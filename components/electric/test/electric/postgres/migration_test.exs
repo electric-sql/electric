@@ -117,7 +117,7 @@ defmodule Electric.Postgres.MigrationTest do
     Schema.update(schema, cmds, oid_loader: &oid_loader/3)
   end
 
-  describe "migrate/2" do
+  describe "to_op/2" do
     test "updates the schema and returns a valid protocol message" do
       stmt = "CREATE TABLE public.fish (id int8 PRIMARY KEY);"
       schema = schema_update(stmt)
@@ -428,6 +428,36 @@ defmodule Electric.Postgres.MigrationTest do
                fks: [],
                pks: ["id"]
              }
+    end
+
+    test "filters out migrations affecting shadow tables" do
+      stmt = """
+      CREATE TABLE electric.shadow__public__projects (
+          _tags electric.tag[] DEFAULT array[]::electric.tag[],
+          _last_modified bigint,
+          _is_a_delete_operation boolean DEFAULT false,
+          _tag electric.tag,
+          _observed_tags electric.tag[],
+          _modified_columns_bit_mask boolean[],
+          _resolved boolean,
+          _currently_reordering boolean,
+          __reordered_name text,
+          id uuid NOT NULL,
+          _tag_name electric.tag,
+          PRIMARY KEY(id)
+      );
+      """
+
+      schema = schema_update(stmt)
+      version = "20240418002800"
+      schema_version = SchemaLoader.Version.new(version, schema)
+      assert {:ok, [], []} = Migration.to_op(stmt, schema_version, Dialect.Postgresql)
+
+      stmt = """
+      ALTER TABLE electric.shadow__public__projects ADD COLUMN some_column int4;
+      """
+
+      assert {:ok, [], []} = Migration.to_op(stmt, schema_version, Dialect.Postgresql)
     end
 
     # TODO: actually I think this is a situation we *MUST* avoid by

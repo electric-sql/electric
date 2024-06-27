@@ -82,11 +82,10 @@ defmodule Electric.Replication.Shapes.Querying do
         ) :: {:ok, [Changes.NewRecord.t()], results(), Graph.t()} | {:error, term()}
   defp do_query_layer(conn, %Layer{} = layer, relation_loader, origin, context, from) do
     target_table = layer.target_table
-
-    table_info = relation_loader.(target_table)
+    shadow_table = Extension.shadow_of(target_table)
+    {:ok, table_info} = relation_loader.(target_table)
 
     columns = Enum.map_join(table_info.columns, ", ", &~s|this."#{&1.name}"|)
-    pk_clause = Enum.map_join(layer.target_pk, " AND ", &~s|this."#{&1}" = shadow."#{&1}"|)
 
     where =
       [
@@ -102,15 +101,29 @@ defmodule Electric.Replication.Shapes.Querying do
     # This ensures that this tag is ordered strictly before any any tag subsequently generated
     # by clients or Postgres.
     query =
-      """
-      SELECT
-        coalesce(shadow."_tags", '{"(epoch,)"}'), #{columns}
-      FROM
-        #{quote_ident(target_table)} as this
-      LEFT JOIN
-        #{quote_ident(Extension.shadow_of(target_table))} as shadow ON #{pk_clause}
-      #{where}
-      """
+      case relation_loader.(shadow_table) do
+        {:ok, _shadow_info} ->
+          pk_clause = Enum.map_join(layer.target_pk, " AND ", &~s|this."#{&1}" = shadow."#{&1}"|)
+
+          """
+          SELECT
+            coalesce(shadow."_tags", '{"(epoch,)"}'::electric.tag[]), #{columns}
+          FROM
+            #{quote_ident(target_table)} AS this
+          LEFT JOIN
+            #{quote_ident(Extension.shadow_of(target_table))} AS shadow ON #{pk_clause}
+          #{where}
+          """
+
+        {:error, _} ->
+          """
+          SELECT
+            '{"(epoch,)"}'::electric.tag[], #{columns}
+          FROM
+            #{quote_ident(target_table)} AS this
+          #{where}
+          """
+      end
 
     # Important reason for `squery` usage here (as opposed to what might be more reasonable `equery`) is that we need
     # string representation of all fields, so we don't want to do double-conversion inside epgsql and back
@@ -118,6 +131,7 @@ defmodule Electric.Replication.Shapes.Querying do
       curr_records =
         rows_to_changes_with_tags(rows, Enum.map(table_info.columns, & &1.name), layer, origin)
 
+      dbg(curr_records)
       graph = maybe_fill_first_graph_layer(Graph.new(), layer, curr_records)
 
       record_map =

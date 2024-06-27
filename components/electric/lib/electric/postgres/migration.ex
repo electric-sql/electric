@@ -16,6 +16,8 @@ defmodule Electric.Postgres.Migration do
   alias Electric.Replication.Connectors
 
   @default_dialect Dialect.SQLite
+  @electric_schema Extension.schema()
+  @shadow_prefix Extension.shadow_prefix()
 
   @doc """
   Convert migration history entries to a list of migration transactions.
@@ -201,7 +203,8 @@ defmodule Electric.Postgres.Migration do
   end
 
   defp propagatable_stmt?(ast) do
-    Enum.filter(ast, fn
+    ast
+    |> Enum.filter(fn
       {%Pg.CreateStmt{}, _loc, _len} ->
         true
 
@@ -218,6 +221,13 @@ defmodule Electric.Postgres.Migration do
 
       _else ->
         false
+    end)
+    |> Enum.filter(fn
+      {%{relation: %{schemaname: @electric_schema, relname: @shadow_prefix <> _}}, _loc, _len} ->
+        false
+
+      _ ->
+        true
     end)
   end
 

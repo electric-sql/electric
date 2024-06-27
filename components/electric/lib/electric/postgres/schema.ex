@@ -2,7 +2,6 @@ defmodule Electric.Postgres.Schema do
   import Electric.Postgres.Extension, only: [is_extension_relation: 1]
   import Electric.Postgres.Schema.Proto, only: [is_unique_constraint: 1]
 
-  alias Electric.Postgres.Extension
   alias Electric.Postgres.Replication
   alias Electric.Postgres.Schema.Proto
   alias PgQuery, as: Pg
@@ -429,96 +428,5 @@ defmodule Electric.Postgres.Schema do
         raise ArgumentError,
           message: "missing `:oid_loader` option"
     end
-  end
-
-  @doc """
-  Enrich the schema with shadow tables for each table.
-
-  We don't check if the shadow tables actually exist, so only electrified
-  tables (or other tables that are expected to have shadows) should be included
-  in the schema passed to this function
-  """
-  def add_shadow_tables(%Proto.Schema{tables: tables} = schema, opts) do
-    oid_loader = verify_oid_loader!(opts)
-    normal_tables = Enum.reject(tables, &is_shadow_table?/1)
-
-    shadow_tables =
-      Enum.map(normal_tables, &build_shadow_table(&1, oid_loader))
-
-    %{schema | tables: normal_tables ++ shadow_tables}
-  end
-
-  @schema Electric.Postgres.Extension.schema()
-  defp is_shadow_table?(%Proto.Table{
-         name: %Proto.RangeVar{schema: @schema, name: "shadow__" <> _}
-       }),
-       do: true
-
-  defp is_shadow_table?(%Proto.Table{}), do: false
-
-  @electric_tag_type %Proto.Column.Type{
-    name: "electric.tag",
-    size: [],
-    array: []
-  }
-
-  # These are missing their DEFAULT constraints, but I don't think it matters
-  #   _tags electric.tag[] DEFAULT array[]::electric.tag[],
-  #   _last_modified bigint,
-  #   _is_a_delete_operation boolean DEFAULT false,
-  #   _tag electric.tag,
-  #   _observed_tags electric.tag[],
-  #   _modified_columns_bit_mask boolean[],
-  #   _resolved boolean,
-  #   _currently_reordering boolean
-  @shadow_columns [
-    %Proto.Column{name: "_tags", type: %Proto.Column.Type{name: "electric.tag", array: [-1]}},
-    %Proto.Column{name: "_last_modified", type: %Proto.Column.Type{name: "int8"}},
-    %Proto.Column{name: "_is_a_delete_operation", type: %Proto.Column.Type{name: "bool"}},
-    %Proto.Column{name: "_tag", type: %Proto.Column.Type{name: "electric.tag"}},
-    %Proto.Column{
-      name: "_observed_tags",
-      type: %Proto.Column.Type{name: "electric.tag", array: [-1]}
-    },
-    %Proto.Column{
-      name: "_modified_columns_bit_mask",
-      type: %Proto.Column.Type{name: "bool", array: [-1]}
-    },
-    %Proto.Column{name: "_resolved", type: %Proto.Column.Type{name: "bool"}},
-    %Proto.Column{name: "_currently_reordering", type: %Proto.Column.Type{name: "bool"}}
-  ]
-
-  defp build_shadow_table(%Proto.Table{} = main, oid_loader) do
-    # The columns based on the main table lack any defaults/constraints on shadow tables
-    stripped_columns = Enum.map(main.columns, &Map.put(&1, :constraints, []))
-    {:ok, pk_column_names} = primary_keys(main)
-
-    {pks, non_pks} = Enum.split_with(stripped_columns, &(&1.name in pk_column_names))
-
-    timestamps =
-      non_pks
-      |> Enum.map(&Map.put(&1, :type, @electric_tag_type))
-      |> Enum.map(&Map.update!(&1, :name, fn n -> String.slice("_tag_#{n}", 0..63) end))
-
-    reordered =
-      Enum.map(
-        non_pks,
-        &Map.update!(&1, :name, fn n -> String.slice("__reordered_#{n}", 0..63) end)
-      )
-
-    {schema, table_name} = Extension.shadow_of({main.name.schema, main.name.name})
-
-    {:ok, oid} = oid_loader.(:table, @schema, table_name)
-
-    %Proto.Table{
-      oid: oid,
-      name: %Proto.RangeVar{
-        schema: schema,
-        name: table_name
-      },
-      columns: pks ++ @shadow_columns ++ timestamps ++ reordered,
-      constraints: Enum.filter(main.constraints, &match?(%{constraint: {:primary, _}}, &1)),
-      indexes: []
-    }
   end
 end

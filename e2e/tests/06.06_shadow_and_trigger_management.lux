@@ -1,0 +1,99 @@
+[doc Table schema validation is done at GRANT WRITE, not ELECTRIFY point]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[global user_id1=95f21e62-4b90-49c3-874a-174eb17e58cf]
+[global session_id=001]
+
+[global migration_version_1=20231109154018]
+[global migration_version_2=20240226114300]
+
+[shell proxy_1]
+    """!
+    BEGIN;
+      CALL electric.migration_version('$migration_version_1');
+
+      CREATE TABLE "users" (
+          id uuid NOT NULL PRIMARY KEY,
+          -- unique constraint not allowed on writable tables
+          name text NOT NULL UNIQUE
+      );
+      CREATE TABLE "projects" (
+          id uuid NOT NULL PRIMARY KEY,
+          name text NOT NULL
+      );
+
+      ALTER TABLE "users" ENABLE ELECTRIC;
+      ALTER TABLE "projects" ENABLE ELECTRIC;
+
+      ELECTRIC GRANT READ ON public.users TO AUTHENTICATED;
+
+      ELECTRIC GRANT READ ON public.projects TO (public.projects, 'member');
+    COMMIT;
+    """
+    ?$psql
+
+
+[shell electric]
+    ??[debug] "public"."users" is compatible with "ELECTRIC GRANT
+    ??[debug] "public"."projects" is compatible with "ELECTRIC GRANT
+    ??[info] Applying migration $migration_version_1
+
+[newshell user_1_ws1]
+    -$fail_pattern
+    [invoke start_elixir_test 1]
+    [invoke client_session $user_id1 $session_id]
+
+    !alias Electric.Satellite.{SatRelation, SatRelationColumn, SatOpInsert, SatOpUpdate, SatOpRow}
+    ?$eprompt
+
+[shell pg_1]
+    -shadow__public__.+
+    !\dt electric.*
+    ?$psql
+    -
+    !select trigger_name, event_manipulation from information_schema.triggers where event_object_schema = 'public' and event_object_table = 'projects';
+    ?send_self_and_references_on_insert
+    ?send_self_and_references_on_update
+    ??(2 rows)
+    ?$psql
+
+[shell proxy_1]
+    """!
+    BEGIN;
+      CALL electric.migration_version('$migration_version_2');
+      ELECTRIC GRANT INSERT ON public.projects TO AUTHENTICATED;
+    COMMIT;
+    """
+    ?ELECTRIC GRANT
+
+[shell electric]
+    ??[info] Applying migration $migration_version_2
+    # ?user_id=$user_id1 .+ Global permissions updated for connection
+
+[shell pg_1]
+    !\dt electric.*
+    ?shadow__public__projects
+    ?$psql
+    !select schema_name, table_name, write_triggers_installed from electric.electrified;
+    ?public +| users +| f
+    ?public +| projects +| t
+    ?$psql
+    !select trigger_name, event_manipulation from information_schema.triggers where event_object_schema = 'public' and event_object_table = 'projects';
+    ?upsert_generate_shadow_rows
+    ?save_operation_for_reordering
+    ??(8 rows)
+    ?$psql
+
+# [shell user_1_ws1]
+#     ?SatClientCommand\{command: .+ResetDatabase\{reason: :PERMISSIONS_CHANGE
+#     ?Server closed the websocket connection
+#
+#     -$fail_pattern
+#
+#     [invoke client_session $user_id1 $session_id]
+
+[cleanup]
+   [invoke teardown]
+

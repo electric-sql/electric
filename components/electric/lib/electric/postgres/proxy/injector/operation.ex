@@ -716,6 +716,7 @@ defmodule Operation.ActivateWriteMode do
           Operation.Private.query(state.query_generator.activate_write_mode_query(relation))
         end)
         |> Operation.activate(state, send)
+        |> dbg
       else
         {nil, state, send}
       end
@@ -1133,6 +1134,7 @@ defmodule Operation.Private do
     end
 
     def activate(op, state, send) do
+      dbg(activate: op.msgs)
       {op, state, Send.server(send, op.msgs)}
     end
   end

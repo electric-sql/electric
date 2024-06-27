@@ -150,6 +150,9 @@ defmodule Electric.Postgres.Extension do
   defguard is_migration_relation(relation)
            when relation in [{@schema, @electrified_tracking_relation}, {@schema, @ddl_relation}]
 
+  defguard is_tracking_relation(relation)
+           when relation == {@schema, @electrified_tracking_relation}
+
   defguard is_ddl_relation(relation) when relation == {@schema, @ddl_relation}
 
   defguard is_acked_client_lsn_relation(relation)
@@ -391,7 +394,8 @@ defmodule Electric.Postgres.Extension do
       Migrations.Migration_20240213160300_DropGenerateElectrifiedSqlFunction,
       Migrations.Migration_20240417131000_ClientReconnectionInfoTables,
       Migrations.Migration_20240501000000_UnsubPoints,
-      Migrations.Migration_20240618152555_DDLXPermissions
+      Migrations.Migration_20240618152555_DDLXPermissions,
+      Migrations.Migration_20240627102408_DeferrableTriggers
     ]
   end
 

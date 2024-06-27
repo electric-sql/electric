@@ -100,9 +100,9 @@ BEGIN
         -- this only needs write mode because we will have previously installed the
         -- read-mode functions and triggers when electrifying table
         PERFORM electric.install_functions_and_triggers(
-            ARRAY['write'],
             schema_name,
             table_name,
+            true,
             primary_key_list,
             non_pk_column_list
         );
@@ -190,9 +190,9 @@ BEGIN
             can have some unexpected effects.
             */
             PERFORM electric.install_conflict_resolution_functions(
-                ARRAY['read','write'],
                 schema_name,
                 table_name,
+                true,
                 primary_key_list,
                 non_pk_column_list
             );

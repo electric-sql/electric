@@ -45,19 +45,13 @@ $function$
 
             -- install read-only version of functions and triggers
             PERFORM <%= schema() %>.install_functions_and_triggers(
-                ARRAY['read'],
                 _schema,
                 _table,
+                false,
                 pk_column_list,
                 non_pk_column_list
             );
 
-
-            EXECUTE format(
-                '<%= add_table_to_publication_sql("%I.%I")  %>;',
-                '<%= schema() %>',
-                (<%= schema() %>.__shadow_table_name(_schema, _table))::name
-            );
         ELSE
             -- rather than raising an error and aborting, let's make this
             -- procedure more idempotent and just ignore double electrification

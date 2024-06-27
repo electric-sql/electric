@@ -178,8 +178,7 @@ defmodule Electric.Postgres.Proxy.Injector do
     {:ok, {stack, state}, server, client}
   end
 
-  @spec introspect_tables_query(Postgres.relation() | String.t() | [String.t()], String.t() | nil) ::
-          String.t()
+  @impl __MODULE__
   def introspect_tables_query(names, quote_delimiter \\ nil) do
     stmts =
       names
@@ -191,34 +190,32 @@ defmodule Electric.Postgres.Proxy.Injector do
     "SELECT electric.introspect_tables(#{stmts});"
   end
 
+  @impl __MODULE__
   def lock_rules_table_query do
     "LOCK TABLE #{Electric.Postgres.Extension.global_perms_table()} IN EXCLUSIVE MODE"
   end
 
+  @impl __MODULE__
   def electrified_tables_query do
     Electric.Postgres.Extension.electrified_tables_query()
   end
 
+  @impl __MODULE__
   def permissions_rules_query do
     Electric.Postgres.Extension.Permissions.global_rules_query()
   end
 
+  @impl __MODULE__
   def save_permissions_rules_query(rules) do
     Electric.Postgres.Extension.Permissions.save_global_query(rules)
   end
 
+  @impl __MODULE__
   def activate_write_mode_query({sname, tname}, quote_delimiter \\ nil) do
     "CALL electric.install_shadow_tables_and_triggers(#{quote_query(sname, quote_delimiter)}, #{quote_query(tname, quote_delimiter)})"
   end
 
-  defp normalise_name({_, _} = relation) do
-    Electric.Utils.inspect_relation(relation)
-  end
-
-  defp normalise_name(name) when is_binary(name) do
-    name
-  end
-
+  @impl __MODULE__
   def capture_ddl_query(stmts, quote_delimiter \\ nil)
 
   @spec capture_ddl_query([String.t()], String.t() | nil) :: String.t()
@@ -232,32 +229,39 @@ defmodule Electric.Postgres.Proxy.Injector do
     ~s|CALL electric.capture_ddl(#{quote_query(query, quote_delimiter)})|
   end
 
-  @spec capture_version_query(String.t(), integer(), String.t() | nil) :: String.t()
+  @impl __MODULE__
   def capture_version_query(version, priority, quote_delimiter \\ nil)
       when is_integer(priority) do
     ~s|CALL electric.assign_migration_version(#{quote_query(version, quote_delimiter)}, #{priority})|
   end
 
+  @impl __MODULE__
   def alter_shadow_table_query(alteration) do
     alter_shadow_table_query(alteration, nil)
   end
 
   def alter_shadow_table_query(alteration, quote) do
-    %{perms: perms, table: {schema, table}, action: action, column: column, type: type} =
-      alteration
-
-    mode =
-      IO.iodata_to_binary(["ARRAY[", perms |> Enum.map(&"'#{&1}'") |> Enum.join(", "), "]"])
+    %{table: {schema, table}, action: action, column: column, type: type} = alteration
 
     args =
-      [mode | Enum.map([schema, table, action, column, type], &quote_query(&1, quote))]
+      [schema, table, action, column, type]
+      |> Enum.map(&quote_query(&1, quote))
       |> Enum.join(", ")
 
     ~s|CALL electric.alter_shadow_table(#{args})|
   end
 
+  @impl __MODULE__
   def quote_query(query) do
     quote_query(query, random_delimiter())
+  end
+
+  @impl __MODULE__
+  def migration_version do
+    Calendar.strftime(
+      DateTime.utc_now(),
+      "%Y%m%d%H%M%S_%f"
+    )
   end
 
   def quote_query(query, delimiter) do
@@ -274,8 +278,11 @@ defmodule Electric.Postgres.Proxy.Injector do
     "$__" <> (:crypto.strong_rand_bytes(6) |> Base.encode16(case: :lower)) <> "__$"
   end
 
-  def migration_version do
-    DateTime.utc_now()
-    |> Calendar.strftime("%Y%m%d%H%M%S_%f")
+  defp normalise_name({_, _} = relation) do
+    Electric.Utils.inspect_relation(relation)
+  end
+
+  defp normalise_name(name) when is_binary(name) do
+    name
   end
 end

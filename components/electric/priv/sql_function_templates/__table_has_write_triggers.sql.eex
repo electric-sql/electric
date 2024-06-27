@@ -1,0 +1,27 @@
+CREATE OR REPLACE FUNCTION <%= schema() %>.__table_has_write_triggers(
+        _schema_name text,
+        _table_name text
+    )
+    RETURNS boolean
+    LANGUAGE PLPGSQL
+    SECURITY DEFINER AS
+$function$
+    DECLARE
+        _write_triggers_enabled boolean;
+    BEGIN
+        SELECT write_triggers_installed
+            INTO _write_triggers_enabled
+            FROM <%= electrified_tracking_table() %> t
+            WHERE t.schema_name = _schema_name
+                AND t.table_name = _table_name
+            LIMIT 1;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'table "%"."%" is not electrified', _schema_name, _table_name;
+        END IF;
+
+        RETURN _write_triggers_enabled;
+    END;
+$function$;
+
+

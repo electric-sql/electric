@@ -58,7 +58,7 @@ defmodule Electric.Postgres.Migration.State do
         changes
         |> transaction_changes_to_migrations(loader)
         |> skip_applied_migrations(loader, opts[:skip_applied])
-        |> Enum.map_reduce(loader, fn {version, stmts}, loader ->
+        |> Enum.flat_map_reduce(loader, fn {version, stmts}, loader ->
           {schema_version, loader} = version_callback.(version, stmts, loader)
 
           {migration(version, schema_version, stmts), loader}
@@ -71,21 +71,29 @@ defmodule Electric.Postgres.Migration.State do
 
   defp chunk_migrations(changes) do
     Enum.chunk_by(changes, fn
-      %NewRecord{relation: relation} -> is_migration_relation(relation)
+      %{relation: relation} -> is_migration_relation(relation)
       _ -> false
     end)
   end
 
   defp migration(version, schema_version, stmts) do
-    {ops, relations} = Electric.Postgres.Migration.to_ops(stmts, schema_version)
+    # internal migrations only affecting shadow tables are entirely filtered, so
+    # don't even propagate the migration message for those
+    case Electric.Postgres.Migration.to_ops(stmts, schema_version) do
+      {[], _} ->
+        []
 
-    %Migration{
-      version: version,
-      schema: schema_version,
-      ddl: stmts,
-      ops: ops,
-      relations: relations
-    }
+      {ops, relations} ->
+        [
+          %Migration{
+            version: version,
+            schema: schema_version,
+            ddl: stmts,
+            ops: ops,
+            relations: relations
+          }
+        ]
+    end
   end
 
   defp skip_applied_migrations(migrations, loader, true) do
@@ -157,7 +165,6 @@ defmodule Electric.Postgres.Migration.State do
           Logger.info("Applying migration #{version}: #{inspect(stmt)}")
           Schema.update(schema, stmt, oid_loader: oid_loader)
         end)
-        |> Schema.add_shadow_tables(oid_loader: oid_loader)
 
       Logger.info("Saving schema version #{version}")
 

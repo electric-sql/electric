@@ -18,7 +18,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader do
   @type table() :: Electric.Postgres.Replication.Table.t()
   @type t() :: {module(), state()}
   @type tx_fk_row() :: %{binary() => integer() | binary()}
-  @type relation_loader() :: (relation() -> table())
+  @type relation_loader() :: (relation() -> {:ok, table()} | {:error, String.t()})
 
   @callback connect(term(), Connectors.config()) :: {:ok, state()}
   @callback load(state()) :: {:ok, Version.t()} | {:error, binary()}

@@ -23,6 +23,7 @@ $function$
         tombstone_table_name NAME;
         shadow_table_oid oid;
         tombstone_table_oid oid;
+        shadow_table_ddl text;
     BEGIN
         SELECT schema_name, table_name, table_oid
             INTO _schema, _table, _oid
@@ -71,7 +72,7 @@ $function$
 
         -- Create a shadow table in the electric namespace and using the table name with `shadow__` prefix
         -- If you update or modify this table structure, please make sure it is fully reflected in `<%= schema() %>.Postgres.Schema.build_shadow_table/1`
-        EXECUTE format(
+        shadow_table_ddl := format(
             E'CREATE TABLE <%= schema() %>.%I (\n'
             '    _tags <%= schema() %>.tag[] DEFAULT array[]::<%= schema() %>.tag[],\n'
             '    _last_modified bigint,\n'
@@ -91,6 +92,8 @@ $function$
             <%= schema() %>.format_every_and_join(primary_key_list, '%I')
         );
 
+        EXECUTE shadow_table_ddl;
+
         EXECUTE format('ALTER TABLE <%= schema() %>.%I REPLICA IDENTITY FULL', shadow_table_name);
 
         -- Create a tombstone table in the electric namespace and using the table name with `tombstone__` prefix
@@ -108,12 +111,27 @@ $function$
         -- this only needs write mode because we will have previously installed the
         -- read-mode functions and triggers when electrifying table
         PERFORM <%= schema() %>.install_functions_and_triggers(
-            ARRAY['read', 'write'],
             _schema,
             _table,
+            true,
             primary_key_list,
             non_pk_column_list
         );
+
+        EXECUTE format(
+            '<%= add_table_to_publication_sql("%I.%I")  %>;',
+            '<%= schema() %>',
+            shadow_table_name::name
+        );
+
+        -- put the shadow table into the pg schema by creating an internal migration
+        CALL <%= schema() %>.capture_ddl(shadow_table_ddl);
+
+        -- mark the table has writable
+        UPDATE <%= electrified_tracking_table() %>
+            SET write_triggers_installed=true
+            WHERE schema_name = _schema
+                AND table_name = _table;
     END;
 $function$;
 

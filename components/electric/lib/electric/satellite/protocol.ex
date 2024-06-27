@@ -329,7 +329,7 @@ defmodule Electric.Satellite.Protocol do
     {serialized_log, unknown_relations, known_relations} =
       gone_nodes
       |> Enum.map(fn {relation, pk} -> %Changes.Gone{pk: pk, relation: relation} end)
-      |> Serialization.serialize_shape_data_as_tx(out_rep.relations, relation_loader(state))
+      |> Serialization.serialize_shape_data_as_tx(out_rep.relations, relation_loader!(state))
 
     msgs = [
       serialize_unknown_relations(unknown_relations, state),
@@ -849,7 +849,7 @@ defmodule Electric.Satellite.Protocol do
         tx,
         offset,
         out_rep.relations,
-        relation_loader(state),
+        relation_loader!(state),
         state.sql_dialect
       )
 
@@ -1177,7 +1177,11 @@ defmodule Electric.Satellite.Protocol do
     #       I don't like that we're websocket-framing this much data, this should be split up
     #       but I'm not sure if we've implemented the collection
     {serialized_log, unknown_relations, known_relations} =
-      Serialization.serialize_shape_data_as_tx(changes, out_rep.relations, relation_loader(state))
+      Serialization.serialize_shape_data_as_tx(
+        changes,
+        out_rep.relations,
+        relation_loader!(state)
+      )
 
     {
       serialize_unknown_relations(unknown_relations, state),
@@ -1207,7 +1211,7 @@ defmodule Electric.Satellite.Protocol do
         ref,
         changes,
         out_rep.relations,
-        relation_loader(state)
+        relation_loader!(state)
       )
 
     out_rep = %OutRep{out_rep | sent_rows_graph: graph, relations: known_relations}
@@ -1235,12 +1239,16 @@ defmodule Electric.Satellite.Protocol do
   end
 
   defp relation_loader(%{schema_loader: schema_loader, schema_version: schema_version}) do
+    &SchemaLoader.relation(schema_loader, &1, schema_version)
+  end
+
+  defp relation_loader!(%{schema_loader: schema_loader, schema_version: schema_version}) do
     &SchemaLoader.relation!(schema_loader, &1, schema_version)
   end
 
   defp load_relation(state, relation) do
     state
-    |> relation_loader()
+    |> relation_loader!()
     |> apply([relation])
   end
 

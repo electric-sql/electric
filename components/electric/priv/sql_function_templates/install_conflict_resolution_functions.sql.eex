@@ -1,7 +1,7 @@
 CREATE OR REPLACE FUNCTION <%= schema() %>.install_conflict_resolution_functions(
-      mode TEXT[],
       schema_name TEXT,
       table_name TEXT,
+      writable boolean,
       primary_key_list TEXT[],
       non_pk_column_list TEXT[]
     )
@@ -11,7 +11,7 @@ $function$
     DECLARE
         function_names JSONB := '{}'::jsonb;
     BEGIN
-        IF 'write' = ANY (mode) THEN
+        IF writable THEN
             function_names := jsonb_set(function_names, '{perform_reordered_op}', to_jsonb(<%= schema() %>.install_function__perform_reordered_op(schema_name, table_name, primary_key_list, non_pk_column_list)));
             function_names := jsonb_set(function_names, '{generate_tombstone_entry}', to_jsonb(<%= schema() %>.install_function__generate_tombstone_entry(schema_name, table_name, primary_key_list, non_pk_column_list)));
             function_names := jsonb_set(function_names, '{create_shadow_row_from_upsert}', to_jsonb(<%= schema() %>.install_function__create_shadow_row_from_upsert(schema_name, table_name, primary_key_list, non_pk_column_list)));
@@ -22,7 +22,7 @@ $function$
             function_names := jsonb_set(function_names, '{resolve_observed_tags}', to_jsonb(<%= schema() %>.install_function__resolve_observed_tags(schema_name, table_name, primary_key_list, non_pk_column_list)));
         END IF;
 
-        function_names := jsonb_set(function_names, '{send_self_and_references}', to_jsonb(<%= schema() %>.install_function__send_self_and_references(schema_name, table_name, primary_key_list, non_pk_column_list)));
+        function_names := jsonb_set(function_names, '{send_self_and_references}', to_jsonb(<%= schema() %>.install_function__send_self_and_references(schema_name, table_name, writable, primary_key_list, non_pk_column_list)));
         function_names := jsonb_set(function_names, '{send_self_trigger}', to_jsonb(<%= schema() %>.install_function__send_self_trigger(schema_name, table_name, primary_key_list)));
 
         RETURN function_names;

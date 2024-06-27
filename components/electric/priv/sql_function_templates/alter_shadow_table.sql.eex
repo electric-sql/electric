@@ -1,5 +1,4 @@
 CREATE OR REPLACE PROCEDURE <%= schema() %>.alter_shadow_table(
-        mode text[],
         schema_name name,
         table_name name,
         action text,
@@ -10,6 +9,7 @@ CREATE OR REPLACE PROCEDURE <%= schema() %>.alter_shadow_table(
     LANGUAGE PLPGSQL AS
 $function$
     DECLARE
+        write_triggers_enabled boolean;
         reordered_column_definition text := '';
         shadow_column_definition text := '';
         tombstone_column_definition text := '';
@@ -18,8 +18,9 @@ $function$
         table_oid oid;
         primary_key_list text[];
         non_pk_column_list text[] := array[]::text[];
+        alter_shadow_table_ddl text;
     BEGIN
-        IF 'write' = ANY (mode) THEN
+        IF <%= schema() %>.__table_has_write_triggers(schema_name, table_name) THEN
             RAISE DEBUG 'alter_shadow_table %.% % % %', schema_name, table_name, action, col_name, col_type;
             shadow_table_name := <%= schema() %>.__shadow_table_name(schema_name , table_name);
             tombstone_table_name := <%= schema() %>.__tombstone_table_name(schema_name , table_name);
@@ -27,12 +28,14 @@ $function$
             reordered_column_definition := format(E'    ADD COLUMN %I %s,\n', '__reordered_' || col_name, col_type);
             shadow_column_definition := format(E'    ADD COLUMN %I <%= schema() %>.tag', '_tag_' || col_name);
             tombstone_column_definition := format(E'    ADD COLUMN %I %s\n', col_name, col_type);
-
-            EXECUTE format(
+            alter_shadow_table_ddl := format(
                 E'ALTER TABLE <%= schema() %>.%I\n%s;',
                 shadow_table_name,
                 reordered_column_definition || shadow_column_definition
             );
+
+            EXECUTE alter_shadow_table_ddl;
+
             EXECUTE format(
                 E'ALTER TABLE <%= schema() %>.%I\n%s;',
                 tombstone_table_name,
@@ -53,7 +56,15 @@ $function$
             explicitly) but safer since `DROP` + `CREATE` can have some unexpected
             effects.
             */
-            PERFORM <%= schema() %>.install_conflict_resolution_functions(mode, schema_name, table_name, primary_key_list, non_pk_column_list);
+            PERFORM <%= schema() %>.install_conflict_resolution_functions(
+                schema_name,
+                table_name,
+                true,
+                primary_key_list,
+                non_pk_column_list
+            );
+            -- put the shadow table into the pg schema by creating an internal migration
+            CALL <%= schema() %>.capture_ddl(alter_shadow_table_ddl);
         END IF;
     END;
 $function$;

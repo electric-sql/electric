@@ -1,7 +1,7 @@
 CREATE OR REPLACE FUNCTION <%= schema() %>.install_functions_and_triggers(
-        mode TEXT[],
         schema_name TEXT,
         table_name TEXT,
+        writable boolean,
         primary_key_list TEXT[],
         non_pk_column_list TEXT[]
     )
@@ -16,9 +16,9 @@ $function$
         -- Install function to be used in the triggers
         -- uses the mode to determine which functions are required
         generated_functions := <%= schema() %>.install_conflict_resolution_functions(
-            mode,
             schema_name,
             table_name,
+            writable,
             primary_key_list,
             non_pk_column_list
         );

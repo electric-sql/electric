@@ -138,7 +138,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
                 {~s[ALTER TABLE "socks" ADD COLUMN size int2],
                  shadow_add_column: [
                    %{
-                     perms: [],
                      table: {"public", "socks"},
                      action: :add,
                      column: "size",
@@ -163,7 +162,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
                 {~s[ALTER TABLE "socks" ADD COLUMN size int2],
                  shadow_add_column: [
                    %{
-                     perms: [],
                      table: {"public", "socks"},
                      action: :add,
                      column: "size",
@@ -182,7 +180,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
             {~s[ALTER TABLE "truths" ADD COLUMN "another" int4],
              shadow_add_column: [
                %{
-                 perms: [:read, :write],
                  table: {"public", "truths"},
                  action: :add,
                  column: "another",
@@ -204,7 +201,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
             {~s[ALTER TABLE "truths" ADD COLUMN "another" int4],
              shadow_add_column: [
                %{
-                 perms: [:read],
                  table: {"public", "truths"},
                  action: :add,
                  column: "another",
@@ -226,7 +222,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
             [{"another", "int4"}, {"colour", "text"}, {"finally", "int2"}]
             |> Enum.map(fn {name, type} ->
               %{
-                perms: [:read, :write],
                 table: {"public", "truths"},
                 action: :add,
                 column: name,
@@ -262,7 +257,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
                 {~s[ALTER TABLE "truths" ADD COLUMN "another" int4],
                  shadow_add_column: [
                    %{
-                     perms: [:read, :write],
                      table: {"public", "truths"},
                      action: :add,
                      column: "another",
@@ -563,7 +557,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       |> server(capture_ddl_complete(),
         server: [
           alter_shadow_table_query(%{
-            perms: [],
             table: {"public", "something"},
             action: :add,
             column: "amount",
@@ -574,7 +567,6 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       |> server(alter_shadow_table_complete(),
         server: [
           alter_shadow_table_query(%{
-            perms: [],
             table: {"public", "something"},
             action: :add,
             column: "colour",

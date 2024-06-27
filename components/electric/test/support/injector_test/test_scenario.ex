@@ -17,26 +17,32 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       DDLX.Command.proxy_sql(command, ddl, &quote_query/1)
     end
 
+    @impl true
     def introspect_tables_query(tables) do
       Injector.introspect_tables_query(tables, "'")
     end
 
+    @impl true
     def lock_rules_table_query do
       Injector.lock_rules_table_query()
     end
 
+    @impl true
     def electrified_tables_query do
       Injector.electrified_tables_query()
     end
 
+    @impl true
     def permissions_rules_query do
       Injector.permissions_rules_query()
     end
 
+    @impl true
     def save_permissions_rules_query(rules) do
       Injector.save_permissions_rules_query(rules)
     end
 
+    @impl true
     def capture_ddl_query(query) do
       Injector.capture_ddl_query(query, "$query$")
     end
@@ -53,22 +59,27 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       capture_version_query(version, 0)
     end
 
+    @impl true
     def capture_version_query(version, priority) do
       Injector.capture_version_query(version, priority, "$query$")
     end
 
+    @impl true
     def alter_shadow_table_query(alteration) do
       Injector.alter_shadow_table_query(alteration, "$query$")
     end
 
+    @impl true
     def activate_write_mode_query({_, _} = relation) do
       Injector.activate_write_mode_query(relation, "$$")
     end
 
+    @impl true
     def quote_query(query) do
       Injector.quote_query(query, "$query$")
     end
 
+    @impl true
     def migration_version do
       "20230801111111_11"
     end
@@ -874,7 +885,6 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
   def alter_shadow_table_query(
         %{
-          perms: _perms,
           table: {_schema, _table},
           action: _action,
           column: _column,

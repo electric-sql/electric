@@ -57,7 +57,7 @@
     -$fail_pattern
     [invoke start_elixir_test 1]
     [invoke client_session $user_id1 $session_id]
-    
+
     !alias Electric.Satellite.{SatRelation, SatRelationColumn, SatOpInsert, SatOpUpdate, SatOpRow}
     ?$eprompt
 

@@ -1,4 +1,10 @@
-CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__send_self_and_references(schema_name TEXT, table_name TEXT, primary_key_list TEXT[], non_pk_column_list TEXT[])
+CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__send_self_and_references(
+        schema_name TEXT,
+        table_name TEXT,
+        writable bool,
+        primary_key_list TEXT[],
+        non_pk_column_list TEXT[]
+    )
     RETURNS TEXT
     LANGUAGE PLPGSQL AS $outer_function$
     DECLARE
@@ -28,6 +34,8 @@ CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__send_self_and_refer
     END LOOP;
 
     pk_serialization := 'ARRAY[' || <%= schema() %>.format_every_and_join(arg_name_list, '%I::text') || ']';
+
+    -- FIXME: change the tag lookup depending on writable flag -- if i set __tags to null it'll work
 
     -- The `%n$I` placeholders use n-th argument for formatting.
     EXECUTE format($injected$
