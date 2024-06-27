@@ -40,7 +40,7 @@ defmodule Electric.Replication.Postgres.Writer do
     # writes to PG.
     #
     # [1]: https://www.postgresql.org/docs/14/runtime-config-custom.html
-    {:ok, [], []} = :epgsql.squery(conn, "SET electric.session_replication_role = replica")
+    {:ok, [], []} = Client.squery(conn, "SET electric.session_replication_role = replica")
 
     {:via, :gproc, producer_name} = Keyword.fetch!(opts, :producer)
 
@@ -88,7 +88,7 @@ defmodule Electric.Replication.Postgres.Writer do
 
     Client.with_transaction(state.conn, fn conn ->
       Enum.each(statements, fn stmt ->
-        case :epgsql.squery(conn, stmt) do
+        case Client.squery(conn, stmt) do
           {:ok, _} ->
             :ok
 

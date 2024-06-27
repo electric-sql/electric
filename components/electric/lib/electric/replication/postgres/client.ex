@@ -11,6 +11,7 @@ defmodule Electric.Replication.Postgres.Client do
   alias Electric.Postgres.Extension
   alias Electric.Postgres.Lsn
   alias Electric.Replication.Connectors
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -35,11 +36,13 @@ defmodule Electric.Replication.Postgres.Client do
   def with_conn(conn_opts, fun) do
     # Best effort capture exit message, expect trap_exit to be set
     wait_exit = fn conn, res ->
-      receive do
-        {:EXIT, ^conn, _} -> res
-      after
-        500 -> res
-      end
+      OpenTelemetry.with_span("epgsql.await_exit", [], fn ->
+        receive do
+          {:EXIT, ^conn, _} -> res
+        after
+          500 -> res
+        end
+      end)
     end
 
     Logger.info("Postgres.Client.with_conn(#{inspect(sanitize_conn_opts(conn_opts))})")
@@ -52,7 +55,9 @@ defmodule Electric.Replication.Postgres.Client do
     with {:ok, ^conn} <- :epgsql.connect(conn, ip_addr, username, password, epgsql_conn_opts),
          :ok <- set_display_settings(conn) do
       try do
-        fun.(conn)
+        OpenTelemetry.with_span("epgsql.with_conn", [], fn ->
+          fun.(conn)
+        end)
       rescue
         e ->
           Logger.error(Exception.format(:error, e, __STACKTRACE__))
@@ -94,10 +99,20 @@ defmodule Electric.Replication.Postgres.Client do
   Wrapper for :epgsql.with_transaction/3 that always sets `reraise` to `true` by default and makes `begin_opts` a
   standalone function argument for easier code reading.
   """
-  def with_transaction(mode \\ "", conn, fun, in_opts \\ [])
-      when is_binary(mode) and is_list(in_opts) do
+  def with_transaction_mode(mode, conn, fun, in_opts \\ [])
+      when is_binary(mode) and is_pid(conn) and is_list(in_opts) do
     opts = Keyword.merge([reraise: true, begin_opts: mode], in_opts)
-    :epgsql.with_transaction(conn, fun, opts)
+    fun = fn -> :epgsql.with_transaction(conn, fun, opts) end
+
+    if Keyword.get(in_opts, :telemetry, true) do
+      OpenTelemetry.with_span("epgsql.with_transaction", %{"txn.mode" => mode}, fun)
+    else
+      fun.()
+    end
+  end
+
+  def with_transaction(conn, fun, opts \\ []) when is_pid(conn) and is_list(opts) do
+    with_transaction_mode("", conn, fun, opts)
   end
 
   def close(conn) do
@@ -148,9 +163,10 @@ defmodule Electric.Replication.Postgres.Client do
     end
   end
 
-  defp squery(conn, query) do
-    Logger.debug("Postgres.Client: #{query}")
-    :epgsql.squery(conn, query)
+  def squery(conn, query) do
+    OpenTelemetry.with_span("epgsql.squery", %{"db.statement" => query}, fn ->
+      :epgsql.squery(conn, query)
+    end)
   end
 
   @spec get_system_id(connection()) :: {:ok, binary}
@@ -269,7 +285,7 @@ defmodule Electric.Replication.Postgres.Client do
   #
   # See `Electric.Postgres.display_settings/0` for details.
   defp set_display_settings(conn) do
-    results = :epgsql.squery(conn, Electric.Postgres.display_settings() |> Enum.join(";"))
+    results = squery(conn, Electric.Postgres.display_settings() |> Enum.join(";"))
     Enum.find(results, :ok, &(not match?({:ok, [], []}, &1)))
   end
 
@@ -345,8 +361,8 @@ defmodule Electric.Replication.Postgres.Client do
           {:ok, {short :: String.t(), long :: String.t(), cluster_id :: String.t()}}
           | {:error, term()}
   def get_server_versions(conn) do
-    with {:ok, _, [{short}]} <- :epgsql.squery(conn, "SHOW SERVER_VERSION"),
-         {:ok, _, [{long}]} <- :epgsql.squery(conn, "SELECT VERSION()"),
+    with {:ok, _, [{short}]} <- squery(conn, "SHOW SERVER_VERSION"),
+         {:ok, _, [{long}]} <- squery(conn, "SELECT VERSION()"),
          {:ok, _, _, [{cluster_id}]} <- Extension.save_and_get_cluster_id(conn) do
       {:ok, {short, long, cluster_id}}
     end

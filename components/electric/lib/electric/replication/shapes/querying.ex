@@ -10,6 +10,7 @@ defmodule Electric.Replication.Shapes.Querying do
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Ownership
   alias Electric.Replication.Eval
+  alias Electric.Replication.Postgres.Client
   alias Electric.Replication.Shapes.ChangeProcessing
   alias Electric.Replication.Shapes.ShapeRequest.Layer
   alias Electric.Replication.Shapes.SentRowsGraph
@@ -105,7 +106,7 @@ defmodule Electric.Replication.Shapes.Querying do
 
     # Important reason for `squery` usage here (as opposed to what might be more reasonable `equery`) is that we need
     # string representation of all fields, so we don't want to do double-conversion inside epgsql and back
-    with {:ok, _, rows} <- :epgsql.squery(conn, query) do
+    with {:ok, _, rows} <- Client.squery(conn, query) do
       curr_records =
         rows_to_changes_with_tags(rows, Enum.map(table_info.columns, & &1.name), layer, origin)
 

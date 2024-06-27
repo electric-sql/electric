@@ -5,6 +5,10 @@
 [newshell log]
 
 [macro setup]
+    [newshell otel_collector]
+        !make start_otel_collector
+        ??Everything is ready. Begin running and processing data.
+
     [newshell postgres_logs]
         [progress start development environment]
         !make start_dev_env
@@ -18,6 +22,7 @@
     [newshell electric]
         [invoke start_electric 1]
         ??Successfully initialized Postgres connector "postgres_1"
+        -$fail_pattern
         [progress setup finished]
 
     [shell postgres_logs]
@@ -36,7 +41,6 @@
 
 [macro start_electric n]
     !make start_electric_${n}
-    -$fail_pattern
 [endmacro]
 
 [macro stop_electric n]

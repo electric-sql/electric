@@ -93,7 +93,7 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
   @spec from_satellite(%SatShapeReq{}, Graph.t(), SchemaLoader.Version.t()) ::
           {:ok, t()} | Validation.error()
   def from_satellite(%SatShapeReq{} = req, graph, schema) do
-    with {:ok, select} <- request_not_empty(req.shape_definition),
+    with {:ok, select} <- check_request(req.shape_definition),
          {:ok, tree, layer_map} <- Validation.build_tree(select, graph, schema, req.request_id) do
       {:ok,
        %__MODULE__{
@@ -105,13 +105,13 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
     end
   end
 
-  @spec request_not_empty(%SatShapeDef{} | nil) :: {:ok, %Select{}} | Validation.error()
-  defp request_not_empty(%SatShapeDef{selects: [select]}), do: {:ok, select}
+  @spec check_request(%SatShapeDef{} | nil) :: {:ok, %Select{}} | Validation.error()
+  defp check_request(%SatShapeDef{selects: [select]}), do: {:ok, select}
 
-  defp request_not_empty(%SatShapeDef{selects: selects}) when selects != [],
+  defp check_request(%SatShapeDef{selects: selects}) when selects != [],
     do: {:error, {:INVALID_INCLUDE_TREE, "Cannot have more than one top-level select"}}
 
-  defp request_not_empty(_),
+  defp check_request(_),
     do: {:error, {:EMPTY_SHAPE_DEFINITION, "Empty shape requests are not allowed"}}
 
   @spec relevant_layers(t(), Changes.change()) :: [Layer.t()]
@@ -167,5 +167,16 @@ defmodule Electric.Replication.Shapes.ShapeRequest do
       curr_records,
       graph
     )
+  end
+
+  def to_string(shape_requests) when is_list(shape_requests) do
+    for %Electric.Satellite.SatShapeReq{
+          shape_definition: %Electric.Satellite.SatShapeDef{selects: selects}
+        } <- shape_requests,
+        %Electric.Satellite.SatShapeDef.Select{tablename: table, where: where, include: includes} <-
+          selects do
+      "#{table} (where: #{where}), including: #{inspect(includes)}"
+    end
+    |> Enum.join("; ")
   end
 end

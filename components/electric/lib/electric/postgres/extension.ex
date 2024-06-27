@@ -461,7 +461,7 @@ defmodule Electric.Postgres.Extension do
   defp ensure_transaction(conn, fun) when is_function(fun, 1) do
     case :epgsql.squery(conn, @is_transaction_sql) do
       {:ok, _cols, [{"t"}]} -> fun.(conn)
-      {:ok, _cols, [{"f"}]} -> Client.with_transaction(conn, fun)
+      {:ok, _cols, [{"f"}]} -> Client.with_transaction(conn, fun, telemetry: false)
     end
   end
 

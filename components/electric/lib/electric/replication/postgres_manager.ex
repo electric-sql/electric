@@ -98,6 +98,11 @@ defmodule Electric.Replication.PostgresConnectorMng do
     {:ok, state, {:continue, :init}}
   end
 
+  @impl GenServer
+  def terminate(_reason, _state) do
+    Logger.info("Terminating #{inspect(__MODULE__)}")
+  end
+
   defp ets_table_name(origin) do
     String.to_atom(inspect(__MODULE__) <> ":" <> origin)
   end

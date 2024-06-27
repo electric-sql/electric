@@ -131,7 +131,7 @@ defmodule Electric.Postgres.Extension.SchemaLoader.Epgsql do
     checkout!(pool, fn conn ->
       query = ~s|ALTER SUBSCRIPTION "#{name}" REFRESH PUBLICATION WITH (copy_data = false)|
 
-      case :epgsql.squery(conn, query) do
+      case Client.squery(conn, query) do
         {:ok, [], []} ->
           :ok
 

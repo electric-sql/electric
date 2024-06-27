@@ -17,7 +17,16 @@ defmodule Electric.MixProject do
         "coveralls.html": :test
       ],
       releases: [
-        electric: [applications: [electric: :permanent], include_executables_for: [:unix]],
+        electric: [
+          applications: [
+            electric: :permanent,
+            # This order of application is important to ensure proper startup sequence of
+            # application dependencies, namely, inets.
+            opentelemetry_exporter: :permanent,
+            opentelemetry: :temporary
+          ],
+          include_executables_for: [:unix]
+        ],
         ws_client: [
           applications: [electric: :load],
           include_executables_for: [:unix],
@@ -38,42 +47,65 @@ defmodule Electric.MixProject do
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
+    List.flatten([
+      [
+        {:backoff, "~> 1.1"},
+        {:bandit, "~> 1.1"},
+        {:dotenvy, "~> 0.8"},
+        {:gen_stage, "~> 1.2"},
+        {:gproc, "~> 1.0", override: true},
+        {:jason, "~> 1.4"},
+        {:joken, "~> 2.6"},
+        {:libgraph, "~> 0.16.0"},
+        {:mint, "~> 1.5"},
+        {:mint_web_socket, "~> 1.0"},
+        {:nimble_parsec, "~> 1.4"},
+        {:nimble_pool, "~> 1.0"},
+        {:pathex, "~> 2.5.2"},
+        {:pg_protocol, github: "electric-sql/pg_protocol"},
+        {:pg_query_ex, github: "electric-sql/pg_query_ex"},
+        {:protox, "~> 1.7"},
+        {:req, "~> 0.4"},
+        {:thousand_island, "~> 1.3"},
+        {:timex, "~> 3.7"},
+        {:tzdata, "~> 1.1"}
+      ],
+      database_deps(),
+      dev_and_test_deps(),
+      telemetry_deps()
+    ])
+  end
+
+  defp database_deps do
     [
+      {:ecto, "~> 3.11"},
+      {:ecto_sql, "~> 3.11"},
       {:epgsql, "~> 4.2"},
-      {:backoff, "~> 1.1"},
-      {:mox, "~> 1.1"},
-      {:mock, "~> 0.3.0", only: :test},
-      {:ssl_verify_fun, "~> 1.1.7", override: true},
-      {:jason, "~> 1.4"},
+      {:postgrex, "~> 0.17"}
+    ]
+  end
+
+  defp dev_and_test_deps do
+    [
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       {:excoveralls, "~> 0.18", only: :test, runtime: false},
-      {:gproc, "~> 1.0"},
-      {:protox, "~> 1.7"},
-      {:gen_stage, "~> 1.2"},
-      {:telemetry, "~> 1.1", override: true},
-      {:telemetry_poller, "~> 1.0"},
+      {:exqlite, "~> 0.19", only: [:dev, :test]},
+      {:mock, "~> 0.3.0", only: :test},
+      {:mox, "~> 1.1", only: :test},
+      {:stream_data, "~> 1.0", only: [:dev, :test]}
+    ]
+  end
+
+  defp telemetry_deps do
+    [
+      {:opentelemetry_exporter, "~> 1.7"},
+      {:opentelemetry_api, "~> 1.3"},
+      {:opentelemetry_ecto, "~> 1.2"},
+      {:opentelemetry, "~> 1.4"},
+      {:telemetry, "~> 1.2"},
       {:telemetry_metrics, "~> 1.0", override: true},
       {:telemetry_metrics_statsd, "~> 0.7"},
-      {:joken, "~> 2.6"},
-      {:libgraph, "~> 0.16.0"},
-      {:pathex, "~> 2.5.2"},
-      {:stream_data, "~> 1.0", only: [:dev, :test]},
-      {:exqlite, "~> 0.19", only: [:dev, :test]},
-      {:tzdata, "~> 1.1"},
-      {:pg_query_ex, github: "electric-sql/pg_query_ex"},
-      {:nimble_pool, "~> 1.0"},
-      {:bandit, "~> 1.1"},
-      {:thousand_island, "~> 1.3"},
-      {:mint_web_socket, "~> 1.0"},
-      {:mint, "~> 1.5"},
-      {:req, "~> 0.4"},
-      {:pg_protocol, github: "electric-sql/pg_protocol"},
-      {:nimble_parsec, "~> 1.4"},
-      {:postgrex, "~> 0.17"},
-      {:ecto_sql, "~> 3.11"},
-      {:ecto, "~> 3.11"},
-      {:dotenvy, "~> 0.8"},
-      {:timex, "~> 3.7"}
+      {:telemetry_poller, "~> 1.1"}
     ]
   end
 

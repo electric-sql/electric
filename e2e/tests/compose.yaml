@@ -19,6 +19,9 @@ services:
       ELECTRIC_WRITE_TO_PG_MODE: "${ELECTRIC_WRITE_TO_PG_MODE:-logical_replication}"
       LOGICAL_PUBLISHER_HOST: electric_1
       PG_PROXY_LOG_LEVEL: info
+      LOG_LEVEL: "${LOG_LEVEL:-debug}"
+      OTEL_EXPORT: "${OTEL_EXPORT:-otlp}"
+      OTLP_ENDPOINT: "http://otel-collector:4318"
     ports:
       - "5133:5133"
       # proxy access
@@ -65,3 +68,12 @@ services:
       PROXY_URL: "postgresql://postgres:${PG_PROXY_PASSWORD}@electric_1:${PG_PROXY_PORT}/postgres"
     volumes:
       - ../prisma_example/prisma:/app/prisma
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib
+    environment:
+      HONEYCOMB_API_KEY: "${HONEYCOMB_API_KEY}"
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - 4318:4318 # OTLP http receiver

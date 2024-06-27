@@ -22,6 +22,7 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Satellite.WriteValidation
   alias Electric.Satellite.ClientReconnectionInfo
   alias Electric.Telemetry.Metrics
+  alias Electric.Telemetry.OpenTelemetry
   alias Electric.Utils
 
   alias Electric.Satellite.Protocol.{State, InRep, OutRep, Telemetry}
@@ -167,77 +168,25 @@ defmodule Electric.Satellite.Protocol do
   end
 
   # Satellite requests a new subscription to a set of shapes
-  def handle_rpc_request(%SatSubsReq{subscription_id: id}, state)
-      when byte_size(id) > 128 do
-    {:reply,
-     %SatSubsResp{
-       subscription_id: String.slice(id, 1..128) <> "...",
-       err: %SatSubsError{
-         message: "ID too long"
-       }
-     }, state}
-  end
+  def handle_rpc_request(%SatSubsReq{subscription_id: id} = req, state) do
+    OpenTelemetry.with_span(
+      "proto.shape_subscription_req",
+      [
+        client_id: state.client_id,
+        subscription_id: id,
+        shape_requests: ShapeRequest.to_string(req.shape_requests)
+      ],
+      fn ->
+        case validate_shape_subscription_req(req, state) do
+          {:ok, shape_requests} ->
+            query_subscription_data(id, shape_requests, state)
 
-  def handle_rpc_request(%SatSubsReq{subscription_id: id}, state)
-      when is_map_key(state.subscriptions, id) do
-    {:reply,
-     %SatSubsResp{
-       subscription_id: id,
-       err: %SatSubsError{
-         message:
-           "Cannot establish multiple subscriptions with the same ID. If you want to change the subscription, you need to unsubscribe first."
-       }
-     }, state}
-  end
-
-  def handle_rpc_request(%SatSubsReq{subscription_id: id, shape_requests: []}, state) do
-    {:reply,
-     %SatSubsResp{
-       subscription_id: id,
-       err: %SatSubsError{
-         message: "Subscription must include at least one shape request"
-       }
-     }, state}
-  end
-
-  def handle_rpc_request(
-        %SatSubsReq{subscription_id: id, shape_requests: requests},
-        %State{} = state
-      ) do
-    cond do
-      Utils.validate_uuid(id) != {:ok, id} ->
-        {:reply,
-         %SatSubsResp{
-           subscription_id: id,
-           err: %SatSubsError{message: "Subscription ID should be a valid UUID"}
-         }, state}
-
-      Utils.has_duplicates_by?(requests, & &1.request_id) ->
-        {:reply,
-         %SatSubsResp{
-           subscription_id: id,
-           err: %SatSubsError{message: "Duplicated request ids are not allowed"}
-         }, state}
-
-      true ->
-        case Shapes.validate_requests(requests, state.origin) do
-          {:ok, requests} ->
-            query_subscription_data(id, requests, state)
-
-          {:error, errors} ->
-            {:reply,
-             %SatSubsResp{
-               subscription_id: id,
-               err: %SatSubsError{
-                 shape_request_error:
-                   Enum.map(errors, fn {id, code, message} ->
-                     %SatSubsError.ShapeReqError{code: code, request_id: id, message: message}
-                   end),
-                 message: "Could not establish a subscription due to errors on requests"
-               }
-             }, state}
+          {:error, error_resp} ->
+            OpenTelemetry.record_exception(error_resp.err.message)
+            {:reply, error_resp, state}
         end
-    end
+      end
+    )
   end
 
   def handle_rpc_request(%SatUnsubsReq{subscription_ids: ids}, %State{} = state) do
@@ -288,6 +237,75 @@ defmodule Electric.Satellite.Protocol do
       {:force_unpause, %SatUnsubsResp{}, gone_messages, state}
     else
       {:reply, %SatUnsubsResp{}, gone_messages, state}
+    end
+  end
+
+  defp validate_shape_subscription_req(%SatSubsReq{subscription_id: id}, _state)
+       when byte_size(id) > 128 do
+    {:error,
+     %SatSubsResp{
+       subscription_id: String.slice(id, 1..128) <> "...",
+       err: %SatSubsError{message: "ID too long"}
+     }}
+  end
+
+  defp validate_shape_subscription_req(%SatSubsReq{subscription_id: id}, state)
+       when is_map_key(state.subscriptions, id) do
+    {:error,
+     %SatSubsResp{
+       subscription_id: id,
+       err: %SatSubsError{
+         message:
+           "Cannot establish multiple subscriptions with the same ID. " <>
+             "If you want to change the subscription, you need to unsubscribe first."
+       }
+     }}
+  end
+
+  defp validate_shape_subscription_req(
+         %SatSubsReq{subscription_id: id, shape_requests: []},
+         _state
+       ) do
+    {:error,
+     %SatSubsResp{
+       subscription_id: id,
+       err: %SatSubsError{message: "Subscription must include at least one shape request"}
+     }}
+  end
+
+  defp validate_shape_subscription_req(
+         %SatSubsReq{subscription_id: id, shape_requests: requests},
+         %State{} = state
+       ) do
+    cond do
+      Utils.validate_uuid(id) != {:ok, id} ->
+        {:error,
+         %SatSubsResp{
+           subscription_id: id,
+           err: %SatSubsError{message: "Subscription ID should be a valid UUID"}
+         }}
+
+      Utils.has_duplicates_by?(requests, & &1.request_id) ->
+        {:error,
+         %SatSubsResp{
+           subscription_id: id,
+           err: %SatSubsError{message: "Duplicated request ids are not allowed"}
+         }}
+
+      true ->
+        with {:error, errors} <- Shapes.validate_requests(requests, state.origin) do
+          {:error,
+           %SatSubsResp{
+             subscription_id: id,
+             err: %SatSubsError{
+               shape_request_error:
+                 Enum.map(errors, fn {id, code, message} ->
+                   %SatSubsError.ShapeReqError{code: code, request_id: id, message: message}
+                 end),
+               message: "Could not establish a subscription due to errors on requests"
+             }
+           }}
+        end
     end
   end
 
@@ -1101,7 +1119,7 @@ defmodule Electric.Satellite.Protocol do
     fun = state.subscription_data_fun
     span = Telemetry.get_subscription_span(state, id)
 
-    Task.start(fn ->
+    OpenTelemetry.async_fun("proto.fetch_subscription_data", [], fn ->
       # This is `InitialSync.query_subscription_data/2` by default, but can be overridden for tests.
       Process.set_label({:initial_sync, state.origin, id})
       # Please see documentation on that function for context on the next `receive` block.
@@ -1111,6 +1129,7 @@ defmodule Electric.Satellite.Protocol do
         telemetry_span: span
       )
     end)
+    |> Task.start()
 
     receive do
       {:data_insertion_point, ^ref, xmin} ->
