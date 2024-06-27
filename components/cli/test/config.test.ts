@@ -3,22 +3,26 @@ import { getConfigValue, redactConfigSecrets } from '../src/config'
 import { configOptions } from '../src/config-options'
 
 const origEnv = { ...process.env }
+const origConfigOptions = { ...configOptions }
 test.beforeEach(() => {
-  // restore environment
+  // restore environment and config options
   process.env = origEnv
+  Object.assign(configOptions, origConfigOptions)
 })
 
 test('getConfigValue respects boolean flag defaults', async (t) => {
-  const flagWithTrueDefault = Object.keys(configOptions).find(
-    (key) =>
-      configOptions[key].valueType === Boolean &&
-      configOptions[key].defaultVal === true
-  )!
-  const flagWithFalseDefault = Object.keys(configOptions).find(
-    (key) =>
-      configOptions[key].valueType === Boolean &&
-      configOptions[key].defaultVal === false
-  )!
+  const flagWithTrueDefault = '_MOCK_TRUE_DEFAULT'
+  const flagWithFalseDefault = '_MOCK_FALSE_DEFAULT'
+
+  configOptions[flagWithTrueDefault] = {
+    valueType: Boolean,
+    defaultVal: true,
+  }
+
+  configOptions[flagWithFalseDefault] = {
+    valueType: Boolean,
+    defaultVal: false,
+  }
 
   t.is(getConfigValue(flagWithTrueDefault), true)
   t.is(getConfigValue(flagWithFalseDefault), false)
