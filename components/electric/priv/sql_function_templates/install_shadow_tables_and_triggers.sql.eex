@@ -1,0 +1,119 @@
+-- This function creates or updates shadow tables for conflict resolution
+CREATE OR REPLACE PROCEDURE <%= schema() %>.install_shadow_tables_and_triggers(
+        name1 text,
+        name2 text
+    )
+    LANGUAGE PLPGSQL
+    SECURITY DEFINER AS
+$function$
+    DECLARE
+        _schema name;
+        _table text;
+        _oid regclass;
+        cols RECORD;
+        sql_statement TEXT := '';
+        reordered_column_definitions TEXT := '';
+        shadow_column_definitions TEXT := '';
+        tombstone_column_definitions TEXT := '';
+        primary_key_list TEXT[];
+        non_pk_column_list TEXT[] := array[]::TEXT[];
+        full_table_identifier TEXT;
+        generated_functions JSONB;
+        shadow_table_name NAME;
+        tombstone_table_name NAME;
+        shadow_table_oid oid;
+        tombstone_table_oid oid;
+    BEGIN
+        SELECT schema_name, table_name, table_oid
+            INTO _schema, _table, _oid
+            FROM <%= schema() %>.__resolve_table_from_names(name1, name2);
+
+        shadow_table_name := <%= schema() %>.__shadow_table_name(_schema , _table);
+        tombstone_table_name := <%= schema() %>.__tombstone_table_name(_schema , _table);
+
+        -- Get primary keys
+        SELECT array_agg(attname ORDER BY array_position(indkey, attnum))
+                INTO primary_key_list
+            FROM pg_index
+            JOIN pg_attribute ON attrelid = indrelid AND attnum = ANY(indkey) AND indisprimary
+            WHERE indrelid = _oid;
+
+
+        -- Table got created, so we need to just copy it's structure for the shadow table
+
+        -- Get a list of columns, which are going to be used in both shadow and the tombstone tables
+        FOR cols IN
+            SELECT * from <%= schema() %>.lookup_columns(_oid)
+        LOOP
+            -- Shadow table primary key duplicates the one on the main table, but other columns are of the `tag` type
+            shadow_column_definitions :=
+                shadow_column_definitions
+                || format(E'    %I %s,\n', (CASE WHEN cols.col_primary THEN '' ELSE '_tag_' END) || cols.col_name, (CASE WHEN cols.col_primary THEN cols.col_type || ' NOT NULL' ELSE '<%= schema() %>.tag' END));
+
+            -- Reordered columns have the same type as the original columns, but will be stored in a shadow table.
+            -- PK columns aren't reordered since we consider them immutable
+            -- They are also always nullable, so that we can reset them to null after reordering is done.
+            IF NOT cols.col_primary THEN
+                reordered_column_definitions :=
+                    reordered_column_definitions
+                    || format(E'    %I %s,\n', '__reordered_' || cols.col_name, cols.col_type);
+
+                -- We're also building up a non-pk column name list, that's going to be used in trigger function creation
+                non_pk_column_list := non_pk_column_list || cols.col_name;
+            END IF;
+
+            -- Tombstone table copies the original table structure, since we're going to copy deleted rows there
+            tombstone_column_definitions :=
+                tombstone_column_definitions
+                || format(E'    %I %s %sNULL,\n', cols.col_name, cols.col_type, (CASE WHEN cols.col_not_null THEN 'NOT ' ELSE '' END));
+
+        END LOOP;
+
+        -- Create a shadow table in the electric namespace and using the table name with `shadow__` prefix
+        -- If you update or modify this table structure, please make sure it is fully reflected in `<%= schema() %>.Postgres.Schema.build_shadow_table/1`
+        EXECUTE format(
+            E'CREATE TABLE <%= schema() %>.%I (\n'
+            '    _tags <%= schema() %>.tag[] DEFAULT array[]::<%= schema() %>.tag[],\n'
+            '    _last_modified bigint,\n'
+            '    _is_a_delete_operation boolean DEFAULT false,\n'
+            '    _tag <%= schema() %>.tag,\n'
+            '    _observed_tags <%= schema() %>.tag[],\n'
+            '    _modified_columns_bit_mask boolean[],\n'
+            '    _resolved boolean,\n'
+            '    _currently_reordering boolean,\n'
+            '%s'
+            '%s'
+            '    PRIMARY KEY(%s)\n'
+            ')',
+            shadow_table_name,
+            reordered_column_definitions,
+            shadow_column_definitions,
+            <%= schema() %>.format_every_and_join(primary_key_list, '%I')
+        );
+
+        EXECUTE format('ALTER TABLE <%= schema() %>.%I REPLICA IDENTITY FULL', shadow_table_name);
+
+        -- Create a tombstone table in the electric namespace and using the table name with `tombstone__` prefix
+        EXECUTE format(
+            E'CREATE TABLE <%= schema() %>.%I (\n'
+            '%s'
+            '    PRIMARY KEY(%s)\n'
+            ')',
+            tombstone_table_name,
+            tombstone_column_definitions,
+            <%= schema() %>.format_every_and_join(primary_key_list, '%I')
+        );
+
+        -- We install generate functions for newly created tables & triggers using those functions
+        -- this only needs write mode because we will have previously installed the
+        -- read-mode functions and triggers when electrifying table
+        PERFORM <%= schema() %>.install_functions_and_triggers(
+            ARRAY['read', 'write'],
+            _schema,
+            _table,
+            primary_key_list,
+            non_pk_column_list
+        );
+    END;
+$function$;
+

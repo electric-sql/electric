@@ -9,11 +9,12 @@ CREATE OR REPLACE FUNCTION <%= schema() %>.install_functions_and_triggers(
     LANGUAGE PLPGSQL AS
 $function$
     DECLARE
-        shadow_table_name TEXT := 'shadow__' || schema_name || '__' || table_name;
+        shadow_table_name TEXT := <%= schema() %>.__shadow_table_name(schema_name , table_name);
         full_table_identifier TEXT := format('%I.%I', schema_name, table_name);
         generated_functions JSONB;
     BEGIN
         -- Install function to be used in the triggers
+        -- uses the mode to determine which functions are required
         generated_functions := <%= schema() %>.install_conflict_resolution_functions(
             mode,
             schema_name,
@@ -23,6 +24,11 @@ $function$
         );
 
         -- Install actual triggers
+        --
+        -- because the `install_conflict_resolution_functions` function honours
+        -- the `mode` flag, not all functions are generated, so we test the return
+        -- value for the installed functions (rather than duplicate the mode test
+        -- filter)
         IF generated_functions ? 'generate_tombstone_entry' THEN
             EXECUTE format($$
                 CREATE OR REPLACE TRIGGER as_first__save_deleted_rows_to_tombstone_table

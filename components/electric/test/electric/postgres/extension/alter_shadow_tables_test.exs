@@ -103,7 +103,7 @@ defmodule Electric.Postgres.Extension.AlterShadowTablesTest do
     {:ok, _, _} =
       :epgsql.squery(
         conn,
-        "CALL electric.alter_shadow_table('public', 'buttercup', 'add', 'name', 'text')"
+        "CALL electric.alter_shadow_table(ARRAY['read','write'], 'public', 'buttercup', 'add', 'name', 'text')"
       )
 
     {:ok, rows} = get_shadow_schema(conn, "public", "buttercup")

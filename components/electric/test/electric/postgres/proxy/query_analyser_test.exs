@@ -51,7 +51,7 @@ defmodule Electric.Postgres.Proxy.QueryAnalyserTest do
       state =
         %State{loader: loader}
         |> State.begin()
-        |> State.tx_permissions(rules)
+        |> State.set_initial_permissions(rules)
 
       {:ok, state: state, loader: loader}
     end

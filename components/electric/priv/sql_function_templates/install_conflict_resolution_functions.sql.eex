@@ -1,8 +1,8 @@
 CREATE OR REPLACE FUNCTION <%= schema() %>.install_conflict_resolution_functions(
       mode TEXT[],
-      schema_name TEXT, 
-      table_name TEXT, 
-      primary_key_list TEXT[], 
+      schema_name TEXT,
+      table_name TEXT,
+      primary_key_list TEXT[],
       non_pk_column_list TEXT[]
     )
     RETURNS JSONB
@@ -20,12 +20,10 @@ $function$
             function_names := jsonb_set(function_names, '{reorder_main_op}', to_jsonb(<%= schema() %>.install_function__reorder_main_op(schema_name, table_name, primary_key_list, non_pk_column_list)));
             function_names := jsonb_set(function_names, '{shadow_insert_to_upsert}', to_jsonb(<%= schema() %>.install_function__shadow_insert_to_upsert(schema_name, table_name, primary_key_list, non_pk_column_list)));
             function_names := jsonb_set(function_names, '{resolve_observed_tags}', to_jsonb(<%= schema() %>.install_function__resolve_observed_tags(schema_name, table_name, primary_key_list, non_pk_column_list)));
-        END IF
-
-        IF 'read' = ANY (mode) THEN
-            function_names := jsonb_set(function_names, '{send_self_and_references}', to_jsonb(<%= schema() %>.install_function__send_self_and_references(schema_name, table_name, primary_key_list, non_pk_column_list)));
-            function_names := jsonb_set(function_names, '{send_self_trigger}', to_jsonb(<%= schema() %>.install_function__send_self_trigger(schema_name, table_name, primary_key_list)));
         END IF;
+
+        function_names := jsonb_set(function_names, '{send_self_and_references}', to_jsonb(<%= schema() %>.install_function__send_self_and_references(schema_name, table_name, primary_key_list, non_pk_column_list)));
+        function_names := jsonb_set(function_names, '{send_self_trigger}', to_jsonb(<%= schema() %>.install_function__send_self_trigger(schema_name, table_name, primary_key_list)));
 
         RETURN function_names;
     END

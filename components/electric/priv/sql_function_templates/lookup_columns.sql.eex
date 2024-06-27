@@ -1,16 +1,21 @@
--- This function returns information about columns of the table based on it's oid, skipping any columns starting with an underscore
-CREATE OR REPLACE FUNCTION <%= schema() %>.lookup_columns(search_oid oid, include_hidden_columns boolean DEFAULT false)
-RETURNS TABLE (
-  col_name name,
-  col_type text,
-  col_not_null boolean,
-  col_default text,
-  col_primary boolean
-)
-STABLE PARALLEL SAFE
-RETURNS NULL ON NULL INPUT
-ROWS 10
-LANGUAGE SQL AS $$
+-- This function returns information about columns of the table based on it's
+-- oid, skipping any columns starting with an underscore
+CREATE OR REPLACE FUNCTION <%= schema() %>.lookup_columns(
+        search_oid oid,
+        include_hidden_columns boolean DEFAULT false
+    )
+    RETURNS TABLE (
+        col_name name,
+        col_type text,
+        col_not_null boolean,
+        col_default text,
+        col_primary boolean
+    )
+    SECURITY DEFINER
+    STABLE PARALLEL SAFE
+    RETURNS NULL ON NULL INPUT
+    ROWS 10 LANGUAGE SQL AS
+$function$
     SELECT
         attname AS col_name,
         pg_catalog.format_type(atttypid, atttypmod) AS col_type,
@@ -28,4 +33,4 @@ LANGUAGE SQL AS $$
         AND (include_hidden_columns OR attname NOT LIKE '\_%')
         AND NOT attisdropped
     ORDER BY attnum
-$$;
+$function$;

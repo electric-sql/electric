@@ -1,0 +1,17 @@
+CREATE OR REPLACE FUNCTION <%= schema() %>.__shadow_table_name(
+        schema_name text,
+        table_name text
+    )
+    RETURNS TEXT
+    LANGUAGE PLPGSQL
+    SECURITY DEFINER AS
+$function$
+    BEGIN
+        IF (schema_name IS NULL) OR (table_name IS NULL) THEN
+            RAISE EXCEPTION 'Can''t generate shadow table name: schema or table name is NULL';
+        END IF;
+
+        RETURN '<%= shadow_prefix() %>' || schema_name || '__' || table_name;
+    END;
+$function$;
+

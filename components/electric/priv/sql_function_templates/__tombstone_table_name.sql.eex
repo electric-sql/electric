@@ -1,0 +1,17 @@
+CREATE OR REPLACE FUNCTION <%= schema() %>.__tombstone_table_name(
+        schema_name text,
+        table_name text
+    )
+    RETURNS TEXT
+    LANGUAGE PLPGSQL
+    SECURITY DEFINER AS
+$function$
+    BEGIN
+        IF (schema_name IS NULL) OR (table_name IS NULL) THEN
+            RAISE EXCEPTION 'Can''t generate tombstone table name, schema or table name is NULL';
+        ELSE
+            RETURN '<%= tombstone_prefix() %>' || schema_name || '__' || table_name;
+        END IF;
+    END;
+$function$;
+

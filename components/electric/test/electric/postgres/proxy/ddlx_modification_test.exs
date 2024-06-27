@@ -80,9 +80,10 @@ defmodule Electric.Postgres.Proxy.DDLXModificationTest do
       introspect_result(@projects),
       client: [complete_ready("ELECTRIC GRANT", :tx)]
     )
-    |> client(commit(), server: [save_permissions_rules_query(rules)])
-    |> server(complete_ready("INSERT 1", :tx), server: [capture_version_query()])
-    |> server(complete_ready("INSERT 1", :tx), server: commit())
+    |> client(commit(), server: [activate_write_mode_query({"public", "projects"})])
+    |> server(complete_ready(), server: [save_permissions_rules_query(rules)])
+    |> server(complete_ready(), server: [capture_version_query()])
+    |> server(complete_ready(), server: commit())
     |> server(complete_ready("COMMIT", :idle))
   end
 
@@ -93,14 +94,14 @@ defmodule Electric.Postgres.Proxy.DDLXModificationTest do
     [call] = proxy_sql(command, table_schema)
 
     cxt.injector
-    |> electric_begin(client: begin())
+    |> electric_begin([client: begin()], rules: cxt.rules)
     |> electric_preamble([client: ddlx], command)
     |> server(introspect_result(table_schema), server: [call])
     |> server(electric_call_complete(),
       client: [complete_ready("ELECTRIC ENABLE", :tx)]
     )
     |> client(commit(), server: [capture_version_query()])
-    |> server(complete_ready("INSERT 1", :tx), server: commit())
+    |> server(complete_ready(), server: commit())
     |> server(complete_ready("COMMIT", :idle))
   end
 
@@ -143,10 +144,11 @@ defmodule Electric.Postgres.Proxy.DDLXModificationTest do
         %M.Execute{},
         %M.Sync{}
       ],
-      server: [save_permissions_rules_query(rules)]
+      server: [activate_write_mode_query({"public", "projects"})]
     )
-    |> server(complete_ready("INSERT 1", :tx), server: [capture_version_query()])
-    |> server(complete_ready("INSERT 1", :tx), server: commit())
+    |> server(complete_ready(), server: [save_permissions_rules_query(rules)])
+    |> server(complete_ready(), server: [capture_version_query()])
+    |> server(complete_ready(), server: commit())
     |> server(complete_ready("COMMIT", :idle),
       client: [
         %M.ParseComplete{},
@@ -156,5 +158,49 @@ defmodule Electric.Postgres.Proxy.DDLXModificationTest do
         %M.ReadyForQuery{status: :idle}
       ]
     )
+  end
+
+  test "granting write perms to table creates triggers and shadow tables", cxt do
+    ddlx = [
+      "ELECTRIC GRANT ALL ON projects TO 'member'"
+    ]
+
+    {[{ddlx1, command1}], rules} = rules(cxt.rules, ddlx)
+
+    cxt.injector
+    |> electric_begin([client: begin()], rules: cxt.rules)
+    |> electric_preamble([client: ddlx1], command1)
+    |> server(
+      introspect_result(@projects),
+      client: [complete_ready("ELECTRIC GRANT", :tx)]
+    )
+    |> client(commit(), server: [activate_write_mode_query({"public", "projects"})])
+    |> server(complete_ready(), server: [save_permissions_rules_query(rules)])
+    |> server(complete_ready(), server: [capture_version_query()])
+    |> server(complete_ready(), server: commit())
+    |> server(complete_ready("COMMIT", :idle))
+  end
+
+  test "granting read perms to table does not create triggers and shadow tables", cxt do
+    ddlx = [
+      "ELECTRIC GRANT READ ON projects TO 'member'"
+    ]
+
+    {[{ddlx1, command1}], rules} = rules(cxt.rules, ddlx)
+
+    cxt.injector
+    |> electric_begin([client: begin()], rules: cxt.rules)
+    |> electric_preamble([client: ddlx1], command1)
+    |> server(
+      introspect_result(@projects),
+      client: [complete_ready("ELECTRIC GRANT", :tx)]
+    )
+    |> client(commit(), server: [save_permissions_rules_query(rules)])
+    |> server(complete_ready(), server: [capture_version_query()])
+    |> server(complete_ready(), server: commit())
+    |> server(complete_ready("COMMIT", :idle))
+  end
+
+  test "add column to writable table triggers modification to shadow", cxt do
   end
 end

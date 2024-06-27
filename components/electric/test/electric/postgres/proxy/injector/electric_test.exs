@@ -41,7 +41,7 @@ defmodule Electric.Postgres.Proxy.Injector.ElectricTest do
       state =
         %Injector.State{loader: loader}
         |> Injector.State.begin()
-        |> Injector.State.tx_permissions(rules)
+        |> Injector.State.set_initial_permissions(rules)
 
       {:ok, state: state, loader: loader}
     end

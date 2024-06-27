@@ -298,7 +298,7 @@ defimpl Operation, for: List do
   end
 
   def activate([], state, send) do
-    {[], state, send}
+    {nil, state, send}
   end
 
   def activate([op | rest], state, send) do
@@ -614,7 +614,7 @@ defmodule Operation.Begin do
           query: state.query_generator.permissions_rules_query(),
           callback: fn [[data]], state, send ->
             {:ok, rules} = Permissions.State.decode_rules(data)
-            {State.tx_permissions(state, rules), send}
+            {State.set_initial_permissions(state, rules), send}
           end
         },
         if(op.hidden?, do: [], else: Operation.Pass.client(op.complete_msgs))
@@ -680,8 +680,9 @@ defmodule Operation.SavePermissionsRules do
     use Operation.Impl
 
     def activate(op, state, send) do
-      if rules = State.permissions_modified(state) do
-        query = state.query_generator.save_permissions_rules_query(rules)
+      if modified = State.permissions_modified(state) do
+        {_initial_rules, final_rules} = modified
+        query = state.query_generator.save_permissions_rules_query(final_rules)
 
         {op, state, Send.server(send, %M.Query{query: query})}
       else
@@ -695,6 +696,29 @@ defmodule Operation.SavePermissionsRules do
 
     def recv_server(op, _msg, state, send) do
       {op, state, send}
+    end
+  end
+end
+
+defmodule Operation.ActivateWriteMode do
+  defstruct []
+
+  defimpl Operation do
+    use Operation.Impl
+
+    def activate(_op, state, send) do
+      if modified = State.permissions_modified(state) do
+        {initial_rules, final_rules} = modified
+
+        initial_rules
+        |> Electric.DDLX.granted_write_permissions(final_rules)
+        |> Enum.map(fn relation ->
+          Operation.Private.query(state.query_generator.activate_write_mode_query(relation))
+        end)
+        |> Operation.activate(state, send)
+      else
+        {nil, state, send}
+      end
     end
   end
 end
@@ -723,6 +747,7 @@ defmodule Operation.Commit do
 
     def activate(op, state, send) do
       stack = [
+        %Operation.ActivateWriteMode{},
         %Operation.SavePermissionsRules{},
         %Operation.AssignMigrationVersion{},
         %Operation.Map{msgs: [%M.Query{query: "COMMIT"}], response: response_msgs(op)},
@@ -1093,15 +1118,89 @@ defmodule Operation.Capture do
   end
 end
 
+defmodule Operation.Private do
+  defstruct msgs: []
+
+  def query(sql) when is_binary(sql) do
+    %__MODULE__{msgs: [%M.Query{query: sql}]}
+  end
+
+  defimpl Operation do
+    use Operation.Impl
+
+    def activate(%{msgs: []}, state, send) do
+      {nil, state, send}
+    end
+
+    def activate(op, state, send) do
+      {op, state, Send.server(send, op.msgs)}
+    end
+  end
+end
+
 defmodule Operation.AlterShadow do
   defstruct [:analysis, :modification]
 
   defimpl Operation do
     use Operation.Impl
 
+    alias Electric.DDLX
+
     def activate(op, state, send) do
-      sql = state.query_generator.alter_shadow_table_query(op.modification)
-      {op, State.electrify(state), Send.server(send, query(sql))}
+      stack = queries(op, state)
+
+      Operation.activate(stack, state, send)
+    end
+
+    defp queries(%{analysis: analysis}, state) do
+      analysis
+      |> shadow_modifications(state)
+      |> Enum.map(&state.query_generator.alter_shadow_table_query/1)
+      |> Enum.map(&Operation.Private.query/1)
+    end
+
+    defp shadow_modifications(%{ast: %PgQuery.AlterTableStmt{} = ast}, state) do
+      analyse_modifications_query(ast, state)
+    end
+
+    defp shadow_modifications(_analysis, _state) do
+      []
+    end
+
+    defp analyse_modifications_query(%PgQuery.AlterTableStmt{} = stmt, state) do
+      {:table, {_schema, _name} = table} = Parser.table_name(stmt, state)
+
+      {:ok, rules} = Injector.State.current_permissions(state)
+      permissions_state = DDLX.permissions_state(rules, table)
+
+      perms =
+        Enum.concat(
+          if(permissions_state.read, do: [:read], else: []),
+          if(permissions_state.write, do: [:write], else: [])
+        )
+
+      Enum.map(stmt.cmds, fn %{node: {:alter_table_cmd, cmd}} ->
+        Map.new([
+          {:perms, perms},
+          {:action, modification_action(cmd)},
+          {:table, table} | column_definition(cmd.def)
+        ])
+      end)
+    end
+
+    defp modification_action(%{subtype: :AT_AddColumn}), do: :add
+    defp modification_action(%{subtype: :AT_DropColumn}), do: :drop
+    defp modification_action(_), do: :modify
+
+    defp column_definition(%{node: {:column_def, def}}) do
+      [
+        column: def.colname,
+        type: Elixir.Electric.Postgres.Dialect.Postgresql.map_type(def.type_name)
+      ]
+    end
+
+    defp column_definition(nil) do
+      []
     end
   end
 end

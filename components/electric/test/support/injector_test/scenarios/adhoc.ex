@@ -33,12 +33,12 @@ defmodule Electric.Postgres.Proxy.TestScenario.AdHoc do
     assert_non_electrified_migration(injector, framework, query)
   end
 
-  def assert_electrified_migration(injector, _framework, queries) do
+  def assert_electrified_migration(injector, _framework, queries, rules \\ default_rules()) do
     queries = List.wrap(queries)
 
     injector =
       injector
-      |> electric_begin(client: begin())
+      |> electric_begin([client: begin()], rules: rules)
 
     queries
     |> Enum.reduce(injector, &execute_tx_sql(&1, &2, :extended))

@@ -29,7 +29,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     |> idle!()
   end
 
-  def assert_electrified_migration(injector, _framework, query) do
+  def assert_electrified_migration(injector, _framework, query, rules \\ default_rules()) do
     {query, opts} =
       case query do
         sql when is_binary(sql) ->
@@ -48,7 +48,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.Manual do
     tag = random_tag()
 
     injector
-    |> electric_begin(client: query(query))
+    |> electric_begin([client: query(query)], rules: rules)
     |> server(complete_ready(tag, :tx),
       server: capture_ddl_query(query),
       client: [

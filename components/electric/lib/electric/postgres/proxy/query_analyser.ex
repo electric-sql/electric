@@ -116,25 +116,11 @@ defmodule Electric.Postgres.Proxy.QueryAnalyser.Impl do
   defp decode_val({:sval, %{sval: s}}), do: s
   defp decode_val({:fval, %{fval: s}}), do: String.to_integer(s)
 
-  @write_privs Electric.Satellite.Permissions.write_privileges()
-
   def write_permissions(%{relation: %PgQuery.RangeVar{} = relation}, state) do
     %{schemaname: schema, relname: name} = relation
-    {:ok, rules} = Injector.State.permissions_rules(state)
+    {:ok, rules} = Injector.State.current_permissions(state)
 
-    rules.grants
-    |> Enum.filter(fn %{table: %{schema: s, name: n}} -> s == schema && n == name end)
-    |> Enum.reduce(
-      %{insert: false, update: false, delete: false, write: false},
-      fn %{privilege: p}, %{insert: i, update: u, delete: d, write: w} ->
-        %{
-          insert: i || p == :INSERT,
-          update: u || p == :UPDATE,
-          delete: d || p == :DELETE,
-          write: w || p in @write_privs
-        }
-      end
-    )
+    Electric.DDLX.permissions_state(rules, {schema, name})
   end
 end
 

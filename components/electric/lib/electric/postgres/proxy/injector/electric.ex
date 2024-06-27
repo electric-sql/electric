@@ -40,10 +40,7 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
   end
 
   def command_from_analysis(msg, %{action: {:alter, "table"}, capture?: true} = analysis, state) do
-    shadow_modifications =
-      analysis
-      |> shadow_modifications(state)
-      |> Enum.map(&%Operation.AlterShadow{analysis: analysis, modification: &1})
+    shadow_modifications = [%Operation.AlterShadow{analysis: analysis}]
 
     [
       Operation.Wait.new(List.wrap(msg), state),
@@ -65,37 +62,6 @@ defmodule Electric.Postgres.Proxy.Injector.Electric do
 
   def command_from_analysis(msg, _analysis, state) do
     [Operation.Wait.new(msg, state)]
-  end
-
-  defp shadow_modifications(%{ast: %PgQuery.AlterTableStmt{} = ast}, state) do
-    analyse_modifications_query(ast, state)
-  end
-
-  defp shadow_modifications(_analysis, _state) do
-    []
-  end
-
-  defp analyse_modifications_query(%PgQuery.AlterTableStmt{} = stmt, state) do
-    {:table, {_schema, _name} = table} = Parser.table_name(stmt, state)
-
-    Enum.map(stmt.cmds, fn %{node: {:alter_table_cmd, cmd}} ->
-      Map.new([{:action, modification_action(cmd)}, {:table, table} | column_definition(cmd.def)])
-    end)
-  end
-
-  defp modification_action(%{subtype: :AT_AddColumn}), do: :add
-  defp modification_action(%{subtype: :AT_DropColumn}), do: :drop
-  defp modification_action(_), do: :modify
-
-  defp column_definition(%{node: {:column_def, def}}) do
-    [
-      column: def.colname,
-      type: Elixir.Electric.Postgres.Dialect.Postgresql.map_type(def.type_name)
-    ]
-  end
-
-  defp column_definition(nil) do
-    []
   end
 
   # split messages into groups that will result in a terminating readyforquery msg from the server

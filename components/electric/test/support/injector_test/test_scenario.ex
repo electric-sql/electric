@@ -4,6 +4,8 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   alias Electric.DDLX
   alias Electric.Satellite.SatPerms
 
+  alias ElectricTest.PermissionsHelpers.Perms
+
   import ExUnit.Assertions
 
   defmodule MockInjector do
@@ -59,6 +61,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       Injector.alter_shadow_table_query(alteration, "$query$")
     end
 
+    def activate_write_mode_query({_, _} = relation) do
+      Injector.activate_write_mode_query(relation, "$$")
+    end
+
     def quote_query(query) do
       Injector.quote_query(query, "$query$")
     end
@@ -83,6 +89,8 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       alias unquote(m).MockInjector
       alias Electric.Postgres.MockSchemaLoader
       alias Electric.Postgres.Proxy.Injector
+
+      alias ElectricTest.PermissionsHelpers.Perms
 
       unquote(message_aliases)
 
@@ -410,9 +418,12 @@ defmodule Electric.Postgres.Proxy.TestScenario do
   end
 
   def permissions_modified!({_stack, state}) do
-    if rules = Injector.State.permissions_modified(state),
-      do: rules,
-      else: raise("permissions are not modified")
+    if rules = Injector.State.permissions_modified(state) do
+      {_initial, final_rules} = rules
+      final_rules
+    else
+      raise("permissions are not modified")
+    end
   end
 
   @doc """
@@ -498,8 +509,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
     [state_msg | state_messages] =
       if rules = Injector.State.permissions_modified(state) do
+        {_initial, final_rules} = rules
+
         [
-          save_permissions_rules_query(rules),
+          save_permissions_rules_query(final_rules),
           if(version?, do: capture_version_query(), else: []),
           commit()
         ]
@@ -539,6 +552,10 @@ defmodule Electric.Postgres.Proxy.TestScenario do
       %M.DataRow{fields: [rules_data]}
       | complete_ready("SELECT 1", :tx)
     ]
+  end
+
+  def default_rules do
+    Perms.to_rules([])
   end
 
   @doc """
@@ -857,14 +874,18 @@ defmodule Electric.Postgres.Proxy.TestScenario do
 
   def alter_shadow_table_query(
         %{
+          perms: _perms,
           table: {_schema, _table},
           action: _action,
           column: _column,
           type: _type
         } = alteration
       ) do
-    # TODO: support 
     query(MockInjector.alter_shadow_table_query(alteration))
+  end
+
+  def activate_write_mode_query({_, _} = relation) do
+    query(MockInjector.activate_write_mode_query(relation))
   end
 
   def capture_migration_queries(injector, initial_messages, queries, version) do

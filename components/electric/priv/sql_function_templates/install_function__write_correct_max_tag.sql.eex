@@ -3,8 +3,8 @@ CREATE OR REPLACE FUNCTION electric.install_function__write_correct_max_tag(sche
     LANGUAGE PLPGSQL AS $outer_function$
 DECLARE
     function_name TEXT := 'write_correct_max_tag___' || schema_name || '__' || table_name;
-    shadow_table_name TEXT := 'shadow__' || schema_name || '__' || table_name;
-    tombstone_table_name TEXT := 'tombstone__' || schema_name || '__' || table_name;
+    shadow_table_name TEXT := <%= schema() %>.__shadow_table_name(schema_name , table_name);
+    tombstone_table_name TEXT := <%= schema() %>.__tombstone_table_name(schema_name , table_name);
     tag_column_list TEXT[] := electric.format_every(non_pk_column_list, '_tag_%s');
     columns_to_write_blocks TEXT;
     where_pk_substitution TEXT;

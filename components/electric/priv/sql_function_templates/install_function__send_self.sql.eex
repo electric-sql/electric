@@ -2,7 +2,7 @@ CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__send_self_and_refer
     RETURNS TEXT
     LANGUAGE PLPGSQL AS $outer_function$
     DECLARE
-        shadow_table_name TEXT := 'shadow__' || schema_name || '__' || table_name;
+        shadow_table_name TEXT := <%= schema() %>.__shadow_table_name(schema_name , table_name);
         function_name TEXT := 'send_self_and_references___' || schema_name || '__' || table_name;
         arg_name_list TEXT[] := <%= schema() %>.format_every(primary_key_list, 'arg_%s'); -- `{arg_id, arg_test}`
         function_args_template TEXT := format('%%1$I %I.%I.%%2$I%%%%TYPE', schema_name, table_name); -- `%1$I schema.table%2$I%%TYPE` formatting template

@@ -3,8 +3,8 @@ CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__perform_reordered_o
     LANGUAGE PLPGSQL AS $outer_function$
 DECLARE
     function_name TEXT := 'perform_reordered_op___' || schema_name || '__' || table_name;
-    shadow_table_name TEXT := 'shadow__' || schema_name || '__' || table_name;
-    tombstone_table_name TEXT := 'tombstone__' || schema_name || '__' || table_name;
+    shadow_table_name TEXT := <%= schema() %>.__shadow_table_name(schema_name , table_name);
+    tombstone_table_name TEXT := <%= schema() %>.__tombstone_table_name(schema_name , table_name);
     tag_column_list TEXT[] := <%= schema() %>.format_every(non_pk_column_list, '_tag_%s');
     reordered_column_list TEXT[];
     where_pks_equal_shadow TEXT;

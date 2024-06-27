@@ -8,6 +8,8 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
   alias Electric.Postgres.Extension.SchemaLoader
   alias Electric.Postgres.MockSchemaLoader
 
+  alias ElectricTest.PermissionsHelpers.Perms
+
   setup do
     # enable all the optional ddlx features
     Electric.Features.process_override(
@@ -135,7 +137,13 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
               capture:
                 {~s[ALTER TABLE "socks" ADD COLUMN size int2],
                  shadow_add_column: [
-                   %{table: {"public", "socks"}, action: :add, column: "size", type: "int2"}
+                   %{
+                     perms: [],
+                     table: {"public", "socks"},
+                     action: :add,
+                     column: "size",
+                     type: "int2"
+                   }
                  ]}
             ]
 
@@ -154,7 +162,13 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
               capture:
                 {~s[ALTER TABLE "socks" ADD COLUMN size int2],
                  shadow_add_column: [
-                   %{table: {"public", "socks"}, action: :add, column: "size", type: "int2"}
+                   %{
+                     perms: [],
+                     table: {"public", "socks"},
+                     action: :add,
+                     column: "size",
+                     type: "int2"
+                   }
                  ]}
             ]
 
@@ -163,27 +177,74 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
         end
 
         @tag electrified_migration: true
-        test "alter electrified table", cxt do
+        test "alter electrified table with write permissions", cxt do
           query =
             {~s[ALTER TABLE "truths" ADD COLUMN "another" int4],
              shadow_add_column: [
-               %{table: {"public", "truths"}, action: :add, column: "another", type: "int4"}
+               %{
+                 perms: [:read, :write],
+                 table: {"public", "truths"},
+                 action: :add,
+                 column: "another",
+                 type: "int4"
+               }
              ]}
 
-          cxt.scenario.assert_electrified_migration(cxt.injector, cxt.framework, query)
+          cxt.scenario.assert_electrified_migration(
+            cxt.injector,
+            cxt.framework,
+            query,
+            Perms.to_rules([~s[GRANT ALL ON "truths" TO AUTHENTICATED]])
+          )
+        end
+
+        @tag electrified_migration: true
+        test "alter electrified table without write permissions", cxt do
+          query =
+            {~s[ALTER TABLE "truths" ADD COLUMN "another" int4],
+             shadow_add_column: [
+               %{
+                 perms: [:read],
+                 table: {"public", "truths"},
+                 action: :add,
+                 column: "another",
+                 type: "int4"
+               }
+             ]}
+
+          cxt.scenario.assert_electrified_migration(
+            cxt.injector,
+            cxt.framework,
+            query,
+            Perms.to_rules([~s[GRANT READ ON "truths" TO AUTHENTICATED]])
+          )
         end
 
         @tag electrified_migration: true
         test "add multiple columns to electrified table", cxt do
-          query =
-            {~s[ALTER TABLE "truths" ADD COLUMN "another" int4, ADD colour text, ADD COLUMN "finally" int2],
-             shadow_add_column: [
-               %{table: {"public", "truths"}, action: :add, column: "another", type: "int4"},
-               %{table: {"public", "truths"}, action: :add, column: "colour", type: "text"},
-               %{table: {"public", "truths"}, action: :add, column: "finally", type: "int2"}
-             ]}
+          cols =
+            [{"another", "int4"}, {"colour", "text"}, {"finally", "int2"}]
+            |> Enum.map(fn {name, type} ->
+              %{
+                perms: [:read, :write],
+                table: {"public", "truths"},
+                action: :add,
+                column: name,
+                type: type
+              }
+            end)
 
-          cxt.scenario.assert_electrified_migration(cxt.injector, cxt.framework, query)
+          query = {
+            ~s[ALTER TABLE "truths" ADD COLUMN "another" int4, ADD colour text, ADD COLUMN "finally" int2],
+            shadow_add_column: cols
+          }
+
+          cxt.scenario.assert_electrified_migration(
+            cxt.injector,
+            cxt.framework,
+            query,
+            Perms.to_rules([~s[GRANT ALL ON "truths" TO AUTHENTICATED]])
+          )
         end
 
         @tag non_electrified_migration: true
@@ -200,13 +261,24 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
               capture:
                 {~s[ALTER TABLE "truths" ADD COLUMN "another" int4],
                  shadow_add_column: [
-                   %{table: {"public", "truths"}, action: :add, column: "another", type: "int4"}
+                   %{
+                     perms: [:read, :write],
+                     table: {"public", "truths"},
+                     action: :add,
+                     column: "another",
+                     type: "int4"
+                   }
                  ]},
               # capture: {:alter_table, "truths", [{:add, "another", "int4"}]},
               passthrough: ~s[ALTER TABLE "socks" ADD COLUMN "holes" int2]
             ]
 
-            cxt.scenario.assert_electrified_migration(cxt.injector, cxt.framework, query)
+            cxt.scenario.assert_electrified_migration(
+              cxt.injector,
+              cxt.framework,
+              query,
+              Perms.to_rules([~s[GRANT ALL ON "truths" TO AUTHENTICATED]])
+            )
           end
         end
 
@@ -491,6 +563,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       |> server(capture_ddl_complete(),
         server: [
           alter_shadow_table_query(%{
+            perms: [],
             table: {"public", "something"},
             action: :add,
             column: "amount",
@@ -501,6 +574,7 @@ defmodule Electric.Postgres.Proxy.InjectorTest do
       |> server(alter_shadow_table_complete(),
         server: [
           alter_shadow_table_query(%{
+            perms: [],
             table: {"public", "something"},
             action: :add,
             column: "colour",

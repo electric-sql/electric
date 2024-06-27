@@ -17,7 +17,8 @@ defmodule Electric.Postgres.Proxy.Injector.State do
               rules_modifications: 0,
               schema: nil,
               failed: false,
-              permissions: %{}
+              initial_permissions: %{},
+              current_permissions: %{}
 
     @type t() :: %__MODULE__{
             electrified: boolean(),
@@ -28,7 +29,8 @@ defmodule Electric.Postgres.Proxy.Injector.State do
             rules_modifications: non_neg_integer(),
             schema: nil | Postgres.Schema.t(),
             failed: boolean(),
-            permissions: %{module() => term()}
+            initial_permissions: %{module() => term()},
+            current_permissions: %{module() => term()}
           }
 
     def new(loader) do
@@ -51,6 +53,55 @@ defmodule Electric.Postgres.Proxy.Injector.State do
 
     def table_electrified?(tx, {schema, table}) do
       Map.get(tx.tables, {schema, table}, false)
+    end
+
+    # NOTE: this uses an abstract `syntax` module as a nod towards future
+    # extensibility, where the proxy can support multiple syntaxes for managing
+    # the permissions state.
+    # At the moment `Electric.DDLX` is hard-coded as the syntax module at the 
+    # call sites for this function.
+    def initial_permissions(tx, syntax, permissions) do
+      tx
+      |> Map.update!(:initial_permissions, &Map.put(&1, syntax, permissions))
+      |> Map.update!(:current_permissions, &Map.put(&1, syntax, {0, permissions}))
+    end
+
+    def current_permissions(%Tx{} = tx, syntax) do
+      with {:ok, {_, perms}} <- Map.fetch(tx.current_permissions, syntax) do
+        {:ok, perms}
+      end
+    end
+
+    def update_permissions(%Tx{} = tx, syntax, command) when is_atom(syntax) do
+      Map.update!(tx, :current_permissions, fn current ->
+        Map.update!(current, syntax, fn {modifications, permissions} ->
+          {:ok, n, updated_permissions} =
+            apply(syntax, :update_permissions, [command, permissions])
+
+          {modifications + n, updated_permissions}
+        end)
+      end)
+    end
+
+    def modified_permissions(%Tx{} = tx, syntax) when is_atom(syntax) do
+      case Map.fetch!(tx.current_permissions, syntax) do
+        {0, _} ->
+          nil
+
+        {_n, current_permissions} ->
+          {
+            Map.fetch!(tx.initial_permissions, syntax),
+            apply(syntax, :finalise_permissions, [current_permissions])
+          }
+      end
+    end
+
+    def permissions_saved(%Tx{} = tx, syntax) when is_atom(syntax) do
+      Map.update!(tx, :current_permissions, fn current ->
+        Map.update!(current, syntax, fn {_, permissions} ->
+          {0, permissions}
+        end)
+      end)
     end
   end
 
@@ -183,14 +234,6 @@ defmodule Electric.Postgres.Proxy.Injector.State do
     :error
   end
 
-  def permissions_rules(%__MODULE__{tx: nil, loader: loader}) do
-    SchemaLoader.global_permissions(loader)
-  end
-
-  def permissions_rules(%__MODULE__{tx: %{rules: rules}}) do
-    {:ok, rules}
-  end
-
   @doc """
   Assign a version to the current transaction.
   """
@@ -244,37 +287,37 @@ defmodule Electric.Postgres.Proxy.Injector.State do
   def failed?(%__MODULE__{tx: nil}), do: false
   def failed?(%__MODULE__{tx: tx}), do: tx.failed
 
-  def txn_permissions(%__MODULE__{tx: nil}, _rules) do
+  def set_initial_permissions(%__MODULE__{tx: nil}, _rules) do
     raise "no in transaction"
   end
 
-  def tx_permissions(%__MODULE__{} = state, rules) do
+  def set_initial_permissions(%__MODULE__{} = state, rules) do
     Map.update!(state, :tx, fn tx ->
-      %{tx | rules: rules, permissions: Map.put(tx.permissions, Electric.DDLX, rules)}
+      Tx.initial_permissions(tx, Electric.DDLX, rules)
     end)
   end
 
+  # TODO: this is less than ideal. We should really just open a tx
+  # for every statement and load the perms within it is usual. 
+  # That way we have access to the permissions state in a consistent
+  # way.
+  def current_permissions(%__MODULE__{tx: nil, loader: loader}) do
+    SchemaLoader.global_permissions(loader)
+  end
+
+  def current_permissions(%__MODULE__{tx: tx}) do
+    Tx.current_permissions(tx, Electric.DDLX)
+  end
+
   def update_permissions(%__MODULE__{} = state, %Electric.DDLX.Command{} = command) do
-    {:ok, n, rules} =
-      Electric.Satellite.Permissions.State.apply_ddlx_txn(command.action, state.tx.rules)
-
-    Map.update!(
-      state,
-      :tx,
-      &%{&1 | rules: rules, rules_modifications: &1.rules_modifications + n}
-    )
+    %{state | tx: Tx.update_permissions(state.tx, Electric.DDLX, command)}
   end
 
-  def permissions_modified(%__MODULE__{tx: %{rules_modifications: n, rules: rules}})
-      when n > 0 do
-    Electric.Satellite.Permissions.State.commit(rules)
-  end
-
-  def permissions_modified(%__MODULE__{}) do
-    nil
+  def permissions_modified(%__MODULE__{} = state) do
+    Tx.modified_permissions(state.tx, Electric.DDLX)
   end
 
   def permissions_saved(%__MODULE__{tx: tx} = state) do
-    %{state | tx: %{tx | rules_modifications: 0}}
+    %{state | tx: Tx.permissions_saved(tx, Electric.DDLX)}
   end
 end

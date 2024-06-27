@@ -563,6 +563,9 @@ defmodule Electric.Postgres.Extension do
   @shadow_prefix "shadow__"
   @tombstone_prefix "tombstone__"
 
+  def shadow_prefix, do: @shadow_prefix
+  def tombstone_prefix, do: @tombstone_prefix
+
   @doc """
   Returns a relation that is the shadow table of the given relation.
   """

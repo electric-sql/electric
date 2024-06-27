@@ -25,10 +25,11 @@ defmodule Electric.Postgres.Proxy.Injector do
   @callback electrified_tables_query() :: String.t()
   @callback permissions_rules_query() :: String.t()
   @callback save_permissions_rules_query(%SatPerms.Rules{}) :: String.t()
-  @callback capture_ddl_query(query :: binary()) :: binary()
-  @callback capture_version_query(version :: binary(), priority :: integer()) :: binary()
-  @callback alter_shadow_table_query(table_modification()) :: binary()
-  @callback migration_version() :: binary()
+  @callback capture_ddl_query(query :: binary()) :: String.t()
+  @callback capture_version_query(version :: binary(), priority :: integer()) :: String.t()
+  @callback alter_shadow_table_query(table_modification()) :: String.t()
+  @callback migration_version() :: String.t()
+  @callback activate_write_mode_query(Postgres.relation()) :: String.t()
 
   @default_mode {Injector.Electric, []}
 
@@ -206,6 +207,10 @@ defmodule Electric.Postgres.Proxy.Injector do
     Electric.Postgres.Extension.Permissions.save_global_query(rules)
   end
 
+  def activate_write_mode_query({sname, tname}, quote_delimiter \\ nil) do
+    "CALL electric.install_shadow_tables_and_triggers(#{quote_query(sname, quote_delimiter)}, #{quote_query(tname, quote_delimiter)})"
+  end
+
   defp normalise_name({_, _} = relation) do
     Electric.Utils.inspect_relation(relation)
   end
@@ -238,11 +243,14 @@ defmodule Electric.Postgres.Proxy.Injector do
   end
 
   def alter_shadow_table_query(alteration, quote) do
-    %{table: {schema, table}, action: action, column: column, type: type} = alteration
+    %{perms: perms, table: {schema, table}, action: action, column: column, type: type} =
+      alteration
+
+    mode =
+      IO.iodata_to_binary(["ARRAY[", perms |> Enum.map(&"'#{&1}'") |> Enum.join(", "), "]"])
 
     args =
-      [schema, table, action, column, type]
-      |> Enum.map(&quote_query(&1, quote))
+      [mode | Enum.map([schema, table, action, column, type], &quote_query(&1, quote))]
       |> Enum.join(", ")
 
     ~s|CALL electric.alter_shadow_table(#{args})|

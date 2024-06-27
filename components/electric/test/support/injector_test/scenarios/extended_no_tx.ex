@@ -38,7 +38,7 @@ defmodule Electric.Postgres.Proxy.TestScenario.ExtendedNoTx do
     |> idle!()
   end
 
-  def assert_electrified_migration(injector, _framework, query) do
+  def assert_electrified_migration(injector, _framework, query, rules \\ default_rules()) do
     {query, opts} =
       case query do
         sql when is_binary(sql) ->
@@ -51,13 +51,14 @@ defmodule Electric.Postgres.Proxy.TestScenario.ExtendedNoTx do
           {sql, opts}
 
         [_ | _] ->
-          raise ArgumentError, message: "Manual migration does not support multiple queries"
+          raise ArgumentError,
+            message: "Extended-no-tx migration does not support multiple queries"
       end
 
     tag = random_tag()
 
     injector
-    |> electric_begin(client: parse_describe(query))
+    |> electric_begin([client: parse_describe(query)], rules: rules)
     |> server(parse_describe_complete())
     |> client(bind_execute())
     |> server(
