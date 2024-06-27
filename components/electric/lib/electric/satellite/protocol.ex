@@ -485,7 +485,7 @@ defmodule Electric.Satellite.Protocol do
         Telemetry.event(state, :bad_transaction)
 
         Logger.error(Exception.format(:error, e, __STACKTRACE__))
-        {:error, %SatErrorResp{error_type: :INVALID_REQUEST}}
+        {:error, %SatErrorResp{error_type: :INVALID_REQUEST, message: "server error"}}
     end
   end
 
