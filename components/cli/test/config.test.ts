@@ -1,5 +1,34 @@
 import test from 'ava'
 import { getConfigValue, redactConfigSecrets } from '../src/config'
+import { configOptions } from '../src/config-options'
+
+const origEnv = { ...process.env }
+test.beforeEach(() => {
+  // restore environment
+  process.env = origEnv
+})
+
+test('getConfigValue respects boolean flag defaults', async (t) => {
+  const flagWithTrueDefault = Object.keys(configOptions).find(
+    (key) =>
+      configOptions[key].valueType === Boolean &&
+      configOptions[key].defaultVal === true
+  )!
+  const flagWithFalseDefault = Object.keys(configOptions).find(
+    (key) =>
+      configOptions[key].valueType === Boolean &&
+      configOptions[key].defaultVal === false
+  )!
+
+  t.is(getConfigValue(flagWithTrueDefault), true)
+  t.is(getConfigValue(flagWithFalseDefault), false)
+
+  // ensure environment overrides default
+  process.env[`ELECTRIC_${flagWithTrueDefault}`] = 'false'
+  process.env[`ELECTRIC_${flagWithFalseDefault}`] = 'true'
+  t.is(getConfigValue(flagWithTrueDefault), false)
+  t.is(getConfigValue(flagWithFalseDefault), true)
+})
 
 test('getConfigValue can capture `ELECTRIC_` prefixed CLI opitons', async (t) => {
   const image = getConfigValue('ELECTRIC_IMAGE', { image: 'electric:test' })
