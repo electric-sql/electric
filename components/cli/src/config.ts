@@ -110,7 +110,7 @@ export function getConfigValue<K extends ConfigOptionName>(
   // Then check if the option was passed as an environment variable
   const envName = name.startsWith('ELECTRIC_') ? name : `ELECTRIC_${name}`
   const envVal = process.env[envName]
-  if (configOptions[name].valueType === Boolean) {
+  if (envName in process.env && configOptions[name].valueType === Boolean) {
     return (!!envVal &&
       !['f', 'false', '0', '', 'no'].includes(
         envVal?.toLocaleLowerCase()
