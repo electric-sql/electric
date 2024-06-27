@@ -19,7 +19,7 @@ npm install pg
 import pg from 'pg'
 
 // Import the adapter to electrify node-postgres from the ElectricSQL library.
-import { PGlite } from '@electric-sql/node-postgres'
+import { electrify } from '@electric-sql/node-postgres'
 
 // Import your generated database schema.
 import { schema } from './generated/client'
