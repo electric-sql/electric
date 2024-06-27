@@ -391,20 +391,26 @@ defmodule Electric.Replication.PostgresConnectorMng do
   # `:public_key.cacerts_load()` is incorrect.
   @dialyzer {:nowarn_function, load_cacerts: 0}
 
-  defp load_cacerts do
-    case :public_key.cacerts_load() do
-      :ok ->
-        cacerts = :public_key.cacerts_get()
-        Logger.info("Successfully loaded #{length(cacerts)} cacerts from the OS")
-        {:ok, cacerts}
+  defp load_cacerts, do: :error
 
-      {:error, reason} ->
-        Logger.warning("Failed to load cacerts from the OS: #{inspect(reason)}")
-        :error
+  # Skip loading cacerts because managed database providers tend to have certificate issues
+  # that we haven't yet decided how to deal with.
+  if false do
+    defp load_cacerts do
+      case :public_key.cacerts_load() do
+        :ok ->
+          cacerts = :public_key.cacerts_get()
+          Logger.info("Successfully loaded #{length(cacerts)} cacerts from the OS")
+          {:ok, cacerts}
 
-      :undefined ->
-        Logger.warning("Failed to load cacerts from the OS.")
-        :error
+        {:error, reason} ->
+          Logger.warning("Failed to load cacerts from the OS: #{inspect(reason)}")
+          :error
+
+        :undefined ->
+          Logger.warning("Failed to load cacerts from the OS.")
+          :error
+      end
     end
   end
 
