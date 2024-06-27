@@ -807,7 +807,7 @@ export class SatelliteProcess implements Satellite {
       throw satelliteError
     }
 
-    Log.warn(`an error occurred in satellite: ${satelliteError.message}`)
+    Log.warn(`an error occurred in satellite: ${SatelliteErrorCode[satelliteError.code]} ${satelliteError.message}`)
 
     this._handleOrThrowClientError(satelliteError)
   }
