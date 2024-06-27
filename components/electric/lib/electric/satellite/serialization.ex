@@ -1,6 +1,7 @@
 defmodule Electric.Satellite.Serialization do
   alias Electric.Satellite.Protocol
   alias Electric.Satellite.SatOpGone
+  alias Electric.Satellite.Serialization.DataValidationError
   alias Electric.Replication.Changes.Gone
   alias Electric.Postgres.Extension.SchemaCache
   alias Electric.Postgres.{Extension, Replication}
@@ -559,7 +560,7 @@ defmodule Electric.Satellite.Serialization do
   def decode_column_value!(val, :bool) when val in ["t", "f"], do: val
 
   def decode_column_value!(val, :bool) do
-    raise "Unexpected value for bool column: #{inspect(val)}"
+    raise DataValidationError, message: "Unexpected value for bool column: #{inspect(val)}"
   end
 
   def decode_column_value!(val, type) when type in [:text, :varchar] do
@@ -589,6 +590,8 @@ defmodule Electric.Satellite.Serialization do
     _ = Date.from_iso8601!(val)
 
     val
+  rescue
+    _ -> raise DataValidationError, message: "Unexpected value for :date column: #{inspect(val)}"
   end
 
   def decode_column_value!(val, type) when type in [:float4, :float8] do
@@ -599,16 +602,25 @@ defmodule Electric.Satellite.Serialization do
   end
 
   def decode_column_value!(val, type) when type in [:int2, :int4, :int8] do
-    val
-    |> String.to_integer()
-    |> assert_valid_integer!(type)
+    case Integer.parse(val) do
+      {int, ""} ->
+        assert_valid_integer!(int, type)
+        val
 
-    val
+      _ ->
+        raise DataValidationError, message: "Non integer value given for #{type} column: #{val}"
+    end
   end
 
   def decode_column_value!(val, type) when type in [:json, :jsonb] do
-    _ = Jason.decode!(val)
-    val
+    case Jason.decode(val) do
+      {:ok, _} ->
+        val
+
+      {:error, %Jason.DecodeError{} = error} ->
+        raise DataValidationError,
+          message: "Invalid JSON found in #{type} column: #{Exception.message(error)}"
+    end
   end
 
   def decode_column_value!(val, :time) do
@@ -628,36 +640,68 @@ defmodule Electric.Satellite.Serialization do
     _ = Time.from_iso8601!(val)
 
     val
+  rescue
+    _ -> raise DataValidationError, message: "Unexpected value for :time column: #{inspect(val)}"
   end
 
   def decode_column_value!(val, :timestamp) do
-    # NaiveDateTime silently discards time zone offset if it is present in the string. But we want to reject such strings
-    # because values of type `timestamp` must not have an offset.
-    {:error, :missing_offset} = DateTime.from_iso8601(val)
+    case DateTime.from_iso8601(val) do
+      {:ok, _, _} ->
+        # NaiveDateTime silently discards time zone offset if it is present in the string. But we want to reject such strings
+        # because values of type `timestamp` must not have an offset.
+        raise DataValidationError,
+          message: "Unexpected offset provided for timestamp column: #{inspect(val)}"
 
-    dt = NaiveDateTime.from_iso8601!(val)
-    assert_valid_year!(dt.year)
+      {:error, :missing_offset} ->
+        dt = NaiveDateTime.from_iso8601!(val)
+        assert_valid_year!(dt.year)
 
-    val
+        val
+
+      {:error, :invalid_format} ->
+        raise DataValidationError,
+          message: "Unexpected format provided for timestamp column: #{inspect(val)}"
+    end
   end
 
   def decode_column_value!(val, :timestamptz) do
     # The offset of datetimes coming over the Satellite protocol MUST be 0.
-    {:ok, dt, 0} = DateTime.from_iso8601(val)
-    assert_valid_year!(dt.year)
+    case DateTime.from_iso8601(val) do
+      {:ok, dt, 0} ->
+        assert_valid_year!(dt.year)
 
-    val
+        val
+
+      {:ok, _, _} ->
+        raise DataValidationError,
+          message: "Non-zeo offset provided for timestamptz column: #{inspect(val)}"
+
+      {:error, :invalid_format} ->
+        raise DataValidationError,
+          message: "Unexpected format for timestamptz column: #{inspect(val)}"
+
+      {:error, :missing_offset} ->
+        raise DataValidationError,
+          message: "Missing offset in timestamptz column: #{inspect(val)}"
+    end
   end
 
   def decode_column_value!(val, :uuid) do
-    Electric.Utils.validate_uuid!(val)
+    case Electric.Utils.validate_uuid(val) do
+      {:ok, uuid} ->
+        uuid
+
+      :error ->
+        raise DataValidationError, message: "Unexpected value for uuid column: #{inspect(val)}"
+    end
   end
 
   def decode_column_value!(val, {:enum, typename, values}) do
     if val in values do
       val
     else
-      raise "Unexpected value #{inspect(val)} for enum type #{typename}"
+      raise DataValidationError,
+        message: "Unexpected value #{inspect(val)} for enum type #{typename}"
     end
   end
 
@@ -668,7 +712,7 @@ defmodule Electric.Satellite.Serialization do
         val
 
       _ ->
-        raise "Unexpected value for #{type} colum: #{inspect(val)}"
+        raise DataValidationError, message: "Unexpected value for #{type} column: #{inspect(val)}"
     end
   end
 
@@ -679,6 +723,9 @@ defmodule Electric.Satellite.Serialization do
   defp assert_valid_integer!(int, :int2) when int in @int2_range, do: :ok
   defp assert_valid_integer!(int, :int4) when int in @int4_range, do: :ok
   defp assert_valid_integer!(int, :int8) when int in @int8_range, do: :ok
+
+  defp assert_valid_integer!(int, type),
+    do: raise(DataValidationError, message: "Value out of range for #{type} column: #{int}")
 
   # Postgres[1] uses BC/AD suffixes to indicate whether the date is in the Common Era or precedes it. Postgres assumes year
   # 0 did not exist, so in its worldview '0001-12-31 BC' is immediately followed by '0001-01-01'.
@@ -694,15 +741,33 @@ defmodule Electric.Satellite.Serialization do
   #   [2]: https://www.sqlite.org/lang_datefunc.html
   defp assert_valid_year!(year) when year in 1..9999, do: :ok
 
+  defp assert_valid_year!(year),
+    do: raise(DataValidationError, message: "Year out of range: #{year}")
+
   defp assert_valid_month!(month) when month in 1..12, do: :ok
+
+  defp assert_valid_month!(month),
+    do: raise(DataValidationError, message: "Month out of range: #{month}")
 
   defp assert_valid_day!(day) when day in 1..31, do: :ok
 
+  defp assert_valid_day!(day),
+    do: raise(DataValidationError, message: "Day out of range: #{day}")
+
   defp assert_valid_hours!(hours) when hours in 0..23, do: :ok
+
+  defp assert_valid_hours!(hours),
+    do: raise(DataValidationError, message: "Hours out of range: #{hours}")
 
   defp assert_valid_minutes!(minutes) when minutes in 0..59, do: :ok
 
+  defp assert_valid_minutes!(minutes),
+    do: raise(DataValidationError, message: "Minutes out of range: #{minutes}")
+
   defp assert_valid_seconds!(seconds) when seconds in 0..59, do: :ok
+
+  defp assert_valid_seconds!(seconds),
+    do: raise(DataValidationError, message: "Seconds out of range: #{seconds}")
 
   defp assert_valid_fractional_seconds!(""), do: :ok
 
@@ -711,6 +776,9 @@ defmodule Electric.Satellite.Serialization do
     _ = String.to_integer(fs_str)
     :ok
   end
+
+  defp assert_valid_fractional_seconds!(val),
+    do: raise(DataValidationError, message: "Fractional seconds out of range: #{val}")
 
   defp assert_float_in_range!(_num, :float8), do: :ok
 
@@ -731,7 +799,7 @@ defmodule Electric.Satellite.Serialization do
       end
 
     with :error <- conversion_result do
-      raise "Value for float4 column out of range: #{inspect(num)}"
+      raise DataValidationError, message: "Value for float4 column out of range: #{inspect(num)}"
     end
   end
 end

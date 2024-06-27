@@ -18,6 +18,7 @@ defmodule Electric.Satellite.Protocol do
   alias Electric.Replication.Shapes
   alias Electric.Replication.Shapes.ShapeRequest
   alias Electric.Satellite.Serialization
+  alias Electric.Satellite.Serialization.DataValidationError
   alias Electric.Satellite.ClientManager
   alias Electric.Satellite.WriteValidation
   alias Electric.Satellite.ClientReconnectionInfo
@@ -485,7 +486,7 @@ defmodule Electric.Satellite.Protocol do
         Telemetry.event(state, :bad_transaction)
 
         Logger.error(Exception.format(:error, e, __STACKTRACE__))
-        {:error, %SatErrorResp{error_type: :INVALID_REQUEST, message: "server error"}}
+        {:error, %SatErrorResp{error_type: :INVALID_REQUEST, message: friendly_error_message(e)}}
     end
   end
 
@@ -1350,4 +1351,7 @@ defmodule Electric.Satellite.Protocol do
     do: Electric.Postgres.Dialect.SQLite
 
   defp decode_sql_dialect(:POSTGRES), do: Electric.Postgres.Dialect.Postgresql
+
+  defp friendly_error_message(%DataValidationError{} = error), do: Exception.message(error)
+  defp friendly_error_message(_), do: "server error"
 end
