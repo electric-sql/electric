@@ -1,6 +1,7 @@
 defmodule Electric.Replication.PostgresConnectorSup do
   use Supervisor
 
+  alias Electric.Replication.ConnectionPoolObserver
   alias Electric.Replication.Connectors
   alias Electric.Replication.Postgres
   alias Electric.Postgres.Extension.SchemaCache
@@ -39,8 +40,11 @@ defmodule Electric.Replication.PostgresConnectorSup do
       producer: SatelliteCollectorProducer.name(origin)
     ]
 
+    observer_pid = Electric.lookup_pid(ConnectionPoolObserver.name(origin))
+    repo_config = Electric.Postgres.Repo.config(connector_config, observer_pids: [observer_pid])
+
     children = [
-      {Electric.Postgres.Repo, Electric.Postgres.Repo.config(connector_config, [])},
+      {Electric.Postgres.Repo, repo_config},
       {Electric.Satellite.ClientReconnectionInfo, connector_config},
       {SchemaCache, connector_config},
       {SatelliteCollectorProducer, connector_config},
