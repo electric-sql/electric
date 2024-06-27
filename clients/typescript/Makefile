@@ -22,10 +22,7 @@ tests-CI:
 	pnpm run test-CI
 
 style:
-	prettier --check --loglevel warn . && eslint src --quiet
-
-typecheck_tests:
-	tsc -p tsconfig.tests.json
+	pnpm prettier --check --loglevel warn . && pnpm eslint src --quiet
 
 INFERRED_VERSION = $(shell git rev-parse --short HEAD)
 publish-canary:
