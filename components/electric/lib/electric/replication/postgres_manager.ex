@@ -389,7 +389,10 @@ defmodule Electric.Replication.PostgresConnectorMng do
   #
   # As explained in https://github.com/erlang/otp/issues/8604, the function spec of
   # `:public_key.cacerts_load()` is incorrect.
-  @dialyzer {:nowarn_function, load_cacerts: 0}
+  #
+  # ssl_verify_opts also needs to have its warnings ignored due to the hacky nature of below
+  # code.
+  @dialyzer {:nowarn_function, load_cacerts: 0, ssl_verify_opts: 0}
 
   defp load_cacerts, do: :error
 
