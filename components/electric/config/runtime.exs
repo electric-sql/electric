@@ -360,6 +360,14 @@ case otel_export do
 end
 
 ###
+# TzData
+###
+
+if env!("DISABLE_TZDATA_AUTOUPDATE", :boolean, nil) do
+  config :tzdata, :autoupdate, :disabled
+end
+
+###
 
 if config_env() in [:dev, :test] do
   path = Path.expand("runtime.#{config_env()}.exs", __DIR__)

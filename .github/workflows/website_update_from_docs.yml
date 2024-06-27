@@ -4,15 +4,15 @@ on:
     branches:
       - main
     paths:
-      - 'docs/**'
-      - 'examples/introduction/**'
+      - "docs/**"
+      - "examples/introduction/**"
 
 jobs:
   update_website_submodule:
     name: Update submodule to latest `main` commit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.CROSSREPO_PAT }}
           repository: electric-sql/website
@@ -29,5 +29,3 @@ jobs:
             git commit -am "updated docs submodule";
             git push;
           fi
-
-

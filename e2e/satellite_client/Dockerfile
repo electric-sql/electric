@@ -1,7 +1,7 @@
 FROM node:18-alpine AS workspace
 
 RUN apk update && apk add git
-RUN corepack enable && corepack prepare pnpm@8.15.3 --activate
+RUN corepack enable && corepack prepare pnpm@9.4.0 --activate
 
 RUN mkdir /app
 WORKDIR /app
