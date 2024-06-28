@@ -411,7 +411,7 @@ describe(`HTTP Sync`, () => {
     const etagValidation = await fetch(
       `http://localhost:3000/shape/issues?offset=-1`,
       {
-        headers: { "if-None-Else": etag },
+        headers: { "If-None-Match": etag },
       }
     )
 
@@ -430,7 +430,7 @@ describe(`HTTP Sync`, () => {
     const catchupEtagValidation = await fetch(
       `http://localhost:3000/shape/issues?offset=${etag}&notLive&shapeId=${shapeId}`,
       {
-        headers: { "if-None-Else": catchupEtag },
+        headers: { "If-None-Match": catchupEtag },
       }
     )
     const catchupStatus = catchupEtagValidation.status
