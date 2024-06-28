@@ -1,8 +1,8 @@
 deps:
-	make -C ../../packages/client deps
+	make -C ../client deps
 	pnpm install --frozen-lockfile
-	make -C ../../packages/client build
-	make -C ../../generator build
+	make -C ../client build
+	make -C ../generator build
 
 build: node_modules
 	pnpm run build

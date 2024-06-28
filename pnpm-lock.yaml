@@ -38,7 +38,7 @@ importers:
     devDependencies:
       '@electric-sql/prisma-generator':
         specifier: workspace:*
-        version: link:../../generator
+        version: link:../../packages/generator
       '@prisma/client':
         specifier: 4.8.1
         version: 4.8.1(prisma@4.8.1)
@@ -122,63 +122,11 @@ importers:
         specifier: ^5.4.5
         version: 5.4.5
 
-  generator:
-    dependencies:
-      '@prisma/generator-helper':
-        specifier: ^4.11.0
-        version: 4.11.0
-      code-block-writer:
-        specifier: ^11.0.3
-        version: 11.0.3
-      lodash:
-        specifier: ^4.17.21
-        version: 4.17.21
-      zod:
-        specifier: 3.21.1
-        version: 3.21.1
-    devDependencies:
-      '@prisma/internals':
-        specifier: ^4.11.0
-        version: 4.11.0
-      '@types/lodash':
-        specifier: ^4.14.191
-        version: 4.14.191
-      '@typescript-eslint/eslint-plugin':
-        specifier: ^5.54.1
-        version: 5.54.1(@typescript-eslint/parser@5.54.1(eslint@8.57.0)(typescript@4.9.5))(eslint@8.57.0)(typescript@4.9.5)
-      '@typescript-eslint/parser':
-        specifier: ^5.54.1
-        version: 5.54.1(eslint@8.57.0)(typescript@4.9.5)
-      eslint:
-        specifier: ^8.35.0
-        version: 8.57.0
-      eslint-config-prettier:
-        specifier: ^8.7.0
-        version: 8.7.0(eslint@8.57.0)
-      eslint-config-universe:
-        specifier: ^11.2.0
-        version: 11.2.0(eslint@8.57.0)(prettier@2.8.4)(typescript@4.9.5)
-      eslint-plugin-import:
-        specifier: ^2.27.5
-        version: 2.27.5(@typescript-eslint/parser@5.54.1(eslint@8.57.0)(typescript@4.9.5))(eslint@8.57.0)
-      eslint-plugin-prettier:
-        specifier: ^4.2.1
-        version: 4.2.1(eslint-config-prettier@8.7.0(eslint@8.57.0))(eslint@8.57.0)(prettier@2.8.4)
-      prettier:
-        specifier: ^2.8.4
-        version: 2.8.4
-      typescript:
-        specifier: ^4.9.5
-        version: 4.9.5
-      vitest:
-        specifier: ^0.24.5
-        version: 0.24.5(happy-dom@14.10.2)(jsdom@24.0.0)(terser@5.31.1)
-
   packages/cli:
     dependencies:
       '@electric-sql/prisma-generator':
         specifier: workspace:*
-        version: link:../../generator
+        version: link:../generator
       '@prisma/client':
         specifier: 4.8.1
         version: 4.8.1(prisma@4.8.1)
@@ -547,6 +495,58 @@ importers:
         version: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/6dbe4f044502a7a285e815896f56304a808fe25b
 
   packages/electric: {}
+
+  packages/generator:
+    dependencies:
+      '@prisma/generator-helper':
+        specifier: ^4.11.0
+        version: 4.11.0
+      code-block-writer:
+        specifier: ^11.0.3
+        version: 11.0.3
+      lodash:
+        specifier: ^4.17.21
+        version: 4.17.21
+      zod:
+        specifier: 3.21.1
+        version: 3.21.1
+    devDependencies:
+      '@prisma/internals':
+        specifier: ^4.11.0
+        version: 4.11.0
+      '@types/lodash':
+        specifier: ^4.14.191
+        version: 4.14.191
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^5.54.1
+        version: 5.54.1(@typescript-eslint/parser@5.54.1(eslint@8.57.0)(typescript@4.9.5))(eslint@8.57.0)(typescript@4.9.5)
+      '@typescript-eslint/parser':
+        specifier: ^5.54.1
+        version: 5.54.1(eslint@8.57.0)(typescript@4.9.5)
+      eslint:
+        specifier: ^8.35.0
+        version: 8.57.0
+      eslint-config-prettier:
+        specifier: ^8.7.0
+        version: 8.7.0(eslint@8.57.0)
+      eslint-config-universe:
+        specifier: ^11.2.0
+        version: 11.2.0(eslint@8.57.0)(prettier@2.8.4)(typescript@4.9.5)
+      eslint-plugin-import:
+        specifier: ^2.27.5
+        version: 2.27.5(@typescript-eslint/parser@5.54.1(eslint@8.57.0)(typescript@4.9.5))(eslint@8.57.0)
+      eslint-plugin-prettier:
+        specifier: ^4.2.1
+        version: 4.2.1(eslint-config-prettier@8.7.0(eslint@8.57.0))(eslint@8.57.0)(prettier@2.8.4)
+      prettier:
+        specifier: ^2.8.4
+        version: 2.8.4
+      typescript:
+        specifier: ^4.9.5
+        version: 4.9.5
+      vitest:
+        specifier: ^0.24.5
+        version: 0.24.5(happy-dom@14.10.2)(jsdom@24.0.0)(terser@5.31.1)
 
   packages/toolbar:
     dependencies:

@@ -94,7 +94,7 @@ If you want to customize the behaviour of the generator you can use the followin
 
 ```prisma
 generator zod {
-  provider                         = "ts-node-dev ../generator/src/bin.ts"
+  provider                         = "ts-node-dev ../packages/generator/src/bin.ts"
   output                           = "./generated/zod" // default is ./generated/zod
   useMultipleFiles                 = true // default is false
   createInputTypes                 = false // default is true

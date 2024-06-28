@@ -66,7 +66,7 @@ This is the main repository for the ElectricSQL source code. Key components incl
 
 - [packages/client](https://github.com/electric-sql/electric/tree/main/packages/client) &mdash; TypeScript client that provides SQLite driver adapters, reactivity and a type-safe data access library
 - [packages/electric](https://github.com/electric-sql/electric/tree/main/packages/electric) &mdash; Elixir sync service that manages active-active replication between Postgres and SQLite
-- [generator](https://github.com/electric-sql/electric/tree/main/generator) &mdash; Prisma generator that creates the type safe data access library
+- [packages/generator](https://github.com/electric-sql/electric/tree/main/packages/generator) &mdash; Prisma generator that creates the type safe data access library
 - [protocol/satellite.proto](https://github.com/electric-sql/electric/tree/main/protocol/satellite.proto) &mdash; Protocol Buffers definition of the Satellite replication protocol
 
 See the Makefiles for test and build instructions and the [e2e](https://github.com/electric-sql/electric/tree/main/e2e) folder for integration tests.

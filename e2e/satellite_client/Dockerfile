@@ -14,7 +14,7 @@ COPY pnpm-workspace.yaml ./
 # E2E Client deps install + build
 COPY packages/client ./packages/client
 COPY common ./common
-COPY generator ./generator
+COPY packages/generator ./packages/generator
 COPY packages/drivers ./packages/drivers
 COPY e2e/satellite_client/package.json  ./e2e/satellite_client/
 RUN pnpm install -r --offline --filter @internal/satellite-client^...
