@@ -12,7 +12,7 @@ import {
   schema,
   Electric,
 } from './generated/client'
-import { globalRegistry } from 'electric-sql/satellite'
+import { globalRegistry, Satellite } from 'electric-sql/satellite'
 import { QualifiedTablename, SatelliteErrorCode } from 'electric-sql/util'
 import { Shape } from 'electric-sql/satellite'
 import {
@@ -23,7 +23,8 @@ import {
 import {
   postgresConverter,
   sqliteConverter,
-} from 'electric-sql/client/conversions'
+} from 'electric-sql/client'
+import type { RunResult } from '@electric-sql/drivers'
 
 setLogLevel('DEBUG')
 
@@ -184,7 +185,7 @@ export const syncOtherItemsTable = (
 }
 
 export const syncTable = async (table: string) => {
-  const satellite = globalRegistry.satellites[dbName]
+  const satellite: Satellite = globalRegistry.satellites[dbName as keyof typeof globalRegistry.satellites]
   const { synced } = await satellite.subscribe([{ tablename: table }])
   return await synced
 }
@@ -218,7 +219,7 @@ type Datetime = { id: string; d: Date; t: Date }
 export const write_timestamp = (
   electric: Electric,
   timestamp: Timestamp
-) => {
+): Promise<RunResult> => {
   const row = converter.encodeRow(timestamp, schema.tables.timestamps)
   return electric.adapter.run({
     sql: `INSERT INTO timestamps (id, created_at, updated_at) VALUES (${builder.makePositionalParam(
@@ -479,21 +480,6 @@ export const write_float = async (
   return converter.decodeRow<Float>(row, schema.tables.floats)
 }
 
-const write_float_raw = async (
-  electric: Electric,
-  id: string,
-  f4: number,
-  f8: number
-) => {
-  const [ row ] = await electric.adapter.query({
-    sql: `INSERT INTO floats (id, f4, f8) VALUES (${builder.makePositionalParam(1)}, ${builder.makePositionalParam(2)}, ${builder.makePositionalParam(3)}) RETURNING *;`,
-    args: [id, converter.encode(f4, PgBasicType.PG_FLOAT4), converter.encode(f8, PgBasicType.PG_FLOAT8)],
-  })
-  return decodeRow<Float>(row, 'floats')
-}
-
-export const write_float = withDal ? write_float_dal : write_float_raw
-
 export const get_json_raw = async (electric: Electric, id: string) => {
   const res = (await electric.db.rawQuery({
     sql: `SELECT js FROM jsons WHERE id = ${builder.makePositionalParam(1)};`,
@@ -665,7 +651,7 @@ export const insert_extended_into = async (
   })
 }
 
-const delete_item_dal = async (electric: Electric, keys: [string]) => {
+export const delete_item = async (electric: Electric, keys: [string]) => {
   for (const key of keys) {
     await electric.adapter.run({
       sql: `DELETE FROM items WHERE content = ${builder.makePositionalParam(1)};`,
@@ -735,39 +721,6 @@ export const set_item_replication_transform = (electric: Electric) => {
     replicationTransformer
   )
 }
-
-export const delete_other_item = withDal ? delete_other_item_dal : delete_other_item_raw
-
-const replicationTransformer = {
-  transformOutbound: (item: Readonly<Item>) => ({
-    ...item,
-    content: item.content
-      .split('')
-      .map((char) => String.fromCharCode(char.charCodeAt(0) + 1))
-      .join(''),
-  }),
-  transformInbound: (item: Readonly<Item>) => ({
-    ...item,
-    content: item.content
-      .split('')
-      .map((char) => String.fromCharCode(char.charCodeAt(0) - 1))
-      .join(''),
-  }),
-}
-
-const set_item_replication_transform_dal = (electric: Electric) => {
-  electric.db.items.setReplicationTransform(replicationTransformer)
-}
-
-const set_item_replication_transform_raw = (electric: Electric) => {
-  const namespace = builder.defaultNamespace
-  electric.setReplicationTransform<Item>(
-    new QualifiedTablename(namespace, 'items'),
-    replicationTransformer
-  )
-}
-
-export const set_item_replication_transform = withDal ? set_item_replication_transform_dal : set_item_replication_transform_raw
 
 export const stop = async () => {
   await globalRegistry.stopAll()

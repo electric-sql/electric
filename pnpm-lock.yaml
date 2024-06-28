@@ -479,6 +479,9 @@ importers:
 
   e2e/satellite_client:
     dependencies:
+      '@electric-sql/drivers':
+        specifier: workspace:*
+        version: link:../../components/drivers
       better-sqlite3:
         specifier: ^11.0.0
         version: 11.0.0

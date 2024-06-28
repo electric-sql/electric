@@ -17,6 +17,7 @@
     "lint": "eslint src --fix"
   },
   "dependencies": {
+    "@electric-sql/drivers": "workspace:*",
     "better-sqlite3": "^11.0.0",
     "electric-sql": "workspace:*",
     "jsonwebtoken": "^9.0.0",
