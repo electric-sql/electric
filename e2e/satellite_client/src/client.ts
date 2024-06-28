@@ -16,7 +16,7 @@ import {
 import { schema as noDalSchema } from './generated/client/db-description'
 export { JsonNull } from './generated/client'
 import { globalRegistry } from 'electric-sql/satellite'
-import { QualifiedTablename, SatelliteErrorCode } from 'electric-sql/util'
+import { QualifiedTablename, ReplicatedRowTransformer, SatelliteErrorCode } from 'electric-sql/util'
 import { Shape } from 'electric-sql/satellite'
 import {
   pgBuilder,
@@ -31,6 +31,7 @@ import {
 import type { AnyTable, AnyTableSchema } from 'electric-sql/client'
 import { Row } from 'electric-sql/util'
 import { dedent } from 'ts-dedent'
+import { Prisma } from './generated/client/prismaClient'
 
 setLogLevel('DEBUG')
 
@@ -126,8 +127,8 @@ export const electrify_db = async (
   }
 
   const electric = isPostgresDb(process.env.DIALECT, db)
-    ? await electrifyPg(db, schema, config)
-    : await electrifySqlite(db, schema, config)
+    ? await electrifyPg(db, schema, config) as Electric
+    : await electrifySqlite(db, schema, config) as Electric
 
   const token = await mockSecureAuthToken(exp)
 
@@ -1132,7 +1133,7 @@ const replicationTransformer = {
 }
 
 const set_item_replication_transform_dal = (electric: Electric) => {
-  electric.db.items.setReplicationTransform(replicationTransformer)
+  electric.db.items.setReplicationTransform(replicationTransformer as unknown as ReplicatedRowTransformer<Prisma.ItemsUncheckedCreateInput>)
 }
 
 const set_item_replication_transform_raw = (electric: Electric) => {
