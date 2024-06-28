@@ -12,7 +12,7 @@ RUN pnpm fetch
 COPY pnpm-workspace.yaml ./
 
 # E2E Client deps install + build
-COPY clients/typescript ./clients/typescript
+COPY packages/client ./packages/client
 COPY common ./common
 COPY generator ./generator
 COPY packages/drivers ./packages/drivers

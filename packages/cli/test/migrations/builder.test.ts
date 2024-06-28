@@ -7,7 +7,7 @@ import { loadMigrations } from '../../src/migrations/builder'
 import { Relation } from 'electric-sql/client/model'
 
 const migrationsFolder = path.join(
-  '../../clients/typescript/test/migrators/support/migrations'
+  '../../packages/client/test/migrators/support/migrations'
 )
 
 test('write migration to configuration file', async (t) => {

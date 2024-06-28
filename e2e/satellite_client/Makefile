@@ -17,6 +17,6 @@ build:
 local-build:
 	make -C ../../packages/drivers build
 	pnpm i --frozen-lockfile
-	make -C ../../clients/typescript build
+	make -C ../../packages/client build
 	pnpm run build
 

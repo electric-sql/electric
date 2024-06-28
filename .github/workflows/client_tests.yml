@@ -8,12 +8,12 @@ on:
   pull_request:
     paths:
       - "pnpm-lock.yaml"
-      - "clients/typescript/**"
-      - "!clients/typescript/**.md"
+      - "packages/client/**"
+      - "!packages/client/**.md"
 
 defaults:
   run:
-    working-directory: clients/typescript
+    working-directory: packages/client
 
 concurrency:
   group: clients-typescript-${{ github.ref }}

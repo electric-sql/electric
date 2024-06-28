@@ -1,7 +1,7 @@
 deps:
-	make -C ../../clients/typescript deps
+	make -C ../../packages/client deps
 	pnpm install --frozen-lockfile
-	make -C ../../clients/typescript build
+	make -C ../../packages/client build
 	make -C ../../generator build
 
 build: node_modules
