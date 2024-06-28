@@ -31,7 +31,7 @@
     "sql-formatter": "^15.3.1"
   },
   "devDependencies": {
-    "@electric-sql/drivers": "^0.0.1",
+    "@electric-sql/drivers": "workspace:*",
     "@electric-sql/pglite": "^0.1.5",
     "@types/better-sqlite3": "7.6.3",
     "@types/node": "^20.12.7",
@@ -52,7 +52,7 @@
     "vitest": "^1.5.0"
   },
   "peerDependencies": {
-    "@electric-sql/drivers": "^0.0.1",
+    "@electric-sql/drivers": "workspace:*",
     "electric-sql": "workspace:*"
   },
   "files": [
