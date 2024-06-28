@@ -257,8 +257,8 @@ importers:
         specifier: ^44.7.0
         version: 44.7.0
       '@types/better-sqlite3':
-        specifier: 7.6.3
-        version: 7.6.3
+        specifier: 7.6.10
+        version: 7.6.10
       '@types/jsonwebtoken':
         specifier: ^9.0.1
         version: 9.0.1
