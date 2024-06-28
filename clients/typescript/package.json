@@ -168,7 +168,7 @@
     "build": "shx rm -rf dist && concurrently \"tsup\" \"tsc -p tsconfig.build.json\" && node scripts/fix-imports.js",
     "test": "ava",
     "test-CI": "DISABLE_DIALECT=postgres npm run test",
-    "generate-test-client": "npx tsx ../../components/cli/src/client/generateTestClient.ts",
+    "generate-test-client": "npx tsx ../../packages/cli/src/client/generateTestClient.ts",
     "typecheck": "tsc -p tsconfig.json",
     "posttest": "npm run typecheck",
     "prepublishOnly": "pnpm run build",

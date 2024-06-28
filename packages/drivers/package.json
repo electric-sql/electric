@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "name": "@electric-sql/drivers",
   "description": "ElectricSQL database drivers.",
-  "repository": "https://github.com/electric-sql/electric/tree/main/components/drivers",
+  "repository": "https://github.com/electric-sql/electric/tree/main/packages/drivers",
   "author": "Electric DB Limited",
   "homepage": "https://electric-sql.com",
   "license": "Apache-2.0",

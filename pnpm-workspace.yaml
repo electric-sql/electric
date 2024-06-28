@@ -3,4 +3,4 @@ packages:
   - 'e2e/satellite_client'
   - 'examples/starter'
   - 'generator'
-  - 'components/*'
+  - 'packages/*'

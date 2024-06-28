@@ -16,7 +16,7 @@ importers:
     dependencies:
       '@electric-sql/drivers':
         specifier: workspace:*
-        version: link:../../components/drivers
+        version: link:../../packages/drivers
       async-mutex:
         specifier: ^0.4.0
         version: 0.4.0
@@ -223,263 +223,6 @@ importers:
         specifier: ^1.8.27
         version: 1.8.27(typescript@5.4.5)
 
-  components/cli:
-    dependencies:
-      '@electric-sql/prisma-generator':
-        specifier: workspace:*
-        version: link:../../generator
-      '@prisma/client':
-        specifier: 4.8.1
-        version: 4.8.1(prisma@4.8.1)
-      commander:
-        specifier: ^11.1.0
-        version: 11.1.0
-      decompress:
-        specifier: ^4.2.1
-        version: 4.2.1
-      dotenv-flow:
-        specifier: ^4.1.0
-        version: 4.1.0
-      electric-sql:
-        specifier: workspace:*
-        version: link:../../clients/typescript
-      get-port:
-        specifier: ^7.0.0
-        version: 7.0.0
-      prisma:
-        specifier: 4.8.1
-        version: 4.8.1
-      ts-dedent:
-        specifier: ^2.2.0
-        version: 2.2.0
-      ws:
-        specifier: ^8.8.1
-        version: 8.8.1
-      zod:
-        specifier: 3.21.1
-        version: 3.21.1
-    devDependencies:
-      '@types/decompress':
-        specifier: ^4.2.4
-        version: 4.2.4
-      '@types/node':
-        specifier: ^18.8.4
-        version: 18.8.4
-      '@types/ws':
-        specifier: ^8.5.3
-        version: 8.5.3
-      '@typescript-eslint/eslint-plugin':
-        specifier: ^7.14.1
-        version: 7.14.1(@typescript-eslint/parser@7.14.1(eslint@8.57.0)(typescript@5.4.5))(eslint@8.57.0)(typescript@5.4.5)
-      '@typescript-eslint/parser':
-        specifier: ^7.14.1
-        version: 7.14.1(eslint@8.57.0)(typescript@5.4.5)
-      ava:
-        specifier: ^4.3.1
-        version: 4.3.1
-      concurrently:
-        specifier: ^8.2.2
-        version: 8.2.2
-      eslint:
-        specifier: ^8.57.0
-        version: 8.57.0
-      glob:
-        specifier: ^10.3.10
-        version: 10.3.10
-      lint-staged:
-        specifier: ^13.1.0
-        version: 13.1.0(enquirer@2.4.1)
-      prettier:
-        specifier: 2.8.2
-        version: 2.8.2
-      shx:
-        specifier: ^0.3.4
-        version: 0.3.4
-      tsup:
-        specifier: ^8.1.0
-        version: 8.1.0(postcss@8.4.38)(typescript@5.4.5)
-      tsx:
-        specifier: ^4.15.7
-        version: 4.15.7
-      typescript:
-        specifier: ^5.3.3
-        version: 5.4.5
-
-  components/drivers:
-    dependencies:
-      '@capacitor-community/sqlite':
-        specifier: '>= 5.6.2'
-        version: 5.6.2(@capacitor/core@5.7.6)
-      '@op-engineering/op-sqlite':
-        specifier: '>= 2.0.16'
-        version: 2.0.16(react-native@0.74.2(@babel/core@7.24.7)(@babel/preset-env@7.24.7(@babel/core@7.24.7))(@types/react@18.3.1)(react@18.3.1))(react@18.3.1)
-      '@tauri-apps/plugin-sql':
-        specifier: 2.0.0-alpha.5
-        version: 2.0.0-alpha.5
-      async-mutex:
-        specifier: ^0.4.0
-        version: 0.4.0
-    devDependencies:
-      '@electric-sql/pglite':
-        specifier: ^0.1.5
-        version: 0.1.5
-      '@types/better-sqlite3':
-        specifier: 7.6.10
-        version: 7.6.10
-      '@types/node':
-        specifier: ^18.8.4
-        version: 18.8.4
-      '@types/pg':
-        specifier: ^8.11.0
-        version: 8.11.3
-      '@typescript-eslint/eslint-plugin':
-        specifier: ^7.14.1
-        version: 7.14.1(@typescript-eslint/parser@7.14.1(eslint@8.57.0)(typescript@5.4.5))(eslint@8.57.0)(typescript@5.4.5)
-      '@typescript-eslint/parser':
-        specifier: ^7.14.1
-        version: 7.14.1(eslint@8.57.0)(typescript@5.4.5)
-      ava:
-        specifier: ^4.3.1
-        version: 4.3.1
-      better-sqlite3:
-        specifier: ^11.0.0
-        version: 11.0.0
-      concurrently:
-        specifier: ^8.2.2
-        version: 8.2.2
-      embedded-postgres:
-        specifier: 16.1.1-beta.9
-        version: 16.1.1-beta.9
-      eslint:
-        specifier: ^8.57.0
-        version: 8.57.0
-      expo-sqlite:
-        specifier: ^13.1.0
-        version: 13.1.0(expo@51.0.14(@babel/core@7.24.7)(@babel/preset-env@7.24.7(@babel/core@7.24.7)))
-      glob:
-        specifier: ^10.3.10
-        version: 10.3.10
-      lint-staged:
-        specifier: ^13.1.0
-        version: 13.1.0(enquirer@2.4.1)
-      pg:
-        specifier: ^8.11.3
-        version: 8.11.3
-      prettier:
-        specifier: 2.8.2
-        version: 2.8.2
-      shx:
-        specifier: ^0.3.4
-        version: 0.3.4
-      tsup:
-        specifier: ^8.0.1
-        version: 8.1.0(postcss@8.4.38)(typescript@5.4.5)
-      tsx:
-        specifier: ^4.15.7
-        version: 4.15.7
-      typescript:
-        specifier: ^5.3.3
-        version: 5.4.5
-      wa-sqlite:
-        specifier: rhashimoto/wa-sqlite#semver:^0.9.8
-        version: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/6dbe4f044502a7a285e815896f56304a808fe25b
-
-  components/electric: {}
-
-  components/toolbar:
-    dependencies:
-      '@glideapps/glide-data-grid':
-        specifier: ^6.0.4-alpha8
-        version: 6.0.4-alpha8(lodash@4.17.21)(marked@4.0.10)(react-dom@18.3.1(react@18.3.1))(react-responsive-carousel@3.2.23)(react@18.3.1)
-      '@radix-ui/themes':
-        specifier: ^3.0.3
-        version: 3.0.3(@types/react-dom@18.3.0)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      clsx:
-        specifier: ^2.1.1
-        version: 2.1.1
-      codemirror:
-        specifier: ^5.65.16
-        version: 5.65.16
-      lodash:
-        specifier: ^4.17.21
-        version: 4.17.21
-      marked:
-        specifier: ^4.0.10
-        version: 4.0.10
-      react:
-        specifier: ^18.3.1
-        version: 18.3.1
-      react-codemirror2:
-        specifier: ^8.0.0
-        version: 8.0.0(codemirror@5.65.16)(react@18.3.1)
-      react-dom:
-        specifier: ^18.3.1
-        version: 18.3.1(react@18.3.1)
-      react-responsive-carousel:
-        specifier: ^3.2.23
-        version: 3.2.23
-      sql-formatter:
-        specifier: ^15.3.1
-        version: 15.3.1
-    devDependencies:
-      '@electric-sql/drivers':
-        specifier: workspace:*
-        version: link:../drivers
-      '@electric-sql/pglite':
-        specifier: ^0.1.5
-        version: 0.1.5
-      '@types/better-sqlite3':
-        specifier: 7.6.3
-        version: 7.6.3
-      '@types/node':
-        specifier: ^20.12.7
-        version: 20.12.7
-      '@types/react':
-        specifier: ^18.3.1
-        version: 18.3.1
-      '@types/react-dom':
-        specifier: ^18.3.0
-        version: 18.3.0
-      '@typescript-eslint/eslint-plugin':
-        specifier: ^7.14.1
-        version: 7.14.1(@typescript-eslint/parser@7.14.1(eslint@8.57.0)(typescript@5.4.5))(eslint@8.57.0)(typescript@5.4.5)
-      '@typescript-eslint/parser':
-        specifier: ^7.14.1
-        version: 7.14.1(eslint@8.57.0)(typescript@5.4.5)
-      '@vitejs/plugin-react':
-        specifier: ^4.2.1
-        version: 4.2.1(vite@5.2.10(@types/node@20.12.7)(terser@5.31.1))
-      better-sqlite3:
-        specifier: ^11.0.0
-        version: 11.0.0
-      electric-sql:
-        specifier: workspace:*
-        version: link:../../clients/typescript
-      eslint:
-        specifier: ^8.57.0
-        version: 8.57.0
-      eslint-plugin-react:
-        specifier: ^7.34.1
-        version: 7.34.1(eslint@8.57.0)
-      happy-dom:
-        specifier: ^14.10.2
-        version: 14.10.2
-      prettier:
-        specifier: 3.2.5
-        version: 3.2.5
-      typescript:
-        specifier: ^5.4.5
-        version: 5.4.5
-      vite:
-        specifier: ^5.2.10
-        version: 5.2.10(@types/node@20.12.7)(terser@5.31.1)
-      vite-plugin-css-injected-by-js:
-        specifier: ^3.5.1
-        version: 3.5.1(vite@5.2.10(@types/node@20.12.7)(terser@5.31.1))
-      vitest:
-        specifier: ^1.5.0
-        version: 1.5.0(@types/node@20.12.7)(happy-dom@14.10.2)(jsdom@24.0.0)(terser@5.31.1)
-
   e2e/satellite_client:
     dependencies:
       better-sqlite3:
@@ -641,6 +384,263 @@ importers:
       vitest:
         specifier: ^0.24.5
         version: 0.24.5(happy-dom@14.10.2)(jsdom@24.0.0)(terser@5.31.1)
+
+  packages/cli:
+    dependencies:
+      '@electric-sql/prisma-generator':
+        specifier: workspace:*
+        version: link:../../generator
+      '@prisma/client':
+        specifier: 4.8.1
+        version: 4.8.1(prisma@4.8.1)
+      commander:
+        specifier: ^11.1.0
+        version: 11.1.0
+      decompress:
+        specifier: ^4.2.1
+        version: 4.2.1
+      dotenv-flow:
+        specifier: ^4.1.0
+        version: 4.1.0
+      electric-sql:
+        specifier: workspace:*
+        version: link:../../clients/typescript
+      get-port:
+        specifier: ^7.0.0
+        version: 7.0.0
+      prisma:
+        specifier: 4.8.1
+        version: 4.8.1
+      ts-dedent:
+        specifier: ^2.2.0
+        version: 2.2.0
+      ws:
+        specifier: ^8.8.1
+        version: 8.17.1
+      zod:
+        specifier: 3.21.1
+        version: 3.21.1
+    devDependencies:
+      '@types/decompress':
+        specifier: ^4.2.4
+        version: 4.2.4
+      '@types/node':
+        specifier: ^18.8.4
+        version: 18.8.4
+      '@types/ws':
+        specifier: ^8.5.3
+        version: 8.5.3
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^7.14.1
+        version: 7.14.1(@typescript-eslint/parser@7.14.1(eslint@8.57.0)(typescript@5.4.5))(eslint@8.57.0)(typescript@5.4.5)
+      '@typescript-eslint/parser':
+        specifier: ^7.14.1
+        version: 7.14.1(eslint@8.57.0)(typescript@5.4.5)
+      ava:
+        specifier: ^4.3.1
+        version: 4.3.1
+      concurrently:
+        specifier: ^8.2.2
+        version: 8.2.2
+      eslint:
+        specifier: ^8.57.0
+        version: 8.57.0
+      glob:
+        specifier: ^10.3.10
+        version: 10.3.10
+      lint-staged:
+        specifier: ^13.1.0
+        version: 13.1.0(enquirer@2.4.1)
+      prettier:
+        specifier: 2.8.2
+        version: 2.8.2
+      shx:
+        specifier: ^0.3.4
+        version: 0.3.4
+      tsup:
+        specifier: ^8.1.0
+        version: 8.1.0(postcss@8.4.38)(typescript@5.4.5)
+      tsx:
+        specifier: ^4.15.7
+        version: 4.15.7
+      typescript:
+        specifier: ^5.3.3
+        version: 5.4.5
+
+  packages/drivers:
+    dependencies:
+      '@capacitor-community/sqlite':
+        specifier: '>= 5.6.2'
+        version: 5.6.2(@capacitor/core@5.7.6)
+      '@op-engineering/op-sqlite':
+        specifier: '>= 2.0.16'
+        version: 2.0.16(react-native@0.74.2(@babel/core@7.24.7)(@babel/preset-env@7.24.7(@babel/core@7.24.7))(@types/react@18.3.1)(react@18.3.1))(react@18.3.1)
+      '@tauri-apps/plugin-sql':
+        specifier: 2.0.0-alpha.5
+        version: 2.0.0-alpha.5
+      async-mutex:
+        specifier: ^0.4.0
+        version: 0.4.0
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.1.5
+        version: 0.1.5
+      '@types/better-sqlite3':
+        specifier: 7.6.10
+        version: 7.6.10
+      '@types/node':
+        specifier: ^18.8.4
+        version: 18.8.4
+      '@types/pg':
+        specifier: ^8.11.0
+        version: 8.11.3
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^7.14.1
+        version: 7.14.1(@typescript-eslint/parser@7.14.1(eslint@8.57.0)(typescript@5.4.5))(eslint@8.57.0)(typescript@5.4.5)
+      '@typescript-eslint/parser':
+        specifier: ^7.14.1
+        version: 7.14.1(eslint@8.57.0)(typescript@5.4.5)
+      ava:
+        specifier: ^4.3.1
+        version: 4.3.1
+      better-sqlite3:
+        specifier: ^11.0.0
+        version: 11.0.0
+      concurrently:
+        specifier: ^8.2.2
+        version: 8.2.2
+      embedded-postgres:
+        specifier: 16.1.1-beta.9
+        version: 16.1.1-beta.9
+      eslint:
+        specifier: ^8.57.0
+        version: 8.57.0
+      expo-sqlite:
+        specifier: ^13.1.0
+        version: 13.1.0(expo@51.0.14(@babel/core@7.24.7)(@babel/preset-env@7.24.7(@babel/core@7.24.7)))
+      glob:
+        specifier: ^10.3.10
+        version: 10.3.10
+      lint-staged:
+        specifier: ^13.1.0
+        version: 13.1.0(enquirer@2.4.1)
+      pg:
+        specifier: ^8.11.3
+        version: 8.11.3
+      prettier:
+        specifier: 2.8.2
+        version: 2.8.2
+      shx:
+        specifier: ^0.3.4
+        version: 0.3.4
+      tsup:
+        specifier: ^8.0.1
+        version: 8.1.0(postcss@8.4.38)(typescript@5.4.5)
+      tsx:
+        specifier: ^4.15.7
+        version: 4.15.7
+      typescript:
+        specifier: ^5.3.3
+        version: 5.4.5
+      wa-sqlite:
+        specifier: rhashimoto/wa-sqlite#semver:^0.9.8
+        version: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/6dbe4f044502a7a285e815896f56304a808fe25b
+
+  packages/electric: {}
+
+  packages/toolbar:
+    dependencies:
+      '@glideapps/glide-data-grid':
+        specifier: ^6.0.4-alpha8
+        version: 6.0.4-alpha8(lodash@4.17.21)(marked@4.0.10)(react-dom@18.3.1(react@18.3.1))(react-responsive-carousel@3.2.23)(react@18.3.1)
+      '@radix-ui/themes':
+        specifier: ^3.0.3
+        version: 3.0.3(@types/react-dom@18.3.0)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      codemirror:
+        specifier: ^5.65.16
+        version: 5.65.16
+      lodash:
+        specifier: ^4.17.21
+        version: 4.17.21
+      marked:
+        specifier: ^4.0.10
+        version: 4.0.10
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-codemirror2:
+        specifier: ^8.0.0
+        version: 8.0.0(codemirror@5.65.16)(react@18.3.1)
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+      react-responsive-carousel:
+        specifier: ^3.2.23
+        version: 3.2.23
+      sql-formatter:
+        specifier: ^15.3.1
+        version: 15.3.1
+    devDependencies:
+      '@electric-sql/drivers':
+        specifier: workspace:*
+        version: link:../drivers
+      '@electric-sql/pglite':
+        specifier: ^0.1.5
+        version: 0.1.5
+      '@types/better-sqlite3':
+        specifier: 7.6.3
+        version: 7.6.3
+      '@types/node':
+        specifier: ^20.12.7
+        version: 20.12.7
+      '@types/react':
+        specifier: ^18.3.1
+        version: 18.3.1
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.0
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^7.14.1
+        version: 7.14.1(@typescript-eslint/parser@7.14.1(eslint@8.57.0)(typescript@5.4.5))(eslint@8.57.0)(typescript@5.4.5)
+      '@typescript-eslint/parser':
+        specifier: ^7.14.1
+        version: 7.14.1(eslint@8.57.0)(typescript@5.4.5)
+      '@vitejs/plugin-react':
+        specifier: ^4.2.1
+        version: 4.2.1(vite@5.2.10(@types/node@20.12.7)(terser@5.31.1))
+      better-sqlite3:
+        specifier: ^11.0.0
+        version: 11.0.0
+      electric-sql:
+        specifier: workspace:*
+        version: link:../../clients/typescript
+      eslint:
+        specifier: ^8.57.0
+        version: 8.57.0
+      eslint-plugin-react:
+        specifier: ^7.34.1
+        version: 7.34.1(eslint@8.57.0)
+      happy-dom:
+        specifier: ^14.10.2
+        version: 14.10.2
+      prettier:
+        specifier: 3.2.5
+        version: 3.2.5
+      typescript:
+        specifier: ^5.4.5
+        version: 5.4.5
+      vite:
+        specifier: ^5.2.10
+        version: 5.2.10(@types/node@20.12.7)(terser@5.31.1)
+      vite-plugin-css-injected-by-js:
+        specifier: ^3.5.1
+        version: 3.5.1(vite@5.2.10(@types/node@20.12.7)(terser@5.31.1))
+      vitest:
+        specifier: ^1.5.0
+        version: 1.5.0(@types/node@20.12.7)(happy-dom@14.10.2)(jsdom@24.0.0)(terser@5.31.1)
 
 packages:
 

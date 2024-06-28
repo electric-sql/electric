@@ -14,7 +14,7 @@ steps:
     command:
       - git fetch --tags
       - export ELECTRIC_IMAGE_NAME="${DOCKER_REPO}/${IMAGE_NAME}"
-      - cd ./components/electric
+      - cd ./packages/electric
       - export ELECTRIC_VERSION=$(make --silent print_version_from_git)
       - export ELECTRIC_CANARY_IMAGE="${DOCKERHUB_REPO}/${IMAGE_NAME}:canary"
       - make docker-build-ci
@@ -23,6 +23,6 @@ steps:
     if: build.tag =~ /@core\/electric@/
     command:
       - export ELECTRIC_IMAGE_NAME="${DOCKERHUB_REPO}/${IMAGE_NAME}"
-      - cd ./components/electric
+      - cd ./packages/electric
       - export ELECTRIC_VERSION=$(make --silent print_version_from_git)
       - make docker-build-ci-crossplatform

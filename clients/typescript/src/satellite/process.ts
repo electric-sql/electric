@@ -5,7 +5,7 @@ import {
   SatRelation_RelationType,
 } from '../_generated/protocol/satellite'
 import { AuthConfig, AuthState } from '../auth/index'
-import { DatabaseAdapter } from '@electric-sql/drivers'
+import { DatabaseAdapter, RunResult } from '@electric-sql/drivers'
 import { Migrator } from '../migrators/index'
 import {
   AuthStateNotification,
@@ -710,7 +710,7 @@ export class SatelliteProcess implements Satellite {
    * Runs the provided statements in a transaction and disables FK checks if `this.fkChecks` is set to `disabled`.
    * `this.fkChecks` should only be set to true when using SQLite as we already disable FK checks for incoming TXs when using Postgres
    */
-  async runInTransaction(...stmts: Statement[]) {
+  async runInTransaction(...stmts: Statement[]): Promise<RunResult> {
     return runInTransaction(this.adapter, this.fkChecks, ...stmts)
   }
 

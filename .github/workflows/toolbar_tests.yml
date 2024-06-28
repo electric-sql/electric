@@ -7,11 +7,11 @@ on:
   pull_request:
     paths:
       - "pnpm-lock.yaml"
-      - "components/toolbar/**"
+      - "packages/toolbar/**"
 
 defaults:
   run:
-    working-directory: components/toolbar
+    working-directory: packages/toolbar
 
 jobs:
   verify_formatting:

@@ -1,7 +1,7 @@
 import Long from 'long'
 import { AuthConfig, AuthState } from '../auth/index'
 import { InternalElectricConfig } from '../config/index'
-import { DatabaseAdapter } from '@electric-sql/drivers'
+import { DatabaseAdapter } from '../../../../packages/drivers/dist'
 import { Migrator } from '../migrators/index'
 import { Notifier } from '../notifiers/index'
 import { SocketFactory } from '../sockets'

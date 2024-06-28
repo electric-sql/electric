@@ -3,7 +3,7 @@ build_generator:
 
 deps:
 	pnpm install --frozen-lockfile
-	make -C ../../components/drivers build
+	make -C ../../packages/drivers build
 #	npm install tslint tslint-config-prettier
 
 node_modules:

@@ -25,7 +25,7 @@ import {
   getPgMatchingShadowEntries,
 } from '../support/satellite-helpers'
 
-import { DatabaseAdapter } from '@electric-sql/drivers'
+import { DatabaseAdapter } from '../../../../packages/drivers/dist'
 import isEqual from 'lodash.isequal'
 import { QueryBuilder } from '../../src/migrators/query-builder'
 

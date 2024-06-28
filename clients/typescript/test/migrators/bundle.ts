@@ -1,7 +1,7 @@
 import { TestFn } from 'ava'
 
 import { makeStmtMigration } from '../../src/migrators'
-import { DatabaseAdapter } from '@electric-sql/drivers'
+import { DatabaseAdapter } from '../../../../packages/drivers/dist'
 import { Migration } from '../../src/migrators'
 import { BundleMigratorBase as BundleMigrator } from '../../src/migrators/bundle'
 

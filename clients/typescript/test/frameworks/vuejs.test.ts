@@ -8,7 +8,10 @@ import {
 import { mount, shallowMount, flushPromises } from '@vue/test-utils'
 import { computed, defineComponent, shallowRef, ref, isProxy, watch } from 'vue'
 
-import { DatabaseAdapter, MockDatabase } from '@electric-sql/drivers/wa-sqlite'
+import {
+  DatabaseAdapter,
+  MockDatabase,
+} from '../../../../packages/drivers/dist/wa-sqlite'
 
 import { MockNotifier } from '../../src/notifiers/mock'
 import { QualifiedTablename } from '../../src/util/tablename'

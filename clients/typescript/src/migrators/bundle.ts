@@ -5,7 +5,7 @@ import {
   Migrator,
   StmtMigration,
 } from './index'
-import { DatabaseAdapter } from '@electric-sql/drivers'
+import { DatabaseAdapter } from '../../../../packages/drivers/dist'
 import { buildInitialMigration as makeBaseMigration } from './schema'
 import Log from 'loglevel'
 import { QualifiedTablename, SatelliteError, SatelliteErrorCode } from '../util'

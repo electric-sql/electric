@@ -7,7 +7,7 @@ DOCKER_WORKDIR=${E2E_ROOT}/elixir_client
 export DOCKER_REPO ?= europe-docker.pkg.dev/vaxine/ci
 export ELECTRIC_CLIENT_IMAGE_NAME ?= electric-ws-client
 
-ELECTRIC_DIR=${PROJECT_ROOT}/components/electric
+ELECTRIC_DIR=${PROJECT_ROOT}/packages/electric
 
 build:
 	make -C ${ELECTRIC_DIR} docker-build-ws-client

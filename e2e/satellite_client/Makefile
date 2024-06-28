@@ -15,7 +15,7 @@ build:
 	docker buildx build --load ${CACHING_SETTINGS} -f ./Dockerfile -t satellite_client:local ${PROJECT_ROOT}
 
 local-build:
-	make -C ../../components/drivers build
+	make -C ../../packages/drivers build
 	pnpm i --frozen-lockfile
 	make -C ../../clients/typescript build
 	pnpm run build

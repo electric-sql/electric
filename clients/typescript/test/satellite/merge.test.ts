@@ -23,8 +23,8 @@ import {
 import { DatabaseAdapter as SQLiteDatabaseAdapter } from '../../src/drivers/better-sqlite3'
 import { DatabaseAdapter as PgDatabaseAdapter } from '../../src/drivers/node-postgres'
 import { DatabaseAdapter as PgliteDatabaseAdapter } from '../../src/drivers/pglite'
-import { DatabaseAdapter as DatabaseAdapterInterface } from '@electric-sql/drivers'
-import { makePgDatabase } from '@electric-sql/drivers/node-postgres'
+import { DatabaseAdapter as DatabaseAdapterInterface } from '../../../../packages/drivers/dist'
+import { makePgDatabase } from '../../../../packages/drivers/dist/node-postgres'
 import { randomValue } from '../../src/util/random'
 import { PGlite } from '@electric-sql/pglite'
 

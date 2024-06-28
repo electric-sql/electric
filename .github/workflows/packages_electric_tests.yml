@@ -1,4 +1,4 @@
-name: Components / Electric / Tests
+name: Packages / Electric / Tests
 
 on:
   push:
@@ -6,15 +6,15 @@ on:
       - main
   pull_request:
     paths:
-      - "components/electric/**"
-      - "!components/electric/**README.md"
+      - "packages/electric/**"
+      - "!packages/electric/**README.md"
 
 env:
   OTP_VERSION: "27.0"
   ELIXIR_VERSION: "1.17.0-otp-27"
 
 concurrency:
-  group: components-electric-${{ github.ref }}
+  group: packages-electric-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: components/electric
+        working-directory: packages/electric
     env:
       MIX_ENV: test
     steps:
@@ -40,29 +40,29 @@ jobs:
       - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
-          path: components/electric/deps
-          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
+          path: packages/electric/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('packages/electric/**/mix.lock') }}
           restore-keys: ${{ runner.os }}-mixdeps-
       - name: Restore compiled code
         uses: actions/cache/restore@v4
         with:
           path: |
-            components/electric/_build/*/lib
-            !components/electric/_build/*/lib/electric
-          key: ${{ runner.os }}-mixbuild-test-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
+            packages/electric/_build/*/lib
+            !packages/electric/_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-test-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('packages/electric/**/mix.lock') }}
       - run: mix deps.get && mix deps.compile
       - name: Cache dependencies
         uses: actions/cache/save@v4
         with:
-          path: components/electric/deps
-          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
+          path: packages/electric/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('packages/electric/**/mix.lock') }}
       - name: Save compiled code
         uses: actions/cache/save@v4
         with:
           path: |
-            components/electric/_build/*/lib
-            !components/electric/_build/*/lib/electric
-          key: ${{ runner.os }}-mixbuild-test-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
+            packages/electric/_build/*/lib
+            !packages/electric/_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-test-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('packages/electric/**/mix.lock') }}
 
       - run: mix compile --force --all-warnings --warnings-as-errors
       - name: Prepare auxiliary services
@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: components/electric
+        working-directory: packages/electric
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,8 +88,8 @@ jobs:
         id: cache-deps
         uses: actions/cache@v4
         with:
-          path: components/electric/deps
-          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
+          path: packages/electric/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('packages/electric/**/mix.lock') }}
       - run: mix deps.get
       - run: make check-format
 
@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: components/electric
+        working-directory: packages/electric
     env:
       MIX_ENV: dev
     steps:
@@ -115,28 +115,28 @@ jobs:
         id: cache-deps
         uses: actions/cache@v4
         with:
-          path: components/electric/deps
-          key: ${{ runner.os }}-mixdeps-${{ hashFiles('components/electric/**/mix.lock') }}
+          path: packages/electric/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('packages/electric/**/mix.lock') }}
       - name: Restore compiled code
         uses: actions/cache/restore@v4
         with:
           path: |
-            components/electric/_build/*/lib
-            !components/electric/_build/*/lib/electric
-          key: ${{ runner.os }}-mixbuild-dev-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
+            packages/electric/_build/*/lib
+            !packages/electric/_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-dev-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('packages/electric/**/mix.lock') }}
       - run: mix deps.get && mix deps.compile
       - name: Save compiled code
         uses: actions/cache/save@v4
         with:
           path: |
-            components/electric/_build/*/lib
-            !components/electric/_build/*/lib/electric
-          key: ${{ runner.os }}-mixbuild-dev-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('components/electric/**/mix.lock') }}
+            packages/electric/_build/*/lib
+            !packages/electric/_build/*/lib/electric
+          key: ${{ runner.os }}-mixbuild-dev-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('packages/electric/**/mix.lock') }}
       - run: mix compile --force --all-warnings --warnings-as-errors
       - name: Cache PLT
         uses: actions/cache/restore@v4
         with:
-          path: components/electric/_build/*/*.plt
+          path: packages/electric/_build/*/*.plt
           key: ${{ runner.os }}-plt-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ github.ref_name }}
           restore-keys: ${{ runner.os }}-plt-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-
 
@@ -147,5 +147,5 @@ jobs:
         if: ${{ always() && steps.dialyzer.outcome != 'cancelled' }}
         uses: actions/cache/save@v4
         with:
-          path: components/electric/_build/*/*.plt
+          path: packages/electric/_build/*/*.plt
           key: ${{ runner.os }}-plt-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ github.ref_name }}

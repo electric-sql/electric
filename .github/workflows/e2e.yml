@@ -61,15 +61,15 @@ jobs:
 
       - run: |
           echo "ELECTRIC_VERSION=$(make --silent print_version_from_git)" >> $GITHUB_ENV
-        working-directory: components/electric
+        working-directory: packages/electric
       - run: make docker-build-ci
         env:
           ELECTRIC_IMAGE_NAME: electric-sql-ci/electric
-        working-directory: components/electric
+        working-directory: packages/electric
       - run: make docker-build-ws-client
         env:
           ELECTRIC_CLIENT_IMAGE_NAME: electric-sql-ci/electric-ws-client
-        working-directory: components/electric
+        working-directory: packages/electric
 
       - name: Cache built lux
         uses: actions/cache@v4
@@ -152,15 +152,15 @@ jobs:
 
       - run: |
           echo "ELECTRIC_VERSION=$(make --silent print_version_from_git)" >> $GITHUB_ENV
-        working-directory: components/electric
+        working-directory: packages/electric
       - run: make docker-build-ci
         env:
           ELECTRIC_IMAGE_NAME: electric-sql-ci/electric
-        working-directory: components/electric
+        working-directory: packages/electric
       - run: make docker-build-ws-client
         env:
           ELECTRIC_CLIENT_IMAGE_NAME: electric-sql-ci/electric-ws-client
-        working-directory: components/electric
+        working-directory: packages/electric
 
       - name: Cache built lux
         uses: actions/cache@v4

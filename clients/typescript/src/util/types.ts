@@ -7,7 +7,7 @@ import {
   SatRelation_RelationType,
 } from '../_generated/protocol/satellite'
 import { Tag } from '../satellite/oplog'
-import type { Row } from '@electric-sql/drivers/util'
+import type { Row } from '../../../../packages/drivers/dist/util'
 
 export type {
   DbName,
@@ -15,7 +15,7 @@ export type {
   Row,
   BindParams,
   Statement,
-} from '@electric-sql/drivers/util'
+} from '../../../../packages/drivers/dist/util'
 
 export type DbNamespace = string
 export type Tablename = string

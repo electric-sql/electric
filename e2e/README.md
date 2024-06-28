@@ -7,7 +7,7 @@ Tests dependencies:
 
 You will also need an Electric Docker image, specified by the environment variables `ELECTRIC_IMAGE_NAME` and `ELECTRIC_IMAGE_TAG`, which defaults to the image `electric:local-build` that can be built using:
 ```sh
-cd ../components/electric
+cd ../packages/electric
 make docker-build
 ```
 
