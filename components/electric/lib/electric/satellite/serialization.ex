@@ -746,28 +746,13 @@ defmodule Electric.Satellite.Serialization do
 
   defp assert_valid_month!(month) when month in 1..12, do: :ok
 
-  defp assert_valid_month!(month),
-    do: raise(DataValidationError, message: "Month out of range: #{month}")
-
   defp assert_valid_day!(day) when day in 1..31, do: :ok
-
-  defp assert_valid_day!(day),
-    do: raise(DataValidationError, message: "Day out of range: #{day}")
 
   defp assert_valid_hours!(hours) when hours in 0..23, do: :ok
 
-  defp assert_valid_hours!(hours),
-    do: raise(DataValidationError, message: "Hours out of range: #{hours}")
-
   defp assert_valid_minutes!(minutes) when minutes in 0..59, do: :ok
 
-  defp assert_valid_minutes!(minutes),
-    do: raise(DataValidationError, message: "Minutes out of range: #{minutes}")
-
   defp assert_valid_seconds!(seconds) when seconds in 0..59, do: :ok
-
-  defp assert_valid_seconds!(seconds),
-    do: raise(DataValidationError, message: "Seconds out of range: #{seconds}")
 
   defp assert_valid_fractional_seconds!(""), do: :ok
 
@@ -776,9 +761,6 @@ defmodule Electric.Satellite.Serialization do
     _ = String.to_integer(fs_str)
     :ok
   end
-
-  defp assert_valid_fractional_seconds!(val),
-    do: raise(DataValidationError, message: "Fractional seconds out of range: #{val}")
 
   defp assert_float_in_range!(_num, :float8), do: :ok
 
