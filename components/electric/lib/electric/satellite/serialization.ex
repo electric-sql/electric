@@ -611,7 +611,7 @@ defmodule Electric.Satellite.Serialization do
         val
 
       _ ->
-        raise DataValidationError, message: "Non integer value given for #{type} column: #{val}"
+        raise DataValidationError, message: "Non-integer value given for #{type} column: #{val}"
     end
   end
 
