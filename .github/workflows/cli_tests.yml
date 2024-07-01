@@ -8,12 +8,12 @@ on:
   pull_request:
     paths:
       - "pnpm-lock.yaml"
-      - "components/cli/**"
-      - "!components/cli/**.md"
+      - "packages/cli/**"
+      - "!packages/cli/**.md"
 
 defaults:
   run:
-    working-directory: components/cli
+    working-directory: packages/cli
 
 concurrency:
   group: cli-${{ github.ref }}

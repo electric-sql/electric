@@ -1,4 +1,4 @@
-name: Drivers / Tests
+name: Clients / Typescript / Tests
 
 on:
   workflow_call:
@@ -8,15 +8,15 @@ on:
   pull_request:
     paths:
       - "pnpm-lock.yaml"
-      - "packages/drivers/**"
-      - "!packages/drivers/**.md"
+      - "packages/client/**"
+      - "!packages/client/**.md"
 
 defaults:
   run:
-    working-directory: packages/drivers
+    working-directory: packages/client
 
 concurrency:
-  group: drivers-${{ github.ref }}
+  group: clients-typescript-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -63,12 +63,14 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
+      - name: Build Generator
+        run: make build_generator
       - name: Install
         run: make deps
       - name: Build
         run: make build
       - name: Run tests
-        run: make tests
+        run: make tests-CI
   maybe_publish:
     runs-on: ubuntu-latest
     needs: [test, check_types, verify_formatting]

@@ -7,11 +7,11 @@ on:
   pull_request:
     paths:
       - "pnpm-lock.yaml"
-      - "generator/**"
+      - "packages/generator/**"
 
 defaults:
   run:
-    working-directory: generator
+    working-directory: packages/generator
 
 jobs:
   verify_formatting:
