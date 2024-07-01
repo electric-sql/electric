@@ -1,5 +1,5 @@
 {
-  "version": "0.0.1",
+  "version": "0.0.2",
   "name": "@electric-sql/drivers",
   "description": "ElectricSQL database drivers.",
   "repository": "https://github.com/electric-sql/electric/tree/main/components/drivers",
