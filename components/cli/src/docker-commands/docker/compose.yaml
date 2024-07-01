@@ -1,3 +1,17 @@
+# This compose file is used by the CLI `start` command to run the sync service and, optionally,
+# a Postgres database inside Docker containers.
+#
+# When a user wants to start only the sync service by executing `electric-sql start`, the CLI
+# will execute `docker compose up ... electric`, omitting the "postgres" service, so only the
+# "electric" service will be running.
+#
+# When `electric-sql start --with-postgres` is invoked, the CLI will execute `docker compose up
+# ... postgres electric`. In this case, the sync service may spend some time in a reconnection loop
+# until the Postgres database is ready to accept connections. This is a normal mode of operation.
+#
+# Docker Compose should be invoked with this file and one of the two extra
+# files, compose.hostnest.yaml or compose.ip6net.yaml, depending on the chosen network mode.
+
 configs:
   postgres_config:
     file: './postgres.conf'

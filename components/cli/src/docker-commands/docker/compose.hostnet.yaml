@@ -1,0 +1,13 @@
+# This extra compose file is meant to be used together with the main compose.yaml file when
+# running Docker Compose commands.
+#
+# In this file we configure both services to use the host network mode, side-stepping Docker
+# networking entirely.
+
+services:
+  electric:
+    network_mode: host
+
+  postgres:
+    # Postgres must be on the same network as the sync service.
+    network_mode: host
