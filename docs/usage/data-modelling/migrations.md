@@ -132,7 +132,25 @@ return new class extends Migration {
 
 With [Prisma](../../integrations/backend/prisma.md) you [customize a migration to include an unsupported feature](https://www.prisma.io/docs/guides/migrate/developing-with-prisma-migrate/include-unsupported-database-features).
 
-First, use the `--create-only` flag to generate a new migration without applying it:
+First, create the `_prisma_migrations` table used by Prisma to store migration state:
+
+```sql
+CREATE TABLE public._prisma_migrations (
+    id character varying(36) NOT NULL,
+    checksum character varying(64) NOT NULL,
+    finished_at timestamp with time zone,
+    migration_name character varying(255) NOT NULL,
+    logs text,
+    rolled_back_at timestamp with time zone,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    applied_steps_count integer DEFAULT 0 NOT NULL
+);
+
+ALTER TABLE ONLY public._prisma_migrations
+    ADD CONSTRAINT _prisma_migrations_pkey PRIMARY KEY (id);
+```
+
+Use the `--create-only` flag to generate a new migration without applying it:
 
 ```shell
 npx prisma migrate dev --create-only
