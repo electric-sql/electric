@@ -74,7 +74,7 @@ defmodule Electric.Satellite.Serialization do
     commit_op = %SatTransOp{op: {:commit, tx_commit}}
 
     {
-      [%SatOpLog{ops: [begin_op | Enum.reverse([commit_op | state.ops])]}],
+      messages_from_ops([begin_op | Enum.reverse([commit_op | state.ops])]),
       state.new_relations,
       state.known_relations
     }
@@ -93,7 +93,7 @@ defmodule Electric.Satellite.Serialization do
     # The changes cannot be migration relations, so our "state" is limited
     state = Enum.reduce(changes, state, &serialize_change/2)
 
-    {[%SatOpLog{ops: [begin_op | state.ops]}], state.new_relations, state.known_relations}
+    {messages_from_ops([begin_op | state.ops]), state.new_relations, state.known_relations}
   end
 
   def serialize_shape_data_as_tx(changes, known_relations) do
@@ -106,7 +106,14 @@ defmodule Electric.Satellite.Serialization do
     # The changes cannot be migration relations, so our "state" is limited
     state = Enum.reduce(changes, state, &serialize_change/2)
 
-    {[%SatOpLog{ops: state.ops}], state.new_relations, state.known_relations}
+    {messages_from_ops(state.ops), state.new_relations, state.known_relations}
+  end
+
+  @max_ops_per_message 100
+  defp messages_from_ops(ops) do
+    ops
+    |> Enum.chunk_every(@max_ops_per_message)
+    |> Enum.map(&%SatOpLog{ops: &1})
   end
 
   defp serialize_change(record, state) when is_migration_relation(record.relation) do
