@@ -423,7 +423,7 @@ importers:
         version: 15.3.1
     devDependencies:
       '@electric-sql/drivers':
-        specifier: workspace:*
+        specifier: workspace:~
         version: link:../drivers
       '@electric-sql/pglite':
         specifier: ^0.1.5
@@ -453,7 +453,7 @@ importers:
         specifier: ^11.0.0
         version: 11.0.0
       electric-sql:
-        specifier: workspace:*
+        specifier: workspace:~
         version: link:../../clients/typescript
       eslint:
         specifier: ^8.57.0
