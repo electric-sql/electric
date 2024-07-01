@@ -591,7 +591,10 @@ defmodule Electric.Satellite.Serialization do
 
     val
   rescue
-    _ -> raise DataValidationError, message: "Unexpected value for :date column: #{inspect(val)}"
+    _ ->
+      reraise DataValidationError,
+              [message: "Unexpected value for :date column: #{inspect(val)}"],
+              __STACKTRACE__
   end
 
   def decode_column_value!(val, type) when type in [:float4, :float8] do
@@ -641,7 +644,10 @@ defmodule Electric.Satellite.Serialization do
 
     val
   rescue
-    _ -> raise DataValidationError, message: "Unexpected value for :time column: #{inspect(val)}"
+    _ ->
+      reraise DataValidationError,
+              [message: "Unexpected value for :time column: #{inspect(val)}"],
+              __STACKTRACE__
   end
 
   def decode_column_value!(val, :timestamp) do
