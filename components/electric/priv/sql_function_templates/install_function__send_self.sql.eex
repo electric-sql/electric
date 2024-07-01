@@ -18,6 +18,7 @@ CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__send_self_and_refer
         json_serialization TEXT := <%= schema() %>.format_every_and_join(primary_key_list || non_pk_column_list, '''%1$s'', __this_row.%1$I::text'); -- `'id', __this_row.id`
         recursive_calls TEXT := '';
         fk_info RECORD;
+        tag_lookup TEXT := '-- non writable table so tags are NULL;';
     BEGIN
 
     /* TODO: This makes an assumption that all foreign keys are to also-electrified tables.
@@ -35,9 +36,11 @@ CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__send_self_and_refer
 
     pk_serialization := 'ARRAY[' || <%= schema() %>.format_every_and_join(arg_name_list, '%I::text') || ']';
 
-    -- FIXME: change the tag lookup depending on writable flag -- if i set __tags to null it'll work
+    IF writable THEN
+        tag_lookup := format('SELECT _tbl._tags INTO __tags FROM <%= schema() %>.%I as _tbl WHERE %s;', shadow_table_name, pk_lookup);
+    END IF;
 
-    -- The `%n$I` placeholders use n-th argument for formatting.
+    -- The `%n$s` placeholders use n-th argument for formatting.
     EXECUTE format($injected$
         CREATE OR REPLACE FUNCTION <%= schema() %>.%1$I(%2$s)
             RETURNS void
@@ -57,7 +60,8 @@ CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__send_self_and_refer
             SELECT * INTO __this_row FROM %3$I.%4$I as _tbl WHERE %6$s;
 
             IF FOUND THEN
-                SELECT _tbl._tags INTO __tags FROM <%= schema() %>.%8$I as _tbl WHERE %6$s;
+                -- `tag_lookup`: find tags for row (if writable)
+                %8$s
 
                 PERFORM <%= schema() %>.__tx_store_touched_row('%3$s', '%4$s', __serialized_pk);
 
@@ -80,7 +84,7 @@ CREATE OR REPLACE FUNCTION <%= schema() %>.install_function__send_self_and_refer
     pk_serialization, -- 5
     pk_lookup, -- 6
     recursive_calls, -- 7
-    shadow_table_name, -- 8
+    tag_lookup, -- 8
     json_serialization -- 9
     );
 

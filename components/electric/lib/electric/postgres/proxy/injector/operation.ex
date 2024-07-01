@@ -930,7 +930,7 @@ defmodule Operation.Electric do
 
     def recv_server(
           %O{introspect: [:electrified | _]} = op,
-          %M.DataRow{fields: [schema, name]},
+          %M.DataRow{fields: [schema, name, _triggers_installed]},
           state,
           send
         ) do

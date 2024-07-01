@@ -296,7 +296,7 @@ defmodule Electric.Postgres.Extension do
     end
   end
 
-  @electrified_tables_query "SELECT schema_name, table_name FROM #{@electrified_tracking_table}"
+  @electrified_tables_query "SELECT schema_name, table_name, write_triggers_installed FROM #{@electrified_tracking_table}"
 
   @spec electrified_tables_query() :: String.t()
   def electrified_tables_query do
@@ -319,7 +319,7 @@ defmodule Electric.Postgres.Extension do
   @spec published_tables(conn()) :: {:ok, [{String.t(), String.t()}]} | {:error, term}
   def published_tables(conn) do
     with {:ok, tables} <- electrified_tables(conn) do
-      tables_with_shadows = Enum.flat_map(tables, &[&1, shadow_of(&1)])
+      tables_with_shadows = Enum.flat_map(tables, &shadow_of_electrified(&1)) |> dbg
       published_tables = Enum.concat(tables_with_shadows, published_extension_tables())
       {:ok, published_tables}
     end
@@ -573,8 +573,19 @@ defmodule Electric.Postgres.Extension do
   @doc """
   Returns a relation that is the shadow table of the given relation.
   """
-  @spec shadow_of({binary, binary}) :: {binary, binary}
-  def shadow_of({schema, table}), do: {@schema, @shadow_prefix <> schema <> "__" <> table}
+  @spec shadow_of({binary, binary, term()}) :: {binary, binary}
+  def shadow_of({schema, table}) do
+    {@schema, @shadow_prefix <> schema <> "__" <> table}
+  end
+
+  @spec shadow_of_electrified({binary(), binary(), binary()}) :: [{binary(), binary()}]
+  defp shadow_of_electrified({schema, table, "t"}) do
+    [{schema, table}, {@schema, @shadow_prefix <> schema <> "__" <> table}]
+  end
+
+  defp shadow_of_electrified({schema, table, "f"}) do
+    [{schema, table}]
+  end
 
   @doc """
   Returns a relation that is the tombstone table of the given relation.

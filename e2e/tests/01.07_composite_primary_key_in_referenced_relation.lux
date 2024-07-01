@@ -44,7 +44,7 @@
 [shell electric]
     ??%Electric.Replication.Changes.NewRecord{relation: {"public", "project_memberships"}, \
        record: %{"id" => "$member_id", "project_id" => "$project_id", "sub_id" => "."}, \
-       tags: ["postgres_1@
+       tags: [
 
 [cleanup]
    [invoke teardown]
