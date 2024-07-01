@@ -38,16 +38,24 @@ beforeAll(async () => {
   context = {}
   const client = new Client({
     host: `localhost`,
-    port: 5532,
-    password: `pg_password`,
+    port: 54321,
+    password: `password`,
     user: `postgres`,
-    database: `testing-instance`,
+    database: `electric`,
   })
   await client.connect()
   //
   // Add an initial row.
   const uuid = uuidv4()
   try {
+    await client.query(`CREATE TABLE IF NOT EXISTS issues (
+          id UUID PRIMARY KEY,
+          title TEXT NOT NULL
+      );`, [])
+    await client.query(`CREATE TABLE IF NOT EXISTS foo (
+        id UUID PRIMARY KEY,
+        title TEXT NOT NULL
+    );`, [])
     await client.query(`insert into foo(id, title) values($1, $2)`, [
       uuid,
       `I AM FOO TABLE`,
@@ -71,7 +79,7 @@ afterAll(async () => {
 })
 
 describe(`HTTP Sync`, () => {
-  it(`should work with empty shape/table`, async () => {
+  it.only(`should work with empty shape/table`, async () => {
     // Get initial data
     const shapeData = new Map()
     const aborter = new AbortController()
@@ -100,13 +108,13 @@ describe(`HTTP Sync`, () => {
     expect(values).toHaveLength(0)
   })
 
-  it(`returns a header with the server shape id`, async () => {
+  it.only(`returns a header with the server shape id`, async () => {
     const res = await fetch(`http://localhost:3000/shape/issues?offset=-1`, {})
     const shapeId = res.headers.get(`x-electric-shape-id`)
     assert.exists(shapeId)
   })
 
-  it(`should get initial data`, async () => {
+  it.only(`should get initial data`, async () => {
     const { client } = context
     // Add an initial row.
     const uuid = uuidv4()
@@ -152,7 +160,7 @@ describe(`HTTP Sync`, () => {
     expect(values[0].title).toEqual(`foo`)
   })
 
-  it(`should get initial data for a second table`, async () => {
+  it.only(`should get initial data for a second table`, async () => {
     // Get initial data
     const shapeData = new Map()
     const aborter = new AbortController()
@@ -182,7 +190,7 @@ describe(`HTTP Sync`, () => {
     expect(values[0].title).toEqual(`I AM FOO TABLE`)
   })
 
-  it(`should get initial data and then receive updates`, async () => {
+  it.only(`should get initial data and then receive updates`, async () => {
     const { rowId } = context
     const shapeData = new Map()
     const aborter = new AbortController()
