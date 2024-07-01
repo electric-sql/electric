@@ -319,7 +319,7 @@ defmodule Electric.Postgres.Extension do
   @spec published_tables(conn()) :: {:ok, [{String.t(), String.t()}]} | {:error, term}
   def published_tables(conn) do
     with {:ok, tables} <- electrified_tables(conn) do
-      tables_with_shadows = Enum.flat_map(tables, &shadow_of_electrified(&1)) |> dbg
+      tables_with_shadows = Enum.flat_map(tables, &shadow_of_electrified(&1))
       published_tables = Enum.concat(tables_with_shadows, published_extension_tables())
       {:ok, published_tables}
     end

@@ -15,6 +15,7 @@ defmodule Electric.Postgres.Extension.TriggersTest do
     assert [
              {:ok, [], []},
              {:ok, [], []},
+             {:ok, [], []},
              {:ok, 1},
              {:ok, 1},
              # assert _modified_columns_bit_mask as having changed the flag
@@ -28,6 +29,7 @@ defmodule Electric.Postgres.Extension.TriggersTest do
                  content_json JSONB
                );
                CALL electric.electrify('public.trigger_test');
+               CALL electric.install_shadow_tables_and_triggers('public', 'trigger_test');
                INSERT INTO public.trigger_test (val, flag, content_json)
                      VALUES ('1', 'false', '{"a": 3}');
                UPDATE public.trigger_test SET flag = 'true' WHERE val = '1';
@@ -37,6 +39,7 @@ defmodule Electric.Postgres.Extension.TriggersTest do
 
   test "shadow table update does not fail even if no columns change", cxt do
     assert [
+             {:ok, [], []},
              {:ok, [], []},
              {:ok, [], []},
              {:ok, 1},
@@ -52,6 +55,7 @@ defmodule Electric.Postgres.Extension.TriggersTest do
                  content_json JSONB
                );
                CALL electric.electrify('public.trigger_test');
+               CALL electric.install_shadow_tables_and_triggers('public', 'trigger_test');
                INSERT INTO public.trigger_test (val, flag, content_json)
                      VALUES ('1', 'false', '{"a": 3}');
                UPDATE public.trigger_test SET flag = 'false' WHERE val = '1';

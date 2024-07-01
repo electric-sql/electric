@@ -202,5 +202,6 @@ defmodule Electric.Postgres.Proxy.DDLXModificationTest do
   end
 
   test "add column to writable table triggers modification to shadow", cxt do
+    flunk()
   end
 end

@@ -131,7 +131,6 @@ defmodule Electric.Replication.Shapes.Querying do
       curr_records =
         rows_to_changes_with_tags(rows, Enum.map(table_info.columns, & &1.name), layer, origin)
 
-      dbg(curr_records)
       graph = maybe_fill_first_graph_layer(Graph.new(), layer, curr_records)
 
       record_map =

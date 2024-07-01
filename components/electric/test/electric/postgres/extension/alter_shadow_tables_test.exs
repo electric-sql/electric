@@ -70,12 +70,13 @@ defmodule Electric.Postgres.Extension.AlterShadowTablesTest do
   test_tx "procedure adds correct columns to shadow tables", fn conn ->
     sql1 = "CREATE TABLE public.buttercup (id text PRIMARY KEY, value text);"
     sql2 = "CALL electric.electrify('public.buttercup')"
+    sql3 = "CALL electric.install_shadow_tables_and_triggers('public', 'buttercup')"
 
-    for sql <- [sql1, sql2] do
+    for sql <- [sql1, sql2, sql3] do
       {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
     end
 
-    assert {:ok, [_]} = Extension.ddl_history(conn)
+    assert {:ok, [_, _]} = Extension.ddl_history(conn)
 
     {:ok, rows} = get_shadow_schema(conn, "public", "buttercup")
 
@@ -103,7 +104,7 @@ defmodule Electric.Postgres.Extension.AlterShadowTablesTest do
     {:ok, _, _} =
       :epgsql.squery(
         conn,
-        "CALL electric.alter_shadow_table(ARRAY['read','write'], 'public', 'buttercup', 'add', 'name', 'text')"
+        "CALL electric.alter_shadow_table('public', 'buttercup', 'add', 'name', 'text')"
       )
 
     {:ok, rows} = get_shadow_schema(conn, "public", "buttercup")

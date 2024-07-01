@@ -201,6 +201,40 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
                 "txts" => "200"
               },
               tags: []
+            },
+            # shadow tables don't have the right columns :shrug:
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "9",
+                "query" =>
+                  "create table electric.shadow__public__something_else (id uuid primary key);",
+                "txid" => "100",
+                "txts" => "200"
+              },
+              tags: []
+            },
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "10",
+                "query" =>
+                  "create table electric.shadow__public__other_thing (id uuid primary key);",
+                "txid" => "100",
+                "txts" => "200"
+              },
+              tags: []
+            },
+            %NewRecord{
+              relation: {"electric", "ddl_commands"},
+              record: %{
+                "id" => "11",
+                "query" =>
+                  "create table electric.shadow__public__yet_another_thing (id uuid primary key);",
+                "txid" => "100",
+                "txts" => "200"
+              },
+              tags: []
             }
           ],
           commit_timestamp: ~U[2023-05-02 10:08:00.948788Z],
@@ -223,7 +257,10 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
                      ddl: [
                        "create table something_else (id uuid primary key);",
                        "create table other_thing (id uuid primary key);",
-                       "create table yet_another_thing (id uuid primary key);"
+                       "create table yet_another_thing (id uuid primary key);",
+                       "create table electric.shadow__public__something_else (id uuid primary key);",
+                       "create table electric.shadow__public__other_thing (id uuid primary key);",
+                       "create table electric.shadow__public__yet_another_thing (id uuid primary key);"
                      ],
                      relations: [
                        {"public", "other_thing"},
@@ -241,7 +278,9 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
 
       assert_receive {MockSchemaLoader, :load}, @receive_timeout
       # only 1 save instruction is observed
-      assert_receive {MockSchemaLoader, {:save, ^version, schema, [_, _, _]}}, @receive_timeout
+      assert_receive {MockSchemaLoader, {:save, ^version, schema, [_, _, _, _, _, _]}},
+                     @receive_timeout
+
       refute_receive {MockSchemaLoader, {:save, _, _schema}}, @refute_receive_timeout
 
       assert Enum.map(schema.tables, & &1.name.name) == [
@@ -251,9 +290,6 @@ defmodule Electric.Replication.Postgres.MigrationConsumerTest do
                "something_else",
                "other_thing",
                "yet_another_thing",
-               "shadow__public__projects",
-               "shadow__public__users",
-               "shadow__public__project_memberships",
                "shadow__public__something_else",
                "shadow__public__other_thing",
                "shadow__public__yet_another_thing"

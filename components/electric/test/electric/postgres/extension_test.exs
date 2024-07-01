@@ -422,7 +422,7 @@ defmodule Electric.Postgres.ExtensionTest do
              """
     end
 
-    test_tx "creates shadow tables", fn conn ->
+    test_tx "doesn't create shadow tables immediately", fn conn ->
       sql1 = "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql2 = "CREATE TABLE public.daisy (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY);"
       sql3 = "CALL electric.electrify('buttercup')"
@@ -431,7 +431,7 @@ defmodule Electric.Postgres.ExtensionTest do
         {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
       end
 
-      assert {:ok, _, [{"1"}]} =
+      assert {:ok, _, []} =
                :epgsql.squery(
                  conn,
                  "SELECT 1 FROM pg_class JOIN pg_namespace ON relnamespace = pg_namespace.oid WHERE relname = 'shadow__public__buttercup' AND nspname = 'electric'"
@@ -444,14 +444,15 @@ defmodule Electric.Postgres.ExtensionTest do
                )
     end
 
-    test_tx "does not include dropped columns in the shadow table", fn conn ->
+    test_tx "shadow tables do not include dropped columns", fn conn ->
       sql1 = "CREATE TABLE public.buttercup (id int4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY)"
       sql2 = "ALTER TABLE public.buttercup ADD COLUMN foo1 text"
       sql3 = "ALTER TABLE public.buttercup ADD COLUMN foo2 text"
       sql4 = "ALTER TABLE public.buttercup DROP COLUMN foo1"
       sql5 = "CALL electric.electrify('buttercup')"
+      sql6 = "CALL electric.install_shadow_tables_and_triggers('public', 'buttercup')"
 
-      for sql <- [sql1, sql2, sql3, sql4, sql5] do
+      for sql <- [sql1, sql2, sql3, sql4, sql5, sql6] do
         {:ok, _cols, _rows} = :epgsql.squery(conn, sql)
       end
 

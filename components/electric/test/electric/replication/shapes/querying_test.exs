@@ -15,7 +15,7 @@ defmodule Electric.Replication.Shapes.QueryingTest do
     setup(cxt) do
       %{
         relation_loader:
-          &Electric.Postgres.Extension.SchemaLoader.Version.table_info!(cxt.schema, &1)
+          &Electric.Postgres.Extension.SchemaLoader.Version.table_info(cxt.schema, &1)
       }
     end
 
