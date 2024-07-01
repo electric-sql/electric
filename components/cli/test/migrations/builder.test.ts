@@ -10,7 +10,7 @@ const migrationsFolder = path.join(
   '../../clients/typescript/test/migrators/support/migrations'
 )
 
-test('write migration to configuration file', async (t) => {
+test('write migration to configuration file and build DB schema', async (t) => {
   // compute absolute path to avoid differences between dynamic import and NodeJS' `fs` module
   const ogMigrationsFile = path.resolve(
     path.join('./test/support/migrations.js')
@@ -36,7 +36,37 @@ test('write migration to configuration file', async (t) => {
   const ogMigrations = await importMigrations()
   t.deepEqual(ogMigrations, [])
 
-  await buildMigrations(migrationsFolder, testMigrationsFile, sqliteBuilder)
+  const dbDescription = await buildMigrations(
+    migrationsFolder,
+    testMigrationsFile,
+    sqliteBuilder
+  )
+
+  // Check that the generated DB description is correct
+  t.deepEqual(dbDescription, {
+    stars: {
+      fields: {
+        id: 'TEXT',
+        avatar_url: 'TEXT',
+        name: 'TEXT',
+        starred_at: 'TEXT',
+        username: 'TEXT',
+      },
+      relations: [
+        new Relation('beers', '', '', 'beers', 'beers_star_idTostars'),
+      ],
+    },
+    beers: {
+      fields: {
+        id: 'TEXT',
+        star_id: 'TEXT',
+      },
+      relations: [
+        new Relation('stars', 'star_id', 'id', 'stars', 'beers_star_idTostars'),
+      ],
+    },
+  })
+
   const newMigrations = await importMigrations()
   const versions = newMigrations.map((m: any) => m.version)
   t.deepEqual(versions, ['20230613112725_814', '20230613112735_992'])
@@ -64,7 +94,7 @@ test('read migration meta data', async (t) => {
         username: 'TEXT',
       },
       relations: [
-        new Relation('beers', '', '', 'beers', 'beers_star_idTostars', 'many'),
+        new Relation('beers', '', '', 'beers', 'beers_star_idTostars'),
       ],
     },
     beers: {
@@ -73,14 +103,7 @@ test('read migration meta data', async (t) => {
         star_id: 'TEXT',
       },
       relations: [
-        new Relation(
-          'stars',
-          'star_id',
-          'id',
-          'stars',
-          'beers_star_idTostars',
-          'one'
-        ),
+        new Relation('stars', 'star_id', 'id', 'stars', 'beers_star_idTostars'),
       ],
     },
   })

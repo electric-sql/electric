@@ -17,6 +17,7 @@
     "lint": "eslint src --fix"
   },
   "dependencies": {
+    "@electric-sql/drivers": "workspace:*",
     "better-sqlite3": "^11.0.0",
     "electric-sql": "workspace:*",
     "jsonwebtoken": "^9.0.0",
@@ -26,10 +27,8 @@
     "zod": "3.21.1"
   },
   "devDependencies": {
-    "@electric-sql/prisma-generator": "workspace:*",
-    "@prisma/client": "4.8.1",
     "@tsmodule/tsmodule": "^44.7.0",
-    "@types/better-sqlite3": "7.6.3",
+    "@types/better-sqlite3": "7.6.10",
     "@types/jsonwebtoken": "^9.0.1",
     "@types/live-server": "^1.2.1",
     "@types/node": "^16.9.1",

@@ -43,7 +43,6 @@
     "**/*": "prettier --write --ignore-unknown"
   },
   "dependencies": {
-    "@electric-sql/prisma-generator": "workspace:*",
     "@prisma/client": "4.8.1",
     "commander": "^11.1.0",
     "decompress": "^4.2.1",
@@ -56,7 +55,6 @@
     "zod": "3.21.1"
   },
   "devDependencies": {
-    "@electric-sql/prisma-generator": "workspace:*",
     "@types/decompress": "^4.2.4",
     "@types/node": "^18.8.4",
     "@types/ws": "^8.5.3",

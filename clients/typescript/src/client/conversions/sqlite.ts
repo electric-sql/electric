@@ -1,10 +1,11 @@
 import { InvalidArgumentError } from '../validation/errors/invalidArgumentError'
-import { Converter } from './converter'
+import { Converter, mapRow, mapRows } from './converter'
 import { deserialiseBoolean, serialiseBoolean } from './datatypes/boolean'
 import { deserialiseBlob, serialiseBlob } from './datatypes/blob'
 import { deserialiseDate, serialiseDate } from './datatypes/date'
 import { deserialiseJSON, serialiseJSON } from './datatypes/json'
 import { PgBasicType, PgDateType, PgType, isPgDateType } from './types'
+import { TableSchema } from '../model/schema'
 
 /**
  * This module takes care of converting TypeScript values for Postgres-specific types to a SQLite storeable value and back.
@@ -14,7 +15,7 @@ import { PgBasicType, PgDateType, PgType, isPgDateType } from './types'
  * When reading from the SQLite database, the string can be parsed back into a `Date` object.
  */
 
-function toSqlite(v: any, pgType: PgType): any {
+export function toSqlite(v: any, pgType: PgType): any {
   if (v === null) {
     // don't transform null values
     return v
@@ -49,7 +50,7 @@ function toSqlite(v: any, pgType: PgType): any {
   }
 }
 
-function fromSqlite(v: any, pgType: PgType): any {
+export function fromSqlite(v: any, pgType: PgType): any {
   if (v === null) {
     // don't transform null values
     return v
@@ -93,5 +94,21 @@ function fromSqlite(v: any, pgType: PgType): any {
 
 export const sqliteConverter: Converter = {
   encode: toSqlite,
+  encodeRow: <T extends Record<string, unknown> = Record<string, unknown>>(
+    row: Record<string, unknown>,
+    tableSchema: TableSchema
+  ) => mapRow<T>(row, tableSchema, toSqlite),
+  encodeRows: <T extends Record<string, unknown> = Record<string, unknown>>(
+    rows: Array<Record<string, unknown>>,
+    tableSchema: TableSchema
+  ) => mapRows<T>(rows, tableSchema, toSqlite),
   decode: fromSqlite,
+  decodeRow: <T extends Record<string, any> = Record<string, any>>(
+    row: Record<string, unknown>,
+    tableSchema: TableSchema
+  ) => mapRow<T>(row, tableSchema, fromSqlite),
+  decodeRows: <T extends Record<string, unknown> = Record<string, unknown>>(
+    rows: Array<Record<string, unknown>>,
+    tableSchema: TableSchema
+  ) => mapRows<T>(rows, tableSchema, fromSqlite),
 }

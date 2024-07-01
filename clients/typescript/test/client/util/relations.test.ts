@@ -182,14 +182,7 @@ test('createRelationsFromTable creates two relations on table with one FK', (t: 
   const [rel] = relation!
   t.deepEqual(
     rel,
-    new Relation(
-      'other',
-      'otherr',
-      'other_id',
-      'other',
-      'foo_otherrToother',
-      'one'
-    ),
+    new Relation('other', 'otherr', 'other_id', 'other', 'foo_otherrToother'),
     'Expected relation to be created correctly'
   )
 
@@ -203,7 +196,7 @@ test('createRelationsFromTable creates two relations on table with one FK', (t: 
   const [backRel] = backwardRelation!
   t.deepEqual(
     backRel,
-    new Relation('foo', '', '', 'foo', 'foo_otherrToother', 'many'),
+    new Relation('foo', '', '', 'foo', 'foo_otherrToother'),
     'Expected relation to be created correctly'
   )
 })
@@ -242,8 +235,7 @@ test('createRelationsFromTable makes long relation field name if child column is
       'other',
       'other_id',
       'other',
-      'foo_otherToother',
-      'one'
+      'foo_otherToother'
     ),
     'Expected relation to be created correctly'
   )
@@ -258,7 +250,7 @@ test('createRelationsFromTable makes long relation field name if child column is
   const [backRel] = backwardRelation!
   t.deepEqual(
     backRel,
-    new Relation('foo', '', '', 'foo', 'foo_otherToother', 'many'),
+    new Relation('foo', '', '', 'foo', 'foo_otherToother'),
     'Expected relation to be created correctly'
   )
 })
@@ -294,7 +286,7 @@ test('createRelationsFromTable makes long relation field name if parent column i
   const [rel] = relation!
   t.deepEqual(
     rel,
-    new Relation('other', 'otherr', 'foo', 'other', 'foo_otherrToother', 'one'),
+    new Relation('other', 'otherr', 'foo', 'other', 'foo_otherrToother'),
     'Expected relation to be created correctly'
   )
 
@@ -308,14 +300,7 @@ test('createRelationsFromTable makes long relation field name if parent column i
   const [backRel] = backwardRelation!
   t.deepEqual(
     backRel,
-    new Relation(
-      'foo_foo_otherrToother',
-      '',
-      '',
-      'foo',
-      'foo_otherrToother',
-      'many'
-    ),
+    new Relation('foo_foo_otherrToother', '', '', 'foo', 'foo_otherrToother'),
     'Expected relation to be created correctly'
   )
 })
@@ -344,8 +329,7 @@ test('createRelationsFromTable makes long relation field name if several FKs are
       'other_id1',
       'other_id',
       'other',
-      'items_other_id1Toother',
-      'one'
+      'items_other_id1Toother'
     ),
     'Expected relation to be created correctly'
   )
@@ -356,8 +340,7 @@ test('createRelationsFromTable makes long relation field name if several FKs are
       'other_id2',
       'other_id',
       'other',
-      'items_other_id2Toother',
-      'one'
+      'items_other_id2Toother'
     ),
     'Expected relation to be created correctly'
   )
@@ -377,8 +360,7 @@ test('createRelationsFromTable makes long relation field name if several FKs are
       '',
       '',
       'items',
-      'items_other_id1Toother',
-      'many'
+      'items_other_id1Toother'
     ),
     'Expected relation to be created correctly'
   )
@@ -389,8 +371,7 @@ test('createRelationsFromTable makes long relation field name if several FKs are
       '',
       '',
       'items',
-      'items_other_id2Toother',
-      'many'
+      'items_other_id2Toother'
     ),
     'Expected relation to be created correctly'
   )
@@ -450,8 +431,7 @@ test('createRelationsFromTable makes long relation field name if parent table ha
       'otherr',
       'other_id',
       'other',
-      'foo_otherrToother',
-      'one'
+      'foo_otherrToother'
     ),
     'Expected relation to be created correctly'
   )
@@ -466,14 +446,7 @@ test('createRelationsFromTable makes long relation field name if parent table ha
   const [backRel] = backwardRelation!
   t.deepEqual(
     backRel,
-    new Relation(
-      'foo_foo_otherrToother',
-      '',
-      '',
-      'foo',
-      'foo_otherrToother',
-      'many'
-    ),
+    new Relation('foo_foo_otherrToother', '', '', 'foo', 'foo_otherrToother'),
     'Expected relation to be created correctly'
   )
 })
@@ -493,30 +466,27 @@ test('createRelationsFromAllTables aggregates all relations', (t: Ctx) => {
             'otherr',
             'other_id',
             'other',
-            'foo_otherrToother',
-            'one'
+            'foo_otherrToother'
           ),
         ],
       ],
       [
         'other',
         [
-          new Relation('foo', '', '', 'foo', 'foo_otherrToother', 'many'),
+          new Relation('foo', '', '', 'foo', 'foo_otherrToother'),
           new Relation(
             'items_items_other_id1Toother',
             '',
             '',
             'items',
-            'items_other_id1Toother',
-            'many'
+            'items_other_id1Toother'
           ),
           new Relation(
             'items_items_other_id2Toother',
             '',
             '',
             'items',
-            'items_other_id2Toother',
-            'many'
+            'items_other_id2Toother'
           ),
         ],
       ],
@@ -528,16 +498,14 @@ test('createRelationsFromAllTables aggregates all relations', (t: Ctx) => {
             'other_id1',
             'other_id',
             'other',
-            'items_other_id1Toother',
-            'one'
+            'items_other_id1Toother'
           ),
           new Relation(
             'other_items_other_id2Toother',
             'other_id2',
             'other_id',
             'other',
-            'items_other_id2Toother',
-            'one'
+            'items_other_id2Toother'
           ),
         ],
       ],
@@ -560,30 +528,27 @@ test('createDbDescription creates a DbSchema from tables', (t: Ctx) => {
           'otherr',
           'other_id',
           'other',
-          'foo_otherrToother',
-          'one'
+          'foo_otherrToother'
         ),
       ],
     },
     other: {
       fields: { other_id: 'TEXT' },
       relations: [
-        new Relation('foo', '', '', 'foo', 'foo_otherrToother', 'many'),
+        new Relation('foo', '', '', 'foo', 'foo_otherrToother'),
         new Relation(
           'items_items_other_id1Toother',
           '',
           '',
           'items',
-          'items_other_id1Toother',
-          'many'
+          'items_other_id1Toother'
         ),
         new Relation(
           'items_items_other_id2Toother',
           '',
           '',
           'items',
-          'items_other_id2Toother',
-          'many'
+          'items_other_id2Toother'
         ),
       ],
     },
@@ -599,16 +564,14 @@ test('createDbDescription creates a DbSchema from tables', (t: Ctx) => {
           'other_id1',
           'other_id',
           'other',
-          'items_other_id1Toother',
-          'one'
+          'items_other_id1Toother'
         ),
         new Relation(
           'other_items_other_id2Toother',
           'other_id2',
           'other_id',
           'other',
-          'items_other_id2Toother',
-          'one'
+          'items_other_id2Toother'
         ),
       ],
     },

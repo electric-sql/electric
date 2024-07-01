@@ -76,6 +76,7 @@ import {
   ReplicatedRowTransformer,
   DataGone,
   GoneBatchCallback,
+  SqlValue,
 } from '../util/types'
 import {
   base64,
@@ -1547,7 +1548,7 @@ function deserializeColumnData(
 
 // All values serialized as textual representation
 function serializeColumnData(
-  columnValue: boolean | string | number | object,
+  columnValue: SqlValue,
   columnType: PgType,
   encoder: TypeEncoder
 ): Uint8Array {

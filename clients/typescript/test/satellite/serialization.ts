@@ -2,9 +2,8 @@ import { SatRelation_RelationType } from '../../src/_generated/protocol/satellit
 import { serializeRow, deserializeRow } from '../../src/satellite/client'
 import { TestFn, ExecutionContext } from 'ava'
 import { Relation, DbRecord } from '../../src/util/types'
-import { DbSchema, TableSchema } from '../../src/client/model/schema'
+import { DbSchema } from '../../src/client/model/schema'
 import { PgBasicType } from '../../src/client/conversions/types'
-import { HKT } from '../../src/client/util/hkt'
 import { DatabaseAdapter as DatabaseAdapterInterface } from '@electric-sql/drivers'
 import { inferRelationsFromDb } from '../../src/util/relations'
 import { SatelliteOpts } from '../../src/satellite/config'
@@ -79,18 +78,7 @@ export const serializationTests = (test: TestFn<ContextType>) => {
             enum2: PgBasicType.PG_TEXT,
           },
           relations: [],
-        } as unknown as TableSchema<
-          any,
-          any,
-          any,
-          any,
-          any,
-          any,
-          any,
-          any,
-          any,
-          HKT
-        >,
+        },
       },
       [],
       []
@@ -245,18 +233,7 @@ export const serializationTests = (test: TestFn<ContextType>) => {
             bit8: PgBasicType.PG_TEXT,
           },
           relations: [],
-        } as unknown as TableSchema<
-          any,
-          any,
-          any,
-          any,
-          any,
-          any,
-          any,
-          any,
-          any,
-          HKT
-        >,
+        },
       },
       [],
       []
@@ -309,18 +286,7 @@ export const serializationTests = (test: TestFn<ContextType>) => {
             b: PgBasicType.PG_BOOL,
           },
           relations: [],
-        } as unknown as TableSchema<
-          any,
-          any,
-          any,
-          any,
-          any,
-          any,
-          any,
-          any,
-          any,
-          HKT
-        >,
+        },
       },
       [],
       []

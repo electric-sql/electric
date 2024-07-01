@@ -1,6 +1,6 @@
 import { ElectricNamespace } from '../../electric/namespace'
-import { DbSchema, TableSchema, TableSchemas } from './schema'
-import { rawQuery, liveRawQuery, unsafeExec, Table } from './table'
+import { DbSchema } from './schema'
+import { rawQuery, liveRawQuery, unsafeExec } from './table'
 import {
   QualifiedTablename,
   ReplicatedRowTransformer,
@@ -22,39 +22,10 @@ import {
   setReplicationTransform,
 } from './transforms'
 import { Dialect } from '../../migrators/query-builder/builder'
-import { InputTransformer } from '../conversions/input'
 import { sqliteConverter } from '../conversions/sqlite'
 import { postgresConverter } from '../conversions/postgres'
 import { IShapeManager } from './shapes'
 import { ShapeInputWithTable, sync } from './sync'
-
-export type ClientTables<DB extends DbSchema<any>> = {
-  [Tbl in keyof DB['tables']]: DB['tables'][Tbl] extends TableSchema<
-    infer T,
-    infer CreateData,
-    infer UpdateData,
-    infer Select,
-    infer Where,
-    infer WhereUnique,
-    infer Include,
-    infer OrderBy,
-    infer ScalarFieldEnum,
-    infer GetPayload
-  >
-    ? Table<
-        T,
-        CreateData,
-        UpdateData,
-        Select,
-        Where,
-        WhereUnique,
-        Include,
-        OrderBy,
-        ScalarFieldEnum,
-        GetPayload
-      >
-    : never
-}
 
 interface RawQueries {
   /**
@@ -134,7 +105,7 @@ export class ElectricClient<
   }
 
   private constructor(
-    public db: ClientTables<DB> & RawQueries,
+    public db: RawQueries,
     dbName: string,
     private _dbDescription: DB,
     adapter: DatabaseAdapter,
@@ -153,9 +124,7 @@ export class ElectricClient<
     }
   }
 
-  setReplicationTransform<
-    T extends Record<string, unknown> = Record<string, unknown>
-  >(
+  setReplicationTransform<T extends Row = Row>(
     qualifiedTableName: QualifiedTablename,
     i: ReplicatedRowTransformer<T>
   ): void {
@@ -189,8 +158,7 @@ export class ElectricClient<
   }
 
   /**
-   * Builds the DAL namespace from a `dbDescription` object
-   * @param minimalDbDescription - A minimal description of the database schema can be provided in order to use Electric without the DAL.
+   * Builds an Electric client.
    */
   static create<DB extends DbSchema<any>>(
     dbName: string,
@@ -201,55 +169,13 @@ export class ElectricClient<
     registry: Registry | GlobalRegistry,
     dialect: Dialect
   ): ElectricClient<DB> {
-    const tables = dbDescription.extendedTables
     const converter = dialect === 'SQLite' ? sqliteConverter : postgresConverter
     const replicationTransformManager = new ReplicationTransformManager(
       satellite,
       converter
     )
-    const inputTransformer = new InputTransformer(converter)
 
-    // Check if we need to create the DAL
-    // If the schemas are missing from the `dbDescription``
-    // it means that the user did not generate the Electric client
-    // and thus we don't create the DAL.
-    // This is needed because we piggyback the minimal DB description (that is used without the DAL)
-    // on the same DB description argument as the one that is used with the DAL.
-    const ts: Array<[string, TableSchemas]> = Object.entries(
-      dbDescription.tables
-    )
-    const withDal = ts.length > 0 && ts[0][1].modelSchema !== undefined
-    let dal = {} as ClientTables<DB>
-
-    if (withDal) {
-      const createTable = (tableName: string) => {
-        return new Table(
-          tableName,
-          adapter,
-          notifier,
-          satellite,
-          replicationTransformManager,
-          dbDescription,
-          inputTransformer,
-          dialect
-        )
-      }
-
-      // Create all tables
-      dal = Object.fromEntries(
-        Object.keys(tables).map((tableName) => {
-          return [tableName, createTable(tableName)]
-        })
-      ) as ClientTables<DB>
-
-      // Now inform each table about all tables
-      Object.keys(dal).forEach((tableName) => {
-        dal[tableName].setTables(new Map(Object.entries(dal)))
-      })
-    }
-
-    const db: ClientTables<DB> & RawQueries = {
-      ...dal,
+    const db: RawQueries = {
       unsafeExec: unsafeExec.bind(null, adapter),
       rawQuery: rawQuery.bind(null, adapter),
       liveRawQuery: liveRawQuery.bind(null, adapter, notifier),

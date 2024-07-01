@@ -1,17 +1,14 @@
 import { createWriteStream } from 'fs'
 import { dedent } from 'ts-dedent'
-import { exec } from 'child_process'
 import * as fs from 'fs/promises'
 import * as z from 'zod'
 import decompress from 'decompress'
 import getPort from 'get-port'
 import http from 'node:http'
 import https from 'node:https'
-import Module from 'node:module'
 import path from 'path'
-import { buildDatabaseURL, parsePgProxyPort, appRoot } from '../util'
+import { appRoot } from '../util'
 import { buildMigrations, getMigrationNames } from './builder'
-import { findAndReplaceInFile } from '../util'
 import { getConfig, type Config } from '../config'
 import { start } from '../docker-commands/command-start'
 import { stop } from '../docker-commands/command-stop'
@@ -21,22 +18,8 @@ import {
   sqliteBuilder,
   Dialect,
 } from 'electric-sql/migrators/query-builder'
-import { DbSchema } from 'electric-sql/client'
+import { MinimalDbSchema } from 'electric-sql/client'
 import { serializeDbDescription } from '../util/serialize'
-
-// Rather than run `npx prisma` we resolve the path to the prisma binary so that
-// we can be sure we are using the same version of Prisma that is a dependency of
-// the Electric client.
-// `Module.createRequire(import.meta.url)` creates an old-style `require()` function
-// that can be used to resolve the path to the prisma cli script using
-// `require.resolve()`.
-// We use the same method to resolve the path to `@electric-sql/prisma-generator`.
-const require = Module.createRequire(import.meta.url)
-const prismaPath = require.resolve('prisma')
-const generatorPath = path.join(
-  path.dirname(require.resolve('@electric-sql/prisma-generator')),
-  'bin.js'
-)
 
 const sqliteMigrationsFileName = 'migrations.ts'
 const pgMigrationsFileName = 'pg-migrations.ts'
@@ -271,32 +254,14 @@ async function buildAndBundleMigrations(
   return dbDescription
 }
 
-async function introspectDbAndGenerateClient(
-  opts: Omit<GeneratorOptions, 'watch'>,
-  tmpFolder: string
-) {
-  const config = opts.config
-  const prismaSchema = await createIntrospectionSchema(tmpFolder, opts)
-
-  // Introspect the created DB to update the Prisma schema
-  await introspectDB(prismaSchema)
-
-  // Generate the Electric client from the given introspected schema
-  await generateClient(prismaSchema, config.CLIENT_PATH)
-
-  const relativePath = path.relative(appRoot, config.CLIENT_PATH)
-  console.log(`Successfully generated Electric client at: ./${relativePath}`)
-}
-
 /**
  * This function migrates the application.
  * To this end, it fetches the migrations from Electric,
- * applies them to a fresh SQLite DB,
- * uses Prisma to introspect the DB and update the Prisma schema,
- * runs the generator to generate the updated Electric client,
  * and runs `buildMigrations` from `cli/migrator.ts`
  * to build the triggers and write the migrations and their triggers
- * to the config file in `.electric/@config/index.mjs`
+ * to the config file in `.electric/@config/index.mjs`.
+ * It also generates a minimal DB schema from the migrations,
+ * and bundles them into the app.
  *
  * @param prismaSchema Path to the Prisma schema (relative path from the root folder of the app or absolute path).
  * @param migrationsFolder Absolute path to the migrations folder.
@@ -313,23 +278,14 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
     // Create `CLIENT_PATH` if it doesn't exist
     await fs.mkdir(config.CLIENT_PATH, { recursive: true })
 
-    if (opts.withDal) {
-      // Generate Electric client
-      console.log('Generating Electric client...')
-      await introspectDbAndGenerateClient(opts, tmpFolder)
-    }
-
     // Build and bundle the SQLite and PG migrations
     // This needs to happen after generating the Electric client
     // otherwise Prisma overwrites the files containing the bundled migrations
     const dbDescription = await buildAndBundleMigrations(opts, tmpFolder)
 
-    if (!opts.withDal) {
-      // User doesn't want an Electric client
-      // Write the minimal database description to a file
-      console.log('Generating database schema...')
-      await bundleDbDescription(dbDescription, opts.config.CLIENT_PATH)
-    }
+    // Write the database description to a file
+    console.log('Generating database schema...')
+    await bundleDbDescription(dbDescription, opts.config.CLIENT_PATH)
 
     if (
       ['nodenext', 'node16'].includes(
@@ -351,15 +307,18 @@ async function _generate(opts: Omit<GeneratorOptions, 'watch'>) {
   }
 }
 
-async function bundleDbDescription(dbDescription: DbSchema, outFolder: string) {
+async function bundleDbDescription(
+  dbDescription: MinimalDbSchema,
+  outFolder: string
+) {
   const dbDescriptionFile = path.join(outFolder, 'index.ts')
   const serializedDbDescription = serializeDbDescription(dbDescription)
   const dbDescriptionStr = dedent`
-    import migrations from './migrations';
-    import pgMigrations from './pg-migrations';
-    import { type TableSchemas, DbSchema, Relation, ElectricClient } from 'electric-sql/client/model';
+    import migrations from './migrations'
+    import pgMigrations from './pg-migrations'
+    import { type TableSchemas, DbSchema, Relation, ElectricClient } from 'electric-sql/client/model'
 
-    const tableSchemas = ${serializedDbDescription} as unknown as TableSchemas
+    const tableSchemas = ${serializedDbDescription} as TableSchemas
 
     export const schema = new DbSchema(tableSchemas, migrations, pgMigrations)
     export type Electric = ElectricClient<typeof schema>
@@ -368,359 +327,6 @@ async function bundleDbDescription(dbDescription: DbSchema, outFolder: string) {
   await fs.writeFile(dbDescriptionFile, dbDescriptionStr)
   const relativePath = path.relative(appRoot, dbDescriptionFile)
   console.log(`Successfully generated database schema at: ./${relativePath}`)
-}
-
-/**
- * Generates the Electric client and the Prisma clients based off of the provided
- * introspected Prisma schema.
- * NOTE: exported for testing purposes only, not intended for external uses
- * @param prismaSchema path to the introspected Prisma schema
- * @param clientPath path to the directory where the client should be generated
- */
-export async function generateClient(prismaSchema: string, clientPath: string) {
-  // Add custom validators (such as uuid) to the Prisma schema
-  await addValidators(prismaSchema)
-
-  // Modify snake_case table names to PascalCase
-  await capitaliseTableNames(prismaSchema)
-
-  // Read the contents of the Prisma schema
-  const introspectedSchema = await fs.readFile(prismaSchema, 'utf8')
-
-  // Add a generator for the Electric client to the Prisma schema
-  await createElectricClientSchema(introspectedSchema, prismaSchema, clientPath)
-
-  // Generate the Electric client from the Prisma schema
-  await generateElectricClient(prismaSchema)
-
-  // Add a generator for the Prisma client to the Prisma schema
-  await createPrismaClientSchema(introspectedSchema, prismaSchema, clientPath)
-
-  // Generate the Prisma client from the Prisma schema
-  await generatePrismaClient(prismaSchema)
-
-  // Perform necessary modifications to the generated client, like
-  // augmenting types, removing unused files, etc
-  await augmentGeneratedClient(clientPath)
-}
-
-/**
- * Performs any necessary modifications to the generated client such
- * as augmenting types, removing unused files, etc.
- * @param clientPath Path to the generated client directory
- */
-async function augmentGeneratedClient(clientPath: string) {
-  // Modify the type of JSON input values in the generated Prisma client
-  // because we deviate from Prisma's typing for JSON values
-  await extendJsonType(clientPath)
-
-  // Replace the type of byte array input values in the generated Prisma client
-  // from `Buffer` to `Uint8Array` for better cross-environment support
-  await replaceByteArrayType(clientPath)
-
-  // Delete all files generated for the Prisma client, except the typings
-  await keepOnlyPrismaTypings(clientPath)
-}
-
-/**
- * Escapes file path for use in strings.
- * On Windows, replaces backslashes with double backslashes for string escaping.
- *
- * @param {string} inputPath - The file path to escape.
- * @return {string} The escaped file path.
- */
-function escapePathForString(inputPath: string): string {
-  return process.platform === 'win32'
-    ? inputPath.replace(/\\/g, '\\\\')
-    : inputPath
-}
-
-function buildProxyUrlForIntrospection(config: Config) {
-  return buildDatabaseURL({
-    user: 'prisma', // We use the "prisma" user to put the proxy into introspection mode
-    password: config.PG_PROXY_PASSWORD,
-    host: config.PG_PROXY_HOST,
-    port: parsePgProxyPort(config.PG_PROXY_PORT).port,
-    dbName: config.DATABASE_NAME,
-  })
-}
-
-/**
- * Creates a fresh Prisma schema in the provided folder.
- * The Prisma schema is initialised with a generator and a datasource.
- */
-async function createIntrospectionSchema(
-  folder: string,
-  opts: GeneratorOptions
-) {
-  const config = opts.config
-  const prismaDir = path.join(folder, 'prisma')
-  const prismaSchemaFile = path.join(prismaDir, 'schema.prisma')
-  await fs.mkdir(prismaDir)
-  const proxyUrl = buildProxyUrlForIntrospection(config)
-  const schema = dedent`
-    datasource db {
-      provider = "postgresql"
-      url      = "${proxyUrl}"
-    }`
-  await fs.writeFile(prismaSchemaFile, schema)
-  return prismaSchemaFile
-}
-
-/**
- * Takes the Prisma schema that results from introspecting the DB
- * and extends it with a generator for the Electric client.
- * @param introspectedSchema The Prisma schema that results from introspecting the DB.
- * @param prismaSchemaFile Path to the Prisma schema file.
- * @returns The path to the Prisma schema file.
- */
-async function createElectricClientSchema(
-  introspectedSchema: string,
-  prismaSchemaFile: string,
-  clientPath: string
-) {
-  const output = path.resolve(clientPath)
-
-  const schema = dedent`
-    generator electric {
-      provider      = "node ${escapePathForString(generatorPath)}"
-      output        = "${escapePathForString(output)}"
-      relationModel = "false"
-    }
-    
-    ${introspectedSchema}`
-
-  await fs.writeFile(prismaSchemaFile, schema)
-  return prismaSchemaFile
-}
-
-/**
- * Takes the Prisma schema that results from introspecting the DB
- * and extends it with a generator for the Prisma client.
- * @param introspectedSchema The Prisma schema that results from introspecting the DB.
- * @param prismaSchemaFile Path to the Prisma schema file.
- * @returns The path to the Prisma schema file.
- */
-async function createPrismaClientSchema(
-  introspectedSchema: string,
-  prismaSchemaFile: string,
-  clientPath: string
-) {
-  const output = path.resolve(clientPath)
-
-  const schema = dedent`
-    generator client {
-      provider = "prisma-client-js"
-      output   = "${escapePathForString(output)}"
-    }
-    
-    ${introspectedSchema}`
-
-  await fs.writeFile(prismaSchemaFile, schema)
-  return prismaSchemaFile
-}
-
-async function getFileLines(prismaSchema: string): Promise<Array<string>> {
-  const contents = await fs.readFile(prismaSchema, 'utf8')
-  return contents.split(/\r?\n/)
-}
-
-/**
- * Transforms the table names in the Prisma schema
- * such that they start with a capital letter.
- * All characters before the first letter are dropped
- * because Prisma requires model names to start with a (capital) letter.
- * @param prismaSchema Path to the Prisma schema file.
- */
-async function capitaliseTableNames(prismaSchema: string): Promise<void> {
-  const lines = await getFileLines(prismaSchema)
-  const casedLines = doCapitaliseTableNames(lines)
-  // Write the modified Prisma schema to the file
-  await fs.writeFile(prismaSchema, casedLines.join('\n'))
-}
-
-/**
- * @param lines Individual lines of the Prisma schema
- * @returns The modified lines.
- */
-export function doCapitaliseTableNames(lines: string[]): string[] {
-  const replacements: Map<string, string> = new Map() // maps table names to their PascalCased model name
-  const modelNameToDbName: Map<string, string> = new Map() // maps the PascalCased model names to their original table name
-
-  // Prisma requires model names to adhere to the regex: [A-Za-z][A-Za-z0-9_]*
-  const modelRegex = /^\s*model\s+([A-Za-z][A-Za-z0-9_]*)\s*{/
-  const getModelName = (ln: string) => ln.match(modelRegex)?.[1]
-
-  lines.forEach((ln, idx) => {
-    const tableName = getModelName(ln)
-    if (tableName) {
-      // Capitalise the first letter due to a bug with lowercase model names in Prisma's DMMF
-      // that leads to inconsistent type names in the generated client
-      // which in turn leads to type errors in the generated Electric client.
-      const modelName = capitaliseFirstLetter(tableName)
-
-      // Replace the model name on this line
-      const newLn = ln.replace(modelRegex, (_, _tableName) => {
-        return `model ${modelName} {`
-      })
-      lines[idx] = newLn
-
-      replacements.set(tableName, modelName)
-      modelNameToDbName.set(modelName, tableName)
-    }
-  })
-
-  // Go over the schema again but now
-  // replace references to the old table names
-  // by the new model name when we are inside
-  // the definition of a model
-  let modelName: string | undefined
-  let modelHasMapAttribute = false
-  // we're inside a model definition if we have a model name
-  const insideModel = () => modelName !== undefined
-  lines = lines.flatMap((ln) => {
-    modelName = getModelName(ln) ?? modelName
-
-    if (insideModel() && ln.trim().startsWith('}')) {
-      // we're exiting the model definition
-      const tableName = modelNameToDbName.get(modelName!)!
-      modelName = undefined
-      // if no `@@map` annotation was added by Prisma add one ourselves
-      if (!modelHasMapAttribute) {
-        return [`  @@map("${tableName}")`, ln]
-      }
-      modelHasMapAttribute = false
-      return ln
-    }
-
-    // the regex below matches a line containing @@map("originalTableName")
-    const nameMappingRegex = /^\s*@@map\("(.*)"\)\s*$/
-    const mapAttribute = ln.match(nameMappingRegex)
-    if (insideModel() && mapAttribute !== null) {
-      // store the mapping from the model name to the original DB name
-      modelHasMapAttribute = true
-      const originalTableName = mapAttribute[1]
-      modelNameToDbName.set(modelName!, originalTableName)
-    }
-
-    if (insideModel()) {
-      // the regex below matches the beginning of a string
-      // followed by two identifiers separated by a space
-      // (first identifier is the column name, second is its type)
-      const reg = /^(\s*\w+\s+)(\w+)/
-      return ln.replace(reg, (_match, columnName, typeName) => {
-        const newTypeName = replacements.get(typeName) ?? typeName
-        return columnName + newTypeName
-      })
-    }
-
-    return ln
-  })
-
-  return lines
-}
-
-async function introspectDB(prismaSchema: string): Promise<void> {
-  await executeShellCommand(
-    `node ${prismaPath} db pull --schema="${prismaSchema}"`,
-    'Introspection script exited with error code: '
-  )
-}
-
-/**
- * Adds validators to the Prisma schema.
- * @param prismaSchema Path to the Prisma schema
- */
-async function addValidators(prismaSchema: string): Promise<void> {
-  const lines = await getFileLines(removeComments(prismaSchema))
-  const newLines = lines.map(addValidator)
-  // Write the modified Prisma schema to the file
-  await fs.writeFile(prismaSchema, newLines.join('\n'))
-}
-
-/**
- * Adds a validator to the Prisma schema line if needed.
- * @param ln A line from the Prisma schema
- */
-function addValidator(ln: string): string {
-  const field = parseFields(ln)[0] // try to parse a field (the line could be something else than a field)
-
-  if (field) {
-    const intValidator = '@zod.number.int().gte(-2147483648).lte(2147483647)'
-    const floatValidator = '@zod.custom.use(z.number().or(z.nan()))'
-
-    // Map attributes to validators
-    const attributeValidatorMapping = new Map([
-      ['@db.Uuid', '@zod.string.uuid()'],
-      ['@db.SmallInt', '@zod.number.int().gte(-32768).lte(32767)'],
-      ['@db.Int', intValidator],
-      ['@db.DoublePrecision', floatValidator],
-      ['@db.Real', floatValidator],
-    ])
-    const attribute = field.attributes
-      .map((a) => a.type)
-      .find((a) => attributeValidatorMapping.has(a))
-
-    if (attribute) {
-      return ln + ' /// ' + attributeValidatorMapping.get(attribute)!
-    } else {
-      // No attribute validators,
-      // check if the field's type requires a validator
-      const typeValidatorMapping = new Map([
-        ['Int', intValidator],
-        ['Int?', intValidator],
-        ['Int[]', intValidator],
-        ['Float', floatValidator],
-        ['Float?', floatValidator],
-        ['Float[]', floatValidator],
-      ])
-      const typeValidator = typeValidatorMapping.get(field.type)
-
-      if (typeValidator) {
-        return ln + ' /// ' + typeValidator
-      } else {
-        return ln
-      }
-    }
-  } else {
-    return ln
-  }
-}
-
-async function generateElectricClient(prismaSchema: string): Promise<void> {
-  await executeShellCommand(
-    `node ${prismaPath} generate --schema="${prismaSchema}"`,
-    'Generator script exited with error code: '
-  )
-}
-
-async function generatePrismaClient(prismaSchema: string): Promise<void> {
-  await executeShellCommand(
-    `node ${prismaPath} generate --schema="${prismaSchema}"`,
-    'Generator script exited with error code: '
-  )
-}
-
-async function executeShellCommand(
-  command: string,
-  errMsg: string
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const proc = exec(command, { cwd: appRoot }, (error, _stdout, _stderr) => {
-      if (error) {
-        console.error(error)
-      }
-    })
-
-    proc.on('close', (code) => {
-      if (code === 0) {
-        // Success
-        resolve()
-      } else {
-        reject(errMsg + code)
-      }
-    })
-  })
 }
 
 /**
@@ -784,127 +390,13 @@ function migrationsFilePath(
   return path.join(outFolder, migrationsFileName)
 }
 
-function capitaliseFirstLetter(word: string): string {
-  return word.charAt(0).toUpperCase() + word.substring(1)
-}
-
-// The below is duplicated code from the generator
-// TODO: move it to a separate helper package
-//       also move the model parsing to the package
-//       also move the removing comments function
-
-export type Attribute = {
-  type: `@${string}`
-  args: Array<string>
-}
-export type Field = {
-  field: string
-  type: string
-  attributes: Array<Attribute>
-}
-
-/**
- * Removes all line comments from a string.
- * A line comment is a comment that starts with *exactly* `//`.
- * It does not remove comments starting with `///`.
- */
-function removeComments(str: string): string {
-  const commentRegex = /(?<=[^/])\/\/(?=[^/]).*$/g // matches // until end of the line (does not match more than 2 slashes)
-  return str.replaceAll(commentRegex, '')
-}
-
-/**
- * Takes the body of a model and returns
- * an array of fields defined by the model.
- * @param body Body of a model
- * @returns Fields defined by the model
- */
-function parseFields(body: string): Array<Field> {
-  // The regex below matches the fields of a model (it assumes there are no comments at the end of the line)
-  // It uses named captured groups to capture the field name, its type, and optional attributes
-  // the type can be `type` or `type?` or `type[]`
-  const fieldRegex =
-    /^\s*(?<field>\w+)\s+(?<type>[\w]+(\?|(\[]))?)\s*(?<attributes>((@[\w.]+\s*)|(@[\w.]+\(.*\)+\s*))+)?\s*$/gm
-  const fieldMatches = [...body.matchAll(fieldRegex)]
-  const fs = fieldMatches.map(
-    (match) =>
-      match.groups as { field: string; type: string; attributes?: string }
-  )
-
-  return fs.map((f) => ({
-    ...f,
-    attributes: parseAttributes(f.attributes ?? ''),
-  }))
-}
-
-/**
- * Takes a string of attributes, e.g. `@id @db.Timestamp(2)`,
- * and returns an array of attributes, e.g. `['@id', '@db.Timestamp(2)]`.
- * @param attributes String of attributes
- * @returns Array of attributes.
- */
-function parseAttributes(attributes: string): Array<Attribute> {
-  // Matches each attribute in a string of attributes
-  // e.g. @id @db.Timestamp(2)
-  // The optional args capture group matches anything
-  // but not @or newline because that would be the start of a new attribute
-  const attributeRegex = /(?<type>@[\w.]+)(?<args>\([^@\n\r]+\))?/g
-  const matches = [...attributes.matchAll(attributeRegex)]
-  return matches.map((m) => {
-    const { type, args } = m.groups! as { type: string; args?: string }
-    const noParens = args?.substring(1, args.length - 1) // arguments without starting '(' and closing ')'
-    const parsedArgs = noParens?.split(',')?.map((arg) => arg.trim()) ?? []
-    return {
-      type: type as `@${string}`,
-      args: parsedArgs,
-    }
-  })
-}
-
-/*
- * Modifies Prisma's `InputJsonValue` type to include `null`
- */
-function extendJsonType(prismaDir: string): Promise<void> {
-  const prismaTypings = path.join(prismaDir, 'index.d.ts')
-  const inputJsonValueRegex = /^\s*export\s*type\s*InputJsonValue\s*(=)\s*/gm
-  const replacement = 'export type InputJsonValue = null | '
-  return findAndReplaceInFile(inputJsonValueRegex, replacement, prismaTypings)
-}
-
-/*
- * Replaces Prisma's `Buffer` type for byte arrays to the more generic `Uint8Array`
- */
-function replaceByteArrayType(prismaDir: string): Promise<void> {
-  const prismaTypings = path.join(prismaDir, 'index.d.ts')
-  return fs.appendFile(
-    prismaTypings,
-    // omit 'set' property as it conflicts with the DAL setter prop name
-    "\n\ntype Buffer = Omit<Uint8Array, 'set'>\n"
-  )
-}
-
-async function keepOnlyPrismaTypings(prismaDir: string): Promise<void> {
-  const contents = await fs.readdir(prismaDir)
-  // Delete all files except the generated Electric client and the Prisma typings
-  const proms = contents.map(async (fileOrDir) => {
-    const filePath = path.join(prismaDir, fileOrDir)
-    if (fileOrDir === 'index.d.ts') {
-      // rename this file to `prismaClient.d.ts`
-      return fs.rename(filePath, path.join(prismaDir, 'prismaClient.d.ts'))
-    } else if (fileOrDir !== 'index.ts') {
-      // delete the file or folder
-      return fs.rm(filePath, { recursive: true })
-    }
-  })
-  await Promise.all(proms)
-}
-
 async function rewriteImportsForNodeNext(clientDir: string): Promise<void> {
   const file = path.join(clientDir, 'index.ts')
   const content = await fs.readFile(file, 'utf8')
-  const newContent = content
-    .replace("from './migrations';", "from './migrations.js';")
-    .replace("from './prismaClient';", "from './prismaClient.js';")
+  const newContent = content.replace(
+    "from './migrations';",
+    "from './migrations.js';"
+  )
   await fs.writeFile(file, newContent)
 }
 
