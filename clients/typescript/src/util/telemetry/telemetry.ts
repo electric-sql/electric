@@ -6,7 +6,7 @@ import {
   StackContextManager,
 } from '@opentelemetry/sdk-trace-web'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
-import { BatchSpanProcessor, Tracer } from '@opentelemetry/sdk-trace-base'
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
 import { W3CTraceContextPropagator } from '@opentelemetry/core'
 import { Resource } from '@opentelemetry/resources'
 import {
@@ -14,7 +14,13 @@ import {
   SEMRESATTRS_SERVICE_VERSION,
 } from '@opentelemetry/semantic-conventions'
 import { LIB_VERSION } from '../../version'
-import { context, Context, propagation } from '@opentelemetry/api'
+import {
+  context,
+  Context,
+  propagation,
+  trace,
+  Tracer,
+} from '@opentelemetry/api'
 
 const tracerName = 'electric-client' as const
 
@@ -39,6 +45,8 @@ const provider = new WebTracerProvider({
 provider.register({
   contextManager: new StackContextManager(),
 })
+
+// Propagation is done using W3C traceparent and tracestate
 propagation.setGlobalPropagator(new W3CTraceContextPropagator())
 
 let consoleExporterAdded = false
@@ -70,12 +78,13 @@ const setUpTelemetry = ({
   exportToOTLP,
   OTLPEndpoint,
 }: TelemetryConfig): void => {
+  if (logToConsole || exportToOTLP) trace.setGlobalTracerProvider(provider)
   if (logToConsole) addConsoleExporter()
   if (exportToOTLP) addOTLPExporter(OTLPEndpoint)
 }
 
 const getTracer = (): Tracer => {
-  return provider.getTracer(tracerName)
+  return trace.getTracer(tracerName)
 }
 
 const getActiveContext = (): Context => {
