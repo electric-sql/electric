@@ -8,6 +8,7 @@ defmodule Electric.Satellite.SerializationTest do
   alias Electric.Postgres.{Lsn, Schema, Extension.SchemaCache}
   alias Electric.Replication.Changes.Transaction
   alias Electric.Satellite.Serialization
+  alias Electric.Satellite.Serialization.DataValidationError
   alias Electric.Postgres.MockSchemaLoader
 
   describe "map_to_row" do
@@ -262,7 +263,7 @@ defmodule Electric.Satellite.SerializationTest do
         try do
           Serialization.decode_record!(row, columns)
         rescue
-          _ -> :ok
+          DataValidationError -> :ok
         else
           val -> flunk("Expected decode_record!() to raise but it returned #{inspect(val)}")
         end
