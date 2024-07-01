@@ -1353,5 +1353,5 @@ defmodule Electric.Satellite.Protocol do
   defp decode_sql_dialect(:POSTGRES), do: Electric.Postgres.Dialect.Postgresql
 
   defp friendly_error_message(%DataValidationError{} = error), do: Exception.message(error)
-  defp friendly_error_message(_), do: "server error"
+  defp friendly_error_message(_), do: "unexpected error"
 end
