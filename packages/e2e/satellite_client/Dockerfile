@@ -16,14 +16,14 @@ COPY packages/client ./packages/client
 COPY common ./common
 COPY packages/generator ./packages/generator
 COPY packages/drivers ./packages/drivers
-COPY e2e/satellite_client/package.json  ./e2e/satellite_client/
+COPY packages/e2e/satellite_client/package.json  ./packages/e2e/satellite_client/
 RUN pnpm install -r --offline --filter @internal/satellite-client^...
 RUN pnpm run -r --filter @internal/satellite-client^... build
 RUN pnpm install --offline --filter @internal/satellite-client
 
 # E2E Client build
-COPY e2e/satellite_client/src  ./e2e/satellite_client/src
-COPY e2e/satellite_client/tsconfig.json  ./e2e/satellite_client
+COPY packages/e2e/satellite_client/src  ./packages/e2e/satellite_client/src
+COPY packages/e2e/satellite_client/tsconfig.json  ./packages/e2e/satellite_client
 RUN pnpm run --filter @internal/satellite-client build
 
 # Deploy an isolated node_modules + src in which the E2E Client will be run

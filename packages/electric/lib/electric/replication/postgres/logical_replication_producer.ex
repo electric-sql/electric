@@ -129,7 +129,7 @@ defmodule Electric.Replication.Postgres.LogicalReplicationProducer do
          # connection is opened. In particular, trying to call `Client.get_server_versions()` before
          # creating the main slot results in the replication stream not delivering transactions from
          # Postgres when Electric is running in the direct_writes mode, which manifests as a
-         # failure of e2e/tests/02.02_migrations_get_streamed_to_satellite.lux.
+         # failure of packages/e2e/tests/02.02_migrations_get_streamed_to_satellite.lux.
          {:ok, _slot_name} <- Client.create_main_slot(repl_conn, main_slot),
          {:ok, _slot_name, main_slot_lsn} <-
            Client.create_temporary_slot(repl_conn, main_slot, tmp_slot),

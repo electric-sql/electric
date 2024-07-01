@@ -69,7 +69,7 @@ This is the main repository for the ElectricSQL source code. Key components incl
 - [packages/generator](https://github.com/electric-sql/electric/tree/main/packages/generator) &mdash; Prisma generator that creates the type safe data access library
 - [protocol/satellite.proto](https://github.com/electric-sql/electric/tree/main/protocol/satellite.proto) &mdash; Protocol Buffers definition of the Satellite replication protocol
 
-See the Makefiles for test and build instructions and the [e2e](https://github.com/electric-sql/electric/tree/main/e2e) folder for integration tests.
+See the Makefiles for test and build instructions and the [e2e](https://github.com/electric-sql/electric/tree/main/packages/e2e) folder for integration tests.
 
 ## Team
 

@@ -12,79 +12,6 @@ importers:
         specifier: ^2.26.2
         version: 2.26.2
 
-  e2e/satellite_client:
-    dependencies:
-      better-sqlite3:
-        specifier: ^11.0.0
-        version: 11.0.0
-      electric-sql:
-        specifier: workspace:*
-        version: link:../../packages/client
-      jsonwebtoken:
-        specifier: ^9.0.0
-        version: 9.0.0
-      pg:
-        specifier: ^8.11.3
-        version: 8.11.3
-      ts-dedent:
-        specifier: ^2.2.0
-        version: 2.2.0
-      uuid:
-        specifier: ^9.0.0
-        version: 9.0.0
-      zod:
-        specifier: 3.21.1
-        version: 3.21.1
-    devDependencies:
-      '@electric-sql/prisma-generator':
-        specifier: workspace:*
-        version: link:../../packages/generator
-      '@prisma/client':
-        specifier: 4.8.1
-        version: 4.8.1(prisma@4.8.1)
-      '@tsmodule/tsmodule':
-        specifier: ^44.7.0
-        version: 44.7.0
-      '@types/better-sqlite3':
-        specifier: 7.6.10
-        version: 7.6.10
-      '@types/jsonwebtoken':
-        specifier: ^9.0.1
-        version: 9.0.1
-      '@types/live-server':
-        specifier: ^1.2.1
-        version: 1.2.1
-      '@types/node':
-        specifier: ^16.9.1
-        version: 16.9.1
-      '@types/pg':
-        specifier: ^8.11.3
-        version: 8.11.3
-      '@types/uuid':
-        specifier: ^9.0.0
-        version: 9.0.0
-      esbuild:
-        specifier: ^0.18.17
-        version: 0.18.17
-      exponential-backoff:
-        specifier: ^3.1.0
-        version: 3.1.0
-      loglevel:
-        specifier: ^1.8.1
-        version: 1.8.1
-      prisma:
-        specifier: 4.8.1
-        version: 4.8.1
-      tslint:
-        specifier: ^6.1.3
-        version: 6.1.3(typescript@4.9.5)
-      tslint-config-prettier:
-        specifier: ^1.18.0
-        version: 1.18.0
-      typescript:
-        specifier: ^4.4.3
-        version: 4.9.5
-
   examples/starter:
     dependencies:
       ora:
@@ -493,6 +420,79 @@ importers:
       wa-sqlite:
         specifier: rhashimoto/wa-sqlite#semver:^0.9.8
         version: https://codeload.github.com/rhashimoto/wa-sqlite/tar.gz/6dbe4f044502a7a285e815896f56304a808fe25b
+
+  packages/e2e/satellite_client:
+    dependencies:
+      better-sqlite3:
+        specifier: ^11.0.0
+        version: 11.0.0
+      electric-sql:
+        specifier: workspace:*
+        version: link:../../client
+      jsonwebtoken:
+        specifier: ^9.0.0
+        version: 9.0.0
+      pg:
+        specifier: ^8.11.3
+        version: 8.11.3
+      ts-dedent:
+        specifier: ^2.2.0
+        version: 2.2.0
+      uuid:
+        specifier: ^9.0.0
+        version: 9.0.0
+      zod:
+        specifier: 3.21.1
+        version: 3.21.1
+    devDependencies:
+      '@electric-sql/prisma-generator':
+        specifier: workspace:*
+        version: link:../../generator
+      '@prisma/client':
+        specifier: 4.8.1
+        version: 4.8.1(prisma@4.8.1)
+      '@tsmodule/tsmodule':
+        specifier: ^44.7.0
+        version: 44.7.0
+      '@types/better-sqlite3':
+        specifier: 7.6.10
+        version: 7.6.10
+      '@types/jsonwebtoken':
+        specifier: ^9.0.1
+        version: 9.0.1
+      '@types/live-server':
+        specifier: ^1.2.1
+        version: 1.2.1
+      '@types/node':
+        specifier: ^16.9.1
+        version: 16.9.1
+      '@types/pg':
+        specifier: ^8.11.3
+        version: 8.11.3
+      '@types/uuid':
+        specifier: ^9.0.0
+        version: 9.0.0
+      esbuild:
+        specifier: ^0.18.17
+        version: 0.18.17
+      exponential-backoff:
+        specifier: ^3.1.0
+        version: 3.1.0
+      loglevel:
+        specifier: ^1.8.1
+        version: 1.8.1
+      prisma:
+        specifier: 4.8.1
+        version: 4.8.1
+      tslint:
+        specifier: ^6.1.3
+        version: 6.1.3(typescript@4.9.5)
+      tslint-config-prettier:
+        specifier: ^1.18.0
+        version: 1.18.0
+      typescript:
+        specifier: ^4.4.3
+        version: 4.9.5
 
   packages/electric: {}
 

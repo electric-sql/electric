@@ -1,5 +1,5 @@
 # This `.dockerignore` file is used when building docker images from the repository root.
-# In particular, we're building the `e2e/satellite_client` that way, because it relies on
+# In particular, we're building the `packages/e2e/satellite_client` that way, because it relies on
 # other packages within the monorepo. Without this, the context sent to docker build engine
 # is over 5Gb due to all the dependencies we don't need anyway.
 
@@ -15,5 +15,5 @@
 **/.npm
 **/.cache
 
-e2e/lux
-e2e/lux_logs
+packages/e2e/lux
+packages/e2e/lux_logs
