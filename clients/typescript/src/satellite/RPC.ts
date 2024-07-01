@@ -62,7 +62,7 @@ export class RPC {
     _service: string,
     method: string,
     message: Uint8Array,
-    reqOptions?: object
+    reqOptions?: Parameters<typeof SatRpcRequestOptions.create>[0]
   ): Promise<Uint8Array> {
     const requestId = this.nextRequestId++
 
@@ -216,7 +216,7 @@ export function withRpcRequestLogging(service: Root, logger: Logger): Root {
 /**
  * Wrap an RPC instance to augment RPC requests with trace propagation.
  * Potenitally slight overkill, could directly add the propagation data
- * on
+ * on the request method directly, but this reduces code pollution.
  *
  * @param rpc RPC instance to wrap
  * @returns A proxy around the RPC instance

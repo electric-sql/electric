@@ -31,8 +31,8 @@ function startSpan(
 }
 
 /**
- * Sets the span status to `ERROR` and optinally records the provided error
- * ass an exception
+ * Sets the span status to `ERROR` and optionally records the provided error
+ * as an exception
  */
 function recordSpanError(span: Span, error?: any) {
   span.recordException(error)
