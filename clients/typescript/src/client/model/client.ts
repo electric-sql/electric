@@ -153,9 +153,7 @@ export class ElectricClient<
     }
   }
 
-  setReplicationTransform<
-    T extends Record<string, unknown> = Record<string, unknown>
-  >(
+  setReplicationTransform<T extends Row = Row>(
     qualifiedTableName: QualifiedTablename,
     i: ReplicatedRowTransformer<T>
   ): void {

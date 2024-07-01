@@ -398,7 +398,7 @@ export function extractPK(c: DataChange) {
       .reduce((primaryKeyRec, col) => {
         primaryKeyRec[col.name] = columnValues[col.name]!
         return primaryKeyRec
-      }, {} as Record<string, boolean | string | number | Uint8Array>)
+      }, {} as Row)
   )
 }
 
@@ -520,11 +520,7 @@ export const opLogEntryToChange = (
  * @param primaryKeyObj object representing all columns of a primary key
  * @returns a stringified JSON with stable sorting on column names
  */
-export const primaryKeyToStr = <
-  T extends Record<string, boolean | string | number | Uint8Array>
->(
-  primaryKeyObj: T
-): string => {
+export const primaryKeyToStr = <T extends Row>(primaryKeyObj: T): string => {
   // Sort the keys then insert them in order in a fresh object
   // cf. https://stackoverflow.com/questions/5467129/sort-javascript-object-by-key
 
