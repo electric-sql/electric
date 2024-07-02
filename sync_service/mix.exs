@@ -7,7 +7,8 @@ defmodule Electric.MixProject do
       version: "0.1.0",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      aliases: aliases()
     ]
   end
 
@@ -30,6 +31,13 @@ defmodule Electric.MixProject do
       {:postgrex, "~> 0.18"},
       {:postgresql_uri, "~> 0.1"},
       {:jason, "~> 1.4"}
+    ]
+  end
+
+  defp aliases() do
+    [
+      start_dev: "cmd --cd dev docker compose up -d",
+      stop_dev: "cmd --cd dev docker compose down -v"
     ]
   end
 end

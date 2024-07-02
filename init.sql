@@ -1,9 +1,0 @@
-CREATE TABLE IF NOT EXISTS issues (
-    id UUID PRIMARY KEY,
-    title TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS foo (
-    id UUID PRIMARY KEY,
-    title TEXT NOT NULL
-);
