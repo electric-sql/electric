@@ -1,5 +1,19 @@
 # electric-sql
 
+## 0.12.2
+
+### Patch Changes
+
+- e518919d: Fix the Docker Compose file that's bundled with the client CLI to support databases that are only reachable over IPv6, such as Supabase.
+- 5e2e276c: Fix `DELETE` statement batching causing call stack overflow and improve performance.
+- a94e860c: Add clarifying documentation on behaviour `synced` promise returned by the `sync` API.
+- 5b42c397: Add deprecation warnings to the public API methods of the DAL.
+- af6a7be7: Extract drivers to separate package
+- 837ce928: Extract the sync API out of the DAL and make the DAL optional.
+- cb19c582: Extract CLI to a separate package.
+- Updated dependencies [af6a7be7]
+  - @electric-sql/drivers@0.0.2
+
 ## 0.12.1
 
 ### Patch Changes
