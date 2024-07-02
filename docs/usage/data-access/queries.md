@@ -239,7 +239,7 @@ To run a static query (or just execute SQL):
 ```ts
 const projects = db.rawQuery({
   sql: 'select * from projects where id = ?',
-  bindParams: ['abcd']
+  args: ['abcd']
 })
 ```
 
@@ -248,7 +248,7 @@ To run a live query that supports arbitrary SQL whilst still working automatical
 ```ts
 const liveQuery = db.liveRawQuery({
   sql: 'select * from projects where id = ?',
-  bindParams: ['abcd']
+  args: ['abcd']
 })
 const { results } = liveQuery()
 ```
@@ -261,7 +261,7 @@ const MyComponent = () => {
   const { results } = useLiveQuery(
     db.liveRawQuery({
       sql: 'select * from projects where status = ?',
-      bindParams: ['active']
+      args: ['active']
     })
   )
 
