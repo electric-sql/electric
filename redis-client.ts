@@ -1,11 +1,12 @@
 import { createClient } from "redis"
-import { ShapeStream } from "../client"
-import { Message } from "../types"
+import { ShapeStream } from "./client"
+import { Message } from "./types"
 
 // Create a Redis client
+const REDIS_HOST = `localhost`
+const REDIS_PORT = 6379
 const client = createClient({
-  host: `localhost`, // Redis server hostname (localhost for Docker container running on host)
-  port: 6379, // Redis server port
+  url: `redis://${REDIS_HOST}:${REDIS_PORT}`,
 })
 
 client.connect().then(() => {
@@ -24,11 +25,19 @@ client.connect().then(() => {
     // Loop through each message and make writes to the Redis hash for action messages
     messages.forEach((message) => {
       // Upsert/delete
-      if (message.headers?.[`action`] === `delete`) {
-        pipeline.hDel(`issues`, message.key)
-      } else if ([`insert`, `update`].includes(message.headers?.[`action`])) {
-        const jsonData = JSON.stringify(message.value)
-        pipeline.hSet(`issues`, String(message.key), jsonData)
+      switch (message.headers?.[`action`]) {
+        case `delete`:
+          pipeline.hDel(`issues`, message.key!)
+          break
+
+        case `insert`:
+        case `update`:
+          pipeline.hSet(
+            `issues`,
+            String(message.key),
+            JSON.stringify(message.value)
+          )
+          break
       }
     })
 
