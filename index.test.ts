@@ -1,8 +1,8 @@
-import { beforeAll, afterAll, describe, it, expect, assert } from "vitest"
-import { ShapeStream } from "./client"
-import { v4 as uuidv4 } from "uuid"
-import { parse } from "cache-control-parser"
-import { Client } from "pg"
+import { beforeAll, afterAll, describe, it, expect, assert } from 'vitest'
+import { ShapeStream } from './client'
+import { v4 as uuidv4 } from 'uuid'
+import { parse } from 'cache-control-parser'
+import { Client } from 'pg'
 
 let context:
   | { client: Client; rowId?: string; secondRowId?: string }
@@ -225,13 +225,16 @@ describe(`HTTP Sync`, () => {
             if (messageCount === 2) {
               secondRowId = await appendRow({ title: `foo2` })
             }
-  
+
             if (messageCount === 3) {
               aborter.abort()
               expect(shapeData).toEqual(
                 new Map([
                   ['public-issues-' + rowId, { id: rowId, title: `foo1` }],
-                  ['public-issues-' + secondRowId, { id: secondRowId, title: `foo2` }],
+                  [
+                    'public-issues-' + secondRowId,
+                    { id: secondRowId, title: `foo2` },
+                  ],
                 ])
               )
               // expect(batchDoneCount).toEqual(3)
@@ -276,13 +279,16 @@ describe(`HTTP Sync`, () => {
             if (messageCount1 === 3) {
               setTimeout(() => updateRow({ id: rowId, title: `foo3` }), 50)
             }
-  
+
             if (messageCount1 === 4) {
               aborter1.abort()
               expect(shapeData1).toEqual(
                 new Map([
                   ['public-issues-' + rowId, { id: rowId, title: `foo3` }],
-                  ['public-issues-' + secondRowId, { id: secondRowId, title: `foo2` }],
+                  [
+                    'public-issues-' + secondRowId,
+                    { id: secondRowId, title: `foo2` },
+                  ],
                 ])
               )
               resolve()
@@ -292,7 +298,6 @@ describe(`HTTP Sync`, () => {
       })
     })
 
-    
     const promise2 = new Promise<void>((resolve) => {
       issueStream2.subscribe((messages) => {
         messages.forEach(async (message) => {
@@ -304,13 +309,15 @@ describe(`HTTP Sync`, () => {
               expect(shapeData2).toEqual(
                 new Map([
                   ['public-issues-' + rowId, { id: rowId, title: `foo3` }],
-                  ['public-issues-' + secondRowId, { id: secondRowId, title: `foo2` }],
+                  [
+                    'public-issues-' + secondRowId,
+                    { id: secondRowId, title: `foo2` },
+                  ],
                 ])
               )
               resolve()
             }
           }
-
         })
       })
     })
@@ -390,7 +397,7 @@ describe(`HTTP Sync`, () => {
     const cacheHeaders = res.headers.get(`cache-control`)
     assert(cacheHeaders !== null, `Response should have cache-control header`)
     const directives = parse(cacheHeaders)
-    expect(directives).toEqual({ "max-age": 60, "stale-while-revalidate": 300 })
+    expect(directives).toEqual({ 'max-age': 60, 'stale-while-revalidate': 300 })
     const etagHeader = res.headers.get(`etag`)
     assert(etagHeader !== null, `Response should have etag header`)
 
@@ -418,10 +425,10 @@ describe(`HTTP Sync`, () => {
     assert(cacheHeaders !== null, `Response should have cache-control header`)
     const directives = parse(cacheHeaders)
     expect(directives).toEqual({
-      "no-store": true,
-      "no-cache": true,
-      "must-revalidate": true,
-      "max-age": 0,
+      'no-store': true,
+      'no-cache': true,
+      'must-revalidate': true,
+      'max-age': 0,
     })
     const pragma = res.headers.get(`pragma`)
     expect(pragma).toEqual(`no-cache`)
@@ -440,7 +447,7 @@ describe(`HTTP Sync`, () => {
     const etagValidation = await fetch(
       `http://localhost:3000/shape/issues?offset=-1`,
       {
-        headers: { "If-None-Match": etag },
+        headers: { 'If-None-Match': etag },
       }
     )
 
@@ -460,7 +467,7 @@ describe(`HTTP Sync`, () => {
     const catchupEtagValidation = await fetch(
       `http://localhost:3000/shape/issues?offset=10&notLive&shapeId=${shapeId}`,
       {
-        headers: { "If-None-Match": catchupEtag },
+        headers: { 'If-None-Match': catchupEtag },
       }
     )
     const catchupStatus = catchupEtagValidation.status
