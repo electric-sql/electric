@@ -1,6 +1,6 @@
 import { Message } from "./types"
 
-interface ShapeStreamOptions {
+export interface ShapeStreamOptions {
   shape: { table: string }
   baseUrl: string
   subscribe?: boolean
@@ -12,9 +12,9 @@ interface ShapeStreamOptions {
 class Subscriber {
   private messageQueue: Message[][] = []
   private isProcessing = false
-  private callback: (messages: Message[]) => Promise<void>
+  private callback: (messages: Message[]) => void | Promise<void>
 
-  constructor(callback: (messages: Message[]) => Promise<void>) {
+  constructor(callback: (messages: Message[]) => void | Promise<void>) {
     this.callback = callback
   }
 
@@ -41,14 +41,14 @@ export class ShapeStream {
   private closedPromise: Promise<unknown>
   private outsideResolve?: (value?: unknown) => void
   options: ShapeStreamOptions
-  shapeId: string
+  shapeId?: string
 
   constructor(options: ShapeStreamOptions) {
     this.validateOptions(options)
     this.instanceId = Math.random()
     this.options = { subscribe: true, ...options }
     console.log(`constructor`, this)
-    this.shapeId = this.options.shapeId || ``
+    this.shapeId = this.options.shapeId
     this.startStream()
 
     this.outsideResolve
@@ -76,7 +76,11 @@ export class ShapeStream {
       )
     }
 
-    if (options.offset > -1 && !options.shapeId) {
+    if (
+      options.offset !== undefined &&
+      options.offset > -1 &&
+      !options.shapeId
+    ) {
       throw new Error(
         `shapeId is required if this isn't an initial fetch (i.e. offset > -1)`
       )
@@ -109,7 +113,7 @@ export class ShapeStream {
         url.searchParams.set(`notLive`, ``)
       }
 
-      url.searchParams.set(`shapeId`, this.shapeId)
+      url.searchParams.set(`shapeId`, this.shapeId!)
       console.log(
         `client`,
         { table: this.options.shape.table },
@@ -128,7 +132,8 @@ export class ShapeStream {
             if (!response.ok) {
               throw new Error(`HTTP error! Status: ${response.status}`)
             }
-            this.shapeId = response.headers.get(`x-electric-shape-id`)
+            this.shapeId =
+              response.headers.get(`x-electric-shape-id`) ?? undefined
             console.log({ shapeId: this.shapeId })
             attempt = 0
             if (response.status === 204) {
@@ -179,7 +184,7 @@ export class ShapeStream {
     this.outsideResolve && this.outsideResolve()
   }
 
-  subscribe(callback: (messages: Message[]) => Promise<void>) {
+  subscribe(callback: (messages: Message[]) => void | Promise<void>) {
     const subscriber = new Subscriber(callback)
     this.subscribers.push(subscriber)
   }

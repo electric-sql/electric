@@ -13,7 +13,7 @@ interface Header {
 // Define the type for a record
 export type Message = {
   key?: string
-  value?: any
+  value?: unknown
   headers?: Header
   offset?: number
 }
