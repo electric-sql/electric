@@ -26,10 +26,8 @@ import {
 import {
   postgresConverter,
   sqliteConverter,
-  PgBasicType
 } from 'electric-sql/client'
-import type { AnyTable, AnyTableSchema } from 'electric-sql/client'
-import { Row } from 'electric-sql/util'
+import type { AnyTable, Converter } from 'electric-sql/client'
 import { dedent } from 'ts-dedent'
 
 setLogLevel('DEBUG')
@@ -38,7 +36,7 @@ let dbName: string
 type DB = PgDatabase | BetterSqliteDatabase
 const builder: QueryBuilder =
   dialect() === 'Postgres' ? pgBuilder : sqliteBuilder
-const converter = dialect() === 'Postgres' ? postgresConverter : sqliteConverter
+const converter: Converter = dialect() === 'Postgres' ? postgresConverter : sqliteConverter
 const withDal = dal() // whether to use the DAL or not
 const schema = withDal ? dalSchema : noDalSchema
 
@@ -265,19 +263,12 @@ const write_timestamp_raw = (
   electric: Electric,
   timestamp: Timestamp
 ) => {
-  const created_at = converter.encode(
-    timestamp.created_at,
-    schema.tables.timestamps.fields.created_at
-  )
-  const updated_at = converter.encode(
-    timestamp.updated_at,
-    schema.tables.timestamps.fields.updated_at
-  )
+  const row = converter.encodeRow(timestamp, schema.tables.timestamps)
   return electric.adapter.run({
     sql: `INSERT INTO timestamps (id, created_at, updated_at) VALUES (${builder.makePositionalParam(
       1
     )}, ${builder.makePositionalParam(2)}, ${builder.makePositionalParam(3)});`,
-    args: [timestamp.id, created_at, updated_at],
+    args: [row.id, row.created_at, row.updated_at],
   })
 }
 
@@ -292,13 +283,12 @@ const write_datetime_dal = (electric: Electric, datetime: Datetime) => {
 }
 
 const write_datetime_raw = (electric: Electric, datetime: Datetime) => {
-  const d = converter.encode(datetime.d, schema.tables.datetimes.fields.d)
-  const t = converter.encode(datetime.t, schema.tables.datetimes.fields.t)
+  const row = converter.encodeRow(datetime, schema.tables.datetimes)
   return electric.adapter.run({
     sql: `INSERT INTO datetimes (id, d, t) VALUES (${builder.makePositionalParam(
       1
     )}, ${builder.makePositionalParam(2)}, ${builder.makePositionalParam(3)});`,
-    args: [datetime.id, d, t],
+    args: [row.id, row.d, row.t],
   })
 }
 
@@ -326,22 +316,8 @@ const get_timestamp_raw = async (
     args: [id],
   })
   return result.length === 1
-    ? decodeRow<Timestamp>(result[0], 'timestamps')
+    ? converter.decodeRow<Timestamp>(result[0], schema.tables.timestamps)
     : null
-}
-
-const decodeRow = <T>(row: Row, table: keyof typeof schema.tables): T => {
-  return Object.fromEntries(
-    Object.entries(row).map(([key, value]) => {
-      const pgType = (schema.tables[table] as unknown as AnyTableSchema).fields[key]
-      const decodedValue = converter.decode(value, pgType)
-      return [key, decodedValue]
-    })
-  ) as T
-}
-
-const decodeRows = <T>(rows: Array<Row>, table: keyof typeof schema.tables): T[] => {
-  return rows.map((row) => decodeRow<T>(row, table))
 }
 
 export const get_timestamp = withDal ? get_timestamp_dal : get_timestamp_raw
@@ -370,7 +346,7 @@ const get_datetime_raw = async (
     args: [id],
   })
   const datetime = res.length === 1
-    ? decodeRow<Datetime>(res[0], 'datetimes')
+    ? converter.decodeRow<Datetime>(res[0], schema.tables.datetimes)
     : null
   console.log(`Found date time?:\n${JSON.stringify(datetime, undefined, 2)}`)
   return datetime
@@ -444,7 +420,7 @@ const write_bool_raw = async (electric: Electric, id: string, b: boolean) => {
     )}, ${builder.makePositionalParam(2)}) RETURNING *;`,
     args: [id, bool],
   })
-  return decodeRow<{ id: string; b: boolean }>(row, 'bools')
+  return converter.decodeRow<{ id: string; b: boolean }>(row, schema.tables.bools)
 }
 
 export const write_bool = withDal ? write_bool_dal : write_bool_raw
@@ -464,7 +440,7 @@ const get_bool_raw = async (electric: Electric, id: string) => {
     args: [id],
   })
   const row = res.length === 1
-    ? decodeRow<{ id: string, b: boolean }>(res[0], 'bools')
+    ? converter.decodeRow<{ id: string, b: boolean }>(res[0], schema.tables.bools)
     : null
   return row?.b
 }
@@ -477,7 +453,7 @@ const get_datetimes_dal = (electric: Electric) => {
 
 const get_datetimes_raw = async (electric: Electric) => {
   const rows = await electric.db.rawQuery({ sql: 'SELECT * FROM datetimes;' })
-  return decodeRows<Datetime>(rows, 'datetimes')
+  return converter.decodeRows<Datetime>(rows, schema.tables.datetimes)
 }
 
 export const get_datetimes = withDal ? get_datetimes_dal : get_datetimes_raw
@@ -497,7 +473,7 @@ const get_items_dal = (electric: Electric) => {
 
 const get_items_raw = async (electric: Electric) => {
   const rows = await electric.db.rawQuery({ sql: 'SELECT * FROM items;' })
-  return decodeRows<Item>(rows, 'items')
+  return converter.decodeRows<Item>(rows, schema.tables.items)
 }
 
 export const get_items = withDal ? get_items_dal : get_items_raw
@@ -610,7 +586,7 @@ const get_int_raw = async (electric: Electric, id: string) => {
   })
   if (rows.length === 1) {
     const row = rows[0]
-    return decodeRow<Int>(row, 'ints')
+    return converter.decodeRow<Int>(row, schema.tables.ints)
   }
   return null
 }
@@ -657,11 +633,13 @@ const write_int_raw = async (
     throw new Error('BigInt must be less than or equal to 9223372036854775807')
   }
 
+  const r = converter.encodeRow({ id, i2, i4, i8 }, schema.tables.ints)
+
   const [ row ] = await electric.adapter.query({
     sql: `INSERT INTO ints (id, i2, i4, i8) VALUES (${builder.makePositionalParam(1)}, ${builder.makePositionalParam(2)}, ${builder.makePositionalParam(3)}, ${builder.makePositionalParam(4)}) RETURNING id, i2, i4, cast(i8 AS TEXT) AS i8;`,
-    args: [id, i2, i4, converter.encode(i8, PgBasicType.PG_INT8)],
+    args: [r.id, r.i2, r.i4, r.i8],
   })
-  return decodeRow<Int>(row, 'ints')
+  return converter.decodeRow<Int>(row, schema.tables.ints)
 }
 
 export const write_int = withDal ? write_int_dal : write_int_raw
@@ -687,7 +665,7 @@ const get_float_raw = async (electric: Electric, id: string) => {
   })
   if (rows.length === 1) {
     const row = rows[0]
-    return decodeRow<Float>(row, 'floats')
+    return converter.decodeRow<Float>(row, schema.tables.floats)
   }
   return null
 }
@@ -715,11 +693,12 @@ const write_float_raw = async (
   f4: number,
   f8: number
 ) => {
+  const r = converter.encodeRow({ id, f4, f8 }, schema.tables.floats)
   const [ row ] = await electric.adapter.query({
     sql: `INSERT INTO floats (id, f4, f8) VALUES (${builder.makePositionalParam(1)}, ${builder.makePositionalParam(2)}, ${builder.makePositionalParam(3)}) RETURNING *;`,
-    args: [id, converter.encode(f4, PgBasicType.PG_FLOAT4), converter.encode(f8, PgBasicType.PG_FLOAT8)],
+    args: [r.id, r.f4, r.f8],
   })
-  return decodeRow<Float>(row, 'floats')
+  return converter.decodeRow<Float>(row, schema.tables.floats)
 }
 
 export const write_float = withDal ? write_float_dal : write_float_raw
@@ -795,7 +774,7 @@ const get_jsonb_raw_internal = async (electric: Electric, id: string) => {
 
   if (rows.length === 1) {
     const row = rows[0]
-    return decodeRow<{ id: string, jsb: any }>(row, 'jsons')
+    return converter.decodeRow<{ id: string, jsb: any }>(row, schema.tables.jsons)
   }
   return null
 }
@@ -812,11 +791,12 @@ const write_json_dal = async (electric: Electric, id: string, jsb: any) => {
 }
 
 const write_json_raw = async (electric: Electric, id: string, jsb: any) => {
+  const r = converter.encodeRow({ id, jsb}, schema.tables.jsons)
   const [ row ] = await electric.adapter.query({
     sql: `INSERT INTO jsons (id, jsb) VALUES (${builder.makePositionalParam(1)}, ${builder.makePositionalParam(2)}) RETURNING *;`,
-    args: [id, converter.encode(jsb, PgBasicType.PG_JSONB)],
+    args: [r.id, r.jsb],
   })
-  return decodeRow<{ id: string, jsb: any }>(row, 'jsons')
+  return converter.decodeRow<{ id: string, jsb: any }>(row, schema.tables.jsons)
 }
 
 export const write_json = withDal ? write_json_dal : write_json_raw
@@ -862,7 +842,7 @@ const write_enum_raw = async (electric: Electric, id: string, c: Color | null) =
     sql: `INSERT INTO enums (id, c) VALUES (${builder.makePositionalParam(1)}, ${builder.makePositionalParam(2)}) RETURNING *;`,
     args: [id, c],
   })
-  return decodeRow<Enum>(row, 'enums')
+  return converter.decodeRow<Enum>(row, schema.tables.enums)
 }
 
 export const write_enum = withDal ? write_enum_dal : write_enum_raw
@@ -918,11 +898,12 @@ const write_blob_raw = async (
   id: string,
   blob: Uint8Array | null
 ) => {
+  const r = converter.encodeRow({ id, blob }, schema.tables.blobs)
   const [ row ] = await electric.adapter.query({
     sql: `INSERT INTO blobs (id, blob) VALUES (${builder.makePositionalParam(1)}, ${builder.makePositionalParam(2)}) RETURNING *;`,
-    args: [id, converter.encode(blob, PgBasicType.PG_BYTEA)],
+    args: [r.id, r.blob],
   })
-  return decodeRow<{ id: string, blob: Uint8Array | null }>(row, 'blobs')
+  return converter.decodeRow<{ id: string, blob: Uint8Array | null }>(row, schema.tables.blobs)
 }
 
 export const write_blob = withDal ? write_blob_dal : write_blob_raw
@@ -980,7 +961,7 @@ const insert_item_raw = async (electric: Electric, id: string, content: string) 
     sql: `INSERT INTO items (id, content) VALUES (${builder.makePositionalParam(1)}, ${builder.makePositionalParam(2)}) RETURNING *;`,
     args: [id, content],
   })
-  return decodeRow<Item>(row, 'items')
+  return converter.decodeRow<Item>(row, schema.tables.items)
 }
 
 export const insert_item = withDal ? insert_item_dal : insert_item_raw
@@ -1088,7 +1069,7 @@ const insert_other_item_raw = async (electric: Electric, id: string, content: st
     sql: `INSERT INTO other_items (id, content, item_id) VALUES (${builder.makePositionalParam(1)}, ${builder.makePositionalParam(2)}, ${builder.makePositionalParam(3)}) RETURNING *;`,
     args: [id, content, item_id],
   })
-  return decodeRow<Item>(row, 'other_items')
+  return converter.decodeRow<Item>(row, schema.tables.other_items)
 }
 
 export const insert_other_item = withDal ? insert_other_item_dal : insert_other_item_raw

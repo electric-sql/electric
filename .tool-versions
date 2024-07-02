@@ -1,6 +1,6 @@
 elixir 1.17.0-otp-27
 erlang 27.0
-nodejs 20.2.0
+nodejs 21.4.0
 pnpm 9.4.0
 # keep synchronised with version pinned in .github/workflows/satellite_proto.yml
 protoc 26.1

@@ -7,7 +7,7 @@ import {
   SatRelation_RelationType,
 } from '../_generated/protocol/satellite'
 import { Tag } from '../satellite/oplog'
-import type { Row } from '@electric-sql/drivers/util'
+import type { SqlValue, Row } from '@electric-sql/drivers/util'
 
 export type {
   DbName,
@@ -192,7 +192,7 @@ export function isDataChange(change: Change): change is DataChange {
 }
 
 export type DbRecord = {
-  [key: string]: boolean | string | number | Uint8Array | undefined | null
+  [key: string]: SqlValue
 }
 
 export type Replication<TransactionType> = {
