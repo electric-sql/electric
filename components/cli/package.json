@@ -1,5 +1,5 @@
 {
-  "version": "0.11.3",
+  "version": "0.12.2",
   "name": "@electric-sql/cli",
   "description": "ElectricSQL command line interface (CLI).",
   "repository": "https://github.com/electric-sql/electric/tree/main/components/cli",
