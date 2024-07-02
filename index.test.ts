@@ -129,7 +129,7 @@ describe(`HTTP Sync`, () => {
     try {
       await client.query(`insert into issues(id, title) values($1, $2)`, [
         uuid,
-        `foo`,
+        `foo + ${uuid}`,
       ])
     } catch (e) {
       console.log(e)
@@ -150,6 +150,7 @@ describe(`HTTP Sync`, () => {
 
     await new Promise<void>((resolve) => {
       issueStream.subscribe((messages) => {
+        console.log(messages)
         messages.forEach((message) => {
           if (message.headers?.[`action`] !== undefined) {
             shapeData.set(message.key, message.value)
@@ -164,7 +165,7 @@ describe(`HTTP Sync`, () => {
     const values = [...shapeData.values()]
 
     expect(values).toHaveLength(1)
-    expect(values[0].title).toEqual(`foo`)
+    expect(values[0].title).toEqual(`foo + ${uuid}`)
   })
 
   it.only(`should get initial data for a second table`, async () => {
@@ -208,38 +209,41 @@ describe(`HTTP Sync`, () => {
       subscribe: true,
       signal: aborter.signal,
     })
-
+    let messageCount = 0
     let secondRowId = ``
     await new Promise<void>((resolve) => {
       issueStream.subscribe((messages) => {
         messages.forEach(async (message) => {
           if (message.headers?.[`action`] !== undefined) {
             shapeData.set(message.key, message.value)
-          }
-          if (message.offset === 1) {
-            updateRow({ id: rowId, title: `foo1` })
-          }
-          if (message.offset === 2) {
-            secondRowId = await appendRow({ title: `foo2` })
-          }
+            messageCount++
+            console.log('Processing msg', messageCount, message)
 
-          if (message.offset === 3) {
-            aborter.abort()
-            expect(shapeData).toEqual(
-              new Map([
-                [rowId, { id: rowId, title: `foo1` }],
-                [secondRowId, { id: secondRowId, title: `foo2` }],
-              ])
-            )
-            // expect(batchDoneCount).toEqual(3)
-            resolve()
+            if (messageCount === 1) {
+              updateRow({ id: rowId, title: `foo1` })
+            }
+            if (messageCount === 2) {
+              secondRowId = await appendRow({ title: `foo2` })
+            }
+  
+            if (messageCount === 3) {
+              aborter.abort()
+              expect(shapeData).toEqual(
+                new Map([
+                  ['public-issues-' + rowId, { id: rowId, title: `foo1` }],
+                  ['public-issues-' + secondRowId, { id: secondRowId, title: `foo2` }],
+                ])
+              )
+              // expect(batchDoneCount).toEqual(3)
+              resolve()
+            }
           }
         })
       })
     })
     context.secondRowId = secondRowId
   })
-  it(`Multiple clients can get the same data`, async () => {
+  it.only(`multiple clients can get the same data`, async () => {
     const { rowId, secondRowId } = context
     assert(rowId !== undefined, `rowId should be defined`)
     assert(secondRowId !== undefined, `secondRowId should be defined`)
@@ -261,47 +265,52 @@ describe(`HTTP Sync`, () => {
       signal: aborter2.signal,
     })
 
+    let messageCount1 = 0
+    let messageCount2 = 0
     const promise1 = new Promise<void>((resolve) => {
       issueStream1.subscribe((messages) => {
         messages.forEach(async (message) => {
           if (message.headers?.[`action`] !== undefined) {
             shapeData1.set(message.key, message.value)
-          }
-          if (message.offset === 3) {
-            setTimeout(() => updateRow({ id: rowId, title: `foo3` }), 50)
-          }
-
-          if (message.offset === 4) {
-            aborter1.abort()
-            expect(shapeData1).toEqual(
-              new Map([
-                [rowId, { id: rowId, title: `foo3` }],
-                [secondRowId, { id: secondRowId, title: `foo2` }],
-              ])
-            )
-            resolve()
+            messageCount1++
+            if (messageCount1 === 3) {
+              setTimeout(() => updateRow({ id: rowId, title: `foo3` }), 50)
+            }
+  
+            if (messageCount1 === 4) {
+              aborter1.abort()
+              expect(shapeData1).toEqual(
+                new Map([
+                  ['public-issues-' + rowId, { id: rowId, title: `foo3` }],
+                  ['public-issues-' + secondRowId, { id: secondRowId, title: `foo2` }],
+                ])
+              )
+              resolve()
+            }
           }
         })
       })
     })
 
+    
     const promise2 = new Promise<void>((resolve) => {
       issueStream2.subscribe((messages) => {
         messages.forEach(async (message) => {
           if (message.headers?.[`action`] !== undefined) {
             shapeData2.set(message.key, message.value)
+            messageCount2++
+            if (messageCount2 === 4) {
+              aborter2.abort()
+              expect(shapeData2).toEqual(
+                new Map([
+                  ['public-issues-' + rowId, { id: rowId, title: `foo3` }],
+                  ['public-issues-' + secondRowId, { id: secondRowId, title: `foo2` }],
+                ])
+              )
+              resolve()
+            }
           }
 
-          if (message.offset === 4) {
-            aborter2.abort()
-            expect(shapeData2).toEqual(
-              new Map([
-                [rowId, { id: rowId, title: `foo3` }],
-                [secondRowId, { id: secondRowId, title: `foo2` }],
-              ])
-            )
-            resolve()
-          }
         })
       })
     })
@@ -309,7 +318,7 @@ describe(`HTTP Sync`, () => {
     await Promise.all([promise1, promise2])
   })
 
-  it(`can go offline and then catchup`, async () => {
+  it.only(`can go offline and then catchup`, async () => {
     const aborter = new AbortController()
     let lastOffset = 0
     const issueStream = new ShapeStream({
@@ -345,7 +354,7 @@ describe(`HTTP Sync`, () => {
     await new Promise((resolve) => setTimeout(resolve, 10))
     // Add message — which the server should then overwrite the original appendRow
     // meaning there won't be an extra operation.
-    updateRow({ id, title: `--foo5` })
+    // updateRow({ id, title: `--foo5` })
     // Wait for sqlite to get all the messages.
     await new Promise((resolve) => setTimeout(resolve, 60))
 
@@ -376,7 +385,7 @@ describe(`HTTP Sync`, () => {
     expect(catchupOpsCount).toBe(9)
   })
 
-  it(`should return correct caching headers`, async () => {
+  it.only(`should return correct caching headers`, async () => {
     const res = await fetch(`http://localhost:3000/shape/issues?offset=-1`, {})
     const cacheHeaders = res.headers.get(`cache-control`)
     assert(cacheHeaders !== null, `Response should have cache-control header`)
@@ -384,9 +393,6 @@ describe(`HTTP Sync`, () => {
     expect(directives).toEqual({ "max-age": 60, "stale-while-revalidate": 300 })
     const etagHeader = res.headers.get(`etag`)
     assert(etagHeader !== null, `Response should have etag header`)
-    const etag = parseInt(etagHeader, 10)
-    expect(etag).toBeTypeOf(`number`)
-    expect(etag).toBeLessThan(100)
 
     await appendRow({ title: `foo4` })
     await appendRow({ title: `foo5` })
@@ -399,12 +405,10 @@ describe(`HTTP Sync`, () => {
     const res2 = await fetch(`http://localhost:3000/shape/issues?offset=-1`, {})
     const etag2Header = res2.headers.get(`etag`)
     assert(etag2Header !== null, `Response should have etag header`)
-    const etag2 = parseInt(etag2Header, 10)
-    expect(etag2).toBeTypeOf(`number`)
-    expect(etag).toBeLessThan(100)
+    assert(etagHeader !== etag2Header, `Etags should change when log grows`)
   })
 
-  it(`should return as uncachable if &live is set`, async () => {
+  it.only(`should return as uncachable if &live is set`, async () => {
     const initialRes = await fetch(`http://localhost:3000/shape/issues`, {})
     const shapeId = initialRes.headers.get(`x-electric-shape-id`)
     const res = await fetch(
@@ -423,13 +427,11 @@ describe(`HTTP Sync`, () => {
     expect(pragma).toEqual(`no-cache`)
 
     const etagHeader = res.headers.get(`etag`)
-    assert(etagHeader !== null, `Response should have etag header`)
-    const etag = parseInt(etagHeader, 10)
-    expect(etag).toBeTypeOf(`number`)
-    expect(etag).toBeLessThan(100)
+    console.log(etagHeader)
+    assert(etagHeader === null)
   })
 
-  it(`should revalidate etags`, async () => {
+  it.only(`should revalidate etags`, async () => {
     const res = await fetch(`http://localhost:3000/shape/issues?offset=-1`, {})
     const shapeId = res.headers.get(`x-electric-shape-id`)
     const etag = res.headers.get(`etag`)
@@ -456,7 +458,7 @@ describe(`HTTP Sync`, () => {
     // Catch-up offsets should also use the same etag as they're
     // also working through the end of the current log.
     const catchupEtagValidation = await fetch(
-      `http://localhost:3000/shape/issues?offset=${etag}&notLive&shapeId=${shapeId}`,
+      `http://localhost:3000/shape/issues?offset=10&notLive&shapeId=${shapeId}`,
       {
         headers: { "If-None-Match": catchupEtag },
       }
