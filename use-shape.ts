@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react"
-import { ShapeStream } from "./client"
+import { ShapeStream, ShapeStreamOptions } from "./client"
 import { Message } from "./types"
 
-export function useShape(config) {
-  const [shapeData, setShapeData] = useState([])
+export function useShape(config: ShapeStreamOptions) {
+  const [shapeData, setShapeData] = useState<unknown[]>([])
 
   useEffect(() => {
     async function stream() {
@@ -21,16 +21,20 @@ export function useShape(config) {
             `message`,
             message,
             message.headers?.[`action`],
-            [`insert`, `update`].includes(message.headers?.[`action`])
+            [`insert`, `update`].includes(
+              (message.headers?.[`action`] as string | undefined) ?? ``
+            )
           )
 
           // Upsert/delete new data
-          if (message.headers?.[`action`] === `delete`) {
-            shapeMap.delete(message.key)
-          } else if (
-            [`insert`, `update`].includes(message.headers?.[`action`])
-          ) {
-            shapeMap.set(message.key, message.value)
+          switch (message.headers?.[`action`]) {
+            case `insert`:
+            case `update`:
+              shapeMap.set(message.key, message.value)
+              break
+            case `delete`:
+              shapeMap.delete(message.key)
+              break
           }
 
           // Control message telling client they're up-to-date
