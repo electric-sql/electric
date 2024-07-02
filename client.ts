@@ -1,4 +1,4 @@
-import { Message } from "./types"
+import { Message } from './types'
 
 export interface ShapeStreamOptions {
   shape: { table: string }
@@ -100,8 +100,8 @@ export class ShapeStream {
 
     // fetch loop.
     while (
-      !this.options.signal?.aborted &&
-      !upToDate || this.options.subscribe
+      (!this.options.signal?.aborted && !upToDate) ||
+      this.options.subscribe
     ) {
       const url = new URL(
         `${this.options.baseUrl}/shape/${this.options.shape.table}`
@@ -126,7 +126,6 @@ export class ShapeStream {
         }
       )
       try {
-        console.log("ABOUT TO REQUEST", url.toString())
         await fetch(url.toString(), {
           signal: this.options.signal ? this.options.signal : undefined,
         })
@@ -139,14 +138,13 @@ export class ShapeStream {
             console.log({ shapeId: this.shapeId })
             attempt = 0
             if (response.status === 204) {
-              console.log("Server returned 204")
+              console.log('Server returned 204')
               return []
             }
 
             return response.json()
           })
           .then((batch: Message[]) => {
-            console.log("RESPONSE JSON", batch)
             this.publish(batch)
 
             // Update upToDate & lastOffset

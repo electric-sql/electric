@@ -1,6 +1,6 @@
-import { createClient } from "redis"
-import { ShapeStream } from "./client"
-import { Message } from "./types"
+import { createClient } from 'redis'
+import { ShapeStream } from './client'
+import { Message } from './types'
 
 // Create a Redis client
 const REDIS_HOST = `localhost`

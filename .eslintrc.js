@@ -22,4 +22,4 @@ module.exports = {
   rules: {
     quotes: [`error`, `backtick`],
   },
-};
+}
