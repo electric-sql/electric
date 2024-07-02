@@ -2,8 +2,8 @@ defmodule Electric.Plug.Shapes do
   use Plug.Router
   alias Electric.Shapes
 
-  plug(:match)
-  plug(:dispatch)
+  plug :match
+  plug :dispatch
 
   get "/:table" do
     conn

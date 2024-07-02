@@ -1,11 +1,11 @@
 defmodule Electric.Plug.Router do
   use Plug.Router
 
-  plug(:match)
-  plug(Plug.Logger)
-  plug(:dispatch)
+  plug :match
+  plug Plug.Logger
+  plug :dispatch
 
-  forward("/shape", to: Electric.Plug.Shapes)
+  forward "/shape", to: Electric.Plug.Shapes
 
   match _ do
     send_resp(conn, 404, "Not found")
