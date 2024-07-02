@@ -1,0 +1,47 @@
+[doc Electric acknowledges logical message's LSN]
+[include _shared.luxinc]
+
+[invoke setup]
+
+[shell pg_1]
+    !SELECT pg_logical_emit_message(false, '', 'hello from PG');
+    ?? pg_logical_emit_message
+    ??-------------------------
+    ?(\d+/[0-9a-fA-F]+)
+    [my logical_msg_lsn=$1]
+    ??(1 row)
+
+[shell electric]
+    ??Got a message from PG via logical replication: \
+          %Electric.Postgres.LogicalReplication.Messages.Message{\
+              transactional?: false, \
+              lsn: #Lsn<$logical_msg_lsn>, \
+              prefix: "", \
+              content: "hello from PG"}
+    ??Acknowledging $logical_msg_lsn
+
+[shell pg_1]
+    !BEGIN;
+    ??BEGIN
+
+    !SELECT pg_logical_emit_message(true, '', 'hello from PG transaction');
+    ?? pg_logical_emit_message
+    ??-------------------------
+    ?(\d+/[0-9a-fA-F]+)
+    [my logical_msg_lsn=$1]
+    ??(1 row)
+
+    !COMMIT;
+    ??COMMIT
+
+[shell electric]
+    ??Got a message from PG via logical replication: \
+          %Electric.Postgres.LogicalReplication.Messages.Message{\
+              transactional?: true, \
+              lsn: #Lsn<$logical_msg_lsn>, \
+              prefix: "", \
+              content: "hello from PG transaction"}
+    ??Acknowledging $logical_msg_lsn
+
+[cleanup]
+    [invoke teardown]
