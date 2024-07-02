@@ -1,0 +1,1 @@
+CREATE PUBLICATION electric_publication FOR ALL TABLES;

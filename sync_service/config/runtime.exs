@@ -1,5 +1,7 @@
 import Config
 
+config :logger, level: :debug
+
 if Config.config_env() == :test do
   config :electric,
     database_config:
