@@ -360,6 +360,18 @@ import EnvVarConfig from '@site/src/components/EnvVarConfig'
   Used by the [`start`](#start) command.
 </EnvVarConfig>
 
+#### ELECTRIC_FEATURES
+
+<EnvVarConfig
+    name="ELECTRIC_HTTP_PORT"
+    defaultValue=""
+    example="some_feature=true:another_feature=false"
+>
+  Experimental feature flags.
+
+  Used by the [`start`](#start) command.
+</EnvVarConfig>
+
 #### ELECTRIC_HTTP_PORT
 
 <EnvVarConfig
