@@ -244,7 +244,7 @@ export function serverErrorToSatelliteError(
 ): SatelliteError {
   return new SatelliteError(
     serverErrorToSatError[error.errorType],
-    'server error'
+    'Server error: ' + error.message
   )
 }
 
