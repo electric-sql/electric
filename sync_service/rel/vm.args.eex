@@ -1,0 +1,14 @@
+# Use the default number of ports regardless of the `OPEN_MAX` limit configured in the OS.
+#
+# In recent versions of Linux kernel and/or Docker, the OPEN_MAX limit is set to an
+# astronomically high value of 1073741816. Erlang picks that value to set its maximum number of
+# ports. When the number is so high, the memory taken up by the port tables ends up dominating
+# the total memory usage of the VM, and it doesn't even show up in Observer stats.
+#
+# Anecdotally, I have seen the memory usage of a Docker container running an Electric release
+# doing nothing go from 1.8GB down to 176MB with this setting.
+#
+# See also:
+# - https://elixirforum.com/t/elixir-erlang-docker-containers-ram-usage-on-different-oss-kernels
+# - https://elixirforum.com/t/beam-vm-consumes-big-amounts-of-memory-virt-vs-erlang-memory-total
++Q 1024

@@ -8,7 +8,16 @@ defmodule Electric.MixProject do
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      aliases: aliases()
+      aliases: aliases(),
+      releases: [
+        electric: [
+          applications: [
+            electric: :permanent
+          ],
+          include_executables_for: [:unix]
+        ]
+      ],
+      default_release: :electric
     ]
   end
 
