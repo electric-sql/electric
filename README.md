@@ -15,3 +15,13 @@ Tests are at `index.test.ts`. You run them by running in terminal: `npx vitest`.
 - bash client @ bash-client.bash
 - redis integration @ redis.ts
 - React hook `useShape` @ use-shape.ts
+
+## Setting up your development environment
+We're using [asdf](https://asdf-vm.com/) to install Elixir, Erlang, and Node.js.
+
+### Mac setup
+1. `brew install asdf`
+2. `asdf plugin-add nodejs elixir erlang`
+3. `asdf install`
+
+You'll probably need to fiddle with your bash/zsh/etc rc file to load the right tool into your environment.
