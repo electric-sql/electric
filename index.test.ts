@@ -4,6 +4,8 @@ import { v4 as uuidv4 } from 'uuid'
 import { parse } from 'cache-control-parser'
 import { Client } from 'pg'
 
+const BASE_URL = `http://localhost:3000`
+
 let context:
   | { client: Client; rowId?: string; secondRowId?: string }
   | Record<string, never> = {}
@@ -92,7 +94,7 @@ describe(`HTTP Sync`, () => {
     const aborter = new AbortController()
     const issueStream = new ShapeStream({
       shape: { table: `issues` },
-      baseUrl: `http://localhost:3000`,
+      baseUrl: `${BASE_URL}`,
       subscribe: false,
       signal: aborter.signal,
     })
@@ -116,7 +118,7 @@ describe(`HTTP Sync`, () => {
   })
 
   it.only(`returns a header with the server shape id`, async () => {
-    const res = await fetch(`http://localhost:3000/shape/issues?offset=-1`, {})
+    const res = await fetch(`${BASE_URL}/shape/issues?offset=-1`, {})
     const shapeId = res.headers.get(`x-electric-shape-id`)
     assert.exists(shapeId)
   })
@@ -143,7 +145,7 @@ describe(`HTTP Sync`, () => {
     const aborter = new AbortController()
     const issueStream = new ShapeStream({
       shape: { table: `issues` },
-      baseUrl: `http://localhost:3000`,
+      baseUrl: `${BASE_URL}`,
       subscribe: false,
       signal: aborter.signal,
     })
@@ -174,7 +176,7 @@ describe(`HTTP Sync`, () => {
     const aborter = new AbortController()
     const fooStream = new ShapeStream({
       shape: { table: `foo` },
-      baseUrl: `http://localhost:3000`,
+      baseUrl: `${BASE_URL}`,
       subscribe: false,
       signal: aborter.signal,
     })
@@ -205,7 +207,7 @@ describe(`HTTP Sync`, () => {
     const aborter = new AbortController()
     const issueStream = new ShapeStream({
       shape: { table: `issues` },
-      baseUrl: `http://localhost:3000`,
+      baseUrl: `${BASE_URL}`,
       subscribe: true,
       signal: aborter.signal,
     })
@@ -254,7 +256,7 @@ describe(`HTTP Sync`, () => {
     const aborter1 = new AbortController()
     const issueStream1 = new ShapeStream({
       shape: { table: `issues` },
-      baseUrl: `http://localhost:3000`,
+      baseUrl: `${BASE_URL}`,
       subscribe: true,
       signal: aborter1.signal,
     })
@@ -263,7 +265,7 @@ describe(`HTTP Sync`, () => {
     const aborter2 = new AbortController()
     const issueStream2 = new ShapeStream({
       shape: { table: `issues` },
-      baseUrl: `http://localhost:3000`,
+      baseUrl: `${BASE_URL}`,
       subscribe: true,
       signal: aborter2.signal,
     })
@@ -330,7 +332,7 @@ describe(`HTTP Sync`, () => {
     let lastOffset = 0
     const issueStream = new ShapeStream({
       shape: { table: `issues` },
-      baseUrl: `http://localhost:3000`,
+      baseUrl: `${BASE_URL}`,
       subscribe: false,
       signal: aborter.signal,
     })
@@ -369,7 +371,7 @@ describe(`HTTP Sync`, () => {
     const newAborter = new AbortController()
     const newIssueStream = new ShapeStream({
       shape: { table: `issues` },
-      baseUrl: `http://localhost:3000`,
+      baseUrl: `${BASE_URL}`,
       subscribe: true,
       signal: newAborter.signal,
       offset: lastOffset,
@@ -393,7 +395,7 @@ describe(`HTTP Sync`, () => {
   })
 
   it.only(`should return correct caching headers`, async () => {
-    const res = await fetch(`http://localhost:3000/shape/issues?offset=-1`, {})
+    const res = await fetch(`${BASE_URL}/shape/issues?offset=-1`, {})
     const cacheHeaders = res.headers.get(`cache-control`)
     assert(cacheHeaders !== null, `Response should have cache-control header`)
     const directives = parse(cacheHeaders)
@@ -409,17 +411,17 @@ describe(`HTTP Sync`, () => {
     // Wait for sqlite to get all the messages.
     await new Promise((resolve) => setTimeout(resolve, 40))
 
-    const res2 = await fetch(`http://localhost:3000/shape/issues?offset=-1`, {})
+    const res2 = await fetch(`${BASE_URL}/shape/issues?offset=-1`, {})
     const etag2Header = res2.headers.get(`etag`)
     assert(etag2Header !== null, `Response should have etag header`)
     assert(etagHeader !== etag2Header, `Etags should change when log grows`)
   })
 
   it.only(`should return as uncachable if &live is set`, async () => {
-    const initialRes = await fetch(`http://localhost:3000/shape/issues`, {})
+    const initialRes = await fetch(`${BASE_URL}/shape/issues`, {})
     const shapeId = initialRes.headers.get(`x-electric-shape-id`)
     const res = await fetch(
-      `http://localhost:3000/shape/issues?offset=10&live&shapeId=${shapeId}`
+      `${BASE_URL}/shape/issues?offset=10&live&shapeId=${shapeId}`
     )
     const cacheHeaders = res.headers.get(`cache-control`)
     assert(cacheHeaders !== null, `Response should have cache-control header`)
@@ -439,24 +441,21 @@ describe(`HTTP Sync`, () => {
   })
 
   it.only(`should revalidate etags`, async () => {
-    const res = await fetch(`http://localhost:3000/shape/issues?offset=-1`, {})
+    const res = await fetch(`${BASE_URL}/shape/issues?offset=-1`, {})
     const shapeId = res.headers.get(`x-electric-shape-id`)
     const etag = res.headers.get(`etag`)
     assert(etag !== null, `Response should have etag header`)
 
-    const etagValidation = await fetch(
-      `http://localhost:3000/shape/issues?offset=-1`,
-      {
-        headers: { 'If-None-Match': etag },
-      }
-    )
+    const etagValidation = await fetch(`${BASE_URL}/shape/issues?offset=-1`, {
+      headers: { 'If-None-Match': etag },
+    })
 
     const status = etagValidation.status
     expect(status).toEqual(304)
 
     // Get etag for catchup
     const catchupEtagRes = await fetch(
-      `http://localhost:3000/shape/issues?offset=4&shapeId=${shapeId}`,
+      `${BASE_URL}/shape/issues?offset=4&shapeId=${shapeId}`,
       {}
     )
     const catchupEtag = catchupEtagRes.headers.get(`etag`)
@@ -465,7 +464,7 @@ describe(`HTTP Sync`, () => {
     // Catch-up offsets should also use the same etag as they're
     // also working through the end of the current log.
     const catchupEtagValidation = await fetch(
-      `http://localhost:3000/shape/issues?offset=10&notLive&shapeId=${shapeId}`,
+      `${BASE_URL}/shape/issues?offset=10&notLive&shapeId=${shapeId}`,
       {
         headers: { 'If-None-Match': catchupEtag },
       }
@@ -483,7 +482,7 @@ describe(`HTTP Sync`, () => {
   // const aborter = new AbortController()
   // const issueStream = new ShapeStream({
   // shape: { table: `issues` },
-  // baseUrl: `http://localhost:3000`,
+  // baseUrl: `${BASE_URL}`,
   // subscribe: true,
   // signal: aborter.signal,
   // })
@@ -516,13 +515,13 @@ describe(`HTTP Sync`, () => {
   // })
   // TODO fetch, delete shape, fetch again with header and get error
   // it(`should return "must-refetch" as only log entry if the shapeId has changed`, async () => {
-  //   const initialRes = await fetch(`http://localhost:3000/shape/issues`, {})
+  //   const initialRes = await fetch(`${BASE_URL}/shape/issues`, {})
   //   const shapeId = initialRes.headers.get(`x-electric-shape-id`)
 
   //   deleteShape(`issues`)
 
   //   const res = await fetch(
-  //     `http://localhost:3000/shape/issues?offset=10&live&shapeId=${shapeId}`
+  //     `${BASE_URL}/shape/issues?offset=10&live&shapeId=${shapeId}`
   //   )
 
   //   const data = await res.json()
