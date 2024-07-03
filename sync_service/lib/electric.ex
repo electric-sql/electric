@@ -1,18 +1,11 @@
 defmodule Electric do
-  @moduledoc """
-  Documentation for `Electric`.
-  """
-
   @doc """
-  Hello world.
+  Every electric cluster belongs to a particular console database instance
 
-  ## Examples
-
-      iex> Electric.hello()
-      :world
-
+  This is that database instance id
   """
-  def hello do
-    :world
+  @spec instance_id() :: binary | no_return
+  def instance_id do
+    Application.fetch_env!(:electric, :instance_id)
   end
 end
