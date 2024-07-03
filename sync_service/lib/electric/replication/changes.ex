@@ -32,7 +32,7 @@ defmodule Electric.Replication.Changes do
           | Changes.UpdatedRecord.t()
           | Changes.DeletedRecord.t()
 
-  @type change() :: data_change()
+  @type change() :: data_change() | Changes.TruncatedRelation.t()
 
   defmodule Transaction do
     alias Electric.Replication.Changes
@@ -56,8 +56,14 @@ defmodule Electric.Replication.Changes do
     @spec prepend_change(t(), Changes.change()) :: t()
     def prepend_change(
           %__MODULE__{changes: changes, affected_relations: rels} = txn,
-          %{relation: rel} = change
-        ) do
+          %change_mod{relation: rel} = change
+        )
+        when change_mod in [
+               Changes.NewRecord,
+               Changes.UpdatedRecord,
+               Changes.DeletedRecord,
+               Changes.TruncatedRelation
+             ] do
       %{
         txn
         | changes: [change | changes],
@@ -130,6 +136,8 @@ defmodule Electric.Replication.Changes do
 
   defmodule TruncatedRelation do
     defstruct [:relation]
+
+    @type t() :: %__MODULE__{relation: Changes.relation()}
   end
 
   # FIXME: this assumes PK is literally just "id" column
