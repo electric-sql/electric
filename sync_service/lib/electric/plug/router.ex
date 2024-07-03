@@ -3,6 +3,7 @@ defmodule Electric.Plug.Router do
 
   plug :match
   plug Plug.Logger
+  plug Plug.RequestId
   plug :dispatch
 
   forward "/shape", to: Electric.Plug.Shapes

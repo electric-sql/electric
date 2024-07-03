@@ -3,17 +3,31 @@ defmodule Electric.Shapes do
   require Logger
 
   def query_snapshot(conn, table) do
+    start = System.monotonic_time()
     query = Postgrex.query!(conn, "SELECT * FROM #{table}", [])
+    query_stopped = System.monotonic_time()
     Logger.debug("Querying a snapshot for #{inspect(table)}")
 
-    query.rows
-    |> Enum.map(fn row ->
-      Enum.zip_with(query.columns, row, fn
-        "id", val -> {"id", Utils.encode_uuid(val)}
-        col, val -> {col, val}
+    results =
+      query.rows
+      |> Enum.map(fn row ->
+        Enum.zip_with(query.columns, row, fn
+          "id", val -> {"id", Utils.encode_uuid(val)}
+          col, val -> {col, val}
+        end)
+        |> Map.new()
       end)
-      |> Map.new()
-    end)
+
+    :telemetry.execute(
+      [:electric, :query],
+      %{
+        duration: query_stopped - start,
+        serialization_duration: System.monotonic_time() - query_stopped
+      },
+      %{}
+    )
+
+    results
   end
 
   def get_or_create_shape(table, opts \\ []) do
