@@ -10,6 +10,7 @@ defmodule Electric.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      Electric.Telemetry,
       {Electric.InMemShapeCache, []},
       {Electric.Replication.ShapeLogStorage, []},
       {Registry,

@@ -31,7 +31,10 @@ defmodule Electric.MixProject do
       {:postgrex, "~> 0.18"},
       {:postgresql_uri, "~> 0.1"},
       {:jason, "~> 1.4"},
-      {:nimble_options, "~> 1.1"}
+      {:nimble_options, "~> 1.1"},
+      {:telemetry_metrics_statsd, "~> 0.7"},
+      {:dotenvy, "~> 0.8"},
+      {:telemetry_poller, "~> 1.1"}
     ]
   end
 

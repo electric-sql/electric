@@ -1,4 +1,14 @@
 defmodule Electric.Utils do
+  @doc """
+  Generate a random UUID v4.
+
+  Code taken from Ecto: https://github.com/elixir-ecto/ecto/blob/v3.10.2/lib/ecto/uuid.ex#L174
+  """
+  def uuid4() do
+    <<u0::48, _::4, u1::12, _::2, u2::62>> = :crypto.strong_rand_bytes(16)
+    encode_uuid(<<u0::48, 4::4, u1::12, 2::2, u2::62>>)
+  end
+
   def encode_uuid(
         <<a1::4, a2::4, a3::4, a4::4, a5::4, a6::4, a7::4, a8::4, b1::4, b2::4, b3::4, b4::4,
           c1::4, c2::4, c3::4, c4::4, d1::4, d2::4, d3::4, d4::4, e1::4, e2::4, e3::4, e4::4,
