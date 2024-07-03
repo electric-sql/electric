@@ -6,6 +6,7 @@ if config_env() in [:dev, :test] do
 end
 
 config :logger, level: :debug
+config :telemetry_poller, :default, period: 500
 
 if Config.config_env() == :test do
   config :electric,

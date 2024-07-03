@@ -100,12 +100,9 @@ defmodule Electric.Plug.Shapes do
                }, offset}
             end)
 
-          conn
-          |> put_resp_header("x-electric-shape-id", shape_id)
-          |> put_resp_content_type("application/json")
-          |> put_resp_header("etag", "#{shape_id}-#{max_offset}")
-          |> send_resp(
-            200,
+          start = System.monotonic_time()
+
+          encoded =
             Jason.encode_to_iodata!(
               initial_rows ++
                 active_log ++
@@ -115,7 +112,18 @@ defmodule Electric.Plug.Shapes do
                   }
                 ]
             )
+
+          :telemetry.execute(
+            [:electric, :snapshot],
+            %{encoding: System.monotonic_time() - start},
+            %{}
           )
+
+          conn
+          |> put_resp_header("x-electric-shape-id", shape_id)
+          |> put_resp_content_type("application/json")
+          |> put_resp_header("etag", "#{shape_id}-#{max_offset}")
+          |> send_resp(200, encoded)
         end
     end
   end

@@ -83,7 +83,15 @@ defmodule Electric.InMemShapeCache do
               Shapes.query_snapshot(conn, shape_definition)
             end)
 
+          start = System.monotonic_time()
           :ets.insert(@ets_table, {hash, shape_id, snapshot})
+
+          :telemetry.execute(
+            [:electric, :snapshot],
+            %{storage: System.monotonic_time() - start},
+            %{}
+          )
+
           GenServer.cast(parent, {:snapshot_ready, hash})
         rescue
           error -> GenServer.cast(parent, {:snapshot_failed, hash, error})

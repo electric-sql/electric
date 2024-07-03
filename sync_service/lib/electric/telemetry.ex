@@ -45,7 +45,11 @@ defmodule Electric.Telemetry do
       summary("plug.router_dispatch.exception.duration",
         tags: [:route],
         unit: {:native, :millisecond}
-      )
+      ),
+      summary("electric.query.duration", unit: {:native, :millisecond}),
+      summary("electric.query.serialization_duration", unit: {:native, :millisecond}),
+      summary("electric.snapshot.storage", unit: {:native, :millisecond}),
+      summary("electric.snapshot.encoding", unit: {:native, :millisecond})
     ]
     |> Enum.map(&%{&1 | tags: [:instance_id | &1.tags]})
   end
