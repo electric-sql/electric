@@ -22,3 +22,16 @@ services:
       - config_file=/etc/postgresql.conf
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ../../caching/nginx_cache:/var/cache/nginx
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - postgres
