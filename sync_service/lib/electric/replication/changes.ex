@@ -141,13 +141,15 @@ defmodule Electric.Replication.Changes do
   end
 
   # FIXME: this assumes PK is literally just "id" column
-  def build_key(%{relation: {schema, table}, record: record}) do
-    IO.iodata_to_binary([schema, ?-, table, ?-, record |> Map.take(["id"]) |> Map.values()])
+  def build_key(%{relation: rel, record: record}) do
+    IO.iodata_to_binary([prefix_from_rel(rel), ?/, record |> Map.take(["id"]) |> Map.values()])
   end
 
-  def build_key(%{relation: {schema, table}, old_record: record}) do
-    IO.iodata_to_binary([schema, ?-, table, ?-, record |> Map.take(["id"]) |> Map.values()])
+  def build_key(%{relation: rel, old_record: record}) do
+    IO.iodata_to_binary([prefix_from_rel(rel), ?/, record |> Map.take(["id"]) |> Map.values()])
   end
+
+  defp prefix_from_rel({schema, table}), do: [?", schema, ?", ?., ?", table, ?"]
 
   def to_json_value(%NewRecord{record: record}), do: record
   def to_json_value(%UpdatedRecord{record: record}), do: record

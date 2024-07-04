@@ -3,101 +3,82 @@ defmodule Electric.Replication.ShapeLogStorage do
   When any txn comes from postgres, we need to store it into the
   log for this shape if and only if it has txid >= xmin of the snapshot.
   """
+  alias Electric.Shapes.Shape
+  alias Electric.ShapeCache.Storage
   alias Electric.Replication.Changes
-  alias Electric.Postgres.Lsn
   alias Electric.InMemShapeCache
   alias Electric.Replication.Changes.Transaction
   use GenServer
   require Logger
-  @table_name :shape_logs
 
-  def start_link(_) do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+  @genserver_name_schema {:or, [:atom, {:tuple, [:atom, :atom, :any]}]}
+  @schema NimbleOptions.new!(
+            name: [
+              type: @genserver_name_schema,
+              default: __MODULE__
+            ],
+            storage: [type: :mod_arg, required: true],
+            registry: [type: :atom, required: true]
+          )
+
+  def start_link(opts) do
+    with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
+      GenServer.start_link(__MODULE__, Map.new(opts), name: opts[:name])
+    end
   end
 
   def store_transaction(%Transaction{} = txn, server \\ __MODULE__) do
     GenServer.cast(server, {:new_txn, txn})
   end
 
-  def get_last_offset(shape_id) do
-    case :ets.prev(@table_name, {shape_id, :infinity}) do
-      {_, offset} -> offset
-      _ -> nil
-    end
-  end
-
-  @spec get_log(String.t(), integer(), non_neg_integer() | :infinity) ::
-          Enumerable.t(
-            {position :: non_neg_integer(), transaction_id :: non_neg_integer(),
-             change :: Changes.change()}
-          )
-  def get_log(shape_id, offset, size \\ :infinity) do
-    Stream.unfold({offset, size}, fn
-      {_, 0} ->
-        nil
-
-      {offset, size} ->
-        new_size = if size != :infinity, do: size - 1, else: :infinity
-
-        case :ets.next_lookup(@table_name, {shape_id, offset}) do
-          :"$end_of_table" ->
-            nil
-
-          {{other_shape_id, _}, _} when other_shape_id != shape_id ->
-            nil
-
-          {{^shape_id, position}, [{_, xid, change}]} ->
-            {{position, xid, change}, {position, new_size}}
-        end
-    end)
-  end
-
-  def init(_) do
-    table = :ets.new(@table_name, [:named_table, :ordered_set, :public])
-    {:ok, %{table: table}}
+  def init(opts) do
+    {:ok, opts}
   end
 
   def handle_cast({:new_txn, %Transaction{xid: xid, changes: changes, lsn: lsn} = txn}, state) do
-    Logger.debug("Txn received: #{inspect(txn)}")
+    Logger.debug(fn -> "Txn received: #{inspect(txn)}" end)
+
     # TODO: can be optimized probably because you can parallelize writing to different shape logs
-
-    dbg(xid)
-
-    for {shape_id, shape_def, xmin} <- InMemShapeCache.list_active_shapes() |> dbg,
+    for {shape_id, shape_def, xmin} <- InMemShapeCache.list_active_shapes(),
         xid >= xmin do
-      relevant_changes =
-        for {change, offset} <- Enum.with_index(changes),
-            change_in_shape?(shape_def, change) do
-          if is_struct(change, Changes.TruncatedRelation) do
-            max_offset = Lsn.to_integer(lsn) + offset
+      relevant_changes = Enum.filter(changes, &Shape.change_in_shape?(shape_def, &1))
 
-            :ets.select_delete(@table_name, [
-              {{{shape_id, :"$1"}, :_, :_}, [{:<, :"$1", max_offset}], [true]}
-            ])
+      cond do
+        Enum.any?(relevant_changes, &is_struct(&1, Changes.TruncatedRelation)) ->
+          # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
+          #       present in the transaction, we're considering the whole transaction empty, and
+          #       just rotate the shape id. "Correct" way to handle truncates is to be designed.
+          Logger.warning(
+            "Truncate operation encountered while processing txn #{txn.xid} for #{shape_id}"
+          )
 
-            GenServer.cast(InMemShapeCache, {:truncate, shape_id, :erlang.phash2(shape_def)})
-            nil
-          else
-            :ets.insert(@table_name, {{shape_id, Lsn.to_integer(lsn) + offset}, xid, change})
-            {Lsn.to_integer(lsn) + offset, xid, change}
-          end
-        end
+          InMemShapeCache.handle_truncate(shape_id)
 
-      dbg(relevant_changes)
+        relevant_changes != [] ->
+          # TODO: what's a graceful way to handle failure to append to log?
+          #       Right now we'll just fail everything
+          :ok = Storage.append_to_log!(shape_id, lsn, xid, changes, state.storage)
 
-      if relevant_changes != [] do
-        Registry.dispatch(Registry.ShapeChanges, shape_id, fn registered ->
-          dbg(registered)
+          notify_listeners(state.registry, :new_changes, shape_id, lsn)
 
-          for {pid, _} <- registered,
-              do: send(pid, {:new_changes, Enum.reject(relevant_changes, &is_nil/1)})
-        end)
+        true ->
+          Logger.debug(fn ->
+            "No relevant changes found for #{inspect(shape_def)} in txn #{txn.xid}"
+          end)
       end
     end
 
     {:noreply, state}
   end
 
-  defp change_in_shape?(table, %{relation: {_, table}}), do: true
-  defp change_in_shape?(_, _), do: false
+  defp notify_listeners(registry, :new_changes, shape_id, changes) do
+    Registry.dispatch(registry, shape_id, fn registered ->
+      Logger.debug(fn ->
+        "Notifying ~#{length(registered)} clients about new changes to #{shape_id}"
+      end)
+
+      for {pid, ref} <- registered,
+          do: send(pid, {ref, :new_changes, changes})
+    end)
+  end
 end

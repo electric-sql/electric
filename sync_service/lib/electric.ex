@@ -8,4 +8,6 @@ defmodule Electric do
   def instance_id do
     Application.fetch_env!(:electric, :instance_id)
   end
+
+  @type relation :: {schema :: String.t(), table :: String.t()}
 end
