@@ -2,6 +2,7 @@ defmodule Electric.Application do
   # See https://hexdocs.pm/elixir/Application.html
   # for more information on OTP Applications
   @moduledoc false
+  alias Electric.ShapeCache.InMemoryStorage
   alias Electric.Postgres.ReplicationClient
   require Logger
 
@@ -9,32 +10,40 @@ defmodule Electric.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
-      Electric.Telemetry,
-      {Electric.InMemShapeCache, []},
-      {Electric.Replication.ShapeLogStorage, []},
-      {Registry,
-       name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
-      {Postgrex,
-       Application.fetch_env!(:electric, :database_config) ++
-         [
-           name: Electric.DbPool,
-           pool_size: 10
-         ]},
-      {ReplicationClient,
-       Application.fetch_env!(:electric, :database_config) ++
-         [
-           init_opts: [
-             publication_name: "electric_publication",
-             transaction_received: {Electric.Replication.ShapeLogStorage, :store_transaction, []}
-           ]
-         ]},
-      {Bandit, plug: Electric.Plug.Router, port: 3000}
-    ]
+    with {:ok, storage_opts} <- InMemoryStorage.shared_opts([]) do
+      storage = {InMemoryStorage, storage_opts}
 
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: Electric.Supervisor]
-    Supervisor.start_link(children, opts)
+      children = [
+        Electric.Telemetry,
+        {InMemoryStorage, storage_opts},
+        {Registry,
+         name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
+        {Electric.InMemShapeCache, storage: storage},
+        {Electric.Replication.ShapeLogStorage, storage: storage, registry: Registry.ShapeChanges},
+        {Postgrex,
+         Application.fetch_env!(:electric, :database_config) ++
+           [
+             name: Electric.DbPool,
+             pool_size: 10
+           ]},
+        {ReplicationClient,
+         Application.fetch_env!(:electric, :database_config) ++
+           [
+             init_opts: [
+               publication_name: "electric_publication",
+               transaction_received:
+                 {Electric.Replication.ShapeLogStorage, :store_transaction, []}
+             ]
+           ]},
+        {Bandit,
+         plug: {Electric.Plug.Router, storage: storage, registry: Registry.ShapeChanges},
+         port: 3000}
+      ]
+
+      # See https://hexdocs.pm/elixir/Supervisor.html
+      # for other strategies and supported options
+      opts = [strategy: :one_for_one, name: Electric.Supervisor]
+      Supervisor.start_link(children, opts)
+    end
   end
 end

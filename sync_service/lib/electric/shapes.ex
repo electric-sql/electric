@@ -1,47 +1,36 @@
 defmodule Electric.Shapes do
-  alias Electric.Utils
+  alias Electric.ShapeCache.Storage
+  alias Electric.InMemShapeCache
+  alias Electric.ShapeCache
+  alias Electric.Shapes.Shape
   require Logger
 
-  def query_snapshot(conn, table) do
-    start = System.monotonic_time()
-    query = Postgrex.query!(conn, "SELECT * FROM #{table}", [])
-    query_stopped = System.monotonic_time()
-    Logger.debug("Querying a snapshot for #{inspect(table)}")
+  @doc """
+  Get snapshot for the shape ID
+  """
+  def get_snapshot(config, shape_id, shape) do
+    shape_cache = Access.get(config, :shape_cache, InMemShapeCache)
+    storage = Access.fetch!(config, :storage)
 
-    results =
-      query.rows
-      |> Enum.map(fn row ->
-        Enum.zip_with(query.columns, row, fn
-          "id", val -> {"id", Utils.encode_uuid(val)}
-          col, val -> {col, val}
-        end)
-        |> Map.new()
-      end)
-
-    :telemetry.execute(
-      [:electric, :query],
-      %{
-        duration: query_stopped - start,
-        serialization_duration: System.monotonic_time() - query_stopped
-      },
-      %{}
-    )
-
-    results
+    with :ready <- InMemShapeCache.wait_for_snapshot(shape_cache, shape_id, shape) do
+      Storage.get_snapshot(shape_id, storage)
+    end
   end
 
-  def get_or_create_shape(table, opts \\ []) do
-    shape_cache = Keyword.get(opts, :shape_cache, Electric.InMemShapeCache)
+  @doc """
+  Get stream of the log since a given offset
+  """
+  def get_log_stream(config, shape_id, opts) do
+    offset = Keyword.get(opts, :since, -1)
+    storage = Access.fetch!(config, :storage)
 
-    case shape_cache.fetch_snapshot(table) do
-      {:ok, shape_id, snapshot} ->
-        {:ok, shape_id, snapshot}
+    Storage.get_log_stream(shape_id, offset, storage)
+  end
 
-      :error ->
-        case shape_cache.create_or_wait_snapshot(table) do
-          :ready -> shape_cache.fetch_snapshot(table)
-          {:error, error} -> {:error, error}
-        end
-    end
+  @spec get_or_create_shape_id(Shape.t(), keyword()) :: {ShapeCache.shape_id(), non_neg_integer()}
+  def get_or_create_shape_id(shape_def, opts \\ []) do
+    {shape_cache, opts} = Keyword.pop(opts, :shape_cache, Electric.InMemShapeCache)
+
+    shape_cache.get_or_create_shape_id(shape_def, opts)
   end
 end
