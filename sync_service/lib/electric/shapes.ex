@@ -34,8 +34,8 @@ defmodule Electric.Shapes do
     shape_cache = Keyword.get(opts, :shape_cache, Electric.InMemShapeCache)
 
     case shape_cache.fetch_snapshot(table) do
-      {:ok, shape_id, version, snapshot} ->
-        {:ok, shape_id, version, snapshot}
+      {:ok, shape_id, snapshot} ->
+        {:ok, shape_id, snapshot}
 
       :error ->
         case shape_cache.create_or_wait_snapshot(table) do
