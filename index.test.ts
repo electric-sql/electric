@@ -1,5 +1,6 @@
 import { beforeAll, afterAll, describe, it, expect, assert } from 'vitest'
 import { ShapeStream } from './client'
+import { Message } from './types'
 import { v4 as uuidv4 } from 'uuid'
 import { parse } from 'cache-control-parser'
 import { Client } from 'pg'
@@ -453,18 +454,29 @@ describe(`HTTP Sync`, () => {
     const status = etagValidation.status
     expect(status).toEqual(304)
 
+    // retrieve last offset
+    const initialLastOffest = res.headers.get('x-electric-chunk-last-offset')
+    assert(initialLastOffest !== null, `Initial response should have last offset header`)
+
+    
+
     // Get etag for catchup
     const catchupEtagRes = await fetch(
-      `${BASE_URL}/shape/issues?offset=4&shapeId=${shapeId}`,
+      `${BASE_URL}/shape/issues?offset=${initialLastOffest}&shapeId=${shapeId}`,
       {}
     )
+    console.log([...catchupEtagRes.headers.entries()], catchupEtagRes.status)
     const catchupEtag = catchupEtagRes.headers.get(`etag`)
     assert(catchupEtag !== null, `Response should have catchup etag header`)
+
+    // retrieve catchup last offset
+    const catchupLastOffset = catchupEtagRes.headers.get('x-electric-chunk-last-offset')
+    assert(catchupLastOffset !== null, `Response should have catchup last offset header`)
 
     // Catch-up offsets should also use the same etag as they're
     // also working through the end of the current log.
     const catchupEtagValidation = await fetch(
-      `${BASE_URL}/shape/issues?offset=10&notLive&shapeId=${shapeId}`,
+      `${BASE_URL}/shape/issues?offset=${catchupLastOffset}&notLive&shapeId=${shapeId}`,
       {
         headers: { 'If-None-Match': catchupEtag },
       }
