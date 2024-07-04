@@ -26,24 +26,10 @@ defmodule Electric.Replication.ShapeLogStorage do
     end
   end
 
-  def has_offset(shape_id, offset) do
-    case :ets.lookup(@table_name, {shape_id, offset}) do
-      [{_, _, _}] -> true
-      _ -> false
-    end
-  end
-
-  def get_version(shape_id) do
-     case InMemShapeCache.fetch_snapshot(shape_id) do
-        {:ok, _, version, _} -> version
-        _ -> nil
-     end
-  end
-
   @spec get_log(String.t(), integer(), non_neg_integer() | :infinity) ::
           Enumerable.t(
             {position :: non_neg_integer(), transaction_id :: non_neg_integer(),
-      change :: Changes.change()}
+             change :: Changes.change()}
           )
   def get_log(shape_id, offset, size \\ :infinity) do
     Stream.unfold({offset, size}, fn
