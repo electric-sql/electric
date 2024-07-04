@@ -12,7 +12,7 @@ defmodule Electric.InMemShapeCache do
   def fetch_snapshot(shape_definition) do
     case :ets.lookup(@ets_table, :erlang.phash2(shape_definition)) do
       [] -> :error
-      [{_, shape_id, snapshot}] -> {:ok, shape_id, snapshot}
+      [{_, shape_id, version, snapshot}] -> {:ok, shape_id, version, snapshot}
     end
   end
 
@@ -84,7 +84,10 @@ defmodule Electric.InMemShapeCache do
             end)
 
           start = System.monotonic_time()
-          :ets.insert(@ets_table, {hash, shape_id, snapshot})
+          # we version shapes with the time at which their snapshot was created
+          # to be able to detect when a client is using an outdated shape
+          version = System.monotonic_time()
+          :ets.insert(@ets_table, {hash, shape_id, version, snapshot})
 
           :telemetry.execute(
             [:electric, :snapshot],
