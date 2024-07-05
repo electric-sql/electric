@@ -9,6 +9,7 @@ defmodule Electric.Plug.Router do
   plug :dispatch
 
   get "/shape/:shape_definition", to: Electric.Plug.ServeShapePlug
+  delete "/shape/:shape_definition", to: Electric.Plug.DeleteShapePlug
 
   match _ do
     send_resp(conn, 404, "Not found")
