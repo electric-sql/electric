@@ -19,3 +19,23 @@ Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_do
 and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
 be found at <https://hexdocs.pm/electric>.
 
+## Running
+
+Run Postgres:
+
+```sh
+docker compose -f dev/docker-compose.yml create
+docker compose -f dev/docker-compose.yml start
+```
+
+Source the `.env.dev` somehow, e.g.:
+
+```sh
+set -a; source .env.dev; set +a
+```
+
+Run the Elixir app:
+
+```sh
+iex -S mix
+```

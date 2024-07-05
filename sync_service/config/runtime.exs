@@ -17,9 +17,11 @@ else
     database_config: PostgresqlUri.parse(env!("DATABASE_URL"))
 end
 
+enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)
 statsd_host = env!("STATSD_HOST", :string?, nil)
 
 config :electric,
+  allow_shape_deletion: enable_integration_testing,
   # Used in telemetry
   instance_id: env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4()),
   telemetry_statsd_host: statsd_host
