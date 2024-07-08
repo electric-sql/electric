@@ -79,6 +79,7 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp load_shape_info(%Plug.Conn{} = conn, _) do
+    Logger.info("Query String: #{conn.query_string}")
     {shape_id, last_offset} =
       Shapes.get_or_create_shape_id(conn.assigns.shape_definition, conn.assigns.config)
 
