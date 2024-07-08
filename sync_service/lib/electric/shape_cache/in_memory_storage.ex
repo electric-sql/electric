@@ -65,6 +65,13 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     end)
   end
 
+  def has_log_entry?(shape_id, offset, opts) do
+    case :ets.select(opts.log_ets_table, [{{{shape_id, offset}, :_, :_, :_, :_}, [], [true]}]) do
+      [] -> false
+      [true] -> true
+    end
+  end
+
   @spec make_new_snapshot!(String.t(), Postgrex.Query.t(), Enumerable.t(), map()) :: :ok
   def make_new_snapshot!(shape_id, query_info, data_stream, opts) do
     ets_table = opts.snapshot_ets_table

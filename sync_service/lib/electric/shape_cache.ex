@@ -69,6 +69,11 @@ defmodule Electric.ShapeCache do
     :ets.tab2list(table)
   end
 
+  @spec clean_shape(GenServer.name(), String.t()) :: :ok
+  def clean_shape(server \\ __MODULE__, shape_id) do
+    GenServer.call(server, {:clean, shape_id})
+  end
+
   @spec handle_truncate(GenServer.name(), String.t()) :: :ok
   def handle_truncate(server \\ __MODULE__, shape_id) do
     GenServer.call(server, {:truncate, shape_id})
@@ -123,15 +128,18 @@ defmodule Electric.ShapeCache do
   end
 
   def handle_call({:truncate, shape_id}, _from, state) do
-    shape = :ets.lookup_element(state.xmins_table, shape_id, 2)
-    :ets.delete(state.xmins_table, shape_id)
-    :ets.match_delete(state.shape_meta_table, {:_, shape_id, :_})
-    Task.start(fn -> Storage.cleanup!(shape_id, state.storage) end)
+    cleaned_up_shape = clean_up_shape(state, shape_id)
 
     Logger.info(
-      "Truncating and rotating shape id, previous shape id #{shape_id}, definition: #{inspect(shape)}"
+      "Truncating and rotating shape id, previous shape id #{shape_id}, definition: #{inspect(cleaned_up_shape)}"
     )
 
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:clean, shape_id}, _from, state) do
+    cleaned_up_shape = clean_up_shape(state, shape_id)
+    Logger.info("Cleaning up shape #{shape_id}, definition: #{inspect(cleaned_up_shape)}")
     {:reply, :ok, state}
   end
 
@@ -163,6 +171,14 @@ defmodule Electric.ShapeCache do
     {waiting, state} = pop_in(state, [:waiting_for_creation, shape_id])
     for client <- waiting, not is_nil(client), do: GenServer.reply(client, {:error, error})
     {:noreply, state}
+  end
+
+  defp clean_up_shape(state, shape_id) do
+    shape = :ets.lookup_element(state.xmins_table, shape_id, 2)
+    :ets.delete(state.xmins_table, shape_id)
+    :ets.match_delete(state.shape_meta_table, {:_, shape_id, :_})
+    Task.start(fn -> Storage.cleanup!(shape_id, state.storage) end)
+    shape
   end
 
   defp maybe_start_snapshot(%{waiting_for_creation: map} = state, shape_id, _)

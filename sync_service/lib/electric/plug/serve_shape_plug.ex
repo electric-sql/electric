@@ -56,6 +56,8 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :put_resp_content_type, "application/json"
   plug :validate_query_params
   plug :load_shape_info
+  plug :validate_shape_offset
+  plug :generate_etag
   plug :validate_and_put_etag
   plug :put_resp_cache_headers
   plug :serve_log_or_snapshot
@@ -85,6 +87,52 @@ defmodule Electric.Plug.ServeShapePlug do
     |> assign(:last_offset, last_offset)
     |> assign(:etag, "#{shape_id}:#{last_offset}")
     |> put_resp_header("x-electric-shape-id", shape_id)
+    |> put_resp_header("x-electric-chunk-last-offset", "#{last_offset}")
+  end
+
+  # If the offset requested is -1, noop as we can always serve it
+  def validate_shape_offset(%Plug.Conn{assigns: %{offset: -1}} = conn, _) do
+    # noop
+    conn
+  end
+
+  # If the offset requested is not found, returns 409 along with a location redirect for clients to
+  # re-request the shape from scratch with the new shape id which acts as a consistent cache buster
+  # e.g. GET /shape/{shape_definition}?shapeId={new_shape_id}&offset=-1
+  def validate_shape_offset(%Plug.Conn{assigns: %{offset: offset}} = conn, _) do
+    shape_id = conn.assigns.active_shape_id
+
+    if !Shapes.has_log_entry?(conn.assigns.config, shape_id, offset) do
+      # TODO: discuss returning a 307 redirect rather than a 409, the client
+      # will have to detect this and throw out old data
+      conn
+      |> put_resp_header(
+        "location",
+        "#{conn.request_path}?shape_id=#{shape_id}&offset=-1"
+      )
+      |> send_resp(
+        409,
+        Jason.encode_to_iodata!(%{
+          message: "Shape offset too far behind. Resync with latest shape ID.",
+          shape_id: shape_id,
+          offset: -1
+        })
+      )
+      |> halt()
+    else
+      conn
+    end
+  end
+
+  defp generate_etag(%Plug.Conn{} = conn, _) do
+    %{
+      offset: offset,
+      active_shape_id: active_shape_id,
+      last_offset: last_offset
+    } = conn.assigns
+
+    conn
+    |> assign(:etag, "#{active_shape_id}:#{offset}:#{last_offset}")
   end
 
   defp validate_and_put_etag(%Plug.Conn{} = conn, _) do
@@ -115,7 +163,11 @@ defmodule Electric.Plug.ServeShapePlug do
       |> put_resp_header("pragma", "no-cache")
       |> put_resp_header("expires", "0")
     else
-      put_resp_header(conn, "cache-control", "max-age=60, stale-while-revalidate=300")
+      put_resp_header(
+        conn,
+        "cache-control",
+        "max-age=#{conn.assigns.config.max_age}, stale-while-revalidate=#{conn.assigns.config.stale_age}"
+      )
     end
   end
 

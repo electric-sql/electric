@@ -27,11 +27,11 @@ export interface BackoffOptions {
 const BackoffDefaults = {
   initialDelay: 100,
   maxDelay: 10_000,
-  multiplier: 1.3
+  multiplier: 1.3,
 }
 
 export interface ShapeStreamOptions extends ShapeOptions {
-  shape: ShapeDefinition,
+  shape: ShapeDefinition
   subscribe?: boolean
   signal?: AbortSignal
 }
@@ -108,7 +108,7 @@ export class ShapeStream {
 
   private instanceId: number
   private subscribers: Map = new Map<string, MessageProcessor>()
-  private upToDateSubscribers: Map = new Map<string, () => void>();
+  private upToDateSubscribers: Map = new Map<string, () => void>()
 
   private closedPromise: Promise<unknown>
   private outsideResolve?: (value?: unknown) => void
@@ -116,7 +116,7 @@ export class ShapeStream {
   private pausedPromise?: Promise<unknown>
   private pausedResolve?: (value?: unknown) => void
 
-  private lastOffset:Number
+  private lastOffset: Number
   private hasBeenUpToDate: Boolean = false
   private isUpToDate: Boolean = false
 
@@ -127,7 +127,10 @@ export class ShapeStream {
 
   shapeId?: string
 
-  constructor(options: ShapeStreamOptions, backoffOptions: BackoffOptions = BackoffDefaults) {
+  constructor(
+    options: ShapeStreamOptions,
+    backoffOptions: BackoffOptions = BackoffDefaults
+  ) {
     this.instanceId = Math.random()
 
     this.validateOptions(options)
@@ -144,7 +147,7 @@ export class ShapeStream {
     })
   }
 
-  setLiveMode (value: Boolean) {
+  setLiveMode(value: Boolean) {
     this.liveMode = value
   }
 
@@ -219,15 +222,13 @@ export class ShapeStream {
               })
             }
           })
-      }
-      catch (e) {
+      } catch (e) {
         if (signal?.aborted) {
           // Break out of while loop when the user aborts the client.
           this.isPaused = false
 
           break
-        }
-        else {
+        } else {
           // Exponentially backoff on errors.
           // Wait for the current delay duration
           await new Promise((resolve) => setTimeout(resolve, delay))
@@ -241,7 +242,7 @@ export class ShapeStream {
       }
     }
 
-    if (!(this.isPaused)) {
+    if (!this.isPaused) {
       this.outsideResolve && this.outsideResolve()
     }
   }
@@ -254,7 +255,7 @@ export class ShapeStream {
     return this.closedPromise
   }
 
-  async pause () {
+  async pause() {
     this.pausedPromise = new Promise((resolve) => {
       this.pausedResolve = resolve
     })
@@ -264,7 +265,7 @@ export class ShapeStream {
     return pausedPromise
   }
 
-  async resume () {
+  async resume() {
     return this.start()
   }
 
@@ -304,7 +305,9 @@ export class ShapeStream {
   }
 
   private notifyUpToDateSubscribers() {
-    this.upToDateSubscribers.forEach((callback) => { callback() })
+    this.upToDateSubscribers.forEach((callback) => {
+      callback()
+    })
   }
 
   private validateOptions(options: ShapeStreamOptions): void {
@@ -399,11 +402,15 @@ export class Shape {
   private stream: ShapeStream
 
   private data: ShapeData = new Map()
-  private subscribers = new Map<string, ShapeChangedCallback>();
+  private subscribers = new Map<string, ShapeChangedCallback>()
 
   private isSyncing = false
 
-  constructor(definition: ShapeDefinition, options: ShapeOptions, backoffOptions?: BackoffOptions) {
+  constructor(
+    definition: ShapeDefinition,
+    options: ShapeOptions,
+    backoffOptions?: BackoffOptions
+  ) {
     this.aborter = new AbortController()
     this.definition = definition
 
@@ -428,8 +435,7 @@ export class Shape {
     return new Promise((resolve) => {
       if (this.stream.hasBeenUpToDate) {
         resolve(this.value)
-      }
-      else {
+      } else {
         this.stream.subscribeOnceToUpToDate(() => {
           resolve(this.value)
         })
@@ -441,8 +447,7 @@ export class Shape {
     return new Promise((resolve) => {
       if (this.stream.isUpToDate) {
         resolve(this.value)
-      }
-      else {
+      } else {
         this.stream.subscribeOnceToUpToDate(() => {
           resolve(this.value)
         })

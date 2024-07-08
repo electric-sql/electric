@@ -193,6 +193,32 @@ defmodule Electric.ShapeCache.InMemoryStorageTest do
     end
   end
 
+  describe "has_log_entry?/3" do
+    test "returns a boolean indicating whether there is a log entry with such an offset", %{
+      opts: opts
+    } do
+      shape_id = "test_shape"
+      lsn = Lsn.from_integer(1000)
+      xid = 1
+
+      changes = [
+        %Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "123", "name" => "Test"}
+        }
+      ]
+
+      :ok = InMemoryStorage.append_to_log!(shape_id, lsn, xid, changes, opts)
+
+      assert InMemoryStorage.has_log_entry?(shape_id, 1000, opts)
+      refute InMemoryStorage.has_log_entry?(shape_id, 1001, opts)
+    end
+
+    test "should return false when there is no log", %{opts: opts} do
+      refute InMemoryStorage.has_log_entry?("shape_id", 1001, opts)
+    end
+  end
+
   describe "cleanup!/2" do
     test "removes all data for a shape", %{opts: opts} do
       shape_id = "test_shape"

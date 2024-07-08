@@ -18,10 +18,14 @@ else
 end
 
 enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)
+cache_max_age = env!("CACHE_MAX_AGE", :integer, 60)
+cache_stale_age = env!("CACHE_STALE_AGE", :integer, 60 * 5)
 statsd_host = env!("STATSD_HOST", :string?, nil)
 
 config :electric,
   allow_shape_deletion: enable_integration_testing,
+  cache_max_age: cache_max_age,
+  cache_stale_age: cache_stale_age,
   # Used in telemetry
   environment: config_env(),
   instance_id: env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4()),
