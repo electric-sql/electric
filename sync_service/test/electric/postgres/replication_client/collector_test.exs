@@ -1,5 +1,5 @@
 defmodule Electric.Postgres.ReplicationClient.CollectorTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   alias Electric.Postgres.ReplicationClient.Collector
   alias Electric.Postgres.LogicalReplication.Messages, as: LR
 
@@ -68,6 +68,27 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
     assert log =~ "Schema for the table public.users had changed"
   end
 
+  test "collector logs information when receiving a generic message",
+       %{collector: collector} do
+    message = %LR.Message{prefix: "test", content: "hello world"}
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        Collector.handle_message(message, collector)
+      end)
+
+    assert log =~ "Got a message from PG via logical replication"
+  end
+
+  test "collector does nothing on origin & type messages",
+       %{collector: collector} do
+    origin = %LR.Origin{name: "another origin"}
+    type = %LR.Type{name: "custom_type"}
+
+    assert collector == Collector.handle_message(origin, collector)
+    assert collector == Collector.handle_message(type, collector)
+  end
+
   test "collector stores received insert when the relation is known", %{collector: collector} do
     collector =
       Collector.handle_message(
@@ -110,6 +131,34 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
                  %UpdatedRecord{
                    relation: {"public", "users"},
                    old_record: %{"id" => "123"},
+                   record: %{"id" => "124"}
+                 }
+               ]
+             }
+           } = updated_collector
+  end
+
+  test "collector works for empty old data on updates", %{collector: collector} do
+    collector =
+      Collector.handle_message(
+        %LR.Begin{final_lsn: 123, commit_timestamp: DateTime.utc_now(), xid: 456},
+        collector
+      )
+
+    update_msg = %LR.Update{
+      relation_id: 1,
+      old_tuple_data: nil,
+      tuple_data: ["124"]
+    }
+
+    updated_collector = Collector.handle_message(update_msg, collector)
+
+    assert %Collector{
+             transaction: %Transaction{
+               changes: [
+                 %UpdatedRecord{
+                   relation: {"public", "users"},
+                   old_record: %{},
                    record: %{"id" => "124"}
                  }
                ]

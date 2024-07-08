@@ -96,6 +96,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def cleanup!(shape_id, opts) do
     :ets.match_delete(opts.snapshot_ets_table, {{shape_id, :_}, :_})
     :ets.match_delete(opts.log_ets_table, {{shape_id, :_}, :_, :_, :_, :_})
+    :ok
   end
 
   @doc false

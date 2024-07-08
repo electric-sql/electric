@@ -6,6 +6,7 @@ defmodule Electric.MixProject do
       app: :electric,
       version: "0.1.0",
       elixir: "~> 1.17",
+      elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
@@ -17,7 +18,16 @@ defmodule Electric.MixProject do
           include_executables_for: [:unix]
         ]
       ],
-      default_release: :electric
+      default_release: :electric,
+      test_coverage: [
+        ignore_modules: [
+          Electric,
+          Electric.Telemetry,
+          Electric.Postgres.ReplicationClient.State,
+          ~r/Electric.Postgres.LogicalReplication.Messages.*/,
+          ~r/^Support.*/
+        ]
+      ]
     ]
   end
 
@@ -28,6 +38,9 @@ defmodule Electric.MixProject do
       mod: {Electric.Application, []}
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
     [
@@ -44,7 +57,8 @@ defmodule Electric.MixProject do
       {:dotenvy, "~> 0.8"},
       {:telemetry_poller, "~> 1.1"},
       {:telemetry_metrics_statsd, "~> 0.7"},
-      {:ecto, "~> 3.11"}
+      {:ecto, "~> 3.11"},
+      {:mox, "~> 1.1", only: [:test]}
     ]
   end
 
