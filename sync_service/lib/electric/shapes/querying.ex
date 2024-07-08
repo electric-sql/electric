@@ -1,6 +1,10 @@
 defmodule Electric.Shapes.Querying do
   alias Electric.Shapes.Shape
 
+  @type row :: [term()]
+
+  @spec stream_initial_data(DBConnection.t(), Shape.t()) ::
+          {Postgrex.Query.t(), Enumerable.t(row())}
   def stream_initial_data(conn, %Shape{} = shape) do
     {schema, table} = shape.root_table
 

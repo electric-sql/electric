@@ -1,0 +1,213 @@
+defmodule Electric.Plug.ServeShapePlugTest do
+  use ExUnit.Case, async: true
+  import Plug.Conn
+
+  alias Electric.Postgres.Lsn
+  alias Electric.Plug.ServeShapePlug
+  alias Electric.Shapes.Shape
+  alias Electric.ShapeCache.MockStorage
+
+  import Mox
+  setup :verify_on_exit!
+  @moduletag :capture_log
+
+  @test_shape %Shape{root_table: {"public", "users"}}
+  @test_shape_id "test-shape-id"
+  @test_offset 100
+  @registry Registry.ServeShapePlugTest
+
+  setup do
+    start_link_supervised!({Registry, keys: :duplicate, name: @registry})
+    :ok
+  end
+
+  def conn(method, params, "?" <> _ = query_string) do
+    # Pass mock dependencies to the plug
+    config = %{
+      shape_cache: {Electric.ShapeCacheMock, []},
+      storage: {MockStorage, []},
+      registry: @registry,
+      long_poll_timeout: 20_000
+    }
+
+    Plug.Test.conn(method, "/" <> query_string, params)
+    |> assign(:config, config)
+  end
+
+  describe "ServeShapePlug" do
+    test "returns 400 for invalid params" do
+      conn =
+        conn(:get, %{"shape_definition" => ".invalid_shape"}, "?offset=invalid")
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "offset" => ["must be integer"],
+               "shape_definition" => ["table name does not match expected format"]
+             }
+    end
+
+    test "returns snapshot when offset is -1" do
+      Electric.ShapeCacheMock
+      |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
+        {@test_shape_id, @test_offset}
+      end)
+      |> expect(:wait_for_snapshot, fn _, @test_shape_id, _ -> :ready end)
+
+      MockStorage
+      |> expect(:get_snapshot, fn @test_shape_id, _opts -> {0, [%{key: "snapshot"}]} end)
+      |> expect(:get_log_stream, fn @test_shape_id, 0, _opts -> [%{key: "log"}] end)
+
+      conn =
+        conn(:get, %{"shape_definition" => "public.users"}, "?offset=-1")
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 200
+
+      assert Jason.decode!(conn.resp_body) == [
+               %{"key" => "snapshot"},
+               %{"key" => "log"},
+               %{"headers" => %{"control" => "up-to-date"}}
+             ]
+
+      assert Plug.Conn.get_resp_header(conn, "etag") == ["#{@test_shape_id}:#{@test_offset}"]
+      assert Plug.Conn.get_resp_header(conn, "x-electric-shape-id") == [@test_shape_id]
+    end
+
+    test "returns log when offset is >= 0" do
+      expect(Electric.ShapeCacheMock, :get_or_create_shape_id, fn @test_shape, _opts ->
+        {@test_shape_id, @test_offset}
+      end)
+
+      expect(MockStorage, :get_log_stream, fn @test_shape_id, 50, _opts ->
+        [%{key: "log1"}, %{key: "log2"}]
+      end)
+
+      conn =
+        conn(:get, %{"shape_definition" => "public.users"}, "?offset=50")
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 200
+
+      assert Jason.decode!(conn.resp_body) == [
+               %{"key" => "log1"},
+               %{"key" => "log2"},
+               %{"headers" => %{"control" => "up-to-date"}}
+             ]
+
+      assert Plug.Conn.get_resp_header(conn, "etag") == ["#{@test_shape_id}:#{@test_offset}"]
+      assert Plug.Conn.get_resp_header(conn, "x-electric-shape-id") == [@test_shape_id]
+    end
+
+    test "returns 304 Not Modified when If-None-Match matches ETag" do
+      expect(Electric.ShapeCacheMock, :get_or_create_shape_id, fn @test_shape, _opts ->
+        {@test_shape_id, @test_offset}
+      end)
+
+      conn =
+        conn(:get, %{"shape_definition" => "public.users"}, "?offset=50")
+        |> put_req_header("if-none-match", ~s("#{@test_shape_id}:#{@test_offset}"))
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 304
+      assert conn.resp_body == ""
+    end
+
+    test "handles live updates" do
+      expect(Electric.ShapeCacheMock, :get_or_create_shape_id, fn @test_shape, _opts ->
+        {@test_shape_id, @test_offset}
+      end)
+
+      MockStorage
+      |> expect(:get_log_stream, fn @test_shape_id, 50, _opts -> [] end)
+      |> expect(:get_log_stream, fn @test_shape_id, 50, _opts -> ["test result"] end)
+
+      task =
+        Task.async(fn ->
+          conn(:get, %{"shape_definition" => "public.users"}, "?offset=50&live=true")
+          |> ServeShapePlug.call([])
+        end)
+
+      Process.sleep(100)
+
+      # Simulate new changes arriving
+      Registry.dispatch(@registry, @test_shape_id, fn [{pid, ref}] ->
+        send(pid, {ref, :new_changes, Lsn.from_string("0/10")})
+      end)
+
+      # The conn process should exit after sending the response
+      conn = Task.await(task)
+
+      assert conn.status == 200
+
+      assert Jason.decode!(conn.resp_body) == [
+               "test result",
+               %{"headers" => %{"control" => "up-to-date"}}
+             ]
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+               "no-store, no-cache, must-revalidate, max-age=0"
+             ]
+
+      assert Plug.Conn.get_resp_header(conn, "pragma") == ["no-cache"]
+      assert Plug.Conn.get_resp_header(conn, "expires") == ["0"]
+    end
+
+    test "handles shape rotation" do
+      expect(Electric.ShapeCacheMock, :get_or_create_shape_id, fn @test_shape, _opts ->
+        {@test_shape_id, @test_offset}
+      end)
+
+      expect(MockStorage, :get_log_stream, fn @test_shape_id, 50, _opts -> [] end)
+
+      task =
+        Task.async(fn ->
+          conn(:get, %{"shape_definition" => "public.users"}, "?offset=50&live=true")
+          |> ServeShapePlug.call([])
+        end)
+
+      Process.sleep(100)
+
+      # Simulate shape rotation
+      Registry.dispatch(@registry, @test_shape_id, fn [{pid, ref}] ->
+        send(pid, {ref, :shape_rotation})
+      end)
+
+      conn = Task.await(task)
+
+      # The conn process should exit after sending the response
+      refute Process.alive?(conn.owner)
+
+      assert conn.status == 200
+      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "up-to-date"}}]
+    end
+
+    test "sends an up-to-date response after a timeout if no changes are observed" do
+      expect(Electric.ShapeCacheMock, :get_or_create_shape_id, fn @test_shape, _opts ->
+        {@test_shape_id, @test_offset}
+      end)
+
+      expect(MockStorage, :get_log_stream, fn @test_shape_id, 50, _opts -> [] end)
+
+      conn =
+        conn(:get, %{"shape_definition" => "public.users"}, "?offset=50&live=true")
+        |> put_in_config(:long_poll_timeout, 100)
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 200
+
+      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "up-to-date"}}]
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+               "no-store, no-cache, must-revalidate, max-age=0"
+             ]
+
+      assert Plug.Conn.get_resp_header(conn, "pragma") == ["no-cache"]
+      assert Plug.Conn.get_resp_header(conn, "expires") == ["0"]
+    end
+  end
+
+  defp put_in_config(%Plug.Conn{assigns: assigns} = conn, key, value),
+    do: %{conn | assigns: put_in(assigns, [:config, key], value)}
+end

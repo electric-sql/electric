@@ -20,7 +20,7 @@ defmodule Electric.Postgres.Lsn do
 
   ## Examples
 
-      iex> to_iolist(%#{Lsn}{segment: 0, offset: 0})
+      iex> to_iolist(%#{Lsn}{})
       ["0", ?/, "0"]
 
       iex> to_iolist(%#{Lsn}{segment: 127, offset: 1024})
@@ -97,6 +97,14 @@ defmodule Electric.Postgres.Lsn do
     int
   end
 
+  @doc """
+  Decode a binary representation of the LSN into a struct. Reverses `encode_bin/1`
+
+  ## Examples
+
+      iex> decode_bin(encode_bin(%#{Lsn}{}))
+      %#{Lsn}{}
+  """
   @spec decode_bin(binary) :: t
   def decode_bin(<<segment::32, offset::32>>), do: %Lsn{segment: segment, offset: offset}
 
@@ -110,8 +118,12 @@ defmodule Electric.Postgres.Lsn do
 
       iex> compare(from_integer(0), from_integer(1))
       :lt
+      iex> compare(from_string("1/0"), from_string("2/0"))
+      :lt
 
       iex> compare(from_integer(99), from_integer(98))
+      :gt
+      iex> compare(from_string("2/0"), from_string("1/0"))
       :gt
 
       iex> compare(from_integer(127_000_256), from_string("0/791DEC0"))

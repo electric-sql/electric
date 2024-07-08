@@ -3,12 +3,25 @@ defmodule Electric.Utils do
   Generate a random UUID v4.
 
   Code taken from Ecto: https://github.com/elixir-ecto/ecto/blob/v3.10.2/lib/ecto/uuid.ex#L174
+
+  ## Examples
+
+      iex> Regex.match?(~r/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/, uuid4())
+      true
   """
   def uuid4() do
     <<u0::48, _::4, u1::12, _::2, u2::62>> = :crypto.strong_rand_bytes(16)
     encode_uuid(<<u0::48, 4::4, u1::12, 2::2, u2::62>>)
   end
 
+  @doc """
+  Encode binary representation of a UUID into a string
+
+  ## Examples
+
+      iex> encode_uuid(<<1, 35, 69, 103, 137, 171, 76, 222, 143, 227, 251, 149, 223, 249, 31, 215>>)
+      "01234567-89ab-4cde-8fe3-fb95dff91fd7"
+  """
   def encode_uuid(
         <<a1::4, a2::4, a3::4, a4::4, a5::4, a6::4, a7::4, a8::4, b1::4, b2::4, b3::4, b4::4,
           c1::4, c2::4, c3::4, c4::4, d1::4, d2::4, d3::4, d4::4, e1::4, e2::4, e3::4, e4::4,
@@ -39,86 +52,15 @@ defmodule Electric.Utils do
   defp e(15), do: ?f
 
   @doc """
-  Validate a UUID
-
-  Code taken from Ecto: https://github.com/elixir-ecto/ecto/blob/v3.10.2/lib/ecto/uuid.ex#L25
-  """
-  @spec validate_uuid!(binary) :: String.t()
-  def validate_uuid!(
-        <<a1, a2, a3, a4, a5, a6, a7, a8, ?-, b1, b2, b3, b4, ?-, c1, c2, c3, c4, ?-, d1, d2, d3,
-          d4, ?-, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12>>
-      ) do
-    <<c(a1), c(a2), c(a3), c(a4), c(a5), c(a6), c(a7), c(a8), ?-, c(b1), c(b2), c(b3), c(b4), ?-,
-      c(c1), c(c2), c(c3), c(c4), ?-, c(d1), c(d2), c(d3), c(d4), ?-, c(e1), c(e2), c(e3), c(e4),
-      c(e5), c(e6), c(e7), c(e8), c(e9), c(e10), c(e11), c(e12)>>
-  end
-
-  @spec validate_uuid(binary) :: {:ok, String.t()} | :error
-  def validate_uuid(uuid) do
-    try do
-      {:ok, validate_uuid!(uuid)}
-    rescue
-      FunctionClauseError -> :error
-    end
-  end
-
-  @compile {:inline, c: 1}
-
-  defp c(?0), do: ?0
-  defp c(?1), do: ?1
-  defp c(?2), do: ?2
-  defp c(?3), do: ?3
-  defp c(?4), do: ?4
-  defp c(?5), do: ?5
-  defp c(?6), do: ?6
-  defp c(?7), do: ?7
-  defp c(?8), do: ?8
-  defp c(?9), do: ?9
-  defp c(?A), do: ?a
-  defp c(?B), do: ?b
-  defp c(?C), do: ?c
-  defp c(?D), do: ?d
-  defp c(?E), do: ?e
-  defp c(?F), do: ?f
-  defp c(?a), do: ?a
-  defp c(?b), do: ?b
-  defp c(?c), do: ?c
-  defp c(?d), do: ?d
-  defp c(?e), do: ?e
-  defp c(?f), do: ?f
-
-  @doc """
   Output a 2-tuple relation (table) reference as pg-style `"schema"."table"`.
+
+  ## Examples
+
+      iex> inspect_relation({"schema", "table"})
+      ~S|"schema"."table"|
   """
   @spec inspect_relation({String.t(), String.t()}) :: String.t()
   def inspect_relation({schema, name}) do
     "#{inspect(schema)}.#{inspect(name)}"
-  end
-
-  @doc """
-  Parse a markdown table from a string
-
-  Options:
-  - `after:` - taking a first table that comes right after a given substring.
-  """
-  @spec parse_md_table(String.t(), [{:after, String.t()}]) :: [[String.t(), ...]]
-  def parse_md_table(string, opts) do
-    string =
-      case Keyword.fetch(opts, :after) do
-        {:ok, split_on} -> List.last(String.split(string, split_on))
-        :error -> string
-      end
-
-    string
-    |> String.split("\n", trim: true)
-    |> Enum.drop_while(&(not String.starts_with?(&1, "|")))
-    |> Enum.take_while(&String.starts_with?(&1, "|"))
-    # Header and separator
-    |> Enum.drop(2)
-    |> Enum.map(fn line ->
-      line
-      |> String.split("|", trim: true)
-      |> Enum.map(&String.trim/1)
-    end)
   end
 end
