@@ -45,6 +45,8 @@ defmodule Electric.ShapeCache.Storage do
             ) :: :ok
   @doc "Get stream of the log for a shape since a given offset"
   @callback get_log_stream(shape_id(), integer(), compiled_opts()) :: Enumerable.t()
+  @doc "Check if log entry for given shape ID and offset exists"
+  @callback has_log_entry?(shape_id(), integer(), compiled_opts()) :: boolean()
   @doc "Clean up snapshots/logs for a shape id"
   @callback cleanup!(shape_id(), compiled_opts()) :: :ok
 
@@ -85,6 +87,11 @@ defmodule Electric.ShapeCache.Storage do
   @spec get_log_stream(shape_id(), integer(), storage()) :: Enumerable.t()
   def get_log_stream(shape_id, offset, {mod, opts}),
     do: apply(mod, :get_log_stream, [shape_id, offset, opts])
+
+  @doc "Check if log entry for given shape ID and offset exists"
+  @spec has_log_entry?(shape_id(), non_neg_integer(), storage()) :: boolean()
+  def has_log_entry?(shape_id, offset, {mod, opts}),
+    do: apply(mod, :has_log_entry?, [shape_id, offset, opts])
 
   @doc "Clean up snapshots/logs for a shape id"
   @spec cleanup!(shape_id(), storage()) :: :ok

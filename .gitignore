@@ -5,3 +5,4 @@ wal
 test-dbs
 shape-data.json
 caching/nginx_cache
+.vscode

@@ -15,6 +15,7 @@ defmodule Electric.ShapeCache.StorageTest do
     |> Mox.expect(:get_snapshot, fn _, :opts -> {1, []} end)
     |> Mox.expect(:append_to_log!, fn _, _, _, _, :opts -> :ok end)
     |> Mox.expect(:get_log_stream, fn _, _, :opts -> [] end)
+    |> Mox.expect(:has_log_entry?, fn _, _, :opts -> [] end)
     |> Mox.expect(:cleanup!, fn _, :opts -> :ok end)
 
     Storage.make_new_snapshot!(shape_id, %{}, [], storage)
@@ -22,6 +23,7 @@ defmodule Electric.ShapeCache.StorageTest do
     Storage.get_snapshot(shape_id, storage)
     Storage.append_to_log!(shape_id, 1, 1, [], storage)
     Storage.get_log_stream(shape_id, -1, storage)
+    Storage.has_log_entry?(shape_id, 1, storage)
     Storage.cleanup!(shape_id, storage)
   end
 end

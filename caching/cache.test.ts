@@ -1,9 +1,16 @@
-import { describe, it, expect, assert, beforeAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  assert,
+  beforeAll,
+  beforeEach,
+  afterAll,
+} from 'vitest'
 import fs from 'fs/promises'
 import path from 'path'
 import { Client } from 'pg'
 import { v4 as uuidv4 } from 'uuid'
-import { Message } from '../types'
 
 const dbClient = new Client({
   host: `localhost`,
@@ -61,6 +68,43 @@ async function initializeDb(): Promise<void> {
   }
 }
 
+async function clearAllItems() {
+  await Promise.all([
+    dbClient.query(`TRUNCATE TABLE issues;`),
+    dbClient.query(`TRUNCATE TABLE foo;`),
+  ])
+}
+
+async function addItems(table: `issues` | `foo`, numItems: number) {
+  try {
+    await dbClient.query(`BEGIN`)
+    const inserts = Array.from({ length: numItems }, (_, idx) => {
+      const uuid = uuidv4()
+      return dbClient.query(`INSERT INTO ${table}(id, title) VALUES($1, $2)`, [
+        uuid,
+        `Item ${idx}`,
+      ])
+    })
+    await Promise.all(inserts)
+    await dbClient.query(`COMMIT`)
+  } catch (e) {
+    await dbClient.query(`ROLLBACK`)
+    throw e
+  }
+}
+
+async function clearShape(table: string, shapeId?: string) {
+  const res = await fetch(
+    `${PROXY_URL}/shape/${table}${shapeId ? `?shapeId=${shapeId}` : ``}`,
+    {
+      method: `DELETE`,
+    }
+  )
+  if (!res.ok) {
+    throw new Error(`Could not delete shape ${table} with ID ${shapeId}`)
+  }
+}
+
 async function sleep(time: number) {
   await new Promise((resolve) => setTimeout(resolve, time))
 }
@@ -76,10 +120,13 @@ async function clearCache(): Promise<void> {
 
 const maxAge = 1 // seconds
 const staleAge = 3 // seconds
-const scopeAge = 5 // seconds, after how long an idle shape goes out of scope
 
 beforeAll(async () => {
   await dbClient.connect()
+})
+
+afterAll(async () => {
+  await dbClient.end()
 })
 
 describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
@@ -171,10 +218,10 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
 
 describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
   beforeAll(async () => await initializeDb())
-  beforeEach(async () => await clearCache())
-
-  it(`mock`, () => {
-    assert(true)
+  beforeEach(async () => {
+    await clearAllItems()
+    await clearCache()
+    await addItems(`issues`, 10)
   })
 
   it(`tells client to resync when shape is out of scope`, async () => {
@@ -184,6 +231,7 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
     expect(client1Res.status).toBe(200)
     const originalShapeId =
       client1Res.headers.get(`x-electric-shape-id`) ?? undefined
+    assert(originalShapeId, `Should have shape ID`)
     expect(getCacheStatus(client1Res)).toBe(CacheStatus.MISS)
     //const messages = client1Res.status === 204 ? [] : await client1Res.json()
 
@@ -200,53 +248,45 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
 
     expect(getCacheStatus(client2Res)).toBe(CacheStatus.HIT)
 
-    const messages: Message[] = await client2Res.json()
-    let latestOffset = -1
-    messages.forEach((msg) => {
-      if (msg.offset && msg.offset > latestOffset) {
-        latestOffset = msg.offset
-      }
-    })
+    const latestOffset = client2Res.headers.get(`x-electric-chunk-last-offset`)
+    assert(latestOffset, `latestOffset should be defined`)
 
-    // Now wait long enough for shape to get out of scope
-    await sleep(scopeAge + 40)
+    // Now GC the shape
+    await clearShape(`issues`, originalShapeId)
 
     // Now try to go live
     // should tell you to go back to initial sync
     // because the shape is out of scope
-    await fetch(`${PROXY_URL}/shape/issues?offset=${latestOffset}&live`, {})
+    const liveRes = await fetch(
+      `${PROXY_URL}/shape/issues?offset=${latestOffset}&shape_id=${originalShapeId}&live`,
+      {}
+    )
+    expect(liveRes.status).toBe(409)
+    const liveBody = await liveRes.json()
+    expect(liveBody.message).toBe(
+      `Shape offset too far behind. Resync with latest shape ID.`
+    )
+    const redirectLocation = liveRes.headers.get(`location`)
+    assert(redirectLocation)
 
-    // TODO: server should GC idle shapes after a while
-    //       and should return an error response
-    //       if the shape ID does not exist
-    //       --> once it does that, check for the error response here
-
-    // Do an initial sync again but with a random seed
-    // such that we don't hit the cache
-
-    // An optimization here is that the server can return the new shapeId when
-    // it tells the client to refetch — this would then be the "cache buster".
-    // The advantage here is if there's tons of clients all re-requesting, they'll
-    // hit the CDN
     const newCacheIgnoredSyncRes = await fetch(
-      `${PROXY_URL}/shape/issues?offset=-1&ignoreCache=${Date.now()}`,
+      `${PROXY_URL}${redirectLocation}`,
       {}
     )
 
     expect(newCacheIgnoredSyncRes.status).toBe(200)
+    expect(getCacheStatus(newCacheIgnoredSyncRes)).toBe(CacheStatus.MISS)
     const cacheBustedShapeId =
-      newCacheIgnoredSyncRes.headers.get(`x-electric-shape-id`) ?? undefined
+      newCacheIgnoredSyncRes.headers.get(`x-electric-shape-id`)
+    assert(cacheBustedShapeId)
     expect(cacheBustedShapeId).not.toBe(originalShapeId)
 
-    // Then try do that and check that we get new shape id (will fail)
-    const newInitialSyncRes = await fetch(
-      `${PROXY_URL}/shape/issues?offset=-1`,
-      {}
-    )
+    // Then try do that and check that we get new shape id
+    const newInitialSyncRes = await fetch(`${PROXY_URL}${redirectLocation}`, {})
     const cachedShapeId =
       newInitialSyncRes.headers.get(`x-electric-shape-id`) ?? undefined
     expect(newInitialSyncRes.status).toBe(200)
-    expect(getCacheStatus(newInitialSyncRes)).toBe(CacheStatus.MISS) // will fail, wil be a hit
+    expect(getCacheStatus(newInitialSyncRes)).toBe(CacheStatus.HIT)
     expect(cachedShapeId, `Got old shape id that is out of scope`).not.toBe(
       originalShapeId
     )

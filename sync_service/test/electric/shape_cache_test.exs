@@ -259,7 +259,7 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
-  describe "handle_truncate/3" do
+  describe "handle_truncate/2" do
     test "cleans up shape data and rotates the shape id",
          %{storage: storage} = ctx do
       %{shape_cache_opts: opts} =
@@ -292,6 +292,50 @@ defmodule Electric.ShapeCacheTest do
       assert Enum.count(Storage.get_log_stream(shape_id, 0, storage)) == 1
 
       ShapeCache.handle_truncate(opts[:server], shape_id)
+
+      # Wait a bit for the async cleanup to complete
+      Process.sleep(100)
+
+      refute Storage.snapshot_exists?(shape_id, storage)
+      assert Enum.count(Storage.get_log_stream(shape_id, 0, storage)) == 0
+      {shape_id2, _} = ShapeCache.get_or_create_shape_id(shape, opts)
+      assert shape_id != shape_id2
+    end
+  end
+
+  describe "clean_shape/2" do
+    test "cleans up shape data and rotates the shape id",
+         %{storage: storage} = ctx do
+      %{shape_cache_opts: opts} =
+        with_shape_cache(Map.put(ctx, :pool, nil),
+          create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
+            GenServer.cast(parent, {:snapshot_xmin_known, shape_id, shape, 10})
+            Storage.make_new_snapshot!(shape_id, @basic_query_meta, [["test"]], storage)
+            GenServer.cast(parent, {:snapshot_ready, shape_id})
+          end
+        )
+
+      shape = %Shape{root_table: {"public", "items"}}
+      {shape_id, _} = ShapeCache.get_or_create_shape_id(shape, opts)
+      assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id, shape)
+
+      Storage.append_to_log!(
+        shape_id,
+        Lsn.from_integer(1000),
+        1,
+        [
+          %Electric.Replication.Changes.NewRecord{
+            relation: {"public", "items"},
+            record: %{"id" => "1", "name" => "Alice"}
+          }
+        ],
+        storage
+      )
+
+      assert Storage.snapshot_exists?(shape_id, storage)
+      assert Enum.count(Storage.get_log_stream(shape_id, 0, storage)) == 1
+
+      ShapeCache.clean_shape(opts[:server], shape_id)
 
       # Wait a bit for the async cleanup to complete
       Process.sleep(100)
