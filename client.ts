@@ -308,8 +308,6 @@ export class ShapeStream {
  *     shape.subscribe(shapeData => {
  *       console.log(shapeData)
  *     })
- *
- *
  */
 export class Shape {
   private stream: ShapeStream

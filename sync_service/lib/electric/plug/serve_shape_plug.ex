@@ -220,7 +220,8 @@ defmodule Electric.Plug.ServeShapePlug do
         # and letting the client handle it on reconnection is good enough.
         send_resp(conn, 200, Jason.encode_to_iodata!(@up_to_date))
     after
-      long_poll_timeout -> send_resp(conn, 200, Jason.encode_to_iodata!(@up_to_date))
+      # If we timeout, return an empty body and 204 as there's no response body.
+      long_poll_timeout -> send_resp(conn, 204, Jason.encode_to_iodata!(@up_to_date))
     end
   end
 end
