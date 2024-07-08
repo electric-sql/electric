@@ -52,15 +52,16 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  plug :fetch_query_params
-  plug :put_resp_content_type, "application/json"
-  plug :validate_query_params
-  plug :load_shape_info
-  plug :validate_shape_offset
-  plug :generate_etag
-  plug :validate_and_put_etag
-  plug :put_resp_cache_headers
-  plug :serve_log_or_snapshot
+  plug(:fetch_query_params)
+  plug(:cors)
+  plug(:put_resp_content_type, "application/json")
+  plug(:validate_query_params)
+  plug(:load_shape_info)
+  plug(:validate_shape_offset)
+  plug(:generate_etag)
+  plug(:validate_and_put_etag)
+  plug(:put_resp_cache_headers)
+  plug(:serve_log_or_snapshot)
 
   defp validate_query_params(%Plug.Conn{} = conn, _) do
     all_params =
@@ -80,6 +81,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp load_shape_info(%Plug.Conn{} = conn, _) do
     Logger.info("Query String: #{conn.query_string}")
+
     {shape_id, last_offset} =
       Shapes.get_or_create_shape_id(conn.assigns.shape_definition, conn.assigns.config)
 
@@ -170,6 +172,13 @@ defmodule Electric.Plug.ServeShapePlug do
         "max-age=#{conn.assigns.config[:max_age]}, stale-while-revalidate=#{conn.assigns.config[:stale_age]}"
       )
     end
+  end
+
+  def cors(conn, _opts) do
+    conn
+    |> Plug.Conn.put_resp_header("access-control-allow-origin", "*")
+    |> Plug.Conn.put_resp_header("access-control-allow-methods", "GET, POST, OPTIONS")
+    |> Plug.Conn.put_resp_header("access-control-allow-headers", "content-type, authorization")
   end
 
   @up_to_date [%{headers: %{control: "up-to-date"}}]
