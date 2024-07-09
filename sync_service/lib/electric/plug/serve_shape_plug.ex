@@ -61,6 +61,7 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   plug :fetch_query_params
+  plug :cors
   plug :put_resp_content_type, "application/json"
   plug :validate_query_params
   plug :load_shape_info
@@ -87,6 +88,8 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp load_shape_info(%Plug.Conn{} = conn, _) do
+    Logger.info("Query String: #{conn.query_string}")
+
     {shape_id, last_offset} =
       Shapes.get_or_create_shape_id(conn.assigns.shape_definition, conn.assigns.config)
 
@@ -179,6 +182,13 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
+  def cors(conn, _opts) do
+    conn
+    |> Plug.Conn.put_resp_header("access-control-allow-origin", "*")
+    |> Plug.Conn.put_resp_header("access-control-allow-methods", "GET, POST, OPTIONS")
+    |> Plug.Conn.put_resp_header("access-control-allow-headers", "content-type, authorization")
+  end
+
   @up_to_date [%{headers: %{control: "up-to-date"}}]
 
   # If offset is -1, we're serving a snapshot
@@ -227,7 +237,8 @@ defmodule Electric.Plug.ServeShapePlug do
         # and letting the client handle it on reconnection is good enough.
         send_resp(conn, 200, Jason.encode_to_iodata!(@up_to_date))
     after
-      long_poll_timeout -> send_resp(conn, 200, Jason.encode_to_iodata!(@up_to_date))
+      # If we timeout, return an empty body and 204 as there's no response body.
+      long_poll_timeout -> send_resp(conn, 204, Jason.encode_to_iodata!(@up_to_date))
     end
   end
 end

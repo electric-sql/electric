@@ -5,16 +5,13 @@ export function useShape(options: ShapeStreamOptions) {
   const [shapeData, setShapeData] = useState<unknown[]>([])
 
   useEffect(() => {
-    const shapeStream = new ShapeStream(options)
-    const shape = new Shape(shapeStream)
-    const subscriptionId = shape.subscribe((map) => {
+    const shape = new Shape(options)
+    const unsubscribe = shape.subscribe((map) => {
       setShapeData([...map.values()])
     })
 
-    shape.sync()
-
     return () => {
-      shape.unsubscribe(subscriptionId)
+      unsubscribe()
     }
   }, [])
 

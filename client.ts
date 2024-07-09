@@ -1,10 +1,9 @@
 import { v4 as uuidv4 } from 'uuid'
 
-import { Message } from './types'
+import { Message, JsonSerializable } from './types'
 
-export type ShapeChangedCallback = (value: Map) => void
-
-export type ShapeData = Map
+export type ShapeData = Map<string, JsonSerializable>
+export type ShapeChangedCallback = (value: ShapeData) => void
 
 // FIXME: Table needs to be qualified.
 // FIXME: Shape definition will be expanded.
@@ -16,6 +15,7 @@ export interface ShapeOptions {
   baseUrl: string
   offset?: number
   shapeId?: string
+  shape: ShapeDefinition
 }
 
 export interface BackoffOptions {
@@ -31,7 +31,6 @@ const BackoffDefaults = {
 }
 
 export interface ShapeStreamOptions extends ShapeOptions {
-  shape: ShapeDefinition
   subscribe?: boolean
   signal?: AbortSignal
 }
@@ -76,54 +75,41 @@ class MessageProcessor {
 /*
  * Consumes a shape stream using long polling. Notifies subscribers
  * when new messages come in. Doesn't maintain any history of the
- * log but does keep track of the offset position and the best way
+ * log but does keep track of the offset position and is the best way
  * to consume the HTTP `GET /shape` api.
  *
  * @constructor
  * @param {ShapeStreamOptions} options
  * @param {BackoffOptions} [backoffOptions]
  *
- * Register a callback function to subscribe to the messages and then
- * call `start()` to start consuming the stream:
+ * Register a callback function to subscribe to the messages.
  *
  *     const stream = new ShapeStream({})
  *     stream.subscribe(console.log)
- *     stream.start()
  *
- * To abruptly stop the stream, call `stop()` or abort the `signal`
+ * To abort the stream, abort the `signal`
  * passed in via the `ShapeStreamOptions`.
  *
- *     stream.stop() // this is final, you can't restart
- *
- * To softly pause the stream after the current fetch has finished
- * call `pause()` and then `resume()` to continue consuming from
- * the previous position without losing the shape ID and offset:
- *
- *     await stream.pause()
- *     stream.resume()
+ *   const aborter = new AbortController()
+ *   const issueStream = new ShapeStream({
+ *     shape: { table },
+ *     baseUrl: `${BASE_URL}`,
+ *     subscribe: true,
+ *     signal: aborter.signal,
+ *   })
+ *   // Later...
+ *   aborter.abort()
  */
 export class ShapeStream {
   private options: ShapeStreamOptions
   private backoffOptions: BackoffOptions
 
-  private instanceId: number
-  private subscribers: Map = new Map<string, MessageProcessor>()
-  private upToDateSubscribers: Map = new Map<string, () => void>()
+  private subscribers = new Map<string, MessageProcessor>()
+  private upToDateSubscribers = new Map<string, () => void>()
 
-  private closedPromise: Promise<unknown>
-  private outsideResolve?: (value?: unknown) => void
-
-  private pausedPromise?: Promise<unknown>
-  private pausedResolve?: (value?: unknown) => void
-
-  private lastOffset: Number
-  private hasBeenUpToDate: Boolean = false
-  private isUpToDate: Boolean = false
-
-  private isPaused: Boolean = false
-  private shouldPause: Boolean = false
-
-  private liveMode: Boolean
+  private lastOffset: number
+  public hasBeenUpToDate: boolean = false
+  public isUpToDate: boolean = false
 
   shapeId?: string
 
@@ -131,56 +117,44 @@ export class ShapeStream {
     options: ShapeStreamOptions,
     backoffOptions: BackoffOptions = BackoffDefaults
   ) {
-    this.instanceId = Math.random()
-
     this.validateOptions(options)
     this.options = { subscribe: true, ...options }
     this.lastOffset = this.options.offset || -1
     this.shapeId = this.options.shapeId
-    this.liveMode = options.subscribe
 
     this.backoffOptions = backoffOptions
 
-    this.outsideResolve
-    this.closedPromise = new Promise((resolve) => {
-      this.outsideResolve = resolve
-    })
-  }
-
-  setLiveMode(value: Boolean) {
-    this.liveMode = value
+    this.start()
   }
 
   async start() {
-    this.isPaused = false
     this.isUpToDate = false
 
-    const { baseUrl, shape, signal, subscribe } = this.options
+    const { baseUrl, shape, signal } = this.options
     const { initialDelay, maxDelay, multiplier } = this.backoffOptions
 
     let attempt = 0
     let delay = initialDelay
 
-    while ((!signal?.aborted && !this.isUpToDate) || this.liveMode) {
-      if (this.shouldPause) {
-        this.isPaused = true
-        this.shouldPause = false
-
-        this.pausedResolve()
-      }
-      if (this.isPaused) {
-        break
-      }
-
+    while ((!signal?.aborted && !this.isUpToDate) || this.options.subscribe) {
       const url = new URL(`${baseUrl}/shape/${shape.table}`)
       url.searchParams.set(`offset`, this.lastOffset.toString())
-      url.searchParams.set(this.isUpToDate ? `live` : `notLive`, ``)
-      // This should probably be a header for better cache breaking?
-      url.searchParams.set(`shapeId`, this.shapeId!)
+      if (this.isUpToDate) {
+        url.searchParams.set(`live`, `true`)
+      }
 
+      if (this.shapeId) {
+        // This should probably be a header for better cache breaking?
+        url.searchParams.set(`shapeId`, this.shapeId!)
+      }
+
+      console.log({
+        url: url.toString(),
+      })
       try {
         await fetch(url.toString(), { signal })
           .then(async (response) => {
+            console.log(`res`, response.ok, response.status)
             if (!response.ok) {
               throw new Error(`HTTP error! Status: ${response.status}`)
             }
@@ -224,9 +198,6 @@ export class ShapeStream {
           })
       } catch (e) {
         if (signal?.aborted) {
-          // Break out of while loop when the user aborts the client.
-          this.isPaused = false
-
           break
         } else {
           // Exponentially backoff on errors.
@@ -241,32 +212,6 @@ export class ShapeStream {
         }
       }
     }
-
-    if (!this.isPaused) {
-      this.outsideResolve && this.outsideResolve()
-    }
-  }
-
-  async stop() {
-    const { signal } = this.options
-
-    signal?.abort()
-
-    return this.closedPromise
-  }
-
-  async pause() {
-    this.pausedPromise = new Promise((resolve) => {
-      this.pausedResolve = resolve
-    })
-
-    this.shouldPause = true
-
-    return pausedPromise
-  }
-
-  async resume() {
-    return this.start()
   }
 
   subscribe(callback: (messages: Message[]) => void | Promise<void>) {
@@ -350,137 +295,46 @@ export class ShapeStream {
  * to simplify developing framework hooks.
  *
  * @constructor
- * @param {ShapeDefinition}
  * @param {ShapeOptions}
  *
- *     const shape = new Shape({table: 'items'}, {baseUrl: 'http://localhost:3000'})
+ *     const shape = new Shape({table: `foo`, baseUrl: 'http://localhost:3000'})
  *
- * Start syncing data:
- *
- *     const value = await shape.sync()
- *
- * Or to sync one time:
- *
- *     const value = await shape.syncOnce()
- *
- * Every time you call `syncOnce` it catches up to the latest data:
- *
- *     let value = await shape.syncOnce()
- *     // ... time passes ...
- *     value = await shape.syncOnce()
- *
- * `isUpToDate` resolves every time the shape is up-to-date again:
+ * `isUpToDate` resolves once the Shape has been fully loaded (and when resuming from being offline):
  *
  *     const value = await shape.isUpToDate
  *
- * `hasSyncedOnce ` resolves when the shape has been up-to-date once:
+ *  Subscribe to updates. Called whenever the shape updates in Postgres.
  *
- *     const value = await shape.hasSyncedOnce
- *
- * So if you want to write a component that blocks on the initial sync but
- * renders immediately thereafter:
- *
- *     shape.sync()
- *     await shape.hasSyncedOnce
- *
- * Or if you want a component that always blocks on syncing the latest data:
- *
- *     await shape.sync()
- *
- * Equivalent to:
- *
- *     shape.sync()
- *     await shape.isUpToDate
- *
- * To stop syncing and teardown subscriptions, etc.
- *
- *     shape.stop()
+ *     shape.subscribe(shapeData => {
+ *       console.log(shapeData)
+ *     })
  */
 export class Shape {
-  private aborter: AbortController
-  private definition: ShapeDefinition
   private stream: ShapeStream
 
   private data: ShapeData = new Map()
   private subscribers = new Map<string, ShapeChangedCallback>()
 
-  private isSyncing = false
-
-  constructor(
-    definition: ShapeDefinition,
-    options: ShapeOptions,
-    backoffOptions?: BackoffOptions
-  ) {
-    this.aborter = new AbortController()
-    this.definition = definition
-
-    const streamOptions = {
-      ...options,
-      shape: definition,
-      signal: this.aborter.signal,
-    }
-
-    this.stream = new ShapeStream(streamOptions, backoffOptions)
+  constructor(options: ShapeOptions, backoffOptions?: BackoffOptions) {
+    this.stream = new ShapeStream(options, backoffOptions)
     this.stream.subscribe(this.process.bind(this))
   }
 
-  get id() {
-    return this.stream.shapeId
-  }
   get value() {
     return this.data
   }
 
-  get hasSyncedOnce(): Promise<Map> {
-    return new Promise((resolve) => {
-      if (this.stream.hasBeenUpToDate) {
-        resolve(this.value)
-      } else {
-        this.stream.subscribeOnceToUpToDate(() => {
-          resolve(this.value)
-        })
-      }
-    })
-  }
-
-  get isUpToDate(): Promise<Map> {
+  get isUpToDate(): Promise<ShapeData> {
     return new Promise((resolve) => {
       if (this.stream.isUpToDate) {
         resolve(this.value)
       } else {
-        this.stream.subscribeOnceToUpToDate(() => {
+        const unsubscribe = this.stream.subscribeOnceToUpToDate(() => {
+          unsubscribe()
           resolve(this.value)
         })
       }
     })
-  }
-
-  async sync(): ShapeData {
-    this.stream.setLiveMode(true)
-
-    if (!this.isSyncing) {
-      this.isSyncing = true
-
-      this.stream.start().then(() => {
-        this.isSyncing = false
-      })
-    }
-
-    return this.isUpToDate
-  }
-
-  async syncOnce(): ShapeData {
-    this.stream.setLiveMode(false)
-
-    if (!this.isSyncing) {
-      this.isSyncing = true
-
-      this.stream.start().then(() => {
-        this.isSyncing = false
-      })
-    }
-
-    return this.hasSyncedOnce
   }
 
   subscribe(callback: ShapeChangedCallback): () => void {
@@ -501,28 +355,26 @@ export class Shape {
     return this.subscribers.size
   }
 
-  async stop() {
-    this.stream.stop()
-  }
-
   private process(messages: Message[]): void {
     let dataMayHaveChanged = false
     let isUpToDate = false
 
     messages.forEach((message) => {
-      switch (message.headers?.[`action`]) {
-        case `insert`:
-        case `update`:
-          this.data.set(message.key, message.value)
-          dataMayHaveChanged = true
+      if (message.key && message.value) {
+        switch (message.headers?.[`action`]) {
+          case `insert`:
+          case `update`:
+            this.data.set(message.key, message.value)
+            dataMayHaveChanged = true
 
-          break
+            break
 
-        case `delete`:
-          this.data.delete(message.key)
-          dataMayHaveChanged = true
+          case `delete`:
+            this.data.delete(message.key)
+            dataMayHaveChanged = true
 
-          break
+            break
+        }
       }
 
       if (message.headers?.[`control`] === `up-to-date`) {

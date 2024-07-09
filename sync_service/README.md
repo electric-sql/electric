@@ -37,5 +37,6 @@ set -a; source .env.dev; set +a
 Run the Elixir app:
 
 ```sh
+mix deps.get
 iex -S mix
 ```
