@@ -111,14 +111,10 @@ async function sleep(time: number) {
 
 async function clearCache(): Promise<void> {
   const cacheDir = path.join(__dirname, `./nginx_cache`)
-  try {
-    await fs.rm(cacheDir, {
-      recursive: true,
-      force: true,
-    })
-  } catch (e) {
-    // Ignore error if the directory doesn't exist.
-  }
+  await fs.rm(cacheDir, {
+    recursive: true,
+    force: true,
+  })
   await fs.mkdir(cacheDir, { recursive: true })
 }
 
