@@ -2,6 +2,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
   use ExUnit.Case, async: true
   import Mox
 
+  alias Electric.Replication.Eval.Parser
   alias Electric.Shapes.Shape
   alias Electric.Postgres.Lsn
   alias Electric.Replication.ShapeLogStorage
@@ -89,7 +90,12 @@ defmodule Electric.Replication.ShapeLogStorageTest do
 
     test "doesn't append to log when change is irrelevant for active shapes", %{server: server} do
       shape_id = "shape1"
-      shape = %Shape{root_table: {"public", "test_table"}}
+
+      shape = %Shape{
+        root_table: {"public", "test_table"},
+        where: Parser.parse_and_validate_expression!("id != 1", %{["id"] => :int4})
+      }
+
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")
@@ -100,7 +106,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
 
       txn = %Transaction{
         xid: xid,
-        changes: [%Changes.NewRecord{relation: {"public", "other table"}, record: %{"id" => "1"}}],
+        changes: [%Changes.NewRecord{relation: {"public", "test_table"}, record: %{"id" => "1"}}],
         lsn: lsn
       }
 

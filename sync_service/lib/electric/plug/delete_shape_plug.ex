@@ -26,7 +26,7 @@ defmodule Electric.Plug.DeleteShapePlug do
   defp validate_query_params(%Plug.Conn{} = conn, _) do
     all_params =
       Map.merge(conn.query_params, conn.path_params)
-      |> Map.take(["shape_definition", "shape_id"])
+      |> Map.take(["root_table", "shape_id"])
       |> Map.put("offset", -1)
 
     case Params.validate(all_params, []) do
@@ -48,7 +48,7 @@ defmodule Electric.Plug.DeleteShapePlug do
     else
       # FIXME: This has a race condition where we accidentally create a snapshot & shape id, but clean
       #        it before snapshot is actually made.
-      with {shape_id, _} <- Shapes.get_or_create_shape_id(conn.assigns.shape_definition),
+      with {shape_id, _} <- Shapes.get_or_create_shape_id(conn.assigns.root_table),
            :ok <- Shapes.clean_shape(shape_id) do
         send_resp(conn, 204, "")
       end

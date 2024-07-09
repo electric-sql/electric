@@ -1,6 +1,8 @@
 import Config
 import Dotenvy
 
+config :elixir, :time_zone_database, Tz.TimeZoneDatabase
+
 if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
