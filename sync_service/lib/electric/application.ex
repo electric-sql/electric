@@ -49,7 +49,7 @@ defmodule Electric.Application do
                 long_poll_timeout: 20_000,
                 max_age: Application.fetch_env!(:electric, :cache_max_age),
                 stale_age: Application.fetch_env!(:electric, :cache_stale_age)},
-             port: 2999}
+             port: 3000}
           ]
         else
           []
