@@ -52,16 +52,16 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  plug(:fetch_query_params)
-  plug(:cors)
-  plug(:put_resp_content_type, "application/json")
-  plug(:validate_query_params)
-  plug(:load_shape_info)
-  plug(:validate_shape_offset)
-  plug(:generate_etag)
-  plug(:validate_and_put_etag)
-  plug(:put_resp_cache_headers)
-  plug(:serve_log_or_snapshot)
+  plug :fetch_query_params
+  plug :cors
+  plug :put_resp_content_type, "application/json"
+  plug :validate_query_params
+  plug :load_shape_info
+  plug :validate_shape_offset
+  plug :generate_etag
+  plug :validate_and_put_etag
+  plug :put_resp_cache_headers
+  plug :serve_log_or_snapshot
 
   defp validate_query_params(%Plug.Conn{} = conn, _) do
     all_params =
@@ -230,7 +230,7 @@ defmodule Electric.Plug.ServeShapePlug do
         send_resp(conn, 200, Jason.encode_to_iodata!(@up_to_date))
     after
       # If we timeout, return an empty body and 204 as there's no response body.
-      long_poll_timeout -> send_resp(conn, 204, Jason.encode_to_iodata!(@up_to_date))
+      long_poll_timeout -> send_resp(conn, 204, "")
     end
   end
 end
