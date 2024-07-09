@@ -1,0 +1,60 @@
+name: TS tests
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: '.tool-versions'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: sync_service/deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('sync_service/**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+      - name: Restore compiled code
+        uses: actions/cache@v4
+        with:
+          path: |
+            sync_service/_build/*/lib
+            !sync_service/_build/*/lib/electric
+          key: ${{ runner.os }}-build-dev-${{ hashFiles('sync_service/**/mix.lock') }}
+      - name: Install dependencies
+        run: mix deps.get && mix deps.compile
+        working-directory: sync_service
+      - name: Compiles without warnings
+        run: mix compile --force --all-warnings --warnings-as-errors
+        working-directory: sync_service
+      - uses: JarvusInnovations/background-action@v1
+        name: Bootstrap System Under Test (SUT)
+        with:
+          run: |
+            mix start_dev
+            mix run --no-halt &
+
+          wait-on: |
+            http://localhost:3000
+
+          tail: true
+          log-output-resume: stderr
+          wait-for: 1m
+          log-output: true
+          log-output-if: failure
+          working-directory: sync_service
+      - run: npm test

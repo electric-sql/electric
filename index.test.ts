@@ -88,7 +88,7 @@ afterAll(async () => {
 })
 
 describe(`HTTP Sync`, () => {
-  it.only(`should work with empty shape/table`, async () => {
+  it(`should work with empty shape/table`, async () => {
     // Get initial data
     const shapeData = new Map()
     const aborter = new AbortController()
@@ -117,13 +117,13 @@ describe(`HTTP Sync`, () => {
     expect(values).toHaveLength(0)
   })
 
-  it.only(`returns a header with the server shape id`, async () => {
+  it(`returns a header with the server shape id`, async () => {
     const res = await fetch(`${BASE_URL}/shape/issues?offset=-1`, {})
     const shapeId = res.headers.get(`x-electric-shape-id`)
     assert.exists(shapeId)
   })
 
-  it.only(`should get initial data`, async () => {
+  it(`should get initial data`, async () => {
     const { client } = context
     // Add an initial row.
     const uuid = uuidv4()
@@ -168,7 +168,7 @@ describe(`HTTP Sync`, () => {
     expect(values[0].title).toEqual(`foo + ${uuid}`)
   })
 
-  it.only(`should get initial data for a second table`, async () => {
+  it(`should get initial data for a second table`, async () => {
     // Get initial data
     const shapeData = new Map()
     const aborter = new AbortController()
@@ -198,7 +198,7 @@ describe(`HTTP Sync`, () => {
     expect(values[0].title).toEqual(`I AM FOO TABLE`)
   })
 
-  it.only(`should get initial data and then receive updates`, async () => {
+  it(`should get initial data and then receive updates`, async () => {
     const { rowId } = context
     assert(rowId !== undefined, `rowId should be defined`)
     const shapeData = new Map()
@@ -245,7 +245,7 @@ describe(`HTTP Sync`, () => {
     })
     context.secondRowId = secondRowId
   })
-  it.only(`multiple clients can get the same data`, async () => {
+  it(`multiple clients can get the same data`, async () => {
     const { rowId, secondRowId } = context
     assert(rowId !== undefined, `rowId should be defined`)
     assert(secondRowId !== undefined, `secondRowId should be defined`)
@@ -324,7 +324,7 @@ describe(`HTTP Sync`, () => {
     await Promise.all([promise1, promise2])
   })
 
-  it.only(`can go offline and then catchup`, async () => {
+  it(`can go offline and then catchup`, async () => {
     const aborter = new AbortController()
     let lastOffset = 0
     const issueStream = new ShapeStream({
@@ -391,7 +391,7 @@ describe(`HTTP Sync`, () => {
     expect(catchupOpsCount).toBe(9)
   })
 
-  it.only(`should return correct caching headers`, async () => {
+  it(`should return correct caching headers`, async () => {
     const res = await fetch(`${BASE_URL}/shape/issues?offset=-1`, {})
     const cacheHeaders = res.headers.get(`cache-control`)
     assert(cacheHeaders !== null, `Response should have cache-control header`)
@@ -417,7 +417,7 @@ describe(`HTTP Sync`, () => {
 
   // We can't test this from the client as this just holds for 20 seconds (the default
   // timeout for long-polling)
-  // it.only(`should return as uncachable if &live is set`, async () => {
+  // it(`should return as uncachable if &live is set`, async () => {
     // const initialRes = await fetch(`${BASE_URL}/shape/issues?offset=-1`, {})
     // const initialcacheHeaders = initialRes.headers.get(`cache-control`)
     // const messages = await initialRes.json()
@@ -446,7 +446,7 @@ describe(`HTTP Sync`, () => {
     // assert(etagHeader === null)
   // })
 
-  it.only(`should revalidate etags`, async () => {
+  it(`should revalidate etags`, async () => {
     const res = await fetch(`${BASE_URL}/shape/issues?offset=-1`, {})
     const messages = await res.json()
     const midOffset = messages.slice(-6)[0].offset
