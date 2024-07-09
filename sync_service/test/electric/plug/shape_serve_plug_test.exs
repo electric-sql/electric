@@ -233,7 +233,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> put_in_config(:long_poll_timeout, 100)
         |> ServeShapePlug.call([])
 
-      assert conn.status == 200
+      assert conn.status == 204
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "up-to-date"}}]
 
