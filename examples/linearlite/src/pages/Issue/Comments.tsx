@@ -13,7 +13,7 @@ export interface CommentsProps {
 }
 
 function Comments(commentProps: CommentsProps) {
-  const [newCommentBody, setNewCommentBody] = useState<string>('')
+  const [newCommentBody, setNewCommentBody] = useState<string>(``)
   const allComments = useShape({
     shape: { table: `comment` },
     baseUrl,
@@ -50,8 +50,8 @@ function Comments(commentProps: CommentsProps) {
   const handlePost = () => {
     if (!newCommentBody) {
       showWarning(
-        'Please enter a comment before submitting',
-        'Comment required'
+        `Please enter a comment before submitting`,
+        `Comment required`
       )
       return
     }
@@ -65,7 +65,7 @@ function Comments(commentProps: CommentsProps) {
     //     username: 'testuser',
     //   },
     // })
-    setNewCommentBody('')
+    setNewCommentBody(``)
   }
 
   return (

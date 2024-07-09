@@ -10,8 +10,8 @@ defmodule Electric.Plug.Router do
 
   head "/", do: send_resp(conn, 200, "")
 
-  get "/shape/:shape_definition", to: Electric.Plug.ServeShapePlug
-  delete "/shape/:shape_definition", to: Electric.Plug.DeleteShapePlug
+  get "/shape/:root_table", to: Electric.Plug.ServeShapePlug
+  delete "/shape/:root_table", to: Electric.Plug.DeleteShapePlug
 
   match _ do
     send_resp(conn, 404, "Not found")
