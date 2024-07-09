@@ -24,7 +24,7 @@ export interface BackoffOptions {
   multiplier: number
 }
 
-const BackoffDefaults = {
+export const BackoffDefaults = {
   initialDelay: 100,
   maxDelay: 10_000,
   multiplier: 1.3,
