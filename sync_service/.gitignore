@@ -24,3 +24,6 @@ electric-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# The shape database, created when the Sync Service runs
+/shapes/

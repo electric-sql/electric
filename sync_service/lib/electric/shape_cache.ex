@@ -96,6 +96,12 @@ defmodule Electric.ShapeCache do
     shape_meta_table =
       :ets.new(opts.shape_meta_table, [:named_table, :protected, :set])
 
+    # TODO: when Electric restarts, we're not re-filling neither xmins nor shape meta tables
+    #       from persisted storage if one exists, which means persistance doesn't carry over
+    #       a restart, which is not great. We should load any shape IDs we have logs for along
+    #       with actual shape definition to be able to immediately start filtering PG txns after
+    #       a restart.
+
     {:ok,
      %{
        storage: opts.storage,
