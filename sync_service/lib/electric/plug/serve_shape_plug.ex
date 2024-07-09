@@ -9,18 +9,22 @@ defmodule Electric.Plug.ServeShapePlug do
 
     @primary_key false
     embedded_schema do
-      field(:shape_definition, :string)
+      field(:root_table, :string)
       field(:offset, :integer)
       field(:shape_id, :string)
       field(:live, :boolean, default: false)
+      field(:where, :string)
+      field(:shape_definition, :string)
     end
 
     def validate(params, opts) do
       %__MODULE__{}
-      |> cast(params, __schema__(:fields), message: fn _, _ -> "must be %{type}" end)
+      |> cast(params, __schema__(:fields) -- [:shape_definition],
+        message: fn _, _ -> "must be %{type}" end
+      )
       |> validate_number(:offset, greater_than_or_equal_to: -1)
-      |> validate_required([:shape_definition, :offset])
-      |> cast_shape_definition(:shape_definition, opts)
+      |> validate_required([:root_table, :offset])
+      |> cast_root_table(opts)
       |> apply_action(:validate)
       |> case do
         {:ok, params} ->
@@ -36,17 +40,21 @@ defmodule Electric.Plug.ServeShapePlug do
       end
     end
 
-    def cast_shape_definition(%Ecto.Changeset{} = changeset, field, opts) do
-      value = fetch_change!(changeset, field)
+    def cast_root_table(%Ecto.Changeset{} = changeset, opts) do
+      table = fetch_change!(changeset, :root_table)
+      where = fetch_field!(changeset, :where)
 
-      case Shapes.Shape.from_string(value, opts) do
+      case Shapes.Shape.new(table, opts ++ [where: where]) do
         {:ok, result} ->
-          put_change(changeset, field, result)
+          put_change(changeset, :shape_definition, result)
 
         {:error, reasons} ->
-          Enum.reduce(reasons, changeset, fn
-            {message, keys}, changeset -> add_error(changeset, field, message, keys)
-            message, changeset when is_binary(message) -> add_error(changeset, field, message)
+          Enum.reduce(List.wrap(reasons), changeset, fn
+            {message, keys}, changeset ->
+              add_error(changeset, :root_table, message, keys)
+
+            message, changeset when is_binary(message) ->
+              add_error(changeset, :root_table, message)
           end)
       end
     end
@@ -68,7 +76,7 @@ defmodule Electric.Plug.ServeShapePlug do
       Map.merge(conn.query_params, conn.path_params)
       |> Map.update("live", "false", &(&1 != "false"))
 
-    case Params.validate(all_params, []) do
+    case Params.validate(all_params, inspector: conn.assigns.config[:inspector]) do
       {:ok, params} ->
         %{conn | assigns: Map.merge(conn.assigns, params)}
 
@@ -101,7 +109,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # If the offset requested is not found, returns 409 along with a location redirect for clients to
   # re-request the shape from scratch with the new shape id which acts as a consistent cache buster
-  # e.g. GET /shape/{shape_definition}?shapeId={new_shape_id}&offset=-1
+  # e.g. GET /shape/{root_table}?shapeId={new_shape_id}&offset=-1
   def validate_shape_offset(%Plug.Conn{assigns: %{offset: offset}} = conn, _) do
     shape_id = conn.assigns.active_shape_id
 

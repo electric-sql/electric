@@ -68,6 +68,16 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
   def handle_message(%LR.Update{} = msg, %__MODULE__{} = state) do
     relation = Map.get(state.relations, msg.relation_id)
 
+    if is_nil(msg.old_tuple_data),
+      do:
+        Logger.error("""
+        Received an update from PG for #{relation.namespace}.#{relation.name} that did not have old data included in the message.
+        This means the table #{relation.namespace}.#{relation.name} doesn't have the correct replica identity mode. Electric cannot
+        function with replica identity mode set to something other than FULL.
+
+        Try executing `ALTER TABLE #{relation.namespace}.#{relation.name} REPLICA IDENTITY FULL` on Postgres.
+        """)
+
     old_data = data_tuple_to_map(relation.columns, msg.old_tuple_data)
     data = data_tuple_to_map(relation.columns, msg.tuple_data)
 

@@ -158,4 +158,14 @@ defmodule Electric.Replication.Changes do
   def get_action(%NewRecord{}), do: "insert"
   def get_action(%UpdatedRecord{}), do: "update"
   def get_action(%DeletedRecord{}), do: "delete"
+
+  def convert_update(%UpdatedRecord{} = change, to: :new_record) do
+    %NewRecord{relation: change.relation, record: change.record}
+  end
+
+  def convert_update(%UpdatedRecord{} = change, to: :deleted_record) do
+    %DeletedRecord{relation: change.relation, old_record: change.old_record}
+  end
+
+  def convert_update(%UpdatedRecord{} = change, to: :updated_record), do: change
 end
