@@ -1,5 +1,5 @@
 version: "3.8"
-name: "${APP_NAME:-electric}"
+name: "todomvc"
 
 configs:
   postgres_config:
@@ -12,7 +12,7 @@ services:
   postgres:
     image: postgres:14-alpine
     environment:
-      POSTGRES_DB: ${APP_NAME:-electric}
+      POSTGRES_DB: todomvc
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: pg_password
     command:
@@ -29,18 +29,3 @@ services:
       - 5632:5432
     volumes:
       - pg_data:/var/lib/postgresql/data
-
-  electric:
-    image: "electricsql/electric:0.12"
-    init: true
-    environment:
-      DATABASE_URL: postgresql://postgres:pg_password@postgres:5332/${APP_NAME:-electric}
-      PG_PROXY_PASSWORD: proxy_password
-      LOGICAL_PUBLISHER_HOST: electric
-      AUTH_MODE: insecure
-      DATABASE_REQUIRE_SSL: false
-    ports:
-      - 5333:5133
-      - 63432:65432
-    depends_on:
-      - postgres
