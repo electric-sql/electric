@@ -63,4 +63,116 @@ defmodule Electric.Utils do
   def inspect_relation({schema, name}) do
     "#{inspect(schema)}.#{inspect(name)}"
   end
+
+  @doc """
+  Map each value of the enumerable using a mapper, unwrapping a result tuple returned by
+  the mapper and stopping on error.
+
+  ## Examples
+
+      iex> map_while_ok(["2015-01-23 23:50:07.0", "2015-01-23 23:50:08"], &NaiveDateTime.from_iso8601/1)
+      {:ok, [~N[2015-01-23 23:50:07.0], ~N[2015-01-23 23:50:08]]}
+
+      iex> map_while_ok(["2015-01-23 23:50:07A", "2015-01-23 23:50:08"], &NaiveDateTime.from_iso8601/1)
+      {:error, :invalid_format}
+  """
+  @spec map_while_ok(Enumerable.t(elem), (elem -> {:ok, result} | {:error, term()})) ::
+          {:ok, list(result)} | {:error, term()}
+        when elem: var, result: var
+  def map_while_ok(enum, mapper) when is_function(mapper, 1) do
+    Enum.reduce_while(enum, {:ok, []}, fn elem, {:ok, acc} ->
+      case mapper.(elem) do
+        {:ok, value} -> {:cont, {:ok, [value | acc]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, x} -> {:ok, Enum.reverse(x)}
+      error -> error
+    end
+  end
+
+  @doc """
+  Return a list of values from `enum` that are the maximal elements as calculated
+  by the given `fun`.
+
+  Base behaviour is similar to `Enum.max_by/4`, but this function returns a list
+  of all maximal values instead of just the first one.
+
+  ## Examples
+
+      iex> all_max_by([4, 1, 1, 3, -4], &abs/1)
+      [4, -4]
+
+      iex> all_max_by([4, 1, -1, 3, 4], &abs/1, &<=/2)
+      [1, -1]
+
+      iex> all_max_by([], &abs/1)
+      ** (Enum.EmptyError) empty error
+  """
+  def all_max_by(
+        enum,
+        fun,
+        sorter \\ &>=/2,
+        comparator \\ &==/2,
+        empty_fallback \\ fn -> raise(Enum.EmptyError) end
+      )
+
+  def all_max_by([], _, _, _, empty_fallback), do: empty_fallback.()
+
+  def all_max_by([head | tail], fun, sorter, comparator, _) when is_function(fun, 1) do
+    {_, max_values} =
+      Enum.reduce(tail, {fun.(head), [head]}, fn elem, {curr_max, agg} ->
+        new = fun.(elem)
+
+        cond do
+          comparator.(curr_max, new) -> {curr_max, [elem | agg]}
+          sorter.(curr_max, new) -> {curr_max, agg}
+          true -> {new, [elem]}
+        end
+      end)
+
+    Enum.reverse(max_values)
+  end
+
+  @doc """
+  Parse a markdown table from a string
+
+  Options:
+  - `after:` - taking a first table that comes right after a given substring.
+
+  ## Example
+
+      iex> \"""
+      ...> Some text
+      ...>
+      ...> ## Known types
+      ...>
+      ...> | type                    | category | preferred? |
+      ...> | ----------------------- | -------- | ---------- |
+      ...> | bool                    | boolean  | t          |
+      ...> | int2                    | numeric  |            |
+      ...> \"""|> parse_md_table(after: "## Known types")
+      [["bool", "boolean", "t"], ["int2", "numeric", ""]]
+  """
+  @spec parse_md_table(String.t(), [{:after, String.t()}]) :: [[String.t(), ...]]
+  def parse_md_table(string, opts) do
+    string =
+      case Keyword.fetch(opts, :after) do
+        {:ok, split_on} -> List.last(String.split(string, split_on))
+        :error -> string
+      end
+
+    string
+    |> String.split("\n", trim: true)
+    |> Enum.drop_while(&(not String.starts_with?(&1, "|")))
+    |> Enum.take_while(&String.starts_with?(&1, "|"))
+    # Header and separator
+    |> Enum.drop(2)
+    |> Enum.map(fn line ->
+      line
+      |> String.split("|", trim: true)
+      |> Enum.map(&String.trim/1)
+    end)
+  end
 end

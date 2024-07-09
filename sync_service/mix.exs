@@ -52,12 +52,14 @@ defmodule Electric.MixProject do
       {:gproc, "~> 0.9"},
       {:postgrex, "~> 0.18"},
       {:postgresql_uri, "~> 0.1"},
+      {:pg_query_ex, github: "electric-sql/pg_query_ex"},
       {:jason, "~> 1.4"},
       {:nimble_options, "~> 1.1"},
       {:dotenvy, "~> 0.8"},
       {:telemetry_poller, "~> 1.1"},
       {:telemetry_metrics_statsd, "~> 0.7"},
       {:ecto, "~> 3.11"},
+      {:tz, "~> 0.26.5"},
       {:mox, "~> 1.1", only: [:test]}
     ]
   end

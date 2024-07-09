@@ -116,7 +116,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
       [columns, types, row]
       |> Enum.zip_with(fn
         [col, Postgrex.Extensions.UUID, val] -> {col, Utils.encode_uuid(val)}
-        [col, _, val] -> {col, val}
+        [col, _, val] -> {col, to_string(val)}
       end)
       |> Map.new()
 
