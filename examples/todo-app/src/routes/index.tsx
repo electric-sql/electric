@@ -8,8 +8,7 @@ import {
   Button,
   Link,
 } from "@radix-ui/themes"
-import { useShape } from "../../../use-shape"
-import { useOptimistic } from "react"
+import { useShape } from "../../../../react-hooks"
 import { v4 as uuidv4 } from "uuid"
 
 export default function Index() {
