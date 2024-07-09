@@ -138,11 +138,11 @@ function IssuePage() {
     if (window.history.length > 2) {
       navigate(-1)
     }
-    navigate('/')
+    navigate(`/`)
   }
 
   const shortId = () => {
-    if (issue.id.includes('-')) {
+    if (issue.id.includes(`-`)) {
       return issue.id.slice(issue.id.length - 8)
     } else {
       return issue.id
@@ -199,7 +199,7 @@ function IssuePage() {
                 </div>
                 <div className="flex flex-[3_0_0]">
                   <StatusMenu
-                    id={'issue-status-' + issue.id}
+                    id={`issue-status-` + issue.id}
                     button={
                       <button className="inline-flex items-center h-6 px-2 text-gray-500border-none rounded hover:bg-gray-100">
                         <StatusIcon status={issue.status} className="mr-1" />
@@ -216,7 +216,7 @@ function IssuePage() {
                 </div>
                 <div className="flex flex-[3_0_0]">
                   <PriorityMenu
-                    id={'issue-priority-' + issue.id}
+                    id={`issue-priority-` + issue.id}
                     button={
                       <button className="inline-flex items-center h-6 px-2 text-gray-500 border-none rounded hover:bg-gray-100 hover:text-gray-700">
                         <PriorityIcon
@@ -240,16 +240,18 @@ function IssuePage() {
               onChange={(e) => handleTitleChange(e.target.value)}
             />
 
-            <Editor
-              className="prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-3 text-md rounded editor"
-              value={
-                descriptionIsDirty.current
-                  ? dirtyDescription || ''
-                  : issue.description || ''
-              }
-              onChange={(val) => handleDescriptionChange(val)}
-              placeholder="Add description..."
-            />
+            <div className="w-full max-w-full mt-2 min-h-14 p-3 ">
+              <Editor
+                className="prose font-normal appearance-none text-md rounded editor"
+                value={
+                  descriptionIsDirty.current
+                    ? dirtyDescription || ``
+                    : issue.description || ``
+                }
+                onChange={(val) => handleDescriptionChange(val)}
+                placeholder="Add description..."
+              />
+            </div>
             <div className="border-t border-gray-200 mt-3 p-3">
               <h2 className="text-md mb-3">Comments</h2>
               <Comments issue={issue} />

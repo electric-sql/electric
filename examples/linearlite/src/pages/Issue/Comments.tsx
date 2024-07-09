@@ -71,12 +71,14 @@ function Comments(commentProps: CommentsProps) {
   return (
     <>
       {commentList()}
-      <Editor
-        className="prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-3 text-md shadow-sm rounded border border-gray-200 editor"
-        value={newCommentBody}
-        onChange={(val) => setNewCommentBody(val)}
-        placeholder="Add a comment..."
-      />
+      <div className="w-full max-w-full mt-2 min-h-14 ">
+        <Editor
+          className="prose font-normal p-3 appearance-none text-md shadow-sm rounded border border-gray-200 editor"
+          value={newCommentBody}
+          onChange={(val) => setNewCommentBody(val)}
+          placeholder="Add a comment..."
+        />
+      </div>
       <div className="flex w-full py-3">
         <button
           className="px-3 ml-auto text-white bg-indigo-600 rounded hover:bg-indigo-700 h-7"

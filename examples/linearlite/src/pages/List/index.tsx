@@ -16,7 +16,7 @@ function List({ showSearch = false }) {
   console.time(`filter issues`)
   const filteredIssues = issues.filter((issue) => {
     const tests = [true]
-    if (filterState.priority.length > 0) {
+    if (filterState.priority && filterState.priority.length > 0) {
       tests.push(filterState.priority.includes(issue.priority))
     }
 
@@ -32,7 +32,7 @@ function List({ showSearch = false }) {
   return (
     <div className="flex flex-col flex-grow">
       <TopFilter issues={filteredIssues} showSearch={showSearch} />
-      <IssueList issues={filteredIssues} filterState={filterState} />
+      <IssueList issues={filteredIssues} />
     </div>
   )
 }

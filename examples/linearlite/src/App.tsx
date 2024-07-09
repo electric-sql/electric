@@ -7,6 +7,7 @@ import 'react-toastify/dist/ReactToastify.css'
 import List from './pages/List'
 import Issue from './pages/Issue'
 import LeftMenu from './components/LeftMenu'
+import { ShapesProvider } from '../../../react-hooks'
 
 interface MenuContextInterface {
   showMenu: boolean
@@ -33,26 +34,28 @@ const App = () => {
   )
 
   return (
-    <MenuContext.Provider value={{ showMenu, setShowMenu }}>
-      <BrowserRouter>
-        <div className="flex w-full h-screen overflow-y-hidden">
-          <LeftMenu />
-          {router}
-        </div>
-        <ToastContainer
-          position="bottom-right"
-          autoClose={5000}
-          hideProgressBar
-          newestOnTop
-          closeOnClick
-          rtl={false}
-          transition={slideUp}
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-        />
-      </BrowserRouter>
-    </MenuContext.Provider>
+    <ShapesProvider>
+      <MenuContext.Provider value={{ showMenu, setShowMenu }}>
+        <BrowserRouter>
+          <div className="flex w-full h-screen overflow-y-hidden">
+            <LeftMenu />
+            {router}
+          </div>
+          <ToastContainer
+            position="bottom-right"
+            autoClose={5000}
+            hideProgressBar
+            newestOnTop
+            closeOnClick
+            rtl={false}
+            transition={slideUp}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+          />
+        </BrowserRouter>
+      </MenuContext.Provider>
+    </ShapesProvider>
   )
 }
 
