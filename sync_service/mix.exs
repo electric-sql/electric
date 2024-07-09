@@ -60,7 +60,8 @@ defmodule Electric.MixProject do
       {:telemetry_metrics_statsd, "~> 0.7"},
       {:ecto, "~> 3.11"},
       {:tz, "~> 0.26.5"},
-      {:mox, "~> 1.1", only: [:test]}
+      {:mox, "~> 1.1", only: [:test]},
+      {:cubdb, "~> 2.0.2"}
     ]
   end
 
