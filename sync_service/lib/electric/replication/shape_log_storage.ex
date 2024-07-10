@@ -3,6 +3,7 @@ defmodule Electric.Replication.ShapeLogStorage do
   When any txn comes from postgres, we need to store it into the
   log for this shape if and only if it has txid >= xmin of the snapshot.
   """
+  alias Electric.Postgres.Lsn
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache.Storage
   alias Electric.Replication.Changes
@@ -65,6 +66,8 @@ defmodule Electric.Replication.ShapeLogStorage do
           # TODO: what's a graceful way to handle failure to append to log?
           #       Right now we'll just fail everything
           :ok = Storage.append_to_log!(shape_id, lsn, xid, relevant_changes, state.storage)
+
+          shape_cache.update_shape_latest_offset(shape_id, Lsn.to_integer(lsn), opts)
 
           notify_listeners(state.registry, :new_changes, shape_id, lsn)
 

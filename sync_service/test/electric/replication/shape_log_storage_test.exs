@@ -41,9 +41,11 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")
+      number_lsn = Lsn.to_integer(lsn)
 
       MockShapeCache
       |> expect(:list_active_shapes, 2, fn _ -> [{shape_id, shape, xmin}] end)
+      |> expect(:update_shape_latest_offset, 2, fn ^shape_id, ^number_lsn, _ -> :ok end)
       |> allow(self(), server)
 
       MockStorage
@@ -141,9 +143,11 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")
+      number_lsn = Lsn.to_integer(lsn)
 
       MockShapeCache
       |> expect(:list_active_shapes, fn _ -> [{shape_id, shape, xmin}] end)
+      |> expect(:update_shape_latest_offset, fn ^shape_id, ^number_lsn, _ -> :ok end)
       |> allow(self(), server)
 
       MockStorage
@@ -169,6 +173,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")
+      number_lsn = Lsn.to_integer(lsn)
 
       MockShapeCache
       |> expect(:list_active_shapes, fn _ ->
@@ -177,6 +182,8 @@ defmodule Electric.Replication.ShapeLogStorageTest do
           {shape2, %Shape{root_table: {"public", "other_table"}}, xmin}
         ]
       end)
+      |> expect(:update_shape_latest_offset, fn ^shape1, ^number_lsn, _ -> :ok end)
+      |> expect(:update_shape_latest_offset, fn ^shape2, ^number_lsn, _ -> :ok end)
       |> allow(self(), server)
 
       MockStorage

@@ -55,6 +55,18 @@ defmodule Electric.Plug.ServeShapePlugTest do
              }
     end
 
+    test "returns 400 for missing shape_id when offset != -1" do
+      conn =
+        conn(:get, %{"root_table" => "public.users"}, "?offset=0")
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "shape_id" => ["can't be blank when offset != -1"]
+             }
+    end
+
     test "returns snapshot when offset is -1" do
       Electric.ShapeCacheMock
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
@@ -64,7 +76,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       MockStorage
       |> expect(:get_snapshot, fn @test_shape_id, _opts -> {0, [%{key: "snapshot"}]} end)
-      |> expect(:get_log_stream, fn @test_shape_id, 0, _opts -> [%{key: "log"}] end)
+      |> expect(:get_log_stream, fn @test_shape_id, 0, _, _opts -> [%{key: "log"}] end)
 
       conn =
         conn(:get, %{"root_table" => "public.users"}, "?offset=-1")
@@ -91,7 +103,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       MockStorage
       |> expect(:get_snapshot, fn @test_shape_id, _opts -> {0, [%{key: "snapshot"}]} end)
-      |> expect(:get_log_stream, fn @test_shape_id, 0, _opts -> [%{key: "log"}] end)
+      |> expect(:get_log_stream, fn @test_shape_id, 0, _, _opts -> [%{key: "log"}] end)
 
       max_age = 62
       stale_age = 312
@@ -115,13 +127,13 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end)
 
       MockStorage
-      |> expect(:get_log_stream, fn @test_shape_id, 50, _opts ->
+      |> expect(:get_log_stream, fn @test_shape_id, 50, _, _opts ->
         [%{key: "log1"}, %{key: "log2"}]
       end)
       |> expect(:has_log_entry?, fn @test_shape_id, 50, _ -> true end)
 
       conn =
-        conn(:get, %{"root_table" => "public.users"}, "?offset=50")
+        conn(:get, %{"root_table" => "public.users"}, "?offset=50&shape_id=#{@test_shape_id}")
         |> ServeShapePlug.call([])
 
       assert conn.status == 200
@@ -144,7 +156,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       expect(MockStorage, :has_log_entry?, fn @test_shape_id, 50, _ -> true end)
 
       conn =
-        conn(:get, %{"root_table" => "public.users"}, "?offset=50")
+        conn(:get, %{"root_table" => "public.users"}, "?offset=50&shape_id=#{@test_shape_id}")
         |> put_req_header("if-none-match", ~s("#{@test_shape_id}:50:#{@test_offset}"))
         |> ServeShapePlug.call([])
 
@@ -159,12 +171,16 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       MockStorage
       |> expect(:has_log_entry?, fn @test_shape_id, 50, _ -> true end)
-      |> expect(:get_log_stream, fn @test_shape_id, 50, _opts -> [] end)
-      |> expect(:get_log_stream, fn @test_shape_id, 50, _opts -> ["test result"] end)
+      |> expect(:get_log_stream, fn @test_shape_id, 50, _, _opts -> [] end)
+      |> expect(:get_log_stream, fn @test_shape_id, 50, _, _opts -> ["test result"] end)
 
       task =
         Task.async(fn ->
-          conn(:get, %{"root_table" => "public.users"}, "?offset=50&live=true")
+          conn(
+            :get,
+            %{"root_table" => "public.users"},
+            "?offset=50&shape_id=#{@test_shape_id}&live=true"
+          )
           |> ServeShapePlug.call([])
         end)
 
@@ -199,12 +215,16 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end)
 
       MockStorage
-      |> expect(:get_log_stream, fn @test_shape_id, 50, _opts -> [] end)
+      |> expect(:get_log_stream, fn @test_shape_id, 50, _, _opts -> [] end)
       |> expect(:has_log_entry?, fn @test_shape_id, 50, _ -> true end)
 
       task =
         Task.async(fn ->
-          conn(:get, %{"root_table" => "public.users"}, "?offset=50&live=true")
+          conn(
+            :get,
+            %{"root_table" => "public.users"},
+            "?offset=50&shape_id=#{@test_shape_id}&live=true"
+          )
           |> ServeShapePlug.call([])
         end)
 
@@ -230,11 +250,15 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end)
 
       MockStorage
-      |> expect(:get_log_stream, fn @test_shape_id, 50, _opts -> [] end)
+      |> expect(:get_log_stream, fn @test_shape_id, 50, _, _opts -> [] end)
       |> expect(:has_log_entry?, fn @test_shape_id, 50, _ -> true end)
 
       conn =
-        conn(:get, %{"root_table" => "public.users"}, "?offset=50&live=true")
+        conn(
+          :get,
+          %{"root_table" => "public.users"},
+          "?offset=50&shape_id=#{@test_shape_id}&live=true"
+        )
         |> put_in_config(:long_poll_timeout, 100)
         |> ServeShapePlug.call([])
 
@@ -259,13 +283,38 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> expect(:has_log_entry?, fn @test_shape_id, 50, _ -> false end)
 
       conn =
-        conn(:get, %{"root_table" => "public.users"}, "?offset=50")
+        conn(:get, %{"root_table" => "public.users"}, "?offset=50&shape_id=#{@test_shape_id}")
         |> ServeShapePlug.call([])
 
       assert conn.status == 409
 
       assert Jason.decode!(conn.resp_body) == %{
-               "message" => "Shape offset too far behind. Resync with latest shape ID.",
+               "message" =>
+                 "The shape associated with this shape_id and offset was not found. Resync to fetch the latest shape",
+               "shape_id" => @test_shape_id,
+               "offset" => -1
+             }
+
+      assert get_resp_header(conn, "location") == ["/?shape_id=#{@test_shape_id}&offset=-1"]
+    end
+
+    test "send 409 when shape ID requested does not exist" do
+      expect(Electric.ShapeCacheMock, :get_or_create_shape_id, fn @test_shape, _opts ->
+        {@test_shape_id, @test_offset}
+      end)
+
+      MockStorage
+      |> expect(:has_log_entry?, fn "foo", _, _ -> false end)
+
+      conn =
+        conn(:get, %{"root_table" => "public.users"}, "?offset=50&shape_id=foo")
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 409
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "message" =>
+                 "The shape associated with this shape_id and offset was not found. Resync to fetch the latest shape",
                "shape_id" => @test_shape_id,
                "offset" => -1
              }
