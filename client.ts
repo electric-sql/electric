@@ -145,7 +145,7 @@ export class ShapeStream {
 
       if (this.shapeId) {
         // This should probably be a header for better cache breaking?
-        url.searchParams.set(`shapeId`, this.shapeId!)
+        url.searchParams.set(`shape_id`, this.shapeId!)
       }
 
       console.log({
@@ -160,7 +160,10 @@ export class ShapeStream {
             }
 
             const { headers, status } = response
-            this.shapeId = headers.get(`x-electric-shape-id`) ?? undefined
+            const shapeId = headers.get(`X-Electric-Shape-Id`) ?? undefined
+            if (shapeId) {
+              this.shapeId = shapeId
+            }
 
             attempt = 0
 
