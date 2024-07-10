@@ -14,7 +14,7 @@ defmodule Electric.ShapeCache.StorageTest do
     |> Mox.expect(:snapshot_exists?, fn _, :opts -> true end)
     |> Mox.expect(:get_snapshot, fn _, :opts -> {1, []} end)
     |> Mox.expect(:append_to_log!, fn _, _, _, _, :opts -> :ok end)
-    |> Mox.expect(:get_log_stream, fn _, _, :opts -> [] end)
+    |> Mox.expect(:get_log_stream, fn _, _, _, :opts -> [] end)
     |> Mox.expect(:has_log_entry?, fn _, _, :opts -> [] end)
     |> Mox.expect(:cleanup!, fn _, :opts -> :ok end)
 

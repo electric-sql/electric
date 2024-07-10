@@ -24,6 +24,7 @@ defmodule Electric.Plug.ServeShapePlug do
       )
       |> validate_number(:offset, greater_than_or_equal_to: -1)
       |> validate_required([:root_table, :offset])
+      |> validate_shape_id_with_offset()
       |> cast_root_table(opts)
       |> apply_action(:validate)
       |> case do
@@ -37,6 +38,20 @@ defmodule Electric.Plug.ServeShapePlug do
                opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
              end)
            end)}
+      end
+    end
+
+    def validate_shape_id_with_offset(%Ecto.Changeset{valid?: false} = changeset), do: changeset
+
+    def validate_shape_id_with_offset(%Ecto.Changeset{} = changeset) do
+      offset = fetch_change!(changeset, :offset)
+
+      case offset do
+        -1 ->
+          changeset
+
+        _ ->
+          validate_required(changeset, [:shape_id], message: "can't be blank when offset != -1")
       end
     end
 
@@ -96,7 +111,6 @@ defmodule Electric.Plug.ServeShapePlug do
     conn
     |> assign(:active_shape_id, shape_id)
     |> assign(:last_offset, last_offset)
-    |> assign(:etag, "#{shape_id}:#{last_offset}")
     |> put_resp_header("x-electric-shape-id", shape_id)
     |> put_resp_header("x-electric-chunk-last-offset", "#{last_offset}")
   end
@@ -111,7 +125,8 @@ defmodule Electric.Plug.ServeShapePlug do
   # re-request the shape from scratch with the new shape id which acts as a consistent cache buster
   # e.g. GET /shape/{root_table}?shapeId={new_shape_id}&offset=-1
   def validate_shape_offset(%Plug.Conn{assigns: %{offset: offset}} = conn, _) do
-    shape_id = conn.assigns.active_shape_id
+    shape_id = conn.assigns.shape_id
+    active_shape_id = conn.assigns.active_shape_id
 
     if !Shapes.has_log_entry?(conn.assigns.config, shape_id, offset) do
       # TODO: discuss returning a 307 redirect rather than a 409, the client
@@ -119,13 +134,14 @@ defmodule Electric.Plug.ServeShapePlug do
       conn
       |> put_resp_header(
         "location",
-        "#{conn.request_path}?shape_id=#{shape_id}&offset=-1"
+        "#{conn.request_path}?shape_id=#{active_shape_id}&offset=-1"
       )
       |> send_resp(
         409,
         Jason.encode_to_iodata!(%{
-          message: "Shape offset too far behind. Resync with latest shape ID.",
-          shape_id: shape_id,
+          message:
+            "The shape associated with this shape_id and offset was not found. Resync to fetch the latest shape",
+          shape_id: conn.assigns.active_shape_id,
           offset: -1
         })
       )
@@ -193,14 +209,16 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # If offset is -1, we're serving a snapshot
   defp serve_log_or_snapshot(
-         %Plug.Conn{assigns: %{offset: -1, active_shape_id: shape_id}} = conn,
+         %Plug.Conn{
+           assigns: %{offset: -1, last_offset: last_offset, active_shape_id: shape_id}
+         } = conn,
          _
        ) do
     {offset, snapshot} =
       Shapes.get_snapshot(conn.assigns.config, shape_id, conn.assigns.shape_definition)
 
     log =
-      Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset)
+      Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset, up_to: last_offset)
       |> Enum.to_list()
 
     send_resp(conn, 200, Jason.encode_to_iodata!(snapshot ++ log ++ @up_to_date))
@@ -208,10 +226,14 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # Otherwise, serve log since that offset
   defp serve_log_or_snapshot(
-         %Plug.Conn{assigns: %{offset: offset, active_shape_id: shape_id}} = conn,
+         %Plug.Conn{
+           assigns: %{offset: offset, last_offset: last_offset, active_shape_id: shape_id}
+         } = conn,
          _
        ) do
-    log = Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset) |> Enum.to_list()
+    log =
+      Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset, up_to: last_offset)
+      |> Enum.to_list()
 
     if log == [] and conn.assigns.live do
       hold_until_change(conn, shape_id)

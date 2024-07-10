@@ -21,9 +21,10 @@ defmodule Electric.Shapes do
   """
   def get_log_stream(config, shape_id, opts) do
     offset = Access.get(opts, :since, -1)
+    max_offset = Access.get(opts, :up_to, :infinity)
     storage = Access.fetch!(config, :storage)
 
-    Storage.get_log_stream(shape_id, offset, storage)
+    Storage.get_log_stream(shape_id, offset, max_offset, storage)
   end
 
   @doc """
