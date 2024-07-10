@@ -2,16 +2,16 @@ import React, { createContext, useEffect, useContext, useState } from 'react'
 
 // Create a Context
 const ShapesContext = createContext({
-  getShape: (_options) => {
+  getShape: (options: ShapeStreamOptions): Shape => {
     throw new Error(`ShapesContext not initialized`)
   },
 })
 
+const cache = new Map()
+
 // Shapes Provider Component
 export function ShapesProvider({ children }) {
-  const [cache, setCache] = useState({}) // Initialize an empty cache
-
-  const getShape = (options) => {
+  const getShape = (options: ShapeStreamOptions): Shape => {
     // A somewhat hacky way to cheaply create a consistent hash of the shape options.
     const shapeDef = JSON.stringify(
       options.shape,
@@ -21,17 +21,13 @@ export function ShapesProvider({ children }) {
     const shapeHash = shapeDef + allOptions
 
     // If the shape is already cached
-    if (cache[shapeHash]) {
+    if (cache.has(shapeHash)) {
       // Return the cached shape
-      return cache[shapeHash]
+      return cache.get(shapeHash)
     } else {
       const newShape = new Shape(options)
 
-      setCache((prevCache) => ({
-        // Add it to the cache
-        ...prevCache,
-        [shapeHash]: newShape,
-      }))
+      cache.set(shapeHash, newShape)
 
       // Return the created shape
       return newShape
@@ -50,7 +46,7 @@ import { Shape, ShapeStreamOptions } from './client'
 
 export function useShape(options: ShapeStreamOptions) {
   const { getShape } = useContext(ShapesContext)
-  const shape = getShape(options) as Shape
+  const shape = getShape(options)
   const [shapeData, setShapeData] = useState<unknown[]>([
     ...shape.value.values(),
   ])

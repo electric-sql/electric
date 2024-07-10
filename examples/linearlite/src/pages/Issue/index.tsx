@@ -25,7 +25,9 @@ function IssuePage() {
     baseUrl,
   }) as Issue[]
 
-  const issue = issues.find((i) => i.id === useParams().id)!
+  const params = useParams()
+
+  const issue = issues.find((i) => i.id === params.id)!
 
   const [showDeleteModal, setShowDeleteModal] = useState(false)
 
