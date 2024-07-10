@@ -72,6 +72,43 @@ class MessageProcessor {
   }
 }
 
+class FetchError extends Error {
+  status: number
+  text?: string
+  json?: object
+  headers: Headers
+
+  constructor(
+    status: number,
+    text: string | undefined,
+    json: object | undefined,
+    headers: Headers,
+    message?: string
+  ) {
+    super(message || `HTTP Error ${status}`)
+    this.name = 'FetchError'
+    this.status = status
+    this.text = text
+    this.json = json
+    this.headers = headers
+  }
+
+  static async fromResponse(response: Response): Promise<FetchError> {
+    const status = response.status
+    const headers = response.headers
+    let text: string | undefined = undefined
+    let json: object | undefined = undefined
+
+    const contentType = response.headers.get('content-type')
+    if (contentType && contentType.includes('application/json')) {
+      json = await response.json()
+    } else {
+      text = await response.text()
+    }
+
+    return new FetchError(status, text, json, headers)
+  }
+}
 /*
  * Consumes a shape stream using long polling. Notifies subscribers
  * when new messages come in. Doesn't maintain any history of the
@@ -152,7 +189,7 @@ export class ShapeStream {
         await fetch(url.toString(), { signal })
           .then(async (response) => {
             if (!response.ok) {
-              throw new Error(`HTTP error! Status: ${response.status}`)
+              throw await FetchError.fromResponse(response)
             }
 
             const { headers, status } = response
@@ -198,6 +235,9 @@ export class ShapeStream {
       } catch (e) {
         if (signal?.aborted) {
           break
+        } else if (e instanceof FetchError && e.status < 500) {
+          // We don't want to continue retrying on 400 errors
+          throw e
         } else {
           // Exponentially backoff on errors.
           // Wait for the current delay duration

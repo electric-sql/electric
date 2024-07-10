@@ -194,8 +194,7 @@ describe(`HTTP Sync`, () => {
     })
     const values = [...shapeData.values()]
 
-    expect(values).toHaveLength(1)
-    expect(values[0].title).toEqual(`I AM FOO TABLE`)
+    expect(values).toMatchObject([{title: `I AM FOO TABLE`}])
   })
 
   it(`should get initial data and then receive updates`, async () => {
@@ -426,7 +425,7 @@ describe(`HTTP Sync`, () => {
 
     // const shapeId = initialRes.headers.get(`x-electric-shape-id`)
     // const res = await fetch(
-      // `${BASE_URL}/shape/issues?offset=${lastOffset}&live&shapeId=${shapeId}`
+      // `${BASE_URL}/shape/issues?offset=${lastOffset}&live&shape_id=${shapeId}`
     // )
     // const cacheHeaders = res.headers.get(`cache-control`)
     // console.log({cacheHeaders, status: res.status})
@@ -464,9 +463,10 @@ describe(`HTTP Sync`, () => {
 
     // Get etag for catchup
     const catchupEtagRes = await fetch(
-      `${BASE_URL}/shape/issues?offset=${midOffset}&shapeId=${shapeId}`,
+      `${BASE_URL}/shape/issues?offset=${midOffset}&shape_id=${shapeId}`,
       {}
     )
+    console.log(catchupEtagRes)
     const catchupEtag = catchupEtagRes.headers.get(`etag`)
     assert(catchupEtag !== null, `Response should have catchup etag header`)
     console.log({catchupEtag})
@@ -474,7 +474,7 @@ describe(`HTTP Sync`, () => {
     // Catch-up offsets should also use the same etag as they're
     // also working through the end of the current log.
     const catchupEtagValidation = await fetch(
-      `${BASE_URL}/shape/issues?offset=${midOffset}&shapeId=${shapeId}`,
+      `${BASE_URL}/shape/issues?offset=${midOffset}&shape_id=${shapeId}`,
       {
         headers: { 'If-None-Match': catchupEtag },
       }
@@ -531,7 +531,7 @@ describe(`HTTP Sync`, () => {
   //   deleteShape(`issues`)
 
   //   const res = await fetch(
-  //     `${BASE_URL}/shape/issues?offset=10&live&shapeId=${shapeId}`
+  //     `${BASE_URL}/shape/issues?offset=10&live&shape_id=${shapeId}`
   //   )
 
   //   const data = await res.json()
