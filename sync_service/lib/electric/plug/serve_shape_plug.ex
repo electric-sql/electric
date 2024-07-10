@@ -201,8 +201,8 @@ defmodule Electric.Plug.ServeShapePlug do
   def cors(conn, _opts) do
     conn
     |> Plug.Conn.put_resp_header("access-control-allow-origin", "*")
+    |> Plug.Conn.put_resp_header("access-control-expose-headers", "*")
     |> Plug.Conn.put_resp_header("access-control-allow-methods", "GET, POST, OPTIONS")
-    |> Plug.Conn.put_resp_header("access-control-allow-headers", "content-type, authorization")
   end
 
   @up_to_date [%{headers: %{control: "up-to-date"}}]
