@@ -15,13 +15,11 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_cache(ctx, additional_opts \\ []) do
-    shape_xmins_table = :"shape_xmins_#{ctx.test}"
     shape_meta_table = :"shape_meta_#{ctx.test}"
 
     start_opts =
       [
         name: :"shape_cache_#{ctx.test}",
-        shape_xmins_table: shape_xmins_table,
         shape_meta_table: shape_meta_table,
         storage: ctx.storage,
         db_pool: ctx.pool
@@ -32,7 +30,6 @@ defmodule Support.ComponentSetup do
     %{
       shape_cache_opts: [
         server: :"shape_cache_#{ctx.test}",
-        shape_xmins_table: shape_xmins_table,
         shape_meta_table: shape_meta_table
       ]
     }
