@@ -48,7 +48,7 @@ defmodule Electric.Plug.DeleteShapePlug do
     else
       # FIXME: This has a race condition where we accidentally create a snapshot & shape id, but clean
       #        it before snapshot is actually made.
-      with {shape_id, _} <- Shapes.get_or_create_shape_id(conn.assigns.root_table),
+      with {shape_id, _} <- Shapes.get_or_create_shape_id(conn.assigns.shape_definition),
            :ok <- Shapes.clean_shape(shape_id) do
         send_resp(conn, 204, "")
       end
