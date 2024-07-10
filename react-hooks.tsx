@@ -9,31 +9,31 @@ const ShapesContext = createContext({
 
 const cache = new Map()
 
+function getShape(options: ShapeStreamOptions): Shape {
+  // A somewhat hacky way to cheaply create a consistent hash of the shape options.
+  const shapeDef = JSON.stringify(
+    options.shape,
+    Object.keys(options.shape).sort()
+  )
+  const allOptions = JSON.stringify(options, Object.keys(options).sort())
+  const shapeHash = shapeDef + allOptions
+
+  // If the shape is already cached
+  if (cache.has(shapeHash)) {
+    // Return the cached shape
+    return cache.get(shapeHash)
+  } else {
+    const newShape = new Shape(options)
+
+    cache.set(shapeHash, newShape)
+
+    // Return the created shape
+    return newShape
+  }
+}
+
 // Shapes Provider Component
 export function ShapesProvider({ children }) {
-  const getShape = (options: ShapeStreamOptions): Shape => {
-    // A somewhat hacky way to cheaply create a consistent hash of the shape options.
-    const shapeDef = JSON.stringify(
-      options.shape,
-      Object.keys(options.shape).sort()
-    )
-    const allOptions = JSON.stringify(options, Object.keys(options).sort())
-    const shapeHash = shapeDef + allOptions
-
-    // If the shape is already cached
-    if (cache.has(shapeHash)) {
-      // Return the cached shape
-      return cache.get(shapeHash)
-    } else {
-      const newShape = new Shape(options)
-
-      cache.set(shapeHash, newShape)
-
-      // Return the created shape
-      return newShape
-    }
-  }
-
   // Provide the context value
   return (
     <ShapesContext.Provider value={{ getShape }}>
