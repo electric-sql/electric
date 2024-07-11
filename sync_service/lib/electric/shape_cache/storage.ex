@@ -55,10 +55,10 @@ defmodule Electric.ShapeCache.Storage do
 
   @doc "Check if snapshot for a given shape id already exists"
   @spec snapshot_exists?(shape_id(), storage()) :: boolean()
-  def snapshot_exists?(shape_id, {mod, opts}), do: apply(mod, :snapshot_exists?, [shape_id, opts])
+  def snapshot_exists?(shape_id, {mod, opts}), do: mod.snapshot_exists?(shape_id, opts)
   @doc "Get the full snapshot for a given shape, also returning the offset this snapshot includes"
   @spec get_snapshot(shape_id(), storage()) :: {offset :: non_neg_integer(), log()}
-  def get_snapshot(shape_id, {mod, opts}), do: apply(mod, :get_snapshot, [shape_id, opts])
+  def get_snapshot(shape_id, {mod, opts}), do: mod.get_snapshot(shape_id, opts)
 
   @doc """
   Make a new snapshot for a shape ID based on the meta information about the table and a stream of plain string rows
@@ -71,7 +71,7 @@ defmodule Electric.ShapeCache.Storage do
           storage()
         ) :: :ok
   def make_new_snapshot!(shape_id, meta, stream, {mod, opts}),
-    do: apply(mod, :make_new_snapshot!, [shape_id, meta, stream, opts])
+    do: mod.make_new_snapshot!(shape_id, meta, stream, opts)
 
   @doc "Append changes from one transaction to the log"
   @spec append_to_log!(
@@ -82,21 +82,21 @@ defmodule Electric.ShapeCache.Storage do
           storage()
         ) :: :ok
   def append_to_log!(shape_id, lsn, xid, changes, {mod, opts}),
-    do: apply(mod, :append_to_log!, [shape_id, lsn, xid, changes, opts])
+    do: mod.append_to_log!(shape_id, lsn, xid, changes, opts)
 
   @doc "Get stream of the log for a shape since a given offset"
   @spec get_log_stream(shape_id(), integer(), non_neg_integer() | :infinity, storage()) ::
           Enumerable.t()
   def get_log_stream(shape_id, offset, max_offset \\ :infinity, {mod, opts})
       when max_offset == :infinity or max_offset >= offset,
-      do: apply(mod, :get_log_stream, [shape_id, offset, max_offset, opts])
+      do: mod.get_log_stream(shape_id, offset, max_offset, opts)
 
   @doc "Check if log entry for given shape ID and offset exists"
   @spec has_log_entry?(shape_id(), non_neg_integer(), storage()) :: boolean()
   def has_log_entry?(shape_id, offset, {mod, opts}),
-    do: apply(mod, :has_log_entry?, [shape_id, offset, opts])
+    do: mod.has_log_entry?(shape_id, offset, opts)
 
   @doc "Clean up snapshots/logs for a shape id"
   @spec cleanup!(shape_id(), storage()) :: :ok
-  def cleanup!(shape_id, {mod, opts}), do: apply(mod, :cleanup!, [shape_id, opts])
+  def cleanup!(shape_id, {mod, opts}), do: mod.cleanup!(shape_id, opts)
 end
