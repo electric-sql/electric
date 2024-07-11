@@ -120,7 +120,15 @@ defmodule Electric.ShapeCacheTest do
       assert {^shape_id, offset_after_snapshot} = ShapeCache.get_or_create_shape_id(shape, opts)
 
       expected_offset_after_log_entry = 1000
-      :ok = ShapeCache.update_shape_latest_offset(shape_id, expected_offset_after_log_entry, opts)
+
+      :ok =
+        ShapeCache.append_to_log!(
+          shape_id,
+          Lsn.from_integer(expected_offset_after_log_entry),
+          _xid = 0,
+          _changes = [],
+          opts
+        )
 
       assert {^shape_id, offset_after_log_entry} = ShapeCache.get_or_create_shape_id(shape, opts)
 
@@ -128,10 +136,6 @@ defmodule Electric.ShapeCacheTest do
       assert initial_offset == offset_after_snapshot
       assert offset_after_log_entry > offset_after_snapshot
       assert offset_after_log_entry == expected_offset_after_log_entry
-    end
-
-    test "fails to update latest offset if shape doesn't exist", %{shape_cache_opts: opts} do
-      assert :error = ShapeCache.update_shape_latest_offset("foo", 10, opts)
     end
 
     test "correctly propagates the error", %{shape_cache_opts: opts} do

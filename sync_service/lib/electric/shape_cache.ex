@@ -7,12 +7,18 @@ defmodule Electric.ShapeCacheBehaviour do
   @type shape_id :: String.t()
   @type shape_def :: Shape.t()
   @type xmin :: non_neg_integer()
+  @doc "Append changes from one transaction to the log"
+  @callback append_to_log!(
+              shape_id(),
+              Lsn.t(),
+              non_neg_integer(),
+              [Changes.change()],
+              keyword()
+            ) :: :ok
 
   @callback get_or_create_shape_id(shape_def(), opts :: keyword()) ::
               {shape_id(), current_snapshot_offset :: non_neg_integer()}
 
-  @callback update_shape_latest_offset(shape_id(), non_neg_integer(), opts :: keyword()) ::
-              :ok | {:error, term()}
   @callback list_active_shapes(opts :: keyword()) :: [{shape_id(), shape_def(), xmin()}]
   @callback wait_for_snapshot(GenServer.name(), shape_id(), shape_def()) ::
               :ready | {:error, term()}
@@ -21,6 +27,7 @@ end
 
 defmodule Electric.ShapeCache do
   require Logger
+  alias Electric.Postgres.Lsn
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Querying
   alias Electric.Shapes.Shape
@@ -72,7 +79,14 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  def update_shape_latest_offset(shape_id, latest_offset, opts \\ []) do
+  def append_to_log!(shape_id, lsn, xid, relevant_changes, opts) do
+    :ok = Storage.append_to_log!(shape_id, lsn, xid, relevant_changes, opts[:storage])
+
+    update_shape_latest_offset(shape_id, Lsn.to_integer(lsn), opts)
+    :ok
+  end
+
+  defp update_shape_latest_offset(shape_id, latest_offset, opts) do
     meta_table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
 
     if :ets.update_element(meta_table, {@shape_meta_data, shape_id}, {
