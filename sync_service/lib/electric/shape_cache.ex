@@ -7,20 +7,26 @@ defmodule Electric.ShapeCacheBehaviour do
   @type shape_id :: String.t()
   @type shape_def :: Shape.t()
   @type xmin :: non_neg_integer()
+  @doc "Append changes from one transaction to the log"
+  @callback append_to_log!(
+              shape_id(),
+              Lsn.t(),
+              non_neg_integer(),
+              [Changes.change()],
+              keyword()
+            ) :: :ok
 
   @callback get_or_create_shape_id(shape_def(), opts :: keyword()) ::
               {shape_id(), current_snapshot_offset :: non_neg_integer()}
 
-  @callback update_shape_latest_offset(shape_id(), non_neg_integer(), opts :: keyword()) ::
-              :ok | {:error, term()}
   @callback list_active_shapes(opts :: keyword()) :: [{shape_id(), shape_def(), xmin()}]
-  @callback wait_for_snapshot(GenServer.name(), shape_id(), shape_def()) ::
-              :ready | {:error, term()}
+  @callback wait_for_snapshot(GenServer.name(), shape_id()) :: :ready | {:error, term()}
   @callback handle_truncate(GenServer.name(), shape_id()) :: :ok
 end
 
 defmodule Electric.ShapeCache do
   require Logger
+  alias Electric.Postgres.Lsn
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Querying
   alias Electric.Shapes.Shape
@@ -72,7 +78,14 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  def update_shape_latest_offset(shape_id, latest_offset, opts \\ []) do
+  def append_to_log!(shape_id, lsn, xid, relevant_changes, opts) do
+    :ok = Storage.append_to_log!(shape_id, lsn, xid, relevant_changes, opts[:storage])
+
+    update_shape_latest_offset(shape_id, Lsn.to_integer(lsn), opts)
+    :ok
+  end
+
+  defp update_shape_latest_offset(shape_id, latest_offset, opts) do
     meta_table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
 
     if :ets.update_element(meta_table, {@shape_meta_data, shape_id}, {
@@ -81,7 +94,7 @@ defmodule Electric.ShapeCache do
        }) do
       :ok
     else
-      Logger.warning("Tried to update latest offset #{shape_id} when it doesn't exist")
+      Logger.warning("Tried to update latest offset for shape #{shape_id} which doesn't exist")
       :error
     end
   end
@@ -108,9 +121,9 @@ defmodule Electric.ShapeCache do
     GenServer.call(server, {:truncate, shape_id})
   end
 
-  @spec wait_for_snapshot(GenServer.name(), String.t(), Shape.t()) :: :ready | {:error, term()}
-  def wait_for_snapshot(server \\ __MODULE__, shape_id, shape) when is_binary(shape_id) do
-    GenServer.call(server, {:wait_for_snapshot, shape_id, shape})
+  @spec wait_for_snapshot(GenServer.name(), String.t()) :: :ready | {:error, term()}
+  def wait_for_snapshot(server \\ __MODULE__, shape_id) when is_binary(shape_id) do
+    GenServer.call(server, {:wait_for_snapshot, shape_id})
   end
 
   def init(opts) do
@@ -154,16 +167,25 @@ defmodule Electric.ShapeCache do
     # match to the same shape ID
     [{_, shape_id}] = :ets.lookup(state.shape_meta_table, {@shape_hash_lookup, hash})
 
+    Logger.debug("Returning shape id #{shape_id} for shape #{inspect(shape)}")
+
     state = maybe_start_snapshot(state, shape_id, shape)
 
     {:reply, {shape_id, latest_offset}, state}
   end
 
-  def handle_call({:wait_for_snapshot, shape_id, shape}, from, state) do
-    if Storage.snapshot_exists?(shape_id, state.storage) do
-      {:reply, :ready, state}
-    else
-      {:noreply, state |> maybe_start_snapshot(shape_id, shape) |> add_waiter(shape_id, from)}
+  def handle_call({:wait_for_snapshot, shape_id}, from, state) do
+    cond do
+      not is_known_shape_id?(state, shape_id) ->
+        {:reply, {:error, :unknown}, state}
+
+      Storage.snapshot_exists?(shape_id, state.storage) ->
+        {:reply, :ready, state}
+
+      true ->
+        Logger.debug("Starting a wait on the snapshot #{shape_id} for #{inspect(from)}}")
+
+        {:noreply, add_waiter(state, shape_id, from)}
     end
   end
 
@@ -190,7 +212,7 @@ defmodule Electric.ShapeCache do
          {@shape_meta_xmin_pos, xmin}
        ) do
       Logger.warning(
-        "Got snapshot information for a shape whose shape_id is no longer valid. Ignoring."
+        "Got snapshot information for a #{shape_id}, that shape id is no longer valid. Ignoring."
       )
     end
 
@@ -198,6 +220,7 @@ defmodule Electric.ShapeCache do
   end
 
   def handle_cast({:snapshot_ready, shape_id}, state) do
+    Logger.debug("Snapshot for #{shape_id} is ready")
     {waiting, state} = pop_in(state, [:waiting_for_creation, shape_id])
     for client <- waiting, not is_nil(client), do: GenServer.reply(client, :ready)
     {:noreply, state}
@@ -208,6 +231,7 @@ defmodule Electric.ShapeCache do
       "Snapshot creation failed for #{shape_id} because of:\n#{Exception.format(:error, error, stacktrace)}"
     )
 
+    clean_up_shape(state, shape_id)
     {waiting, state} = pop_in(state, [:waiting_for_creation, shape_id])
     for client <- waiting, not is_nil(client), do: GenServer.reply(client, {:error, error})
     {:noreply, state}
@@ -242,6 +266,13 @@ defmodule Electric.ShapeCache do
       add_waiter(state, shape_id, nil)
     else
       state
+    end
+  end
+
+  defp is_known_shape_id?(%{shape_meta_table: table}, shape_id) do
+    case :ets.select(table, [{{{@shape_meta_data, shape_id}, :_, :_, :_}, [], [true]}]) do
+      [] -> false
+      _ -> true
     end
   end
 

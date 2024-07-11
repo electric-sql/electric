@@ -213,19 +213,20 @@ describe(`HTTP Sync`, () => {
     await new Promise<void>((resolve) => {
       issueStream.subscribe((messages) => {
         messages.forEach(async (message) => {
+          console.log(`Received msg`, message)
           if (message.headers?.[`action`] !== undefined) {
             shapeData.set(message.key, message.value)
             messageCount++
-            console.log(`Processing msg`, messageCount, message)
+            console.log(`Processing msg as #`, messageCount)
 
-            if (messageCount === 2) {
+            if (messageCount === 1) {
               updateRow({ id: rowId, title: `foo1` })
             }
-            if (messageCount === 3) {
+            if (messageCount === 2) {
               secondRowId = await appendRow({ title: `foo2` })
             }
 
-            if (messageCount === 4) {
+            if (messageCount === 3) {
               aborter.abort()
               expect(shapeData).toEqual(
                 new Map([
@@ -274,11 +275,11 @@ describe(`HTTP Sync`, () => {
           if (message.headers?.[`action`] !== undefined) {
             shapeData1.set(message.key, message.value)
             messageCount1++
-            if (messageCount1 === 4) {
+            if (messageCount1 === 3) {
               setTimeout(() => updateRow({ id: rowId, title: `foo3` }), 50)
             }
 
-            if (messageCount1 === 5) {
+            if (messageCount1 === 4) {
               aborter1.abort()
               expect(shapeData1).toEqual(
                 new Map([
@@ -302,7 +303,7 @@ describe(`HTTP Sync`, () => {
           if (message.headers?.[`action`] !== undefined) {
             shapeData2.set(message.key, message.value)
             messageCount2++
-            if (messageCount2 === 5) {
+            if (messageCount2 === 4) {
               aborter2.abort()
               expect(shapeData2).toEqual(
                 new Map([
@@ -466,7 +467,6 @@ describe(`HTTP Sync`, () => {
       `${BASE_URL}/shape/issues?offset=${midOffset}&shape_id=${shapeId}`,
       {}
     )
-    console.log(catchupEtagRes)
     const catchupEtag = catchupEtagRes.headers.get(`etag`)
     assert(catchupEtag !== null, `Response should have catchup etag header`)
     console.log({catchupEtag})

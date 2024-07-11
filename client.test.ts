@@ -121,8 +121,7 @@ describe(`Shape`, () => {
     expect(map).toEqual(expectedValue)
   })
 
-  // FIXME once offset=0 bug fixed.
-  it.skip(`should continually sync a shape/table`, async () => {
+  it(`should continually sync a shape/table`, async () => {
     const { client, tableName } = context
 
     const { id, title } = await addItem(client, tableName)

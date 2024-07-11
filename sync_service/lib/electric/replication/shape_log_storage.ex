@@ -3,9 +3,7 @@ defmodule Electric.Replication.ShapeLogStorage do
   When any txn comes from postgres, we need to store it into the
   log for this shape if and only if it has txid >= xmin of the snapshot.
   """
-  alias Electric.Postgres.Lsn
   alias Electric.Shapes.Shape
-  alias Electric.ShapeCache.Storage
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
   use GenServer
@@ -17,9 +15,8 @@ defmodule Electric.Replication.ShapeLogStorage do
               type: @genserver_name_schema,
               default: __MODULE__
             ],
-            storage: [type: :mod_arg, required: true],
             registry: [type: :atom, required: true],
-            shape_cache: [type: :mod_arg, default: {Electric.ShapeCache, []}]
+            shape_cache: [type: :mod_arg, required: true]
           )
 
   def start_link(opts) do
@@ -47,8 +44,7 @@ defmodule Electric.Replication.ShapeLogStorage do
     {shape_cache, opts} = state.shape_cache
 
     # TODO: can be optimized probably because you can parallelize writing to different shape logs
-    for {shape_id, shape_def, xmin} <- apply(shape_cache, :list_active_shapes, [opts]),
-        xid >= xmin do
+    for {shape_id, shape_def, xmin} <- shape_cache.list_active_shapes(opts), xid >= xmin do
       relevant_changes = Enum.flat_map(changes, &Shape.convert_change(shape_def, &1))
 
       cond do
@@ -60,14 +56,12 @@ defmodule Electric.Replication.ShapeLogStorage do
             "Truncate operation encountered while processing txn #{txn.xid} for #{shape_id}"
           )
 
-          apply(shape_cache, :handle_truncate, [shape_cache, shape_id])
+          shape_cache.handle_truncate(shape_cache, shape_id)
 
         relevant_changes != [] ->
           # TODO: what's a graceful way to handle failure to append to log?
           #       Right now we'll just fail everything
-          :ok = Storage.append_to_log!(shape_id, lsn, xid, relevant_changes, state.storage)
-
-          shape_cache.update_shape_latest_offset(shape_id, Lsn.to_integer(lsn), opts)
+          shape_cache.append_to_log!(shape_id, lsn, xid, relevant_changes, opts)
 
           notify_listeners(state.registry, :new_changes, shape_id, lsn)
 

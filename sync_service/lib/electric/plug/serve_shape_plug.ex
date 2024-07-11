@@ -214,14 +214,18 @@ defmodule Electric.Plug.ServeShapePlug do
          } = conn,
          _
        ) do
-    {offset, snapshot} =
-      Shapes.get_snapshot(conn.assigns.config, shape_id, conn.assigns.shape_definition)
+    case Shapes.get_snapshot(conn.assigns.config, shape_id) do
+      {:ok, {offset, snapshot}} ->
+        log =
+          Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset, up_to: last_offset)
+          |> Enum.to_list()
 
-    log =
-      Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset, up_to: last_offset)
-      |> Enum.to_list()
+        send_resp(conn, 200, Jason.encode_to_iodata!(snapshot ++ log ++ @up_to_date))
 
-    send_resp(conn, 200, Jason.encode_to_iodata!(snapshot ++ log ++ @up_to_date))
+      {:error, reason} ->
+        Logger.warning("Could not serve a snapshot because of #{reason}")
+        send_resp(conn, 500, "")
+    end
   end
 
   # Otherwise, serve log since that offset

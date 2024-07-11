@@ -76,13 +76,14 @@ class FetchError extends Error {
   status: number
   text?: string
   json?: object
-  headers: Headers
+  headers: Record<string, string>
 
   constructor(
     status: number,
     text: string | undefined,
     json: object | undefined,
-    headers: Headers,
+    headers: Record<string, string>,
+    public url: string,
     message?: string
   ) {
     super(message || `HTTP Error ${status}`)
@@ -93,9 +94,12 @@ class FetchError extends Error {
     this.headers = headers
   }
 
-  static async fromResponse(response: Response): Promise<FetchError> {
+  static async fromResponse(
+    response: Response,
+    url: string
+  ): Promise<FetchError> {
     const status = response.status
-    const headers = response.headers
+    const headers = Object.fromEntries([...response.headers.entries()])
     let text: string | undefined = undefined
     let json: object | undefined = undefined
 
@@ -106,7 +110,7 @@ class FetchError extends Error {
       text = await response.text()
     }
 
-    return new FetchError(status, text, json, headers)
+    return new FetchError(status, text, json, headers, url)
   }
 }
 /*
@@ -142,7 +146,10 @@ export class ShapeStream {
   private backoffOptions: BackoffOptions
 
   private subscribers = new Map<string, MessageProcessor>()
-  private upToDateSubscribers = new Map<string, () => void>()
+  private upToDateSubscribers = new Map<
+    string,
+    [() => void, (error: FetchError | Error) => void]
+  >()
 
   private lastOffset: number
   public hasBeenUpToDate: boolean = false
@@ -189,7 +196,7 @@ export class ShapeStream {
         await fetch(url.toString(), { signal })
           .then(async (response) => {
             if (!response.ok) {
-              throw await FetchError.fromResponse(response)
+              throw await FetchError.fromResponse(response, url.toString())
             }
 
             const { headers, status } = response
@@ -235,9 +242,12 @@ export class ShapeStream {
       } catch (e) {
         if (signal?.aborted) {
           break
-        } else if (e instanceof FetchError && e.status < 500) {
+        } else if (e instanceof FetchError && e.status == 400) {
+          // Notify subscribers
+          this.sendErrorToUpToDateSubscribers(e)
+
           // We don't want to continue retrying on 400 errors
-          throw e
+          break
         } else {
           // Exponentially backoff on errors.
           // Wait for the current delay duration
@@ -274,10 +284,13 @@ export class ShapeStream {
     })
   }
 
-  subscribeOnceToUpToDate(callback: () => void | Promise<void>) {
+  subscribeOnceToUpToDate(
+    callback: () => void | Promise<void>,
+    error: (err: FetchError | Error) => void
+  ) {
     const subscriptionId = uuidv4()
 
-    this.upToDateSubscribers.set(subscriptionId, callback)
+    this.upToDateSubscribers.set(subscriptionId, [callback, error])
 
     return () => {
       this.upToDateSubscribers.delete(subscriptionId)
@@ -289,9 +302,15 @@ export class ShapeStream {
   }
 
   private notifyUpToDateSubscribers() {
-    this.upToDateSubscribers.forEach((callback) => {
+    this.upToDateSubscribers.forEach(([callback, _]) => {
       callback()
     })
+  }
+
+  private sendErrorToUpToDateSubscribers(error: FetchError | Error) {
+    this.upToDateSubscribers.forEach(([_, errorCallback]) =>
+      errorCallback(error)
+    )
   }
 
   private validateOptions(options: ShapeStreamOptions): void {
@@ -364,14 +383,14 @@ export class Shape {
   }
 
   get isUpToDate(): Promise<ShapeData> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       if (this.stream.isUpToDate) {
         resolve(this.value)
       } else {
         const unsubscribe = this.stream.subscribeOnceToUpToDate(() => {
           unsubscribe()
           resolve(this.value)
-        })
+        }, reject)
       }
     })
   }
