@@ -1,0 +1,153 @@
+openapi: 3.1.0
+info:
+  title: Electric API
+  description: HTTP API for Electric
+  version: 0.0.1
+
+servers:
+  - url: http://localhost:3000
+    description: Local server
+
+paths:
+  /shape/{root_table}:
+    get:
+      summary: Request a shape based on the name of the table.
+      parameters:
+        # Path parameters
+        - name: root_table
+          in: path
+          schema:
+            type: string
+          required: true
+          description: The shape definition, currently the name of the table.
+        # Query parameters
+        - name: shape_id
+          in: query
+          schema:
+            type: string
+          description: The shape ID returned by the initial shape request.
+                       This is a required parameter when this is not an initial sync request, i.e. when offset > -1.
+                       The sync engine does not use it but it's used as a cache buster.
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: -1
+          description: The offset in the shape stream where to resume from.
+                       Specify -1 for initial sync (or just leave it out).
+                       Afterwards, need to specify the offset from where to continue in the stream.
+        - name: live
+          in: query
+          schema:
+            type: boolean
+          description: Whether to subscribe to live updates of the shape.
+        # Headers
+        - name: If-None-Match
+          in: header
+          schema:
+            type: string
+          # TODO: is this description below correct?
+          description: Revalidate the shape if the etag doesn't match the servers'
+      responses:
+        '204':
+          description: Client is up to date.
+        '200':
+          description: The shape data
+          headers:
+            x-electric-shape-id:
+              schema:
+                type: string
+              description: The shape ID
+            cache-control:
+              schema:
+                type: string
+              description: "Cache control header as a string of comma separated directives.
+                           Supported directives are: max-age, stale-while-revalidate, no-store, no-cache, must-revalidate."
+            etag:
+              schema:
+                type: string
+              description: Etag header specifying the shape ID and offset {shape_id}-{start_offset}-{end_offset} for efficient caching.
+            pragma:
+              schema:
+                type: string
+                enum:
+                  - no-cache
+              description: Pragma header for backwards compatibility with HTTP/1.0 caches that do not have a Cache-Control HTTP/1.1 header.
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of message objects
+                items:
+                  type: object
+                  description: Message object
+                  properties:
+                    headers:
+                      type: object
+                      description: The shape data
+                      properties:
+                        control:
+                          type: string
+                          enum:
+                            - up-to-date
+                            - must-refetch
+                        action:
+                          type: string
+                          enum:
+                            - begin
+                            - insert
+                            - update
+                            - delete
+                            - commit
+                          description: The type of operation that is performed on the row of the shape that is identified by the `key`.
+                    offset:
+                      type: integer
+                      description: The offset of the row in the shape stream
+                    key:
+                      type: string
+                      description: Row ID
+                    value:
+                      type: object
+                      description: The row data
+        '400':
+          description: Bad request.
+        '409':
+          description: The requested offset for the given shape no longer exists.
+                       Client should sync the shape using the relative path from the location header.
+          headers:
+            location:
+              schema:
+                type: string
+              description: Relative path for syncing the latest version of the requested shape.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Error message
+                  shape_id:
+                    type: string
+                    description: The latest shape ID the client should sync.
+                  offset:
+                    type: integer
+                    description: The offset from where to sync the given shape_id.         
+    delete:
+      summary: Deletes the shape for this table.
+               WARNING - this is to be used in development only and works only if the allow_shape_deletion environment variable is set.
+      parameters:
+        # Path parameters
+        - name: root_table
+          in: path
+          schema:
+            type: string
+          required: true
+          description: The name of the table for which to delete the shape.
+        # Query parameters
+        - name: shape_id
+          in: query
+          schema:
+            type: string
+          description: Optional, deletes the current shape if it matches the shape_id.
+                       If not provided, deletes the current shape.

@@ -27,3 +27,7 @@ We're using [asdf](https://asdf-vm.com/) to install Elixir, Erlang, and Node.js.
 3. `asdf install`
 
 You'll probably need to fiddle with your bash/zsh/etc rc file to load the right tool into your environment.
+
+## HTTP API Documentation
+
+The HTTP API documentation is defined through an OpenAPI 3.1.0 specification found in `docs/electric-api.yaml`. Documentation for the API can be generated with `npm run docs:generate`.
