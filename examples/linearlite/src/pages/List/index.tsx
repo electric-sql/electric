@@ -2,16 +2,13 @@ import TopFilter from '../../components/TopFilter'
 import IssueList from './IssueList'
 import { useFilterState } from '../../utils/filterState'
 import { useShape } from '../../../../../react-hooks'
-import { baseUrl } from '../../electric'
 import { Issue } from '../../types/types'
+import { issueShape } from '../../shapes'
 
 function List({ showSearch = false }) {
   const [filterState] = useFilterState()
 
-  const issues = useShape({
-    shape: { table: `issue` },
-    baseUrl,
-  })! as Issue[]
+  const issues = useShape(issueShape)! as Issue[]
 
   const filteredIssues = issues.filter((issue) => {
     const tests = [true]

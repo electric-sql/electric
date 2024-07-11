@@ -3,14 +3,11 @@ import IssueBoard from './IssueBoard'
 import { useFilterState } from '../../utils/filterState'
 import { useShape } from '../../../../../react-hooks'
 import { Issue } from '../../types/types'
-import { baseUrl } from '../../electric'
+import { issueShape } from '../../shapes'
 
 function Board() {
   const [_filterState] = useFilterState()
-  const issues = useShape({
-    shape: { table: `issue` },
-    baseUrl,
-  })! as Issue[]
+  const issues = useShape(issueShape)! as Issue[]
 
   // TODO: apply filter state
 

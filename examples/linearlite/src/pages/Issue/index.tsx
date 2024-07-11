@@ -13,17 +13,14 @@ import DeleteModal from './DeleteModal'
 import Comments from './Comments'
 import debounce from 'lodash.debounce'
 import { useShape } from '../../../../../react-hooks'
-import { baseUrl } from '../../electric'
+import { issueShape } from '../../shapes'
 
 const debounceTime = 500
 
 function IssuePage() {
   const navigate = useNavigate()
 
-  const issues = useShape({
-    shape: { table: `issue` },
-    baseUrl,
-  }) as Issue[]
+  const issues = useShape(issueShape) as Issue[]
 
   const params = useParams()
 

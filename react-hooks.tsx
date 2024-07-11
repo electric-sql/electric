@@ -9,7 +9,7 @@ const ShapesContext = createContext({
 
 const cache = new Map()
 
-function getShape(options: ShapeStreamOptions): Shape {
+export function getShape(options: ShapeStreamOptions): Shape {
   // A somewhat hacky way to cheaply create a consistent hash of the shape options.
   const shapeDef = JSON.stringify(
     options.shape,
