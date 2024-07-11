@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Shape do
   @moduledoc """
   Struct describing the requested shape
   """
+  require Logger
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Runner
   alias Electric.Replication.Changes
@@ -50,6 +51,8 @@ defmodule Electric.Shapes.Shape do
 
       table_info ->
         # %{["column_name"] => :type}
+        Logger.debug("Table #{inspect(table)} found with #{length(table_info)} columns")
+
         {:ok,
          Map.new(table_info, fn %{name: name, type: type} -> {[name], String.to_atom(type)} end)}
     end

@@ -36,6 +36,15 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         assert storage.snapshot_exists?(@shape_id, opts) == true
       end
+
+      test "returns true when shape does exist even from empty query reeults", %{
+        module: storage,
+        opts: opts
+      } do
+        storage.make_new_snapshot!(@shape_id, @query_info, [], opts)
+
+        assert storage.snapshot_exists?(@shape_id, opts) == true
+      end
     end
 
     describe "#{module_name}.get_snapshot/2" do

@@ -30,14 +30,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
 
   @spec snapshot_exists?(any(), any()) :: false
   def snapshot_exists?(shape_id, opts) do
-    # FIXME: doesn't seem optimal to select for existence check
-    # CubDB.has_key?(opts.db, snapshot_match(shape_id))
-    CubDB.select(opts.db,
-      min_key: snapshot_start(shape_id),
-      max_key: snapshot_end(shape_id)
-    )
-    |> Stream.take(1)
-    |> Enum.any?()
+    CubDB.has_key?(opts.db, snapshot_meta_key(shape_id))
   end
 
   def get_snapshot(shape_id, opts) do
@@ -60,8 +53,9 @@ defmodule Electric.ShapeCache.CubDbStorage do
 
     opts.db
     |> CubDB.select(
-      min_key: log_key(shape_id, offset + 1),
-      max_key: max_key
+      min_key: log_key(shape_id, offset),
+      max_key: max_key,
+      min_key_inclusive: false
     )
     |> Stream.map(&storage_item_to_log_item/1)
   end
@@ -79,6 +73,8 @@ defmodule Electric.ShapeCache.CubDbStorage do
     |> Stream.chunk_every(500)
     |> Stream.each(fn chunk -> CubDB.put_multi(opts.db, chunk) end)
     |> Stream.run()
+
+    CubDB.put(opts.db, snapshot_meta_key(shape_id), 0)
   end
 
   def append_to_log!(shape_id, lsn, xid, changes, opts) do
@@ -101,11 +97,19 @@ defmodule Electric.ShapeCache.CubDbStorage do
     # Deletes from the snapshot start to the log end
     # and since @snapshot_key_type < @log_key_type this will
     # delete everything for the shape.
+    CubDB.delete(opts.db, snapshot_meta_key(shape_id))
+
     CubDB.select(opts.db,
       min_key: snapshot_start(shape_id),
       max_key: log_end(shape_id)
     )
-    |> Enum.each(fn {key, _} -> CubDB.delete(opts.db, key) end)
+    |> Stream.map(&elem(&1, 0))
+    |> Stream.chunk_every(500)
+    |> Enum.each(fn keys -> CubDB.delete_multi(opts.db, keys) end)
+  end
+
+  defp snapshot_meta_key(shape_id) do
+    {:snapshot_metadata, shape_id}
   end
 
   defp snapshot_key(shape_id, index) do

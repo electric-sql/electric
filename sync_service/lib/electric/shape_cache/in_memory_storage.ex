@@ -25,7 +25,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   def snapshot_exists?(shape_id, opts) do
-    case :ets.match(opts.snapshot_ets_table, {{shape_id, :_}, :_}, 1) do
+    case :ets.match(opts.snapshot_ets_table, {{:metadata, shape_id}, :_}, 1) do
       {[_], _} -> true
       :"$end_of_table" -> false
     end
@@ -36,7 +36,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
     results =
       :ets.select(opts.snapshot_ets_table, [
-        {{{shape_id, :"$1"}, :"$2"}, [],
+        {{{:data, shape_id, :"$1"}, :"$2"}, [],
          [%{key: :"$1", value: :"$2", headers: %{action: "insert"}, offset: offset}]}
       ])
 
@@ -79,6 +79,9 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     |> Stream.chunk_every(500)
     |> Stream.each(fn chunk -> :ets.insert(ets_table, chunk) end)
     |> Stream.run()
+
+    :ets.insert(ets_table, {{:metadata, shape_id}, 0})
+    :ok
   end
 
   def append_to_log!(shape_id, lsn, xid, changes, opts) do
@@ -99,7 +102,8 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   def cleanup!(shape_id, opts) do
-    :ets.match_delete(opts.snapshot_ets_table, {{shape_id, :_}, :_})
+    :ets.match_delete(opts.snapshot_ets_table, {{:data, shape_id, :_}, :_})
+    :ets.match_delete(opts.snapshot_ets_table, {{:metadata, shape_id}, :_})
     :ets.match_delete(opts.log_ets_table, {{shape_id, :_}, :_, :_, :_, :_})
     :ok
   end
@@ -121,6 +125,6 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     # FIXME: This should not assume pk columns, but we're not querying PG for that info yet
     pk = Map.fetch!(serialized_row, "id")
 
-    {{shape_id, key_prefix <> "/" <> pk}, serialized_row}
+    {{:data, shape_id, key_prefix <> "/" <> pk}, serialized_row}
   end
 end

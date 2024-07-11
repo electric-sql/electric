@@ -2,12 +2,14 @@ import Config
 import Dotenvy
 
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
+config :logger, level: :debug
+
+if config_env() == :test, do: config(:logger, level: :info)
 
 if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
 
-config :logger, level: :debug
 config :telemetry_poller, :default, period: 500
 
 if Config.config_env() == :test do
