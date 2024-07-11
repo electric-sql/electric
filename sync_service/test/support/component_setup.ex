@@ -30,7 +30,8 @@ defmodule Support.ComponentSetup do
     %{
       shape_cache_opts: [
         server: :"shape_cache_#{ctx.test}",
-        shape_meta_table: shape_meta_table
+        shape_meta_table: shape_meta_table,
+        storage: ctx.storage
       ]
     }
   end

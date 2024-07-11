@@ -13,6 +13,7 @@ defmodule Electric.Application do
 
     with {:ok, storage_opts} <- storage_module.shared_opts(init_params) do
       storage = {storage_module, storage_opts}
+      shape_cache = {Electric.ShapeCache, storage: storage}
 
       children =
         if Application.fetch_env!(:electric, :environment) != :test do
@@ -21,9 +22,9 @@ defmodule Electric.Application do
             {storage_module, storage_opts},
             {Registry,
              name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
-            {Electric.ShapeCache, storage: storage},
+            shape_cache,
             {Electric.Replication.ShapeLogStorage,
-             storage: storage, registry: Registry.ShapeChanges},
+             registry: Registry.ShapeChanges, shape_cache: shape_cache},
             {Postgrex,
              Application.fetch_env!(:electric, :database_config) ++
                [
