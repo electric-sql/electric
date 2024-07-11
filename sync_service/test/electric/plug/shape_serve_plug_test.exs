@@ -72,7 +72,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
       end)
-      |> expect(:wait_for_snapshot, fn _, @test_shape_id, _ -> :ready end)
+      |> expect(:wait_for_snapshot, fn _, @test_shape_id -> :ready end)
 
       MockStorage
       |> expect(:get_snapshot, fn @test_shape_id, _opts -> {0, [%{key: "snapshot"}]} end)
@@ -99,7 +99,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
       end)
-      |> expect(:wait_for_snapshot, fn _, @test_shape_id, _ -> :ready end)
+      |> expect(:wait_for_snapshot, fn _, @test_shape_id -> :ready end)
 
       MockStorage
       |> expect(:get_snapshot, fn @test_shape_id, _opts -> {0, [%{key: "snapshot"}]} end)
@@ -169,9 +169,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
         {@test_shape_id, @test_offset}
       end)
 
+      test_pid = self()
+
       MockStorage
       |> expect(:has_log_entry?, fn @test_shape_id, 50, _ -> true end)
-      |> expect(:get_log_stream, fn @test_shape_id, 50, _, _opts -> [] end)
+      |> expect(:get_log_stream, fn @test_shape_id, 50, _, _opts ->
+        send(test_pid, :got_log_stream)
+        []
+      end)
       |> expect(:get_log_stream, fn @test_shape_id, 50, _, _opts -> ["test result"] end)
 
       task =
@@ -184,7 +189,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
           |> ServeShapePlug.call([])
         end)
 
-      Process.sleep(100)
+      # Raised timeout here because sometimes, rarely, the task takes a little while to reach this point
+      assert_receive :got_log_stream, 300
+      Process.sleep(50)
 
       # Simulate new changes arriving
       Registry.dispatch(@registry, @test_shape_id, fn [{pid, ref}] ->
@@ -214,8 +221,13 @@ defmodule Electric.Plug.ServeShapePlugTest do
         {@test_shape_id, @test_offset}
       end)
 
+      test_pid = self()
+
       MockStorage
-      |> expect(:get_log_stream, fn @test_shape_id, 50, _, _opts -> [] end)
+      |> expect(:get_log_stream, fn @test_shape_id, 50, _, _opts ->
+        send(test_pid, :got_log_stream)
+        []
+      end)
       |> expect(:has_log_entry?, fn @test_shape_id, 50, _ -> true end)
 
       task =
@@ -228,7 +240,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
           |> ServeShapePlug.call([])
         end)
 
-      Process.sleep(100)
+      # Raised timeout here because sometimes, rarely, the task takes a little while to reach this point
+      assert_receive :got_log_stream, 300
+      Process.sleep(50)
 
       # Simulate shape rotation
       Registry.dispatch(@registry, @test_shape_id, fn [{pid, ref}] ->

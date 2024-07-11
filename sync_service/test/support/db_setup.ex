@@ -12,15 +12,20 @@ defmodule Support.DbSetup do
     db_name = to_string(ctx.test)
     escaped_db_name = :binary.replace(db_name, ~s'"', ~s'""', [:global])
 
-    Postgrex.query!(
-      utility_pool,
-      "CREATE DATABASE \"#{escaped_db_name}\"",
-      []
-    )
+    Postgrex.query!(utility_pool, "DROP DATABASE IF EXISTS \"#{escaped_db_name}\"", [])
+    Postgrex.query!(utility_pool, "CREATE DATABASE \"#{escaped_db_name}\"", [])
 
     on_exit(fn ->
       Process.link(utility_pool)
-      Postgrex.query!(utility_pool, "DROP DATABASE \"#{escaped_db_name}\"", [])
+
+      # Make multiple 100ms-spaced attempts to drop the DB because sometimes the replication stream takes some time to stop
+      Enum.reduce_while(1..3, :ok, fn _, _ ->
+        case Postgrex.query(utility_pool, "DROP DATABASE \"#{escaped_db_name}\"", []) do
+          {:ok, _} -> {:halt, :ok}
+          {:error, %{postgres: %{code: :object_in_use}}} -> {:cont, Process.sleep(100)}
+        end
+      end)
+
       GenServer.stop(utility_pool)
     end)
 

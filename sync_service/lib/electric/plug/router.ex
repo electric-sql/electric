@@ -8,7 +8,7 @@ defmodule Electric.Plug.Router do
   plug Plug.RequestId
   plug :dispatch
 
-  head "/", do: send_resp(conn, 200, "")
+  match "/", via: [:get, :head], do: send_resp(conn, 200, "")
 
   get "/shape/:root_table", to: Electric.Plug.ServeShapePlug
   delete "/shape/:root_table", to: Electric.Plug.DeleteShapePlug
