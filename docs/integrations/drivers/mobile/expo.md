@@ -6,7 +6,7 @@ sidebar_position: 10
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-ElectricSQL supports [Expo](https://expo.dev) via both [expo-sqlite](https://docs.expo.dev/versions/latest/sdk/sqlite/) and [expo-sqlite/next](https://docs.expo.dev/versions/latest/sdk/sqlite-next/).
+ElectricSQL supports [Expo](https://expo.dev) via both [expo-sqlite](https://docs.expo.dev/versions/latest/sdk/sqlite/) and [expo-sqlite/next](https://docs.expo.dev/versions/v50.0.0/sdk/sqlite-next/).
 
 ## Dependencies
 
