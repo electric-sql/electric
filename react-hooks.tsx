@@ -9,6 +9,14 @@ const ShapesContext = createContext({
 
 const cache = new Map()
 
+export async function preloadShape(
+  options: ShapeStreamOptions
+): Promise<Shape> {
+  const shape = getShape(options)
+  await shape.value
+  return shape
+}
+
 export function getShape(options: ShapeStreamOptions): Shape {
   // A somewhat hacky way to cheaply create a consistent hash of the shape options.
   const shapeDef = JSON.stringify(

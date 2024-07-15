@@ -1,5 +1,3 @@
-import { v4 as uuidv4 } from 'uuid'
-
 import { Message, JsonSerializable } from './types'
 
 export type ShapeData = Map<string, JsonSerializable>
@@ -87,7 +85,7 @@ class FetchError extends Error {
     message?: string
   ) {
     super(message || `HTTP Error ${status}`)
-    this.name = 'FetchError'
+    this.name = `FetchError`
     this.status = status
     this.text = text
     this.json = json
@@ -103,8 +101,8 @@ class FetchError extends Error {
     let text: string | undefined = undefined
     let json: object | undefined = undefined
 
-    const contentType = response.headers.get('content-type')
-    if (contentType && contentType.includes('application/json')) {
+    const contentType = response.headers.get(`content-type`)
+    if (contentType && contentType.includes(`application/json`)) {
       json = await response.json()
     } else {
       text = await response.text()
@@ -264,7 +262,7 @@ export class ShapeStream {
   }
 
   subscribe(callback: (messages: Message[]) => void | Promise<void>) {
-    const subscriptionId = uuidv4()
+    const subscriptionId = Math.random()
     const subscriber = new MessageProcessor(callback)
 
     this.subscribers.set(subscriptionId, subscriber)
@@ -357,9 +355,9 @@ export class ShapeStream {
  *
  *     const shape = new Shape({table: `foo`, baseUrl: 'http://localhost:3000'})
  *
- * `isUpToDate` resolves once the Shape has been fully loaded (and when resuming from being offline):
+ * `value` resolves once the Shape has been fully loaded (and when resuming from being offline):
  *
- *     const value = await shape.isUpToDate
+ *     const value = await shape.value
  *
  *  Subscribe to updates. Called whenever the shape updates in Postgres.
  *
@@ -372,31 +370,37 @@ export class Shape {
 
   private data: ShapeData = new Map()
   private subscribers = new Map<string, ShapeChangedCallback>()
+  public isUpToDate: boolean = false
 
   constructor(options: ShapeOptions, backoffOptions?: BackoffOptions) {
     this.stream = new ShapeStream(options, backoffOptions)
     this.stream.subscribe(this.process.bind(this))
+    const unsubscribe = this.stream.subscribeOnceToUpToDate(() => {
+      unsubscribe()
+      this.isUpToDate = true
+    })
   }
 
-  get value() {
-    return this.data
-  }
-
-  get isUpToDate(): Promise<ShapeData> {
-    return new Promise((resolve, reject) => {
+  get value(): Promise<ShapeData> {
+    return new Promise((resolve) => {
       if (this.stream.isUpToDate) {
-        resolve(this.value)
+        // resolve(this.value)
+        resolve(new Map())
       } else {
         const unsubscribe = this.stream.subscribeOnceToUpToDate(() => {
           unsubscribe()
-          resolve(this.value)
-        }, reject)
+          resolve(this.valueSync)
+        })
       }
     })
   }
 
+  get valueSync() {
+    return this.data
+  }
+
   subscribe(callback: ShapeChangedCallback): () => void {
-    const subscriptionId = uuidv4()
+    const subscriptionId = Math.random()
 
     this.subscribers.set(subscriptionId, callback)
 
@@ -447,7 +451,7 @@ export class Shape {
 
   private notify(): void {
     this.subscribers.forEach((callback) => {
-      callback(this.value)
+      callback(this.valueSync)
     })
   }
 }

@@ -6,7 +6,7 @@ import 'react-toastify/dist/ReactToastify.css'
 import List from './pages/List'
 import Root from './pages/root'
 import Issue from './pages/Issue'
-import { ShapesProvider, getShape } from '../../../react-hooks'
+import { ShapesProvider, preloadShape } from '../../../react-hooks'
 import { issueShape } from './shapes'
 
 interface MenuContextInterface {
@@ -21,8 +21,9 @@ const router = createBrowserRouter([
     path: `/`,
     element: <Root />,
     loader: async () => {
-      const shape = getShape(issueShape)
-      await shape.isUpToDate
+      console.time(`preload`)
+      await preloadShape(issueShape)
+      console.timeEnd(`preload`)
       return null
     },
     children: [
