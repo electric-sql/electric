@@ -75,14 +75,14 @@ defmodule Electric.Replication.ShapeLogStorage do
     {:reply, :ok, state}
   end
 
-  defp notify_listeners(registry, :new_changes, shape_id, changes) do
+  defp notify_listeners(registry, :new_changes, shape_id, lsn) do
     Registry.dispatch(registry, shape_id, fn registered ->
       Logger.debug(fn ->
         "Notifying ~#{length(registered)} clients about new changes to #{shape_id}"
       end)
 
       for {pid, ref} <- registered,
-          do: send(pid, {ref, :new_changes, changes})
+          do: send(pid, {ref, :new_changes, lsn})
     end)
   end
 end
