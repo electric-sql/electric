@@ -56,7 +56,7 @@ export function useShape(options: ShapeStreamOptions) {
   const { getShape } = useContext(ShapesContext)
   const shape = getShape(options)
   const [shapeData, setShapeData] = useState<unknown[]>([
-    ...shape.value.values(),
+    ...shape.valueSync.values(),
   ])
 
   useEffect(() => {
