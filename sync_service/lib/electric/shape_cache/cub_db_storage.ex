@@ -28,6 +28,54 @@ defmodule Electric.ShapeCache.CubDbStorage do
     CubDB.start_link(data_dir: opts.file_path, name: opts.db)
   end
 
+  def cleanup_shapes_without_xmins(opts) do
+    opts.db
+    |> CubDB.select(min_key: shapes_start(), max_key: shapes_end())
+    |> Stream.map(fn {{:shapes, shape_id}, _} -> shape_id end)
+    |> Stream.reject(&snapshot_xmin(&1, opts))
+    |> Enum.each(&cleanup!(&1, opts))
+  end
+
+  def list_shapes(opts) do
+    opts.db
+    |> CubDB.select(min_key: shapes_start(), max_key: shapes_end())
+    |> Enum.map(fn {{:shapes, shape_id}, shape} ->
+      %{
+        shape_id: shape_id,
+        shape: shape,
+        latest_offset: latest_offset(shape_id, opts),
+        snapshot_xmin: snapshot_xmin(shape_id, opts)
+      }
+    end)
+  end
+
+  def add_shape(shape_id, shape, opts) do
+    CubDB.put(opts.db, shape_key(shape_id), shape)
+  end
+
+  def set_snapshot_xmin(shape_id, xmin, opts) do
+    CubDB.put(opts.db, xmin_key(shape_id), xmin)
+  end
+
+  defp snapshot_xmin(shape_id, opts) do
+    CubDB.get(opts.db, xmin_key(shape_id))
+  end
+
+  defp latest_offset(shape_id, opts) do
+    case CubDB.select(opts.db,
+           min_key: snapshot_start(shape_id),
+           max_key: log_end(shape_id),
+           reverse: true
+         )
+         |> Enum.take(1) do
+      [{key, _}] ->
+        offset(key)
+
+      _ ->
+        0
+    end
+  end
+
   @spec snapshot_exists?(any(), any()) :: false
   def snapshot_exists?(shape_id, opts) do
     CubDB.has_key?(opts.db, snapshot_meta_key(shape_id))
@@ -94,18 +142,19 @@ defmodule Electric.ShapeCache.CubDbStorage do
   end
 
   def cleanup!(shape_id, opts) do
-    # Deletes from the snapshot start to the log end
-    # and since @snapshot_key_type < @log_key_type this will
-    # delete everything for the shape.
-    CubDB.delete(opts.db, snapshot_meta_key(shape_id))
+    [
+      snapshot_meta_key(shape_id),
+      shape_key(shape_id),
+      xmin_key(shape_id)
+    ]
+    |> Stream.concat(keys_from_range(snapshot_start(shape_id), snapshot_end(shape_id), opts))
+    |> Stream.concat(keys_from_range(log_start(shape_id), log_end(shape_id), opts))
+    |> then(&CubDB.delete_multi(opts.db, &1))
+  end
 
-    CubDB.select(opts.db,
-      min_key: snapshot_start(shape_id),
-      max_key: log_end(shape_id)
-    )
+  defp keys_from_range(min_key, max_key, opts) do
+    CubDB.select(opts.db, min_key: min_key, max_key: max_key)
     |> Stream.map(&elem(&1, 0))
-    |> Stream.chunk_every(500)
-    |> Enum.each(fn keys -> CubDB.delete_multi(opts.db, keys) end)
   end
 
   defp snapshot_meta_key(shape_id) do
@@ -120,21 +169,26 @@ defmodule Electric.ShapeCache.CubDbStorage do
     {shape_id, @log_key_type, offset}
   end
 
+  defp shape_key(shape_id) do
+    {:shapes, shape_id}
+  end
+
+  def xmin_key(shape_id) do
+    {:snapshot_xmin, shape_id}
+  end
+
+  defp shapes_start, do: shape_key(0)
+  defp shapes_end, do: shape_key("zzz-end")
+
   # FIXME: this is naive while we don't have snapshot metadata to get real offsets
   defp offset({_shape_id, @snapshot_key_type, _index}), do: 0
   defp offset({_shape_id, @log_key_type, offset}), do: offset
 
-  defp log_end(shape_id) do
-    log_key(shape_id, :end)
-  end
+  defp log_start(shape_id), do: log_key(shape_id, 0)
+  defp log_end(shape_id), do: log_key(shape_id, :end)
 
-  defp snapshot_start(shape_id) do
-    snapshot_key(shape_id, 0)
-  end
-
-  defp snapshot_end(shape_id) do
-    snapshot_key(shape_id, :end)
-  end
+  defp snapshot_start(shape_id), do: snapshot_key(shape_id, 0)
+  defp snapshot_end(shape_id), do: snapshot_key(shape_id, :end)
 
   defp row_to_snapshot_item({row, index}, shape_id, %Postgrex.Query{
          name: change_key_prefix,

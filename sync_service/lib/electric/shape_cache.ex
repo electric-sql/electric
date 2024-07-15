@@ -130,20 +130,17 @@ defmodule Electric.ShapeCache do
     shape_meta_table =
       :ets.new(opts.shape_meta_table, [:named_table, :public, :ordered_set])
 
-    # TODO: when Electric restarts, we're not re-filling neither xmins nor shape meta tables
-    #       from persisted storage if one exists, which means persistance doesn't carry over
-    #       a restart, which is not great. We should load any shape IDs we have logs for along
-    #       with actual shape definition to be able to immediately start filtering PG txns after
-    #       a restart.
+    state = %{
+      storage: opts.storage,
+      shape_meta_table: shape_meta_table,
+      waiting_for_creation: %{},
+      db_pool: opts.db_pool,
+      create_snapshot_fn: opts.create_snapshot_fn
+    }
 
-    {:ok,
-     %{
-       storage: opts.storage,
-       shape_meta_table: shape_meta_table,
-       waiting_for_creation: %{},
-       db_pool: opts.db_pool,
-       create_snapshot_fn: opts.create_snapshot_fn
-     }}
+    recover_shapes(state)
+
+    {:ok, state}
   end
 
   def handle_call({:create_or_wait_shape_id, shape}, _from, state) do
@@ -166,6 +163,7 @@ defmodule Electric.ShapeCache do
     # lookup to ensure concurrent calls with the same shape definition all
     # match to the same shape ID
     [{_, shape_id}] = :ets.lookup(state.shape_meta_table, {@shape_hash_lookup, hash})
+    Storage.add_shape(shape_id, shape, state.storage)
 
     Logger.debug("Returning shape id #{shape_id} for shape #{inspect(shape)}")
 
@@ -206,11 +204,13 @@ defmodule Electric.ShapeCache do
   end
 
   def handle_cast({:snapshot_xmin_known, shape_id, xmin}, state) do
-    if not :ets.update_element(
+    if :ets.update_element(
          state.shape_meta_table,
          {@shape_meta_data, shape_id},
          {@shape_meta_xmin_pos, xmin}
        ) do
+      Storage.set_snapshot_xmin(shape_id, xmin, state.storage)
+    else
       Logger.warning(
         "Got snapshot information for a #{shape_id}, that shape id is no longer valid. Ignoring."
       )
@@ -304,5 +304,28 @@ defmodule Electric.ShapeCache do
     GenServer.cast(parent, {:snapshot_ready, shape_id})
   rescue
     error -> GenServer.cast(parent, {:snapshot_failed, shape_id, error, __STACKTRACE__})
+  end
+
+  defp recover_shapes(state) do
+    Storage.cleanup_shapes_without_xmins(state.storage)
+
+    state.storage
+    |> Storage.list_shapes()
+    |> Enum.each(fn %{
+                      shape: shape,
+                      shape_id: shape_id,
+                      latest_offset: latest_offset,
+                      snapshot_xmin: snapshot_xmin
+                    } ->
+      hash = Shape.hash(shape)
+
+      :ets.insert_new(
+        state.shape_meta_table,
+        [
+          {{@shape_hash_lookup, hash}, shape_id},
+          {{@shape_meta_data, shape_id}, shape, snapshot_xmin, latest_offset}
+        ]
+      )
+    end)
   end
 end
