@@ -20,7 +20,7 @@ export interface ShapeOptions {
   offset?: number
   shapeId?: string
   shape: ShapeDefinition
-  backoffOptions: BackoffOptions
+  backoffOptions?: BackoffOptions
 }
 
 export const BackoffDefaults = {
@@ -283,7 +283,7 @@ export class ShapeStream {
     callback: () => void | Promise<void>,
     error: (err: FetchError | Error) => void
   ) {
-    const subscriptionId = uuidv4()
+    const subscriptionId = Math.random()
 
     this.upToDateSubscribers.set(subscriptionId, [callback, error])
 
