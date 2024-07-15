@@ -10,6 +10,9 @@ defmodule Electric.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
+      preferred_cli_env: [
+        dialyzer: :test
+      ],
       releases: [
         electric: [
           applications: [
@@ -43,25 +46,34 @@ defmodule Electric.MixProject do
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
+    List.flatten([
+      [
+        {:bandit, "~> 1.5"},
+        {:plug, "~> 1.16"},
+        {:gen_stage, "~> 1.2"},
+        {:epgsql, "~> 4.2"},
+        {:backoff, "~> 1.1"},
+        {:gproc, "~> 0.9"},
+        {:postgrex, "~> 0.18"},
+        {:postgresql_uri, "~> 0.1"},
+        {:pg_query_ex, github: "electric-sql/pg_query_ex"},
+        {:jason, "~> 1.4"},
+        {:nimble_options, "~> 1.1"},
+        {:dotenvy, "~> 0.8"},
+        {:telemetry_poller, "~> 1.1"},
+        {:telemetry_metrics_statsd, "~> 0.7"},
+        {:ecto, "~> 3.11"},
+        {:tz, "~> 0.26.5"},
+        {:mox, "~> 1.1", only: [:test]},
+        {:cubdb, "~> 2.0.2"}
+      ],
+      dev_and_test_deps()
+    ])
+  end
+
+  defp dev_and_test_deps do
     [
-      {:bandit, "~> 1.5"},
-      {:plug, "~> 1.16"},
-      {:gen_stage, "~> 1.2"},
-      {:epgsql, "~> 4.2"},
-      {:backoff, "~> 1.1"},
-      {:gproc, "~> 0.9"},
-      {:postgrex, "~> 0.18"},
-      {:postgresql_uri, "~> 0.1"},
-      {:pg_query_ex, github: "electric-sql/pg_query_ex"},
-      {:jason, "~> 1.4"},
-      {:nimble_options, "~> 1.1"},
-      {:dotenvy, "~> 0.8"},
-      {:telemetry_poller, "~> 1.1"},
-      {:telemetry_metrics_statsd, "~> 0.7"},
-      {:ecto, "~> 3.11"},
-      {:tz, "~> 0.26.5"},
-      {:mox, "~> 1.1", only: [:test]},
-      {:cubdb, "~> 2.0.2"}
+      {:dialyxir, "~> 1.4", only: [:test], runtime: false}
     ]
   end
 

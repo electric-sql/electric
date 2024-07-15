@@ -2,6 +2,9 @@ defmodule Electric.Replication.ChangesTest do
   use ExUnit.Case, async: true
 
   alias Electric.Replication.Changes.UpdatedRecord
+  alias Electric.Replication.Changes.NewRecord
+
+  doctest Electric.Replication.Changes, import: true
 
   describe "UpdatedRecord.changed_columns" do
     test "is empty when old_record is nil" do

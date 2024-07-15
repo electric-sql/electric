@@ -1,5 +1,6 @@
 defmodule Electric.Postgres.ReplicationClient.CollectorTest do
   use ExUnit.Case, async: true
+  alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient.Collector
   alias Electric.Postgres.LogicalReplication.Messages, as: LR
 
@@ -10,6 +11,9 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
     DeletedRecord,
     TruncatedRelation
   }
+
+  @test_lsn Lsn.from_integer(123)
+  @test_end_lsn Lsn.from_integer(456)
 
   @relation %LR.Relation{
     id: 1,
@@ -29,14 +33,14 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
     collector: collector
   } do
     begin_msg = %LR.Begin{
-      final_lsn: 123,
+      final_lsn: @test_lsn,
       commit_timestamp: DateTime.utc_now(),
       xid: 456
     }
 
     updated_collector = Collector.handle_message(begin_msg, collector)
 
-    assert %Collector{transaction: %Transaction{xid: 456, lsn: 123}} = updated_collector
+    assert %Collector{transaction: %Transaction{xid: 456, lsn: @test_lsn}} = updated_collector
   end
 
   test "collector stores received relation message", %{collector: collector} do
@@ -92,7 +96,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
   test "collector stores received insert when the relation is known", %{collector: collector} do
     collector =
       Collector.handle_message(
-        %LR.Begin{final_lsn: 123, commit_timestamp: DateTime.utc_now(), xid: 456},
+        %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
         collector
       )
 
@@ -113,7 +117,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
   test "collector stores received update when the relation is known", %{collector: collector} do
     collector =
       Collector.handle_message(
-        %LR.Begin{final_lsn: 123, commit_timestamp: DateTime.utc_now(), xid: 456},
+        %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
         collector
       )
 
@@ -141,7 +145,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
   test "collector works for empty old data on updates", %{collector: collector} do
     collector =
       Collector.handle_message(
-        %LR.Begin{final_lsn: 123, commit_timestamp: DateTime.utc_now(), xid: 456},
+        %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
         collector
       )
 
@@ -169,7 +173,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
   test "collector stores received delete when the relation is known", %{collector: collector} do
     collector =
       Collector.handle_message(
-        %LR.Begin{final_lsn: 123, commit_timestamp: DateTime.utc_now(), xid: 456},
+        %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
         collector
       )
 
@@ -192,7 +196,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
   test "collector stores received truncate when the relation is known", %{collector: collector} do
     collector =
       Collector.handle_message(
-        %LR.Begin{final_lsn: 123, commit_timestamp: DateTime.utc_now(), xid: 456},
+        %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
         collector
       )
 
@@ -216,18 +220,18 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
   } do
     collector =
       Collector.handle_message(
-        %LR.Begin{final_lsn: 123, commit_timestamp: DateTime.utc_now(), xid: 456},
+        %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
         collector
       )
 
     commit_msg = %LR.Commit{
-      lsn: 123,
-      end_lsn: 456
+      lsn: @test_lsn,
+      end_lsn: @test_end_lsn
     }
 
     {completed_txn, updated_collector} = Collector.handle_message(commit_msg, collector)
 
-    assert %Transaction{xid: 456, lsn: 456} = completed_txn
+    assert %Transaction{xid: 456, lsn: @test_lsn} = completed_txn
     assert %Collector{transaction: nil} = updated_collector
   end
 
@@ -235,7 +239,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
        %{collector: collector} do
     collector =
       Collector.handle_message(
-        %LR.Begin{final_lsn: 123, commit_timestamp: DateTime.utc_now(), xid: 456},
+        %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
         collector
       )
 
@@ -247,7 +251,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
     collector = Collector.handle_message(update_msg, collector)
     collector = Collector.handle_message(delete_msg, collector)
 
-    commit_msg = %LR.Commit{lsn: 123, end_lsn: 456}
+    commit_msg = %LR.Commit{lsn: @test_lsn, end_lsn: @test_end_lsn}
 
     {completed_txn, _updated_collector} = Collector.handle_message(commit_msg, collector)
 

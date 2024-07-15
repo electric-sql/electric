@@ -1,4 +1,5 @@
 defmodule Electric.Shapes do
+  alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache
   alias Electric.Shapes.Shape
@@ -20,8 +21,8 @@ defmodule Electric.Shapes do
   Get stream of the log since a given offset
   """
   def get_log_stream(config, shape_id, opts) do
-    offset = Access.get(opts, :since, -1)
-    max_offset = Access.get(opts, :up_to, :infinity)
+    offset = Access.get(opts, :since, LogOffset.before_all())
+    max_offset = Access.get(opts, :up_to, LogOffset.last())
     storage = Access.fetch!(config, :storage)
 
     Storage.get_log_stream(shape_id, offset, max_offset, storage)
@@ -31,7 +32,7 @@ defmodule Electric.Shapes do
   Get or create a shape ID and return it along with the latest
   offset available
   """
-  @spec get_or_create_shape_id(Shape.t(), keyword()) :: {Storage.shape_id(), non_neg_integer()}
+  @spec get_or_create_shape_id(Shape.t(), keyword()) :: {Storage.shape_id(), LogOffset.t()}
   def get_or_create_shape_id(shape_def, opts \\ []) do
     {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
 
@@ -41,7 +42,7 @@ defmodule Electric.Shapes do
   @doc """
   Check whether the log has an entry for a given shape ID and offset
   """
-  @spec has_log_entry?(keyword(), Storage.shape_id(), non_neg_integer()) ::
+  @spec has_log_entry?(keyword(), Storage.shape_id(), LogOffset.t()) ::
           boolean()
   def has_log_entry?(config, shape_id, offset) do
     storage = Access.fetch!(config, :storage)
