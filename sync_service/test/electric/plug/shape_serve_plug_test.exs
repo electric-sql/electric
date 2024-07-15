@@ -170,21 +170,24 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end)
 
       test_pid = self()
+      next_offset = @test_offset + 1
 
       MockStorage
-      |> expect(:has_log_entry?, fn @test_shape_id, 50, _ -> true end)
-      |> expect(:get_log_stream, fn @test_shape_id, 50, _, _opts ->
+      |> expect(:has_log_entry?, fn @test_shape_id, @test_offset, _ -> true end)
+      |> expect(:get_log_stream, fn @test_shape_id, @test_offset, @test_offset, _opts ->
         send(test_pid, :got_log_stream)
         []
       end)
-      |> expect(:get_log_stream, fn @test_shape_id, 50, _, _opts -> ["test result"] end)
+      |> expect(:get_log_stream, fn @test_shape_id, @test_offset, ^next_offset, _opts ->
+        ["test result"]
+      end)
 
       task =
         Task.async(fn ->
           conn(
             :get,
             %{"root_table" => "public.users"},
-            "?offset=50&shape_id=#{@test_shape_id}&live=true"
+            "?offset=#{@test_offset}&shape_id=#{@test_shape_id}&live=true"
           )
           |> ServeShapePlug.call([])
         end)
@@ -195,7 +198,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       # Simulate new changes arriving
       Registry.dispatch(@registry, @test_shape_id, fn [{pid, ref}] ->
-        send(pid, {ref, :new_changes, Lsn.from_string("0/10")})
+        send(pid, {ref, :new_changes, Lsn.from_integer(next_offset)})
       end)
 
       # The conn process should exit after sending the response
@@ -214,6 +217,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Plug.Conn.get_resp_header(conn, "pragma") == ["no-cache"]
       assert Plug.Conn.get_resp_header(conn, "expires") == ["0"]
+      assert Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset") == ["#{next_offset}"]
     end
 
     test "handles shape rotation" do

@@ -254,9 +254,15 @@ defmodule Electric.Plug.ServeShapePlug do
     Registry.register(registry, shape_id, ref)
 
     receive do
-      {^ref, :new_changes, _new_lsn} ->
+      {^ref, :new_changes, new_lsn} ->
         # Stream new log since currently "held" offset
-        serve_log_or_snapshot(assign(conn, :live, false), [])
+        new_offset = Electric.Postgres.Lsn.to_integer(new_lsn)
+
+        conn
+        |> assign(:last_offset, new_offset)
+        # update last offset header
+        |> put_resp_header("x-electric-chunk-last-offset", "#{new_offset}")
+        |> serve_log_or_snapshot([])
 
       {^ref, :shape_rotation} ->
         # We may want to notify the client better that the shape ID had changed, but just closing the response
