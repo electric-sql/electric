@@ -9,12 +9,20 @@ defmodule Electric.ShapeCacheTest do
   alias Electric.ShapeCache
   alias Electric.Shapes.Shape
   alias Electric.Postgres.Lsn
+  alias Electric.Replication.Changes
 
   @basic_query_meta %Postgrex.Query{columns: ["id"], result_types: [:text], name: "key_prefix"}
-
-  setup :with_in_memory_storage
+  @changes [
+    %Changes.NewRecord{
+      relation: {"public", "test_table"},
+      record: %{"id" => "123", "name" => "Test"}
+    }
+  ]
+  @xid 99
 
   describe "get_or_create_shape_id/2" do
+    setup :with_in_memory_storage
+
     setup(do: %{pool: :no_pool})
     setup(ctx, do: with_shape_cache(ctx, create_snapshot_fn: fn _, _, _, _, _ -> nil end))
 
@@ -33,6 +41,8 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "get_or_create_shape_id/2 shape initialization" do
+    setup :with_in_memory_storage
+
     test "creates initial snapshot if one doesn't exist", %{storage: storage} = ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.put(ctx, :pool, nil),
@@ -75,6 +85,7 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "get_or_create_shape_id/2 against real db" do
+    setup :with_in_memory_storage
     setup :with_unique_db
     setup :with_basic_tables
     setup :with_shape_cache
@@ -116,8 +127,8 @@ defmodule Electric.ShapeCacheTest do
         ShapeCache.append_to_log!(
           shape_id,
           Lsn.from_integer(expected_offset_after_log_entry),
-          _xid = 0,
-          _changes = [],
+          @xid,
+          @changes,
           opts
         )
 
@@ -150,6 +161,8 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "list_active_shapes/1" do
+    setup :with_in_memory_storage
+
     test "returns empty list initially", ctx do
       %{shape_cache_opts: opts} = with_shape_cache(Map.put(ctx, :pool, nil))
       assert ShapeCache.list_active_shapes(opts) == []
@@ -202,6 +215,8 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "wait_for_snapshot/4" do
+    setup :with_in_memory_storage
+
     test "returns :ready for existing snapshot", %{storage: storage} = ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.put(ctx, :pool, nil),
@@ -302,6 +317,8 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "handle_truncate/2" do
+    setup :with_in_memory_storage
+
     test "cleans up shape data and rotates the shape id",
          %{storage: storage} = ctx do
       %{shape_cache_opts: opts} =
@@ -348,6 +365,8 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "clean_shape/2" do
+    setup :with_in_memory_storage
+
     test "cleans up shape data and rotates the shape id",
          %{storage: storage} = ctx do
       %{shape_cache_opts: opts} =
@@ -390,6 +409,93 @@ defmodule Electric.ShapeCacheTest do
       assert Enum.count(Storage.get_log_stream(shape_id, 0, storage)) == 0
       {shape_id2, _} = ShapeCache.get_or_create_shape_id(shape, opts)
       assert shape_id != shape_id2
+    end
+  end
+
+  describe "after restart" do
+    # Capture the log to hide the GenServer exit messages
+    @describetag capture_log: true
+
+    @describetag :tmp_dir
+
+    @shape %Shape{root_table: {"public", "items"}}
+    @snapshot_xmin 10
+
+    setup :with_cub_db_storage
+    setup(do: %{pool: :no_pool})
+
+    setup(ctx,
+      do:
+        with_shape_cache(ctx,
+          create_snapshot_fn: fn parent, shape_id, _, _, storage ->
+            GenServer.cast(parent, {:snapshot_xmin_known, shape_id, @snapshot_xmin})
+            Storage.make_new_snapshot!(shape_id, @basic_query_meta, [["test"]], storage)
+            GenServer.cast(parent, {:snapshot_ready, shape_id})
+          end
+        )
+    )
+
+    test "restores shape_ids", %{shape_cache_opts: opts} = context do
+      {shape_id1, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
+      :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id1)
+      restart_shape_cache(context)
+      {shape_id2, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
+      assert shape_id1 == shape_id2
+    end
+
+    test "restores snapshot xmins", %{shape_cache_opts: opts} = context do
+      {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
+      :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      [{^shape_id, @shape, @snapshot_xmin}] = ShapeCache.list_active_shapes(opts)
+
+      restart_shape_cache(context)
+      :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+
+      assert [{^shape_id, @shape, @snapshot_xmin}] = ShapeCache.list_active_shapes(opts)
+    end
+
+    test "restores latest offset", %{shape_cache_opts: opts} = context do
+      offset = 23
+      {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
+      :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+
+      :ok = ShapeCache.append_to_log!(shape_id, Lsn.from_integer(offset), @xid, @changes, opts)
+
+      {^shape_id, ^offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
+      restart_shape_cache(context)
+      :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      assert {^shape_id, ^offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
+    end
+
+    defp restart_shape_cache(context) do
+      stop_shape_cache(context)
+      # Wait 1 millisecond to ensure shape IDs are not generated the same
+      Process.sleep(1)
+      with_cub_db_storage(context)
+      with_shape_cache(context)
+    end
+
+    defp stop_shape_cache(%{storage: {_, %{db: shape_db}}, shape_cache_opts: shape_cache_opts}) do
+      stop_processes([shape_cache_opts[:server], shape_db])
+    end
+
+    defp stop_processes(process_names) do
+      processes =
+        for name <- process_names do
+          pid = Process.whereis(name)
+          Process.unlink(pid)
+          Process.monitor(pid)
+          Process.exit(pid, :kill)
+          {pid, name}
+        end
+
+      for {pid, name} <- processes do
+        receive do
+          {:DOWN, _, :process, ^pid, :killed} -> :process_killed
+        after
+          500 -> raise "#{name} process not killed"
+        end
+      end
     end
   end
 end

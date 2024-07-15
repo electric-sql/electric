@@ -3,8 +3,11 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   alias Electric.Replication.Changes
   alias Electric.ShapeCache.CubDbStorage
   alias Electric.ShapeCache.InMemoryStorage
+  alias Electric.Shapes.Shape
   alias Electric.Utils
   use ExUnit.Case, async: true
+  @moduletag :tmp_dir
+
   @shape_id "the-shape-id"
   @snapshot_offset 0
   @query_info %Postgrex.Query{
@@ -400,34 +403,115 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     end
   end
 
-  defp start_storage(%{module: module}) do
-    {:ok, opts} = module |> opts() |> module.shared_opts()
-    {:ok, _} = module.start_link(opts)
+  # Tests for storage implimentations that are recoverable
+  for module <- [CubDbStorage] do
+    module_name = module |> Module.split() |> List.last()
 
-    on_exit(fn ->
-      teardown(module, opts)
-    end)
+    describe "#{module_name}.list_shapes/1" do
+      @shape %Shape{root_table: {"public", "items"}}
+      @changes [
+        %Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "123", "name" => "Test"}
+        }
+      ]
+
+      setup do
+        {:ok, %{module: unquote(module)}}
+      end
+
+      setup :start_storage
+
+      test "returns shapes with it's snapshot xmins", %{module: storage, opts: opts} do
+        storage.add_shape("shape-1", @shape, opts)
+        storage.add_shape("shape-2", @shape, opts)
+        storage.set_snapshot_xmin("shape-1", 11, opts)
+        storage.set_snapshot_xmin("shape-2", 22, opts)
+
+        assert [
+                 %{shape_id: "shape-1", snapshot_xmin: 11},
+                 %{shape_id: "shape-2", snapshot_xmin: 22}
+               ] =
+                 storage.list_shapes(opts)
+      end
+
+      test "returns shapes with it's latest offset", %{module: storage, opts: opts} do
+        storage.add_shape("shape-1", @shape, opts)
+        storage.add_shape("shape-2", @shape, opts)
+        storage.add_shape("shape-3", @shape, opts)
+
+        storage.make_new_snapshot!("shape-1", @query_info, @data_stream, opts)
+        storage.append_to_log!("shape-1", Lsn.from_integer(123), 0, @changes, opts)
+
+        storage.make_new_snapshot!("shape-2", @query_info, @data_stream, opts)
+
+        assert [
+                 %{shape_id: "shape-1", latest_offset: 123},
+                 %{shape_id: "shape-2", latest_offset: 0},
+                 %{shape_id: "shape-3", latest_offset: 0}
+               ] =
+                 storage.list_shapes(opts)
+      end
+
+      test "does not return cleaned up shape", %{module: storage, opts: opts} do
+        storage.add_shape("shape-1", @shape, opts)
+        storage.add_shape("shape-2", @shape, opts)
+        storage.add_shape("shape-3", @shape, opts)
+
+        storage.cleanup!("shape-2", opts)
+
+        assert [%{shape_id: "shape-1"}, %{shape_id: "shape-3"}] =
+                 storage.list_shapes(opts)
+      end
+    end
+
+    describe "#{module_name}.cleanup_shapes_without_xmins/1" do
+      setup do
+        {:ok, %{module: unquote(module)}}
+      end
+
+      setup :start_storage
+
+      test "cleans up the shape if the snapshot_xmin has not been set", %{
+        module: storage,
+        opts: opts
+      } do
+        storage.add_shape("shape-1", @shape, opts)
+        storage.add_shape("shape-2", @shape, opts)
+        storage.add_shape("shape-3", @shape, opts)
+        storage.make_new_snapshot!("shape-1", @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-2", @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-3", @query_info, @data_stream, opts)
+        storage.set_snapshot_xmin("shape-1", 11, opts)
+        storage.set_snapshot_xmin("shape-3", 33, opts)
+
+        storage.cleanup_shapes_without_xmins(opts)
+
+        assert storage.snapshot_exists?("shape-1", opts) == true
+        assert storage.snapshot_exists?("shape-2", opts) == false
+        assert storage.snapshot_exists?("shape-3", opts) == true
+      end
+    end
+  end
+
+  defp start_storage(%{module: module} = context) do
+    {:ok, opts} = module |> opts(context) |> module.shared_opts()
+    {:ok, _} = module.start_link(opts)
 
     {:ok, %{module: module, opts: opts}}
   end
 
-  defp opts(InMemoryStorage) do
+  defp opts(InMemoryStorage, _context) do
     [
       snapshot_ets_table: String.to_atom("snapshot_ets_table_#{Utils.uuid4()}"),
       log_ets_table: String.to_atom("log_ets_table_#{Utils.uuid4()}")
     ]
   end
 
-  defp opts(CubDbStorage) do
+  defp opts(CubDbStorage, %{tmp_dir: tmp_dir}) do
     [
       db: String.to_atom("shape_cubdb_#{Utils.uuid4()}"),
-      file_path: "./test/db"
+      file_path: tmp_dir
     ]
-  end
-
-  defp teardown(InMemoryStorage, _opts), do: :ok
-
-  defp teardown(CubDbStorage, opts) do
-    File.rm_rf!(opts.file_path)
   end
 end
