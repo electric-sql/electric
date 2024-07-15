@@ -8,6 +8,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
   alias Electric.Replication.ShapeLogStorage
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes
+  alias Electric.Replication.LogOffset
 
   @moduletag :capture_log
 
@@ -40,17 +41,19 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
 
       MockShapeCache
       |> expect(:list_active_shapes, 2, fn _ -> [{shape_id, shape, xmin}] end)
-      |> expect(:append_to_log!, fn ^shape_id, ^lsn, ^xmin, _, _ -> :ok end)
-      |> expect(:append_to_log!, fn ^shape_id, ^lsn, ^xid, _, _ -> :ok end)
+      |> expect(:append_to_log!, fn ^shape_id, ^last_log_offset, ^xmin, _, _ -> :ok end)
+      |> expect(:append_to_log!, fn ^shape_id, ^last_log_offset, ^xid, _, _ -> :ok end)
       |> allow(self(), server)
 
       txn = %Transaction{
         xid: xmin,
         changes: [%Changes.NewRecord{relation: {"public", "test_table"}, record: %{"id" => "1"}}],
-        lsn: lsn
+        lsn: lsn,
+        last_log_offset: last_log_offset
       }
 
       assert :ok = ShapeLogStorage.store_transaction(txn, server)
@@ -58,7 +61,8 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       txn = %Transaction{
         xid: xid,
         changes: [%Changes.NewRecord{relation: {"public", "test_table"}, record: %{"id" => "1"}}],
-        lsn: lsn
+        lsn: lsn,
+        last_log_offset: last_log_offset
       }
 
       assert :ok = ShapeLogStorage.store_transaction(txn, server)
@@ -70,6 +74,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       xmin = 200
       xid = 150
       lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
 
       MockShapeCache
       |> expect(:list_active_shapes, fn _ -> [{shape_id, shape, xmin}] end)
@@ -78,7 +83,8 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       txn = %Transaction{
         xid: xid,
         changes: [%Changes.NewRecord{relation: {"public", "test_table"}, record: %{"id" => "1"}}],
-        lsn: lsn
+        lsn: lsn,
+        last_log_offset: last_log_offset
       }
 
       assert :ok = ShapeLogStorage.store_transaction(txn, server)
@@ -95,6 +101,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
 
       MockShapeCache
       |> expect(:list_active_shapes, fn _ -> [{shape_id, shape, xmin}] end)
@@ -103,7 +110,8 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       txn = %Transaction{
         xid: xid,
         changes: [%Changes.NewRecord{relation: {"public", "test_table"}, record: %{"id" => "1"}}],
-        lsn: lsn
+        lsn: lsn,
+        last_log_offset: last_log_offset
       }
 
       assert :ok = ShapeLogStorage.store_transaction(txn, server)
@@ -115,6 +123,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
 
       # The fact that we don't expect `append_to_log` is enough to prove that it wasn't called.
       MockShapeCache
@@ -125,7 +134,8 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       txn = %Transaction{
         xid: xid,
         changes: [%Changes.TruncatedRelation{relation: {"public", "test_table"}}],
-        lsn: lsn
+        lsn: lsn,
+        last_log_offset: last_log_offset
       }
 
       assert :ok = ShapeLogStorage.store_transaction(txn, server)
@@ -137,10 +147,11 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
 
       MockShapeCache
       |> expect(:list_active_shapes, fn _ -> [{shape_id, shape, xmin}] end)
-      |> expect(:append_to_log!, fn ^shape_id, ^lsn, ^xid, _, _ -> :ok end)
+      |> expect(:append_to_log!, fn ^shape_id, ^last_log_offset, ^xid, _, _ -> :ok end)
       |> allow(self(), server)
 
       ref = make_ref()
@@ -149,11 +160,12 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       txn = %Transaction{
         xid: xid,
         changes: [%Changes.NewRecord{relation: {"public", "test_table"}, record: %{"id" => "1"}}],
-        lsn: lsn
+        lsn: lsn,
+        last_log_offset: last_log_offset
       }
 
       assert :ok = ShapeLogStorage.store_transaction(txn, server)
-      assert_receive {^ref, :new_changes, ^lsn}, 1000
+      assert_receive {^ref, :new_changes, ^last_log_offset}, 1000
     end
 
     test "correctly writes only relevant changes to multiple shape logs", %{server: server} do
@@ -162,6 +174,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
 
       MockShapeCache
       |> expect(:list_active_shapes, fn _ ->
@@ -170,11 +183,11 @@ defmodule Electric.Replication.ShapeLogStorageTest do
           {shape2, %Shape{root_table: {"public", "other_table"}}, xmin}
         ]
       end)
-      |> expect(:append_to_log!, fn ^shape1, ^lsn, ^xid, [change], _ ->
+      |> expect(:append_to_log!, fn ^shape1, ^last_log_offset, ^xid, [change], _ ->
         assert change.record["id"] == "1"
         :ok
       end)
-      |> expect(:append_to_log!, fn ^shape2, ^lsn, ^xid, [change], _ ->
+      |> expect(:append_to_log!, fn ^shape2, ^last_log_offset, ^xid, [change], _ ->
         assert change.record["id"] == "2"
         :ok
       end)
@@ -187,7 +200,8 @@ defmodule Electric.Replication.ShapeLogStorageTest do
           %Changes.NewRecord{relation: {"public", "other_table"}, record: %{"id" => "2"}},
           %Changes.NewRecord{relation: {"public", "something else"}, record: %{"id" => "3"}}
         ],
-        lsn: lsn
+        lsn: lsn,
+        last_log_offset: last_log_offset
       }
 
       assert :ok = ShapeLogStorage.store_transaction(txn, server)

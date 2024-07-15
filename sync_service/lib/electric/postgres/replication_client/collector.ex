@@ -5,6 +5,7 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
   """
 
   require Logger
+  alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes
   alias Electric.Postgres.LogicalReplication.Messages, as: LR
 
@@ -16,10 +17,11 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     TruncatedRelation
   }
 
-  defstruct transaction: nil, relations: %{}
+  defstruct transaction: nil, tx_op_index: nil, relations: %{}
 
   @type t() :: %__MODULE__{
           transaction: nil | Transaction.t(),
+          tx_op_index: nil | non_neg_integer(),
           relations: %{optional(LR.relation_id()) => LR.Relation.t()}
         }
 
@@ -42,7 +44,7 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
       commit_timestamp: msg.commit_timestamp
     }
 
-    %{state | transaction: txn}
+    %{state | transaction: txn, tx_op_index: 0}
   end
 
   def handle_message(%LR.Origin{} = _msg, state), do: state
@@ -60,8 +62,9 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     relation = Map.fetch!(state.relations, msg.relation_id)
 
     data = data_tuple_to_map(relation.columns, msg.tuple_data)
+    offset = LogOffset.new(state.transaction.lsn, state.tx_op_index)
 
-    %NewRecord{relation: {relation.namespace, relation.name}, record: data}
+    %NewRecord{relation: {relation.namespace, relation.name}, record: data, log_offset: offset}
     |> prepend_change(state)
   end
 
@@ -80,11 +83,13 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
 
     old_data = data_tuple_to_map(relation.columns, msg.old_tuple_data)
     data = data_tuple_to_map(relation.columns, msg.tuple_data)
+    offset = LogOffset.new(state.transaction.lsn, state.tx_op_index)
 
     UpdatedRecord.new(
       relation: {relation.namespace, relation.name},
       old_record: old_data,
-      record: data
+      record: data,
+      log_offset: offset
     )
     |> prepend_change(state)
   end
@@ -98,27 +103,37 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
         msg.old_tuple_data || msg.changed_key_tuple_data
       )
 
+    offset = LogOffset.new(state.transaction.lsn, state.tx_op_index)
+
     %DeletedRecord{
       relation: {relation.namespace, relation.name},
-      old_record: data
+      old_record: data,
+      log_offset: offset
     }
     |> prepend_change(state)
   end
 
   def handle_message(%LR.Truncate{} = msg, state) do
+    offset = LogOffset.new(state.transaction.lsn, state.tx_op_index)
+
     msg.truncated_relations
     |> Enum.map(&Map.get(state.relations, &1))
-    |> Enum.map(&%TruncatedRelation{relation: {&1.namespace, &1.name}})
+    |> Enum.map(&%TruncatedRelation{relation: {&1.namespace, &1.name}, log_offset: offset})
     |> Enum.reduce(state, &prepend_change/2)
   end
 
   def handle_message(
-        %LR.Commit{lsn: commit_lsn, end_lsn: end_lsn},
+        %LR.Commit{lsn: commit_lsn},
         %__MODULE__{transaction: txn} = state
       )
+      # NOTE: keeping the commit LSN rather than the end_lsn as the
+      # transaction's identifying LSN for convenience
       when not is_nil(txn) and commit_lsn == txn.lsn do
-    {%Transaction{txn | lsn: end_lsn, changes: Enum.reverse(txn.changes)},
-     %__MODULE__{state | transaction: nil}}
+    {%Transaction{
+       txn
+       | changes: Enum.reverse(txn.changes),
+         last_log_offset: LogOffset.new(txn.lsn, max(0, state.tx_op_index - 1))
+     }, %__MODULE__{state | transaction: nil, tx_op_index: nil}}
   end
 
   @spec data_tuple_to_map([LR.Relation.Column.t()], list(String.t())) :: %{
@@ -133,7 +148,7 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
   end
 
   @spec prepend_change(Changes.change(), t()) :: t()
-  defp prepend_change(change, %__MODULE__{transaction: txn} = state) do
-    %{state | transaction: Transaction.prepend_change(txn, change)}
+  defp prepend_change(change, %__MODULE__{transaction: txn, tx_op_index: tx_op_index} = state) do
+    %{state | transaction: Transaction.prepend_change(txn, change), tx_op_index: tx_op_index + 1}
   end
 end

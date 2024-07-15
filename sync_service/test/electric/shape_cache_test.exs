@@ -8,17 +8,21 @@ defmodule Electric.ShapeCacheTest do
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache
   alias Electric.Shapes.Shape
-  alias Electric.Postgres.Lsn
   alias Electric.Replication.Changes
+  alias Electric.Replication.LogOffset
 
   @basic_query_meta %Postgrex.Query{columns: ["id"], result_types: [:text], name: "key_prefix"}
+  @change_offset LogOffset.new(13, 2)
   @changes [
     %Changes.NewRecord{
       relation: {"public", "test_table"},
-      record: %{"id" => "123", "name" => "Test"}
+      record: %{"id" => "123", "name" => "Test"},
+      log_offset: @change_offset
     }
   ]
   @xid 99
+
+  @zero_offset LogOffset.first()
 
   describe "get_or_create_shape_id/2" do
     setup :with_in_memory_storage
@@ -28,14 +32,14 @@ defmodule Electric.ShapeCacheTest do
 
     test "creates a new shape_id", %{shape_cache_opts: opts} do
       shape = %Shape{root_table: {"public", "items"}}
-      {shape_id, 0} = ShapeCache.get_or_create_shape_id(shape, opts)
+      {shape_id, @zero_offset} = ShapeCache.get_or_create_shape_id(shape, opts)
       assert is_binary(shape_id)
     end
 
     test "returns existing shape_id", %{shape_cache_opts: opts} do
       shape = %Shape{root_table: {"public", "items"}}
-      {shape_id1, 0} = ShapeCache.get_or_create_shape_id(shape, opts)
-      {shape_id2, 0} = ShapeCache.get_or_create_shape_id(shape, opts)
+      {shape_id1, @zero_offset} = ShapeCache.get_or_create_shape_id(shape, opts)
+      {shape_id2, @zero_offset} = ShapeCache.get_or_create_shape_id(shape, opts)
       assert shape_id1 == shape_id2
     end
   end
@@ -56,7 +60,7 @@ defmodule Electric.ShapeCacheTest do
       shape = %Shape{root_table: {"public", "items"}}
 
       {shape_id, offset} = ShapeCache.get_or_create_shape_id(shape, opts)
-      assert offset == 0
+      assert offset == @zero_offset
       assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
       assert Storage.snapshot_exists?(shape_id, storage)
     end
@@ -107,7 +111,7 @@ defmodule Electric.ShapeCacheTest do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(shape, opts)
       assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
       assert Storage.snapshot_exists?(shape_id, storage)
-      assert {0, stream} = Storage.get_snapshot(shape_id, storage)
+      assert {@zero_offset, stream} = Storage.get_snapshot(shape_id, storage)
 
       assert [%{value: %{"value" => "test1"}}, %{value: %{"value" => "test2"}}] =
                Enum.to_list(stream)
@@ -121,12 +125,13 @@ defmodule Electric.ShapeCacheTest do
       assert Storage.snapshot_exists?(shape_id, storage)
       assert {^shape_id, offset_after_snapshot} = ShapeCache.get_or_create_shape_id(shape, opts)
 
-      expected_offset_after_log_entry = 1000
+      expected_offset_after_log_entry =
+        LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
 
       :ok =
         ShapeCache.append_to_log!(
           shape_id,
-          Lsn.from_integer(expected_offset_after_log_entry),
+          expected_offset_after_log_entry,
           @xid,
           @changes,
           opts
@@ -134,7 +139,7 @@ defmodule Electric.ShapeCacheTest do
 
       assert {^shape_id, offset_after_log_entry} = ShapeCache.get_or_create_shape_id(shape, opts)
 
-      assert initial_offset == 0
+      assert initial_offset == @zero_offset
       assert initial_offset == offset_after_snapshot
       assert offset_after_log_entry > offset_after_snapshot
       assert offset_after_log_entry == expected_offset_after_log_entry
@@ -337,19 +342,19 @@ defmodule Electric.ShapeCacheTest do
 
       Storage.append_to_log!(
         shape_id,
-        Lsn.from_integer(1000),
         1,
         [
           %Electric.Replication.Changes.NewRecord{
             relation: {"public", "items"},
-            record: %{"id" => "1", "name" => "Alice"}
+            record: %{"id" => "1", "name" => "Alice"},
+            log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
           }
         ],
         storage
       )
 
       assert Storage.snapshot_exists?(shape_id, storage)
-      assert Enum.count(Storage.get_log_stream(shape_id, 0, storage)) == 1
+      assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 1
 
       log = capture_log(fn -> ShapeCache.handle_truncate(opts[:server], shape_id) end)
       assert log =~ "Truncating and rotating shape id"
@@ -358,7 +363,7 @@ defmodule Electric.ShapeCacheTest do
       Process.sleep(100)
 
       refute Storage.snapshot_exists?(shape_id, storage)
-      assert Enum.count(Storage.get_log_stream(shape_id, 0, storage)) == 0
+      assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 0
       {shape_id2, _} = ShapeCache.get_or_create_shape_id(shape, opts)
       assert shape_id != shape_id2
     end
@@ -385,19 +390,19 @@ defmodule Electric.ShapeCacheTest do
 
       Storage.append_to_log!(
         shape_id,
-        Lsn.from_integer(1000),
         1,
         [
           %Electric.Replication.Changes.NewRecord{
             relation: {"public", "items"},
-            record: %{"id" => "1", "name" => "Alice"}
+            record: %{"id" => "1", "name" => "Alice"},
+            log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
           }
         ],
         storage
       )
 
       assert Storage.snapshot_exists?(shape_id, storage)
-      assert Enum.count(Storage.get_log_stream(shape_id, 0, storage)) == 1
+      assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 1
 
       log = capture_log(fn -> ShapeCache.clean_shape(opts[:server], shape_id) end)
       assert log =~ "Cleaning up shape"
@@ -406,7 +411,7 @@ defmodule Electric.ShapeCacheTest do
       Process.sleep(100)
 
       refute Storage.snapshot_exists?(shape_id, storage)
-      assert Enum.count(Storage.get_log_stream(shape_id, 0, storage)) == 0
+      assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 0
       {shape_id2, _} = ShapeCache.get_or_create_shape_id(shape, opts)
       assert shape_id != shape_id2
     end
@@ -455,11 +460,11 @@ defmodule Electric.ShapeCacheTest do
     end
 
     test "restores latest offset", %{shape_cache_opts: opts} = context do
-      offset = 23
+      offset = @change_offset
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
 
-      :ok = ShapeCache.append_to_log!(shape_id, Lsn.from_integer(offset), @xid, @changes, opts)
+      :ok = ShapeCache.append_to_log!(shape_id, offset, @xid, @changes, opts)
 
       {^shape_id, ^offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
       restart_shape_cache(context)
