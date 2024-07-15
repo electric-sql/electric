@@ -9,6 +9,8 @@ defmodule Electric.Application do
 
   @impl true
   def start(_type, _args) do
+    :erlang.system_flag(:backtrace_depth, 50)
+
     {storage_module, init_params} = Application.fetch_env!(:electric, :storage)
 
     with {:ok, storage_opts} <- storage_module.shared_opts(init_params) do

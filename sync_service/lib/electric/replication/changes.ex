@@ -11,6 +11,7 @@ defmodule Electric.Replication.Changes do
   """
 
   alias Electric.Replication.Changes
+  alias Electric.Replication.LogOffset
 
   require Logger
 
@@ -42,13 +43,15 @@ defmodule Electric.Replication.Changes do
             changes: [Changes.change()],
             affected_relations: MapSet.t(Changes.relation()),
             commit_timestamp: DateTime.t(),
-            lsn: Electric.Postgres.Lsn.t()
+            lsn: Electric.Postgres.Lsn.t(),
+            last_log_offset: LogOffset.t()
           }
 
     defstruct [
       :xid,
       :commit_timestamp,
       :lsn,
+      :last_log_offset,
       changes: [],
       affected_relations: MapSet.new()
     ]
@@ -73,21 +76,30 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule NewRecord do
-    defstruct [:relation, :record]
+    defstruct [:relation, :record, :log_offset]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation(),
-            record: Changes.record()
+            record: Changes.record(),
+            log_offset: LogOffset.t()
           }
   end
 
   defmodule UpdatedRecord do
-    defstruct [:relation, :old_record, :record, tags: [], changed_columns: MapSet.new()]
+    defstruct [
+      :relation,
+      :old_record,
+      :record,
+      :log_offset,
+      tags: [],
+      changed_columns: MapSet.new()
+    ]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation(),
             old_record: Changes.record() | nil,
             record: Changes.record(),
+            log_offset: LogOffset.t(),
             tags: [Changes.tag()],
             changed_columns: MapSet.t()
           }
@@ -125,19 +137,23 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule DeletedRecord do
-    defstruct [:relation, :old_record, tags: []]
+    defstruct [:relation, :old_record, :log_offset, tags: []]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation(),
             old_record: Changes.record(),
+            log_offset: LogOffset.t(),
             tags: [Changes.tag()]
           }
   end
 
   defmodule TruncatedRelation do
-    defstruct [:relation]
+    defstruct [:relation, :log_offset]
 
-    @type t() :: %__MODULE__{relation: Changes.relation()}
+    @type t() :: %__MODULE__{
+            relation: Changes.relation(),
+            log_offset: LogOffset.t()
+          }
   end
 
   # FIXME: this assumes PK is literally just "id" column
@@ -158,6 +174,20 @@ defmodule Electric.Replication.Changes do
   def get_action(%NewRecord{}), do: "insert"
   def get_action(%UpdatedRecord{}), do: "update"
   def get_action(%DeletedRecord{}), do: "delete"
+
+  @doc """
+  ## Examples
+
+      iex> get_log_offset(%NewRecord{log_offset: {1, 2}})
+      {1, 2}
+
+      iex> get_log_offset(%NewRecord{})
+      ** (FunctionClauseError) no function clause matching in Electric.Replication.Changes.get_log_offset/1
+  """
+  def get_log_offset(%NewRecord{log_offset: offset}) when offset != nil, do: offset
+  def get_log_offset(%UpdatedRecord{log_offset: offset}) when offset != nil, do: offset
+  def get_log_offset(%DeletedRecord{log_offset: offset}) when offset != nil, do: offset
+  def get_log_offset(%TruncatedRelation{log_offset: offset}) when offset != nil, do: offset
 
   def convert_update(%UpdatedRecord{} = change, to: :new_record) do
     %NewRecord{relation: change.relation, record: change.record}

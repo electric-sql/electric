@@ -1,16 +1,21 @@
 defmodule Electric.Plug.ServeShapePlug do
   require Logger
   alias Electric.Shapes
+  alias Electric.Replication.LogOffset
   use Plug.Builder
+
+  # Aliasing for pattern matching
+  @before_all_offset LogOffset.before_all()
 
   defmodule Params do
     use Ecto.Schema
     import Ecto.Changeset
+    alias Electric.Replication.LogOffset
 
     @primary_key false
     embedded_schema do
       field(:root_table, :string)
-      field(:offset, :integer)
+      field(:offset, :string)
       field(:shape_id, :string)
       field(:live, :boolean, default: false)
       field(:where, :string)
@@ -22,8 +27,8 @@ defmodule Electric.Plug.ServeShapePlug do
       |> cast(params, __schema__(:fields) -- [:shape_definition],
         message: fn _, _ -> "must be %{type}" end
       )
-      |> validate_number(:offset, greater_than_or_equal_to: -1)
       |> validate_required([:root_table, :offset])
+      |> cast_offset()
       |> validate_shape_id_with_offset()
       |> cast_root_table(opts)
       |> apply_action(:validate)
@@ -41,17 +46,29 @@ defmodule Electric.Plug.ServeShapePlug do
       end
     end
 
+    def cast_offset(%Ecto.Changeset{valid?: false} = changeset), do: changeset
+
+    def cast_offset(%Ecto.Changeset{} = changeset) do
+      offset = fetch_change!(changeset, :offset)
+
+      case LogOffset.from_string(offset) do
+        {:ok, offset} ->
+          put_change(changeset, :offset, offset)
+
+        {:error, message} ->
+          add_error(changeset, :offset, message)
+      end
+    end
+
     def validate_shape_id_with_offset(%Ecto.Changeset{valid?: false} = changeset), do: changeset
 
     def validate_shape_id_with_offset(%Ecto.Changeset{} = changeset) do
       offset = fetch_change!(changeset, :offset)
 
-      case offset do
-        -1 ->
-          changeset
-
-        _ ->
-          validate_required(changeset, [:shape_id], message: "can't be blank when offset != -1")
+      if offset == LogOffset.before_all() do
+        changeset
+      else
+        validate_required(changeset, [:shape_id], message: "can't be blank when offset != -1")
       end
     end
 
@@ -116,7 +133,7 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   # If the offset requested is -1, noop as we can always serve it
-  def validate_shape_offset(%Plug.Conn{assigns: %{offset: -1}} = conn, _) do
+  def validate_shape_offset(%Plug.Conn{assigns: %{offset: @before_all_offset}} = conn, _) do
     # noop
     conn
   end
@@ -159,7 +176,10 @@ defmodule Electric.Plug.ServeShapePlug do
     } = conn.assigns
 
     conn
-    |> assign(:etag, "#{active_shape_id}:#{offset}:#{last_offset}")
+    |> assign(
+      :etag,
+      "#{active_shape_id}:#{offset}:#{last_offset}"
+    )
   end
 
   defp validate_and_put_etag(%Plug.Conn{} = conn, _) do
@@ -210,7 +230,11 @@ defmodule Electric.Plug.ServeShapePlug do
   # If offset is -1, we're serving a snapshot
   defp serve_log_or_snapshot(
          %Plug.Conn{
-           assigns: %{offset: -1, last_offset: last_offset, active_shape_id: shape_id}
+           assigns: %{
+             offset: @before_all_offset,
+             last_offset: last_offset,
+             active_shape_id: shape_id
+           }
          } = conn,
          _
        ) do
@@ -254,9 +278,13 @@ defmodule Electric.Plug.ServeShapePlug do
     Registry.register(registry, shape_id, ref)
 
     receive do
-      {^ref, :new_changes, _new_lsn} ->
+      {^ref, :new_changes, latest_log_offset} ->
         # Stream new log since currently "held" offset
-        serve_log_or_snapshot(assign(conn, :live, false), [])
+        conn
+        |> assign(:last_offset, latest_log_offset)
+        # update last offset header
+        |> put_resp_header("x-electric-chunk-last-offset", "#{latest_log_offset}")
+        |> serve_log_or_snapshot([])
 
       {^ref, :shape_rotation} ->
         # We may want to notify the client better that the shape ID had changed, but just closing the response
