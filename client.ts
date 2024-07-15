@@ -143,9 +143,9 @@ export class ShapeStream {
   private options: ShapeStreamOptions
   private backoffOptions: BackoffOptions
 
-  private subscribers = new Map<string, MessageProcessor>()
+  private subscribers = new Map<number, MessageProcessor>()
   private upToDateSubscribers = new Map<
-    string,
+    number,
     [() => void, (error: FetchError | Error) => void]
   >()
 
@@ -297,12 +297,13 @@ export class ShapeStream {
   }
 
   private notifyUpToDateSubscribers() {
-    this.upToDateSubscribers.forEach(([callback, _]) => {
+    this.upToDateSubscribers.forEach(([callback]) => {
       callback()
     })
   }
 
   private sendErrorToUpToDateSubscribers(error: FetchError | Error) {
+    // eslint-disable-next-line
     this.upToDateSubscribers.forEach(([_, errorCallback]) =>
       errorCallback(error)
     )
@@ -366,28 +367,38 @@ export class Shape {
   private stream: ShapeStream
 
   private data: ShapeData = new Map()
-  private subscribers = new Map<string, ShapeChangedCallback>()
+  private subscribers = new Map<number, ShapeChangedCallback>()
   public isUpToDate: boolean = false
 
-  constructor(options: ShapeOptions, backoffOptions?: BackoffOptions) {
-    this.stream = new ShapeStream(options, backoffOptions)
+  constructor(stream: ShapeStream) {
+    console.log({ stream })
+    this.stream = stream
     this.stream.subscribe(this.process.bind(this))
-    const unsubscribe = this.stream.subscribeOnceToUpToDate(() => {
-      unsubscribe()
-      this.isUpToDate = true
-    })
+    const unsubscribe = this.stream.subscribeOnceToUpToDate(
+      () => {
+        unsubscribe()
+        this.isUpToDate = true
+      },
+      (e) => {
+        throw e
+      }
+    )
   }
 
   get value(): Promise<ShapeData> {
     return new Promise((resolve) => {
       if (this.stream.isUpToDate) {
-        // resolve(this.value)
-        resolve(new Map())
+        resolve(this.value)
       } else {
-        const unsubscribe = this.stream.subscribeOnceToUpToDate(() => {
-          unsubscribe()
-          resolve(this.valueSync)
-        })
+        const unsubscribe = this.stream.subscribeOnceToUpToDate(
+          () => {
+            unsubscribe()
+            resolve(this.valueSync)
+          },
+          (e) => {
+            throw e
+          }
+        )
       }
     })
   }

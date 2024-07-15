@@ -10,7 +10,7 @@ import { Client } from 'pg'
 import { v4 as uuidv4 } from 'uuid'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
-import { useShape } from './react-hooks'
+import { useShape, ShapesProvider } from './react-hooks'
 
 let context: {
   aborter?: AbortController
@@ -83,7 +83,7 @@ describe(`useShape`, () => {
     const { aborter, tableName } = context
 
     const wrapper: FC = ({ children }) => {
-      return <div>{children}</div>
+      return <ShapesProvider>{children}</ShapesProvider>
     }
 
     const { result } = renderHook(
