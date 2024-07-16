@@ -6,7 +6,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, inject } from 'vitest'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
-import { useShape } from '../react-hooks'
+import { useShape, ShapesProvider } from '../react-hooks'
 import { Message } from '../types'
 
 type FC = React.FC<React.PropsWithChildren>
@@ -15,7 +15,7 @@ const BASE_URL = inject(`baseUrl`)
 describe(`useShape`, () => {
   it(`should sync an empty shape`, async ({ aborter, issuesTableUrl }) => {
     const wrapper: FC = ({ children }) => {
-      return <div>{children}</div>
+      return <ShapesProvider>{children}</ShapesProvider>
     }
 
     const { result } = renderHook(
@@ -40,7 +40,7 @@ describe(`useShape`, () => {
     const [id] = await insertIssues({ title: `test row` })
 
     const wrapper: FC = ({ children }) => {
-      return <div>{children}</div>
+      return <ShapesProvider>{children}</ShapesProvider>
     }
 
     const { result } = renderHook(
@@ -67,7 +67,7 @@ describe(`useShape`, () => {
     const [id] = await insertIssues({ title: `test row` })
 
     const wrapper: FC = ({ children }) => {
-      return <div>{children}</div>
+      return <ShapesProvider>{children}</ShapesProvider>
     }
 
     const { result } = renderHook(
@@ -102,7 +102,7 @@ describe(`useShape`, () => {
     await insertIssues({ title: `test row` })
 
     const wrapper: FC = ({ children }) => {
-      return <div>{children}</div>
+      return <ShapesProvider>{children}</ShapesProvider>
     }
 
     const { result, unmount } = renderHook(
