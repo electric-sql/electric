@@ -97,13 +97,18 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :put_resp_content_type, "application/json"
   plug :validate_query_params
   plug :load_shape_info
-  # plug :validate_shape_offset
+
+  # We're starting listening as soon as possible to not miss stuff that was added since we've asked for last offset
+  plug :listen_for_new_changes
+  plug :validate_shape_offset
   plug :generate_etag
   plug :validate_and_put_etag
   plug :put_resp_cache_headers
   plug :serve_log_or_snapshot
 
   defp validate_query_params(%Plug.Conn{} = conn, _) do
+    Logger.info("Query String: #{conn.query_string}")
+
     all_params =
       Map.merge(conn.query_params, conn.path_params)
       |> Map.update("live", "false", &(&1 != "false"))
@@ -120,8 +125,6 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp load_shape_info(%Plug.Conn{} = conn, _) do
-    Logger.info("Query String: #{conn.query_string}")
-
     {shape_id, last_offset} =
       Shapes.get_or_create_shape_id(conn.assigns.shape_definition, conn.assigns.config)
 
@@ -270,12 +273,28 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
+  defp listen_for_new_changes(%Plug.Conn{} = conn, _) when not conn.assigns.live, do: conn
+
+  defp listen_for_new_changes(%Plug.Conn{assigns: assigns} = conn, _) do
+    # Only start listening when we know there is a possibility that nothing is going to be returned
+    if LogOffset.compare(assigns.offset, assigns.last_offset) != :lt do
+      shape_id = assigns.shape_id
+
+      ref = make_ref()
+      registry = conn.assigns.config[:registry]
+      Registry.register(registry, shape_id, ref)
+      Logger.debug("Client #{inspect(self())} is registered for changes to #{shape_id}")
+
+      assign(conn, :new_changes_ref, ref)
+    else
+      conn
+    end
+  end
+
   def hold_until_change(conn, shape_id) do
-    Logger.debug("Client is waiting for changes to #{shape_id}")
-    registry = conn.assigns.config[:registry]
     long_poll_timeout = conn.assigns.config[:long_poll_timeout]
-    ref = make_ref()
-    Registry.register(registry, shape_id, ref)
+    Logger.debug("Client #{inspect(self())} is waiting for changes to #{shape_id}")
+    ref = conn.assigns.new_changes_ref
 
     receive do
       {^ref, :new_changes, latest_log_offset} ->

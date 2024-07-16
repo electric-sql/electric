@@ -30,7 +30,6 @@ services:
       - "3002:3002"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
-      - ../../caching/nginx_cache:/var/cache/nginx
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

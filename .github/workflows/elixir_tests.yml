@@ -4,7 +4,6 @@ on:
   push:
     branches: ['main']
   pull_request:
-    branches: ['main']
 
 permissions:
   contents: read
@@ -18,20 +17,24 @@ jobs:
         working-directory: sync_service
     env:
       MIX_ENV: test
-    # services:
-    #   postgres:
-    #     image: postgres:14
-    #     env:
-    #       POSTGRES_PASSWORD: password
-    #     options: >-
-    #       --health-cmd pg_isready
-    #       --health-interval 10s
-    #       --health-timeout 5s
-    #       --health-retries 5
-    #     ports:
-    #       - 54321:5432
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 54321:5432
     steps:
       - uses: actions/checkout@v4
+      - name: 'Set PG settings'
+        run: |
+          docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
+          docker restart ${{ job.services.postgres.id }}
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
@@ -60,7 +63,6 @@ jobs:
           key: ${{ runner.os }}-build-${{ hashFiles('sync_service/**/mix.lock') }}
       - name: Compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
-      - run: mix start_dev
       - name: Run tests
         run: mix test
   formatting:
