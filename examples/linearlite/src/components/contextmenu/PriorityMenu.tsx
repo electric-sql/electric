@@ -19,14 +19,14 @@ function PriorityMenu({
   className,
   onSelect,
 }: Props) {
-  const [keyword, setKeyword] = useState('')
+  const [keyword, setKeyword] = useState(``)
 
   const handleSelect = (priority: string) => {
-    setKeyword('')
+    setKeyword(``)
     if (onSelect) onSelect(priority)
   }
   let statusOpts = PriorityOptions
-  if (keyword !== '') {
+  if (keyword !== ``) {
     const normalizedKeyword = keyword.toLowerCase().trim()
     statusOpts = statusOpts.filter(
       ([_Icon, _priority, label]) =>

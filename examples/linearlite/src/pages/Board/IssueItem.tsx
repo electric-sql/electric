@@ -52,7 +52,7 @@ const IssueItem = ({ issue, style, isDragging, provided }: IssueProps) => {
     <div
       ref={provided.innerRef}
       className={classNames(
-        'cursor-default flex flex-col w-full px-4 py-3 mb-2 bg-white rounded focus:outline-none',
+        `cursor-default flex flex-col w-full px-4 py-3 mb-2 bg-white rounded focus:outline-none`,
         {
           'shadow-modal': isDragging,
         }
@@ -75,7 +75,7 @@ const IssueItem = ({ issue, style, isDragging, provided }: IssueProps) => {
       <div className="mt-2.5 flex items-center">
         <PriorityMenu
           button={priorityIcon}
-          id={'priority-menu-' + issue.id}
+          id={`priority-menu-` + issue.id}
           filterKeyword={true}
           // TODO: onSelect={(p) => updatePriority(p)}
         />

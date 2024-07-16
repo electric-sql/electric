@@ -24,7 +24,7 @@ interface EditorProps {
 const Editor = ({
   value,
   onChange,
-  className = '',
+  className = ``,
   placeholder,
 }: EditorProps) => {
   const editorProps = {
@@ -49,7 +49,7 @@ const Editor = ({
     content: value || undefined,
     onUpdate: ({ editor }) => {
       markdownValue.current = editor.storage.markdown.getMarkdown()
-      onChange(markdownValue.current || '')
+      onChange(markdownValue.current || ``)
     },
   })
 

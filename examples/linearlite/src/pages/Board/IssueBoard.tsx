@@ -86,9 +86,9 @@ export default function IssueBoard({ issues }: IssueBoardProps) {
       prevIssue = columnIssues[index - 1]
       nextIssue = columnIssues[index]
     }
-    console.log('sameColumn', sameColumn)
-    console.log('prevIssue', prevIssue)
-    console.log('nextIssue', nextIssue)
+    console.log(`sameColumn`, sameColumn)
+    console.log(`prevIssue`, prevIssue)
+    console.log(`nextIssue`, nextIssue)
     return { prevIssue, nextIssue }
   }
 

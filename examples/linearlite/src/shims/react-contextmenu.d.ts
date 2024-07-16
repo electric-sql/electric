@@ -1,7 +1,7 @@
 // Copied here from the unreleased master branch of github.com/firefox-devtools/react-contextmenu
 /* eslint @typescript-eslint/ban-types: 0 */
 
-declare module '@firefox-devtools/react-contextmenu' {
+declare module `@firefox-devtools/react-contextmenu` {
   import * as React from 'react'
 
   export interface ContextMenuProps {
@@ -101,7 +101,7 @@ declare module '@firefox-devtools/react-contextmenu' {
   export function hideMenu(opts?: any, target?: HTMLElement): void
 }
 
-declare module '@firefox-devtools/react-contextmenu/modules/actions' {
+declare module `@firefox-devtools/react-contextmenu/modules/actions` {
   export function showMenu(opts?: any, target?: HTMLElement): void
   export function hideMenu(opts?: any, target?: HTMLElement): void
 }

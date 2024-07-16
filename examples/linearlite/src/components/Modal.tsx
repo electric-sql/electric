@@ -23,15 +23,15 @@ interface Props {
   size?: keyof typeof sizeClasses
 }
 const sizeClasses = {
-  large: 'w-175',
-  normal: 'w-140',
+  large: `w-175`,
+  normal: `w-140`,
 }
 
 function Modal({
   title,
   isOpen,
   center = true,
-  size = 'normal',
+  size = `normal`,
   className,
   onDismiss,
   children,
@@ -40,13 +40,13 @@ function Modal({
   const outerRef = useRef(null)
 
   const wrapperClasses = classnames(
-    'fixed flex flex-col items-center inset-0 z-50',
+    `fixed flex flex-col items-center inset-0 z-50`,
     {
       'justify-center': center,
     }
   )
   const modalClasses = classnames(
-    'flex flex-col items-center overflow-hidden transform bg-white modal shadow-large-modal rounded-xl',
+    `flex flex-col items-center overflow-hidden transform bg-white modal shadow-large-modal rounded-xl`,
     {
       'mt-20 mb-2 ': !center,
     },
@@ -93,7 +93,7 @@ function Modal({
 
   return ReactDOM.createPortal(
     modal,
-    document.getElementById('root-modal') as Element
+    document.getElementById(`root-modal`) as Element
   )
 }
 

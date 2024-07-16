@@ -21,7 +21,7 @@ interface Props {
 
 function IssueModal({ isOpen, onDismiss }: Props) {
   const ref = useRef<HTMLInputElement>(null)
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(``)
   const [description, setDescription] = useState<string>()
   const [priority, setPriority] = useState(Priority.NONE)
   const [status, setStatus] = useState(Status.BACKLOG)
@@ -56,7 +56,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
 
     if (onDismiss) onDismiss()
     reset()
-    showInfo('You created new issue.', 'Issue created')
+    showInfo(`You created new issue.`, `Issue created`)
   }
 
   const handleClickCloseBtn = () => {
@@ -66,8 +66,8 @@ function IssueModal({ isOpen, onDismiss }: Props) {
 
   const reset = () => {
     setTimeout(() => {
-      setTitle('')
-      setDescription('')
+      setTitle(``)
+      setDescription(``)
       setPriority(Priority.NONE)
       setStatus(Status.BACKLOG)
     }, 250)
@@ -129,7 +129,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
         <div className="w-full px-4">
           <Editor
             className="prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 p-1 text-md editor border border-transparent focus:outline-none focus:ring-0"
-            value={description || ''}
+            value={description || ``}
             onChange={(val) => setDescription(val)}
             placeholder="Add description..."
           />

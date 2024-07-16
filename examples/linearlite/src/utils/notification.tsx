@@ -1,14 +1,12 @@
 import { toast } from 'react-toastify'
 
-export function showWarning(msg: string, title: string = '') {
+export function showWarning(msg: string, title: string = ``) {
   //TODO: make notification showing from bottom
   const content = (
     <div className="flex flex-col">
-      {title !== '' && (
+      {title !== `` && (
         <div
-          className={
-            'font-medium text-sm w-full text-gray-700 flex items-center'
-          }
+          className={`font-medium text-sm w-full text-gray-700 flex items-center`}
         >
           <span className="flex items-center justify-center w-4 h-4 bg-gray-200 rounded-full">
             <svg width="4" height="9" viewBox="0 0 3 9">
@@ -22,19 +20,17 @@ export function showWarning(msg: string, title: string = '') {
     </div>
   )
   toast(content, {
-    position: 'bottom-right',
+    position: `bottom-right`,
   })
 }
 
-export function showInfo(msg: string, title: string = '') {
+export function showInfo(msg: string, title: string = ``) {
   //TODO: make notification showing from bottom
   const content = (
     <div className="flex flex-col">
-      {title !== '' && (
+      {title !== `` && (
         <div
-          className={
-            'font-medium text-sm w-full text-gray-700 flex items-center'
-          }
+          className={`font-medium text-sm w-full text-gray-700 flex items-center`}
         >
           <span className="flex items-center justify-center w-4 h-4 bg-indigo-700 rounded-full">
             <svg width="10" height="7" viewBox="0 0 9 7" fill="#fff">
@@ -48,6 +44,6 @@ export function showInfo(msg: string, title: string = '') {
     </div>
   )
   toast(content, {
-    position: 'bottom-right',
+    position: `bottom-right`,
   })
 }

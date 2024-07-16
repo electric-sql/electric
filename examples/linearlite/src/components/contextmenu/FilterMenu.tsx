@@ -14,10 +14,10 @@ interface Props {
 
 function FilterMenu({ id, button, className }: Props) {
   const [filterState, setFilterState] = useFilterState()
-  const [keyword, setKeyword] = useState('')
+  const [keyword, setKeyword] = useState(``)
 
   let priorities = PriorityOptions
-  if (keyword !== '') {
+  if (keyword !== ``) {
     const normalizedKeyword = keyword.toLowerCase().trim()
     priorities = priorities.filter(
       ([_icon, _priority, label]) =>
@@ -26,7 +26,7 @@ function FilterMenu({ id, button, className }: Props) {
   }
 
   let statuses = StatusOptions
-  if (keyword !== '') {
+  if (keyword !== ``) {
     const normalizedKeyword = keyword.toLowerCase().trim()
     statuses = statuses.filter(
       ([_icon, _status, label]) =>
@@ -65,7 +65,7 @@ function FilterMenu({ id, button, className }: Props) {
   })
 
   const handlePrioritySelect = (priority: string) => {
-    setKeyword('')
+    setKeyword(``)
     const newPriority = filterState.priority || []
     if (newPriority.includes(priority)) {
       newPriority.splice(newPriority.indexOf(priority), 1)
@@ -79,7 +79,7 @@ function FilterMenu({ id, button, className }: Props) {
   }
 
   const handleStatusSelect = (status: string) => {
-    setKeyword('')
+    setKeyword(``)
     const newStatus = filterState.status || []
     if (newStatus.includes(status)) {
       newStatus.splice(newStatus.indexOf(status), 1)

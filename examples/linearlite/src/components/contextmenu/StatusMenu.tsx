@@ -11,13 +11,13 @@ interface Props {
   onSelect?: (item: any) => void
 }
 export default function StatusMenu({ id, button, className, onSelect }: Props) {
-  const [keyword, setKeyword] = useState('')
+  const [keyword, setKeyword] = useState(``)
   const handleSelect = (status: string) => {
     if (onSelect) onSelect(status)
   }
 
   let statuses = StatusOptions
-  if (keyword !== '') {
+  if (keyword !== ``) {
     const normalizedKeyword = keyword.toLowerCase().trim()
     statuses = statuses.filter(
       ([_icon, _id, l]) => l.toLowerCase().indexOf(normalizedKeyword) !== -1

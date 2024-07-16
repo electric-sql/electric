@@ -18,12 +18,12 @@ export default function ({
   issues,
   hideSort,
   showSearch,
-  title = 'All issues',
+  title = `All issues`,
 }: Props) {
   const [filterState, setFilterState] = useFilterState()
   const [showViewOption, setShowViewOption] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(``)
 
   // TODO: get total issues count
   const totalIssuesCount: number = 0
@@ -51,10 +51,10 @@ export default function ({
   }
 
   if (filterState.status?.length) {
-    if (eqStatuses(['backlog'])) {
-      title = 'Backlog'
-    } else if (eqStatuses(['todo', 'in_progress'])) {
-      title = 'Active'
+    if (eqStatuses([`backlog`])) {
+      title = `Backlog`
+    } else if (eqStatuses([`todo`, `in_progress`])) {
+      title = `Active`
     }
   }
 
@@ -76,7 +76,7 @@ export default function ({
             {filteredIssuesCount}
             {filteredIssuesCount !== totalIssuesCount
               ? ` of ${totalIssuesCount}`
-              : ''}
+              : ``}
           </span>
           <FilterMenu
             button={
@@ -85,7 +85,7 @@ export default function ({
                 Filter
               </button>
             }
-            id={'filter-menu'}
+            id={`filter-menu`}
           />
         </div>
 
@@ -109,7 +109,7 @@ export default function ({
               <span className="px-1 bg-gray-300 ">
                 {filterState.priority
                   ?.map((priority) => PriorityDisplay[priority])
-                  .join(', ')}
+                  .join(`, `)}
               </span>
               <span
                 className="px-1 bg-gray-300 rounded-r cursor-pointer flex items-center"
@@ -130,7 +130,7 @@ export default function ({
               <span className="px-1 bg-gray-300 ">
                 {filterState.status
                   ?.map((status) => StatusDisplay[status])
-                  .join(', ')}
+                  .join(`, `)}
               </span>
               <span
                 className="px-1 bg-gray-300 rounded-r cursor-pointer flex items-center"

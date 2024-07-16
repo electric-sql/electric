@@ -25,7 +25,7 @@ function LeftMenu() {
   const { showMenu, setShowMenu } = useContext(MenuContext)!
 
   const classes = classnames(
-    'absolute z-40 lg:static inset-0 transform duration-300 lg:relative lg:translate-x-0 bg-white flex flex-col flex-shrink-0 w-56 font-sans text-sm text-gray-700 border-r border-gray-100 lg:shadow-none justify-items-start',
+    `absolute z-40 lg:static inset-0 transform duration-300 lg:relative lg:translate-x-0 bg-white flex flex-col flex-shrink-0 w-56 font-sans text-sm text-gray-700 border-r border-gray-100 lg:shadow-none justify-items-start`,
     {
       '-translate-x-full ease-out shadow-none': !showMenu,
       'translate-x-0 ease-in shadow-xl': showMenu,
@@ -142,7 +142,8 @@ function LeftMenu() {
           {/* bottom group */}
           <div className="flex flex-col px-2 pb-2 text-gray-500 mt-7">
             <a className="inline-flex" href="https://electric-sql.com/">
-              <ElectricIcon className="w-3 h-3 mr-2 mt-1 scale-150" />{' '}
+              <ElectricIcon className="w-3 h-3 mr-2 mt-1 scale-150" />
+              {` `}
               ElectricSQL
             </a>
             <button

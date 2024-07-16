@@ -28,7 +28,7 @@ export default function ({ isOpen, onDismiss }: Props) {
   ) => {
     setFilterState({
       ...filterState,
-      orderDirection: e.target.value as 'asc' | 'desc',
+      orderDirection: e.target.value as `asc` | `desc`,
     })
   }
 

@@ -2,7 +2,7 @@ import { useSearchParams } from 'react-router-dom'
 
 interface FilterState {
   orderBy: string
-  orderDirection: 'asc' | 'desc'
+  orderDirection: `asc` | `desc`
   status?: string[]
   priority?: string[]
   query?: string
@@ -10,21 +10,21 @@ interface FilterState {
 
 export function useFilterState(): [
   FilterState,
-  (state: Partial<FilterState>) => void
+  (state: Partial<FilterState>) => void,
 ] {
   const [searchParams, setSearchParams] = useSearchParams()
-  const orderBy = searchParams.get('orderBy') ?? 'created'
+  const orderBy = searchParams.get(`orderBy`) ?? `created`
   const orderDirection =
-    (searchParams.get('orderDirection') as 'asc' | 'desc') ?? 'desc'
+    (searchParams.get(`orderDirection`) as `asc` | `desc`) ?? `desc`
   const status = searchParams
-    .getAll('status')
-    .map((status) => status.toLocaleLowerCase().split(','))
+    .getAll(`status`)
+    .map((status) => status.toLocaleLowerCase().split(`,`))
     .flat()
   const priority = searchParams
-    .getAll('priority')
-    .map((status) => status.toLocaleLowerCase().split(','))
+    .getAll(`priority`)
+    .map((status) => status.toLocaleLowerCase().split(`,`))
     .flat()
-  const query = searchParams.get('query')
+  const query = searchParams.get(`query`)
 
   const state = {
     orderBy,
@@ -38,29 +38,29 @@ export function useFilterState(): [
     const { orderBy, orderDirection, status, priority, query } = state
     setSearchParams((searchParams) => {
       if (orderBy) {
-        searchParams.set('orderBy', orderBy)
+        searchParams.set(`orderBy`, orderBy)
       } else {
-        searchParams.delete('orderBy')
+        searchParams.delete(`orderBy`)
       }
       if (orderDirection) {
-        searchParams.set('orderDirection', orderDirection)
+        searchParams.set(`orderDirection`, orderDirection)
       } else {
-        searchParams.delete('orderDirection')
+        searchParams.delete(`orderDirection`)
       }
       if (status && status.length > 0) {
-        searchParams.set('status', status.join(','))
+        searchParams.set(`status`, status.join(`,`))
       } else {
-        searchParams.delete('status')
+        searchParams.delete(`status`)
       }
       if (priority && priority.length > 0) {
-        searchParams.set('priority', priority.join(','))
+        searchParams.set(`priority`, priority.join(`,`))
       } else {
-        searchParams.delete('priority')
+        searchParams.delete(`priority`)
       }
       if (query) {
-        searchParams.set('query', query)
+        searchParams.set(`query`, query)
       } else {
-        searchParams.delete('query')
+        searchParams.delete(`query`)
       }
       return searchParams
     })

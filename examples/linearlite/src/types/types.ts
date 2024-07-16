@@ -33,19 +33,19 @@ export type Comment = {
 }
 
 export const Priority = {
-  NONE: 'none',
-  URGENT: 'urgent',
-  HIGH: 'high',
-  LOW: 'low',
-  MEDIUM: 'medium',
+  NONE: `none`,
+  URGENT: `urgent`,
+  HIGH: `high`,
+  LOW: `low`,
+  MEDIUM: `medium`,
 }
 
 export const PriorityDisplay = {
-  [Priority.NONE]: 'None',
-  [Priority.URGENT]: 'Urgent',
-  [Priority.HIGH]: 'High',
-  [Priority.LOW]: 'Low',
-  [Priority.MEDIUM]: 'Medium',
+  [Priority.NONE]: `None`,
+  [Priority.URGENT]: `Urgent`,
+  [Priority.HIGH]: `High`,
+  [Priority.LOW]: `Low`,
+  [Priority.MEDIUM]: `Medium`,
 }
 
 export const PriorityIcons = {
@@ -61,27 +61,27 @@ export const PriorityOptions: [
   string,
   (typeof Priority)[keyof typeof Priority],
 ][] = [
-  [PriorityIcons[Priority.NONE], Priority.NONE, 'None'],
-  [PriorityIcons[Priority.URGENT], Priority.URGENT, 'Urgent'],
-  [PriorityIcons[Priority.HIGH], Priority.HIGH, 'High'],
-  [PriorityIcons[Priority.MEDIUM], Priority.MEDIUM, 'Medium'],
-  [PriorityIcons[Priority.LOW], Priority.LOW, 'Low'],
+  [PriorityIcons[Priority.NONE], Priority.NONE, `None`],
+  [PriorityIcons[Priority.URGENT], Priority.URGENT, `Urgent`],
+  [PriorityIcons[Priority.HIGH], Priority.HIGH, `High`],
+  [PriorityIcons[Priority.MEDIUM], Priority.MEDIUM, `Medium`],
+  [PriorityIcons[Priority.LOW], Priority.LOW, `Low`],
 ]
 
 export const Status = {
-  BACKLOG: 'backlog',
-  TODO: 'todo',
-  IN_PROGRESS: 'in_progress',
-  DONE: 'done',
-  CANCELED: 'canceled',
+  BACKLOG: `backlog`,
+  TODO: `todo`,
+  IN_PROGRESS: `in_progress`,
+  DONE: `done`,
+  CANCELED: `canceled`,
 }
 
 export const StatusDisplay = {
-  [Status.BACKLOG]: 'Backlog',
-  [Status.TODO]: 'To Do',
-  [Status.IN_PROGRESS]: 'In Progress',
-  [Status.DONE]: 'Done',
-  [Status.CANCELED]: 'Canceled',
+  [Status.BACKLOG]: `Backlog`,
+  [Status.TODO]: `To Do`,
+  [Status.IN_PROGRESS]: `In Progress`,
+  [Status.DONE]: `Done`,
+  [Status.CANCELED]: `Canceled`,
 }
 
 export const StatusIcons = {

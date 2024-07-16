@@ -21,9 +21,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
         onClick={() => editor.chain().focus().toggleBold().run()}
         disabled={!editor.can().chain().focus().toggleBold().run()}
         className={classNames(
-          'me-1 px-1 rounded color text-gray-500 hover:text-black',
+          `me-1 px-1 rounded color text-gray-500 hover:text-black`,
           {
-            'bg-gray-100': editor.isActive('bold'),
+            'bg-gray-100': editor.isActive(`bold`),
           }
         )}
       >
@@ -33,9 +33,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
         onClick={() => editor.chain().focus().toggleItalic().run()}
         disabled={!editor.can().chain().focus().toggleItalic().run()}
         className={classNames(
-          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black',
+          `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
-            'bg-gray-100': editor.isActive('italic'),
+            'bg-gray-100': editor.isActive(`italic`),
           }
         )}
       >
@@ -45,9 +45,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
         onClick={() => editor.chain().focus().toggleStrike().run()}
         disabled={!editor.can().chain().focus().toggleStrike().run()}
         className={classNames(
-          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black',
+          `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
-            'bg-gray-100': editor.isActive('strike'),
+            'bg-gray-100': editor.isActive(`strike`),
           }
         )}
       >
@@ -57,9 +57,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
         onClick={() => editor.chain().focus().toggleCode().run()}
         disabled={!editor.can().chain().focus().toggleCode().run()}
         className={classNames(
-          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black',
+          `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
-            'bg-gray-100': editor.isActive('code'),
+            'bg-gray-100': editor.isActive(`code`),
           }
         )}
       >
@@ -69,9 +69,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
       <button
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         className={classNames(
-          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black',
+          `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
-            'bg-gray-100': editor.isActive('bulletList'),
+            'bg-gray-100': editor.isActive(`bulletList`),
           }
         )}
       >
@@ -80,9 +80,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
       <button
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         className={classNames(
-          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black',
+          `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
-            'bg-gray-100': editor.isActive('orderedList'),
+            'bg-gray-100': editor.isActive(`orderedList`),
           }
         )}
       >
@@ -91,9 +91,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
       <button
         onClick={() => editor.chain().focus().toggleCodeBlock().run()}
         className={classNames(
-          'me-1 px-1 py-1 rounded color text-gray-500 hover:text-black',
+          `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
-            'bg-gray-100': editor.isActive('codeBlock'),
+            'bg-gray-100': editor.isActive(`codeBlock`),
           }
         )}
       >
@@ -102,9 +102,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
       <button
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
         className={classNames(
-          'px-1 py-1 rounded color text-gray-500 hover:text-black',
+          `px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
-            'bg-gray-100': editor.isActive('blockquote'),
+            'bg-gray-100': editor.isActive(`blockquote`),
           }
         )}
       >

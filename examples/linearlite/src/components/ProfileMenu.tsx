@@ -16,14 +16,14 @@ export default function ProfileMenu({
   onDismiss,
   setShowAboutModal,
 }: Props) {
-  const connectivityState = { status: 'disconnected' }
+  const connectivityState = { status: `disconnected` }
   const classes = classnames(
-    'select-none w-53 shadow-modal z-50 flex flex-col py-1 bg-white font-normal rounded text-gray-800',
+    `select-none w-53 shadow-modal z-50 flex flex-col py-1 bg-white font-normal rounded text-gray-800`,
     className
   )
   const ref = useRef(null)
 
-  const connectivityConnected = connectivityState.status !== 'disconnected'
+  const connectivityConnected = connectivityState.status !== `disconnected`
   const connectivityStateDisplay =
     connectivityState.status[0].toUpperCase() +
     connectivityState.status.slice(1)

@@ -13,18 +13,18 @@ interface Props {
 //bg-blue-500
 
 function stringToHslColor(str: string, s: number, l: number) {
-  var hash = 0
-  for (var i = 0; i < str.length; i++) {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
     hash = str.charCodeAt(i) + ((hash << 5) - hash)
   }
 
-  var h = hash % 360
-  return 'hsl(' + h + ', ' + s + '%, ' + l + '%)'
+  const h = hash % 360
+  return `hsl(` + h + `, ` + s + `%, ` + l + `%)`
 }
 
 function getAcronym(name: string) {
-  let acr = ((name || '').match(/\b(\w)/g) || [])
-    .join('')
+  let acr = ((name || ``).match(/\b(\w)/g) || [])
+    .join(``)
     .slice(0, 2)
     .toUpperCase()
   if (acr.length === 1) {
@@ -63,7 +63,7 @@ function Avatar({ online, showOffline, name, onClick, avatarUrl }: Props) {
       // <span className="absolute -right-0.5 -bottom-0.5 w-2 h-2 rounded-full bg-green-500 border border-white"></span>
       <span
         className={classnames(
-          'absolute -right-0.5 -bottom-0.5 w-2 h-2 rounded-full border border-white',
+          `absolute -right-0.5 -bottom-0.5 w-2 h-2 rounded-full border border-white`,
           {
             'bg-green-500': online,
             'bg-red-500': !online,
