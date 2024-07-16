@@ -7,10 +7,10 @@ type Item = { id: string }
 const baseUrl = import.meta.env.ELECTRIC_URL ?? `http://localhost:3000`
 
 export const Example = () => {
-  const items = useShape({
+  const { data: items } = useShape({
     shape: { table: `items` },
     baseUrl,
-  })! as Item[]
+  }) as unknown as { data: Item[] }
 
   const addItem = async () => {
     console.log(`'addItem' is not implemented`)

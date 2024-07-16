@@ -8,7 +8,7 @@ import { issueShape } from '../../shapes'
 function List({ showSearch = false }) {
   const [filterState] = useFilterState()
 
-  const issues = useShape(issueShape)! as unknown as Issue[]
+  const { data: issues } = useShape(issueShape) as unknown as { data: Issue[] }
 
   const filteredIssues = issues.filter((issue) => {
     const tests = [true]
