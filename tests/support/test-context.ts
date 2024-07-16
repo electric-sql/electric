@@ -2,19 +2,22 @@
 import { v4 as uuidv4 } from 'uuid'
 import { Client, QueryResult } from 'pg'
 import { inject, test } from 'vitest'
-import { makePgClient } from './test_helpers'
+import { makePgClient } from './test-helpers'
 import { FetchError } from '../../client'
 
 export type IssueRow = { id: string; title: string }
 export type GeneratedIssueRow = { id?: string; title: string }
 export type UpdateIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type InsertIssuesFn = (...rows: GeneratedIssueRow[]) => Promise<string[]>
+export type ClearIssuesShapeFn = (shapeId?: string) => Promise<void>
+export type ClearShapeFn = (table: string, shapeId?: string) => Promise<void>
 
 export const testWithDbClient = test.extend<{
   dbClient: Client
   aborter: AbortController
   baseUrl: string
   pgSchema: string
+  clearShape: ClearShapeFn
 }>({
   dbClient: async ({}, use) => {
     const searchOption = `-csearch_path=${inject(`testPgSchema`)}`
@@ -30,6 +33,26 @@ export const testWithDbClient = test.extend<{
   },
   baseUrl: async ({}, use) => use(inject(`baseUrl`)),
   pgSchema: async ({}, use) => use(inject(`testPgSchema`)),
+  clearShape: async ({}, use) => {
+    use(async (table: string, shapeId?: string) => {
+      const baseUrl = inject(`baseUrl`)
+      const resp = await fetch(
+        `${baseUrl}/shape/${table}${shapeId ? `?shape_id=${shapeId}` : ``}`,
+        {
+          method: `DELETE`,
+        }
+      )
+      if (!resp.ok) {
+        console.error(
+          await FetchError.fromResponse(
+            resp,
+            `DELETE ${baseUrl}/shape/${table}`
+          )
+        )
+        throw new Error(`Could not delete shape ${table} with ID ${shapeId}`)
+      }
+    })
+  },
 })
 
 export const testWithIssuesTable = testWithDbClient.extend<{
@@ -38,6 +61,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
   issuesTableKey: string
   updateIssue: UpdateIssueFn
   insertIssues: InsertIssuesFn
+  clearIssuesShape: ClearIssuesShapeFn
 }>({
   issuesTableSql: async ({ dbClient, task }, use) => {
     const tableName = `"issues for ${task.id}"`
@@ -48,26 +72,20 @@ export const testWithIssuesTable = testWithDbClient.extend<{
       title TEXT NOT NULL
     );
     ALTER TABLE ${tableName} REPLICA IDENTITY FULL;
-    COMMENT ON TABLE ${tableName} IS 'Created for ${task.file.name} - ${task.name}';
+    COMMENT ON TABLE ${tableName} IS 'Created for ${task.file?.name ?? `unknown`} - ${task.name}';
   `)
     await use(tableName)
     await dbClient.query(`DROP TABLE ${tableName}`)
   },
-  issuesTableUrl: async ({ issuesTableSql, pgSchema, baseUrl }, use) => {
+  issuesTableUrl: async ({ issuesTableSql, pgSchema, clearShape }, use) => {
     const urlAppropriateTable = pgSchema + `.` + issuesTableSql.slice(1, -1)
     await use(urlAppropriateTable)
-
-    const resp = await fetch(`${baseUrl}/shape/${urlAppropriateTable}`, {
-      method: `DELETE`,
-    })
-
-    if (!resp.ok)
-      console.error(
-        await FetchError.fromResponse(
-          resp,
-          `DELETE ${baseUrl}/shape/${urlAppropriateTable}`
-        )
-      )
+    try {
+      await clearShape(urlAppropriateTable)
+    } catch (_) {
+      // ignore - clearShape has its own logging
+      // we don't want to interrupt cleanup
+    }
   },
   issuesTableKey: ({ issuesTableSql, pgSchema }, use) =>
     use(`"${pgSchema}".${issuesTableSql}`),
@@ -87,4 +105,8 @@ export const testWithIssuesTable = testWithDbClient.extend<{
       )
       return rows_1.map((x_1) => x_1.id)
     }),
+
+  clearIssuesShape: async ({ clearShape, issuesTableUrl }, use) => {
+    use((shapeId?: string) => clearShape(issuesTableUrl, shapeId))
+  },
 })
