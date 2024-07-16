@@ -3,14 +3,33 @@ import 'global-jsdom/register'
 
 import React from 'react'
 import { renderHook, waitFor } from '@testing-library/react'
-import { describe, expect, inject } from 'vitest'
+import { describe, expect, inject, it as bareIt } from 'vitest'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
-import { useShape, ShapesProvider } from '../react-hooks'
+import { useShape, ShapesProvider, sortedOptionsHash } from '../react-hooks'
 import { Message } from '../types'
 
 type FC = React.FC<React.PropsWithChildren>
 const BASE_URL = inject(`baseUrl`)
+
+describe(`sortedOptionsHash`, () => {
+  bareIt(
+    `should create the same hash from options sorted in different ways`,
+    () => {
+      const hash1 = sortedOptionsHash({
+        shape: { table: `foo` },
+        baseUrl: `http://whatever`,
+        offset: `-1`,
+      })
+      const hash2 = sortedOptionsHash({
+        baseUrl: `http://whatever`,
+        offset: `-1`,
+        shape: { table: `foo` },
+      })
+      expect(hash1).toEqual(hash2)
+    }
+  )
+})
 
 describe(`useShape`, () => {
   it(`should sync an empty shape`, async ({ aborter, issuesTableUrl }) => {

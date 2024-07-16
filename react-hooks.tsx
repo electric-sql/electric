@@ -22,14 +22,25 @@ export async function preloadShape(
   return shape
 }
 
-export function getShapeStream(options: ShapeStreamOptions): ShapeStream {
-  // A somewhat hacky way to cheaply create a consistent hash of the shape options.
+export function sortedOptionsHash(options: ShapeStreamOptions): string {
   const shapeDef = JSON.stringify(
     options.shape,
     Object.keys(options.shape).sort()
   )
-  const allOptions = JSON.stringify(options, Object.keys(options).sort())
+  // eslint-disable-next-line
+  const { shape, ...optionsWithoutShapeDef } = options
+  const allOptions = JSON.stringify(
+    optionsWithoutShapeDef,
+    Object.keys(options).sort()
+  )
   const shapeHash = shapeDef + allOptions
+
+  return shapeHash
+}
+
+export function getShapeStream(options: ShapeStreamOptions): ShapeStream {
+  const shapeHash = sortedOptionsHash(options)
+
   // If the stream is already cached, return
   if (streamCache.has(shapeHash)) {
     // Return the ShapeStream
