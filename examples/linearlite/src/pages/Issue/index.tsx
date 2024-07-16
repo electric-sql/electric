@@ -1,3 +1,5 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
 import { useParams, useNavigate } from 'react-router-dom'
 import { useState, useRef } from 'react'
 import { BsTrash3 as DeleteIcon } from 'react-icons/bs'

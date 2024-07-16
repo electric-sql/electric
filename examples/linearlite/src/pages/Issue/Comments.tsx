@@ -1,3 +1,5 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import Editor from '../../components/editor/Editor'

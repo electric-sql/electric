@@ -1,6 +1,5 @@
 import React, { createContext, useEffect, useContext, useState } from 'react'
 import { Shape, ShapeStream, ShapeStreamOptions } from './client'
-import { JsonSerializable } from './types'
 
 interface ShapeContextType {
   getShape: (shapeStream: ShapeStream) => Shape
@@ -92,20 +91,16 @@ export function useShapeContext() {
   return context
 }
 
-export function useShape<Data extends JsonSerializable>(
-  options: ShapeStreamOptions
-) {
+export function useShape(options: ShapeStreamOptions) {
   const { getShape, getShapeStream } = useShapeContext()
   const shapeStream = getShapeStream(options)
   const shape = getShape(shapeStream)
-  const [shapeData, setShapeData] = useState<Data[]>([
-    ...shape.valueSync.values(),
-  ] as Data[])
+  const [shapeData, setShapeData] = useState([...shape.valueSync.values()])
 
   useEffect(() => {
     // Subscribe to updates.
     const unsubscribe = shape.subscribe((map) => {
-      setShapeData([...map.values()] as Data[])
+      setShapeData([...map.values()])
     })
 
     return () => {

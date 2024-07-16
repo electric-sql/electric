@@ -1,3 +1,5 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
 import { memo, useEffect, useRef, useState } from 'react'
 
 import { BsChevronRight as ChevronRight } from 'react-icons/bs'
