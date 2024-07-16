@@ -403,7 +403,7 @@ export class Shape {
   get value(): Promise<ShapeData> {
     return new Promise((resolve) => {
       if (this.stream.isUpToDate) {
-        resolve(this.value)
+        resolve(this.valueSync)
       } else {
         const unsubscribe = this.stream.subscribeOnceToUpToDate(
           () => {

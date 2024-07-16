@@ -55,7 +55,7 @@ describe(`Shape`, () => {
       baseUrl: BASE_URL,
     })
     const shape = new Shape(shapeStream)
-    const map = await shape.isUpToDate
+    const map = await shape.value
 
     const expectedValue = new Map()
     expectedValue.set(`${issuesTableKey}/${id}`, {
@@ -74,7 +74,7 @@ describe(`Shape`, () => {
       id: id2,
       title: `other title`,
     })
-    expect(shape.value).toEqual(expectedValue)
+    expect(shape.valueSync).toEqual(expectedValue)
 
     shape.unsubscribeAll()
   })
