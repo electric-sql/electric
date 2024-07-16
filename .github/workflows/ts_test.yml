@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build_and_test:
     name: Build and test
     runs-on: ubuntu-latest
     steps:
@@ -21,6 +21,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
       - run: npm ci
       - name: Restore dependencies cache
         uses: actions/cache@v4
@@ -62,3 +64,67 @@ jobs:
           sudo chown -R runner:docker /home/runner/work/electric-next/electric-next/
           sudo chmod -R 775 /home/runner/work/electric-next/electric-next/
       - run: npm test
+  style_check:
+    name: Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            examples/**/package-lock.json
+      - run: npm ci
+      - name: npm ci in each examples dir
+        run: for dir in examples/*/; do (cd "$dir" && npm ci); done
+      - run: npm run stylecheck
+  type_check:
+    name: Type checking
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+  list_examples:
+    name: List examples
+    runs-on: ubuntu-latest
+    outputs:
+      example_names: ${{ steps.list_examples.outputs.example_names }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "example_names=`ls -d examples/*/ | jq -R -s -c 'split("\n")[:-1] | map(rtrimstr("/"))'`" >> $GITHUB_OUTPUT
+        id: list_examples
+  check_and_build_examples:
+    name: Check and build ${{ matrix.example_folder }}
+    needs: [list_examples, build_and_test]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example_folder: ${{ fromJson(needs.list_examples.outputs.example_names) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.example_folder }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            ${{ matrix.example_folder }}/package-lock.json
+      - name: npm ci in the repository root
+        run: npm ci
+        working-directory: .
+      - name: npm ci in the ${{ matrix.example_folder }}
+        run: npm ci
+      - run: npm run typecheck
+      - run: npm run build

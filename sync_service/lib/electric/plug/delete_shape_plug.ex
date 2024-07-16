@@ -27,7 +27,7 @@ defmodule Electric.Plug.DeleteShapePlug do
     all_params =
       Map.merge(conn.query_params, conn.path_params)
       |> Map.take(["root_table", "shape_id"])
-      |> Map.put("offset", -1)
+      |> Map.put("offset", "-1")
 
     case Params.validate(all_params, []) do
       {:ok, params} ->

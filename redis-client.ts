@@ -24,10 +24,11 @@ client.connect().then(() => {
 
     // Loop through each message and make writes to the Redis hash for action messages
     messages.forEach((message) => {
+      if (!(`key` in message)) return
       // Upsert/delete
-      switch (message.headers?.[`action`]) {
+      switch (message.headers.action) {
         case `delete`:
-          pipeline.hDel(`issues`, message.key!)
+          pipeline.hDel(`issues`, message.key)
           break
 
         case `insert`:

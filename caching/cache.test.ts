@@ -262,7 +262,7 @@ describe.skip(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
       {}
     )
     expect(liveRes.status).toBe(409)
-    const liveBody = await liveRes.json()
+    const liveBody = (await liveRes.json()) as { message: string }
     expect(liveBody.message).toBe(
       `Shape offset too far behind. Resync with latest shape ID.`
     )

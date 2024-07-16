@@ -62,12 +62,10 @@
   "scripts": {
     "backend:start": "docker compose --env-file src/backend/compose/.envrc -f src/backend/compose/docker-compose.yaml up",
     "backend:down": "docker compose  --env-file src/backend/compose/.envrc -f src/backend/compose/docker-compose.yaml down --volumes",
-    "build": "cross-env-shell ELECTRIC_URL=$ELECTRIC_URL ELECTRIC_PROXY=$ELECTRIC_PROXY VITE_ELECTRIC_URL=$ELECTRIC_URL \"npm run client:generate:prod && vite build\"",
-    "client:generate": "electric-sql generate --service http://localhost:5333 --proxy postgresql://postgres:proxy_password@localhost:63432/postgres",
-    "client:generate:prod": "electric-sql generate --service https://$ELECTRIC_URL --proxy $ELECTRIC_PROXY",
+    "build": "vite build",
     "db:migrate": "node ./db/migrate.cjs",
     "db:psql": "node ./db/connect.cjs",
-    "cleanup-example-code": "node scripts/cleanup-example-code.js",
-    "dev": "vite"
+    "dev": "vite",
+    "typecheck": "tsc --noEmit"
   }
 }
