@@ -5,7 +5,7 @@ import { ShapeStream, Shape } from '../client'
 const BASE_URL = inject(`baseUrl`)
 
 describe(`Shape`, () => {
-  it.only(`should sync an empty shape`, async ({ issuesTableUrl }) => {
+  it(`should sync an empty shape`, async ({ issuesTableUrl }) => {
     const shapeStream = new ShapeStream({
       shape: { table: issuesTableUrl },
       baseUrl: BASE_URL,

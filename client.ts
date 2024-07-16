@@ -169,8 +169,6 @@ export class ShapeStream {
 
     this.backoffOptions = options.backoffOptions ?? BackoffDefaults
 
-    console.log(`this.lastOffset`, this.lastOffset)
-
     this.start()
   }
 
@@ -184,7 +182,7 @@ export class ShapeStream {
     let delay = initialDelay
 
     while ((!signal?.aborted && !this.isUpToDate) || this.options.subscribe) {
-      const url = new URL(`${baseUrl}/shape/${shape.table}`)
+      const url = new URL(`${baseUrl}/shape/${encodeURIComponent(shape.table)}`)
       url.searchParams.set(`offset`, this.lastOffset)
       if (this.isUpToDate) {
         url.searchParams.set(`live`, `true`)
