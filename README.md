@@ -1,22 +1,32 @@
-# The Next Electric
+# ElectricSQL (@next)
 
-### Notes
+Postgres Sync for modern apps.
 
-- Test table SQL — https://github.com/KyleAMathews/http-sync-prototype/tree/main/test-electric-instance/db/migrations
-- TODO table SQL — https://github.com/KyleAMathews/http-sync-prototype/blob/main/todomvc/db/migrations/001-create-todos.sql
+## Getting Started
 
-Tests are at `index.test.ts`. You run them by running in terminal: `npx vitest`. Tests have to be run in sequence to work (not ideal) and to only run the first one, change the function from `it(` to `it.only(`
+1. Install the TypeScript client and React integrations
+`npm install @electric-sql/client @electric-sql/react`
 
-`afterAll` is the vitest hook for running cleanup code when the tests are done. Right now it deletes test data in postgres. While working on the Electric server, this would be the place to do any cleanup neccessary there.
+2. Run Docker Compose similar to the following to setup Postgres and Electric
+```docker
+Etc.
+```
 
-## Clients & integrations
+`command to run Docker w/ correct environment variables etc.
 
-- js client @ client.ts with `Shape` and `ShapeStream` primitives
-- bash client @ bash-client.bash
-- redis integration @ redis.ts
-- React hook `useShape` @ use-shape.ts
+3. Try a curl command
+`curl http://localhost:3000/shape/{table}`
 
-## Setting up your development environment
+4. Add to React app
+```tsx
+Show adding provider
+```
+
+```tsx
+Show using `useHook` to fetch and use data
+```
+
+## How to setup your development environment to work on Electric
 
 We're using [asdf](https://asdf-vm.com/) to install Elixir, Erlang, and Node.js.
 
@@ -31,3 +41,13 @@ You'll probably need to fiddle with your bash/zsh/etc rc file to load the right 
 ## HTTP API Documentation
 
 The HTTP API documentation is defined through an OpenAPI 3.1.0 specification found in `docs/electric-api.yaml`. Documentation for the API can be generated with `npm run docs:generate`.
+
+## Contributing
+
+See the [Community Guidelines](https://github.com/electric-sql/electric/blob/main/CODE_OF_CONDUCT.md) including the [Guide to Contributing](https://github.com/electric-sql/electric/blob/main/CONTRIBUTING.md) and [Contributor License Agreement](https://github.com/electric-sql/electric/blob/main/CLA.md).
+
+## Support
+
+We have an [open community Discord](https://discord.electric-sql.com). Come and say hello and let us know if you have any questions or need any help getting things running.
+
+It's also super helpful if you leave the project a star here at the [top of the page☝️](#start-of-content)
