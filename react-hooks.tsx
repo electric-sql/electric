@@ -1,5 +1,6 @@
 import React, { createContext, useEffect, useContext, useState } from 'react'
 import { Shape, ShapeStream, ShapeStreamOptions } from './client'
+import { JsonSerializable } from './types'
 
 interface ShapeContextType {
   getShape: (shapeStream: ShapeStream) => Shape
