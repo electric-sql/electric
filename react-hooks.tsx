@@ -80,18 +80,20 @@ export function useShapeContext() {
   return context
 }
 
-export function useShape(options: ShapeStreamOptions) {
+export function useShape<Data extends JsonSerializable>(
+  options: ShapeStreamOptions
+) {
   const { getShape, getShapeStream } = useShapeContext()
   const shapeStream = getShapeStream(options)
   const shape = getShape(shapeStream)
-  const [shapeData, setShapeData] = useState<unknown[]>([
+  const [shapeData, setShapeData] = useState<Data[]>([
     ...shape.valueSync.values(),
-  ])
+  ] as Data[])
 
   useEffect(() => {
     // Subscribe to updates.
     const unsubscribe = shape.subscribe((map) => {
-      setShapeData([...map.values()])
+      setShapeData([...map.values()] as Data[])
     })
 
     return () => {
