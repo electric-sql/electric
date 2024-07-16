@@ -1,3 +1,4 @@
+import { CSSProperties } from 'react'
 import StatusIcon from '../../components/StatusIcon'
 import { memo } from 'react'
 import {
@@ -99,7 +100,7 @@ const Row = memo(
   }: {
     data: Issue[]
     index: number
-    style: any
+    style: CSSProperties | undefined
   }) => {
     const issue = issues[index]
     if (!issue) return null

@@ -1,3 +1,4 @@
+import { CSSProperties } from 'react'
 import { FixedSizeList as List, areEqual } from 'react-window'
 import { memo } from 'react'
 import AutoSizer from 'react-virtualized-auto-sizer'
@@ -36,7 +37,7 @@ const VirtualIssueRow = memo(
   }: {
     data: Issue[]
     index: number
-    style: any
+    style: CSSProperties
   }) => {
     const issue = issues[index]
     return <IssueRow key={`issue-${issue.id}`} issue={issue} style={style} />
