@@ -2,16 +2,7 @@ import React, { createContext, useEffect, useContext, useState } from 'react'
 import { Shape, ShapeStream, ShapeStreamOptions } from './client'
 
 // Create a Context
-const ShapesContext = createContext({
-  getShape: (stream: ShapeStream): Shape => {
-    console.log({ stream })
-    throw new Error(`ShapesContext not initialized`)
-  },
-  getShapeStream: (options: ShapeStreamOptions): ShapeStream => {
-    console.log({ options })
-    throw new Error(`ShapesContext not initialized`)
-  },
-})
+const ShapesContext = createContext(null)
 
 const streamCache = new Map<string, ShapeStream>()
 const shapeCache = new Map<ShapeStream, Shape>()
