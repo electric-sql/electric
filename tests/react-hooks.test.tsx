@@ -7,6 +7,7 @@ import { describe, expect, inject, it as bareIt } from 'vitest'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
 import { useShape, ShapesProvider, sortedOptionsHash } from '../react-hooks'
+import { Shape } from '../client'
 import { Message } from '../types'
 
 type FC = React.FC<React.PropsWithChildren>
@@ -48,7 +49,11 @@ describe(`useShape`, () => {
       { wrapper }
     )
 
-    await waitFor(() => expect(result.current).toEqual([]))
+    await waitFor(() => expect(result.current.isUpToDate).toEqual(true))
+    await waitFor(() => expect(result.current.error).toBe(false))
+    await waitFor(() => expect(result.current.isError).toEqual(false))
+    await waitFor(() => expect(result.current.data).toEqual([]))
+    await waitFor(() => expect(result.current.shape).toBeInstanceOf(Shape))
   })
 
   it(`should sync a shape`, async ({
@@ -74,7 +79,7 @@ describe(`useShape`, () => {
     )
 
     await waitFor(() =>
-      expect(result.current).toEqual([{ id: id, title: `test row` }])
+      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
     )
   })
 
@@ -100,13 +105,13 @@ describe(`useShape`, () => {
       { wrapper }
     )
 
-    await waitFor(() => expect(result.current).not.toEqual([]))
+    await waitFor(() => expect(result.current.data).not.toEqual([]))
 
     // Add an item.
     const [id2] = await insertIssues({ title: `other row` })
 
     await waitFor(() =>
-      expect(result.current).toEqual([
+      expect(result.current.data).toEqual([
         { id: id, title: `test row` },
         { id: id2, title: `other row` },
       ])
@@ -135,7 +140,7 @@ describe(`useShape`, () => {
       { wrapper }
     )
 
-    await waitFor(() => expect(result.current).not.toEqual([]))
+    await waitFor(() => expect(result.current.data).not.toEqual([]))
 
     unmount()
 
@@ -150,6 +155,6 @@ describe(`useShape`, () => {
 
     await sleep(50)
 
-    expect(result.current.length).toEqual(1)
+    expect(result.current.data.length).toEqual(1)
   })
 })

@@ -1,5 +1,6 @@
 import React, { createContext, useEffect, useContext, useState } from 'react'
 import { Shape, ShapeStream, ShapeStreamOptions } from './client'
+import { JsonSerializable } from './types'
 
 interface ShapeContextType {
   getShape: (shapeStream: ShapeStream) => Shape
@@ -91,16 +92,47 @@ export function useShapeContext() {
   return context
 }
 
-export function useShape(options: ShapeStreamOptions) {
+interface UseShapeResult {
+  /**
+   * The array of rows that make up the Shape.
+   * @type {JsonSerializable}
+   */
+  data: JsonSerializable[]
+  /**
+   * The Shape instance used by this useShape
+   * @type(Shape)
+   */
+  shape: Shape
+  error: Shape[`error`]
+  isError: boolean
+  /**
+   * Has the ShapeStream caught up with the replication log from Postgres.
+   */
+  isUpToDate: boolean
+}
+
+export function useShape(options: ShapeStreamOptions): UseShapeResult {
   const { getShape, getShapeStream } = useShapeContext()
   const shapeStream = getShapeStream(options)
   const shape = getShape(shapeStream)
-  const [shapeData, setShapeData] = useState([...shape.valueSync.values()])
+  const [shapeData, setShapeData] = useState<UseShapeResult>({
+    data: [...shape.valueSync.values()],
+    isUpToDate: shape.isUpToDate,
+    isError: shape.error !== false,
+    shape,
+    error: shape.error,
+  })
 
   useEffect(() => {
     // Subscribe to updates.
     const unsubscribe = shape.subscribe((map) => {
-      setShapeData([...map.values()])
+      setShapeData({
+        data: [...map.values()],
+        isUpToDate: shape.isUpToDate,
+        isError: shape.error !== false,
+        shape,
+        error: shape.error,
+      })
     })
 
     return () => {
