@@ -115,8 +115,9 @@ export class FetchError extends Error {
     return new FetchError(status, text, json, headers, url)
   }
 }
+
 /**
- * Consumes a shape stream using long polling. Notifies subscribers
+ * Consumes a shape stream from Electric using HTTP requests and long polling. Notifies subscribers
  * when new messages come in. Doesn't maintain any history of the
  * log but does keep track of the offset position and is the best way
  * to consume the HTTP `GET /shape` api.
@@ -126,7 +127,7 @@ export class FetchError extends Error {
  *
  * Register a callback function to subscribe to the messages.
  *
- *     const stream = new ShapeStream({})
+ *     const stream = new ShapeStream(options)
  *     stream.subscribe(console.log)
  *
  * To abort the stream, abort the `signal`
@@ -369,9 +370,14 @@ export class ShapeStream {
  *
  *     const shape = new Shape({table: `foo`, baseUrl: 'http://localhost:3000'})
  *
- * `value` resolves once the Shape has been fully loaded (and when resuming from being offline):
+ * `value` returns a promise that resolves the Shape data once the Shape has been
+ * fully loaded (and when resuming from being offline):
  *
  *     const value = await shape.value
+ *
+ * `valueSync` returns the current data synchronously:
+ *
+ *     const value = shape.valueSync
  *
  *  Subscribe to updates. Called whenever the shape updates in Postgres.
  *
