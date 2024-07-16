@@ -4,7 +4,9 @@
   "description": "The Next Electric",
   "main": "index.js",
   "scripts": {
-    "test": "npx vitest"
+    "test": "npx vitest",
+    "typecheck": "tsc --noEmit",
+    "stylecheck": "eslint './*.{ts,js,tsx,jsx}' './tests/**/*.{ts,tsx}' './examples/**/*.{ts,tsx}' --no-error-on-unmatched-pattern"
   },
   "repository": {
     "type": "git",

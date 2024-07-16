@@ -26,16 +26,16 @@ paths:
           schema:
             type: string
           description: The shape ID returned by the initial shape request.
-                       This is a required parameter when this is not an initial sync request, i.e. when offset > -1.
-                       The sync engine does not use it but it's used as a cache buster.
+            This is a required parameter when this is not an initial sync request, i.e. when offset > -1.
+            The sync engine does not use it but it's used as a cache buster.
         - name: offset
           in: query
           schema:
             type: integer
             minimum: -1
           description: The offset in the shape stream where to resume from.
-                       Specify -1 for initial sync (or just leave it out).
-                       Afterwards, need to specify the offset from where to continue in the stream.
+            Specify -1 for initial sync (or just leave it out).
+            Afterwards, need to specify the offset from where to continue in the stream.
         - name: live
           in: query
           schema:
@@ -61,8 +61,9 @@ paths:
             cache-control:
               schema:
                 type: string
-              description: "Cache control header as a string of comma separated directives.
-                           Supported directives are: max-age, stale-while-revalidate, no-store, no-cache, must-revalidate."
+              description:
+                'Cache control header as a string of comma separated directives.
+                Supported directives are: max-age, stale-while-revalidate, no-store, no-cache, must-revalidate.'
             etag:
               schema:
                 type: string
@@ -112,8 +113,9 @@ paths:
         '400':
           description: Bad request.
         '409':
-          description: The requested offset for the given shape no longer exists.
-                       Client should sync the shape using the relative path from the location header.
+          description:
+            The requested offset for the given shape no longer exists.
+            Client should sync the shape using the relative path from the location header.
           headers:
             location:
               schema:
@@ -132,10 +134,10 @@ paths:
                     description: The latest shape ID the client should sync.
                   offset:
                     type: integer
-                    description: The offset from where to sync the given shape_id.         
+                    description: The offset from where to sync the given shape_id.
     delete:
       summary: Deletes the shape for this table.
-               WARNING - this is to be used in development only and works only if the allow_shape_deletion environment variable is set.
+        WARNING - this is to be used in development only and works only if the allow_shape_deletion environment variable is set.
       parameters:
         # Path parameters
         - name: root_table
@@ -149,5 +151,6 @@ paths:
           in: query
           schema:
             type: string
-          description: Optional, deletes the current shape if it matches the shape_id.
-                       If not provided, deletes the current shape.
+          description:
+            Optional, deletes the current shape if it matches the shape_id.
+            If not provided, deletes the current shape.

@@ -60,12 +60,38 @@ defmodule Electric.Replication.LogOffset do
   end
 
   @doc """
+  Compare two log offsets
+
+  ## Examples
+
+      iex> compare(new(10, 0), new(10, 1))
+      :lt
+
+      iex> compare(new(0, 0), before_all())
+      :gt
+
+      iex> compare(new(10, 0), %LogOffset{tx_offset: 10, op_offset: 0})
+      :eq
+  """
+  def compare(%LogOffset{} = offset, offset), do: :eq
+  def compare(%LogOffset{tx_offset: a}, %LogOffset{tx_offset: b}) when a < b, do: :lt
+  def compare(%LogOffset{tx_offset: a}, %LogOffset{tx_offset: b}) when a > b, do: :gt
+
+  def compare(%LogOffset{tx_offset: tx, op_offset: a}, %LogOffset{tx_offset: tx, op_offset: b})
+      when a < b,
+      do: :lt
+
+  def compare(%LogOffset{tx_offset: tx, op_offset: a}, %LogOffset{tx_offset: tx, op_offset: b})
+      when a > b,
+      do: :gt
+
+  @doc """
   An offset that is smaller than all offsets in the log.
 
   ## Examples
 
-      iex> before_all() < first()
-      true
+      iex> compare(before_all(), first())
+      :lt
   """
   @spec before_all() :: t
   def before_all(), do: %LogOffset{tx_offset: -1, op_offset: 0}
@@ -81,11 +107,11 @@ defmodule Electric.Replication.LogOffset do
 
   ## Examples
 
-      iex> first() < last()
-      true
+      iex> compare(first(), last())
+      :lt
 
-      iex> new(Lsn.from_integer(10), 0) < last()
-      true
+      iex> compare(new(Lsn.from_integer(10), 0), last())
+      :lt
   """
   @spec last() :: t
   def last(), do: %LogOffset{tx_offset: 0xFFFFFFFFFFFFFFFF, op_offset: :infinity}
@@ -188,8 +214,12 @@ defmodule Electric.Replication.LogOffset do
   end
 
   defimpl Inspect do
-    def inspect(offset, _opts) do
-      "#LogOffset<#{Electric.Replication.LogOffset.to_iolist(offset)}>"
+    def inspect(%LogOffset{tx_offset: -1, op_offset: 0}, _opts) do
+      "LogOffset.before_all()"
+    end
+
+    def inspect(%LogOffset{tx_offset: tx, op_offset: op}, _opts) do
+      "LogOffset.new(#{tx}, #{op})"
     end
   end
 

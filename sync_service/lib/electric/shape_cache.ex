@@ -250,7 +250,14 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_shape(state, shape_id) do
-    shape = :ets.lookup_element(state.shape_meta_table, {@shape_meta_data, shape_id}, 2)
+    shape =
+      try do
+        :ets.lookup_element(state.shape_meta_table, {@shape_meta_data, shape_id}, 2)
+      rescue
+        # Sometimes we're calling cleanup when snapshot creation has failed for some reason.
+        # In those cases we're not sure about the state of the ETS keys, so we're doing our best to just delete everything without crashing
+        ArgumentError -> nil
+      end
 
     :ets.select_delete(
       state.shape_meta_table,

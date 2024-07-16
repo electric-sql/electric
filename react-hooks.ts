@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Shape, ShapeStream, ShapeStreamOptions } from './client'
+import { Shape, ShapeStreamOptions } from './client'
 
 export function useShape(options: ShapeStreamOptions) {
   const [shapeData, setShapeData] = useState<unknown[]>([])

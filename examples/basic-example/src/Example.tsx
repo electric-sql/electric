@@ -1,4 +1,4 @@
-import { useShape } from '../../../use-shape'
+import { useShape } from '../../../react-hooks'
 
 import './Example.css'
 

@@ -5,17 +5,23 @@ import {
   Heading,
   Text,
   TextField,
-  Button,
   Link,
 } from "@radix-ui/themes"
 import { useShape } from "../../../../react-hooks"
 import { v4 as uuidv4 } from "uuid"
 
+type ToDo = {
+  id: string
+  title: string
+  completed: boolean
+  created_at: number
+}
+
 export default function Index() {
   const todos = useShape({
     shape: { table: `todos` },
     baseUrl: `http://localhost:3000`,
-  })
+  }) as ToDo[]
   todos.sort((a, b) => a.created_at - b.created_at)
   console.log({ todos })
   return (
@@ -66,7 +72,9 @@ export default function Index() {
           onSubmit={async (event) => {
             event.preventDefault()
             const id = uuidv4()
-            const formData = Object.fromEntries(new FormData(event.target))
+            const formData = Object.fromEntries(
+              new FormData(event.target as HTMLFormElement)
+            )
             const res = await fetch(`http://localhost:3000/todos`, {
               method: `POST`,
               headers: {

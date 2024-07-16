@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 
-import { Message, JsonSerializable } from './types'
+import { Message, JsonSerializable, Offset } from './types'
 
 export type ShapeData = Map<string, JsonSerializable>
 export type ShapeChangedCallback = (value: ShapeData) => void
@@ -13,7 +13,7 @@ export type ShapeDefinition = {
 
 export interface ShapeOptions {
   baseUrl: string
-  offset?: number
+  offset?: Offset
   shapeId?: string
   shape: ShapeDefinition
 }
@@ -35,7 +35,7 @@ export interface ShapeStreamOptions extends ShapeOptions {
   signal?: AbortSignal
 }
 
-/*
+/**
  * Recieves batches of `messages`, puts them on a queue and processes
  * them asynchronously by passing to a registered callback function.
  *
@@ -72,7 +72,7 @@ class MessageProcessor {
   }
 }
 
-class FetchError extends Error {
+export class FetchError extends Error {
   status: number
   text?: string
   json?: object
@@ -86,8 +86,11 @@ class FetchError extends Error {
     public url: string,
     message?: string
   ) {
-    super(message || `HTTP Error ${status}`)
-    this.name = 'FetchError'
+    super(
+      message ||
+        `HTTP Error ${status} at ${url}: ${text ?? JSON.stringify(json)}`
+    )
+    this.name = `FetchError`
     this.status = status
     this.text = text
     this.json = json
@@ -103,9 +106,9 @@ class FetchError extends Error {
     let text: string | undefined = undefined
     let json: object | undefined = undefined
 
-    const contentType = response.headers.get('content-type')
-    if (contentType && contentType.includes('application/json')) {
-      json = await response.json()
+    const contentType = response.headers.get(`content-type`)
+    if (contentType && contentType.includes(`application/json`)) {
+      json = (await response.json()) as object
     } else {
       text = await response.text()
     }
@@ -113,7 +116,7 @@ class FetchError extends Error {
     return new FetchError(status, text, json, headers, url)
   }
 }
-/*
+/**
  * Consumes a shape stream using long polling. Notifies subscribers
  * when new messages come in. Doesn't maintain any history of the
  * log but does keep track of the offset position and is the best way
@@ -145,13 +148,16 @@ export class ShapeStream {
   private options: ShapeStreamOptions
   private backoffOptions: BackoffOptions
 
-  private subscribers = new Map<string, MessageProcessor>()
+  private subscribers = new Map<
+    string,
+    [MessageProcessor, ((error: Error) => void) | undefined]
+  >()
   private upToDateSubscribers = new Map<
     string,
     [() => void, (error: FetchError | Error) => void]
   >()
 
-  private lastOffset: number
+  private lastOffset: Offset
   public hasBeenUpToDate: boolean = false
   public isUpToDate: boolean = false
 
@@ -163,10 +169,12 @@ export class ShapeStream {
   ) {
     this.validateOptions(options)
     this.options = { subscribe: true, ...options }
-    this.lastOffset = this.options.offset || -1
+    this.lastOffset = this.options.offset ?? `-1`
     this.shapeId = this.options.shapeId
 
     this.backoffOptions = backoffOptions
+
+    console.log(`this.lastOffset`, this.lastOffset)
 
     this.start()
   }
@@ -182,7 +190,7 @@ export class ShapeStream {
 
     while ((!signal?.aborted && !this.isUpToDate) || this.options.subscribe) {
       const url = new URL(`${baseUrl}/shape/${shape.table}`)
-      url.searchParams.set(`offset`, this.lastOffset.toString())
+      url.searchParams.set(`offset`, this.lastOffset)
       if (this.isUpToDate) {
         url.searchParams.set(`live`, `true`)
       }
@@ -215,7 +223,7 @@ export class ShapeStream {
               return []
             }
 
-            return response.json()
+            return response.json() as Promise<Message[]>
           })
           .then((batch: Message[]) => {
             this.publish(batch)
@@ -237,7 +245,7 @@ export class ShapeStream {
                   }
                 }
 
-                if (typeof message.offset !== `undefined`) {
+                if (`offset` in message) {
                   this.lastOffset = message.offset
                 }
               })
@@ -249,6 +257,7 @@ export class ShapeStream {
         } else if (e instanceof FetchError && e.status == 400) {
           // Notify subscribers
           this.sendErrorToUpToDateSubscribers(e)
+          this.sendErrorToSubscribers(e)
 
           // We don't want to continue retrying on 400 errors
           break
@@ -267,11 +276,14 @@ export class ShapeStream {
     }
   }
 
-  subscribe(callback: (messages: Message[]) => void | Promise<void>) {
+  subscribe(
+    callback: (messages: Message[]) => void | Promise<void>,
+    onError?: (error: FetchError | Error) => void
+  ) {
     const subscriptionId = uuidv4()
     const subscriber = new MessageProcessor(callback)
 
-    this.subscribers.set(subscriptionId, subscriber)
+    this.subscribers.set(subscriptionId, [subscriber, onError])
 
     return () => {
       this.subscribers.delete(subscriptionId)
@@ -283,8 +295,14 @@ export class ShapeStream {
   }
 
   private publish(messages: Message[]) {
-    this.subscribers.forEach((subscriber) => {
+    this.subscribers.forEach(([subscriber, _]) => {
       subscriber.process(messages)
+    })
+  }
+
+  private sendErrorToSubscribers(error: Error) {
+    this.subscribers.forEach(([_, errorFn]) => {
+      errorFn?.(error)
     })
   }
 
@@ -338,7 +356,7 @@ export class ShapeStream {
 
     if (
       options.offset !== undefined &&
-      options.offset > -1 &&
+      options.offset !== `-1` &&
       !options.shapeId
     ) {
       throw new Error(
@@ -422,7 +440,7 @@ export class Shape {
     let isUpToDate = false
 
     messages.forEach((message) => {
-      if (message.key && message.value) {
+      if (`key` in message && message.value) {
         switch (message.headers?.[`action`]) {
           case `insert`:
           case `update`:
