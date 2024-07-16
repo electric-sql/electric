@@ -10,6 +10,7 @@
     "migrate": "node ./db/migrate.js",
     "preview": "vite preview",
     "load-data": "node ./db/load_data.js",
+    "typecheck": "tsc --noEmit",
     "process-data": "node ./db/process_data.js"
   },
   "dependencies": {
@@ -58,7 +59,7 @@
     "@types/react-router-dom": "^5.3.3",
     "@types/react-window": "^1.8.8",
     "@types/uuid": "^9.0.3",
-    "@types/vite-plugin-react-svg": "^0.2.5",    
+    "@types/vite-plugin-react-svg": "^0.2.5",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "@vitejs/plugin-react": "^4.3.1",
