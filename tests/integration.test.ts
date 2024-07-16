@@ -4,8 +4,8 @@ import { v4 as uuidv4 } from 'uuid'
 import { assert, describe, expect, inject, vi } from 'vitest'
 import { ShapeStream } from '../client'
 import { Message, Offset } from '../types'
-import { testWithIssuesTable as it } from './support/test_context'
-import * as h from './support/test_helpers'
+import { testWithIssuesTable as it } from './support/test-context'
+import * as h from './support/test-helpers'
 
 const BASE_URL = inject(`baseUrl`)
 

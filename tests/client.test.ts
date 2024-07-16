@@ -1,5 +1,5 @@
 import { describe, expect, inject, vi } from 'vitest'
-import { testWithIssuesTable as it } from './support/test_context'
+import { testWithIssuesTable as it } from './support/test-context'
 import { Shape } from '../client'
 
 const BASE_URL = inject(`baseUrl`)

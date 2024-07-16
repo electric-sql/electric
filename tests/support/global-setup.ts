@@ -1,14 +1,24 @@
 import type { GlobalSetupContext } from 'vitest/node'
 import { FetchError } from '../../client'
-import { makePgClient } from './test_helpers'
+import { makePgClient } from './test-helpers'
 
 const url = process.env.ELECTRIC_URL ?? `http://localhost:3000`
+const proxyUrl = process.env.ELECTRIC_PROXY_CACHE_URL ?? `http://localhost:3002`
+
+// name of proxy cache container to execute commands against,
+// see docker-compose.yml that spins it up for details
+const proxyCacheContainerName = `electric_dev-nginx-1`
+// path pattern for cache files inside proxy cache to clear
+const proxyCachePath = `/var/cache/nginx/*`
 
 // eslint-disable-next-line quotes -- eslint is acting dumb with enforce backtick quotes mode, and is trying to use it here where it's not allowed.
 declare module 'vitest' {
   export interface ProvidedContext {
     baseUrl: string
+    proxyCacheBaseUrl: string
     testPgSchema: string
+    proxyCacheContainerName: string
+    proxyCachePath: string
   }
 }
 
@@ -26,6 +36,9 @@ export default async function ({ provide }: GlobalSetupContext) {
 
   provide(`baseUrl`, url)
   provide(`testPgSchema`, `electric_test`)
+  provide(`proxyCacheBaseUrl`, proxyUrl)
+  provide(`proxyCacheContainerName`, proxyCacheContainerName)
+  provide(`proxyCachePath`, proxyCachePath)
 
   return async () => {
     await client.query(`DROP SCHEMA electric_test`)

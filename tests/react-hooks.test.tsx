@@ -5,7 +5,7 @@ import React from 'react'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, inject } from 'vitest'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { testWithIssuesTable as it } from './support/test_context'
+import { testWithIssuesTable as it } from './support/test-context'
 import { useShape } from '../react-hooks'
 import { Message } from '../types'
 
