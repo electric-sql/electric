@@ -14,7 +14,7 @@ defmodule Electric.Plug.DeleteShapePlug do
   plug :truncate_or_delete_shape
 
   defp allow_shape_deletion(%Plug.Conn{} = conn, _) do
-    if Application.get_env(:electric, :allow_shape_deletion, false) do
+    if conn.assigns.config[:allow_shape_deletion] do
       conn
     else
       conn
@@ -29,7 +29,7 @@ defmodule Electric.Plug.DeleteShapePlug do
       |> Map.take(["root_table", "shape_id"])
       |> Map.put("offset", "-1")
 
-    case Params.validate(all_params, []) do
+    case Params.validate(all_params, inspector: conn.assigns.config[:inspector]) do
       {:ok, params} ->
         %{conn | assigns: Map.merge(conn.assigns, params)}
 
@@ -42,14 +42,15 @@ defmodule Electric.Plug.DeleteShapePlug do
 
   defp truncate_or_delete_shape(%Plug.Conn{} = conn, _) do
     if conn.assigns.shape_id !== nil do
-      with :ok <- Shapes.clean_shape(conn.assigns.shape_id) do
+      with :ok <- Shapes.clean_shape(conn.assigns.shape_id, conn.assigns.config) do
         send_resp(conn, 204, "")
       end
     else
       # FIXME: This has a race condition where we accidentally create a snapshot & shape id, but clean
       #        it before snapshot is actually made.
-      with {shape_id, _} <- Shapes.get_or_create_shape_id(conn.assigns.shape_definition),
-           :ok <- Shapes.clean_shape(shape_id) do
+      with {shape_id, _} <-
+             Shapes.get_or_create_shape_id(conn.assigns.shape_definition, conn.assigns.config),
+           :ok <- Shapes.clean_shape(shape_id, conn.assigns.config) do
         send_resp(conn, 204, "")
       end
     end

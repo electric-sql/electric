@@ -15,25 +15,39 @@ defmodule PgInterop.Interval.ISO8601Parser do
 
   ## Examples
 
-      iex> {:ok, d} = #{__MODULE__}.parse("P15Y3M2DT1H14M37.25S")
-      ...> #{Interval}.Iso8601Formatter.format(d)
-      "P15Y3M2DT1H14M37.25S"
+      iex> parse("P15Y3M2DT1H14M37.25S")
+      {:ok, Interval.parse!("P15Y3M2DT1H14M37.25S")}
 
-      iex> {:ok, d} = #{__MODULE__}.parse("P15Y3M2D")
-      ...> #{Interval}.Iso8601Formatter.format(d)
-      "P15Y3M2D"
+      iex> parse("P15Y3M2D")
+      {:ok, Interval.parse!("P15Y3M2D")}
 
-      iex> {:ok, d} = #{__MODULE__}.parse("PT3H12M25.001S")
-      ...> #{Interval}.Iso8601Formatter.format(d)
-      "PT3H12M25.001S"
+      iex> parse("PT3H12M25.001S")
+      {:ok, Interval.parse!("PT3H12M25.001S")}
 
-      iex> {:ok, d} = #{__MODULE__}.parse("P2W")
-      ...> #{Interval}.Iso8601Formatter.format(d)
-      "P14D"
+      iex> parse("P2W1D")
+      {:ok, Interval.parse!("P15D")}
 
-      iex> #{__MODULE__}.parse("P15YT3D")
+      iex> parse("P15YT3D")
       {:error, "invalid use of date component after time separator"}
+      iex> parse("P15Y3H")
+      {:error, "missing T separator between date and time components"}
+      iex> parse("P15YTT3H")
+      {:error, "encountered duplicate time separator T"}
 
+      iex> parse("P1O")
+      {:error, "unexpected token O"}
+      iex> parse("P1-1D")
+      {:error, "invalid number `1-1`"}
+      iex> parse("P1")
+      {:error, "unexpected end of input at 1"}
+      iex> parse("P11")
+      {:error, "unexpected end of input at 1"}
+      iex> parse("PT")
+      {:error, "unexpected end of input at T"}
+      iex> parse("PO")
+      {:error, "expected numeric, but got `O`"}
+      iex> parse("O")
+      {:error, "expected P, got `O`"}
   """
   @spec parse(String.t()) :: {:ok, Interval.t()} | {:error, term}
   def parse(<<>>), do: {:error, "input string cannot be empty"}
@@ -42,9 +56,6 @@ defmodule PgInterop.Interval.ISO8601Parser do
     case parse_components(rest, []) do
       {:error, _} = err ->
         err
-
-      [{?W, w}] ->
-        {:ok, Interval.from_days(7 * w)}
 
       components when is_list(components) ->
         result =
@@ -61,6 +72,9 @@ defmodule PgInterop.Interval.ISO8601Parser do
             {?D, dd}, {false, d} ->
               {false, Interval.add(d, Interval.from_days(dd))}
 
+            {?W, w}, {false, d} ->
+              {false, Interval.add(d, Interval.from_days(7 * w))}
+
             ?T, {false, d} ->
               {true, d}
 
@@ -76,11 +90,6 @@ defmodule PgInterop.Interval.ISO8601Parser do
             {?S, s}, {true, d} ->
               {true, Interval.add(d, Interval.from_seconds(s))}
 
-            {?W, _w}, {_, _} ->
-              {:error,
-               "Found 'W', a basic format designator, but the parse indicates " <>
-                 "this is an extended format, mixing the two formats is disallowed"}
-
             {unit, _}, {true, _d} when unit in [?Y, ?D] ->
               {:error, "invalid use of date component after time separator"}
 
@@ -95,8 +104,7 @@ defmodule PgInterop.Interval.ISO8601Parser do
     end
   end
 
-  def parse(<<c::utf8, _::binary>>), do: {:error, "expected P, got #{<<c::utf8>>}"}
-  def parse(s) when is_binary(s), do: {:error, "unexpected end of input"}
+  def parse(<<c::utf8, _::binary>>), do: {:error, "expected P, got `#{<<c::utf8>>}`"}
 
   @spec parse_components(binary, [{integer, number}]) ::
           [{integer, number}] | {:error, String.t()}
@@ -119,23 +127,21 @@ defmodule PgInterop.Interval.ISO8601Parser do
     end
   end
 
-  defp parse_components(<<c::utf8>>, _acc),
-    do: {:error, "unexpected end of input at #{<<c::utf8>>}"}
-
   defp parse_components(<<c::utf8, _::binary>>, _acc),
-    do: {:error, "expected numeric, but got #{<<c::utf8>>}"}
+    do: {:error, "expected numeric, but got `#{<<c::utf8>>}`"}
 
   @spec parse_component(binary, {:float | :integer, binary}) ::
           {integer, number, binary} | {:error, msg :: binary()}
-  defp parse_component(<<c::utf8>>, _acc) when c in @numeric,
-    do: {:error, "unexpected end of input at #{<<c::utf8>>}"}
 
-  defp parse_component(<<c::utf8>>, {type, acc}) when c in ~c"WYMDHS" do
+  defp parse_component(<<c::utf8, rest::binary>>, {type, acc}) when c in ~c"WYMDHS" do
     case cast_number(type, acc) do
-      {n, _} -> {c, n, <<>>}
-      :error -> {:error, "invalid number `#{acc}`"}
+      {n, ""} -> {c, n, rest}
+      _ -> {:error, "invalid number `#{acc}`"}
     end
   end
+
+  defp parse_component(<<c::utf8>>, _acc) when c in @numeric,
+    do: {:error, "unexpected end of input at #{<<c::utf8>>}"}
 
   defp parse_component(<<".", rest::binary>>, {:integer, acc}) do
     parse_component(rest, {:float, <<acc::binary, ".">>})
@@ -147,13 +153,6 @@ defmodule PgInterop.Interval.ISO8601Parser do
 
   defp parse_component(<<c::utf8, rest::binary>>, {:float, acc}) when c in @numeric do
     parse_component(rest, {:float, <<acc::binary, c::utf8>>})
-  end
-
-  defp parse_component(<<c::utf8, rest::binary>>, {type, acc}) when c in ~c"WYMDHS" do
-    case cast_number(type, acc) do
-      {n, _} -> {c, n, rest}
-      :error -> {:error, "invalid number `#{acc}`"}
-    end
   end
 
   defp parse_component(<<c::utf8>>, _acc), do: {:error, "unexpected token #{<<c::utf8>>}"}

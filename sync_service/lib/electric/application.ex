@@ -58,7 +58,8 @@ defmodule Electric.Application do
                 inspector: {Electric.Postgres.Inspector, Electric.DbPool},
                 long_poll_timeout: 20_000,
                 max_age: Application.fetch_env!(:electric, :cache_max_age),
-                stale_age: Application.fetch_env!(:electric, :cache_stale_age)},
+                stale_age: Application.fetch_env!(:electric, :cache_stale_age),
+                allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},
              port: 3000}
           ]
         else

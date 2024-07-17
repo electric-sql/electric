@@ -1,0 +1,6 @@
+{
+  "skip_files": [
+    "test/support",
+    "lib/electric/replication/eval/known_definition.ex"
+  ]
+}

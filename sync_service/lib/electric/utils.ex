@@ -154,6 +154,11 @@ defmodule Electric.Utils do
       ...> | int2                    | numeric  |            |
       ...> \"""|> parse_md_table(after: "## Known types")
       [["bool", "boolean", "t"], ["int2", "numeric", ""]]
+
+      iex> \"""
+      ...> Some text
+      ...> \"""|> parse_md_table([])
+      []
   """
   @spec parse_md_table(String.t(), [{:after, String.t()}]) :: [[String.t(), ...]]
   def parse_md_table(string, opts) do

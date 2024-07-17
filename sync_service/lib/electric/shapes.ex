@@ -54,8 +54,8 @@ defmodule Electric.Shapes do
   """
   @spec clean_shape(Storage.shape_id(), keyword()) :: :ok
   def clean_shape(shape_id, opts \\ []) do
-    {shape_cache, _} = Keyword.pop(opts, :shape_cache, Electric.ShapeCache)
-    shape_cache.clean_shape(shape_id)
+    {shape_cache, _} = Access.get(opts, :shape_cache, {ShapeCache, []})
+    shape_cache.clean_shape(shape_cache, shape_id)
     :ok
   end
 end

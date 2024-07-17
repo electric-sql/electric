@@ -3,6 +3,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient.Collector
   alias Electric.Postgres.LogicalReplication.Messages, as: LR
+  alias Electric.Replication.LogOffset
 
   alias Electric.Replication.Changes.{
     Transaction,
@@ -13,6 +14,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
   }
 
   @test_lsn Lsn.from_integer(123)
+  @test_log_offset LogOffset.new(@test_lsn, 0)
   @test_end_lsn Lsn.from_integer(456)
 
   @relation %LR.Relation{
@@ -231,8 +233,10 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
 
     {completed_txn, updated_collector} = Collector.handle_message(commit_msg, collector)
 
-    assert %Transaction{xid: 456, lsn: @test_lsn} = completed_txn
-    assert %Collector{transaction: nil} = updated_collector
+    assert %Transaction{xid: 456, lsn: @test_lsn, last_log_offset: @test_log_offset} =
+             completed_txn
+
+    assert %Collector{transaction: nil, tx_op_index: nil} = updated_collector
   end
 
   test "Multiple collected operations are stored in the correct order within the transaction when it's emitted",
@@ -255,14 +259,27 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
 
     {completed_txn, _updated_collector} = Collector.handle_message(commit_msg, collector)
 
+    log_offset_1 = LogOffset.new(@test_lsn, 0)
+    log_offset_2 = LogOffset.increment(log_offset_1)
+    log_offset_3 = LogOffset.increment(log_offset_2)
+
     assert [
-             %NewRecord{relation: {"public", "users"}, record: %{"id" => "123"}},
+             %NewRecord{
+               relation: {"public", "users"},
+               record: %{"id" => "123"},
+               log_offset: ^log_offset_1
+             },
              %UpdatedRecord{
                relation: {"public", "users"},
                old_record: %{"id" => "123"},
-               record: %{"id" => "124"}
+               record: %{"id" => "124"},
+               log_offset: ^log_offset_2
              },
-             %DeletedRecord{relation: {"public", "users"}, old_record: %{"id" => "124"}}
+             %DeletedRecord{
+               relation: {"public", "users"},
+               old_record: %{"id" => "124"},
+               log_offset: ^log_offset_3
+             }
            ] = completed_txn.changes
   end
 end

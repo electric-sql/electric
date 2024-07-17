@@ -25,6 +25,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   for module <- [InMemoryStorage, CubDbStorage] do
     module_name = module |> Module.split() |> List.last()
 
+    doctest module, import: true
+
     describe "#{module_name}.snapshot_exists?/2" do
       setup do
         {:ok, %{module: unquote(module)}}
