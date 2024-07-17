@@ -10,10 +10,11 @@ See James' blog post for more background on the change: https://next.electric-sq
 
 ## Getting Started
 
-1. Install the TypeScript client and React integrations
-`npm install @electric-sql/next @electric-sql/react`
+#### Create a new React app
 
-2. Run Docker Compose similar to the following to setup Postgres and Electric
+`npm create vite@latest my-first-electric-app -- --template react-ts`
+
+#### Setup Docker Compose to run Postgres and Electric
 
 `docker-compose.yaml`
 
@@ -53,25 +54,51 @@ services:
 # TODO add Electric image
 ```
 
-Add a `postgresql.conf` file.
+Add a `postgres.conf` file.
 
 ```
 listen_addresses = '*'
 wal_level = 'logical'
 ```
 
-3. Try a curl command
-`curl http://localhost:3000/v1/shape/{table}`
+#### Start Docker
 
-Start Docker: `docker compose -f ./docker-compose.yaml up`
+`docker compose -f ./docker-compose.yaml up`
 
-3. Create a table and insert some data:
+#### Try a curl command against Electric's HTTP API
+
+`curl -i http://localhost:3000/v1/shape/foo?offset=-1`
+
+You should get a response like this:
+
+```bash
+HTTP/1.1 400 Bad Request
+date: Wed, 17 Jul 2024 20:30:31 GMT
+content-length: 62
+vary: accept-encoding
+cache-control: max-age=0, private, must-revalidate
+x-request-id: F-MaJcF9A--cg9QAAAeF
+access-control-allow-origin: *
+access-control-expose-headers: *
+access-control-allow-methods: GET, POST, OPTIONS
+Server: ElectricSQL/0.0.1
+content-type: application/json; charset=utf-8
+
+{"offset":["can't be blank"],"root_table":["table not found"]}%
+```
+
+So it didn't work! Which makes sense... as it's a empty database without any tables or data. Let's fix that.
+
+#### Create a table and insert some data
+
+Use your favorite Postgres client to connect to Postgres e.g. with [psql](https://www.postgresql.org/docs/current/app-psql.html)
+you run: `psql postgresql://postgres:password@localhost:55321/electric`
 
 ```sql
 CREATE TABLE foo (
-    id INT PRIMARY KEY AUTO_INCREMENT, -- Unique identifier, auto-incrementing
-    name VARCHAR(255),                  -- Text field for names (adjust size as needed)
-    value FLOAT                         -- Numeric value (can be decimal)
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255),
+    value FLOAT
 );
 
 INSERT INTO foo (name, value) VALUES 
@@ -82,36 +109,92 @@ INSERT INTO foo (name, value) VALUES
     ('Eve', 0);
 ```
 
-4. Try a curl command to Electric's HTTP API:
+#### Now try the curl command again
 
-`curl http://localhost:3000/shape/foo`
+`curl http://localhost:3000/shape/foo?offset=-1`
 
-5. Add to React app
+Success! You should see the data you just put into Postgres in the shape response:
 
-Add the Shapes provider
+```bash
+HTTP/1.1 200 OK
+date: Wed, 17 Jul 2024 20:38:07 GMT
+content-length: 643
+vary: accept-encoding
+cache-control: max-age=60, stale-while-revalidate=300
+x-request-id: F-Maj_CikDKfZTIAAAAh
+access-control-allow-origin: *
+access-control-expose-headers: *
+access-control-allow-methods: GET, POST, OPTIONS
+Server: ElectricSQL/0.0.1
+content-type: application/json; charset=utf-8
+x-electric-shape-id: 3833821-1721248688126
+x-electric-chunk-last-offset: 0_0
+etag: 3833821-1721248688126:-1:0_0
+
+[{"offset":"0_0","value":{"id":1,"name":"Alice","value":3.14},"key":"\"public\".\"foo\"/1","headers":{"action"
+:"insert"}},{"offset":"0_0","value":{"id":2,"name":"Bob","value":2.71},"key":"\"public\".\"foo\"/2","headers":
+{"action":"insert"}},{"offset":"0_0","value":{"id":3,"name":"Charlie","value":-1.618},"key":"\"public\".\"foo\
+"/3","headers":{"action":"insert"}},{"offset":"0_0","value":{"id":4,"name":"David","value":1.414},"key":"\"pub
+lic\".\"foo\"/4","headers":{"action":"insert"}},{"offset":"0_0","value":{"id":5,"name":"Eve","value":0.0},"key
+":"\"public\".\"foo\"/5","headers":{"action":"insert"}},{"headers":{"control":"up-to-date"}}]%                
+```
+
+#### Now let's fetch the same shape to use in our React app
+
+Install the Electric TypeScript client and React integrations:
+
+`npm install @electric-sql/next @electric-sql/react`
+
+
+Wrap your root in `src/main.tsx` with the `ShapesProvider`:
+
 ```tsx
 import { ShapesProvider } from "@electric-sql/react"
 
-ReactDOM.createRoot(document.getElementById(`root`)!).render(
-  <ShapesProvider>
-    <App />
-  </ShapesProvider>
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <ShapesProvider>
+      <App />
+    </ShapesProvider>
+  </React.StrictMode>,
 )
 ```
 
-Add `useShape` to a component
-```tsx
-import { useShape } from "@electric-sql/react"
+Replace `App.tsx` with the following:
 
-function Component {
+```tsx
+import { useShape } from "@electric-sql/react";
+
+function Component() {
   const { data: fooData } = useShape({
     shape: { table: `foo` },
     baseUrl: `http://localhost:3000`,
-  })
+  });
 
-  return JSON.stringify(foo, null, 4)
+  return JSON.stringify(fooData, null, 4);
 }
+
+export default Component;
 ```
+
+Finally run the dev server to see it all in action!
+
+`npm run dev`
+
+You should see something like:
+
+![screenshot](<img width="699" alt="Screenshot 2024-07-17 at 2 49 28 PM" src="https://github.com/user-attachments/assets/cda36897-2db9-4f6c-86bb-99e7e325a490">
+)
+
+#### Postgres as a real-time database
+
+Go back to your postgres client and update a row. It'll instantly be reflected in your React app!
+
+```sql
+UPDATE foo SET name = 'James' WHERE id = 2;
+```
+
+Congradulations! You've now built your first Electric app!
 
 ## HTTP API Documentation
 
