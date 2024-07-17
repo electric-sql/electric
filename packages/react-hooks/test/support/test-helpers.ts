@@ -1,4 +1,4 @@
-import { ShapeStream, JsonSerializable, Message } from 'electric-sql'
+import { ShapeStream, JsonSerializable, Message } from '@electric-sql/next'
 import { Client, ClientConfig } from 'pg'
 
 export function makePgClient(overrides: ClientConfig = {}) {

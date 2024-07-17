@@ -4,7 +4,7 @@ import {
   ShapeStream,
   ShapeStreamOptions,
   JsonSerializable,
-} from 'electric-sql'
+} from '@electric-sql/next'
 
 interface ShapeContextType {
   getShape: (shapeStream: ShapeStream) => Shape

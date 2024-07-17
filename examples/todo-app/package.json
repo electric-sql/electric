@@ -1,12 +1,12 @@
 {
-  "name": "vite-react-router-electric-sql-starter",
+  "name": "@electric-examples/todo-app",
   "description": "Somewhat opinionated starter for ElectricSQL with Vite, and React Router",
   "version": "1.0.1",
   "type": "module",
   "author": "Kyle Mathews <mathews.kyle@gmail.com>",
   "private": true,
   "bugs": {
-    "url": "https://github.com/KyleAMathews/vite-react-router-electric-sql-starter/issues"
+    "url": "https://github.com/electric-sql/electric-next/issues"
   },
   "dependencies": {
     "@electric-sql/react": "workspace:*",
