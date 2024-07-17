@@ -187,7 +187,7 @@ You should see something like:
 
 #### Postgres as a real-time database
 
-Go back to your postgres client and update a row. It'll instantly be reflected in your React app!
+Go back to your postgres client and update a row. It'll instantly be synced to your component!
 
 ```sql
 UPDATE foo SET name = 'James' WHERE id = 2;

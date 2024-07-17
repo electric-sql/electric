@@ -224,7 +224,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   def server_header(conn, _opts) do
     conn
-    |> Plug.Conn.put_resp_header("Server", "ElectricSQL/0.0.1")
+    |> Plug.Conn.put_resp_header("server", "ElectricSQL/0.0.1")
   end
 
   def cors(conn, _opts) do
