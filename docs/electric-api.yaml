@@ -135,7 +135,6 @@ paths:
                       status: backlog
                   - headers:
                       action: insert
-                      control: up-to-date
                     offset: 1934/0
                     key: issue-2
                     value:
