@@ -16,3 +16,7 @@ From the root directory:
 3. Start the dev server
 
 `pnpm run dev`
+
+4. When done, tear down the backend containers so you can run other examples
+
+`pnpm run backend:down`

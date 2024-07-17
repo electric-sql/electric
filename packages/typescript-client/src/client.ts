@@ -463,7 +463,7 @@ export class Shape {
     let newlyUpToDate = false
 
     messages.forEach((message) => {
-      if (`key` in message && message.value) {
+      if (`key` in message) {
         switch (message.headers?.[`action`]) {
           case `insert`:
           case `update`:
