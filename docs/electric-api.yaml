@@ -30,10 +30,10 @@ paths:
                        This should be a valid PostgreSQL WHERE clause.
           examples:
             title_filter:
-              value: "\"this.title='Electric'\""
+              value: "\"title='Electric'\""
               summary: Only include rows where the title is 'Electric'.
             status_filter:
-              value: "\"this.status IN ('backlog', 'todo')\""
+              value: "\"status IN ('backlog', 'todo')\""
               summary: Only include rows whose status is either 'backlog' or 'todo'.
         - name: shape_id
           in: query

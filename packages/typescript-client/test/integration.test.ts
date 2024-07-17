@@ -339,4 +339,46 @@ describe(`HTTP Sync`, () => {
     const catchupStatus = catchupEtagValidation.status
     expect(catchupStatus).toEqual(304)
   })
+
+  it(`should correctly use a where clause for initial sync and updates`, async ({
+    insertIssues,
+    updateIssue,
+    issuesTableUrl,
+    issuesTableKey,
+    clearShape,
+    aborter,
+  }) => {
+    // Add an initial rows
+    const id1 = uuidv4()
+    const id2 = uuidv4()
+
+    await insertIssues({ id: id1, title: `foo` }, { id: id2, title: `bar` })
+
+    // Get initial data
+    const shapeData = new Map()
+    const issueStream = new ShapeStream({
+      shape: { table: issuesTableUrl, where: `title LIKE 'foo%'` },
+      baseUrl: `${BASE_URL}`,
+      subscribe: true,
+      signal: aborter.signal,
+    })
+
+    await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
+      if (!(`key` in msg)) return
+      shapeData.set(msg.key, msg.value)
+
+      if (nth === 0) {
+        updateIssue({ id: id1, title: `foo1` })
+        updateIssue({ id: id2, title: `bar1` })
+      } else if (nth === 1) {
+        res()
+      }
+    })
+
+    await clearShape(issuesTableUrl, issueStream.shapeId!)
+
+    expect(shapeData).toEqual(
+      new Map([[`${issuesTableKey}/${id1}`, { id: id1, title: `foo1` }]])
+    )
+  })
 })

@@ -7,6 +7,7 @@ export type ShapeChangedCallback = (value: ShapeData) => void
 // FIXME: Shape definition will be expanded.
 export type ShapeDefinition = {
   table: string
+  where?: string
 }
 
 export interface BackoffOptions {
@@ -35,7 +36,7 @@ export interface ShapeStreamOptions extends ShapeOptions {
 }
 
 /**
- * Recieves batches of `messages`, puts them on a queue and processes
+ * Receives batches of `messages`, puts them on a queue and processes
  * them asynchronously by passing to a registered callback function.
  *
  * @constructor
@@ -188,6 +189,7 @@ export class ShapeStream {
       const url = new URL(
         `${baseUrl}/v1/shape/${encodeURIComponent(shape.table)}`
       )
+      if (shape.where) url.searchParams.set(`where`, shape.where)
       url.searchParams.set(`offset`, this.lastOffset)
       if (this.isUpToDate) {
         url.searchParams.set(`live`, `true`)
