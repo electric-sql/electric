@@ -1,25 +1,20 @@
 # Linearlite
 
 ## To run
-start electric-next. e.g.
-
+Install dependencies
 ```bash
-  cd sync_service
-  docker compose -f dev/docker-compose.yml up
-  iex -S mix
+pnpm install
 ```
 
-install deps for the example and load data
+Initialize Electric, along with a Postgres instance that will be migrated and have sample data loaded to it:
 
 ```bash
-cd examples/linearlite
-npm i
-DATABASE_URL=postgresql://postgres:password@localhost:54321/postgres npm run migrate
-npm run load-data
+pnpm backend:up
+# pnpm backend:down to clean up
 ```
 
-start the app
+Start the application
 
 ```bash
-npm run dev
+pnpm dev
 ```

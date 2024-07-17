@@ -2,13 +2,14 @@
   "name": "vite-react-router-electric-sql-starter",
   "description": "Somewhat opinionated starter for ElectricSQL with Vite, and React Router",
   "version": "1.0.1",
+  "type": "module",
   "author": "Kyle Mathews <mathews.kyle@gmail.com>",
   "private": true,
   "bugs": {
     "url": "https://github.com/KyleAMathews/vite-react-router-electric-sql-starter/issues"
   },
   "dependencies": {
-    "@databases/pg-migrations": "^5.0.3",
+    "@capsizecss/metrics": "^3.2.0",
     "@electric-sql/react": "workspace:*",
     "@fontsource/alegreya-sans": "^5.0.13",
     "@radix-ui/themes": "^3.1.0",
@@ -22,7 +23,6 @@
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "electric-query": "^0.0.14",
-    "electric-sql": "^0.12.0",
     "eslint": "^8.0.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-config-react": "^1.1.7",
@@ -47,7 +47,9 @@
     "wa-sqlite": "rhashimoto/wa-sqlite#master"
   },
   "devDependencies": {
-    "@types/uuid": "^10.0.0"
+    "@databases/pg-migrations": "^5.0.3",
+    "@types/uuid": "^10.0.0",
+    "dotenv-cli": "^7.4.2"
   },
   "homepage": "https://github.com/KyleAMathews/vite-react-router-electric-sql-starter#readme",
   "keywords": [
@@ -66,11 +68,10 @@
     "url": "git+https://github.com/KyleAMathews/vite-react-router-electric-sql-starter.git"
   },
   "scripts": {
-    "backend:start": "docker compose --env-file src/backend/compose/.envrc -f src/backend/compose/docker-compose.yaml up",
-    "backend:down": "docker compose  --env-file src/backend/compose/.envrc -f src/backend/compose/docker-compose.yaml down --volumes",
+    "backend:up": "PROJECT_NAME=todo-app pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=todo-app pnpm -C ../../ run example-backend:down",
     "build": "vite build",
-    "db:migrate": "node ./db/migrate.cjs",
-    "db:psql": "node ./db/connect.cjs",
+    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
     "dev": "vite",
     "typecheck": "tsc --noEmit"
   }
