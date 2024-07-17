@@ -6,7 +6,8 @@
   "scripts": {
     "test": "npx vitest",
     "typecheck": "tsc --noEmit",
-    "stylecheck": "eslint './*.{ts,js,tsx,jsx}' './tests/**/*.{ts,tsx}' './examples/**/*.{ts,tsx}' --no-error-on-unmatched-pattern"
+    "stylecheck": "eslint './*.{ts,js,tsx,jsx}' './tests/**/*.{ts,tsx}' './examples/**/*.{ts,tsx}' --no-error-on-unmatched-pattern",
+    "docs:generate": "redocly build-docs ./docs/electric-api.yaml --output=./docs/dist/electric-api.html"
   },
   "repository": {
     "type": "git",
@@ -26,6 +27,7 @@
     "uuid": "^10.0.0"
   },
   "devDependencies": {
+    "@redocly/cli": "^1.18.0",
     "@testing-library/dom": "^10.3.0",
     "@testing-library/react": "^16.0.0",
     "@types/pg": "^8.11.6",

@@ -18,21 +18,34 @@ paths:
           in: path
           schema:
             type: string
+            example: issues
           required: true
-          description: The shape definition, currently the name of the table.
+          description: Root table of the shape.
         # Query parameters
+        - name: where
+          in: query
+          schema:
+            type: string
+          description: Optional where clause to filter rows belonging to the shape.
+                       This should be a valid PostgreSQL WHERE clause.
+          examples:
+            title_filter:
+              value: "\"this.title='Electric'\""
+              summary: Only include rows where the title is 'Electric'.
+            status_filter:
+              value: "\"this.status IN ('backlog', 'todo')\""
+              summary: Only include rows whose status is either 'backlog' or 'todo'.
         - name: shape_id
           in: query
           schema:
             type: string
           description: The shape ID returned by the initial shape request.
-            This is a required parameter when this is not an initial sync request, i.e. when offset > -1.
-            The sync engine does not use it but it's used as a cache buster.
+                       This is a required parameter when this is not an initial sync request, i.e. when offset != -1.
+                       The sync engine does not use it but it's used as a cache buster.
         - name: offset
           in: query
           schema:
-            type: integer
-            minimum: -1
+            type: string
           description: The offset in the shape stream where to resume from.
             Specify -1 for initial sync (or just leave it out).
             Afterwards, need to specify the offset from where to continue in the stream.
@@ -102,14 +115,33 @@ paths:
                             - commit
                           description: The type of operation that is performed on the row of the shape that is identified by the `key`.
                     offset:
-                      type: integer
-                      description: The offset of the row in the shape stream
+                      type: string
+                      description: The offset of the row in the shape stream.
+                                   This is an opaque identifier.
                     key:
                       type: string
                       description: Row ID
                     value:
                       type: object
                       description: The row data
+                example:
+                  - headers:
+                      action: insert
+                    offset: 0/0
+                    key: issue-1
+                    value:
+                      id: issue-1
+                      title: Electric
+                      status: backlog
+                  - headers:
+                      action: insert
+                      control: up-to-date
+                    offset: 1934/0
+                    key: issue-2
+                    value:
+                      id: issue-2
+                      title: Hello
+                      status: backlog
         '400':
           description: Bad request.
         '409':
@@ -133,8 +165,12 @@ paths:
                     type: string
                     description: The latest shape ID the client should sync.
                   offset:
-                    type: integer
-                    description: The offset from where to sync the given shape_id.
+                    type: string
+                    description: The offset from where to sync the given shape_id.   
+                example:
+                  message: "The shape associated with this shape_id and offset was not found. Resync to fetch the latest shape"
+                  shape_id: "2494_84241"
+                  offset: "-1"
     delete:
       summary: Deletes the shape for this table.
         WARNING - this is to be used in development only and works only if the allow_shape_deletion environment variable is set.
