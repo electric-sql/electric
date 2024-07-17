@@ -12,37 +12,42 @@ jobs:
   build_and_test:
     name: Build and test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/typescript-client
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
           version-file: '.tool-versions'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: package-lock.json
-      - run: npm ci
+          cache: pnpm
+      - run: pnpm install
       - name: Restore dependencies cache
         uses: actions/cache@v4
         with:
-          path: sync_service/deps
-          key: ${{ runner.os }}-mix-${{ hashFiles('sync_service/**/mix.lock') }}
+          path: packages/sync-service/deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('sync-service/**/mix.lock') }}
           restore-keys: ${{ runner.os }}-mix-
       - name: Restore compiled code
         uses: actions/cache@v4
         with:
           path: |
-            sync_service/_build/*/lib
-            !sync_service/_build/*/lib/electric
-          key: ${{ runner.os }}-build-dev-${{ hashFiles('sync_service/**/mix.lock') }}
+            packages/sync-service/_build/*/lib
+            !packages/sync-service/_build/*/lib/electric
+          key: ${{ runner.os }}-build-dev-${{ hashFiles('sync-service/**/mix.lock') }}
       - name: Install dependencies
         run: mix deps.get && mix deps.compile
-        working-directory: sync_service
+        working-directory: packages/sync-service
       - name: Compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
-        working-directory: sync_service
+        working-directory: packages/sync-service
       - uses: JarvusInnovations/background-action@v1
         name: Bootstrap System Under Test (SUT)
         with:
@@ -58,7 +63,7 @@ jobs:
           wait-for: 1m
           log-output: true
           log-output-if: failure
-          working-directory: sync_service
+          working-directory: packages/sync-service
       - name: Adjust Permissions
         run: |
           sudo chown -R runner:docker /home/runner/work/electric-next/electric-next/
@@ -69,29 +74,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            examples/**/package-lock.json
-      - run: npm ci
-      - name: npm ci in each examples dir
-        run: for dir in examples/*/; do (cd "$dir" && npm ci); done
-      - run: npm run stylecheck
+          cache: 'pnpm'
+      - run: pnpm install
+      - run: pnpm stylecheck
+        working-directory: packages/typescript-client
   type_check:
     name: Type checking
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/typescript-client
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
+          cache: 'pnpm'
+      - run: pnpm install
+      - run: pnpm typecheck
+  check_and_build_react_hooks:
+    name: Check and build React hooks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/react-hooks
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install
+      - run: pnpm build
+        name: pnpm build the typescript client
+        working-directory: packages/typescript-client
+      - run: pnpm stylecheck
+      - run: pnpm typecheck
+      - run: pnpm build
   list_examples:
     name: List examples
     runs-on: ubuntu-latest
@@ -99,11 +130,11 @@ jobs:
       example_names: ${{ steps.list_examples.outputs.example_names }}
     steps:
       - uses: actions/checkout@v4
-      - run: echo "example_names=`ls -d examples/*/ | jq -R -s -c 'split("\n")[:-1] | map(rtrimstr("/"))'`" >> $GITHUB_OUTPUT
+      - run: echo "example_names=`find examples/ -mindepth 1 -maxdepth 1 -type d -not -name "bash-client" | jq -R -s -c 'split("\n")[:-1]'`" >> $GITHUB_OUTPUT
         id: list_examples
   check_and_build_examples:
     name: Check and build ${{ matrix.example_folder }}
-    needs: [list_examples, build_and_test]
+    needs: [list_examples, build_and_test, check_and_build_react_hooks]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -114,17 +145,19 @@ jobs:
         working-directory: ${{ matrix.example_folder }}
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            ${{ matrix.example_folder }}/package-lock.json
-      - name: npm ci in the repository root
-        run: npm ci
-        working-directory: .
-      - name: npm ci in the ${{ matrix.example_folder }}
-        run: npm ci
-      - run: npm run typecheck
-      - run: npm run build
+          cache: pnpm
+      - run: pnpm install
+      - run: pnpm build
+        name: pnpm build the typescript client
+        working-directory: packages/typescript-client
+      - run: pnpm build
+        name: pnpm build the react hooks
+        working-directory: packages/react-hooks
+      - run: pnpm typecheck
+      - run: pnpm build

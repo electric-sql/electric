@@ -1,6 +1,5 @@
 import { createClient } from 'redis'
-import { ShapeStream } from './client'
-import { Message } from './types'
+import { ShapeStream, Message } from 'electric-sql'
 
 // Create a Redis client
 const REDIS_HOST = `localhost`

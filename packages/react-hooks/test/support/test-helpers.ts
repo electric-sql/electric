@@ -1,6 +1,5 @@
-import { ShapeStream } from '../../client'
+import { ShapeStream, JsonSerializable, Message } from 'electric-sql'
 import { Client, ClientConfig } from 'pg'
-import { JsonSerializable, Message } from '../../types'
 
 export function makePgClient(overrides: ClientConfig = {}) {
   return new Client({

@@ -6,7 +6,7 @@ import 'react-toastify/dist/ReactToastify.css'
 import List from './pages/List'
 import Root from './pages/root'
 import Issue from './pages/Issue'
-import { ShapesProvider, preloadShape } from '../../../react-hooks'
+import { ShapesProvider, preloadShape } from '@electric-sql/react'
 import { issueShape } from './shapes'
 
 interface MenuContextInterface {

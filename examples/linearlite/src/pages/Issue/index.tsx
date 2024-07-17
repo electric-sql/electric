@@ -14,7 +14,7 @@ import Editor from '../../components/editor/Editor'
 import DeleteModal from './DeleteModal'
 import Comments from './Comments'
 import debounce from 'lodash.debounce'
-import { useShape } from '../../../../../react-hooks'
+import { useShape } from '@electric-sql/react'
 import { issueShape } from '../../shapes'
 
 const debounceTime = 500

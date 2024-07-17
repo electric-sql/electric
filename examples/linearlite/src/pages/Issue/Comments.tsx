@@ -7,7 +7,7 @@ import Avatar from '../../components/Avatar'
 import { formatDate } from '../../utils/date'
 import { showWarning } from '../../utils/notification'
 import { Comment, Issue } from '../../types/types'
-import { useShape } from '../../../../../react-hooks'
+import { useShape } from '@electric-sql/react'
 import { baseUrl } from '../../electric'
 
 export interface CommentsProps {

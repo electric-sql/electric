@@ -1,6 +1,6 @@
 import { describe, expect, inject, vi } from 'vitest'
 import { testWithIssuesTable as it } from './support/test-context'
-import { ShapeStream, Shape } from '../client'
+import { ShapeStream, Shape } from '../src/client'
 
 const BASE_URL = inject(`baseUrl`)
 

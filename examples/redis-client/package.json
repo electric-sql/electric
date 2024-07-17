@@ -1,0 +1,58 @@
+{
+  "name": "electric-sql-redis-client",
+  "version": "0.0.1",
+  "description": "An example Redis client for ElectricSQL",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "shx rm -rf dist && concurrently \"tsup\" \"tsc -p tsconfig.build.json\"",
+    "stylecheck": "eslint './*.{ts,js,tsx,jsx}' './tests/**/*.{ts,tsx}' './examples/**/*.{ts,tsx}' --no-error-on-unmatched-pattern"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric-next.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/electric-sql/electric-next/issues"
+  },
+  "homepage": "https://github.com/electric-sql/electric-next#readme",
+  "dependencies": {
+    "electric-sql": "workspace:*",
+    "redis": "^4.6.14"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.14.1",
+    "@typescript-eslint/parser": "^7.14.1",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-config-react": "^1.1.7",
+    "eslint-plugin-prettier": "^5.1.3",
+    "eslint-plugin-react": "^7.34.3",
+    "glob": "^10.3.10",
+    "prettier": "^3.3.2",
+    "shx": "^0.3.4",
+    "tsup": "^8.0.1",
+    "typescript": "^5.5.2"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-darwin-arm64": "^4.18.1"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/index.d.ts"
+      ]
+    }
+  }
+}
