@@ -1,5 +1,3 @@
-import { v4 as uuidv4 } from 'uuid'
-
 import { Message, JsonSerializable, Offset } from './types'
 
 export type ShapeData = Map<string, JsonSerializable>
@@ -152,7 +150,7 @@ export class ShapeStream {
   private backoffOptions: BackoffOptions
 
   private subscribers = new Map<
-    string,
+    number,
     [MessageProcessor, ((error: Error) => void) | undefined]
   >()
   private upToDateSubscribers = new Map<
@@ -274,7 +272,7 @@ export class ShapeStream {
     callback: (messages: Message[]) => void | Promise<void>,
     onError?: (error: FetchError | Error) => void
   ) {
-    const subscriptionId = uuidv4()
+    const subscriptionId = Math.random()
     const subscriber = new MessageProcessor(callback)
 
     this.subscribers.set(subscriptionId, [subscriber, onError])
