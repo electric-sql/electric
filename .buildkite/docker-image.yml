@@ -1,0 +1,21 @@
+env:
+  DOCKERHUB_REPO: electricsql
+  IMAGE_NAME: electric-next
+
+agent:
+  docker: true
+  gcp: true
+
+steps:
+  - label: ":rocket: Publish the image to DockerHub"
+    if: build.tag =~ /@core\/sync-service@/
+    command:
+      - export ELECTRIC_IMAGE_NAME="${DOCKERHUB_REPO}/${IMAGE_NAME}"
+      - cd ./packages/sync-service
+      - export ELECTRIC_VERSION=$(jq '.version' -r package.json)
+      - mkdir -p deps
+      - docker buildx build --platform linux/arm64/v8,linux/amd64 --push \
+        --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
+        -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION} \
+        -t ${ELECTRIC_IMAGE_NAME}:latest \
+        .
