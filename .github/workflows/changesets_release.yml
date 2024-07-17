@@ -28,8 +28,8 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          version: pnpm run bump
-          publish: pnpm changeset publish
+          version: pnpm exec changeset version
+          publish: pnpm exec changeset publish
           title: Publish new package versions
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
