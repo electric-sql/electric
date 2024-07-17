@@ -1,5 +1,6 @@
 {
   "name": "@electric-examples/basic-example",
+  "private": true,
   "version": "0.0.1",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
