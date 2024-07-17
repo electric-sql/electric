@@ -1,6 +1,7 @@
 {
   "name": "@electric-examples/bash-client",
   "version": "0.0.1",
+  "private": true,
   "author": "ElectricSQL",
   "scripts": {
     "backend:up": "PROJECT_NAME=bash-client pnpm -C ../../ run example-backend:up && pnpm db:migrate",
