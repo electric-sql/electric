@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: sync_service
+        working-directory: packages/sync-service
     env:
       MIX_ENV: test
     services:
@@ -42,25 +42,25 @@ jobs:
       - name: Restore dependencies cache
         uses: actions/cache@v3
         with:
-          path: sync_service/deps
-          key: ${{ runner.os }}-mix-${{ hashFiles('sync_service/**/mix.lock') }}
+          path: packages/sync-service/deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('sync-service/**/mix.lock') }}
           restore-keys: ${{ runner.os }}-mix-
       - name: Restore compiled code
         uses: actions/cache/restore@v4
         with:
           path: |
-            sync_service/_build/*/lib
-            !sync_service/_build/*/lib/electric
-          key: ${{ runner.os }}-build-${{ hashFiles('sync_service/**/mix.lock') }}
+            packages/sync-service/_build/*/lib
+            !packages/sync-service/_build/*/lib/electric
+          key: ${{ runner.os }}-build-${{ hashFiles('sync-service/**/mix.lock') }}
       - name: Install dependencies
         run: mix deps.get && mix deps.compile
       - name: Save compiled code
         uses: actions/cache/save@v4
         with:
           path: |
-            sync_service/_build/*/lib
-            !sync_service/_build/*/lib/electric
-          key: ${{ runner.os }}-build-${{ hashFiles('sync_service/**/mix.lock') }}
+            packages/sync-service/_build/*/lib
+            !packages/sync-service/_build/*/lib/electric
+          key: ${{ runner.os }}-build-${{ hashFiles('sync-service/**/mix.lock') }}
       - name: Compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
       - name: Run tests
@@ -70,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: sync_service
+        working-directory: packages/sync-service
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
@@ -81,7 +81,7 @@ jobs:
         id: cache-deps
         uses: actions/cache@v4
         with:
-          path: sync_service/deps
-          key: ${{ runner.os }}-mixdeps-${{ hashFiles('sync_service/**/mix.lock') }}
+          path: sync-service/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('sync-service/**/mix.lock') }}
       - run: mix deps.get
       - run: mix format --check-formatted

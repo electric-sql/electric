@@ -1,13 +1,18 @@
 {
-  "name": "electric-next",
+  "name": "@electric-sql/react",
   "version": "0.0.1",
-  "description": "The Next Electric",
-  "main": "index.js",
+  "description": "React hooks for ElectricSQL",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "test": "npx vitest",
-    "typecheck": "tsc --noEmit",
-    "stylecheck": "eslint './*.{ts,js,tsx,jsx}' './tests/**/*.{ts,tsx}' './examples/**/*.{ts,tsx}' --no-error-on-unmatched-pattern",
-    "docs:generate": "redocly build-docs ./docs/electric-api.yaml --output=./docs/dist/electric-api.html"
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "shx rm -rf dist && tsc -p tsconfig.build.json",
+    "stylecheck": "eslint . --quiet",
+    "format": "eslint . --fix"
   },
   "repository": {
     "type": "git",
@@ -20,33 +25,40 @@
   },
   "homepage": "https://github.com/electric-sql/electric-next#readme",
   "dependencies": {
-    "cache-control-parser": "^2.0.6",
-    "pg": "^8.12.0",
-    "react": "^18.3.1",
-    "redis": "^4.6.14",
-    "uuid": "^10.0.0"
+    "electric-sql": "workspace:*",
+    "react": "^18.3.1"
   },
   "devDependencies": {
-    "@redocly/cli": "^1.18.0",
-    "@testing-library/dom": "^10.3.0",
     "@testing-library/react": "^16.0.0",
     "@types/pg": "^8.11.6",
     "@types/react": "^18.3.3",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
     "@typescript-eslint/parser": "^7.14.1",
+    "concurrently": "^8.2.2",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-config-react": "^1.1.7",
     "eslint-plugin-prettier": "^5.1.3",
     "eslint-plugin-react": "^7.34.3",
+    "glob": "^10.3.10",
     "global-jsdom": "24.0.0",
-    "jsdom": "24.1.0",
+    "pg": "^8.12.0",
     "prettier": "^3.3.2",
+    "shx": "^0.3.4",
+    "tsup": "^8.0.1",
     "typescript": "^5.5.2",
+    "uuid": "^10.0.0",
     "vitest": "^2.0.2"
   },
-  "optionalDependencies": {
-    "@rollup/rollup-darwin-arm64": "^4.18.1"
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/index.d.ts"
+      ]
+    }
   }
 }

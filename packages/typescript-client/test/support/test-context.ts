@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { Client, QueryResult } from 'pg'
 import { inject, test } from 'vitest'
 import { makePgClient } from './test-helpers'
-import { FetchError } from '../../client'
+import { FetchError } from '../../src/client'
 
 export type IssueRow = { id: string; title: string }
 export type GeneratedIssueRow = { id?: string; title: string }

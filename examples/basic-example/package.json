@@ -4,6 +4,7 @@
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "type": "module",
+  "private": true,
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -13,6 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@electric-sql/react": "workspace:*",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },

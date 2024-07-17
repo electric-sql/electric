@@ -14,6 +14,7 @@
     "process-data": "node ./db/process_data.js"
   },
   "dependencies": {
+    "@electric-sql/react": "workspace:*",
     "@firefox-devtools/react-contextmenu": "^5.1.1",
     "@headlessui/react": "^1.7.17",
     "@svgr/plugin-jsx": "^8.1.0",
@@ -31,6 +32,7 @@
     "classnames": "^2.5.1",
     "dayjs": "^1.11.11",
     "dotenv": "^16.4.5",
+    "electric-sql": "workspace:*",
     "fractional-indexing": "^3.2.0",
     "jsonwebtoken": "^9.0.2",
     "lodash.debounce": "^4.0.8",

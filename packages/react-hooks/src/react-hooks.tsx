@@ -1,6 +1,10 @@
 import React, { createContext, useEffect, useContext, useState } from 'react'
-import { Shape, ShapeStream, ShapeStreamOptions } from './client'
-import { JsonSerializable } from './types'
+import {
+  Shape,
+  ShapeStream,
+  ShapeStreamOptions,
+  JsonSerializable,
+} from 'electric-sql'
 
 interface ShapeContextType {
   getShape: (shapeStream: ShapeStream) => Shape
