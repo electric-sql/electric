@@ -11,6 +11,7 @@
     "test": "npx vitest",
     "typecheck": "tsc -p tsconfig.json",
     "build": "shx rm -rf dist && concurrently \"tsup\" \"tsc -p tsconfig.build.json\"",
+    "prepublishOnly": "pnpm -r --filter '@electric-sql/react^...' build && pnpm run build",
     "stylecheck": "eslint . --quiet",
     "format": "eslint . --fix"
   },

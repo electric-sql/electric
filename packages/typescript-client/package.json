@@ -11,6 +11,7 @@
     "test": "npx vitest",
     "typecheck": "tsc -p tsconfig.json",
     "build": "shx rm -rf dist && concurrently \"tsup\" \"tsc -p tsconfig.build.json\"",
+    "prepublishOnly": "pnpm run build",
     "stylecheck": "eslint . --quiet",
     "format": "eslint . --fix",
     "docs:generate": "redocly build-docs ./docs/electric-api.yaml --output=./docs/dist/electric-api.html"
