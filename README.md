@@ -20,14 +20,7 @@ See James' blog post for more background on the change: https://next.electric-sq
 
 ```docker
 version: "3.8"
-name: "todomvc"
-
-configs:
-  postgres_config:
-    file: "./postgres/postgres.conf"
-
-volumes:
-  pg_data:
+name: "my-first-electric-service"
 
 services:
   postgres:
@@ -35,23 +28,26 @@ services:
     environment:
       POSTGRES_DB: electric
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: pg_password
-    command:
+      POSTGRES_PASSWORD: password
+    ports:
+      - 55321:5432
+    volumes:
+      - ./postgres.conf:/etc/postgresql/postgresql.conf:ro
+    command: 
+      - postgres
       - -c
-      - config_file=/etc/postgresql.conf
-    configs:
-      - source: postgres_config
-        target: /etc/postgresql.conf
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      - config_file=/etc/postgresql/postgresql.conf
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    ports:
-      - 5632:5432
-    volumes:
-      - pg_data:/var/lib/postgresql/data
 
-# TODO add Electric image
+  electric:
+    image: electricsql/next:example
+    environment:
+      DATABASE_URL: postgresql://postgres:password@host.docker.internal:55321/electric
+    ports:
+      - "3000:3000"
+    build:
+      context: ~/programs/electric-next/packages/sync-service/
 ```
 
 Add a `postgres.conf` file.
