@@ -33,7 +33,7 @@ services:
       - 55321:5432
     volumes:
       - ./postgres.conf:/etc/postgresql/postgresql.conf:ro
-    command: 
+    command:
       - postgres
       - -c
       - config_file=/etc/postgresql/postgresql.conf
@@ -64,6 +64,15 @@ wal_level = 'logical'
 #### Try a curl command against Electric's HTTP API
 
 `curl -i http://localhost:3000/v1/shape/foo?offset=-1`
+
+This request asks for a shape composed of the entire `foo` table.
+
+A bit of explanation about the URL structure — `/v1/shape/` are standard
+segments. `foo` is the name of the root table of the shape (and is required).
+`offset=-1` means we're asking for the entire log of the Shape as we don't have
+any of the log cached locally yet. If we had previously fetched the shape and
+wanted to see if there was any updates, we'd set the offset of the last log
+message we'd got the first time.
 
 You should get a response like this:
 
