@@ -100,7 +100,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
     ),
   deleteIssue: ({ issuesTableSql, dbClient }, use) =>
     use(({ id }) =>
-      dbClient.query(`DELETE FROM ${issuesTableSql} WHERE id = $1`, [id, title])
+      dbClient.query(`DELETE FROM ${issuesTableSql} WHERE id = $1`, [id])
     ),
   insertIssues: ({ issuesTableSql, dbClient }, use) =>
     use(async (...rows) => {
