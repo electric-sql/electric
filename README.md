@@ -183,8 +183,7 @@ Finally run the dev server to see it all in action!
 
 You should see something like:
 
-![screenshot](<img width="699" alt="Screenshot 2024-07-17 at 2 49 28 PM" src="https://github.com/user-attachments/assets/cda36897-2db9-4f6c-86bb-99e7e325a490">
-)
+<img width="699" alt="Screenshot 2024-07-17 at 2 49 28 PM" src="https://github.com/user-attachments/assets/cda36897-2db9-4f6c-86bb-99e7e325a490">
 
 #### Postgres as a real-time database
 
