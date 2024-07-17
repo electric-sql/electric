@@ -6,4 +6,5 @@ test-dbs
 shape-data.json
 caching/nginx_cache
 .vscode
+.DS_store
 **/dist/**

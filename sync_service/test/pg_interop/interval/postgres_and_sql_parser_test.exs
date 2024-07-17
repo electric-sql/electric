@@ -1,4 +1,5 @@
 defmodule PgInterop.Interval.PostgresAndSQLParserTest do
   use ExUnit.Case, async: true
-  doctest PgInterop.Interval.PostgresAndSQLParser
+  alias PgInterop.Interval
+  doctest PgInterop.Interval.PostgresAndSQLParser, import: true
 end

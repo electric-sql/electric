@@ -1,4 +1,5 @@
 defmodule PgInterop.Interval.ISO8601ParserTest do
   use ExUnit.Case, async: true
-  doctest PgInterop.Interval.ISO8601Parser
+  alias PgInterop.Interval
+  doctest PgInterop.Interval.ISO8601Parser, import: true
 end

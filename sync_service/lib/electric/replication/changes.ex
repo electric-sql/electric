@@ -181,6 +181,15 @@ defmodule Electric.Replication.Changes do
       iex> get_log_offset(%NewRecord{log_offset: {1, 2}})
       {1, 2}
 
+      iex> get_log_offset(%UpdatedRecord{log_offset: {1, 2}})
+      {1, 2}
+
+      iex> get_log_offset(%DeletedRecord{log_offset: {1, 2}})
+      {1, 2}
+
+      iex> get_log_offset(%TruncatedRelation{log_offset: {1, 2}})
+      {1, 2}
+
       iex> get_log_offset(%NewRecord{})
       ** (FunctionClauseError) no function clause matching in Electric.Replication.Changes.get_log_offset/1
   """
@@ -189,6 +198,21 @@ defmodule Electric.Replication.Changes do
   def get_log_offset(%DeletedRecord{log_offset: offset}) when offset != nil, do: offset
   def get_log_offset(%TruncatedRelation{log_offset: offset}) when offset != nil, do: offset
 
+  @doc """
+  Convert an UpdateRecord into the corresponding NewRecord or DeletedRecord
+  based on the provided `to` option.
+
+  ## Examples
+
+      iex> convert_update(%UpdatedRecord{record: %{id: 1}}, to: :new_record)
+      %NewRecord{record: %{id: 1}}
+
+      iex> convert_update(%UpdatedRecord{record: %{id: 2}, old_record: %{id: 1}}, to: :deleted_record)
+      %DeletedRecord{old_record: %{id: 1}}
+
+      iex> convert_update(%UpdatedRecord{record: %{id: 1}}, to: :updated_record)
+      %UpdatedRecord{record: %{id: 1}}
+  """
   def convert_update(%UpdatedRecord{} = change, to: :new_record) do
     %NewRecord{relation: change.relation, record: change.record}
   end

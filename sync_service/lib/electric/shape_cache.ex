@@ -24,6 +24,7 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback list_active_shapes(opts :: keyword()) :: [{shape_id(), shape_def(), xmin()}]
   @callback wait_for_snapshot(GenServer.name(), shape_id()) :: :ready | {:error, term()}
   @callback handle_truncate(GenServer.name(), shape_id()) :: :ok
+  @callback clean_shape(GenServer.name(), shape_id()) :: :ok
 end
 
 defmodule Electric.ShapeCache do
@@ -94,7 +95,6 @@ defmodule Electric.ShapeCache do
     :ok = Storage.append_to_log!(shape_id, xid, relevant_changes, opts[:storage])
 
     update_shape_latest_offset(shape_id, latest_offset, opts)
-    :ok
   end
 
   @spec update_shape_latest_offset(shape_id(), LogOffset.t(), opts :: keyword()) ::

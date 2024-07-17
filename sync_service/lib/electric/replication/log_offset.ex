@@ -67,6 +67,15 @@ defmodule Electric.Replication.LogOffset do
       iex> compare(new(10, 0), new(10, 1))
       :lt
 
+      iex> compare(new(9, 1), new(10, 1))
+      :lt
+
+      iex> compare(new(10, 1), new(10, 0))
+      :gt
+
+      iex> compare(new(11, 1), new(10, 1))
+      :gt
+
       iex> compare(new(0, 0), before_all())
       :gt
 
@@ -121,11 +130,11 @@ defmodule Electric.Replication.LogOffset do
 
   ## Examples
 
-      iex> increment(new(Lsn.from_integer(10), 5))
+      iex> increment(new(10, 5))
       %LogOffset{tx_offset: 10, op_offset: 6}
 
-      iex> new(Lsn.from_integer(10), 5) |> increment > new(Lsn.from_integer(10), 5)
-      true
+      iex> compare(new(10, 5) |> increment, new(10, 5))
+      :gt
   """
   def increment(%LogOffset{tx_offset: tx_offset, op_offset: op_offset}) do
     %LogOffset{tx_offset: tx_offset, op_offset: op_offset + 1}
@@ -174,7 +183,7 @@ defmodule Electric.Replication.LogOffset do
   ## Examples
 
       iex> from_string("-1")
-      {:ok, %LogOffset{tx_offset: -1, op_offset: 0}}
+      {:ok, before_all()}
 
       iex> from_string("0_0")
       {:ok, %LogOffset{tx_offset: 0, op_offset: 0}}

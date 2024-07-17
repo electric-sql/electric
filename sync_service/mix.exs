@@ -11,7 +11,12 @@ defmodule Electric.MixProject do
       deps: deps(),
       aliases: aliases(),
       preferred_cli_env: [
-        dialyzer: :test
+        dialyzer: :test,
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test,
+        "coveralls.cobertura": :test
       ],
       releases: [
         electric: [
@@ -23,6 +28,7 @@ defmodule Electric.MixProject do
       ],
       default_release: :electric,
       test_coverage: [
+        tool: ExCoveralls,
         ignore_modules: [
           Electric,
           Electric.Telemetry,
@@ -73,7 +79,8 @@ defmodule Electric.MixProject do
 
   defp dev_and_test_deps do
     [
-      {:dialyxir, "~> 1.4", only: [:test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:test], runtime: false},
+      {:excoveralls, "~> 0.18", only: [:test], runtime: false}
     ]
   end
 
