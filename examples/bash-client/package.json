@@ -1,5 +1,5 @@
 {
-  "name": "electric-bash-client",
+  "name": "@electric-examples/bash-client",
   "version": "0.0.1",
   "author": "ElectricSQL",
   "scripts": {
