@@ -11,20 +11,21 @@ export type ShapeDefinition = {
   table: string
 }
 
-export interface ShapeOptions {
-  baseUrl: string
-  offset?: Offset
-  shapeId?: string
-  shape: ShapeDefinition
-}
-
 export interface BackoffOptions {
   initialDelay: number
   maxDelay: number
   multiplier: number
 }
 
-const BackoffDefaults = {
+export interface ShapeOptions {
+  baseUrl: string
+  offset?: Offset
+  shapeId?: string
+  shape: ShapeDefinition
+  backoffOptions?: BackoffOptions
+}
+
+export const BackoffDefaults = {
   initialDelay: 100,
   maxDelay: 10_000,
   multiplier: 1.3,
@@ -116,20 +117,22 @@ export class FetchError extends Error {
     return new FetchError(status, text, json, headers, url)
   }
 }
+
 /**
- * Consumes a shape stream using long polling. Notifies subscribers
+ * Reads updates to a shape from Electric using HTTP requests and long polling. Notifies subscribers
  * when new messages come in. Doesn't maintain any history of the
  * log but does keep track of the offset position and is the best way
  * to consume the HTTP `GET /shape` api.
  *
  * @constructor
  * @param {ShapeStreamOptions} options
- * @param {BackoffOptions} [backoffOptions]
  *
  * Register a callback function to subscribe to the messages.
  *
- *     const stream = new ShapeStream({})
- *     stream.subscribe(console.log)
+ *     const stream = new ShapeStream(options)
+ *     stream.subscribe(messages => {
+ *       // messages is 1 or more row updates
+ *     })
  *
  * To abort the stream, abort the `signal`
  * passed in via the `ShapeStreamOptions`.
@@ -153,7 +156,7 @@ export class ShapeStream {
     [MessageProcessor, ((error: Error) => void) | undefined]
   >()
   private upToDateSubscribers = new Map<
-    string,
+    number,
     [() => void, (error: FetchError | Error) => void]
   >()
 
@@ -163,18 +166,13 @@ export class ShapeStream {
 
   shapeId?: string
 
-  constructor(
-    options: ShapeStreamOptions,
-    backoffOptions: BackoffOptions = BackoffDefaults
-  ) {
+  constructor(options: ShapeStreamOptions) {
     this.validateOptions(options)
     this.options = { subscribe: true, ...options }
     this.lastOffset = this.options.offset ?? `-1`
     this.shapeId = this.options.shapeId
 
-    this.backoffOptions = backoffOptions
-
-    console.log(`this.lastOffset`, this.lastOffset)
+    this.backoffOptions = options.backoffOptions ?? BackoffDefaults
 
     this.start()
   }
@@ -189,7 +187,7 @@ export class ShapeStream {
     let delay = initialDelay
 
     while ((!signal?.aborted && !this.isUpToDate) || this.options.subscribe) {
-      const url = new URL(`${baseUrl}/shape/${shape.table}`)
+      const url = new URL(`${baseUrl}/shape/${encodeURIComponent(shape.table)}`)
       url.searchParams.set(`offset`, this.lastOffset)
       if (this.isUpToDate) {
         url.searchParams.set(`live`, `true`)
@@ -200,13 +198,9 @@ export class ShapeStream {
         url.searchParams.set(`shape_id`, this.shapeId!)
       }
 
-      console.log({
-        url: url.toString(),
-      })
       try {
         await fetch(url.toString(), { signal })
           .then(async (response) => {
-            console.log(`res`, response.ok, response.status)
             if (!response.ok) {
               throw await FetchError.fromResponse(response, url.toString())
             }
@@ -226,8 +220,6 @@ export class ShapeStream {
             return response.json() as Promise<Message[]>
           })
           .then((batch: Message[]) => {
-            this.publish(batch)
-
             // Update isUpToDate & lastOffset
             if (batch.length > 0) {
               const lastMessages = batch.slice(-2)
@@ -249,6 +241,8 @@ export class ShapeStream {
                   this.lastOffset = message.offset
                 }
               })
+
+              this.publish(batch)
             }
           })
       } catch (e) {
@@ -310,7 +304,7 @@ export class ShapeStream {
     callback: () => void | Promise<void>,
     error: (err: FetchError | Error) => void
   ) {
-    const subscriptionId = uuidv4()
+    const subscriptionId = Math.random()
 
     this.upToDateSubscribers.set(subscriptionId, [callback, error])
 
@@ -324,12 +318,13 @@ export class ShapeStream {
   }
 
   private notifyUpToDateSubscribers() {
-    this.upToDateSubscribers.forEach(([callback, _]) => {
+    this.upToDateSubscribers.forEach(([callback]) => {
       callback()
     })
   }
 
   private sendErrorToUpToDateSubscribers(error: FetchError | Error) {
+    // eslint-disable-next-line
     this.upToDateSubscribers.forEach(([_, errorCallback]) =>
       errorCallback(error)
     )
@@ -377,11 +372,17 @@ export class ShapeStream {
  * @constructor
  * @param {ShapeOptions}
  *
- *     const shape = new Shape({table: `foo`, baseUrl: 'http://localhost:3000'})
+ *     const shapeStream = new ShapeStream({table: `foo`, baseUrl: 'http://localhost:3000'})
+ *     const shape = new Shape(shapeStream)
  *
- * `isUpToDate` resolves once the Shape has been fully loaded (and when resuming from being offline):
+ * `value` returns a promise that resolves the Shape data once the Shape has been
+ * fully loaded (and when resuming from being offline):
  *
- *     const value = await shape.isUpToDate
+ *     const value = await shape.value
+ *
+ * `valueSync` returns the current data synchronously:
+ *
+ *     const value = shape.valueSync
  *
  *  Subscribe to updates. Called whenever the shape updates in Postgres.
  *
@@ -393,32 +394,51 @@ export class Shape {
   private stream: ShapeStream
 
   private data: ShapeData = new Map()
-  private subscribers = new Map<string, ShapeChangedCallback>()
+  private subscribers = new Map<number, ShapeChangedCallback>()
+  public error: FetchError | false = false
+  private hasNotifiedSubscribersUpToDate: boolean = false
 
-  constructor(options: ShapeOptions, backoffOptions?: BackoffOptions) {
-    this.stream = new ShapeStream(options, backoffOptions)
+  constructor(stream: ShapeStream) {
+    this.stream = stream
     this.stream.subscribe(this.process.bind(this))
+    const unsubscribe = this.stream.subscribeOnceToUpToDate(
+      () => {
+        unsubscribe()
+      },
+      (e) => {
+        throw e
+      }
+    )
   }
 
-  get value() {
-    return this.data
+  get isUpToDate(): boolean {
+    return this.stream.isUpToDate
   }
 
-  get isUpToDate(): Promise<ShapeData> {
-    return new Promise((resolve, reject) => {
+  get value(): Promise<ShapeData> {
+    return new Promise((resolve) => {
       if (this.stream.isUpToDate) {
-        resolve(this.value)
+        resolve(this.valueSync)
       } else {
-        const unsubscribe = this.stream.subscribeOnceToUpToDate(() => {
-          unsubscribe()
-          resolve(this.value)
-        }, reject)
+        const unsubscribe = this.stream.subscribeOnceToUpToDate(
+          () => {
+            unsubscribe()
+            resolve(this.valueSync)
+          },
+          (e) => {
+            throw e
+          }
+        )
       }
     })
   }
 
+  get valueSync() {
+    return this.data
+  }
+
   subscribe(callback: ShapeChangedCallback): () => void {
-    const subscriptionId = uuidv4()
+    const subscriptionId = Math.random()
 
     this.subscribers.set(subscriptionId, callback)
 
@@ -438,6 +458,7 @@ export class Shape {
   private process(messages: Message[]): void {
     let dataMayHaveChanged = false
     let isUpToDate = false
+    let newlyUpToDate = false
 
     messages.forEach((message) => {
       if (`key` in message && message.value) {
@@ -459,17 +480,23 @@ export class Shape {
 
       if (message.headers?.[`control`] === `up-to-date`) {
         isUpToDate = true
+        if (!this.hasNotifiedSubscribersUpToDate) {
+          newlyUpToDate = true
+        }
       }
     })
 
-    if (isUpToDate && dataMayHaveChanged) {
+    // Always notify subscribers when the Shape first is up to date.
+    // FIXME this would be cleaner with a simple state machine.
+    if (newlyUpToDate || (isUpToDate && dataMayHaveChanged)) {
+      this.hasNotifiedSubscribersUpToDate = true
       this.notify()
     }
   }
 
   private notify(): void {
     this.subscribers.forEach((callback) => {
-      callback(this.value)
+      callback(this.valueSync)
     })
   }
 }

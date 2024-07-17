@@ -1,16 +1,17 @@
 import { describe, expect, inject, vi } from 'vitest'
 import { testWithIssuesTable as it } from './support/test-context'
-import { Shape } from '../client'
+import { ShapeStream, Shape } from '../client'
 
 const BASE_URL = inject(`baseUrl`)
 
 describe(`Shape`, () => {
   it(`should sync an empty shape`, async ({ issuesTableUrl }) => {
-    const shape = new Shape({
+    const shapeStream = new ShapeStream({
       shape: { table: issuesTableUrl },
       baseUrl: BASE_URL,
     })
-    const map = await shape.isUpToDate
+    const shape = new Shape(shapeStream)
+    const map = await shape.value
 
     expect(map).toEqual(new Map())
   })
@@ -22,10 +23,11 @@ describe(`Shape`, () => {
   }) => {
     const [id] = await insertIssues({ title: `test title` })
 
-    const shape = new Shape({
+    const shapeStream = new ShapeStream({
       shape: { table: issuesTableUrl },
       baseUrl: BASE_URL,
     })
+    const shape = new Shape(shapeStream)
 
     const map = await new Promise((resolve) => {
       shape.subscribe(resolve)
@@ -48,11 +50,12 @@ describe(`Shape`, () => {
   }) => {
     const [id] = await insertIssues({ title: `test title` })
 
-    const shape = new Shape({
+    const shapeStream = new ShapeStream({
       shape: { table: issuesTableUrl },
       baseUrl: BASE_URL,
     })
-    const map = await shape.isUpToDate
+    const shape = new Shape(shapeStream)
+    const map = await shape.value
 
     const expectedValue = new Map()
     expectedValue.set(`${issuesTableKey}/${id}`, {
@@ -71,7 +74,7 @@ describe(`Shape`, () => {
       id: id2,
       title: `other title`,
     })
-    expect(shape.value).toEqual(expectedValue)
+    expect(shape.valueSync).toEqual(expectedValue)
 
     shape.unsubscribeAll()
   })
@@ -83,10 +86,11 @@ describe(`Shape`, () => {
   }) => {
     const [id] = await insertIssues({ title: `test title` })
 
-    const shape = new Shape({
+    const shapeStream = new ShapeStream({
       shape: { table: issuesTableUrl },
       baseUrl: BASE_URL,
     })
+    const shape = new Shape(shapeStream)
 
     const hasNotified = new Promise((resolve) => {
       shape.subscribe(resolve)
@@ -110,10 +114,11 @@ describe(`Shape`, () => {
   })
 
   it(`should support unsubscribe`, async ({ issuesTableUrl }) => {
-    const shape = new Shape({
+    const shapeStream = new ShapeStream({
       shape: { table: issuesTableUrl },
       baseUrl: BASE_URL,
     })
+    const shape = new Shape(shapeStream)
 
     const subFn = vi.fn((_) => void 0)
 
