@@ -2,6 +2,12 @@
 
 Postgres sync for modern apps.
 
+`electric-next` is an experimental new approach to building ElectricSQL.
+
+One that's informed by the lessons learned building the [previous system](https://github.com/electric-sql/electric).
+
+See James' blog post for more background on the change: https://next.electric-sql.com/about
+
 ## Getting Started
 
 1. Install the TypeScript client and React integrations
