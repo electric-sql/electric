@@ -1,5 +1,5 @@
 import { Outlet } from "react-router-dom"
-import { ShapesProvider } from "../../../../react-hooks"
+import { ShapesProvider } from "@electric-sql/react"
 
 export default function Root() {
   return (

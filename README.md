@@ -54,6 +54,9 @@ listen_addresses = '*'
 wal_level = 'logical'
 ```
 
+3. Try a curl command
+`curl http://localhost:3000/v1/shape/{table}`
+
 Start Docker: `docker compose -f ./docker-compose.yaml up`
 
 3. Create a table and insert some data:

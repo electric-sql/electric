@@ -1,9 +1,0 @@
-json_files
-file.jsonl
-node_modules
-wal
-test-dbs
-shape-data.json
-caching/nginx_cache
-.vscode
-sync_service
