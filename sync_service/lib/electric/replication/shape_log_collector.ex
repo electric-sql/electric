@@ -1,4 +1,4 @@
-defmodule Electric.Replication.ShapeLogStorage do
+defmodule Electric.Replication.ShapeLogCollector do
   @moduledoc """
   When any txn comes from postgres, we need to store it into the
   log for this shape if and only if it has txid >= xmin of the snapshot.
