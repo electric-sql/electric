@@ -45,7 +45,7 @@ client.connect().then(() => {
     // Execute all commands as a single transaction
     try {
       await pipeline.exec()
-      console.log(`Hash updated successfully`)
+      console.log(`Redis hash updated successfully with latest shape updates`)
     } catch (error) {
       console.error(`Error while updating hash:`, error)
     }

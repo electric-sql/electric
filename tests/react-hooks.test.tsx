@@ -3,19 +3,39 @@ import 'global-jsdom/register'
 
 import React from 'react'
 import { renderHook, waitFor } from '@testing-library/react'
-import { describe, expect, inject } from 'vitest'
+import { describe, expect, inject, it as bareIt } from 'vitest'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
-import { useShape } from '../react-hooks'
+import { useShape, ShapesProvider, sortedOptionsHash } from '../react-hooks'
+import { Shape } from '../client'
 import { Message } from '../types'
 
 type FC = React.FC<React.PropsWithChildren>
 const BASE_URL = inject(`baseUrl`)
 
+describe(`sortedOptionsHash`, () => {
+  bareIt(
+    `should create the same hash from options sorted in different ways`,
+    () => {
+      const hash1 = sortedOptionsHash({
+        shape: { table: `foo` },
+        baseUrl: `http://whatever`,
+        offset: `-1`,
+      })
+      const hash2 = sortedOptionsHash({
+        baseUrl: `http://whatever`,
+        offset: `-1`,
+        shape: { table: `foo` },
+      })
+      expect(hash1).toEqual(hash2)
+    }
+  )
+})
+
 describe(`useShape`, () => {
   it(`should sync an empty shape`, async ({ aborter, issuesTableUrl }) => {
     const wrapper: FC = ({ children }) => {
-      return <div>{children}</div>
+      return <ShapesProvider>{children}</ShapesProvider>
     }
 
     const { result } = renderHook(
@@ -29,7 +49,11 @@ describe(`useShape`, () => {
       { wrapper }
     )
 
-    await waitFor(() => expect(result.current).toEqual([]))
+    await waitFor(() => expect(result.current.isUpToDate).toEqual(true))
+    await waitFor(() => expect(result.current.error).toBe(false))
+    await waitFor(() => expect(result.current.isError).toEqual(false))
+    await waitFor(() => expect(result.current.data).toEqual([]))
+    await waitFor(() => expect(result.current.shape).toBeInstanceOf(Shape))
   })
 
   it(`should sync a shape`, async ({
@@ -40,7 +64,7 @@ describe(`useShape`, () => {
     const [id] = await insertIssues({ title: `test row` })
 
     const wrapper: FC = ({ children }) => {
-      return <div>{children}</div>
+      return <ShapesProvider>{children}</ShapesProvider>
     }
 
     const { result } = renderHook(
@@ -55,7 +79,7 @@ describe(`useShape`, () => {
     )
 
     await waitFor(() =>
-      expect(result.current).toEqual([{ id: id, title: `test row` }])
+      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
     )
   })
 
@@ -67,7 +91,7 @@ describe(`useShape`, () => {
     const [id] = await insertIssues({ title: `test row` })
 
     const wrapper: FC = ({ children }) => {
-      return <div>{children}</div>
+      return <ShapesProvider>{children}</ShapesProvider>
     }
 
     const { result } = renderHook(
@@ -81,13 +105,13 @@ describe(`useShape`, () => {
       { wrapper }
     )
 
-    await waitFor(() => expect(result.current).not.toEqual([]))
+    await waitFor(() => expect(result.current.data).not.toEqual([]))
 
     // Add an item.
     const [id2] = await insertIssues({ title: `other row` })
 
     await waitFor(() =>
-      expect(result.current).toEqual([
+      expect(result.current.data).toEqual([
         { id: id, title: `test row` },
         { id: id2, title: `other row` },
       ])
@@ -102,7 +126,7 @@ describe(`useShape`, () => {
     await insertIssues({ title: `test row` })
 
     const wrapper: FC = ({ children }) => {
-      return <div>{children}</div>
+      return <ShapesProvider>{children}</ShapesProvider>
     }
 
     const { result, unmount } = renderHook(
@@ -116,7 +140,7 @@ describe(`useShape`, () => {
       { wrapper }
     )
 
-    await waitFor(() => expect(result.current).not.toEqual([]))
+    await waitFor(() => expect(result.current.data).not.toEqual([]))
 
     unmount()
 
@@ -131,6 +155,6 @@ describe(`useShape`, () => {
 
     await sleep(50)
 
-    expect(result.current.length).toEqual(1)
+    expect(result.current.data.length).toEqual(1)
   })
 })
