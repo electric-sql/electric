@@ -1,6 +1,6 @@
 # TypeScript client for ElectricSQL
 
-Postgres Sync for modern apps.
+Postgres sync for modern apps.
 
 Electric provides an HTTP interface to Postgres to enable massive number of clients to query and get real-time updates to data in "shapes" i.e. subsets of the database. Electric turns Postgres into a real-time database.
 

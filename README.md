@@ -1,11 +1,11 @@
 # ElectricSQL (@next)
 
-Postgres Sync for modern apps.
+Postgres sync for modern apps.
 
 ## Getting Started
 
 1. Install the TypeScript client and React integrations
-`npm install @electric-sql/next @electric-sql/react-next`
+`npm install @electric-sql/next @electric-sql/react`
 
 2. Run Docker Compose similar to the following to setup Postgres and Electric
 
@@ -84,7 +84,7 @@ INSERT INTO foo (name, value) VALUES
 
 Add the Shapes provider
 ```tsx
-import { ShapesProvider } from "@electric-sql/react-next"
+import { ShapesProvider } from "@electric-sql/react"
 
 ReactDOM.createRoot(document.getElementById(`root`)!).render(
   <ShapesProvider>
@@ -95,7 +95,7 @@ ReactDOM.createRoot(document.getElementById(`root`)!).render(
 
 Add `useShape` to a component
 ```tsx
-import { useShape } from "@electric-sql/react-next"
+import { useShape } from "@electric-sql/react"
 
 function Component {
   const { data: fooData } = useShape({
