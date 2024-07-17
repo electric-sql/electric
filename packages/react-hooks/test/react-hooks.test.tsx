@@ -147,7 +147,9 @@ describe(`useShape`, () => {
     const [newId] = await insertIssues({ title: `other row` })
     // And wait until it's definitely seen
     await waitFor(async () => {
-      const res = await fetch(`${BASE_URL}/shape/${issuesTableUrl}?offset=-1`)
+      const res = await fetch(
+        `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`
+      )
       const body = (await res.json()) as Message[]
       expect(body).toMatchObject([{}, { value: { id: newId } }, {}])
     })

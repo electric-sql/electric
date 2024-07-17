@@ -120,7 +120,7 @@ export class FetchError extends Error {
  * Reads updates to a shape from Electric using HTTP requests and long polling. Notifies subscribers
  * when new messages come in. Doesn't maintain any history of the
  * log but does keep track of the offset position and is the best way
- * to consume the HTTP `GET /shape` api.
+ * to consume the HTTP `GET /v1/shape` api.
  *
  * @constructor
  * @param {ShapeStreamOptions} options
@@ -185,7 +185,9 @@ export class ShapeStream {
     let delay = initialDelay
 
     while ((!signal?.aborted && !this.isUpToDate) || this.options.subscribe) {
-      const url = new URL(`${baseUrl}/shape/${encodeURIComponent(shape.table)}`)
+      const url = new URL(
+        `${baseUrl}/v1/shape/${encodeURIComponent(shape.table)}`
+      )
       url.searchParams.set(`offset`, this.lastOffset)
       if (this.isUpToDate) {
         url.searchParams.set(`live`, `true`)

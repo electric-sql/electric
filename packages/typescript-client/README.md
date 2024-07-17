@@ -15,7 +15,7 @@ Etc.
 `command to run Docker w/ correct environment variables etc.
 
 3. Try a curl command
-`curl http://localhost:3000/shape/{table}`
+`curl http://localhost:3000/v1/shape/{table}`
 
 4. Add to React app
 ```tsx

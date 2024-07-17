@@ -70,7 +70,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
   }) => {
     // First request gets non-cached response
     const originalRes = await fetch(
-      `${proxyCacheBaseUrl}/shape/${issuesTableUrl}?offset=-1&live`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1&live`,
       {}
     )
 
@@ -79,7 +79,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
 
     // Second request still gets non-cached response
     const cachedRes = await fetch(
-      `${proxyCacheBaseUrl}/shape/${issuesTableUrl}?offset=-1&live`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1&live`,
       {}
     )
     expect(cachedRes.status).toBe(200)
@@ -93,7 +93,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
   }) => {
     // First request gets non-cached response
     const originalRes = await fetch(
-      `${proxyCacheBaseUrl}/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
 
@@ -102,7 +102,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
 
     // Second request gets cached response
     const cachedRes = await fetch(
-      `${proxyCacheBaseUrl}/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
     expect(cachedRes.status).toBe(200)
@@ -116,7 +116,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
   }) => {
     // Make a first request such that response is cached
     const originalRes = await fetch(
-      `${proxyCacheBaseUrl}/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
 
@@ -125,7 +125,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
 
     // Second request gets cached response
     const cachedRes = await fetch(
-      `${proxyCacheBaseUrl}/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
     expect(cachedRes.status).toBe(200)
@@ -137,7 +137,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
 
     // Third request gets cached response
     const staleRes = await fetch(
-      `${proxyCacheBaseUrl}/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
 
@@ -151,7 +151,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
   }) => {
     // Make a first request such that response is cached
     const originalRes = await fetch(
-      `${proxyCacheBaseUrl}/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
 
@@ -160,7 +160,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
 
     // Second request gets cached response
     const cachedRes = await fetch(
-      `${proxyCacheBaseUrl}/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
     expect(cachedRes.status).toBe(200)
@@ -172,7 +172,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
 
     // Third request gets cached response
     const staleRes = await fetch(
-      `${proxyCacheBaseUrl}/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
 
@@ -194,7 +194,7 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
     // Make a client that fetches a shape
     // which forces the shape data to be cached
     const client1Res = await fetch(
-      `${proxyCacheBaseUrl}/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
     expect(client1Res.status).toBe(200)
@@ -207,7 +207,7 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
     // Make a 2nd client that fetches the shape
     // check that it is served from cached data
     const client2Res = await fetch(
-      `${proxyCacheBaseUrl}/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
     expect(client2Res.status).toBe(200)
@@ -230,7 +230,7 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
     // should tell you to go back to initial sync
     // because the shape is out of scope
     const liveRes = await fetch(
-      `${proxyCacheBaseUrl}/shape/${issuesTableUrl}?offset=${latestOffset}&shape_id=${originalShapeId}&live`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${latestOffset}&shape_id=${originalShapeId}&live`,
       {}
     )
     expect(liveRes.status).toBe(409)

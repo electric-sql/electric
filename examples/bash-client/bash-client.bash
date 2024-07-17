@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # URL to download the JSON file from (without the output parameter)
-BASE_URL="http://localhost:3000/shape/todos"
+BASE_URL="http://localhost:3000/v1/shape/todos"
 
 # Directory to store individual JSON files
 OFFSET_DIR="./json_files"
