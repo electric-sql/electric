@@ -137,9 +137,9 @@ lic\".\"foo\"/4","headers":{"action":"insert"}},{"offset":"0_0","value":{"id":5,
 
 #### Now let's fetch the same shape to use in our React app
 
-Install the Electric TypeScript client and React integrations:
+Install the Electric React package:
 
-`npm install @electric-sql/next @electric-sql/react`
+`npm install @electric-sql/react`
 
 
 Wrap your root in `src/main.tsx` with the `ShapesProvider`:
