@@ -35,6 +35,11 @@ defmodule Support.DbSetup do
     {:ok, %{utility_pool: utility_pool, db_config: updated_config, pool: pool, db_conn: pool}}
   end
 
+  def with_publication(ctx) do
+    Postgrex.query!(ctx.pool, "CREATE PUBLICATION electric_test_publication", [])
+    {:ok, %{publication_name: "electric_test_publication"}}
+  end
+
   def with_shared_db(_ctx) do
     config = Application.fetch_env!(:electric, :database_config)
 

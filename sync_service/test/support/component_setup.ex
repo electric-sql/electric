@@ -37,7 +37,12 @@ defmodule Support.ComponentSetup do
         shape_meta_table: shape_meta_table,
         storage: ctx.storage,
         db_pool: ctx.pool
-      ] ++ additional_opts
+      ]
+      |> Keyword.merge(additional_opts)
+      |> Keyword.put_new_lazy(:prepare_tables_fn, fn ->
+        {Electric.Postgres.Configuration, :configure_tables_for_replication!,
+         [ctx.publication_name]}
+      end)
 
     {:ok, _pid} = ShapeCache.start_link(start_opts)
 

@@ -175,4 +175,40 @@ defmodule Electric.Utils do
       |> Enum.map(&String.trim/1)
     end)
   end
+
+  @doc """
+  Format a relation tuple to be correctly escaped for use in SQL queries.
+
+  ## Examples
+
+      iex> relation_to_sql({"public", "items"})
+      ~S|"public"."items"|
+
+      iex> relation_to_sql({"with spaces", ~S|and "quoted"!|})
+      ~S|"with spaces"."and ""quoted""!"|
+  """
+  @spec relation_to_sql(Electric.relation()) :: String.t()
+  def relation_to_sql({schema, table}) do
+    ~s|"#{escape_quotes(schema)}"."#{escape_quotes(table)}"|
+  end
+
+  defp escape_quotes(text), do: :binary.replace(text, ~S|"|, ~S|""|, [:global])
+
+  @doc """
+  Applies either an anonymous function or a MFA tuple, prepending the given arguments
+  in case of an MFA.
+
+  ## Examples
+
+      iex> apply_fn_or_mfa(&String.contains?(&1, "foo"), ["foobar"])
+      true
+
+      iex> apply_fn_or_mfa({String, :contains?, ["foo"]}, ["foobar"])
+      true
+  """
+  def apply_fn_or_mfa(fun, args) when is_function(fun) and is_list(args), do: apply(fun, args)
+
+  def apply_fn_or_mfa({mod, fun, args}, more_args)
+      when is_atom(mod) and is_atom(fun) and is_list(args) and is_list(more_args),
+      do: apply(mod, fun, more_args ++ args)
 end

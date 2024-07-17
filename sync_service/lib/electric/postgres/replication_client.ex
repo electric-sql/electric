@@ -12,6 +12,7 @@ defmodule Electric.Postgres.ReplicationClient do
     defstruct [
       :transaction_received,
       :publication_name,
+      :try_creating_publication?,
       origin: "postgres",
       txn_collector: %Collector{},
       step: :disconnected
@@ -20,14 +21,16 @@ defmodule Electric.Postgres.ReplicationClient do
     @type t() :: %__MODULE__{
             transaction_received: {module(), atom(), [term()]},
             publication_name: String.t(),
+            try_creating_publication?: boolean(),
             origin: String.t(),
             txn_collector: Collector.t(),
-            step: :disconnected | :create_slot | :streaming
+            step: :disconnected | :create_slot | :streaming | :create_publication
           }
 
     @opts_schema NimbleOptions.new!(
                    transaction_received: [required: true, type: :mfa],
-                   publication_name: [required: true, type: :string]
+                   publication_name: [required: true, type: :string],
+                   try_creating_publication?: [type: :boolean, required: true]
                  )
 
     @spec new(Access.t()) :: t()
@@ -54,6 +57,12 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   @impl true
+  def handle_connect(%State{try_creating_publication?: true} = state) do
+    # We're creating an "empty" publication because first snapshot creation should add the table
+    query = "CREATE PUBLICATION #{state.publication_name}"
+    {:query, query, %{state | step: :create_publication}}
+  end
+
   def handle_connect(state) do
     query = "CREATE_REPLICATION_SLOT electric TEMPORARY LOGICAL pgoutput NOEXPORT_SNAPSHOT"
     {:query, query, %{state | step: :create_slot}}
@@ -67,6 +76,14 @@ defmodule Electric.Postgres.ReplicationClient do
     Logger.info("Started replication from postgres")
 
     {:stream, query, [], %{state | step: :streaming}}
+  end
+
+  def handle_result(result, %State{step: :create_publication} = state)
+      when is_list(result)
+      when is_struct(result, Postgrex.Error) and result.postgres.code == :duplicate_object and
+             result.postgres.routine == "CreatePublication" do
+    # Either a success in publication or a "duplicate object" error are fine here
+    handle_connect(%{state | try_creating_publication?: false})
   end
 
   @impl true

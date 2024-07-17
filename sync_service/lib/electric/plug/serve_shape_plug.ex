@@ -250,8 +250,13 @@ defmodule Electric.Plug.ServeShapePlug do
         send_resp(conn, 200, Jason.encode_to_iodata!(snapshot ++ log ++ @up_to_date))
 
       {:error, reason} ->
-        Logger.warning("Could not serve a snapshot because of #{reason}")
-        send_resp(conn, 500, "")
+        Logger.warning("Could not serve a snapshot because of #{inspect(reason)}")
+
+        send_resp(
+          conn,
+          500,
+          Jason.encode_to_iodata!(%{error: "Failed creating or fetching the snapshot"})
+        )
     end
   end
 

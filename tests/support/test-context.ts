@@ -71,7 +71,6 @@ export const testWithIssuesTable = testWithDbClient.extend<{
       id UUID PRIMARY KEY,
       title TEXT NOT NULL
     );
-    ALTER TABLE ${tableName} REPLICA IDENTITY FULL;
     COMMENT ON TABLE ${tableName} IS 'Created for ${task.file?.name ?? `unknown`} - ${task.name}';
   `)
     await use(tableName)

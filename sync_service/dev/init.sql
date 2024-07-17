@@ -1,1 +1,1 @@
-CREATE PUBLICATION electric_publication FOR ALL TABLES;
+-- CREATE PUBLICATION electric_publication;
