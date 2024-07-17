@@ -5,7 +5,7 @@ Postgres Sync for modern apps.
 ## Getting Started
 
 1. Install the TypeScript client and React integrations
-`npm install electric-next electric-next/react`
+`npm install @electric-sql/next @electric-sql/react-next`
 
 2. Run Docker Compose similar to the following to setup Postgres and Electric
 
@@ -73,18 +73,40 @@ INSERT INTO foo (name, value) VALUES
     ('Eve', 0);
 ```
 
-3. Try a curl command to Electric's HTTP API:
+4. Try a curl command to Electric's HTTP API:
 
 `curl http://localhost:3000/shape/foo`
 
-4. Add to React app
+5. Add to React app
+
+Add the Shapes provider
 ```tsx
-Show adding provider
+import { ShapesProvider } from "@electric-sql/react-next"
+
+ReactDOM.createRoot(document.getElementById(`root`)!).render(
+  <ShapesProvider>
+    <App />
+  </ShapesProvider>
+)
 ```
 
+Add `useShape` to a component
 ```tsx
-Show using `useHook` to fetch and use data
+import { useShape } from "@electric-sql/react-next"
+
+function Component {
+  const { data: fooData } = useShape({
+    shape: { table: `foo` },
+    baseUrl: `http://localhost:3000`,
+  })
+
+  return JSON.stringify(foo, null, 4)
+}
 ```
+
+## HTTP API Documentation
+
+The HTTP API documentation is defined through an OpenAPI 3.1.0 specification found in `docs/electric-api.yaml`. Documentation for the API can be generated with `npm run docs:generate`.
 
 ## How to setup your development environment to work on Electric
 
@@ -97,10 +119,6 @@ We're using [asdf](https://asdf-vm.com/) to install Elixir, Erlang, and Node.js.
 3. `asdf install`
 
 You'll probably need to fiddle with your bash/zsh/etc rc file to load the right tool into your environment.
-
-## HTTP API Documentation
-
-The HTTP API documentation is defined through an OpenAPI 3.1.0 specification found in `docs/electric-api.yaml`. Documentation for the API can be generated with `npm run docs:generate`.
 
 ## Contributing
 
