@@ -5,17 +5,77 @@ Postgres Sync for modern apps.
 ## Getting Started
 
 1. Install the TypeScript client and React integrations
-`npm install @electric-sql/client @electric-sql/react`
+`npm install electric-next electric-next/react`
 
 2. Run Docker Compose similar to the following to setup Postgres and Electric
+
+`docker-compose.yaml`
+
 ```docker
-Etc.
+version: "3.8"
+name: "todomvc"
+
+configs:
+  postgres_config:
+    file: "./postgres/postgres.conf"
+
+volumes:
+  pg_data:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: electric
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pg_password
+    command:
+      - -c
+      - config_file=/etc/postgresql.conf
+    configs:
+      - source: postgres_config
+        target: /etc/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - 5632:5432
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+# TODO add Electric image
 ```
 
-`command to run Docker w/ correct environment variables etc.
+Add a `postgresql.conf` file.
 
-3. Try a curl command
-`curl http://localhost:3000/shape/{table}`
+```
+listen_addresses = '*'
+wal_level = 'logical'
+```
+
+Start Docker: `docker compose -f ./docker-compose.yaml up`
+
+3. Create a table and insert some data:
+
+```sql
+CREATE TABLE foo (
+    id INT PRIMARY KEY AUTO_INCREMENT, -- Unique identifier, auto-incrementing
+    name VARCHAR(255),                  -- Text field for names (adjust size as needed)
+    value FLOAT                         -- Numeric value (can be decimal)
+);
+
+INSERT INTO foo (name, value) VALUES 
+    ('Alice', 3.14),
+    ('Bob', 2.71),
+    ('Charlie', -1.618),
+    ('David', 1.414),
+    ('Eve', 0);
+```
+
+3. Try a curl command to Electric's HTTP API:
+
+`curl http://localhost:3000/shape/foo`
 
 4. Add to React app
 ```tsx
