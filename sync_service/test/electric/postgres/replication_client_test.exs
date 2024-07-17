@@ -8,27 +8,27 @@ defmodule Electric.Postgres.ReplicationClientTest do
   @moduletag :capture_log
   @publication_name "test_electric_publication"
 
+  def create_publication_for_all_tables(conn),
+    do: Postgrex.query!(conn, "CREATE PUBLICATION #{@publication_name} FOR ALL TABLES", [])
+
   describe "ReplicationClient against real db" do
     setup {Support.DbSetup, :with_unique_db}
     setup {Support.DbStructureSetup, :with_basic_tables}
-
-    setup %{db_conn: conn} do
-      Postgrex.query!(conn, "CREATE PUBLICATION #{@publication_name} FOR ALL TABLES", [])
-      :ok
-    end
 
     setup do
       %{
         init_opts: [
           publication_name: @publication_name,
-          transaction_received: {__MODULE__, :test_transaction_received, [self()]}
+          transaction_received: {__MODULE__, :test_transaction_received, [self()]},
+          try_creating_publication?: false
         ]
       }
     end
 
     test "calls a provided function when receiving it from the PG",
          %{db_config: config, init_opts: init_opts, db_conn: conn} do
-      {:ok, _pid} = ReplicationClient.start_link(config ++ [init_opts: init_opts])
+      create_publication_for_all_tables(conn)
+      assert {:ok, _pid} = ReplicationClient.start_link(config ++ [init_opts: init_opts])
 
       {:ok, _} =
         Postgrex.query(conn, "INSERT INTO items (id, value) VALUES ($1, $2)", [
@@ -42,9 +42,11 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
     test "logs a message when connected & replication has started",
          %{db_config: config, init_opts: init_opts, db_conn: conn} do
+      create_publication_for_all_tables(conn)
+
       log =
         ExUnit.CaptureLog.capture_log(fn ->
-          {:ok, _pid} = ReplicationClient.start_link(config ++ [init_opts: init_opts])
+          assert {:ok, _pid} = ReplicationClient.start_link(config ++ [init_opts: init_opts])
 
           {:ok, _} =
             Postgrex.query(conn, "INSERT INTO items (id, value) VALUES ($1, $2)", [
@@ -57,6 +59,31 @@ defmodule Electric.Postgres.ReplicationClientTest do
         end)
 
       log =~ "Started replication from postgres"
+    end
+
+    test "creates an empty publication on startup if requested", %{
+      db_config: config,
+      init_opts: init_opts,
+      db_conn: conn
+    } do
+      init_opts = Keyword.put(init_opts, :try_creating_publication?, true)
+      assert {:ok, _} = ReplicationClient.start_link(config ++ [init_opts: init_opts])
+
+      assert %{rows: [[@publication_name]]} =
+               Postgrex.query!(conn, "SELECT pubname FROM pg_publication", [])
+
+      assert %{rows: []} = Postgrex.query!(conn, "SELECT pubname FROM pg_publication_tables", [])
+    end
+
+    test "doesn't fail to start when publicaiton already exists", %{
+      db_config: config,
+      init_opts: init_opts,
+      db_conn: conn
+    } do
+      init_opts = Keyword.put(init_opts, :try_creating_publication?, true)
+      create_publication_for_all_tables(conn)
+
+      assert {:ok, _} = ReplicationClient.start_link(config ++ [init_opts: init_opts])
     end
   end
 

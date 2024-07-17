@@ -72,6 +72,11 @@ defmodule Electric.Shapes.Shape do
   end
 
   @doc """
+  List tables that are a part of this shape.
+  """
+  def affected_tables(%__MODULE__{root_table: table}), do: [table]
+
+  @doc """
   Convert a change to be correctly represented within the shape.
 
   New or deleted changes are either propagated as-is, or filtered out completely.

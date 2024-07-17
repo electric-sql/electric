@@ -13,9 +13,15 @@ defmodule Electric.Application do
 
     {storage_module, init_params} = Application.fetch_env!(:electric, :storage)
 
+    publication_name = "electric_publication"
+
     with {:ok, storage_opts} <- storage_module.shared_opts(init_params) do
       storage = {storage_module, storage_opts}
-      shape_cache = {Electric.ShapeCache, storage: storage}
+
+      prepare_tables_fn =
+        {Electric.Postgres.Configuration, :configure_tables_for_replication!, [publication_name]}
+
+      shape_cache = {Electric.ShapeCache, storage: storage, prepare_tables_fn: prepare_tables_fn}
 
       children =
         if Application.fetch_env!(:electric, :environment) != :test do
@@ -37,9 +43,10 @@ defmodule Electric.Application do
              Application.fetch_env!(:electric, :database_config) ++
                [
                  init_opts: [
-                   publication_name: "electric_publication",
+                   publication_name: publication_name,
                    transaction_received:
-                     {Electric.Replication.ShapeLogStorage, :store_transaction, []}
+                     {Electric.Replication.ShapeLogStorage, :store_transaction, []},
+                   try_creating_publication?: true
                  ]
                ]},
             {Bandit,
