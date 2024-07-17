@@ -9,7 +9,7 @@ servers:
     description: Local server
 
 paths:
-  /shape/{root_table}:
+  /v1/shape/{root_table}:
     get:
       summary: Request a shape based on the name of the table.
       parameters:

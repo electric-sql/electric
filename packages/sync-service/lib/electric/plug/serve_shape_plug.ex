@@ -143,7 +143,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # If the offset requested is not found, returns 409 along with a location redirect for clients to
   # re-request the shape from scratch with the new shape id which acts as a consistent cache buster
-  # e.g. GET /shape/{root_table}?shape_id={new_shape_id}&offset=-1
+  # e.g. GET /v1/shape/{root_table}?shape_id={new_shape_id}&offset=-1
   def validate_shape_offset(%Plug.Conn{assigns: %{offset: offset}} = conn, _) do
     shape_id = conn.assigns.shape_id
     active_shape_id = conn.assigns.active_shape_id
