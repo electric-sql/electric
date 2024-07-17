@@ -1,0 +1,11 @@
+{
+  "name": "electric-bash-client",
+  "version": "0.0.1",
+  "author": "ElectricSQL",
+  "scripts": {
+    "backend:up": "PROJECT_NAME=bash-client pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=bash-client pnpm -C ../../ run example-backend:down",
+    "build": "echo 'Nothing to build'",
+    "typecheck": "echo 'Nothing to typecheck'"
+  }
+}

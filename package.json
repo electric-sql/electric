@@ -1,0 +1,11 @@
+{
+  "name": "electric-next-monorepo",
+  "private": true,
+  "scripts": {
+    "example-backend:up": "dotenv -e .env.dev -- docker compose -f ./.support/docker-compose.yml up -d ",
+    "example-backend:down": "dotenv  -e .env.dev -- docker compose -f .support/docker-compose.yml down --volumes"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^7.4.2"
+  }
+}

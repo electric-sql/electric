@@ -4,12 +4,14 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
+    "backend:up": "PROJECT_NAME=linearlite pnpm -C ../../ run example-backend:up && pnpm db:migrate && pnpm db:load-data",
+    "backend:down": "PROJECT_NAME=linearlite pnpm -C ../../ run example-backend:down",
+    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
+    "db:load-data": "dotenv -e ../../.env.dev -- node ./db/load_data.js",
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "migrate": "node ./db/migrate.js",
     "preview": "vite preview",
-    "load-data": "node ./db/load_data.js",
     "typecheck": "tsc --noEmit",
     "process-data": "node ./db/process_data.js"
   },
@@ -51,6 +53,7 @@
   },
   "devDependencies": {
     "@databases/pg": "^5.5.0",
+    "@databases/pg-migrations": "^5.0.3",
     "@faker-js/faker": "^8.4.1",
     "@tailwindcss/typography": "^0.5.10",
     "@types/jest": "^29.5.12",
@@ -67,6 +70,7 @@
     "@typescript-eslint/parser": "^6.0.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
+    "dotenv-cli": "^7.4.2",
     "eslint": "^8.45.0",
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.3",
