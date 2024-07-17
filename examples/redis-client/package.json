@@ -1,5 +1,5 @@
 {
-  "name": "electric-sql-redis-client",
+  "name": "@electric-examples/redis-client",
   "version": "0.0.1",
   "description": "An example Redis client for ElectricSQL",
   "main": "dist/index.js",
@@ -26,7 +26,7 @@
   },
   "homepage": "https://github.com/electric-sql/electric-next#readme",
   "dependencies": {
-    "electric-sql": "workspace:*",
+    "@electric-sql/next": "workspace:*",
     "redis": "^4.6.14"
   },
   "devDependencies": {

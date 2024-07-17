@@ -1,5 +1,5 @@
 {
-  "name": "electric-sql",
+  "name": "@electric-sql/next",
   "version": "0.0.1",
   "description": "The Next Electric",
   "main": "dist/index.js",
