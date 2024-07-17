@@ -102,7 +102,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
         `INSERT INTO ${issuesTableSql} (id, title) VALUES ${placeholders} RETURNING id`,
         rows.flatMap((x) => [x.id ?? uuidv4(), x.title])
       )
-      return rows_1.map((x_1) => x_1.id)
+      return rows_1.map((x) => x.id)
     }),
 
   clearIssuesShape: async ({ clearShape, issuesTableUrl }, use) => {
