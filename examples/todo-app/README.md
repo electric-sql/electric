@@ -1,10 +1,22 @@
-# TODO example app
+# Todo example
 
-Not quite working
+## Setup
 
-## Instructions to run
+1. Make sure you've installed all dependencies for the monorepo and built packages
 
-1. Start docker compose
-2. Add table
-3. Run Electric: `pnpm backend:up`
-4. Run Vite dev server `pnpm dev`
+From the root directory:
+
+- `pnpm i`
+- `pnpm run -r build`
+
+2. Start the docker containers
+
+`pnpm run backend:up`
+
+3. Start the dev server
+
+`pnpm run dev`
+
+4. When done, tear down the backend containers so you can run other examples
+
+`pnpm run backend:down`
