@@ -31,7 +31,7 @@ defmodule Electric.Application do
             {Registry,
              name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
             shape_cache,
-            {Electric.Replication.ShapeLogStorage,
+            {Electric.Replication.ShapeLogCollector,
              registry: Registry.ShapeChanges, shape_cache: shape_cache},
             {Postgrex,
              Application.fetch_env!(:electric, :database_config) ++
@@ -45,7 +45,7 @@ defmodule Electric.Application do
                  init_opts: [
                    publication_name: publication_name,
                    transaction_received:
-                     {Electric.Replication.ShapeLogStorage, :store_transaction, []},
+                     {Electric.Replication.ShapeLogCollector, :store_transaction, []},
                    try_creating_publication?: true
                  ]
                ]},

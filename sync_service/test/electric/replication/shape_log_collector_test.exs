@@ -1,11 +1,11 @@
-defmodule Electric.Replication.ShapeLogStorageTest do
+defmodule Electric.Replication.ShapeLogCollectorTest do
   use ExUnit.Case, async: true
   import Mox
 
   alias Electric.Replication.Eval.Parser
   alias Electric.Shapes.Shape
   alias Electric.Postgres.Lsn
-  alias Electric.Replication.ShapeLogStorage
+  alias Electric.Replication.ShapeLogCollector
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
@@ -23,14 +23,14 @@ defmodule Electric.Replication.ShapeLogStorageTest do
     registry_name = Module.concat(__MODULE__, Registry)
     start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
 
-    # Start the ShapeLogStorage process
+    # Start the ShapeLogCollector process
     opts = [
       name: :test_shape_log_storage,
       registry: registry_name,
       shape_cache: {MockShapeCache, []}
     ]
 
-    {:ok, pid} = start_supervised({ShapeLogStorage, opts})
+    {:ok, pid} = start_supervised({ShapeLogCollector, opts})
     %{server: pid, registry: registry_name}
   end
 
@@ -56,7 +56,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
         last_log_offset: last_log_offset
       }
 
-      assert :ok = ShapeLogStorage.store_transaction(txn, server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, server)
 
       txn = %Transaction{
         xid: xid,
@@ -65,7 +65,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
         last_log_offset: last_log_offset
       }
 
-      assert :ok = ShapeLogStorage.store_transaction(txn, server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, server)
     end
 
     test "doesn't append to log when xid < xmin", %{server: server} do
@@ -87,7 +87,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
         last_log_offset: last_log_offset
       }
 
-      assert :ok = ShapeLogStorage.store_transaction(txn, server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, server)
     end
 
     test "doesn't append to log when change is irrelevant for active shapes", %{server: server} do
@@ -114,7 +114,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
         last_log_offset: last_log_offset
       }
 
-      assert :ok = ShapeLogStorage.store_transaction(txn, server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, server)
     end
 
     test "handles truncate without appending to log", %{server: server} do
@@ -138,7 +138,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
         last_log_offset: last_log_offset
       }
 
-      assert :ok = ShapeLogStorage.store_transaction(txn, server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, server)
     end
 
     test "notifies listeners of new changes", %{server: server, registry: registry} do
@@ -164,7 +164,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
         last_log_offset: last_log_offset
       }
 
-      assert :ok = ShapeLogStorage.store_transaction(txn, server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, server)
       assert_receive {^ref, :new_changes, ^last_log_offset}, 1000
     end
 
@@ -204,7 +204,7 @@ defmodule Electric.Replication.ShapeLogStorageTest do
         last_log_offset: last_log_offset
       }
 
-      assert :ok = ShapeLogStorage.store_transaction(txn, server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, server)
     end
   end
 end
