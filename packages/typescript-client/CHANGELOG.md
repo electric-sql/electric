@@ -1,5 +1,11 @@
 # @electric-sql/next
 
+## 0.0.6
+
+### Patch Changes
+
+- 324effc: Updated typescript-client README and docs page.
+
 ## 0.0.5
 
 ### Patch Changes
