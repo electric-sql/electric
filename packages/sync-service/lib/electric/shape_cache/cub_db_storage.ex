@@ -88,6 +88,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
         min_key: snapshot_start(shape_id),
         max_key: snapshot_end(shape_id)
       )
+      |> Stream.flat_map(fn {_, items} -> items end)
       |> Stream.map(&storage_item_to_log_item/1)
       |> Enum.to_list()
 
@@ -119,7 +120,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
     |> Stream.with_index()
     |> Stream.map(&row_to_snapshot_item(&1, shape_id, query_info))
     |> Stream.chunk_every(500)
-    |> Stream.each(fn chunk -> CubDB.put_multi(opts.db, chunk) end)
+    |> Stream.each(fn [{key, _} | _] = chunk -> CubDB.put(opts.db, key, chunk) end)
     |> Stream.run()
 
     CubDB.put(opts.db, snapshot_meta_key(shape_id), 0)
