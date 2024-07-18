@@ -34,7 +34,7 @@ You can now start using Electric!
 
 First let's try the [HTTP API](/api/http).
 
-Use `curl` to request a [Shape](/guides/shapes) containing all rows in the `foo` table:
+In a different terminal, use `curl` to request a [Shape](/guides/shapes) containing all rows in the `foo` table:
 
 ```sh
 curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
@@ -97,6 +97,8 @@ INSERT INTO foo (name, value) VALUES
 
 #### Now try the curl command again
 
+Exit your Postgres client (e.g.: using `\q`) and try the `curl` command again:
+
 ```sh
 curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
 ```
@@ -140,7 +142,6 @@ Run the following to bootstrap a react application in the `react-app` subfolder:
 
 ```sh
 npm create --yes vite@latest react-app -- --template react-ts
-cd react-app
 ```
 
 Install the `@electric-sql/react` package:
