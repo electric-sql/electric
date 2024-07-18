@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.1.3
+
+### Patch Changes
+
+- eea9a64: chore: reconfigured CI building
+
 ## 0.1.2
 
 ### Patch Changes
