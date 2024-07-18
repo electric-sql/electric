@@ -1,3 +1,5 @@
+docs/.vitepress/dist
+docs/.vitepress/cache
 json_files
 file.jsonl
 node_modules

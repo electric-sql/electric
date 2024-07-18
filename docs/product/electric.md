@@ -1,0 +1,38 @@
+---
+outline: deep
+---
+
+<img src="/img/icons/electric.svg" class="product-icon" />
+
+# Electric Sync Engine
+
+Sync partial replicas of your data into local
+apps and services.
+
+## Use cases
+
+The Electric Sync Engine syncs subsets of data out of Postgres into local apps, services and environments &mdash; wherever you need the data.
+
+<img srcset="/img/about/use-cases.sm.png 1098w, /img/about/use-cases.png 1484w"
+    sizes="(max-width: 767px) 600px, 1484px"
+    src="/img/about/use-cases.png"
+    alt="Use cases diagramme"
+/>
+
+You can sync data into:
+
+- web and mobile apps, [replacing data fetching with data sync](/examples/linearlite)
+- development environments, for example syncing data into [an embedded PGlite](/product/pglite)
+- edge workers and services, for example maintaining a low-latency [edge data cache](/api/connectors/redis)
+- local AI systems running RAG, for example [using pgvector](https://electric-sql.com/blog/2024/02/05/local-first-ai-with-tauri-postgres-pgvector-llama)
+- databases like [PGlite](./pglite)
+
+## How does it work?
+
+The Electric sync engine is an [Elixir](https://elixir-lang.org) application, developed at [electric-sql/electric-next/tree/main/packages/sync-service](https://github.com/electric-sql/electric-next/tree/main/packages/sync-service).
+
+It connects to your Postgres using a `DATABASE_URL`, consumes the logical replication stream and provides [an HTTP API](/api/http) for replicating [Shapes](https://electric-sql.com/docs/usage/data-access/shapes).
+
+## How do I use it?
+
+See the [Quickstart](/guides/quickstart) and [Examples](/examples/basic).

@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Electric API
+  title: Electric Next
   description: HTTP API for Electric
   version: 0.0.1
 
@@ -135,6 +135,7 @@ paths:
                       status: backlog
                   - headers:
                       action: insert
+                      control: up-to-date
                     offset: 1934/0
                     key: issue-2
                     value:
@@ -165,7 +166,7 @@ paths:
                     description: The latest shape ID the client should sync.
                   offset:
                     type: string
-                    description: The offset from where to sync the given shape_id.   
+                    description: The offset from where to sync the given shape_id.
                 example:
                   message: "The shape associated with this shape_id and offset was not found. Resync to fetch the latest shape"
                   shape_id: "2494_84241"

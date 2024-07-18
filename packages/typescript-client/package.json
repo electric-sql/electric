@@ -1,7 +1,7 @@
 {
   "name": "@electric-sql/next",
   "version": "0.0.2",
-  "description": "The Next Electric",
+  "description": "Postgres everywhere - your data, in sync, wherever you need it.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -20,12 +20,12 @@
     "type": "git",
     "url": "git+https://github.com/electric-sql/electric-next.git"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "ElectricSQL team and contributors.",
+  "license": "Apache-2",
   "bugs": {
     "url": "https://github.com/electric-sql/electric-next/issues"
   },
-  "homepage": "https://github.com/electric-sql/electric-next#readme",
+  "homepage": "https://next.electric-sql.com",
   "dependencies": {},
   "devDependencies": {
     "@redocly/cli": "^1.18.0",
