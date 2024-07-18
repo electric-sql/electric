@@ -1,6 +1,6 @@
 {
   "name": "@electric-sql/next",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Postgres everywhere - your data, in sync, wherever you need it.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
