@@ -14,7 +14,7 @@ steps:
       - cd ./packages/sync-service
       - export ELECTRIC_VERSION=$(jq '.version' -r package.json)
       - docker buildx build --platform linux/arm64/v8,linux/amd64 --push \
-        --build-arg ELECTRIC_VERSION=${ELECTRIC_VERSION} \
-        -t ${ELECTRIC_IMAGE_NAME}:${ELECTRIC_VERSION} \
-        -t ${ELECTRIC_IMAGE_NAME}:latest \
+        --build-arg ELECTRIC_VERSION=$${ELECTRIC_VERSION} \
+        -t $${ELECTRIC_IMAGE_NAME}:$${ELECTRIC_VERSION} \
+        -t $${ELECTRIC_IMAGE_NAME}:latest \
         .
