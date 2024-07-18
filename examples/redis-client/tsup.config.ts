@@ -1,18 +1,18 @@
 import { globSync } from 'glob'
 import { defineConfig } from 'tsup'
 
-const entries = globSync('src/**/*.{ts,tsx,js,jsx}', { posix: true })
+const entries = globSync(`src/**/*.{ts,tsx,js,jsx}`, { posix: true })
 
 export default defineConfig({
   entry: entries,
-  format: ['esm'],
+  format: [`esm`],
   bundle: false,
   splitting: false,
   sourcemap: true,
   outExtension({ format }) {
     return {
-      js: format === 'cjs' ? '.cjs' : '.js',
+      js: format === `cjs` ? `.cjs` : `.js`,
     }
   },
-  tsconfig: 'tsconfig.build.json',
+  tsconfig: `tsconfig.build.json`,
 })

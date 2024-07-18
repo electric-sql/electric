@@ -51,7 +51,7 @@ jobs:
           path: |
             packages/sync-service/_build/*/lib
             !packages/sync-service/_build/*/lib/electric
-          key: ${{ runner.os }}-build-${{ hashFiles('packages/sync-service/mix.lock') }}
+          key: ${{ runner.os }}-build-test-${{ hashFiles('packages/sync-service/mix.lock') }}
       - name: Install dependencies
         run: mix deps.get && mix deps.compile
       - name: Save compiled code
@@ -60,7 +60,7 @@ jobs:
           path: |
             packages/sync-service/_build/*/lib
             !packages/sync-service/_build/*/lib/electric
-          key: ${{ runner.os }}-build-${{ hashFiles('packages/sync-service/mix.lock') }}
+          key: ${{ runner.os }}-build-test-${{ hashFiles('packages/sync-service/mix.lock') }}
       - name: Compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
       - name: Run tests
