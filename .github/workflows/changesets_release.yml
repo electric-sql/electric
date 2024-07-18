@@ -30,7 +30,7 @@ jobs:
         with:
           version: pnpm exec changeset version
           publish: pnpm exec changeset publish
-          title: Publish new package versions
+          title: 'chore: publish new package versions'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
