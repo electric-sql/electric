@@ -10,4 +10,9 @@ defmodule Electric do
   end
 
   @type relation :: {schema :: String.t(), table :: String.t()}
+
+  @current_vsn Mix.Project.config()[:version]
+  def vsn do
+    @current_vsn
+  end
 end
