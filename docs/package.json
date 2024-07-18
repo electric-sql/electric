@@ -3,10 +3,12 @@
   "scripts": {
     "docs:dev": "vitepress dev .",
     "docs:build": "vitepress build .",
-    "docs:preview": "vitepress preview ."
+    "docs:preview": "vitepress preview .",
+    "api:generate": "redocly build-docs ./electric-api.yaml --output=./dist/electric-api.html"
   },
   "devDependencies": {
     "vitepress": "^1.3.1",
-    "vue-tweet": "^2.3.1"
+    "vue-tweet": "^2.3.1",
+    "@redocly/cli": "^1.18.0"
   }
 }

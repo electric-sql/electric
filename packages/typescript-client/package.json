@@ -13,8 +13,7 @@
     "build": "shx rm -rf dist && concurrently \"tsup\" \"tsc -p tsconfig.build.json\"",
     "prepublishOnly": "pnpm run build",
     "stylecheck": "eslint . --quiet",
-    "format": "eslint . --fix",
-    "docs:generate": "redocly build-docs ./docs/electric-api.yaml --output=./docs/dist/electric-api.html"
+    "format": "eslint . --fix"
   },
   "repository": {
     "type": "git",
@@ -28,7 +27,6 @@
   "homepage": "https://next.electric-sql.com",
   "dependencies": {},
   "devDependencies": {
-    "@redocly/cli": "^1.18.0",
     "@types/pg": "^8.11.6",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
