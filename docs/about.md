@@ -36,7 +36,7 @@ What started as tinkering in private now looks certain to be the way forward for
 
 We created a new repo at [electric-sql/electric-next](https://github.com/electric-sql/electric-next) and started by porting the absolute minimum code necessary from the previous repo.
 
-It provides an [HTTP API](/api/http) for syncing [Shapes](https://electric-sql.com/docs/usage/data-access/shapes) of data from Postgres. This can be used directly or via [client libraries](/api/clients/js) and [connectors](/api/connectors/mobx).
+It provides an [HTTP API](/api/http) for syncing [Shapes](/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/api/clients/typescript) and [connectors](/api/connectors/react).
 
 It's also simple to [write your own client](/guides/write-your-own-client) in any language.
 
@@ -152,7 +152,7 @@ The diagramme above and table below summarise what we see as core and what we've
 | Aspect | Is it core? | Who should/can provide? |
 | --- | --- | --- |
 | Syncing data | yes | Electric |
-| Partial replication ([Shapes](https://electric-sql.com/docs/usage/data-access/shapes)) | yes | Electric |
+| Partial replication ([Shapes](/guides/shapes)) | yes | Electric |
 | Schema management / propagation / matching | partial | Application specific. In some cases it may be useful or necessary to replicate and validate schema information. In others, it can be the responsibility of the client to connect with the correct schema. |
 | Type safety in the client | partial | Important in many cases for DX and can be assisted by the sync service (e.g.: by providing an endpoint to query types for a shape). But use of types is optional and in many cases types can be provided by ORMs and other client-libraries. |
 | Permissions / authorization | no | There are many valid patterns here. Auth middleware, proxies, rule systems. Authorize at connect, per shape, per row/operation. A sync engine may provide some hooks and options but should not prescribe a solution. |
@@ -285,8 +285,8 @@ At the time of writing this document, we are early in the development of `electr
 
 However, even just with the first release of `electric-next` you can already sync partial subsets of data from a Postgres database into a wide variety of clients and environments, for example:
 
-- syncing data into local apps using the [JavaScript](/api/clients/js) and [Elixir](/api/clients/elixir) clients
-- replacing hot-path data fetching and database queries in apps using [React](/api/connectors/react), [MobX](/api/connectors/mobx) and [TanStack](/api/connectors/tanstack)
+- syncing data into local apps using the [TypeScript](/api/clients/typescript) and [Elixir](/api/clients/elixir) clients
+- replacing hot-path data fetching and database queries in apps using [React](/api/connectors/react), [MobX](/api/connectors/react) and [TanStack](/api/connectors/tanstack)
 - maintain live caches with automatic invalidation, as per [our Redis connector](/api/connectors/redis)
 
 ### Roadmap
