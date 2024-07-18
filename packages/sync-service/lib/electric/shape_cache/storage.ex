@@ -120,11 +120,12 @@ defmodule Electric.ShapeCache.Storage do
   def append_to_log!(shape_id, xid, changes, {mod, opts}),
     do: mod.append_to_log!(shape_id, xid, changes, opts)
 
+  import LogOffset, only: :macros
   @doc "Get stream of the log for a shape since a given offset"
   @spec get_log_stream(shape_id(), LogOffset.t(), LogOffset.t(), storage()) ::
           Enumerable.t()
   def get_log_stream(shape_id, offset, max_offset \\ LogOffset.last(), {mod, opts})
-      when max_offset == :infinity or max_offset >= offset,
+      when max_offset == :infinity or not is_log_offset_lt(max_offset, offset),
       do: mod.get_log_stream(shape_id, offset, max_offset, opts)
 
   @doc "Check if log entry for given shape ID and offset exists"

@@ -94,6 +94,11 @@ defmodule Electric.Replication.LogOffset do
       when a > b,
       do: :gt
 
+  defguard is_log_offset_lt(offset1, offset2)
+           when offset1.tx_offset < offset2.tx_offset or
+                  (offset1.tx_offset == offset2.tx_offset and
+                     offset1.op_offset < offset2.op_offset)
+
   @doc """
   An offset that is smaller than all offsets in the log.
 
