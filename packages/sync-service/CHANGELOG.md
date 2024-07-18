@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.1.5
+
+### Patch Changes
+
+- 94956f7: Fix bug with LogOffsets being wrongly compared by the guard of get_log_stream.
+
 ## 0.1.4
 
 ### Patch Changes

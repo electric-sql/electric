@@ -1,5 +1,11 @@
 # @electric-sql/next
 
+## 0.0.4
+
+### Patch Changes
+
+- 958cc0c: Respect 409 errors by restarting the stream with the new `shape_id`.
+
 ## 0.0.3
 
 ### Patch Changes
