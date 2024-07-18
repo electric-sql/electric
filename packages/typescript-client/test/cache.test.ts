@@ -65,21 +65,37 @@ const it = testWithIssuesTable.extend<{
 
 describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
   it(`should always get non-cached response in live mode`, async ({
+    insertIssues,
     proxyCacheBaseUrl,
     issuesTableUrl,
   }) => {
-    // First request gets non-cached response
-    const originalRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1&live`,
+    // First request get initial request
+    const initialRes = await fetch(
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
 
-    expect(originalRes.status).toBe(200)
-    expect(getCacheStatus(originalRes)).toBe(CacheStatus.MISS)
+    expect(initialRes.status).toBe(200)
+    expect(getCacheStatus(initialRes)).toBe(CacheStatus.MISS)
+
+    // add some data and follow with live request
+    await insertIssues({ title: `foo` })
+    const searchParams = new URLSearchParams({
+      offset: initialRes.headers.get(`x-electric-chunk-last-offset`)!,
+      shape_id: initialRes.headers.get(`x-electric-shape-id`)!,
+      live: `true`,
+    })
+
+    const liveRes = await fetch(
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?${searchParams.toString()}`,
+      {}
+    )
+    expect(liveRes.status).toBe(200)
+    expect(getCacheStatus(liveRes)).toBe(CacheStatus.MISS)
 
     // Second request still gets non-cached response
     const cachedRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1&live`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?${searchParams.toString()}`,
       {}
     )
     expect(cachedRes.status).toBe(200)

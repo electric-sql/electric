@@ -1,7 +1,7 @@
 import { parse } from 'cache-control-parser'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
-import { assert, describe, expect, inject, vi } from 'vitest'
+import { ArgumentsType, assert, describe, expect, inject, vi } from 'vitest'
 import { ShapeStream } from '../src/client'
 import { Message, Offset } from '../src/types'
 import { testWithIssuesTable as it } from './support/test-context'
@@ -47,6 +47,64 @@ describe(`HTTP Sync`, () => {
     expect(values).toHaveLength(0)
   })
 
+  it(`should wait properly for updates on an empty shape/table`, async ({
+    issuesTableUrl,
+    aborter,
+  }) => {
+    const urlsRequested: URL[] = []
+    const fetchWrapper = (...args: ArgumentsType<typeof fetch>) => {
+      const url = new URL(args[0])
+      urlsRequested.push(url)
+      return fetch(...args)
+    }
+
+    // Get initial data
+    const shapeData = new Map()
+    const issueStream = new ShapeStream({
+      shape: { table: issuesTableUrl },
+      baseUrl: `${BASE_URL}`,
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+    })
+
+    let upToDateMessageCount = 0
+
+    await new Promise<void>((resolve, reject) => {
+      issueStream.subscribe((messages) => {
+        messages.forEach((message) => {
+          if (`key` in message) {
+            shapeData.set(message.key, message.value)
+          }
+          if (message.headers?.[`control`] === `up-to-date`) {
+            upToDateMessageCount += 1
+          }
+        })
+      }, reject)
+
+      // count updates received over 1 second - proper long polling
+      // should wait for far longer than this time period
+      setTimeout(() => {
+        aborter.abort()
+        resolve()
+      }, 1000)
+    })
+
+    // first request was -1, second should be something else
+    expect(urlsRequested).toHaveLength(2)
+    expect(urlsRequested[0].searchParams.get(`offset`)).toBe(`-1`)
+    expect(urlsRequested[0].searchParams.has(`live`)).false
+    expect(urlsRequested[1].searchParams.get(`offset`)).not.toBe(`-1`)
+    expect(urlsRequested[1].searchParams.has(`live`)).true
+
+    // first request comes back immediately and is up to date, second one
+    // should hang while waiting for updates
+    expect(upToDateMessageCount).toBe(1)
+
+    // data should be 0
+    const values = [...shapeData.values()]
+    expect(values).toHaveLength(0)
+  })
+
   it(`returns a header with the server shape id`, async ({
     issuesTableUrl,
   }) => {
@@ -56,6 +114,17 @@ describe(`HTTP Sync`, () => {
     )
     const shapeId = res.headers.get(`x-electric-shape-id`)
     expect(shapeId).to.exist
+  })
+
+  it(`returns a header with the chunk's last offset`, async ({
+    issuesTableUrl,
+  }) => {
+    const res = await fetch(
+      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`,
+      {}
+    )
+    const lastOffset = res.headers.get(`x-electric-chunk-last-offset`)
+    expect(lastOffset).to.exist
   })
 
   it(`should get initial data`, async ({

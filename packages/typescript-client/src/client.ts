@@ -33,6 +33,7 @@ export const BackoffDefaults = {
 export interface ShapeStreamOptions extends ShapeOptions {
   subscribe?: boolean
   signal?: AbortSignal
+  fetchClient?: typeof fetch
 }
 
 /**
@@ -149,6 +150,7 @@ export class FetchError extends Error {
 export class ShapeStream {
   private options: ShapeStreamOptions
   private backoffOptions: BackoffOptions
+  private fetchClient: typeof fetch
 
   private subscribers = new Map<
     number,
@@ -172,6 +174,7 @@ export class ShapeStream {
     this.shapeId = this.options.shapeId
 
     this.backoffOptions = options.backoffOptions ?? BackoffDefaults
+    this.fetchClient = options.fetchClient ?? fetch
 
     this.start()
   }
@@ -201,16 +204,21 @@ export class ShapeStream {
       }
 
       try {
-        await fetch(url.toString(), { signal })
+        await this.fetchClient(url.toString(), { signal })
           .then(async (response) => {
             if (!response.ok) {
               throw await FetchError.fromResponse(response, url.toString())
             }
 
             const { headers, status } = response
-            const shapeId = headers.get(`X-Electric-Shape-Id`) ?? undefined
+            const shapeId = headers.get(`X-Electric-Shape-Id`)
             if (shapeId) {
               this.shapeId = shapeId
+            }
+
+            const lastOffset = headers.get(`X-Electric-Chunk-Last-Offset`)
+            if (lastOffset) {
+              this.lastOffset = lastOffset as Offset
             }
 
             attempt = 0
@@ -237,10 +245,6 @@ export class ShapeStream {
 
                     this.notifyUpToDateSubscribers()
                   }
-                }
-
-                if (`offset` in message) {
-                  this.lastOffset = message.offset
                 }
               })
 

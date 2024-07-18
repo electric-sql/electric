@@ -73,7 +73,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
       id UUID PRIMARY KEY,
       title TEXT NOT NULL
     );
-    COMMENT ON TABLE ${tableName} IS 'Created for ${task.file?.name ?? `unknown`} - ${task.name}';
+    COMMENT ON TABLE ${tableName} IS 'Created for ${task.file?.name.replace(/'/g, `\``) ?? `unknown`} - ${task.name.replace(`'`, `\``)}';
   `)
     await use(tableName)
     await dbClient.query(`DROP TABLE ${tableName}`)
