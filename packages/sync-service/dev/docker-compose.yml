@@ -20,9 +20,6 @@ services:
       - docker-entrypoint.sh
       - -c
       - config_file=/etc/postgresql.conf
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
 
   nginx:
     image: nginx:latest
