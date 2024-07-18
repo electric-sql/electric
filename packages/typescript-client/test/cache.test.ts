@@ -250,10 +250,6 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
       {}
     )
     expect(liveRes.status).toBe(409)
-    const liveBody = (await liveRes.json()) as { message: string }
-    expect(liveBody.message).toContain(
-      `The shape associated with this shape_id and offset was not found.`
-    )
     const redirectLocation = liveRes.headers.get(`location`)
     assert(redirectLocation)
 

@@ -254,12 +254,22 @@ export class ShapeStream {
       } catch (e) {
         if (signal?.aborted) {
           break
-        } else if (e instanceof FetchError && e.status == 400) {
+        } else if (e instanceof FetchError && e.status == 409) {
+          // Upon receiving a 409, we should start from scratch
+          // with the newly provided shape ID
+          const newShapeId = e.headers[`x-electric-shape-id`]
+          this.reset(newShapeId)
+          this.publish(e.json as Message[])
+        } else if (
+          e instanceof FetchError &&
+          e.status >= 400 &&
+          e.status < 500
+        ) {
           // Notify subscribers
           this.sendErrorToUpToDateSubscribers(e)
           this.sendErrorToSubscribers(e)
 
-          // We don't want to continue retrying on 400 errors
+          // We don't want to continue retrying on 4xx errors
           break
         } else {
           // Exponentially backoff on errors.
@@ -336,6 +346,16 @@ export class ShapeStream {
     )
   }
 
+  /**
+   * Resets the state of the stream, optionally with a provided
+   * shape ID
+   */
+  private reset(shapeId?: string) {
+    this.lastOffset = `-1`
+    this.shapeId = shapeId
+    this.isUpToDate = false
+  }
+
   private validateOptions(options: ShapeStreamOptions): void {
     if (
       !options.shape ||
@@ -406,12 +426,13 @@ export class Shape {
 
   constructor(stream: ShapeStream) {
     this.stream = stream
-    this.stream.subscribe(this.process.bind(this))
+    this.stream.subscribe(this.process.bind(this), this.handleError.bind(this))
     const unsubscribe = this.stream.subscribeOnceToUpToDate(
       () => {
         unsubscribe()
       },
       (e) => {
+        this.handleError(e)
         throw e
       }
     )
@@ -490,6 +511,13 @@ export class Shape {
           newlyUpToDate = true
         }
       }
+
+      if (message.headers?.[`control`] === `must-refetch`) {
+        this.data.clear()
+        this.error = false
+        isUpToDate = false
+        newlyUpToDate = false
+      }
     })
 
     // Always notify subscribers when the Shape first is up to date.
@@ -497,6 +525,12 @@ export class Shape {
     if (newlyUpToDate || (isUpToDate && dataMayHaveChanged)) {
       this.hasNotifiedSubscribersUpToDate = true
       this.notify()
+    }
+  }
+
+  private handleError(e: Error): void {
+    if (e instanceof FetchError) {
+      this.error = e
     }
   }
 

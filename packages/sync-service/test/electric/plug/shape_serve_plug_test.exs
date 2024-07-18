@@ -381,13 +381,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 409
 
-      assert Jason.decode!(conn.resp_body) == %{
-               "message" =>
-                 "The shape associated with this shape_id and offset was not found. Resync to fetch the latest shape",
-               "shape_id" => @test_shape_id,
-               "offset" => -1
-             }
-
+      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
+      assert get_resp_header(conn, "x-electric-shape-id") == [@test_shape_id]
       assert get_resp_header(conn, "location") == ["/?shape_id=#{@test_shape_id}&offset=-1"]
     end
 
@@ -409,13 +404,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 409
 
-      assert Jason.decode!(conn.resp_body) == %{
-               "message" =>
-                 "The shape associated with this shape_id and offset was not found. Resync to fetch the latest shape",
-               "shape_id" => @test_shape_id,
-               "offset" => -1
-             }
-
+      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
+      assert get_resp_header(conn, "x-electric-shape-id") == [@test_shape_id]
       assert get_resp_header(conn, "location") == ["/?shape_id=#{@test_shape_id}&offset=-1"]
     end
   end

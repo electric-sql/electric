@@ -7,6 +7,10 @@ defmodule Electric.Plug.ServeShapePlug do
   # Aliasing for pattern matching
   @before_all_offset LogOffset.before_all()
 
+  # Control messages
+  @up_to_date [%{headers: %{control: "up-to-date"}}]
+  @must_refetch [%{headers: %{control: "must-refetch"}}]
+
   defmodule Params do
     use Ecto.Schema
     import Ecto.Changeset
@@ -171,12 +175,7 @@ defmodule Electric.Plug.ServeShapePlug do
       )
       |> send_resp(
         409,
-        Jason.encode_to_iodata!(%{
-          message:
-            "The shape associated with this shape_id and offset was not found. Resync to fetch the latest shape",
-          shape_id: conn.assigns.active_shape_id,
-          offset: -1
-        })
+        Jason.encode_to_iodata!(@must_refetch)
       )
       |> halt()
     else
@@ -240,8 +239,6 @@ defmodule Electric.Plug.ServeShapePlug do
     |> Plug.Conn.put_resp_header("access-control-expose-headers", "*")
     |> Plug.Conn.put_resp_header("access-control-allow-methods", "GET, POST, OPTIONS")
   end
-
-  @up_to_date [%{headers: %{control: "up-to-date"}}]
 
   # If offset is -1, we're serving a snapshot
   defp serve_log_or_snapshot(
