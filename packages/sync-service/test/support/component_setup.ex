@@ -1,7 +1,17 @@
 defmodule Support.ComponentSetup do
+  import ExUnit.Callbacks
+  alias Electric.Postgres.ReplicationClient
+  alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
   alias Electric.ShapeCache.CubDbStorage
   alias Electric.ShapeCache.InMemoryStorage
+
+  def with_registry(ctx) do
+    registry_name = Module.concat(Registry, String.to_atom(full_test_name(ctx)))
+    start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
+
+    %{registry: registry_name}
+  end
 
   def with_in_memory_storage(ctx) do
     {:ok, storage_opts} =
@@ -12,7 +22,7 @@ defmodule Support.ComponentSetup do
 
     {:ok, _} = InMemoryStorage.start_link(storage_opts)
 
-    {:ok, %{storage: {InMemoryStorage, storage_opts}}}
+    %{storage: {InMemoryStorage, storage_opts}}
   end
 
   def with_cub_db_storage(ctx) do
@@ -24,7 +34,7 @@ defmodule Support.ComponentSetup do
 
     {:ok, _} = CubDbStorage.start_link(storage_opts)
 
-    {:ok, %{storage: {CubDbStorage, storage_opts}}}
+    %{storage: {CubDbStorage, storage_opts}}
   end
 
   def with_shape_cache(ctx, additional_opts \\ []) do
@@ -55,7 +65,63 @@ defmodule Support.ComponentSetup do
     }
   end
 
-  def full_test_name(ctx) do
+  def with_shape_log_collector(ctx) do
+    server = :"shape_log_collector #{full_test_name(ctx)}"
+
+    {:ok, _} =
+      ShapeLogCollector.start_link(
+        name: server,
+        registry: ctx.registry,
+        shape_cache: {Electric.ShapeCache, ctx.shape_cache_opts}
+      )
+
+    %{shape_log_collector: server}
+  end
+
+  def with_replication_client(ctx) do
+    {:ok, pid} =
+      ReplicationClient.start_link(
+        ctx.db_config ++
+          [
+            init_opts: [
+              publication_name: ctx.publication_name,
+              transaction_received:
+                {Electric.Replication.ShapeLogCollector, :store_transaction,
+                 [ctx.shape_log_collector]},
+              try_creating_publication?: true
+            ]
+          ]
+      )
+
+    %{replication_client: pid}
+  end
+
+  def with_complete_stack(ctx) do
+    [
+      &with_registry/1,
+      &with_cub_db_storage/1,
+      &with_shape_cache/1,
+      &with_shape_log_collector/1,
+      &with_replication_client/1
+    ]
+    |> Enum.reduce(ctx, &Map.merge(&2, apply(&1, [&2])))
+  end
+
+  def build_router_opts(ctx, overrides \\ []) do
+    [
+      storage: ctx.storage,
+      registry: ctx.registry,
+      shape_cache: {Electric.ShapeCache, ctx.shape_cache_opts},
+      inspector: {Electric.Postgres.Inspector, ctx.pool},
+      long_poll_timeout: Access.get(overrides, :long_poll_timeout, 5_000),
+      max_age: Access.get(overrides, :max_age, 60),
+      stale_age: Access.get(overrides, :stale_age, 300),
+      allow_shape_deletion: Access.get(overrides, :allow_shape_deletion, true)
+    ]
+    |> Keyword.merge(overrides)
+  end
+
+  defp full_test_name(ctx) do
     "#{ctx.module} #{ctx.test}"
   end
 end

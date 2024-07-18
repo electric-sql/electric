@@ -30,7 +30,9 @@ defmodule Support.DbSetup do
     end)
 
     updated_config = Keyword.put(base_config, :database, db_name)
-    {:ok, pool} = Postgrex.start_link(updated_config ++ [backoff_type: :stop, max_restarts: 0])
+
+    {:ok, pool} =
+      Postgrex.start_link(updated_config ++ [backoff_type: :stop, max_restarts: 0, pool_size: 2])
 
     {:ok, %{utility_pool: utility_pool, db_config: updated_config, pool: pool, db_conn: pool}}
   end
