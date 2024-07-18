@@ -27,10 +27,11 @@ RUN mix deps.compile
 COPY rel /app/rel
 COPY lib /app/lib/
 
+COPY package.json /app/
 COPY config/*runtime.exs /app/config/
 
 ARG ELECTRIC_VERSION=local
-RUN mix compile
+RUN MIX_ENV="prod" mix compile
 RUN MIX_ENV="prod" mix release
 
 FROM ${RUNNER_IMAGE} AS runner_setup

@@ -4,7 +4,7 @@ defmodule Electric.MixProject do
   def project do
     [
       app: :electric,
-      version: "0.1.0",
+      version: version(),
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -70,7 +70,6 @@ defmodule Electric.MixProject do
         {:telemetry_metrics_statsd, "~> 0.7"},
         {:ecto, "~> 3.11"},
         {:tz, "~> 0.26.5"},
-        {:mox, "~> 1.1", only: [:test]},
         {:cubdb, "~> 2.0.2"}
       ],
       dev_and_test_deps()
@@ -79,6 +78,7 @@ defmodule Electric.MixProject do
 
   defp dev_and_test_deps do
     [
+      {:mox, "~> 1.1", only: [:test]},
       {:dialyxir, "~> 1.4", only: [:test], runtime: false},
       {:excoveralls, "~> 0.18", only: [:test], runtime: false}
     ]
@@ -89,5 +89,12 @@ defmodule Electric.MixProject do
       start_dev: "cmd --cd dev docker compose up -d",
       stop_dev: "cmd --cd dev docker compose down -v"
     ]
+  end
+
+  defp version() do
+    case File.read("./package.json") do
+      {:ok, binary} -> binary |> :json.decode() |> Map.fetch!("version")
+      {:error, _} -> "0.0.0"
+    end
   end
 end
