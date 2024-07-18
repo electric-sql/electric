@@ -13,7 +13,7 @@ import { v4 as uuidv4 } from "uuid"
 type ToDo = {
   id: string
   title: string
-  completed: boolean
+  completed: string
   created_at: number
 }
 
@@ -36,15 +36,17 @@ export default function Index() {
                 <Text as="label">
                   <Flex gap="2" align="center">
                     <Checkbox
-                      checked={todo.completed}
+                      checked={todo.completed === `t`}
                       onClick={async () => {
                         console.log(`completed`)
-                        await fetch(`http://localhost:3000/todos/${todo.id}`, {
+                        await fetch(`http://localhost:3010/todos/${todo.id}`, {
                           method: `PUT`,
                           headers: {
                             "Content-Type": `application/json`,
                           },
-                          body: JSON.stringify({ completed: !todo.completed }),
+                          body: JSON.stringify({
+                            completed: todo.completed === `t` ? false : true,
+                          }),
                         })
                       }}
                     />
@@ -57,7 +59,7 @@ export default function Index() {
                   style={{ cursor: `pointer` }}
                   onClick={async () => {
                     console.log(`deleted`)
-                    await fetch(`http://localhost:3000/todos/${todo.id}`, {
+                    await fetch(`http://localhost:3010/todos/${todo.id}`, {
                       method: `DELETE`,
                     })
                   }}
@@ -75,7 +77,7 @@ export default function Index() {
             const formData = Object.fromEntries(
               new FormData(event.target as HTMLFormElement)
             )
-            const res = await fetch(`http://localhost:3000/todos`, {
+            const res = await fetch(`http://localhost:3010/todos`, {
               method: `POST`,
               headers: {
                 "Content-Type": `application/json`,

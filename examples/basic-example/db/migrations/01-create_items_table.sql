@@ -3,7 +3,6 @@ CREATE TABLE IF NOT EXISTS items (
   id TEXT PRIMARY KEY NOT NULL
 );
 
-
 -- Populate the table with 10 items.
 -- FIXME: Remove this once writing out of band is implemented
 WITH generate_series AS (

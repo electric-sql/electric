@@ -46,6 +46,7 @@ describe(`Shape`, () => {
   it(`should continually sync a shape/table`, async ({
     issuesTableUrl,
     insertIssues,
+    deleteIssue,
     issuesTableKey,
   }) => {
     const [id] = await insertIssues({ title: `test title` })
@@ -68,6 +69,8 @@ describe(`Shape`, () => {
       shape.subscribe(resolve)
     })
     const [id2] = await insertIssues({ title: `other title` })
+    const [id3] = await insertIssues({ title: `other title2` })
+    await deleteIssue({ id: id3, title: `foo` })
     await hasNotified
 
     expectedValue.set(`${issuesTableKey}/${id2}`, {

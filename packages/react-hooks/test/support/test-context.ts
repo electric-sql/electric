@@ -8,6 +8,7 @@ import { FetchError } from '@electric-sql/next'
 export type IssueRow = { id: string; title: string }
 export type GeneratedIssueRow = { id?: string; title: string }
 export type UpdateIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
+export type DeleteIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type InsertIssuesFn = (...rows: GeneratedIssueRow[]) => Promise<string[]>
 export type ClearIssuesShapeFn = (shapeId?: string) => Promise<void>
 export type ClearShapeFn = (table: string, shapeId?: string) => Promise<void>
@@ -60,6 +61,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
   issuesTableUrl: string
   issuesTableKey: string
   updateIssue: UpdateIssueFn
+  deleteIssue: DeleteIssueFn
   insertIssues: InsertIssuesFn
   clearIssuesShape: ClearIssuesShapeFn
 }>({
@@ -95,6 +97,10 @@ export const testWithIssuesTable = testWithDbClient.extend<{
         id,
         title,
       ])
+    ),
+  deleteIssue: ({ issuesTableSql, dbClient }, use) =>
+    use(({ id }) =>
+      dbClient.query(`DELETE FROM ${issuesTableSql} WHERE id = $1`, [id])
     ),
   insertIssues: ({ issuesTableSql, dbClient }, use) =>
     use(async (...rows) => {
