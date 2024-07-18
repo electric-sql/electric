@@ -79,7 +79,7 @@ export default defineConfig({
     siteTitle: false,
     socialLinks: [
       { icon: 'discord', link: 'https://discord.electric-sql.com' },
-      { icon: 'github', link: 'https://github.com/electric-sql/electric-sql' }
+      { icon: 'github', link: 'https://github.com/electric-sql/electric-next' }
     ]
   }
 })
