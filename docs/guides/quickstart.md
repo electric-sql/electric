@@ -139,7 +139,7 @@ At this point, you could continue to fetch data using HTTP requests. However, le
 Run the following to bootstrap a react application in the `react-app` subfolder:
 
 ```sh
-npm create vite@latest react-app -- --template react-ts
+npm create --yes vite@latest react-app -- --template react-ts
 cd react-app
 ```
 
@@ -164,7 +164,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 )
 ```
 
-Replace `App.tsx` with the following. Note that we're requesting the same shape as before:
+Replace `src/App.tsx` with the following. Note that we're requesting the same shape as before:
 
 ```tsx
 import { useShape } from '@electric-sql/react'
