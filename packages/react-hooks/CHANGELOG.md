@@ -1,5 +1,16 @@
 # @electric-sql/react
 
+## 0.0.3
+
+### Patch Changes
+
+- cf3b3bb: Updated package author, license and homepage.
+- 6fdb1b2: chore: updated testing fixtures
+- Updated dependencies [af3452a]
+- Updated dependencies [cf3b3bb]
+- Updated dependencies [6fdb1b2]
+  - @electric-sql/next@0.0.3
+
 ## 0.0.2
 
 ### Patch Changes

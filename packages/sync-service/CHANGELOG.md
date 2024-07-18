@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 0.1.4
+
+### Patch Changes
+
+- af3452a: Fix empty initial requests leading to infinite loop of empty live requests.
+- 6fdb1b2: feat: include ElectricSQL version header
+
 ## 0.1.3
 
 ### Patch Changes
