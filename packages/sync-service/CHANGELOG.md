@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.1.6
+
+### Patch Changes
+
+- b4d8ae3: Speed up shape creation, 50x faster for tables > 30MB
+
 ## 0.1.5
 
 ### Patch Changes
