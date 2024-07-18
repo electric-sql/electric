@@ -31,7 +31,7 @@ You can sync data into:
 
 The Electric sync engine is an [Elixir](https://elixir-lang.org) application, developed at [electric-sql/electric-next/tree/main/packages/sync-service](https://github.com/electric-sql/electric-next/tree/main/packages/sync-service).
 
-It connects to your Postgres using a `DATABASE_URL`, consumes the logical replication stream and provides [an HTTP API](/api/http) for replicating [Shapes](https://electric-sql.com/docs/usage/data-access/shapes).
+It connects to your Postgres using a `DATABASE_URL`, consumes the logical replication stream and provides [an HTTP API](/api/http) for replicating [Shapes](/guides/shapes).
 
 ## How do I use it?
 

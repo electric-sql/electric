@@ -8,6 +8,7 @@ export default defineConfig({
   appearance: 'force-dark',
   base: '/',
   cleanUrls: true,
+  ignoreDeadLinks: 'localhostLinks',
   head: [
     ['link', {
       rel: 'icon',
@@ -44,9 +45,10 @@ export default defineConfig({
         text: 'Guides',
         items: [
           { text: 'Quickstart', link: '/guides/quickstart' },
-          { text: 'Usage', link: '/guides/usage' },
-          { text: 'Deployment', link: '/guides/deployment' },
-          { text: 'Write your own client', link: '/guides/write-your-own-client' }
+          // { text: 'Usage', link: '/guides/usage' },
+          { text: 'Shapes', link: '/guides/shapes' },
+          // { text: 'Deployment', link: '/guides/deployment' },
+          { text: 'Writing clients', link: '/guides/write-your-own-client' }
         ]
       },
       {
@@ -56,7 +58,7 @@ export default defineConfig({
           {
             text: 'Clients',
             items: [
-              { text: 'JavaScript', link: '/api/clients/js' },
+              { text: 'TypeScript', link: '/api/clients/typescript' },
               { text: 'Elixir', link: '/api/clients/elixir' },
             ],
             collapsed: false
@@ -64,10 +66,10 @@ export default defineConfig({
           {
             text: 'Connectors',
             items: [
-              { text: 'MobX', link: '/api/connectors/mobx' },
+              // { text: 'MobX', link: '/api/connectors/mobx' },
               { text: 'React', link: '/api/connectors/react' },
               { text: 'Redis', link: '/api/connectors/redis' },
-              { text: 'TanStack', link: '/api/connectors/tanstack' },
+              // { text: 'TanStack', link: '/api/connectors/tanstack' },
             ],
             collapsed: false
           }

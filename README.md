@@ -1,224 +1,108 @@
-# ElectricSQL (@next)
+<p align="center">
+  <a href="https://next.electric-sql.com" target="_blank">
+    <picture>
+      <source media="(prefers-color-scheme: dark)"
+          srcset="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-next.svg"
+      />
+      <source media="(prefers-color-scheme: light)"
+          srcset="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-black.svg"
+      />
+      <img alt="ElectricSQL logo"
+          src="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-black.svg"
+      />
+    </picture>
+  </a>
+</p>
 
-Postgres sync for modern apps.
+<p align="center">
+  <a href="https://github.com/electric-sql/electric-next/actions"><img src="https://github.com/electric-sql/electric-next/workflows/CI/badge.svg" alt="CI"></a>
+  <a href="https://github.com/electric-sql/electric-next/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-green" alt="License - Apache 2.0"></a>
+  <a href="https://github.com/electric-sql/electric-n
+  ext/milestones"><img src="https://img.shields.io/badge/status-alpha-orange" alt="Status - Alpha"></a>
+  <a href="https://discord.electric-sql.com"><img src="https://img.shields.io/discord/933657521581858818?color=5969EA&label=discord" alt="Chat - Discord"></a>
+  <a href="https://x.com/ElectricSQL" target="_blank"><img src="https://img.shields.io/twitter/follow/ElectricSQL.svg?style=social&label=Follow @ElectricSQL"></a>
+</p>
 
-`electric-next` is an experimental new approach to building ElectricSQL.
+# Electric Next
 
-One that's informed by the lessons learned building the [previous system](https://github.com/electric-sql/electric).
+Your Postgres data, in sync, wherever you need it.
 
-See James' blog post for more background on the change: https://next.electric-sql.com/about
+## Quick links
+
+- [About](https://next.electric-sql.com/about)
+- [Docs](https://next.electric-sql.com)
+- [Examples](./examples)
+
+## What is Electric Next?
+
+This is a clean rebuild of the [ElectricSQL](https://electric-sql.com) sync engine. One that's informed by the lessons learned building the [previous system](https://github.com/electric-sql/electric). See
+James' blog post for background on the change: https://next.electric-sql.com/about
+
+It provides an [HTTP API](https://next.electric-sql.com/api/http) for syncing [Shapes](https://next.electric-sql.com/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](https://next.electric-sql.com/api/clients/typescript) and [connectors](https://next.electric-sql.com/api/connectors/react).
+
+It's also simple to [write your own client](https://next.electric-sql.com/guides/write-your-own-client) in any language.
 
 ## Getting Started
 
-#### Create a new React app
+See the [Quickstart guide](https://next.electric-sql.com/guides/quickstart) to get up and running. In short, you need to:
 
-`npm create vite@latest my-first-electric-app -- --template react-ts`
+1. have a Postgres database with logical replication enabled; and then to
+2. run Electric in front of it, connected via `DATABASE_URL`
 
-#### Setup Docker Compose to run Postgres and Electric
+For example, using [Docker Compose](https://docs.docker.com/compose/) from the root of this repo:
 
-`docker-compose.yaml`
-
-```docker
-version: "3.8"
-name: "my-first-electric-service"
-
-services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: electric
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-    ports:
-      - 55321:5432
-    volumes:
-      - ./postgres.conf:/etc/postgresql/postgresql.conf:ro
-    command:
-      - postgres
-      - -c
-      - config_file=/etc/postgresql/postgresql.conf
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  electric:
-    image: electricsql/next:example
-    environment:
-      DATABASE_URL: postgresql://postgres:password@host.docker.internal:55321/electric
-    ports:
-      - "3000:3000"
-    build:
-      context: ~/programs/electric-next/packages/sync-service/
+```sh
+docker compose -f .support/docker-compose.yml up
 ```
 
-Add a `postgres.conf` file.
+You can then use the [HTTP API](https://next.electric-sql/api/http) to sync data from your Postgres. For example, to start syncing the whole `foo` table:
 
-```
-listen_addresses = '*'
-wal_level = 'logical'
-```
-
-#### Start Docker
-
-`docker compose -f ./docker-compose.yaml up`
-
-#### Try a curl command against Electric's HTTP API
-
-`curl -i http://localhost:3000/v1/shape/foo?offset=-1`
-
-This request asks for a shape composed of the entire `foo` table.
-
-A bit of explanation about the URL structure — `/v1/shape/` are standard
-segments. `foo` is the name of the root table of the shape (and is required).
-`offset=-1` means we're asking for the entire log of the Shape as we don't have
-any of the log cached locally yet. If we had previously fetched the shape and
-wanted to see if there was any updates, we'd set the offset of the last log
-message we'd got the first time.
-
-You should get a response like this:
-
-```bash
-HTTP/1.1 400 Bad Request
-date: Wed, 17 Jul 2024 20:30:31 GMT
-content-length: 62
-vary: accept-encoding
-cache-control: max-age=0, private, must-revalidate
-x-request-id: F-MaJcF9A--cg9QAAAeF
-access-control-allow-origin: *
-access-control-expose-headers: *
-access-control-allow-methods: GET, POST, OPTIONS
-Server: ElectricSQL/0.0.1
-content-type: application/json; charset=utf-8
-
-{"offset":["can't be blank"],"root_table":["table not found"]}%
+```sh
+curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
 ```
 
-So it didn't work! Which makes sense... as it's a empty database without any tables or data. Let's fix that.
+Or use one of the clients or connectors, such as the [`useShape`](https://next.electric-sql/api/connectors/react) React hook:
 
-#### Create a table and insert some data
-
-Use your favorite Postgres client to connect to Postgres e.g. with [psql](https://www.postgresql.org/docs/current/app-psql.html)
-you run: `psql postgresql://postgres:password@localhost:55321/electric`
-
-```sql
-CREATE TABLE foo (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255),
-    value FLOAT
-);
-
-INSERT INTO foo (name, value) VALUES 
-    ('Alice', 3.14),
-    ('Bob', 2.71),
-    ('Charlie', -1.618),
-    ('David', 1.414),
-    ('Eve', 0);
-```
-
-#### Now try the curl command again
-
-`curl http://localhost:3000/shape/foo?offset=-1`
-
-Success! You should see the data you just put into Postgres in the shape response:
-
-```bash
-HTTP/1.1 200 OK
-date: Wed, 17 Jul 2024 20:38:07 GMT
-content-length: 643
-vary: accept-encoding
-cache-control: max-age=60, stale-while-revalidate=300
-x-request-id: F-Maj_CikDKfZTIAAAAh
-access-control-allow-origin: *
-access-control-expose-headers: *
-access-control-allow-methods: GET, POST, OPTIONS
-Server: ElectricSQL/0.0.1
-content-type: application/json; charset=utf-8
-x-electric-shape-id: 3833821-1721248688126
-x-electric-chunk-last-offset: 0_0
-etag: 3833821-1721248688126:-1:0_0
-
-[{"offset":"0_0","value":{"id":1,"name":"Alice","value":3.14},"key":"\"public\".\"foo\"/1","headers":{"action"
-:"insert"}},{"offset":"0_0","value":{"id":2,"name":"Bob","value":2.71},"key":"\"public\".\"foo\"/2","headers":
-{"action":"insert"}},{"offset":"0_0","value":{"id":3,"name":"Charlie","value":-1.618},"key":"\"public\".\"foo\
-"/3","headers":{"action":"insert"}},{"offset":"0_0","value":{"id":4,"name":"David","value":1.414},"key":"\"pub
-lic\".\"foo\"/4","headers":{"action":"insert"}},{"offset":"0_0","value":{"id":5,"name":"Eve","value":0.0},"key
-":"\"public\".\"foo\"/5","headers":{"action":"insert"}},{"headers":{"control":"up-to-date"}}]%                
-```
-
-#### Now let's fetch the same shape to use in our React app
-
-Install the Electric React package:
-
-`npm install @electric-sql/react`
-
-
-Wrap your root in `src/main.tsx` with the `ShapesProvider`:
-
-```tsx
-import { ShapesProvider } from "@electric-sql/react"
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ShapesProvider>
-      <App />
-    </ShapesProvider>
-  </React.StrictMode>,
-)
-```
-
-Replace `App.tsx` with the following:
-
-```tsx
-import { useShape } from "@electric-sql/react";
+```jsx
+import { useShape } from '@electric-sql/react'
 
 function Component() {
-  const { data: fooData } = useShape({
-    shape: { table: `foo` },
+  const { data } = useShape({
     baseUrl: `http://localhost:3000`,
-  });
+    shape: { table: `foo`, where: `title LIKE 'foo%'` }
+  })
 
-  return JSON.stringify(fooData, null, 4);
+  return JSON.stringify(data)
 }
-
-export default Component;
 ```
 
-Finally run the dev server to see it all in action!
+Again, see the [Quickstart](https://next.electric-sql.com/guides/quickstart) and the [Docs](https://next.electric-sql.com) for more details.
 
-`npm run dev`
+## HTTP API Docs
 
-You should see something like:
+The HTTP API is defined in an [OpenAPI spec](https://swagger.io/specification/) in [docs/electric-api.yaml](./docs/electric-api.yaml).
 
-<img width="699" alt="Screenshot 2024-07-17 at 2 49 28 PM" src="https://github.com/user-attachments/assets/cda36897-2db9-4f6c-86bb-99e7e325a490">
+## Developing Electric
 
-#### Postgres as a real-time database
-
-Go back to your postgres client and update a row. It'll instantly be synced to your component!
-
-```sql
-UPDATE foo SET name = 'James' WHERE id = 2;
-```
-
-Congradulations! You've now built your first Electric app!
-
-## HTTP API Documentation
-
-The HTTP API documentation is defined through an OpenAPI 3.1.0 specification found in `docs/electric-api.yaml`. Documentation for the API can be generated with `npm run docs:generate`.
-
-## How to setup your development environment to work on Electric
-
-We're using [asdf](https://asdf-vm.com/) to install Elixir, Erlang, and Node.js.
+We're using [asdf](https://asdf-vm.com/) to install Elixir, Erlang, and Node.js. Versions are defined in [.tool-versions](.tool-versions).
 
 ### Mac setup
 
-1. `brew install asdf`
-2. `asdf plugin-add nodejs elixir erlang`
-3. `asdf install`
+```sh
+brew install asdf
+asdf plugin-add nodejs elixir erlang
+asdf install
+```
 
 You'll probably need to fiddle with your bash/zsh/etc rc file to load the right tool into your environment.
 
 ## Contributing
 
-See the [Community Guidelines](https://github.com/electric-sql/electric/blob/main/CODE_OF_CONDUCT.md) including the [Guide to Contributing](https://github.com/electric-sql/electric/blob/main/CONTRIBUTING.md) and [Contributor License Agreement](https://github.com/electric-sql/electric/blob/main/CLA.md).
+See the:
+
+- [Guide to Contributing](https://github.com/electric-sql/electric/blob/main/CONTRIBUTING.md)
+- [Contributor License Agreement](https://github.com/electric-sql/electric/blob/main/CLA.md)
+- [Community Guidelines](https://github.com/electric-sql/electric/blob/main/CODE_OF_CONDUCT.md)
 
 ## Support
 

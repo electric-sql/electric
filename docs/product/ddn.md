@@ -17,7 +17,7 @@ This allows you to scale out real-time data to millions of concurrent users from
 
 ## How does it work?
 
-`electric-next` has been designed from the ground up to deliver fast initial data loads and low latency ongoing sync. It exposes this through an [HTTP API](/api/http) that provides standard caching headers to integrates out-of-the-box with CDNs like Cloudflare and Fastly.
+`electric-next` has been designed from the ground up to deliver fast initial data loads and low latency ongoing sync. It exposes this through an [HTTP API](/api/http) that provides standard caching headers that work out-of-the-box with CDNs like Cloudflare and Fastly.
 
 ## How do I use it?
 
