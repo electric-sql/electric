@@ -1,5 +1,11 @@
 # @electric-sql/next
 
+## 0.0.5
+
+### Patch Changes
+
+- 7208887: Fix `fetch` not being bound correctly
+
 ## 0.0.4
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@electric-sql/react",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "React hooks for ElectricSQL",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
