@@ -1,3 +1,4 @@
+import { ArgumentsType } from 'vitest'
 import { Message, JsonSerializable, Offset } from './types'
 
 export type ShapeData = Map<string, JsonSerializable>
@@ -174,7 +175,9 @@ export class ShapeStream {
     this.shapeId = this.options.shapeId
 
     this.backoffOptions = options.backoffOptions ?? BackoffDefaults
-    this.fetchClient = options.fetchClient ?? fetch
+    this.fetchClient =
+      options.fetchClient ??
+      ((...args: ArgumentsType<typeof fetch>) => fetch(...args))
 
     this.start()
   }
