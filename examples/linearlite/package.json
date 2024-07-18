@@ -2,7 +2,6 @@
   "name": "@electric-examples/linearlite",
   "version": "0.0.1",
   "license": "Apache-2.0",
-  "type": "module",
   "private": true,
   "scripts": {
     "backend:up": "PROJECT_NAME=linearlite pnpm -C ../../ run example-backend:up && pnpm db:migrate && pnpm db:load-data",
@@ -11,7 +10,7 @@
     "db:load-data": "dotenv -e ../../.env.dev -- node ./db/load_data.js",
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "process-data": "node ./db/process_data.js"
@@ -72,7 +71,9 @@
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
     "dotenv-cli": "^7.4.2",
-    "eslint": "^8.45.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.3",
     "fs-extra": "^10.0.0",
