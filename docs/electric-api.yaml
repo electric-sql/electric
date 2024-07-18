@@ -47,7 +47,7 @@ paths:
           schema:
             type: string
           description: The offset in the shape stream where to resume from.
-            Specify -1 for initial sync (or just leave it out).
+            Specify -1 for initial sync.
             Afterwards, need to specify the offset from where to continue in the stream.
         - name: live
           in: query
