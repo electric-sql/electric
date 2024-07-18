@@ -30,6 +30,7 @@ defmodule Electric.Plug.ServeShapePlug do
       |> validate_required([:root_table, :offset])
       |> cast_offset()
       |> validate_shape_id_with_offset()
+      |> validate_live_with_offset()
       |> cast_root_table(opts)
       |> apply_action(:validate)
       |> case do
@@ -69,6 +70,18 @@ defmodule Electric.Plug.ServeShapePlug do
         changeset
       else
         validate_required(changeset, [:shape_id], message: "can't be blank when offset != -1")
+      end
+    end
+
+    def validate_live_with_offset(%Ecto.Changeset{valid?: false} = changeset), do: changeset
+
+    def validate_live_with_offset(%Ecto.Changeset{} = changeset) do
+      offset = fetch_change!(changeset, :offset)
+
+      if offset != LogOffset.before_all() do
+        changeset
+      else
+        validate_exclusion(changeset, :live, [true], message: "can't be true when offset == -1")
       end
     end
 

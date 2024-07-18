@@ -71,6 +71,22 @@ defmodule Electric.Plug.ServeShapePlugTest do
              }
     end
 
+    test "returns 400 for live request when offset == -1" do
+      conn =
+        conn(
+          :get,
+          %{"root_table" => "public.users"},
+          "?offset=#{LogOffset.before_all()}&live=true"
+        )
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "live" => ["can't be true when offset == -1"]
+             }
+    end
+
     test "returns snapshot when offset is -1" do
       Electric.ShapeCacheMock
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
