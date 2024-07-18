@@ -1,20 +1,22 @@
 # Linearlite
 
-## To run
-Install dependencies
-```bash
-pnpm install
-```
+## Setup
 
-Initialize Electric, along with a Postgres instance that will be migrated and have sample data loaded to it:
+1. Make sure you've installed all dependencies for the monorepo and built packages
 
-```bash
-pnpm backend:up
-# pnpm backend:down to clean up
-```
+From the root directory:
 
-Start the application
+- `pnpm i`
+- `pnpm run -r build`
 
-```bash
-pnpm dev
-```
+2. Start the docker containers
+
+`pnpm run backend:up`
+
+3. Start the dev server
+
+`pnpm run dev`
+
+4. When done, tear down the backend containers so you can run other examples
+
+`pnpm run backend:down`
