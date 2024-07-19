@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useSyncExternalStore,
+  useRef,
 } from 'react'
 import {
   Shape,
@@ -127,7 +128,7 @@ function shapeSubscribe(shape: Shape, callback: () => void) {
   }
 }
 
-function parseShapeData(shape: Shape) {
+function parseShapeData(shape: Shape): UseShapeResult {
   return {
     data: [...shape.valueSync.values()],
     isUpToDate: shape.isUpToDate,
@@ -142,10 +143,15 @@ export function useShape(options: ShapeStreamOptions): UseShapeResult {
   const shapeStream = getShapeStream(options)
   const shape = getShape(shapeStream)
 
-  const getSnapshot = useCallback(() => parseShapeData(shape), [shape])
+  const latestShapeData = useRef(parseShapeData(shape))
+  const getSnapshot = React.useMemo(() => () => latestShapeData.current, [])
   const shapeData = useSyncExternalStore(
     useCallback(
-      (onStoreChange) => shapeSubscribe(shape, onStoreChange),
+      (onStoreChange) =>
+        shapeSubscribe(shape, () => {
+          latestShapeData.current = parseShapeData(shape)
+          onStoreChange()
+        }),
       [shape]
     ),
     getSnapshot,
