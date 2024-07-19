@@ -1,4 +1,9 @@
-import React, { createContext, useCallback, useContext, useSyncExternalStore } from 'react'
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useSyncExternalStore,
+} from 'react'
 import {
   Shape,
   ShapeStream,
