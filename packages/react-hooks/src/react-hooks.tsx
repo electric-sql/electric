@@ -1,4 +1,4 @@
-import React, { createContext, useEffect, useContext, useState } from 'react'
+import React, { createContext, useCallback, useContext, useSyncExternalStore } from 'react'
 import {
   Shape,
   ShapeStream,
@@ -115,34 +115,37 @@ interface UseShapeResult {
   isUpToDate: boolean
 }
 
-export function useShape(options: ShapeStreamOptions): UseShapeResult {
-  const { getShape, getShapeStream } = useShapeContext()
-  const shapeStream = getShapeStream(options)
-  const shape = getShape(shapeStream)
-  const [shapeData, setShapeData] = useState<UseShapeResult>({
+function shapeSubscribe(shape: Shape, callback: () => void) {
+  const unsubscribe = shape.subscribe(callback)
+  return () => {
+    unsubscribe()
+  }
+}
+
+function parseShapeData(shape: Shape) {
+  return {
     data: [...shape.valueSync.values()],
     isUpToDate: shape.isUpToDate,
     isError: shape.error !== false,
     shape,
     error: shape.error,
-  })
+  }
+}
 
-  useEffect(() => {
-    // Subscribe to updates.
-    const unsubscribe = shape.subscribe((map) => {
-      setShapeData({
-        data: [...map.values()],
-        isUpToDate: shape.isUpToDate,
-        isError: shape.error !== false,
-        shape,
-        error: shape.error,
-      })
-    })
+export function useShape(options: ShapeStreamOptions): UseShapeResult {
+  const { getShape, getShapeStream } = useShapeContext()
+  const shapeStream = getShapeStream(options)
+  const shape = getShape(shapeStream)
 
-    return () => {
-      unsubscribe()
-    }
-  }, [])
+  const getSnapshot = useCallback(() => parseShapeData(shape), [shape])
+  const shapeData = useSyncExternalStore(
+    useCallback(
+      (onStoreChange) => shapeSubscribe(shape, onStoreChange),
+      [shape]
+    ),
+    getSnapshot,
+    getSnapshot
+  )
 
   return shapeData
 }
