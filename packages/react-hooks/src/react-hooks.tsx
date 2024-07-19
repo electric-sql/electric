@@ -1,16 +1,11 @@
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useSyncExternalStore,
-  useRef,
-} from 'react'
 import {
+  JsonSerializable,
   Shape,
   ShapeStream,
   ShapeStreamOptions,
-  JsonSerializable,
 } from '@electric-sql/next'
+import React, { createContext, useCallback, useContext, useRef } from 'react'
+import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector'
 
 interface ShapeContextType {
   getShape: (shapeStream: ShapeStream) => Shape
@@ -138,14 +133,23 @@ function parseShapeData(shape: Shape): UseShapeResult {
   }
 }
 
-export function useShape(options: ShapeStreamOptions): UseShapeResult {
+const identity = (arg: unknown) => arg
+
+interface UseShapeOptions<Selection> extends ShapeStreamOptions {
+  selector?: (value: UseShapeResult) => Selection
+}
+
+export function useShape<Selection = UseShapeResult>({
+  selector = identity as never,
+  ...options
+}: UseShapeOptions<Selection>): Selection {
   const { getShape, getShapeStream } = useShapeContext()
-  const shapeStream = getShapeStream(options)
+  const shapeStream = getShapeStream(options as ShapeStreamOptions)
   const shape = getShape(shapeStream)
 
   const latestShapeData = useRef(parseShapeData(shape))
   const getSnapshot = React.useCallback(() => latestShapeData.current, [])
-  const shapeData = useSyncExternalStore(
+  const shapeData = useSyncExternalStoreWithSelector(
     useCallback(
       (onStoreChange) =>
         shapeSubscribe(shape, () => {
@@ -155,7 +159,8 @@ export function useShape(options: ShapeStreamOptions): UseShapeResult {
       [shape]
     ),
     getSnapshot,
-    getSnapshot
+    getSnapshot,
+    selector
   )
 
   return shapeData
