@@ -113,7 +113,7 @@ Gabriel contrasts "Worse is Better" with a make the "Right Thing" approach that 
 
 #### The motivation for `electric-next`
 
-So, hopefully now our motivation is clear. We need to find a way to simplify Electric and make it more loosely coupled. To pare it back to it's core and iterate on solid foundations.
+So, hopefully now our motivation is clear. We needed to find a way to simplify Electric and make it more loosely coupled. To pare it back to it's core and iterate on solid foundations.
 
 
 ## What's changed?
@@ -211,13 +211,9 @@ So, following the strategy of paring down to the core and then progressively lay
 2. then add support for optimistic write patterns with tentativity
 3. then add support for through-the-DB writes
 
-This explicitly reduces the capability of the system in the short term, in order to build a better, more resilient system in the long term. The beauty is also that you are &mdash; that anyone is &mdash; free to build systems using any write-path strategy on top of this and it will just work, from day one. We no longer prescribe a write-path strategy. Instead, if you can get the data into Postgres, Electric will sync it out.
+This explicitly reduces the capability of the system in the short term, in order to build a better, more resilient system in the long term. The beauty is that, because we no longer prescribe a write-path strategy, you can choose and if necessary implement any write-path strategy you like.
 
-We recognise that the sync engine can facilitate different strategies by providing appropriate metadata in the replication stream. For example, helping you see when you writes have synced.
-
-In addition, we still believe in the optimality of writing through the local database and intend to both provide first-class APIs for handling database write operations and contribute to the ecosystem by developing client-side libraries to support more complex write patterns where they're needed.
-
-However, we will only focus on these more complex strategies ourseves once the simpler ones are bulletproof. And we hope that others, like [LiveStore](https://www.schickling.dev/projects/livestore) and [Drizzle](https://orm.drizzle.team/), for example, will build better client-side libraries that we can.
+We will only focus on the more complex strategies ourseves once the simpler ones are bulletproof. And we hope that others, like [LiveStore](https://www.schickling.dev/projects/livestore) and [Drizzle](https://orm.drizzle.team/), for example, will build better client-side libraries that we can.
 
 #### A note on finality of local writes
 
@@ -277,7 +273,7 @@ You can sync data into:
 - some parts will be cut out into optional libraries, for example the [DDLX implementation](https://github.com/electric-sql/electric/pull/1393)
 - some parts will not be needed
 
-You're welcome to continue to use it and perhaps to choose your moment to migrate. However caveat emptor -- the direction of travel should be pretty clear from this document.
+You're welcome to continue to use it and perhaps to choose your moment to migrate. However caveat emptor &mdash; the direction of travel should be pretty clear.
 
 ### New system
 
