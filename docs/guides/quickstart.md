@@ -68,7 +68,7 @@ So it didn't work! Which makes sense... as it's an empty database without any ta
 
 ### Create a table and insert some data
 
-Use your favorite Postgres client to connect to Postgres e.g. with [psql](https://www.postgresql.org/docs/current/app-psql.html) you can run:
+Use a Postgres client to connect to Postgres. For example, with [psql](https://www.postgresql.org/docs/current/app-psql.html) you can run:
 
 ```sh
 psql "postgresql://postgres:password@localhost:54321/electric"
@@ -97,7 +97,7 @@ INSERT INTO foo (name, value) VALUES
 
 #### Now try the curl command again
 
-Exit your Postgres client (e.g.: using `\q`) and try the `curl` command again:
+Exit your Postgres client (e.g.: with `psql` enter `\q`) and try the `curl` request again:
 
 ```sh
 curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
@@ -138,20 +138,20 @@ At this point, you could continue to fetch data using HTTP requests. However, le
 
 ## React app
 
-Run the following to bootstrap a react application in the `react-app` subfolder:
+Run the following to create a react app:
 
 ```sh
 npm create --yes vite@latest react-app -- --template react-ts
 ```
 
-Install the `@electric-sql/react` package:
+Change into the `react-app` subfolder and install the `@electric-sql/react` package:
 
 ```sh
 cd react-app
 npm install @electric-sql/react
 ```
 
-Wrap your `<App />` in `src/main.tsx` with the `ShapesProvider`:
+Edit `src/main.tsx` to wrap your `<App />` with a `ShapesProvider`:
 
 ```tsx
 import { ShapesProvider } from '@electric-sql/react'
@@ -165,7 +165,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 )
 ```
 
-Replace `src/App.tsx` with the following. Note that we're requesting the same shape as before:
+Replace the contents of `src/App.tsx` with the following. Note that we're requesting the same shape as before:
 
 ```tsx
 import { useShape } from '@electric-sql/react'
@@ -224,10 +224,10 @@ Navigate to http://localhost:5173 in your web browser. You should see output lik
 
 #### Postgres as a real-time database
 
-Go back to your Postgres client and update a row. It'll instantly be synced to your component!
+Note that the row with id `2` has the name `"Bob"`. Go back to your Postgres client and update the name of that row. It'll instantly be synced to your component!
 
 ```sql
 UPDATE foo SET name = 'James' WHERE id = 2;
 ```
 
-Congratulations! You've now built your first Electric app!
+Congratulations! You've built your first real-time, reactive `electric-next` app!
