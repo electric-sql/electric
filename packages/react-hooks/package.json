@@ -27,13 +27,13 @@
   "homepage": "https://next.electric-sql.com",
   "dependencies": {
     "@electric-sql/next": "workspace:*",
-    "@types/use-sync-external-store": "^0.0.6",
     "use-sync-external-store": "^1.2.2"
   },
   "devDependencies": {
     "@testing-library/react": "^16.0.0",
     "@types/pg": "^8.11.6",
     "@types/react": "^18.3.3",
+    "@types/use-sync-external-store": "^0.0.6",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
     "@typescript-eslint/parser": "^7.14.1",
