@@ -144,7 +144,7 @@ export function useShape(options: ShapeStreamOptions): UseShapeResult {
   const shape = getShape(shapeStream)
 
   const latestShapeData = useRef(parseShapeData(shape))
-  const getSnapshot = React.useMemo(() => () => latestShapeData.current, [])
+  const getSnapshot = React.useCallback(() => latestShapeData.current, [])
   const shapeData = useSyncExternalStore(
     useCallback(
       (onStoreChange) =>
