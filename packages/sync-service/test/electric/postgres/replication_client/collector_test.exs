@@ -1,9 +1,11 @@
 defmodule Electric.Postgres.ReplicationClient.CollectorTest do
   use ExUnit.Case, async: true
+
+  import ExUnit.CaptureLog
+
+  alias Electric.Postgres.LogicalReplication.Messages, as: LR
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient.Collector
-  alias Electric.Postgres.LogicalReplication.Messages, as: LR
-  alias Electric.Replication.LogOffset
 
   alias Electric.Replication.Changes.{
     Transaction,
@@ -12,6 +14,8 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
     DeletedRecord,
     TruncatedRelation
   }
+
+  alias Electric.Replication.LogOffset
 
   @test_lsn Lsn.from_integer(123)
   @test_log_offset LogOffset.new(@test_lsn, 0)
@@ -66,23 +70,14 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
       | columns: [%LR.Relation.Column{name: "id", flags: [:key], type_oid: 20, type_modifier: -1}]
     }
 
-    log =
-      ExUnit.CaptureLog.capture_log(fn ->
-        Collector.handle_message(new_relation, collector)
-      end)
-
+    log = capture_log(fn -> Collector.handle_message(new_relation, collector) end)
     assert log =~ "Schema for the table public.users had changed"
   end
 
   test "collector logs information when receiving a generic message",
        %{collector: collector} do
     message = %LR.Message{prefix: "test", content: "hello world"}
-
-    log =
-      ExUnit.CaptureLog.capture_log(fn ->
-        Collector.handle_message(message, collector)
-      end)
-
+    log = capture_log(fn -> Collector.handle_message(message, collector) end)
     assert log =~ "Got a message from PG via logical replication"
   end
 
@@ -144,7 +139,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
            } = updated_collector
   end
 
-  test "collector works for empty old data on updates", %{collector: collector} do
+  test "collector logs an error for empty old data on updates", %{collector: collector} do
     collector =
       Collector.handle_message(
         %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
@@ -157,19 +152,29 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
       tuple_data: ["124"]
     }
 
-    updated_collector = Collector.handle_message(update_msg, collector)
+    log =
+      capture_log(fn ->
+        updated_collector = Collector.handle_message(update_msg, collector)
+        send(self(), updated_collector)
+      end)
 
-    assert %Collector{
-             transaction: %Transaction{
-               changes: [
-                 %UpdatedRecord{
-                   relation: {"public", "users"},
-                   old_record: %{},
-                   record: %{"id" => "124"}
-                 }
-               ]
-             }
-           } = updated_collector
+    assert_received %Collector{
+      transaction: %Transaction{
+        changes: [
+          %UpdatedRecord{
+            relation: {"public", "users"},
+            old_record: %{},
+            record: %{"id" => "124"}
+          }
+        ]
+      }
+    }
+
+    assert log =~
+             "[error] Received an update from PG for public.users that did not have " <>
+               "old data included in the message."
+
+    assert log =~ "Try executing `ALTER TABLE public.users REPLICA IDENTITY FULL`"
   end
 
   test "collector stores received delete when the relation is known", %{collector: collector} do

@@ -199,7 +199,7 @@ defmodule Electric.Replication.Changes do
   def get_log_offset(%TruncatedRelation{log_offset: offset}) when offset != nil, do: offset
 
   @doc """
-  Convert an UpdateRecord into the corresponding NewRecord or DeletedRecord
+  Convert an UpdatedRecord into the corresponding NewRecord or DeletedRecord
   based on the provided `to` option.
 
   ## Examples
