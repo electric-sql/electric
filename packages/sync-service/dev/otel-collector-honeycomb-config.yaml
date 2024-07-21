@@ -1,0 +1,720 @@
+exporters:
+  otlp/honeycomb:
+    endpoint: api.honeycomb.io:443
+    headers:
+      x-honeycomb-team: ${HNY_API_KEY}
+      x-honeycomb-dataset: ${HNY_DATASET}
+  logging:
+    loglevel: info
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: '0.0.0.0:4317'
+      http:
+        endpoint: '0.0.0.0:4318'
+  hostmetrics:
+    collection_interval: 10s
+    scrapers:
+      memory: {}
+      cpu: {}
+      load: {}
+      disk: {}
+      filesystem: {}
+      network: {}
+      paging: {}
+      processes: {}
+processors:
+  resourcedetection:
+    detectors:
+      - env
+      - system
+  transform:
+    error_mode: ignore
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(time, TruncateTime(time, Duration("1s")))
+  batch:
+    send_batch_size: 8192
+    timeout: 200ms
+  metricstransform:
+    transforms:
+      - include: system.disk.io_time
+        action: update
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.disk.weighted_io_time
+        action: update
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.disk.pending_operations
+        action: update
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: process.cpu.time
+        experimental_match_labels:
+          state: system
+        action: insert
+        new_name: process.cpu.time.system
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: process.cpu.time
+        experimental_match_labels:
+          state: user
+        action: insert
+        new_name: process.cpu.time.user
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: process.cpu.time
+        experimental_match_labels:
+          state: wait
+        action: insert
+        new_name: process.cpu.time.wait
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: process.disk.io
+        experimental_match_labels:
+          direction: read
+        action: insert
+        new_name: process.disk.io.read
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: process.disk.io
+        experimental_match_labels:
+          direction: write
+        action: insert
+        new_name: process.disk.io.write
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.cpu.time
+        experimental_match_labels:
+          state: idle
+        action: insert
+        new_name: system.cpu.time.idle
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.cpu.time
+        experimental_match_labels:
+          state: interrupt
+        action: insert
+        new_name: system.cpu.time.interrupt
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.cpu.time
+        experimental_match_labels:
+          state: nice
+        action: insert
+        new_name: system.cpu.time.nice
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.cpu.time
+        experimental_match_labels:
+          state: softirq
+        action: insert
+        new_name: system.cpu.time.softirq
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.cpu.time
+        experimental_match_labels:
+          state: steal
+        action: insert
+        new_name: system.cpu.time.steal
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.cpu.time
+        experimental_match_labels:
+          state: system
+        action: insert
+        new_name: system.cpu.time.system
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.cpu.time
+        experimental_match_labels:
+          state: user
+        action: insert
+        new_name: system.cpu.time.user
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.cpu.time
+        experimental_match_labels:
+          state: wait
+        action: insert
+        new_name: system.cpu.time.wait
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.memory.usage
+        experimental_match_labels:
+          state: buffered
+        action: insert
+        new_name: system.memory.usage.buffered
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.memory.usage
+        experimental_match_labels:
+          state: cached
+        action: insert
+        new_name: system.memory.usage.cached
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.memory.usage
+        experimental_match_labels:
+          state: inactive
+        action: insert
+        new_name: system.memory.usage.inactive
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.memory.usage
+        experimental_match_labels:
+          state: free
+        action: insert
+        new_name: system.memory.usage.free
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.memory.usage
+        experimental_match_labels:
+          state: slab_reclaimable
+        action: insert
+        new_name: system.memory.usage.slab_reclaimable
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.memory.usage
+        experimental_match_labels:
+          state: slab_unreclaimable
+        action: insert
+        new_name: system.memory.usage.slab_unreclaimable
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.memory.usage
+        experimental_match_labels:
+          state: used
+        action: insert
+        new_name: system.memory.usage.used
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.disk.io
+        experimental_match_labels:
+          direction: read
+        action: insert
+        new_name: system.disk.io.read
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.disk.io
+        experimental_match_labels:
+          direction: write
+        action: insert
+        new_name: system.disk.io.write
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.disk.operations
+        experimental_match_labels:
+          direction: read
+        action: insert
+        new_name: system.disk.operations.read
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.disk.operations
+        experimental_match_labels:
+          direction: write
+        action: insert
+        new_name: system.disk.operations.write
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.disk.operation_time
+        experimental_match_labels:
+          direction: read
+        action: insert
+        new_name: system.disk.operation_time.read
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.disk.operation_time
+        experimental_match_labels:
+          direction: write
+        action: insert
+        new_name: system.disk.operation_time.write
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.disk.merged
+        experimental_match_labels:
+          direction: read
+        action: insert
+        new_name: system.disk.merged.read
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.disk.merged
+        experimental_match_labels:
+          direction: write
+        action: insert
+        new_name: system.disk.merged.write
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.filesystem.usage
+        experimental_match_labels:
+          state: free
+        action: insert
+        new_name: system.filesystem.usage.free
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.filesystem.usage
+        experimental_match_labels:
+          state: reserved
+        action: insert
+        new_name: system.filesystem.usage.reserved
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.filesystem.usage
+        experimental_match_labels:
+          state: used
+        action: insert
+        new_name: system.filesystem.usage.used
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.filesystem.inodes.usage
+        experimental_match_labels:
+          state: free
+        action: insert
+        new_name: system.filesystem.inodes.usage.free
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.filesystem.inodes.usage
+        experimental_match_labels:
+          state: reserved
+        action: insert
+        new_name: system.filesystem.inodes.usage.reserved
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.filesystem.inodes.usage
+        experimental_match_labels:
+          state: used
+        action: insert
+        new_name: system.filesystem.inodes.usage.used
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.packets
+        experimental_match_labels:
+          direction: receive
+        action: insert
+        new_name: system.network.packets.receive
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.packets
+        experimental_match_labels:
+          direction: transmit
+        action: insert
+        new_name: system.network.packets.transmit
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.dropped
+        experimental_match_labels:
+          direction: receive
+        action: insert
+        new_name: system.network.dropped.receive
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.dropped
+        experimental_match_labels:
+          direction: transmit
+        action: insert
+        new_name: system.network.dropped.transmit
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.errors
+        experimental_match_labels:
+          direction: receive
+        action: insert
+        new_name: system.network.errors.receive
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.errors
+        experimental_match_labels:
+          direction: transmit
+        action: insert
+        new_name: system.network.errors.transmit
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.io
+        experimental_match_labels:
+          direction: receive
+        action: insert
+        new_name: system.network.io.receive
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.io
+        experimental_match_labels:
+          direction: transmit
+        action: insert
+        new_name: system.network.io.transmit
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.connections
+        experimental_match_labels:
+          protocol: tcp
+        action: insert
+        new_name: system.network.connections.tcp
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set:
+              - state
+      - include: system.network.connections.tcp
+        experimental_match_labels:
+          state: CLOSE_WAIT
+        action: insert
+        new_name: system.network.connections.tcp.CLOSE_WAIT
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.connections.tcp
+        experimental_match_labels:
+          state: CLOSED
+        action: insert
+        new_name: system.network.connections.tcp.CLOSED
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.connections.tcp
+        experimental_match_labels:
+          state: CLOSING
+        action: insert
+        new_name: system.network.connections.tcp.CLOSING
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.connections.tcp
+        experimental_match_labels:
+          state: DELETE
+        action: insert
+        new_name: system.network.connections.tcp.DELETE
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.connections.tcp
+        experimental_match_labels:
+          state: ESTABLISHED
+        action: insert
+        new_name: system.network.connections.tcp.ESTABLISHED
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.connections.tcp
+        experimental_match_labels:
+          state: FIN_WAIT_1
+        action: insert
+        new_name: system.network.connections.tcp.FIN_WAIT_1
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.connections.tcp
+        experimental_match_labels:
+          state: FIN_WAIT_2
+        action: insert
+        new_name: system.network.connections.tcp.FIN_WAIT_2
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.connections.tcp
+        experimental_match_labels:
+          state: LAST_ACK
+        action: insert
+        new_name: system.network.connections.tcp.LAST_ACK
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.connections.tcp
+        experimental_match_labels:
+          state: LISTEN
+        action: insert
+        new_name: system.network.connections.tcp.LISTEN
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.connections.tcp
+        experimental_match_labels:
+          state: SYN_RECEIVED
+        action: insert
+        new_name: system.network.connections.tcp.SYN_RECEIVED
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.connections.tcp
+        experimental_match_labels:
+          state: SYN_SENT
+        action: insert
+        new_name: system.network.connections.tcp.SYN_SENT
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.network.connections.tcp
+        experimental_match_labels:
+          state: TIME_WAIT
+        action: insert
+        new_name: system.network.connections.tcp.TIME_WAIT
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.paging.usage
+        experimental_match_labels:
+          state: cached
+        action: insert
+        new_name: system.paging.usage.cached
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.paging.usage
+        experimental_match_labels:
+          state: free
+        action: insert
+        new_name: system.paging.usage.free
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.paging.usage
+        experimental_match_labels:
+          state: used
+        action: insert
+        new_name: system.paging.usage.used
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.paging.operations
+        experimental_match_labels:
+          direction: page_in
+        action: insert
+        new_name: system.paging.operations.page_in
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set:
+              - type
+      - include: system.paging.operations.page_in
+        experimental_match_labels:
+          type: major
+        action: insert
+        new_name: system.paging.operations.page_in.major
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.paging.operations.page_in
+        experimental_match_labels:
+          type: minor
+        action: insert
+        new_name: system.paging.operations.page_in.minor
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.paging.operations
+        experimental_match_labels:
+          direction: page_out
+        action: insert
+        new_name: system.paging.operations.page_out
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set:
+              - type
+      - include: system.paging.operations.page_out
+        experimental_match_labels:
+          type: major
+        action: insert
+        new_name: system.paging.operations.page_out.major
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.paging.operations.page_out
+        experimental_match_labels:
+          type: minor
+        action: insert
+        new_name: system.paging.operations.page_out.minor
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.paging.faults
+        experimental_match_labels:
+          type: major
+        action: insert
+        new_name: system.paging.faults.major
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.paging.faults
+        experimental_match_labels:
+          type: minor
+        action: insert
+        new_name: system.paging.faults.minor
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.processes.count
+        experimental_match_labels:
+          status: blocked
+        action: insert
+        new_name: system.processes.count.blocked
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+      - include: system.processes.count
+        experimental_match_labels:
+          status: running
+        action: insert
+        new_name: system.processes.count.running
+        operations:
+          - action: aggregate_labels
+            aggregation_type: sum
+            label_set: []
+  filter:
+    metrics:
+      exclude:
+        match_type: strict
+        metric_names:
+          - process.cpu.time
+          - process.disk.io
+          - system.cpu.time
+          - system.disk.io
+          - system.disk.merged
+          - system.disk.operation_time
+          - system.disk.operations
+          - system.filesystem.inodes.usage
+          - system.filesystem.usage
+          - system.memory.usage
+          - system.network.connections
+          - system.network.connections.tcp
+          - system.network.dropped
+          - system.network.errors
+          - system.network.io
+          - system.network.packets
+          - system.paging.faults
+          - system.paging.operations
+          - system.paging.operations.page_in
+          - system.paging.operations.page_out
+          - system.paging.usage
+          - system.processes.count
+service:
+  pipelines:
+    metrics:
+      receivers:
+        - hostmetrics
+      processors:
+        - metricstransform
+        - filter
+        - transform
+        - resourcedetection
+        - batch
+      exporters:
+        - logging
+        - otlp/honeycomb
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/honeycomb]

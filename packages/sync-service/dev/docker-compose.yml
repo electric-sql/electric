@@ -31,3 +31,24 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       - postgres
+
+  # We can make these services optional, but don't care for dev
+  otel:
+    image: otel/opentelemetry-collector-contrib:0.105.0
+    environment:
+      HNY_DATASET: ${HNY_DATASET}
+      HNY_API_KEY: ${HNY_API_KEY}
+    command: ['--config=/conf/otel-collector-config.yaml']
+    ports:
+      - 4317:4317
+      - 4318:4318
+      - 8125:8125
+    volumes:
+      - ./otel-collector-honeycomb-config.yaml:/conf/otel-collector-config.yaml
+    links:
+      - jaeger-all-in-one
+
+  jaeger-all-in-one:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - '16686:16686'
