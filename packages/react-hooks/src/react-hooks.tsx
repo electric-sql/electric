@@ -100,7 +100,7 @@ export function useShapeContext() {
 interface UseShapeResult {
   /**
    * The array of rows that make up the Shape.
-   * @type {JsonSerializable}
+   * @type {{ [key: string]: JsonSerializable }[]}
    */
   data: { [key: string]: JsonSerializable }[]
   /**
