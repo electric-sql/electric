@@ -24,6 +24,6 @@ export type ChangeMessage<T> = {
 }
 
 // Define the type for a record
-export type Message<T extends JsonSerializable = JsonSerializable> =
-  | ControlMessage
-  | ChangeMessage<T>
+export type Message<
+  T extends JsonSerializable = { [key: string]: JsonSerializable },
+> = ControlMessage | ChangeMessage<T>

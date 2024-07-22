@@ -1,10 +1,11 @@
-import React, { createContext, useEffect, useContext, useState } from 'react'
 import {
+  JsonSerializable,
   Shape,
   ShapeStream,
   ShapeStreamOptions,
-  JsonSerializable,
 } from '@electric-sql/next'
+import React, { createContext, useCallback, useContext, useRef } from 'react'
+import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector'
 
 interface ShapeContextType {
   getShape: (shapeStream: ShapeStream) => Shape
@@ -99,9 +100,9 @@ export function useShapeContext() {
 interface UseShapeResult {
   /**
    * The array of rows that make up the Shape.
-   * @type {JsonSerializable}
+   * @type {{ [key: string]: JsonSerializable }[]}
    */
-  data: JsonSerializable[]
+  data: { [key: string]: JsonSerializable }[]
   /**
    * The Shape instance used by this useShape
    * @type(Shape)
@@ -115,34 +116,52 @@ interface UseShapeResult {
   isUpToDate: boolean
 }
 
-export function useShape(options: ShapeStreamOptions): UseShapeResult {
-  const { getShape, getShapeStream } = useShapeContext()
-  const shapeStream = getShapeStream(options)
-  const shape = getShape(shapeStream)
-  const [shapeData, setShapeData] = useState<UseShapeResult>({
+function shapeSubscribe(shape: Shape, callback: () => void) {
+  const unsubscribe = shape.subscribe(callback)
+  return () => {
+    unsubscribe()
+  }
+}
+
+function parseShapeData(shape: Shape): UseShapeResult {
+  return {
     data: [...shape.valueSync.values()],
     isUpToDate: shape.isUpToDate,
     isError: shape.error !== false,
     shape,
     error: shape.error,
-  })
+  }
+}
 
-  useEffect(() => {
-    // Subscribe to updates.
-    const unsubscribe = shape.subscribe((map) => {
-      setShapeData({
-        data: [...map.values()],
-        isUpToDate: shape.isUpToDate,
-        isError: shape.error !== false,
-        shape,
-        error: shape.error,
-      })
-    })
+const identity = (arg: unknown) => arg
 
-    return () => {
-      unsubscribe()
-    }
-  }, [])
+interface UseShapeOptions<Selection> extends ShapeStreamOptions {
+  selector?: (value: UseShapeResult) => Selection
+}
+
+export function useShape<Selection = UseShapeResult>({
+  selector = identity as never,
+  ...options
+}: UseShapeOptions<Selection>): Selection {
+  const { getShape, getShapeStream } = useShapeContext()
+  const shapeStream = getShapeStream(options as ShapeStreamOptions)
+  const shape = getShape(shapeStream)
+
+  const latestShapeData = useRef(parseShapeData(shape))
+  const getSnapshot = React.useCallback(() => latestShapeData.current, [])
+  const shapeData = useSyncExternalStoreWithSelector(
+    useCallback(
+      (onStoreChange) =>
+        shapeSubscribe(shape, () => {
+          latestShapeData.current = parseShapeData(shape)
+          onStoreChange()
+        }),
+      [shape]
+    ),
+    getSnapshot,
+    getSnapshot,
+    selector
+  )
 
   return shapeData
 }
