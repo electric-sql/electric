@@ -1,7 +1,7 @@
 import { ArgumentsType } from 'vitest'
 import { Message, JsonSerializable, Offset } from './types'
 
-export type ShapeData = Map<string, JsonSerializable>
+export type ShapeData = Map<string, { [key: string]: JsonSerializable }>
 export type ShapeChangedCallback = (value: ShapeData) => void
 
 // FIXME: Table needs to be qualified.
