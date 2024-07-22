@@ -117,6 +117,50 @@ describe(`useShape`, () => {
     )
   })
 
+  it(`should allow use of the "selector" api from useSyncExternalStoreWithSelector`, async ({
+    aborter,
+    issuesTableUrl,
+    insertIssues,
+  }) => {
+    const [id] = await insertIssues({ title: `test row` })
+    await insertIssues({ title: `test row2` })
+
+    const wrapper: FC = ({ children }) => {
+      return <ShapesProvider>{children}</ShapesProvider>
+    }
+
+    const { result } = renderHook(
+      () =>
+        useShape({
+          baseUrl: BASE_URL,
+          shape: { table: issuesTableUrl },
+          signal: aborter.signal,
+          subscribe: true,
+          selector: (result) => {
+            result.data = result.data.filter(
+              (row) => row?.title !== `test row2`
+            )
+            return result
+          },
+        }),
+      { wrapper }
+    )
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+    )
+
+    // Add an item.
+    const [id2] = await insertIssues({ title: `other row` })
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual([
+        { id: id, title: `test row` },
+        { id: id2, title: `other row` },
+      ])
+    )
+  })
+
   it(`should unmount cleanly`, async ({
     aborter,
     issuesTableUrl,

@@ -102,7 +102,7 @@ interface UseShapeResult {
    * The array of rows that make up the Shape.
    * @type {JsonSerializable}
    */
-  data: JsonSerializable[]
+  data: { [key: string]: JsonSerializable }[]
   /**
    * The Shape instance used by this useShape
    * @type(Shape)
