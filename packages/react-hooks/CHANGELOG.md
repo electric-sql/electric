@@ -1,5 +1,13 @@
 # @electric-sql/react
 
+## 0.0.7
+
+### Patch Changes
+
+- 4ce7634: useShape now uses useSyncExternalStoreWithSelector for better integration with React's rendering lifecycle
+- Updated dependencies [4ce7634]
+  - @electric-sql/next@0.0.7
+
 ## 0.0.6
 
 ### Patch Changes
