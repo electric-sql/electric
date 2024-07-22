@@ -712,9 +712,14 @@ service:
         - resourcedetection
         - batch
       exporters:
-        - logging
         - otlp/honeycomb
+        - logging
     traces:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [otlp/honeycomb]
+      receivers:
+        - otlp
+      processors:
+        - resourcedetection
+        - batch
+      exporters:
+        - otlp/honeycomb
+        - logging
