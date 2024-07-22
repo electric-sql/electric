@@ -7,13 +7,15 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
     Begin,
     Commit,
     Origin,
+    Message,
     Relation,
     Relation.Column,
     Insert,
     Update,
     Delete,
     Truncate,
-    Type
+    Type,
+    Unsupported
   }
 
   alias Electric.Postgres.Lsn
@@ -54,6 +56,16 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
              }
   end
 
+  test "decodes 'message' messages" do
+    assert decode(<<?M, 1::8, 1::64, "hello", 0, 5::32, "world">>) ==
+             %Message{
+               transactional?: true,
+               lsn: lsn({0, 1}),
+               prefix: "hello",
+               content: "world"
+             }
+  end
+
   test "decodes relation messages" do
     assert decode(
              <<82, 0, 0, 96, 0, 112, 117, 98, 108, 105, 99, 0, 102, 111, 111, 0, 100, 0, 2, 0, 98,
@@ -81,6 +93,28 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
                }
              ]
            }
+  end
+
+  test "decodes relation messages with different identities" do
+    assert %Relation{replica_identity: :default} =
+             decode(
+               <<82, 0, 0, 96, 0, 112, 117, 98, 108, 105, 99, 0, 102, 111, 111, 0, ?d, 0, 0>>
+             )
+
+    assert %Relation{replica_identity: :nothing} =
+             decode(
+               <<82, 0, 0, 96, 0, 112, 117, 98, 108, 105, 99, 0, 102, 111, 111, 0, ?n, 0, 0>>
+             )
+
+    assert %Relation{replica_identity: :all_columns} =
+             decode(
+               <<82, 0, 0, 96, 0, 112, 117, 98, 108, 105, 99, 0, 102, 111, 111, 0, ?f, 0, 0>>
+             )
+
+    assert %Relation{replica_identity: :index} =
+             decode(
+               <<82, 0, 0, 96, 0, 112, 117, 98, 108, 105, 99, 0, 102, 111, 111, 0, ?i, 0, 0>>
+             )
   end
 
   test "decodes relation messages with array types" do
@@ -158,6 +192,11 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
                  options: [:restart_identity],
                  truncated_relations: [24576]
                }
+    end
+
+    test "decodes unknown messages" do
+      assert decode("!what's this message") ==
+               %Unsupported{data: "!what's this message"}
     end
   end
 

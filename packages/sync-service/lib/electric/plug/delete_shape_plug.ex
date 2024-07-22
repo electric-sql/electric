@@ -43,7 +43,7 @@ defmodule Electric.Plug.DeleteShapePlug do
   defp truncate_or_delete_shape(%Plug.Conn{} = conn, _) do
     if conn.assigns.shape_id !== nil do
       with :ok <- Shapes.clean_shape(conn.assigns.shape_id, conn.assigns.config) do
-        send_resp(conn, 204, "")
+        send_resp(conn, 202, "")
       end
     else
       # FIXME: This has a race condition where we accidentally create a snapshot & shape id, but clean
@@ -51,7 +51,7 @@ defmodule Electric.Plug.DeleteShapePlug do
       with {shape_id, _} <-
              Shapes.get_or_create_shape_id(conn.assigns.shape_definition, conn.assigns.config),
            :ok <- Shapes.clean_shape(shape_id, conn.assigns.config) do
-        send_resp(conn, 204, "")
+        send_resp(conn, 202, "")
       end
     end
   end
