@@ -59,7 +59,7 @@ await shape.value
 // passes subscribers shape data when the shape updates
 shape.subscribe(shapeData => {
   // shapeData is a Map of the latest value of each row in a shape.
-}
+})
 ```
 
 See the [Examples](/examples/basic) and [Connectors](/api/connectors/react) for more usage examples.

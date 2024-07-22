@@ -27,6 +27,8 @@ defmodule PgInterop.Interval.ISO8601Parser do
       iex> parse("P2W1D")
       {:ok, Interval.parse!("P15D")}
 
+      iex> parse("")
+      {:error, "input string cannot be empty"}
       iex> parse("P15YT3D")
       {:error, "invalid use of date component after time separator"}
       iex> parse("P15Y3H")

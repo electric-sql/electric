@@ -18,6 +18,18 @@ defmodule Electric.Plug.RouterTest do
 
   @first_offset to_string(LogOffset.first())
 
+  describe "/" do
+    test "returns 200" do
+      assert %{status: 200, resp_body: ""} = Router.call(conn("GET", "/"), [])
+    end
+  end
+
+  describe "/nonexistent" do
+    test "returns 404" do
+      assert %{status: 404, resp_body: "Not found"} = Router.call(conn("GET", "/nonexistent"), [])
+    end
+  end
+
   describe "/v1/shapes" do
     setup {DbSetup, :with_unique_db}
     setup {DbStructureSetup, :with_basic_tables}
@@ -32,7 +44,7 @@ defmodule Electric.Plug.RouterTest do
     @tag with_sql: [
            "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
          ]
-    test "returns a snapshot of initial data", %{opts: opts} do
+    test "GET returns a snapshot of initial data", %{opts: opts} do
       conn =
         conn("GET", "/v1/shape/items?offset=-1")
         |> Router.call(opts)
@@ -53,7 +65,7 @@ defmodule Electric.Plug.RouterTest do
              ] = Jason.decode!(conn.resp_body)
     end
 
-    test "returns an error when table is not found", %{opts: opts} do
+    test "GET returns an error when table is not found", %{opts: opts} do
       conn =
         conn("GET", "/v1/shape/nonexistent?offset=-1")
         |> Router.call(opts)
@@ -61,6 +73,40 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 400} = conn
 
       assert %{"root_table" => ["table not found"]} = Jason.decode!(conn.resp_body)
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "DELETE forces the shape ID to be different on reconnect and new snapshot to be created",
+         %{opts: opts, db_conn: db_conn} do
+      conn =
+        conn("GET", "/v1/shape/items?offset=-1")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      assert [shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+
+      assert [%{"value" => %{"value" => "test value 1"}}, %{"headers" => _}] =
+               Jason.decode!(conn.resp_body)
+
+      assert %{status: 202} =
+               conn("DELETE", "/v1/shape/items?shape_id=#{shape_id}")
+               |> Router.call(opts)
+
+      Postgrex.query!(db_conn, "DELETE FROM items", [])
+      Postgrex.query!(db_conn, "INSERT INTO items VALUES (gen_random_uuid(), 'test value 2')", [])
+
+      conn =
+        conn("GET", "/v1/shape/items?offset=-1")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      assert [shape_id2] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+      assert shape_id != shape_id2
+
+      assert [%{"value" => %{"value" => "test value 2"}}, %{"headers" => _}] =
+               Jason.decode!(conn.resp_body)
     end
   end
 end

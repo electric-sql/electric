@@ -73,7 +73,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         conn(:delete, "?root_table=public.users")
         |> DeleteShapePlug.call([])
 
-      assert conn.status == 204
+      assert conn.status == 202
     end
 
     test "should clean shape based on shape_id" do
@@ -84,7 +84,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         conn(:delete, "?root_table=public.users&shape_id=#{@test_shape_id}")
         |> DeleteShapePlug.call([])
 
-      assert conn.status == 204
+      assert conn.status == 202
     end
   end
 end

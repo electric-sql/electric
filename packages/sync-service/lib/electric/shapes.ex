@@ -55,8 +55,9 @@ defmodule Electric.Shapes do
   """
   @spec clean_shape(Storage.shape_id(), keyword()) :: :ok
   def clean_shape(shape_id, opts \\ []) do
-    {shape_cache, _} = Access.get(opts, :shape_cache, {ShapeCache, []})
-    shape_cache.clean_shape(shape_cache, shape_id)
+    {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
+    server = Access.get(opts, :server, shape_cache)
+    shape_cache.clean_shape(server, shape_id)
     :ok
   end
 end

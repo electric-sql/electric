@@ -6,28 +6,30 @@ defmodule PgInterop.Interval.Iso8601Formatter do
   @second 1_000_000
 
   @doc """
-    Return a human readable string representing the duration, formatted according
-    to ISO8601. Negative sections will be formatted accordingly, as does PG.
+  Return a human readable string representing the duration, formatted according
+  to ISO8601. Negative sections will be formatted accordingly, as does PG.
 
-    ## Examples
+  ## Examples
 
-        iex> #{Interval}.parse("PT2S") |> #{__MODULE__}.format
-        "PT2S"
+      iex> format(Interval.parse!("PT2S"))
+      "PT2S"
 
-        iex> #{Interval}.parse("PT2.0001S") |> #{__MODULE__}.format
-        "PT2.0001S"
+      iex> format(Interval.parse!("PT2.0001S"))
+      "PT2.0001S"
 
-        iex> #{Interval}.parse("PT1M5S") |> #{__MODULE__}.format
-        "PT1M5S"
+      iex> format(Interval.parse!("PT1M5S"))
+      "PT1M5S"
 
-        iex> #{Interval}.parse("PT1M5S") |> #{__MODULE__}.format
-        "PT1M5S"
+      iex> format(Interval.parse!("PT1M5S"))
+      "PT1M5S"
 
-        iex> #{Interval}.parse("P45Y6M5DT21H12M34.590264S") |> #{__MODULE__}.format
-        "P45Y6M5DT21H12M34.590264S"
+      iex> format(Interval.parse!("P45Y6M5DT21H12M34.590264S"))
+      "P45Y6M5DT21H12M34.590264S"
 
-        iex> #{Interval}.parse("PT0S") |> #{__MODULE__}.format
-        "PT0S"
+  0-length interval is special-cased to render as "0S"
+
+      iex> format(%Interval{months: 0, days: 0, microseconds: 0})
+      "PT0S"
   """
   def format(%Interval{} = interval), do: IO.iodata_to_binary(to_iodata(interval))
 

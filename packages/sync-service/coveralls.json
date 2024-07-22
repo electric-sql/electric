@@ -1,6 +1,8 @@
 {
   "skip_files": [
     "test/support",
-    "lib/electric/replication/eval/known_definition.ex"
+    "lib/electric/replication/eval/known_definition.ex",
+    "lib/electric.ex",
+    "lib/electric/telemetry.ex"
   ]
 }
