@@ -10,10 +10,12 @@ if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
 
+instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
+
 config :telemetry_poller, :default, period: 500
 
 config :opentelemetry,
-  resource_detectors: [:otel_resource_app_env],
+  resource_detectors: [:otel_resource_env_var, :otel_resource_app_env],
   resource: %{service: %{name: "electric", version: Mix.Project.config()[:version]}}
 
 otel_export = env!("OTEL_EXPORT", :string, nil)
@@ -92,6 +94,6 @@ config :electric,
   cache_stale_age: cache_stale_age,
   # Used in telemetry
   environment: config_env(),
-  instance_id: env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4()),
+  instance_id: instance_id,
   telemetry_statsd_host: statsd_host,
   storage: storage
