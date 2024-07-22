@@ -10,22 +10,30 @@ defmodule PgInterop.Interval.ISO8601AlternativeParser do
 
   ## Examples
 
-      iex> {:ok, d} = #{__MODULE__}.parse("P0015-3-2T1:14:37.25")
-      ...> #{Interval}.Iso8601Formatter.format(d)
-      "P15Y3M2DT1H14M37.25S"
+      iex> parse("P0015-3-2T1:14:37.25")
+      {:ok, Interval.parse!("P15Y3M2DT1H14M37.25S")}
 
-      iex> {:ok, d} = #{__MODULE__}.parse("P0015-3-2")
-      ...> #{Interval}.Iso8601Formatter.format(d)
-      "P15Y3M2D"
+      iex> parse("P0015-3-2")
+      {:ok, Interval.parse!("P15Y3M2D")}
 
-      iex> {:ok, d} = #{__MODULE__}.parse("PT3:12:25.001")
-      ...> #{Interval}.Iso8601Formatter.format(d)
-      "PT3H12M25.001S"
+      iex> parse("PT3:12:25.001")
+      {:ok, Interval.parse!("PT3H12M25.001S")}
 
-      iex> {:ok, d} = #{__MODULE__}.parse("P0015T30:00")
-      ...> #{Interval}.Iso8601Formatter.format(d)
-      "P15YT30H"
+      iex> parse("P0015T30:00")
+      {:ok, Interval.parse!("P15YT30H")}
 
+      iex> parse("")
+      {:error, "input string cannot be empty"}
+      iex> parse("W")
+      {:error, "expected P, got W"}
+      iex> parse("P0015TT30:00")
+      {:error, "unexpected duplicate T"}
+      iex> parse("P0015-3-2-1")
+      {:error, "unexpected 4th section in y-m-d part"}
+      iex> parse("P0015-3-y")
+      {:error, "invalid number `y`"}
+      iex> parse("P0015-3-1T30:00:10.y")
+      {:error, "invalid number `10.y`"}
   """
   @spec parse(String.t()) :: {:ok, Interval.t()} | {:error, term}
   def parse(<<>>), do: {:error, "input string cannot be empty"}
@@ -39,7 +47,6 @@ defmodule PgInterop.Interval.ISO8601AlternativeParser do
   end
 
   def parse(<<c::utf8, _::binary>>), do: {:error, "expected P, got #{<<c::utf8>>}"}
-  def parse(s) when is_binary(s), do: {:error, "unexpected end of input"}
 
   def split_on_time(x) do
     case String.split(x, "T") do

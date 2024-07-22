@@ -63,19 +63,14 @@ defmodule PgInterop.Interval.PostgresAndSQLParser do
 
       iex> parse("10 10:01  1 10:01:10")
       {:error, "invalid input syntax"}
-
       iex> parse("1 month 1-10")
       {:error, "invalid input syntax"}
-
       iex> parse("1-13")
       {:error, "invalid input syntax"}
-
       iex> parse("1 minute 1 10:01:10")
       {:error, "invalid input syntax"}
-
       iex> parse("1 second 1 10:01:10")
       {:error, "invalid input syntax"}
-
       iex> parse("10 10:01 1")
       {:error, "invalid input syntax"}
 

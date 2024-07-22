@@ -45,6 +45,14 @@ defmodule Electric.Replication.Eval.Env.BasicTypes do
                   %{category: String.to_atom(category), preferred?: preferred == "t"}}
                end)
 
+  @doc """
+  List all known basic types
+
+  ## Examples
+
+      iex> noop(known()[:timestamptz])
+      %{category: :datetime, preferred?: true}
+  """
   def known(), do: @known_types
 
   def noop(input), do: input
