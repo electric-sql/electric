@@ -49,6 +49,7 @@ defmodule Electric.ShapeCache.Storage do
   @doc unstable: "The meta information about the single table is subject to change"
   @callback make_new_snapshot!(
               shape_id(),
+              Electric.Shapes.Shape.t(),
               Postgrex.Query.t(),
               Enumerable.t(row()),
               compiled_opts()
@@ -103,12 +104,13 @@ defmodule Electric.ShapeCache.Storage do
   @doc unstable: "The meta information about the single table is subject to change"
   @spec make_new_snapshot!(
           shape_id(),
+          Electric.Shapes.Shape.t(),
           Postgrex.Query.t(),
           Enumerable.t(row()),
           storage()
         ) :: :ok
-  def make_new_snapshot!(shape_id, meta, stream, {mod, opts}),
-    do: mod.make_new_snapshot!(shape_id, meta, stream, opts)
+  def make_new_snapshot!(shape_id, shape, meta, stream, {mod, opts}),
+    do: mod.make_new_snapshot!(shape_id, shape, meta, stream, opts)
 
   @doc "Append changes from one transaction to the log"
   @spec append_to_log!(

@@ -1,5 +1,6 @@
-defmodule Electric.Postgres.InspectorBehaviour do
-  @type relation :: {String.t(), String.t()}
+defmodule Electric.Postgres.Inspector do
+  alias Electric.Replication.Eval.Parser
+  @type relation :: Electric.relation()
 
   @type column_info :: %{
           name: String.t(),
@@ -9,35 +10,39 @@ defmodule Electric.Postgres.InspectorBehaviour do
           type_id: {typid :: non_neg_integer(), typmod :: integer()}
         }
 
-  @callback load_table_info(relation(), opts :: term()) :: [column_info()]
-end
+  @callback load_column_info(relation(), opts :: term()) ::
+              {:ok, [column_info()]} | :table_not_found
 
-defmodule Electric.Postgres.Inspector do
-  @behaviour Electric.Postgres.InspectorBehaviour
+  @type inspector :: {module(), opts :: term()}
 
   @doc """
-  Load table information (refs) from the database
+  Load column information about a given table using a provided inspector.
   """
-  def load_table_info({namespace, tbl}, conn) do
-    query = """
-    SELECT
-      attname as name,
-      (atttypid, atttypmod) as type_id,
-      typname as type,
-      format_type(pg_attribute.atttypid, pg_attribute.atttypmod) AS formatted_type,
-      array_position(indkey, attnum) as pk_position
-    FROM pg_class
-    JOIN pg_namespace ON relnamespace = pg_namespace.oid
-    JOIN pg_attribute ON attrelid = pg_class.oid AND attnum >= 0
-    JOIN pg_type ON atttypid = pg_type.oid
-    JOIN pg_index ON indrelid = pg_class.oid AND indisprimary
-    WHERE relname = $1 AND nspname = $2
-    ORDER BY pg_class.oid, attnum
-    """
+  @spec load_column_info(relation(), inspector()) :: {:ok, [column_info()]} | :table_not_found
+  def load_column_info(relation, {module, opts}), do: module.load_column_info(relation, opts)
 
-    result = Postgrex.query!(conn, query, [tbl, namespace])
+  @doc """
+  Get columns that should be considered a PK for table. If the table
+  has no PK, then we're considering all columns as identifying.
+  """
+  @spec get_pk_cols([column_info(), ...]) :: [String.t(), ...]
+  def get_pk_cols([_ | _] = columns) do
+    columns
+    |> Enum.reject(&is_nil(&1.pk_position))
+    |> Enum.sort_by(& &1.pk_position)
+    |> Enum.map(& &1.name)
+    |> case do
+      [] -> Enum.map(columns, & &1.name)
+      results -> results
+    end
+  end
 
-    columns = Enum.map(result.columns, &String.to_atom/1)
-    Enum.map(result.rows, fn row -> Enum.zip(columns, row) |> Map.new() end)
+  @doc """
+  Convert a column list into something that can be used by
+  `Electric.Replication.Eval.Parser.parse_and_validate_expression/2`
+  """
+  @spec columns_to_expr([column_info(), ...]) :: Parser.refs_map()
+  def columns_to_expr(columns) when is_list(columns) do
+    Map.new(columns, fn %{name: name, type: type} -> {[name], String.to_atom(type)} end)
   end
 end

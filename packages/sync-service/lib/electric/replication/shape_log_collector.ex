@@ -3,6 +3,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   When any txn comes from postgres, we need to store it into the
   log for this shape if and only if it has txid >= xmin of the snapshot.
   """
+  alias Electric.Postgres.Inspector
   alias Electric.Shapes.Shape
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
@@ -16,7 +17,8 @@ defmodule Electric.Replication.ShapeLogCollector do
               default: __MODULE__
             ],
             registry: [type: :atom, required: true],
-            shape_cache: [type: :mod_arg, required: true]
+            shape_cache: [type: :mod_arg, required: true],
+            inspector: [type: :mod_arg, required: true]
           )
 
   def start_link(opts) do
@@ -42,6 +44,15 @@ defmodule Electric.Replication.ShapeLogCollector do
       ) do
     Logger.info("Received transaction #{xid} from Postgres at #{lsn}")
     Logger.debug(fn -> "Txn received: #{inspect(txn)}" end)
+
+    pk_cols_of_relations =
+      for relation <- txn.affected_relations, into: %{} do
+        {:ok, info} = Inspector.load_column_info(relation, state.inspector)
+        pk_cols = Inspector.get_pk_cols(info)
+        {relation, pk_cols}
+      end
+
+    changes = Enum.map(changes, &Changes.fill_key(&1, pk_cols_of_relations[&1.relation]))
 
     {shape_cache, opts} = state.shape_cache
 

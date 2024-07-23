@@ -11,12 +11,19 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
   @registry Registry.DeleteShapePlugTest
 
-  @test_shape %Shape{root_table: {"public", "users"}}
+  @test_shape %Shape{
+    root_table: {"public", "users"},
+    table_info: %{
+      {"public", "users"} => %{
+        columns: [%{name: "id", type: "int8", pk_position: 0}],
+        pk: ["id"]
+      }
+    }
+  }
   @test_shape_id "test-shape-id"
 
-  defmodule Inspector do
-    def load_table_info({"public", "users"}, _), do: [%{name: "id", type: "int8"}]
-  end
+  def load_column_info({"public", "users"}, _),
+    do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
 
   setup do
     start_link_supervised!({Registry, keys: :duplicate, name: @registry})
@@ -27,7 +34,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     # Pass mock dependencies to the plug
     config = %{
       shape_cache: {Electric.ShapeCacheMock, []},
-      inspector: {__MODULE__.Inspector, []},
+      inspector: {__MODULE__, []},
       registry: @registry,
       long_poll_timeout: 20_000,
       max_age: 60,

@@ -2,6 +2,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes
   alias Electric.Utils
+  alias Electric.Shapes.Shape
   @behaviour Electric.ShapeCache.Storage
 
   @snapshot_key_type 0
@@ -115,10 +116,10 @@ defmodule Electric.ShapeCache.CubDbStorage do
       (snapshot_exists?(shape_id, opts) and offset == LogOffset.first())
   end
 
-  def make_new_snapshot!(shape_id, query_info, data_stream, opts) do
+  def make_new_snapshot!(shape_id, shape, query_info, data_stream, opts) do
     data_stream
     |> Stream.with_index()
-    |> Stream.map(&row_to_snapshot_item(&1, shape_id, query_info))
+    |> Stream.map(&row_to_snapshot_item(&1, shape_id, shape, query_info))
     |> Stream.chunk_every(500)
     |> Stream.each(fn [{key, _} | _] = chunk -> CubDB.put(opts.db, key, chunk) end)
     |> Stream.run()
@@ -129,8 +130,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
   def append_to_log!(shape_id, xid, changes, opts) do
     changes
     |> Enum.map(fn
-      %{relation: _} = change ->
-        change_key = Changes.build_key(change)
+      %{relation: _, key: change_key} = change ->
         value = Changes.to_json_value(change)
         action = Changes.get_action(change)
         offset = Changes.get_log_offset(change)
@@ -192,8 +192,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
   defp snapshot_start(shape_id), do: snapshot_key(shape_id, 0)
   defp snapshot_end(shape_id), do: snapshot_key(shape_id, :end)
 
-  defp row_to_snapshot_item({row, index}, shape_id, %Postgrex.Query{
-         name: change_key_prefix,
+  defp row_to_snapshot_item({row, index}, shape_id, shape, %Postgrex.Query{
          columns: columns,
          result_types: types
        }) do
@@ -205,9 +204,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
       end)
       |> Map.new()
 
-    # FIXME: This should not assume pk columns, but we're not querying PG for that info yet
-    pk = Map.fetch!(serialized_row, "id")
-    change_key = "#{change_key_prefix}/#{pk}"
+    change_key = Changes.build_key(shape.root_table, serialized_row, Shape.pk(shape))
 
     {snapshot_key(shape_id, index), {_xid = nil, change_key, "insert", serialized_row}}
   end

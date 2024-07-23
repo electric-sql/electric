@@ -10,6 +10,14 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   @moduletag :tmp_dir
 
   @shape_id "the-shape-id"
+  @shape %Shape{
+    root_table: {"public", "the-table"},
+    table_info: %{
+      {"public", "the-table"} => %{
+        pk: ["id"]
+      }
+    }
+  }
   @snapshot_offset LogOffset.first()
   @zero_offset LogOffset.first()
   @query_info %Postgrex.Query{
@@ -39,7 +47,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
 
       test "returns true when shape does exist", %{module: storage, opts: opts} do
-        storage.make_new_snapshot!(@shape_id, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
         assert storage.snapshot_exists?(@shape_id, opts) == true
       end
@@ -48,7 +56,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         module: storage,
         opts: opts
       } do
-        storage.make_new_snapshot!(@shape_id, @query_info, [], opts)
+        storage.make_new_snapshot!(@shape_id, @shape, @query_info, [], opts)
 
         assert storage.snapshot_exists?(@shape_id, opts) == true
       end
@@ -70,20 +78,20 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
 
       test "returns snapshot when shape does exist", %{module: storage, opts: opts} do
-        storage.make_new_snapshot!(@shape_id, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
         assert {@snapshot_offset,
                 [
                   %{
                     offset: @snapshot_offset,
                     value: %{"id" => "00000000-0000-0000-0000-000000000001", "title" => "row1"},
-                    key: "the-table/00000000-0000-0000-0000-000000000001",
+                    key: "\"public\".\"the-table\"/00000000-0000-0000-0000-000000000001",
                     headers: %{action: "insert"}
                   },
                   %{
                     offset: @snapshot_offset,
                     value: %{"id" => "00000000-0000-0000-0000-000000000002", "title" => "row2"},
-                    key: "the-table/00000000-0000-0000-0000-000000000002",
+                    key: "\"public\".\"the-table\"/00000000-0000-0000-0000-000000000002",
                     headers: %{action: "insert"}
                   }
                 ]} = storage.get_snapshot(@shape_id, opts)
@@ -95,29 +103,35 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           [<<4::128>>, "row4"]
         ]
 
-        storage.make_new_snapshot!(@shape_id, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
-        storage.make_new_snapshot!("another-shape-id", @query_info, another_data_stream, opts)
+        storage.make_new_snapshot!(
+          "another-shape-id",
+          @shape,
+          @query_info,
+          another_data_stream,
+          opts
+        )
 
         assert {@snapshot_offset,
                 [
                   %{
                     offset: @snapshot_offset,
                     value: %{"id" => "00000000-0000-0000-0000-000000000001", "title" => "row1"},
-                    key: "the-table/00000000-0000-0000-0000-000000000001",
+                    key: "\"public\".\"the-table\"/00000000-0000-0000-0000-000000000001",
                     headers: %{action: "insert"}
                   },
                   %{
                     offset: @snapshot_offset,
                     value: %{"id" => "00000000-0000-0000-0000-000000000002", "title" => "row2"},
-                    key: "the-table/00000000-0000-0000-0000-000000000002",
+                    key: "\"public\".\"the-table\"/00000000-0000-0000-0000-000000000002",
                     headers: %{action: "insert"}
                   }
                 ]} = storage.get_snapshot(@shape_id, opts)
       end
 
       test "returns snapshot offset when shape does exist", %{module: storage, opts: opts} do
-        storage.make_new_snapshot!(@shape_id, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
         {@snapshot_offset, _} = storage.get_snapshot(@shape_id, opts)
       end
@@ -153,6 +167,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         changes = [
           %Changes.NewRecord{
+            key: ~S|"public"."test_table"/123|,
             relation: {"public", "test_table"},
             record: %{"id" => "123", "name" => "Test"},
             log_offset: offset
@@ -346,7 +361,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       setup :start_storage
 
       test "causes snapshot_exists?/2 to return false", %{module: storage, opts: opts} do
-        storage.make_new_snapshot!(@shape_id, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
         storage.cleanup!(@shape_id, opts)
 
@@ -354,7 +369,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
 
       test "causes get_snapshot/2 to return empty list", %{module: storage, opts: opts} do
-        storage.make_new_snapshot!(@shape_id, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
         storage.cleanup!(@shape_id, opts)
 
@@ -362,7 +377,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
 
       test "causes get_snapshot/2 to return a zero offset", %{module: storage, opts: opts} do
-        storage.make_new_snapshot!(@shape_id, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
         storage.cleanup!(@shape_id, opts)
 
@@ -424,7 +439,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         opts: opts
       } do
         refute storage.has_log_entry?(@shape_id, @snapshot_offset, opts)
-        storage.make_new_snapshot!(@shape_id, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
         assert storage.has_log_entry?(@shape_id, @snapshot_offset, opts)
       end
 
@@ -439,7 +454,14 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     module_name = module |> Module.split() |> List.last()
 
     describe "#{module_name}.list_shapes/1" do
-      @shape %Shape{root_table: {"public", "items"}}
+      @shape %Shape{
+        root_table: {"public", "items"},
+        table_info: %{
+          {"public", "items"} => %{
+            pk: ["id"]
+          }
+        }
+      }
       @first_offset LogOffset.first()
       @change_offset LogOffset.new(Lsn.from_integer(123), 0)
       @changes [
@@ -474,10 +496,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.add_shape("shape-2", @shape, opts)
         storage.add_shape("shape-3", @shape, opts)
 
-        storage.make_new_snapshot!("shape-1", @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-1", @shape, @query_info, @data_stream, opts)
         storage.append_to_log!("shape-1", _xmin = 0, @changes, opts)
 
-        storage.make_new_snapshot!("shape-2", @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-2", @shape, @query_info, @data_stream, opts)
 
         assert [
                  %{shape_id: "shape-1", latest_offset: @change_offset},
@@ -513,9 +535,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.add_shape("shape-1", @shape, opts)
         storage.add_shape("shape-2", @shape, opts)
         storage.add_shape("shape-3", @shape, opts)
-        storage.make_new_snapshot!("shape-1", @query_info, @data_stream, opts)
-        storage.make_new_snapshot!("shape-2", @query_info, @data_stream, opts)
-        storage.make_new_snapshot!("shape-3", @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-1", @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-2", @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-3", @shape, @query_info, @data_stream, opts)
         storage.set_snapshot_xmin("shape-1", 11, opts)
         storage.set_snapshot_xmin("shape-3", 33, opts)
 

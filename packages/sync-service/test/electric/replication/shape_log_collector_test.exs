@@ -15,6 +15,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   # Define mocks
   Mox.defmock(MockShapeCache, for: Electric.ShapeCacheBehaviour)
   Mox.defmock(MockStorage, for: Electric.ShapeCache.Storage)
+  Mox.defmock(MockInspector, for: Electric.Postgres.Inspector)
 
   setup :verify_on_exit!
 
@@ -27,7 +28,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     opts = [
       name: :test_shape_log_storage,
       registry: registry_name,
-      shape_cache: {MockShapeCache, []}
+      shape_cache: {MockShapeCache, []},
+      inspector: {MockInspector, []}
     ]
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
@@ -49,23 +51,24 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       |> expect(:append_to_log!, fn ^shape_id, ^last_log_offset, ^xid, _, _ -> :ok end)
       |> allow(self(), server)
 
-      txn = %Transaction{
-        xid: xmin,
-        changes: [%Changes.NewRecord{relation: {"public", "test_table"}, record: %{"id" => "1"}}],
-        lsn: lsn,
-        last_log_offset: last_log_offset
-      }
+      MockInspector
+      |> expect(:load_column_info, 2, fn {"public", "test_table"}, _ ->
+        {:ok, [%{pk_position: 0, name: "id"}]}
+      end)
+      |> allow(self(), server)
+
+      txn =
+        %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "1"}
+        })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, server)
 
-      txn = %Transaction{
-        xid: xid,
-        changes: [%Changes.NewRecord{relation: {"public", "test_table"}, record: %{"id" => "1"}}],
-        lsn: lsn,
-        last_log_offset: last_log_offset
-      }
+      txn2 = %{txn | xid: xid}
 
-      assert :ok = ShapeLogCollector.store_transaction(txn, server)
+      assert :ok = ShapeLogCollector.store_transaction(txn2, server)
     end
 
     test "doesn't append to log when xid < xmin", %{server: server} do
@@ -80,12 +83,18 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       |> expect(:list_active_shapes, fn _ -> [{shape_id, shape, xmin}] end)
       |> allow(self(), server)
 
-      txn = %Transaction{
-        xid: xid,
-        changes: [%Changes.NewRecord{relation: {"public", "test_table"}, record: %{"id" => "1"}}],
-        lsn: lsn,
-        last_log_offset: last_log_offset
-      }
+      MockInspector
+      |> expect(:load_column_info, fn {"public", "test_table"}, _ ->
+        {:ok, [%{pk_position: 0, name: "id"}]}
+      end)
+      |> allow(self(), server)
+
+      txn =
+        %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "1"}
+        })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, server)
     end
@@ -107,12 +116,18 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       |> expect(:list_active_shapes, fn _ -> [{shape_id, shape, xmin}] end)
       |> allow(self(), server)
 
-      txn = %Transaction{
-        xid: xid,
-        changes: [%Changes.NewRecord{relation: {"public", "test_table"}, record: %{"id" => "1"}}],
-        lsn: lsn,
-        last_log_offset: last_log_offset
-      }
+      MockInspector
+      |> expect(:load_column_info, fn {"public", "test_table"}, _ ->
+        {:ok, [%{pk_position: 0, name: "id"}]}
+      end)
+      |> allow(self(), server)
+
+      txn =
+        %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "1"}
+        })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, server)
     end
@@ -131,12 +146,17 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       |> expect(:handle_truncate, fn _, ^shape_id -> :ok end)
       |> allow(self(), server)
 
-      txn = %Transaction{
-        xid: xid,
-        changes: [%Changes.TruncatedRelation{relation: {"public", "test_table"}}],
-        lsn: lsn,
-        last_log_offset: last_log_offset
-      }
+      MockInspector
+      |> expect(:load_column_info, fn {"public", "test_table"}, _ ->
+        {:ok, [%{pk_position: 0, name: "id"}]}
+      end)
+      |> allow(self(), server)
+
+      txn =
+        %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.TruncatedRelation{
+          relation: {"public", "test_table"}
+        })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, server)
     end
@@ -154,15 +174,21 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       |> expect(:append_to_log!, fn ^shape_id, ^last_log_offset, ^xid, _, _ -> :ok end)
       |> allow(self(), server)
 
+      MockInspector
+      |> expect(:load_column_info, fn {"public", "test_table"}, _ ->
+        {:ok, [%{pk_position: 0, name: "id"}]}
+      end)
+      |> allow(self(), server)
+
       ref = make_ref()
       Registry.register(registry, shape_id, ref)
 
-      txn = %Transaction{
-        xid: xid,
-        changes: [%Changes.NewRecord{relation: {"public", "test_table"}, record: %{"id" => "1"}}],
-        lsn: lsn,
-        last_log_offset: last_log_offset
-      }
+      txn =
+        %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "1"}
+        })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, server)
       assert_receive {^ref, :new_changes, ^last_log_offset}, 1000
@@ -193,16 +219,28 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       end)
       |> allow(self(), server)
 
-      txn = %Transaction{
-        xid: xid,
-        changes: [
-          %Changes.NewRecord{relation: {"public", "test_table"}, record: %{"id" => "1"}},
-          %Changes.NewRecord{relation: {"public", "other_table"}, record: %{"id" => "2"}},
-          %Changes.NewRecord{relation: {"public", "something else"}, record: %{"id" => "3"}}
-        ],
-        lsn: lsn,
-        last_log_offset: last_log_offset
-      }
+      MockInspector
+      |> expect(:load_column_info, 3, fn
+        {"public", "test_table"}, _ -> {:ok, [%{pk_position: 0, name: "id"}]}
+        {"public", "other_table"}, _ -> {:ok, [%{pk_position: 0, name: "id"}]}
+        {"public", "something else"}, _ -> {:ok, [%{pk_position: 0, name: "id"}]}
+      end)
+      |> allow(self(), server)
+
+      txn =
+        %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "1"}
+        })
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "other_table"},
+          record: %{"id" => "2"}
+        })
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "something else"},
+          record: %{"id" => "3"}
+        })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, server)
     end

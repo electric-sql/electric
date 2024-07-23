@@ -14,15 +14,22 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
   @registry Registry.ServeShapePlugTest
 
-  @test_shape %Shape{root_table: {"public", "users"}}
+  @test_shape %Shape{
+    root_table: {"public", "users"},
+    table_info: %{
+      {"public", "users"} => %{
+        columns: [%{name: "id", type: "int8", pk_position: 0}],
+        pk: ["id"]
+      }
+    }
+  }
   @test_shape_id "test-shape-id"
   @first_offset LogOffset.first()
   @test_offset LogOffset.new(Lsn.from_integer(100), 0)
   @start_offset_50 LogOffset.new(Lsn.from_integer(50), 0)
 
-  defmodule Inspector do
-    def load_table_info({"public", "users"}, _), do: [%{name: "id", type: "int8"}]
-  end
+  def load_column_info({"public", "users"}, _),
+    do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
 
   setup do
     start_link_supervised!({Registry, keys: :duplicate, name: @registry})
@@ -34,7 +41,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     config = %{
       shape_cache: {Electric.ShapeCacheMock, []},
       storage: {MockStorage, []},
-      inspector: {__MODULE__.Inspector, []},
+      inspector: {__MODULE__, []},
       registry: @registry,
       long_poll_timeout: 20_000,
       max_age: 60,

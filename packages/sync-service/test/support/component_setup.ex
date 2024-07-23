@@ -5,6 +5,7 @@ defmodule Support.ComponentSetup do
   alias Electric.ShapeCache
   alias Electric.ShapeCache.CubDbStorage
   alias Electric.ShapeCache.InMemoryStorage
+  alias Electric.Postgres.Inspector.EtsInspector
 
   def with_registry(ctx) do
     registry_name = Module.concat(Registry, String.to_atom(full_test_name(ctx)))
@@ -72,7 +73,8 @@ defmodule Support.ComponentSetup do
       ShapeLogCollector.start_link(
         name: server,
         registry: ctx.registry,
-        shape_cache: {Electric.ShapeCache, ctx.shape_cache_opts}
+        shape_cache: {Electric.ShapeCache, ctx.shape_cache_opts},
+        inspector: ctx.inspector
       )
 
     %{shape_log_collector: server}
@@ -96,9 +98,19 @@ defmodule Support.ComponentSetup do
     %{replication_client: pid}
   end
 
+  def with_inspector(ctx) do
+    server = :"inspector #{full_test_name(ctx)}"
+    pg_info_table = :"pg_info_table #{full_test_name(ctx)}"
+
+    {:ok, _} = EtsInspector.start_link(pg_info_table: pg_info_table, pool: ctx.pool, name: server)
+
+    %{inspector: {EtsInspector, pg_info_table: pg_info_table, server: server}}
+  end
+
   def with_complete_stack(ctx) do
     [
       &with_registry/1,
+      &with_inspector/1,
       &with_cub_db_storage/1,
       &with_shape_cache/1,
       &with_shape_log_collector/1,
@@ -112,7 +124,7 @@ defmodule Support.ComponentSetup do
       storage: ctx.storage,
       registry: ctx.registry,
       shape_cache: {Electric.ShapeCache, ctx.shape_cache_opts},
-      inspector: {Electric.Postgres.Inspector, ctx.pool},
+      inspector: ctx.inspector,
       long_poll_timeout: Access.get(overrides, :long_poll_timeout, 5_000),
       max_age: Access.get(overrides, :max_age, 60),
       stale_age: Access.get(overrides, :stale_age, 300),
