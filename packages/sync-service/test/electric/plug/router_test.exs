@@ -75,6 +75,29 @@ defmodule Electric.Plug.RouterTest do
       assert %{"root_table" => ["table not found"]} = Jason.decode!(conn.resp_body)
     end
 
+    @tag additional_fields: "num INTEGER NOT NULL"
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1', 1)"
+         ]
+    test "GET returns values in the snapshot and the rest of the log in the same format (as strings)",
+         %{opts: opts, db_conn: db_conn} do
+      conn = conn("GET", "/v1/shape/items?offset=-1") |> Router.call(opts)
+      assert [%{"value" => %{"num" => "1"}}, _] = Jason.decode!(conn.resp_body)
+
+      Postgrex.query!(
+        db_conn,
+        "INSERT INTO items VALUES (gen_random_uuid(), 'test value 2', 2)",
+        []
+      )
+
+      [shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+
+      conn =
+        conn("GET", "/v1/shape/items?shape_id=#{shape_id}&offset=0_0&live") |> Router.call(opts)
+
+      assert [%{"value" => %{"num" => "2"}}, _] = Jason.decode!(conn.resp_body)
+    end
+
     @tag with_sql: [
            "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
          ]

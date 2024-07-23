@@ -197,7 +197,7 @@ defmodule Electric.Utils do
     ~s|"#{escape_quotes(schema)}"."#{escape_quotes(table)}"|
   end
 
-  defp escape_quotes(text), do: :binary.replace(text, ~S|"|, ~S|""|, [:global])
+  def escape_quotes(text), do: :binary.replace(text, ~S|"|, ~S|""|, [:global])
 
   @doc """
   Applies either an anonymous function or a MFA tuple, prepending the given arguments

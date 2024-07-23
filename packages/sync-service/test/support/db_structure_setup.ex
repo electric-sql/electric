@@ -1,11 +1,12 @@
 defmodule Support.DbStructureSetup do
-  def with_basic_tables(%{db_conn: conn}) do
+  def with_basic_tables(%{db_conn: conn} = context) do
     Postgrex.query!(
       conn,
       """
       CREATE TABLE items (
         id UUID PRIMARY KEY,
         value TEXT NOT NULL
+        #{additional_fields(context)}
       )
       """,
       []
@@ -29,4 +30,7 @@ defmodule Support.DbStructureSetup do
   end
 
   def with_sql_execute(_), do: :ok
+
+  defp additional_fields(%{additional_fields: additional_fields}), do: ", " <> additional_fields
+  defp additional_fields(_), do: nil
 end
