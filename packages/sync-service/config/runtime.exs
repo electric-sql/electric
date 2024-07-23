@@ -10,13 +10,15 @@ if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
 
+service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
 instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
+version = Mix.Project.config()[:version]
 
 config :telemetry_poller, :default, period: 500
 
 config :opentelemetry,
   resource_detectors: [:otel_resource_env_var, :otel_resource_app_env],
-  resource: %{service: %{name: "electric", version: Mix.Project.config()[:version]}}
+  resource: %{service: %{name: service_name, version: version}, instance: %{id: instance_id}}
 
 otel_export = env!("OTEL_EXPORT", :string, nil)
 
