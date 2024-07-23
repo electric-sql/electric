@@ -76,12 +76,13 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule NewRecord do
-    defstruct [:relation, :record, :log_offset]
+    defstruct [:relation, :record, :log_offset, :key]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation(),
             record: Changes.record(),
-            log_offset: LogOffset.t()
+            log_offset: LogOffset.t(),
+            key: String.t()
           }
   end
 
@@ -91,6 +92,8 @@ defmodule Electric.Replication.Changes do
       :old_record,
       :record,
       :log_offset,
+      :key,
+      :old_key,
       tags: [],
       changed_columns: MapSet.new()
     ]
@@ -100,6 +103,8 @@ defmodule Electric.Replication.Changes do
             old_record: Changes.record() | nil,
             record: Changes.record(),
             log_offset: LogOffset.t(),
+            key: String.t(),
+            old_key: String.t(),
             tags: [Changes.tag()],
             changed_columns: MapSet.t()
           }
@@ -137,12 +142,13 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule DeletedRecord do
-    defstruct [:relation, :old_record, :log_offset, tags: []]
+    defstruct [:relation, :old_record, :log_offset, :key, tags: []]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation(),
             old_record: Changes.record(),
             log_offset: LogOffset.t(),
+            key: String.t(),
             tags: [Changes.tag()]
           }
   end
@@ -156,14 +162,26 @@ defmodule Electric.Replication.Changes do
           }
   end
 
-  # FIXME: this assumes PK is literally just "id" column
-  def build_key(%{relation: rel, record: record}) do
-    IO.iodata_to_binary([prefix_from_rel(rel), ?/, record |> Map.take(["id"]) |> Map.values()])
+  def build_key(rel, record, pk_cols) when is_list(pk_cols) do
+    IO.iodata_to_binary([prefix_from_rel(rel), ?/, record |> Map.take(pk_cols) |> Map.values()])
   end
 
-  def build_key(%{relation: rel, old_record: record}) do
-    IO.iodata_to_binary([prefix_from_rel(rel), ?/, record |> Map.take(["id"]) |> Map.values()])
+  def fill_key(%TruncatedRelation{} = tr, _pk), do: tr
+
+  def fill_key(%UpdatedRecord{old_record: old_record, record: new_record} = change, pk) do
+    old_key = build_key(change.relation, old_record, pk)
+    new_key = build_key(change.relation, new_record, pk)
+
+    if old_key == new_key,
+      do: %{change | key: new_key},
+      else: %{change | old_key: old_key, key: new_key}
   end
+
+  def fill_key(%NewRecord{relation: relation, record: record} = change, pk),
+    do: %{change | key: build_key(relation, record, pk)}
+
+  def fill_key(%DeletedRecord{relation: relation, old_record: old_record} = change, pk),
+    do: %{change | key: build_key(relation, old_record, pk)}
 
   defp prefix_from_rel({schema, table}), do: [?", schema, ?", ?., ?", table, ?"]
 

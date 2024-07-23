@@ -10,6 +10,7 @@ defmodule Electric.Plug.RouterTest do
   alias Support.DbStructureSetup
   alias Electric.Plug.Router
   alias Support.DbSetup
+  alias Electric.Replication.Changes
   import Support.ComponentSetup
   import Plug.Test
 
@@ -130,6 +131,84 @@ defmodule Electric.Plug.RouterTest do
 
       assert [%{"value" => %{"value" => "test value 2"}}, %{"headers" => _}] =
                Jason.decode!(conn.resp_body)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE foo (second TEXT NOT NULL, first TEXT NOT NULL, fourth TEXT, third TEXT NOT NULL, PRIMARY KEY (first, second, third))",
+           "INSERT INTO foo (first, second, third, fourth) VALUES ('a', 'b', 'c', 'd')"
+         ]
+    test "correctly snapshots and follows a table with a composite PK", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      # Request a snapshot
+      conn =
+        conn("GET", "/v1/shape/foo?offset=-1")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      assert [shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+
+      key =
+        Changes.build_key({"public", "foo"}, %{"first" => "a", "second" => "b", "third" => "c"}, [
+          "first",
+          "second",
+          "third"
+        ])
+
+      assert [
+               %{
+                 "headers" => %{"action" => "insert"},
+                 "key" => ^key,
+                 "offset" => @first_offset,
+                 "value" => %{
+                   "first" => "a",
+                   "second" => "b",
+                   "third" => "c",
+                   "fourth" => "d"
+                 }
+               },
+               %{"headers" => %{"control" => "up-to-date"}}
+             ] = Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape/foo?offset=#{@first_offset}&shape_id=#{shape_id}&live")
+          |> Router.call(opts)
+        end)
+
+      # insert a new thing
+      Postgrex.query!(
+        db_conn,
+        "INSERT INTO foo (first, second, third, fourth) VALUES ('e', 'f', 'g', 'h')",
+        []
+      )
+
+      conn = Task.await(task)
+
+      assert %{status: 200} = conn
+
+      key2 =
+        Changes.build_key({"public", "foo"}, %{"first" => "e", "second" => "f", "third" => "g"}, [
+          "first",
+          "second",
+          "third"
+        ])
+
+      assert [
+               %{
+                 "headers" => %{"action" => "insert"},
+                 "key" => ^key2,
+                 "offset" => _,
+                 "value" => %{
+                   "first" => "e",
+                   "second" => "f",
+                   "third" => "g",
+                   "fourth" => "h"
+                 }
+               },
+               %{"headers" => %{"control" => "up-to-date"}}
+             ] = Jason.decode!(conn.resp_body)
     end
   end
 end

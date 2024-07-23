@@ -336,7 +336,9 @@ defmodule Electric.ShapeCache do
       GenServer.cast(parent, {:snapshot_xmin_known, shape_id, xmin})
       {query, stream} = Querying.stream_initial_data(conn, shape)
 
-      Storage.make_new_snapshot!(shape_id, query, stream, storage)
+      # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
+      # that way it has the relation, but it is still missing the pk_cols
+      Storage.make_new_snapshot!(shape_id, shape, query, stream, storage)
     end)
   end
 

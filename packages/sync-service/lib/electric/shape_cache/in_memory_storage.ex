@@ -2,6 +2,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes
   alias Electric.Utils
+  alias Electric.Shapes.Shape
   use Agent
 
   @behaviour Electric.ShapeCache.Storage
@@ -81,12 +82,18 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     end
   end
 
-  @spec make_new_snapshot!(String.t(), Postgrex.Query.t(), Enumerable.t(), map()) :: :ok
-  def make_new_snapshot!(shape_id, query_info, data_stream, opts) do
+  @spec make_new_snapshot!(
+          String.t(),
+          Electric.Shapes.Shape.t(),
+          Postgrex.Query.t(),
+          Enumerable.t(),
+          map()
+        ) :: :ok
+  def make_new_snapshot!(shape_id, shape, query_info, data_stream, opts) do
     ets_table = opts.snapshot_ets_table
 
     data_stream
-    |> Stream.map(&__MODULE__.row_to_snapshot_entry(&1, shape_id, query_info))
+    |> Stream.map(&__MODULE__.row_to_snapshot_entry(&1, shape_id, shape, query_info))
     |> Stream.chunk_every(500)
     |> Stream.each(fn chunk -> :ets.insert(ets_table, chunk) end)
     |> Stream.run()
@@ -100,8 +107,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
     changes
     |> Enum.map(fn
-      %{relation: _} = change ->
-        key = Changes.build_key(change)
+      %{relation: _, key: key} = change ->
         value = Changes.to_json_value(change)
         action = Changes.get_action(change)
         offset = storage_offset(Changes.get_log_offset(change))
@@ -120,8 +126,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @doc false
-  def row_to_snapshot_entry(row, shape_id, %Postgrex.Query{
-        name: key_prefix,
+  def row_to_snapshot_entry(row, shape_id, shape, %Postgrex.Query{
         columns: columns,
         result_types: types
       }) do
@@ -133,10 +138,9 @@ defmodule Electric.ShapeCache.InMemoryStorage do
       end)
       |> Map.new()
 
-    # FIXME: This should not assume pk columns, but we're not querying PG for that info yet
-    pk = Map.fetch!(serialized_row, "id")
+    key = Changes.build_key(shape.root_table, serialized_row, Shape.pk(shape))
 
-    {{:data, shape_id, key_prefix <> "/" <> pk}, serialized_row}
+    {{:data, shape_id, key}, serialized_row}
   end
 
   defp snapshot_storage_item_to_log_item({_shape_id, snapshot_log_offset}, {key, value}) do

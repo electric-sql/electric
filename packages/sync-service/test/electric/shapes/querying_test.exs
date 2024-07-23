@@ -1,7 +1,7 @@
 defmodule Electric.Shapes.QueryingTest do
   use Support.TransactionCase, async: true
 
-  alias Electric.Postgres.Inspector
+  alias Electric.Postgres.Inspector.DirectInspector
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Querying
 
@@ -18,9 +18,9 @@ defmodule Electric.Shapes.QueryingTest do
     )
 
     Postgrex.query!(conn, "INSERT INTO items (value) VALUES (1), (2), (3), (4), (5)", [])
+    shape = Shape.new!("items", inspector: {DirectInspector, conn})
 
-    assert {query_info, stream} =
-             Querying.stream_initial_data(conn, %Shape{root_table: {"public", "items"}})
+    assert {query_info, stream} = Querying.stream_initial_data(conn, shape)
 
     assert %{columns: ["id", "value"]} = query_info
     assert [[_, "1"], [_, "2"], [_, "3"], [_, "4"], [_, "5"]] = Enum.to_list(stream)
@@ -39,7 +39,7 @@ defmodule Electric.Shapes.QueryingTest do
     )
 
     Postgrex.query!(conn, "INSERT INTO items (value) VALUES (1), (2), (3), (4), (5)", [])
-    shape = Shape.new!("items", where: "value > 3", inspector: {Inspector, conn})
+    shape = Shape.new!("items", where: "value > 3", inspector: {DirectInspector, conn})
 
     assert {query_info, stream} = Querying.stream_initial_data(conn, shape)
 
@@ -65,8 +65,9 @@ defmodule Electric.Shapes.QueryingTest do
       []
     )
 
-    assert {query_info, stream} =
-             Querying.stream_initial_data(conn, %Shape{root_table: {"public", "items"}})
+    shape = Shape.new!("items", inspector: {DirectInspector, conn})
+
+    assert {query_info, stream} = Querying.stream_initial_data(conn, shape)
 
     assert %{columns: ["id", ~s(col with " in it)]} = query_info
     assert [[_, "1"], [_, "2"], [_, "3"], [_, "4"], [_, "5"]] = Enum.to_list(stream)
