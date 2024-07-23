@@ -33,6 +33,8 @@ defmodule Electric.ShapeCache do
   alias Electric.Shapes.Querying
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
+  alias Electric.Telemetry.OpenTelemetry
+
   use GenServer
   @behaviour Electric.ShapeCacheBehaviour
 
@@ -288,16 +290,21 @@ defmodule Electric.ShapeCache do
 
       affected_tables = Shape.affected_tables(shape)
 
-      Task.start(fn ->
-        try do
-          Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [pool, affected_tables])
+      OpenTelemetry.async_fun(
+        "create_snapshot_task",
+        [],
+        fn ->
+          try do
+            Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [pool, affected_tables])
 
-          apply(create_snapshot_fn, [parent, shape_id, shape, pool, storage])
-          GenServer.cast(parent, {:snapshot_ready, shape_id})
-        rescue
-          error -> GenServer.cast(parent, {:snapshot_failed, shape_id, error, __STACKTRACE__})
+            apply(create_snapshot_fn, [parent, shape_id, shape, pool, storage])
+            GenServer.cast(parent, {:snapshot_ready, shape_id})
+          rescue
+            error -> GenServer.cast(parent, {:snapshot_failed, shape_id, error, __STACKTRACE__})
+          end
+          |> Task.start()
         end
-      end)
+      )
 
       add_waiter(state, shape_id, nil)
     else
@@ -321,25 +328,27 @@ defmodule Electric.ShapeCache do
   @doc false
   def query_in_readonly_txn(parent, shape_id, shape, db_pool, storage) do
     Postgrex.transaction(db_pool, fn conn ->
-      Postgrex.query!(
-        conn,
-        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
-        []
-      )
+      OpenTelemetry.with_span("snapshot_query_txn", [], fn ->
+        Postgrex.query!(
+          conn,
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+          []
+        )
 
-      %{rows: [[xmin]]} =
-        Postgrex.query!(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())", [])
+        %{rows: [[xmin]]} =
+          Postgrex.query!(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())", [])
 
-      # Enforce display settings *before* querying initial data to maintain consistent
-      # formatting between snapshot and live log entries.
-      Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
+        # Enforce display settings *before* querying initial data to maintain consistent
+        # formatting between snapshot and live log entries.
+        Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
 
-      GenServer.cast(parent, {:snapshot_xmin_known, shape_id, xmin})
-      {query, stream} = Querying.stream_initial_data(conn, shape)
+        GenServer.cast(parent, {:snapshot_xmin_known, shape_id, xmin})
+        {query, stream} = Querying.stream_initial_data(conn, shape)
 
-      # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
-      # that way it has the relation, but it is still missing the pk_cols
-      Storage.make_new_snapshot!(shape_id, shape, query, stream, storage)
+        # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
+        # that way it has the relation, but it is still missing the pk_cols
+        Storage.make_new_snapshot!(shape_id, shape, query, stream, storage)
+      end)
     end)
   end
 

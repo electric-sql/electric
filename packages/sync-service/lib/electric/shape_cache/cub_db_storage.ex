@@ -1,6 +1,7 @@
 defmodule Electric.ShapeCache.CubDbStorage do
   alias Electric.LogItems
   alias Electric.Replication.LogOffset
+  alias Electric.Telemetry.OpenTelemetry
   @behaviour Electric.ShapeCache.Storage
 
   @snapshot_key_type 0
@@ -115,17 +116,19 @@ defmodule Electric.ShapeCache.CubDbStorage do
   end
 
   def make_new_snapshot!(shape_id, shape, query_info, data_stream, opts) do
-    data_stream
-    |> LogItems.from_snapshot_row_stream(@snapshot_offset, shape, query_info)
-    |> Stream.with_index()
-    |> Stream.map(fn {log_item, index} ->
-      {snapshot_key(shape_id, index), Jason.encode!(log_item)}
-    end)
-    |> Stream.chunk_every(500)
-    |> Stream.each(fn [{key, _} | _] = chunk -> CubDB.put(opts.db, key, chunk) end)
-    |> Stream.run()
+    OpenTelemetry.with_span("make_new_snapshot", [], fn ->
+      data_stream
+      |> LogItems.from_snapshot_row_stream(@snapshot_offset, shape, query_info)
+      |> Stream.with_index()
+      |> Stream.map(fn {log_item, index} ->
+        {snapshot_key(shape_id, index), Jason.encode!(log_item)}
+      end)
+      |> Stream.chunk_every(500)
+      |> Stream.each(fn [{key, _} | _] = chunk -> CubDB.put(opts.db, key, chunk) end)
+      |> Stream.run()
 
-    CubDB.put(opts.db, snapshot_meta_key(shape_id), 0)
+      CubDB.put(opts.db, snapshot_meta_key(shape_id), 0)
+    end)
   end
 
   def append_to_log!(shape_id, log_items, opts) do

@@ -1,6 +1,7 @@
 defmodule Electric.ShapeCache.InMemoryStorage do
   alias Electric.LogItems
   alias Electric.Replication.LogOffset
+  alias Electric.Telemetry.OpenTelemetry
   use Agent
 
   @behaviour Electric.ShapeCache.Storage
@@ -87,19 +88,21 @@ defmodule Electric.ShapeCache.InMemoryStorage do
           map()
         ) :: :ok
   def make_new_snapshot!(shape_id, shape, query_info, data_stream, opts) do
-    ets_table = opts.snapshot_ets_table
+    OpenTelemetry.with_span("make_new_snapshot", [], fn ->
+      ets_table = opts.snapshot_ets_table
 
-    data_stream
-    |> LogItems.from_snapshot_row_stream(@snapshot_offset, shape, query_info)
-    |> Stream.map(fn log_item ->
-      {{:data, shape_id, log_item.key}, Jason.encode!(log_item)}
+      data_stream
+      |> LogItems.from_snapshot_row_stream(@snapshot_offset, shape, query_info)
+      |> Stream.map(fn log_item ->
+        {{:data, shape_id, log_item.key}, Jason.encode!(log_item)}
+      end)
+      |> Stream.chunk_every(500)
+      |> Stream.each(fn chunk -> :ets.insert(ets_table, chunk) end)
+      |> Stream.run()
+
+      :ets.insert(ets_table, {{:metadata, shape_id}, 0})
+      :ok
     end)
-    |> Stream.chunk_every(500)
-    |> Stream.each(fn chunk -> :ets.insert(ets_table, chunk) end)
-    |> Stream.run()
-
-    :ets.insert(ets_table, {{:metadata, shape_id}, 0})
-    :ok
   end
 
   def append_to_log!(shape_id, log_items, opts) do
