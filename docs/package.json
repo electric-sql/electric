@@ -1,14 +1,16 @@
 {
   "name": "@electric-sql/docs",
   "scripts": {
+    "api:generate": "redocly build-docs ./electric-api.yaml --output=./public/openapi.html",
+    "api:watch": "nodemon -w ./ -x \"npm run api:generate\" -e \"*.yaml\"",
+    "docs:build": "npm run api:generate && vitepress build .",
     "docs:dev": "vitepress dev .",
-    "docs:build": "vitepress build .",
-    "docs:preview": "vitepress preview .",
-    "api:generate": "redocly build-docs ./electric-api.yaml --output=./dist/electric-api.html"
+    "docs:preview": "vitepress preview ."
   },
   "devDependencies": {
+    "@redocly/cli": "^1.18.0",
+    "nodemon": "^3.1.4",
     "vitepress": "^1.3.1",
-    "vue-tweet": "^2.3.1",
-    "@redocly/cli": "^1.18.0"
+    "vue-tweet": "^2.3.1"
   }
 }
