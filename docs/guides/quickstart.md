@@ -129,7 +129,7 @@ lic\".\"foo\"/4","headers":{"action":"insert"}},{"offset":"0_0","value":{"id":5,
 ```
 
 ::: info What are those messages in the response data?
-When you request shape data using the HTTP API you're actually requesting entries from a log of database operations affecting the data in the shape. This is called the **Shape Log**.
+When you request shape data using the HTTP API you're actually requesting entries from a log of database operations affecting the data in the shape. This is called the [Shape Log](/api/http#shape-log).
 
 The `offset` that you see in the messages and provide as the `?offset=...` query parameter in your request identifies a position in the log. The messages you see in the response are shape log entries (the ones with `value`s and `action` headers) and control messages (the ones with `control` headers).
 :::

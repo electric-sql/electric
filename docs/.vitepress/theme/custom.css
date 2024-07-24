@@ -112,3 +112,7 @@ iframe {
 .vp-doc blockquote {
   margin: 25px 10px 30px;
 }
+
+.custom-block-no-title {
+  margin-bottom: 10px !important;
+}
