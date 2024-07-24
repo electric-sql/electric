@@ -1,5 +1,6 @@
 docs/.vitepress/dist
 docs/.vitepress/cache
+docs/public/openapi.html
 json_files
 file.jsonl
 node_modules
