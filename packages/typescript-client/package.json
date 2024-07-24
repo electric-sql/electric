@@ -2,19 +2,23 @@
   "name": "@electric-sql/next",
   "version": "0.0.7",
   "description": "Postgres everywhere - your data, in sync, wherever you need it.",
-  "main": "dist/index.js",
+  "type": "module",
+  "main": "dist/cjs/index.cjs",
+  "module": "dist/index.legacy-esm.js",
   "types": "dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "test": "npx vitest",
-    "typecheck": "tsc -p tsconfig.json",
-    "build": "shx rm -rf dist && concurrently \"tsup\" \"tsc -p tsconfig.build.json\"",
-    "prepublishOnly": "pnpm run build",
-    "stylecheck": "eslint . --quiet",
-    "format": "eslint . --fix"
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/cjs/index.cjs"
+    }
   },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "sideEffects": false,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/electric-sql/electric-next.git"
@@ -48,14 +52,18 @@
   "optionalDependencies": {
     "@rollup/rollup-darwin-arm64": "^4.18.1"
   },
-  "exports": {
-    ".": "./dist/index.js"
-  },
   "typesVersions": {
     "*": {
       "*": [
         "./dist/index.d.ts"
       ]
     }
+  },
+  "scripts": {
+    "test": "npx vitest",
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "shx rm -rf dist && concurrently \"tsup\" \"tsc -p tsconfig.build.json\"",
+    "stylecheck": "eslint . --quiet",
+    "format": "eslint . --fix"
   }
 }
