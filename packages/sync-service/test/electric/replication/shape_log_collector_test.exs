@@ -1,6 +1,7 @@
 defmodule Electric.Replication.ShapeLogCollectorTest do
   use ExUnit.Case, async: true
   import Mox
+  import Support.StubInspector, only: [{:stub_inspector, 1}]
 
   alias Electric.Replication.Eval.Parser
   alias Electric.Shapes.Shape
@@ -135,6 +136,41 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     test "handles truncate without appending to log", %{server: server} do
       shape_id = "shape1"
       shape = %Shape{root_table: {"public", "test_table"}}
+      xmin = 100
+      xid = 150
+      lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
+
+      # The fact that we don't expect `append_to_log` is enough to prove that it wasn't called.
+      MockShapeCache
+      |> expect(:list_active_shapes, fn _ -> [{shape_id, shape, xmin}] end)
+      |> expect(:handle_truncate, fn _, ^shape_id -> :ok end)
+      |> allow(self(), server)
+
+      MockInspector
+      |> expect(:load_column_info, fn {"public", "test_table"}, _ ->
+        {:ok, [%{pk_position: 0, name: "id"}]}
+      end)
+      |> allow(self(), server)
+
+      txn =
+        %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.TruncatedRelation{
+          relation: {"public", "test_table"}
+        })
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, server)
+    end
+
+    test "handles truncate when shape has a where clause", %{server: server} do
+      shape_id = "shape1"
+
+      shape =
+        Shape.new!("test_table",
+          where: "id LIKE 'test'",
+          inspector: stub_inspector([%{pk_position: 0, name: "id"}])
+        )
+
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")

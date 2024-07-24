@@ -109,6 +109,7 @@ defmodule Electric.Shapes.Shape do
       do: []
 
   def convert_change(%__MODULE__{where: nil}, change), do: [change]
+  def convert_change(%__MODULE__{where: _}, %Changes.TruncatedRelation{} = change), do: [change]
 
   def convert_change(%__MODULE__{where: where}, change)
       when is_struct(change, Changes.NewRecord)
