@@ -1,5 +1,11 @@
 # @electric-sql/next
 
+## 0.0.8
+
+### Patch Changes
+
+- fedf95c: fix: make packaging work in Remix, etc.
+
 ## 0.0.7
 
 ### Patch Changes
