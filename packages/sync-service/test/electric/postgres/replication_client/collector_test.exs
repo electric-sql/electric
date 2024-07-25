@@ -265,8 +265,8 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
     {completed_txn, _updated_collector} = Collector.handle_message(commit_msg, collector)
 
     log_offset_1 = LogOffset.new(@test_lsn, 0)
-    log_offset_2 = LogOffset.increment(log_offset_1)
-    log_offset_3 = LogOffset.increment(log_offset_2)
+    log_offset_2 = LogOffset.new(@test_lsn, 2)
+    log_offset_3 = LogOffset.new(@test_lsn, 4)
 
     assert [
              %NewRecord{

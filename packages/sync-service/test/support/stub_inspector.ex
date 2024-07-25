@@ -1,7 +1,7 @@
 defmodule Support.StubInspector do
   @behaviour Electric.Postgres.Inspector
 
-  def stub_inspector(opts), do: {__MODULE__, opts}
+  def new(opts), do: {__MODULE__, opts}
 
   @impl true
   def load_column_info(_relation, column_list) when is_list(column_list) do

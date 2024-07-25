@@ -41,6 +41,7 @@ describe(`Shape`, () => {
     expectedValue.set(`${issuesTableKey}/${id}`, {
       id: id,
       title: `test title`,
+      priority: `10`,
     })
 
     expect(map).toEqual(expectedValue)
@@ -50,6 +51,7 @@ describe(`Shape`, () => {
     issuesTableUrl,
     insertIssues,
     deleteIssue,
+    updateIssue,
     issuesTableKey,
     aborter,
   }) => {
@@ -67,6 +69,7 @@ describe(`Shape`, () => {
     expectedValue.set(`${issuesTableKey}/${id}`, {
       id: id,
       title: `test title`,
+      priority: `10`,
     })
     expect(map).toEqual(expectedValue)
 
@@ -77,12 +80,15 @@ describe(`Shape`, () => {
     const [id2] = await insertIssues({ title: `other title` })
     const [id3] = await insertIssues({ title: `other title2` })
     await deleteIssue({ id: id3, title: `other title2` })
+    // Test an update too because we're sending patches that should be correctly merged in
+    await updateIssue({ id: id2, title: `new title` })
     await sleep(100) // some time for electric to catch up
     await hasNotified
 
     expectedValue.set(`${issuesTableKey}/${id2}`, {
       id: id2,
-      title: `other title`,
+      title: `new title`,
+      priority: `10`,
     })
     expect(shape.valueSync).toEqual(expectedValue)
 
@@ -105,12 +111,14 @@ describe(`Shape`, () => {
     expectedValue1.set(`${issuesTableKey}/${id1}`, {
       id: id1,
       title: `foo1`,
+      priority: `10`,
     })
 
     const expectedValue2 = new Map()
     expectedValue2.set(`${issuesTableKey}/${id2}`, {
       id: id2,
       title: `foo2`,
+      priority: `10`,
     })
 
     let requestsMade = 0
@@ -180,10 +188,12 @@ describe(`Shape`, () => {
     expectedValue.set(`${issuesTableKey}/${id}`, {
       id: id,
       title: `test title`,
+      priority: `10`,
     })
     expectedValue.set(`${issuesTableKey}/${id2}`, {
       id: id2,
       title: `other title`,
+      priority: `10`,
     })
     expect(value).toEqual(expectedValue)
 

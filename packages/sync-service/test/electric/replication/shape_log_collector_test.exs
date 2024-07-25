@@ -1,8 +1,8 @@
 defmodule Electric.Replication.ShapeLogCollectorTest do
   use ExUnit.Case, async: true
   import Mox
-  import Support.StubInspector, only: [{:stub_inspector, 1}]
 
+  alias Support.StubInspector
   alias Electric.Replication.Eval.Parser
   alias Electric.Shapes.Shape
   alias Electric.Postgres.Lsn
@@ -37,10 +37,18 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     %{server: pid, registry: registry_name}
   end
 
+  @shape Shape.new!("public.test_table",
+           inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+         )
+
+  @other_shape Shape.new!("public.other_table",
+                 inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+               )
+
   describe "store_transaction/2" do
     test "appends to log when xid >= xmin", %{server: server} do
       shape_id = "shape1"
-      shape = %Shape{root_table: {"public", "test_table"}}
+      shape = @shape
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")
@@ -48,8 +56,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       MockShapeCache
       |> expect(:list_active_shapes, 2, fn _ -> [{shape_id, shape, xmin}] end)
-      |> expect(:append_to_log!, fn ^shape_id, ^last_log_offset, ^xmin, _, _ -> :ok end)
-      |> expect(:append_to_log!, fn ^shape_id, ^last_log_offset, ^xid, _, _ -> :ok end)
+      |> expect(:append_to_log!, 2, fn ^shape_id, ^last_log_offset, _, _ -> :ok end)
       |> allow(self(), server)
 
       MockInspector
@@ -74,7 +81,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     test "doesn't append to log when xid < xmin", %{server: server} do
       shape_id = "shape1"
-      shape = %Shape{root_table: {"public", "test_table"}}
+      shape = @shape
       xmin = 200
       xid = 150
       lsn = Lsn.from_string("0/10")
@@ -135,7 +142,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     test "handles truncate without appending to log", %{server: server} do
       shape_id = "shape1"
-      shape = %Shape{root_table: {"public", "test_table"}}
+      shape = @shape
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")
@@ -168,7 +175,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       shape =
         Shape.new!("test_table",
           where: "id LIKE 'test'",
-          inspector: stub_inspector([%{pk_position: 0, name: "id"}])
+          inspector: StubInspector.new([%{pk_position: 0, name: "id"}])
         )
 
       xmin = 100
@@ -199,7 +206,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     test "notifies listeners of new changes", %{server: server, registry: registry} do
       shape_id = "shape1"
-      shape = %Shape{root_table: {"public", "test_table"}}
+      shape = @shape
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")
@@ -207,7 +214,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       MockShapeCache
       |> expect(:list_active_shapes, fn _ -> [{shape_id, shape, xmin}] end)
-      |> expect(:append_to_log!, fn ^shape_id, ^last_log_offset, ^xid, _, _ -> :ok end)
+      |> expect(:append_to_log!, fn ^shape_id, ^last_log_offset, _, _ -> :ok end)
       |> allow(self(), server)
 
       MockInspector
@@ -241,16 +248,16 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       MockShapeCache
       |> expect(:list_active_shapes, fn _ ->
         [
-          {shape1, %Shape{root_table: {"public", "test_table"}}, xmin},
-          {shape2, %Shape{root_table: {"public", "other_table"}}, xmin}
+          {shape1, @shape, xmin},
+          {shape2, @other_shape, xmin}
         ]
       end)
-      |> expect(:append_to_log!, fn ^shape1, ^last_log_offset, ^xid, [change], _ ->
-        assert change.record["id"] == "1"
+      |> expect(:append_to_log!, fn ^shape1, ^last_log_offset, [{_, _, _, record, _}], _ ->
+        assert record["id"] == "1"
         :ok
       end)
-      |> expect(:append_to_log!, fn ^shape2, ^last_log_offset, ^xid, [change], _ ->
-        assert change.record["id"] == "2"
+      |> expect(:append_to_log!, fn ^shape2, ^last_log_offset, [{_, _, _, record, _}], _ ->
+        assert record["id"] == "2"
         :ok
       end)
       |> allow(self(), server)

@@ -162,6 +162,10 @@ defmodule Electric.Replication.Changes do
           }
   end
 
+  def build_key(rel, record, []) do
+    IO.iodata_to_binary([prefix_from_rel(rel), ?/, Map.values(record)])
+  end
+
   def build_key(rel, record, pk_cols) when is_list(pk_cols) do
     IO.iodata_to_binary([prefix_from_rel(rel), ?/, record |> Map.take(pk_cols) |> Map.values()])
   end
@@ -184,37 +188,6 @@ defmodule Electric.Replication.Changes do
     do: %{change | key: build_key(relation, old_record, pk)}
 
   defp prefix_from_rel({schema, table}), do: [?", schema, ?", ?., ?", table, ?"]
-
-  def to_json_value(%NewRecord{record: record}), do: record
-  def to_json_value(%UpdatedRecord{record: record}), do: record
-  def to_json_value(%DeletedRecord{}), do: nil
-
-  def get_action(%NewRecord{}), do: "insert"
-  def get_action(%UpdatedRecord{}), do: "update"
-  def get_action(%DeletedRecord{}), do: "delete"
-
-  @doc """
-  ## Examples
-
-      iex> get_log_offset(%NewRecord{log_offset: {1, 2}})
-      {1, 2}
-
-      iex> get_log_offset(%UpdatedRecord{log_offset: {1, 2}})
-      {1, 2}
-
-      iex> get_log_offset(%DeletedRecord{log_offset: {1, 2}})
-      {1, 2}
-
-      iex> get_log_offset(%TruncatedRelation{log_offset: {1, 2}})
-      {1, 2}
-
-      iex> get_log_offset(%NewRecord{})
-      ** (FunctionClauseError) no function clause matching in Electric.Replication.Changes.get_log_offset/1
-  """
-  def get_log_offset(%NewRecord{log_offset: offset}) when offset != nil, do: offset
-  def get_log_offset(%UpdatedRecord{log_offset: offset}) when offset != nil, do: offset
-  def get_log_offset(%DeletedRecord{log_offset: offset}) when offset != nil, do: offset
-  def get_log_offset(%TruncatedRelation{log_offset: offset}) when offset != nil, do: offset
 
   @doc """
   Convert an UpdatedRecord into the corresponding NewRecord or DeletedRecord

@@ -102,16 +102,13 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     :ok
   end
 
-  def append_to_log!(shape_id, xid, changes, opts) do
+  def append_to_log!(shape_id, changes, opts) do
     ets_table = opts.log_ets_table
 
     changes
-    |> Enum.map(fn
-      %{relation: _, key: key} = change ->
-        value = Changes.to_json_value(change)
-        action = Changes.get_action(change)
-        offset = storage_offset(Changes.get_log_offset(change))
-        {{shape_id, offset}, xid, key, action, value}
+    |> Enum.map(fn {offset, key, action, value, header_data} ->
+      offset = storage_offset(offset)
+      {{shape_id, offset}, key, action, value, header_data}
     end)
     |> then(&:ets.insert(ets_table, &1))
 
@@ -144,15 +141,15 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   defp snapshot_storage_item_to_log_item({_shape_id, snapshot_log_offset}, {key, value}) do
-    %{key: key, value: value, headers: %{action: "insert"}, offset: snapshot_log_offset}
+    %{key: key, value: value, headers: %{action: :insert}, offset: snapshot_log_offset}
   end
 
   # Turns a stored log item into a log item
   # by modifying the turning the tuple offset
   # back into a LogOffset value.
-  defp log_storage_item_to_log_item({_shape_id, position}, {_, xid, key, action, value}) do
+  defp log_storage_item_to_log_item({_shape_id, position}, {_, key, action, value, header_data}) do
     offset = LogOffset.new(position)
-    %{key: key, value: value, headers: %{action: action, txid: xid}, offset: offset}
+    %{key: key, value: value, headers: Map.put(header_data, :action, action), offset: offset}
   end
 
   # Turns a LogOffset into a tuple representation

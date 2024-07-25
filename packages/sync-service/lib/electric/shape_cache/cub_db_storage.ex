@@ -127,14 +127,10 @@ defmodule Electric.ShapeCache.CubDbStorage do
     CubDB.put(opts.db, snapshot_meta_key(shape_id), 0)
   end
 
-  def append_to_log!(shape_id, xid, changes, opts) do
+  def append_to_log!(shape_id, changes, opts) do
     changes
-    |> Enum.map(fn
-      %{relation: _, key: change_key} = change ->
-        value = Changes.to_json_value(change)
-        action = Changes.get_action(change)
-        offset = Changes.get_log_offset(change)
-        {log_key(shape_id, offset), {xid, change_key, action, value}}
+    |> Enum.map(fn {offset, key, action, value, header_data} ->
+      {log_key(shape_id, offset), {key, action, value, header_data}}
     end)
     |> then(&CubDB.put_multi(opts.db, &1))
 
@@ -206,13 +202,16 @@ defmodule Electric.ShapeCache.CubDbStorage do
 
     change_key = Changes.build_key(shape.root_table, serialized_row, Shape.pk(shape))
 
-    {snapshot_key(shape_id, index), {_xid = nil, change_key, "insert", serialized_row}}
+    {snapshot_key(shape_id, index), {change_key, :insert, serialized_row, %{}}}
   end
 
-  defp storage_item_to_log_item({key, {xid, change_key, action, value}}) do
-    %{key: change_key, value: value, headers: headers(action, xid), offset: offset(key)}
+  defp storage_item_to_log_item({key, {change_key, action, value, header_data}})
+       when is_binary(change_key) do
+    %{
+      key: change_key,
+      value: value,
+      headers: Map.put(header_data, :action, action),
+      offset: offset(key)
+    }
   end
-
-  defp headers(action, nil = _xid), do: %{action: action}
-  defp headers(action, xid), do: %{action: action, txid: xid}
 end

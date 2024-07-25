@@ -138,7 +138,7 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     {%Transaction{
        txn
        | changes: Enum.reverse(txn.changes),
-         last_log_offset: LogOffset.new(txn.lsn, max(0, state.tx_op_index - 1))
+         last_log_offset: LogOffset.new(txn.lsn, max(0, state.tx_op_index - 2))
      }, %__MODULE__{state | transaction: nil, tx_op_index: nil}}
   end
 
@@ -162,6 +162,8 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
 
   @spec prepend_change(Changes.change(), t()) :: t()
   defp prepend_change(change, %__MODULE__{transaction: txn, tx_op_index: tx_op_index} = state) do
-    %{state | transaction: Transaction.prepend_change(txn, change), tx_op_index: tx_op_index + 1}
+    # We're adding 2 to the op index because it's possible we're splitting some of the operations before storage.
+    # This gives us headroom for splitting any operation into 2.
+    %{state | transaction: Transaction.prepend_change(txn, change), tx_op_index: tx_op_index + 2}
   end
 end
