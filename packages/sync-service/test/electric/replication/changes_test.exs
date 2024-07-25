@@ -4,7 +4,6 @@ defmodule Electric.Replication.ChangesTest do
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Replication.Changes.DeletedRecord
-  alias Electric.Replication.Changes.TruncatedRelation
 
   doctest Electric.Replication.Changes, import: true
 

@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { ArgumentsType, assert, describe, expect, inject, vi } from 'vitest'
 import { ShapeStream } from '../src/client'
 import { Message, Offset } from '../src/types'
-import { testWithIssuesTable as it } from './support/test-context'
+import { IssueRow, testWithIssuesTable as it } from './support/test-context'
 import * as h from './support/test-helpers'
 
 const BASE_URL = inject(`baseUrl`)
@@ -134,7 +134,7 @@ describe(`HTTP Sync`, () => {
   }) => {
     // Add an initial row.
     const uuid = uuidv4()
-    console.log(await insertIssues({ id: uuid, title: `foo + ${uuid}` }))
+    await insertIssues({ id: uuid, title: `foo + ${uuid}` })
 
     // Get initial data
     const shapeData = new Map()
@@ -195,12 +195,14 @@ describe(`HTTP Sync`, () => {
       }
     })
 
+    // Only initial insert has the full row, the update contains only PK & changed columns.
+    // This test doesn't merge in updates, so we don't have `priority` on the row.
     expect(shapeData).toEqual(
       new Map([
         [`${issuesTableKey}/${rowId}`, { id: rowId, title: `foo1` }],
         [
           `${issuesTableKey}/${secondRowId}`,
-          { id: secondRowId, title: `foo2` },
+          { id: secondRowId, title: `foo2`, priority: `10` },
         ],
       ])
     )
@@ -375,7 +377,6 @@ describe(`HTTP Sync`, () => {
     const midOffset = midMessage.offset
     const shapeId = res.headers.get(`x-electric-shape-id`)
     const etag = res.headers.get(`etag`)
-    console.log({ etag })
     assert(etag !== null, `Response should have etag header`)
 
     const etagValidation = await fetch(
@@ -395,7 +396,6 @@ describe(`HTTP Sync`, () => {
     )
     const catchupEtag = catchupEtagRes.headers.get(`etag`)
     assert(catchupEtag !== null, `Response should have catchup etag header`)
-    console.log({ catchupEtag })
 
     // Catch-up offsets should also use the same etag as they're
     // also working through the end of the current log.
@@ -452,6 +452,7 @@ describe(`HTTP Sync`, () => {
   })
 
   it(`should detect shape deprecation and restart syncing`, async ({
+    expect,
     insertIssues,
     issuesTableUrl,
     aborter,
@@ -485,52 +486,75 @@ describe(`HTTP Sync`, () => {
       fetchClient: fetchWrapper,
     })
 
+    expect.assertions(11)
+
     let originalShapeId: string | undefined
     let upToDateReachedCount = 0
-    await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
-      // shapeData.set(msg.key, msg.value)
-      if (msg.headers?.[`control`] === `up-to-date`) {
-        upToDateReachedCount++
-        if (upToDateReachedCount === 1) {
-          // upon reaching up to date initially, we have one
-          // response with the initial data
-          expect(statusCodesReceived).toHaveLength(1)
-          expect(statusCodesReceived[0]).toBe(200)
-        } else if (upToDateReachedCount === 2) {
-          // the next up to date message should have had
-          // a 409 interleaved before it that instructed the
-          // client to go and fetch data from scratch
-          expect(statusCodesReceived).toHaveLength(3)
-          expect(statusCodesReceived[1]).toBe(409)
-          expect(statusCodesReceived[2]).toBe(200)
-          return res()
+    await h.forEachMessage<IssueRow>(
+      issueStream,
+      aborter,
+      async (res, msg, nth) => {
+        // shapeData.set(msg.key, msg.value)
+        if (msg.headers?.[`control`] === `up-to-date`) {
+          upToDateReachedCount++
+          if (upToDateReachedCount === 1) {
+            // upon reaching up to date initially, we have one
+            // response with the initial data
+            expect(statusCodesReceived).toHaveLength(1)
+            expect(statusCodesReceived[0]).toBe(200)
+          } else if (upToDateReachedCount === 2) {
+            // the next up to date message should have had
+            // a 409 interleaved before it that instructed the
+            // client to go and fetch data from scratch
+            expect(statusCodesReceived).toHaveLength(3)
+            expect(statusCodesReceived[1]).toBe(409)
+            expect(statusCodesReceived[2]).toBe(200)
+            return res()
+          }
+          return
         }
-        return
-      }
 
-      if (!(`key` in msg)) return
+        if (!(`key` in msg)) return
 
-      switch (nth) {
-        case 0:
-          // first message is the initial row
-          expect(msg.value).toEqual({ id: rowId, title: `foo1` })
-          expect(issueStream.shapeId).to.exist
-          originalShapeId = issueStream.shapeId
-          break
-        case 1:
-          // second message is the initial row again as it is a new shape
-          // with different shape id
-          expect(msg.value).toEqual({ id: rowId, title: `foo1` })
-          expect(issueStream.shapeId).not.toBe(originalShapeId)
-          break
-        case 2:
-          // should get the second row as well with the new shape ID
-          expect(msg.value).toEqual({ id: secondRowId, title: `foo2` })
-          expect(issueStream.shapeId).not.toBe(originalShapeId)
-          break
-        default:
-          throw new Error(`Received more messages than expected`)
+        switch (nth) {
+          case 0:
+            // first message is the initial row
+            expect(msg.value).toEqual({
+              id: rowId,
+              title: `foo1`,
+              priority: `10`,
+            })
+            expect(issueStream.shapeId).to.exist
+            originalShapeId = issueStream.shapeId
+            break
+          case 1:
+          case 2:
+            // Second snapshot queries PG without `ORDER BY`, so check that it's generally correct.
+            // We're checking that both messages arrive by using `expect.assertions(N)` above.
+
+            if (msg.value.id == rowId) {
+              // message is the initial row again as it is a new shape
+              // with different shape id
+              expect(msg.value).toEqual({
+                id: rowId,
+                title: `foo1`,
+                priority: `10`,
+              })
+              expect(issueStream.shapeId).not.toBe(originalShapeId)
+            } else {
+              // should get the second row as well with the new shape ID
+              expect(msg.value).toEqual({
+                id: secondRowId,
+                title: `foo2`,
+                priority: `10`,
+              })
+              expect(issueStream.shapeId).not.toBe(originalShapeId)
+            }
+            break
+          default:
+            expect.unreachable(`Received more messages than expected`)
+        }
       }
-    })
+    )
   })
 })

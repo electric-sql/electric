@@ -492,18 +492,22 @@ export class Shape {
 
     messages.forEach((message) => {
       if (`key` in message) {
-        switch (message.headers?.[`action`]) {
+        dataMayHaveChanged = [`insert`, `update`, `delete`].includes(
+          message.headers.action
+        )
+
+        switch (message.headers.action) {
           case `insert`:
-          case `update`:
             this.data.set(message.key, message.value)
-            dataMayHaveChanged = true
-
             break
-
+          case `update`:
+            this.data.set(message.key, {
+              ...this.data.get(message.key)!,
+              ...message.value,
+            })
+            break
           case `delete`:
             this.data.delete(message.key)
-            dataMayHaveChanged = true
-
             break
         }
       }

@@ -16,8 +16,8 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
     JOIN pg_namespace ON relnamespace = pg_namespace.oid
     JOIN pg_attribute ON attrelid = pg_class.oid AND attnum >= 0
     JOIN pg_type ON atttypid = pg_type.oid
-    JOIN pg_index ON indrelid = pg_class.oid AND indisprimary
-    WHERE relname = $1 AND nspname = $2
+    LEFT JOIN pg_index ON indrelid = pg_class.oid AND indisprimary
+    WHERE relname = $1 AND nspname = $2 AND relkind = 'r'
     ORDER BY pg_class.oid, attnum
     """
 

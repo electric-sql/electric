@@ -2,9 +2,9 @@ defmodule Electric.ShapeCacheBehaviour do
   @moduledoc """
   Behaviour defining the ShapeCache functions to be used in mocks
   """
+  alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
-  alias Electric.Replication.Changes
 
   @type shape_id :: String.t()
   @type shape_def :: Shape.t()
@@ -13,8 +13,7 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback append_to_log!(
               shape_id(),
               LogOffset.t(),
-              non_neg_integer(),
-              [Changes.change()],
+              [Storage.prepared_change()],
               keyword()
             ) :: :ok
 
@@ -34,7 +33,6 @@ defmodule Electric.ShapeCache do
   alias Electric.Shapes.Querying
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
-  alias Electric.Replication.Changes
   use GenServer
   @behaviour Electric.ShapeCacheBehaviour
 
@@ -87,12 +85,11 @@ defmodule Electric.ShapeCache do
   @spec append_to_log!(
           shape_id(),
           LogOffset.t(),
-          non_neg_integer(),
-          [Changes.change()],
+          [Storage.prepared_change()],
           keyword()
         ) :: :ok
-  def append_to_log!(shape_id, latest_offset, xid, relevant_changes, opts) do
-    :ok = Storage.append_to_log!(shape_id, xid, relevant_changes, opts[:storage])
+  def append_to_log!(shape_id, latest_offset, relevant_changes, opts) do
+    :ok = Storage.append_to_log!(shape_id, relevant_changes, opts[:storage])
 
     update_shape_latest_offset(shape_id, latest_offset, opts)
   end

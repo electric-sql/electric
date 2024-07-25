@@ -5,7 +5,7 @@ import { inject, test } from 'vitest'
 import { makePgClient } from './test-helpers'
 import { FetchError } from '../../src/client'
 
-export type IssueRow = { id: string; title: string }
+export type IssueRow = { id: string; title: string; priority?: string }
 export type GeneratedIssueRow = { id?: string; title: string }
 export type UpdateIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type DeleteIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
@@ -71,7 +71,8 @@ export const testWithIssuesTable = testWithDbClient.extend<{
     DROP TABLE IF EXISTS ${tableName};
     CREATE TABLE ${tableName} (
       id UUID PRIMARY KEY,
-      title TEXT NOT NULL
+      title TEXT NOT NULL,
+      priority INTEGER NOT NULL
     );
     COMMENT ON TABLE ${tableName} IS 'Created for ${task.file?.name.replace(/'/g, `\``) ?? `unknown`} - ${task.name.replace(`'`, `\``)}';
   `)
@@ -103,10 +104,12 @@ export const testWithIssuesTable = testWithDbClient.extend<{
     ),
   insertIssues: ({ issuesTableSql, dbClient }, use) =>
     use(async (...rows) => {
-      const placeholders = rows.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`)
+      const placeholders = rows.map(
+        (_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`
+      )
       const { rows: rows_1 } = await dbClient.query(
-        `INSERT INTO ${issuesTableSql} (id, title) VALUES ${placeholders} RETURNING id`,
-        rows.flatMap((x) => [x.id ?? uuidv4(), x.title])
+        `INSERT INTO ${issuesTableSql} (id, title, priority) VALUES ${placeholders} RETURNING id`,
+        rows.flatMap((x) => [x.id ?? uuidv4(), x.title, 10])
       )
       return rows_1.map((x) => x.id)
     }),
