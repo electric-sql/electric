@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 0.2.1
+
+### Patch Changes
+
+- 72ba8cc: fix: restructure generated keys to avoid possible colisions on multi-pk tables
+- 715d2cb: Include schema information in HTTP response header.
+
 ## 0.2.0
 
 ### Minor Changes
