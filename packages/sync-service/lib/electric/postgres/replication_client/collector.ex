@@ -82,7 +82,13 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
         """)
 
     old_data = data_tuple_to_map(relation.columns, msg.old_tuple_data)
-    data = data_tuple_to_map(relation.columns, msg.tuple_data)
+
+    data =
+      data_tuple_to_map(relation.columns, msg.tuple_data, fn
+        column_name, :unchanged_toast -> Map.fetch!(old_data, column_name)
+        _, value -> value
+      end)
+
     offset = LogOffset.new(state.transaction.lsn, state.tx_op_index)
 
     UpdatedRecord.new(
@@ -141,11 +147,18 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
         }
   defp data_tuple_to_map(_columns, nil), do: %{}
 
-  defp data_tuple_to_map(columns, tuple_data) do
+  defp data_tuple_to_map(columns, tuple_data),
+    do: data_tuple_to_map(columns, tuple_data, &column_value/2)
+
+  defp data_tuple_to_map(columns, tuple_data, value_fun) do
     columns
     |> Enum.zip(tuple_data)
-    |> Map.new(fn {column, data} -> {column.name, data} end)
+    |> Map.new(fn {%{name: column_name}, value} ->
+      {column_name, value_fun.(column_name, value)}
+    end)
   end
+
+  defp column_value(_column_name, value), do: value
 
   @spec prepend_change(Changes.change(), t()) :: t()
   defp prepend_change(change, %__MODULE__{transaction: txn, tx_op_index: tx_op_index} = state) do
