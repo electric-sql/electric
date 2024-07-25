@@ -28,8 +28,8 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          version: pnpm exec changeset version
-          publish: pnpm exec changeset publish
+          version: pnpm ci:version
+          publish: pnpm ci:publish
           title: 'chore: publish new package versions'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

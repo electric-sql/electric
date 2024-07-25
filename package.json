@@ -8,6 +8,8 @@
   "scripts": {
     "example-backend:up": "dotenv -e .env.dev -- docker compose -f ./.support/docker-compose.yml up -d ",
     "example-backend:down": "dotenv  -e .env.dev -- docker compose -f .support/docker-compose.yml down --volumes",
-    "stylecheck-all": "pnpm --if-present --recursive run stylecheck"
+    "stylecheck-all": "pnpm --if-present --recursive run stylecheck",
+    "ci:version": "pnpm exec changset version",
+    "ci:publish": "pnpm publish -r"
   }
 }
