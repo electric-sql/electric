@@ -5,7 +5,7 @@ import {
   ShapeStreamOptions,
 } from '@electric-sql/next'
 import React, { createContext, useCallback, useContext, useRef } from 'react'
-import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector'
+import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
 
 interface ShapeContextType {
   getShape: (shapeStream: ShapeStream) => Shape
