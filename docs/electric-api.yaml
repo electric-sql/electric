@@ -169,6 +169,23 @@ paths:
 
                 Must be provided as the `shape_id` parameter when making
                 subsequent requests where `offset` is not `-1`.
+            x-electric-schema:
+              schema:
+                type: string
+                example: "{\"id\":{\"type\":\"int4\",\"dimensions\":0},\"title\":{\"type\":\"text\",\"dimensions\":0},\"status\":{\"type\":\"text\",\"dimensions\":0,\"max_length\":8}}"
+                description: |-
+                  A JSON string of an object that maps column names to the corresponding schema object.
+                  The schema object contains the type of the column, the number of dimensions, and possibly additional properties.
+                  Non-array types have a dimension of `0`, while array types have a dimension of 1 or more.
+                  For instance, an array of booleans would have a type of `bool` and a dimension of `1`.
+                  Some types provide additional properties,
+                  e.g.: `VARCHAR(8)` has an additional `“max_length": 8` property,
+                        `BPCHAR(9)` has an additional `"length": 9` property,
+                        `TIME(3)` has an additional `"precision": 3` property,
+                        `NUMERIC(8,5)` has additional `"precision": 8` and `"scale": 5` properties,
+                        `INTERVAL(4)` has an additional `"precision": 4` property,
+                        `INTERVAL MINUTE TO SECOND` has an additional `"fields": "MINUTE TO SECOND"` property,
+                        `BIT(5)` has an additional `"length": 5` property.
           content:
             application/json:
               schema:

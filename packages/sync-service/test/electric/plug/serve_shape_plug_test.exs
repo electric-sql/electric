@@ -18,7 +18,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     root_table: {"public", "users"},
     table_info: %{
       {"public", "users"} => %{
-        columns: [%{name: "id", type: "int8", pk_position: 0}],
+        columns: [%{name: "id", type: "int8", pk_position: 0, array_dimensions: 0}],
         pk: ["id"]
       }
     }
@@ -165,6 +165,32 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
                "max-age=#{max_age}, stale-while-revalidate=#{stale_age}"
+             ]
+    end
+
+    test "response has correct schema header" do
+      Electric.ShapeCacheMock
+      |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
+        {@test_shape_id, @test_offset}
+      end)
+      |> expect(:wait_for_snapshot, fn _, @test_shape_id -> :ready end)
+
+      next_offset = LogOffset.increment(@first_offset)
+
+      MockStorage
+      |> expect(:get_snapshot, fn @test_shape_id, _opts ->
+        {@first_offset, [%{key: "snapshot"}]}
+      end)
+      |> expect(:get_log_stream, fn @test_shape_id, @first_offset, _, _opts ->
+        [%{key: "log", value: "foo", headers: %{}, offset: next_offset}]
+      end)
+
+      conn =
+        conn(:get, %{"root_table" => "public.users"}, "?offset=-1")
+        |> ServeShapePlug.call([])
+
+      assert Plug.Conn.get_resp_header(conn, "x-electric-schema") == [
+               ~s|{"id":{"type":"int8","dims":0}}|
              ]
     end
 

@@ -22,6 +22,7 @@ defmodule Electric.Replication.Eval.Env.BasicTypes do
   | time                    | datetime |            |
   | timestamp               | datetime |            |
   | timestamptz             | datetime | t          |
+  | interval                | timespan | t          |
   | unknown                 | unknown  |            |
   | bytea                   | user     |            |
   | uuid                    | user     |            |
