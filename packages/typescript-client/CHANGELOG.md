@@ -1,5 +1,11 @@
 # @electric-sql/next
 
+## 0.1.1
+
+### Patch Changes
+
+- c3aafda: fix: add prepack script so typescript gets compiled before publishing
+
 ## 0.1.0
 
 ### Minor Changes
