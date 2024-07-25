@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 0.1.7
+
+### Patch Changes
+
+- 8afc720: The initial values in the log are now strings to be consistent with the ongoing values
+- bbb377e: fix: correctly parse larger set of Postgres intervals with signs
+- ffe7ca7: Detoast "unchanged toast" values in logical message decoding.
+- 27c998f: Support primary keys (including composite primary keys).
+
 ## 0.1.6
 
 ### Patch Changes
