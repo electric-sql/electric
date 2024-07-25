@@ -88,13 +88,13 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                   %{
                     offset: @snapshot_offset,
                     value: %{"id" => "00000000-0000-0000-0000-000000000001", "title" => "row1"},
-                    key: "\"public\".\"the-table\"/00000000-0000-0000-0000-000000000001",
+                    key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
                     headers: %{action: :insert}
                   },
                   %{
                     offset: @snapshot_offset,
                     value: %{"id" => "00000000-0000-0000-0000-000000000002", "title" => "row2"},
-                    key: "\"public\".\"the-table\"/00000000-0000-0000-0000-000000000002",
+                    key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
                     headers: %{action: :insert}
                   }
                 ]} = storage.get_snapshot(@shape_id, opts)
@@ -121,13 +121,13 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                   %{
                     offset: @snapshot_offset,
                     value: %{"id" => "00000000-0000-0000-0000-000000000001", "title" => "row1"},
-                    key: "\"public\".\"the-table\"/00000000-0000-0000-0000-000000000001",
+                    key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
                     headers: %{action: :insert}
                   },
                   %{
                     offset: @snapshot_offset,
                     value: %{"id" => "00000000-0000-0000-0000-000000000002", "title" => "row2"},
-                    key: "\"public\".\"the-table\"/00000000-0000-0000-0000-000000000002",
+                    key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
                     headers: %{action: :insert}
                   }
                 ]} = storage.get_snapshot(@shape_id, opts)
@@ -182,7 +182,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         stream = storage.get_log_stream(@shape_id, LogOffset.first(), LogOffset.last(), opts)
         [entry] = Enum.to_list(stream)
 
-        assert entry.key == ~S|"public"."test_table"/123|
+        assert entry.key == ~S|"public"."test_table"/"123"|
         assert entry.value == %{"id" => "123", "name" => "Test"}
         assert entry.headers == %{action: :insert, txid: 1, relation: ["public", "test_table"]}
         assert entry.offset == offset

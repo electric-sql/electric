@@ -162,12 +162,40 @@ defmodule Electric.Replication.Changes do
           }
   end
 
-  def build_key(rel, record, []) do
-    IO.iodata_to_binary([prefix_from_rel(rel), ?/, Map.values(record)])
-  end
+  @doc """
+  Build a unique key for a given record based on it's relation and PK.
 
+  Uses the `/` symbol as a PK separator, so any `/`s in the PK will
+  be escaped to avoid collisions.
+
+  ## Examples
+
+  Build key respects PK column order:
+
+      iex> build_key({"hello", "world"}, %{"c" => "d", "a" => "b"}, ["a", "c"])
+      ~S|"hello"."world"/"b"/"d"|
+      iex> build_key({"hello", "world"}, %{"a" => "b", "c" => "d"}, ["a", "c"])
+      ~S|"hello"."world"/"b"/"d"|
+
+  Build key has `/` symbol in the PK escaped by repetition:
+
+      iex> build_key({"hello", "world"}, %{"a" => "test/test", "c" => "test"}, ["a", "c"])
+      ~S|"hello"."world"/"test//test"/"test"|
+      iex> build_key({"hello", "world"}, %{"a" => "test", "c" => "test/test"}, ["a", "c"])
+      ~S|"hello"."world"/"test"/"test//test"|
+
+  If a table has no PK, all columns are used, sorted by the column name:
+
+      iex> build_key({"hello", "world"}, %{"c" => "d", "a" => "b"}, [])
+      ~S|"hello"."world"/"b"/"d"|
+
+  All pk sections are wrapped in quotes to allow for empty strings without generating a `//` pair.
+
+      iex> build_key({"hello", "world"}, %{"a" => "1", "b" => "", "c" => "2"}, [])
+      ~S|"hello"."world"/"1"/""/"2"|
+  """
   def build_key(rel, record, pk_cols) when is_list(pk_cols) do
-    IO.iodata_to_binary([prefix_from_rel(rel), ?/, record |> Map.take(pk_cols) |> Map.values()])
+    IO.iodata_to_binary([prefix_from_rel(rel), join_escape_pk(record, pk_cols)])
   end
 
   def fill_key(%TruncatedRelation{} = tr, _pk), do: tr
@@ -188,6 +216,17 @@ defmodule Electric.Replication.Changes do
     do: %{change | key: build_key(relation, old_record, pk)}
 
   defp prefix_from_rel({schema, table}), do: [?", schema, ?", ?., ?", table, ?"]
+
+  defp join_escape_pk(record, []),
+    do:
+      record
+      |> Enum.sort_by(&elem(&1, 0))
+      |> Enum.map(fn {_, v} -> escape_pk_section(v) end)
+
+  defp join_escape_pk(record, pk_cols),
+    do: Enum.map(pk_cols, fn col -> escape_pk_section(Map.fetch!(record, col)) end)
+
+  defp escape_pk_section(v), do: [?/, ?", :binary.replace(v, "/", "//", [:global]), ?"]
 
   @doc """
   Convert an UpdatedRecord into the corresponding NewRecord or DeletedRecord

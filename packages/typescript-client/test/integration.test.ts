@@ -199,9 +199,9 @@ describe(`HTTP Sync`, () => {
     // This test doesn't merge in updates, so we don't have `priority` on the row.
     expect(shapeData).toEqual(
       new Map([
-        [`${issuesTableKey}/${rowId}`, { id: rowId, title: `foo1` }],
+        [`${issuesTableKey}/"${rowId}"`, { id: rowId, title: `foo1` }],
         [
-          `${issuesTableKey}/${secondRowId}`,
+          `${issuesTableKey}/"${secondRowId}"`,
           { id: secondRowId, title: `foo2`, priority: `10` },
         ],
       ])
@@ -447,7 +447,7 @@ describe(`HTTP Sync`, () => {
     await clearShape(issuesTableUrl, issueStream.shapeId!)
 
     expect(shapeData).toEqual(
-      new Map([[`${issuesTableKey}/${id1}`, { id: id1, title: `foo1` }]])
+      new Map([[`${issuesTableKey}/"${id1}"`, { id: id1, title: `foo1` }]])
     )
   })
 
