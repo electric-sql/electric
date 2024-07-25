@@ -25,7 +25,5 @@ services:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/electric
     ports:
       - "3000:3000"
-    build:
-      context: ../packages/sync-service/
     depends_on:
       - postgres
