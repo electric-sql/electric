@@ -1,5 +1,13 @@
 # @electric-sql/react
 
+## 0.0.10
+
+### Patch Changes
+
+- c3aafda: fix: add prepack script so typescript gets compiled before publishing
+- Updated dependencies [c3aafda]
+  - @electric-sql/next@0.1.1
+
 ## 0.0.9
 
 ### Patch Changes
