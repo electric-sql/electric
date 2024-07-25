@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.2.0
+
+### Minor Changes
+
+- 36b9ab5: Send only changed columns and PKs on updates instead of full rows, and only PKs on deletes. Also tackle a case where we change a PK of a row - this is split into a delete+insert operations that reference each other using header metadata
+
 ## 0.1.7
 
 ### Patch Changes

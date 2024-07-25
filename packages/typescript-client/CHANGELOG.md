@@ -1,5 +1,11 @@
 # @electric-sql/next
 
+## 0.1.0
+
+### Minor Changes
+
+- 36b9ab5: Update the client to work correctly with patch (instead of full) updates
+
 ## 0.0.8
 
 ### Patch Changes
