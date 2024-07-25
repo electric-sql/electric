@@ -38,7 +38,7 @@ describe(`Shape`, () => {
     })
 
     const expectedValue = new Map()
-    expectedValue.set(`${issuesTableKey}/${id}`, {
+    expectedValue.set(`${issuesTableKey}/"${id}"`, {
       id: id,
       title: `test title`,
       priority: `10`,
@@ -66,7 +66,7 @@ describe(`Shape`, () => {
     const map = await shape.value
 
     const expectedValue = new Map()
-    expectedValue.set(`${issuesTableKey}/${id}`, {
+    expectedValue.set(`${issuesTableKey}/"${id}"`, {
       id: id,
       title: `test title`,
       priority: `10`,
@@ -85,7 +85,7 @@ describe(`Shape`, () => {
     await sleep(100) // some time for electric to catch up
     await hasNotified
 
-    expectedValue.set(`${issuesTableKey}/${id2}`, {
+    expectedValue.set(`${issuesTableKey}/"${id2}"`, {
       id: id2,
       title: `new title`,
       priority: `10`,
@@ -108,14 +108,14 @@ describe(`Shape`, () => {
     await insertIssues({ id: id1, title: `foo1` })
 
     const expectedValue1 = new Map()
-    expectedValue1.set(`${issuesTableKey}/${id1}`, {
+    expectedValue1.set(`${issuesTableKey}/"${id1}"`, {
       id: id1,
       title: `foo1`,
       priority: `10`,
     })
 
     const expectedValue2 = new Map()
-    expectedValue2.set(`${issuesTableKey}/${id2}`, {
+    expectedValue2.set(`${issuesTableKey}/"${id2}"`, {
       id: id2,
       title: `foo2`,
       priority: `10`,
@@ -185,12 +185,12 @@ describe(`Shape`, () => {
 
     const value = await hasNotified
     const expectedValue = new Map()
-    expectedValue.set(`${issuesTableKey}/${id}`, {
+    expectedValue.set(`${issuesTableKey}/"${id}"`, {
       id: id,
       title: `test title`,
       priority: `10`,
     })
-    expectedValue.set(`${issuesTableKey}/${id2}`, {
+    expectedValue.set(`${issuesTableKey}/"${id2}"`, {
       id: id2,
       title: `other title`,
       priority: `10`,
