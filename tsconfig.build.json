@@ -8,5 +8,5 @@
       "@electric-sql/next": ["packages/typescript-client/*"]
     }
   },
-  "include": ["**/*", ".*.js"]
+  "include": [".*.ts"]
 }
