@@ -5,7 +5,7 @@
     "baseUrl": "./",
     "moduleResolution": "node",
     "paths": {
-      "@electric-sql/next": ["packages/typescript-client/*"]
+      "@electric-sql/next": ["./packages/typescript-client/*"]
     }
   },
   "include": [".*.ts"]
