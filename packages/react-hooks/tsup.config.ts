@@ -6,6 +6,7 @@ export default defineConfig(options => {
     entry: {
       index: 'src/index.ts'
     },
+    tsconfig: `./tsconfig.build.json`,
     // esbuildPlugins: [mangleErrorsTransform],
     sourcemap: true,
     ...options
