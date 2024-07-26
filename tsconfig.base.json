@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "incremental": false,
+    "noEmit": false,
+    "baseUrl": "./",
+    "moduleResolution": "node",
+    "paths": {
+      "@electric-sql/next": ["./packages/typescript-client/*"]
+    }
+  },
+  "include": ["./packages/*.ts"]
+}
