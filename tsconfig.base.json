@@ -3,10 +3,17 @@
     "incremental": false,
     "noEmit": false,
     "baseUrl": "./",
-    "moduleResolution": "node",
-    "paths": {
-      "@electric-sql/next": ["./packages/typescript-client/*"]
-    }
-  },
-  "include": ["./packages/*.ts"]
+    "target": "es2016",
+    "lib": [
+      "ESNext"
+    ],
+    "jsx": "preserve",
+    "noEmit": true,
+    "module": "preserve",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "moduleResolution": "bundler"
+  }
 }

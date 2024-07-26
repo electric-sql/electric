@@ -1,9 +1,12 @@
 {
   "compilerOptions": {
     "incremental": false,
-    "noEmit": false,
     "baseUrl": "./",
-    "moduleResolution": "node"
+    "target": "es2016",
+    "noEmit": true,
+    "jsx": "preserve",
+    "module": "preserve",
+    "moduleResolution": "bundler"
     // "paths": {
       // "@electric-sql/next": ["./packages/typescript-client/*"]
     // }
