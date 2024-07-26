@@ -3,7 +3,10 @@
     "incremental": false,
     "noEmit": false,
     "baseUrl": "./",
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "paths": {
+      "@electric-sql/next": ["packages/typescript-client/*"]
+    }
   },
   "include": ["**/*", ".*.js"]
 }
