@@ -3,7 +3,7 @@ name: Changesets
 on:
   push:
     branches:
-      - more-attempts
+      - main
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 

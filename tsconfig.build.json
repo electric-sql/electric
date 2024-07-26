@@ -7,9 +7,5 @@
     "jsx": "preserve",
     "module": "preserve",
     "moduleResolution": "bundler"
-    // "paths": {
-      // "@electric-sql/next": ["./packages/typescript-client/*"]
-    // }
   }
-  // "include": [".*.ts"]
 }

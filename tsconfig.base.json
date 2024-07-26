@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "incremental": false,
-    "noEmit": false,
     "baseUrl": "./",
     "target": "es2016",
     "lib": [
