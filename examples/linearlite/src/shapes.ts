@@ -1,6 +1,5 @@
 import { baseUrl } from './electric'
 
 export const issueShape = {
-  shape: { table: `issue` },
-  baseUrl,
+  url: `${baseUrl}/v1/shape/issue`,
 }
