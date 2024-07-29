@@ -1,3 +1,13 @@
+# 🎉 Big Announcement! 🎉
+
+At the start of July, we jumped into an experimental new approach to engineering the Electric sync layer, partly driven by the challenges and DX pain points we're aware of with the current system and partly inspired by some new thinking that @KyleAMathews has brought to the team.
+
+There's a Quickstart guide to try it out here https://next.electric-sql.com/guides/quickstart and a post explaining the background and context here https://next.electric-sql.com/about
+
+The work is happening temporarily in a new repo (we'll copy it over here soon) at https://github.com/electric-sql/electric-next/
+
+Super excited to share and see what you think of the new thinking, direction, APIs etc.
+
 <p align="center">
   <a href="https://electric-sql.com" target="_blank">
     <picture>
