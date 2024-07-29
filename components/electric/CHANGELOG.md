@@ -1,5 +1,14 @@
 # @core/electric
 
+## 0.12.2
+
+### Patch Changes
+
+- febb710e: Add support for covering the code with trace spans and exporting traces using the OpenTelemetry protocol.
+- 5e16611f: Improve performance of shape unsubscribe API with alternative `SentRowsGraph` pruning method.
+- 9c16bb55: Limit the number of changes in a websocket frame to 100 changes to reduce the chance of frame exceeding 100MB limit in the case where there are lots of changes
+- 6002f07f: Fix a bug that first appeared in v0.12.1 and prevented Electric from establishing SSL connections to the database.
+
 ## 0.12.1
 
 ### Patch Changes

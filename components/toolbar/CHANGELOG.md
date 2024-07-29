@@ -1,5 +1,22 @@
 # @electric-sql/debug-toolbar
 
+## 2.0.2
+
+### Patch Changes
+
+- 5ced1281: Use looser peer dependencies for electric packages
+- 31d8418f: Fix toolbar dependency on drivers
+- af6a7be7: Extract drivers to separate package
+- Updated dependencies [e518919d]
+- Updated dependencies [5e2e276c]
+- Updated dependencies [a94e860c]
+- Updated dependencies [5b42c397]
+- Updated dependencies [af6a7be7]
+- Updated dependencies [837ce928]
+- Updated dependencies [cb19c582]
+  - electric-sql@0.12.2
+  - @electric-sql/drivers@0.0.2
+
 ## 2.0.1
 
 ### Patch Changes

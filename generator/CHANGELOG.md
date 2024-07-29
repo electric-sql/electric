@@ -1,5 +1,11 @@
 # @electric-sql/prisma-generator
 
+## 1.1.6
+
+### Patch Changes
+
+- 837ce928: Extract the sync API out of the DAL and make the DAL optional.
+
 ## 1.1.5
 
 ### Patch Changes
