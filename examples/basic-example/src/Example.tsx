@@ -7,8 +7,7 @@ const baseUrl = import.meta.env.ELECTRIC_URL ?? `http://localhost:3000`
 
 export const Example = () => {
   const { data: items } = useShape({
-    shape: { table: `items` },
-    baseUrl,
+    url: `${baseUrl}/v1/shape/items`,
   }) as unknown as { data: Item[] }
 
 /*

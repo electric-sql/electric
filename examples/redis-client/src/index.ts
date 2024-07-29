@@ -12,9 +12,7 @@ client.connect().then(() => {
   console.log(`Connected to Redis server`)
 
   const issueStream = new ShapeStream({
-    shape: { table: `todos` },
-    baseUrl: `http://localhost:3000`,
-    subscribe: true,
+    url: `http://localhost:3000/v1/shape/todos`,
   })
   issueStream.subscribe(async (messages: Message[]) => {
     console.log(`messages`, messages)

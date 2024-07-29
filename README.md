@@ -68,8 +68,8 @@ import { useShape } from '@electric-sql/react'
 
 function Component() {
   const { data } = useShape({
-    baseUrl: `http://localhost:3000`,
-    shape: { table: `foo`, where: `title LIKE 'foo%'` }
+    url: `http://localhost:3000/v1/shape/foo`,
+    where: `title LIKE 'foo%'`,
   })
 
   return JSON.stringify(data)

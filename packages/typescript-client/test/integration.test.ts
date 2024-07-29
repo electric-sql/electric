@@ -23,8 +23,7 @@ describe(`HTTP Sync`, () => {
     // Get initial data
     const shapeData = new Map()
     const issueStream = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: `${BASE_URL}`,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       subscribe: false,
       signal: aborter.signal,
     })
@@ -61,8 +60,7 @@ describe(`HTTP Sync`, () => {
     // Get initial data
     const shapeData = new Map()
     const issueStream = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: `${BASE_URL}`,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter.signal,
       fetchClient: fetchWrapper,
     })
@@ -139,9 +137,7 @@ describe(`HTTP Sync`, () => {
     // Get initial data
     const shapeData = new Map()
     const issueStream = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: `${BASE_URL}`,
-      subscribe: false,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter.signal,
     })
 
@@ -176,9 +172,7 @@ describe(`HTTP Sync`, () => {
 
     const shapeData = new Map()
     const issueStream = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: `${BASE_URL}`,
-      subscribe: true,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter.signal,
     })
     let secondRowId = ``
@@ -223,18 +217,14 @@ describe(`HTTP Sync`, () => {
     const shapeData1 = new Map()
     const aborter1 = new AbortController()
     const issueStream1 = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: `${BASE_URL}`,
-      subscribe: true,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter1.signal,
     })
 
     const shapeData2 = new Map()
     const aborter2 = new AbortController()
     const issueStream2 = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: `${BASE_URL}`,
-      subscribe: true,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter2.signal,
     })
 
@@ -273,10 +263,9 @@ describe(`HTTP Sync`, () => {
 
     let lastOffset: Offset = `-1`
     const issueStream = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: `${BASE_URL}`,
-      subscribe: false,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter.signal,
+      subscribe: false,
     })
 
     await h.forEachMessage(issueStream, aborter, (res, msg) => {
@@ -304,8 +293,7 @@ describe(`HTTP Sync`, () => {
     let catchupOpsCount = 0
     const newAborter = new AbortController()
     const newIssueStream = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: `${BASE_URL}`,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       subscribe: false,
       signal: newAborter.signal,
       offset: lastOffset,
@@ -426,8 +414,8 @@ describe(`HTTP Sync`, () => {
     // Get initial data
     const shapeData = new Map()
     const issueStream = new ShapeStream({
-      shape: { table: issuesTableUrl, where: `title LIKE 'foo%'` },
-      baseUrl: `${BASE_URL}`,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      where: `title LIKE 'foo%'`,
       subscribe: true,
       signal: aborter.signal,
     })
@@ -479,8 +467,7 @@ describe(`HTTP Sync`, () => {
     }
 
     const issueStream = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: `${BASE_URL}`,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       subscribe: true,
       signal: aborter.signal,
       fetchClient: fetchWrapper,

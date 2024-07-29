@@ -172,8 +172,7 @@ import { useShape } from '@electric-sql/react'
 
 function Component() {
   const { data } = useShape({
-    baseUrl: `http://localhost:3000`,
-    shape: { table: `foo` }
+    url: `http://localhost:3000/v1/shape/foo`,
   })
 
   return (
