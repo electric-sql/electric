@@ -28,20 +28,20 @@ export default defineConfig(options => {
       target: 'es2017',
       dts: false,
       outExtension: () => ({ js: '.js' }),
-      entry: { 'index.legacy-esm': 'src/index.ts' }
+      entry: { 'index.legacy-esm': 'src/index.ts' } as Record<string, string>
     },
     // Browser-ready ESM, production + minified
     {
       ...commonOptions,
-      entry: {
-        'index.browser': 'src/index.ts'
-      },
       define: {
         'process.env.NODE_ENV': JSON.stringify('production')
       },
       format: ['esm'],
       outExtension: () => ({ js: '.mjs' }),
-      minify: true
+      minify: true,
+      entry: {
+        'index.browser': 'src/index.ts'
+      },
     },
     {
       ...commonOptions,
