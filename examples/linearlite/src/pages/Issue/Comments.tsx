@@ -17,8 +17,7 @@ export interface CommentsProps {
 function Comments(commentProps: CommentsProps) {
   const [newCommentBody, setNewCommentBody] = useState<string>(``)
   const allComments = useShape({
-    shape: { table: `comment` },
-    baseUrl,
+    url: `${baseUrl}/v1/shape/comment`,
   })! as Comment[]
 
   const comments = allComments.data.filter(

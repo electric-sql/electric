@@ -4,25 +4,10 @@ import { Message, JsonSerializable, Offset } from './types'
 export type ShapeData = Map<string, { [key: string]: JsonSerializable }>
 export type ShapeChangedCallback = (value: ShapeData) => void
 
-// FIXME: Table needs to be qualified.
-// FIXME: Shape definition will be expanded.
-export type ShapeDefinition = {
-  table: string
-  where?: string
-}
-
 export interface BackoffOptions {
   initialDelay: number
   maxDelay: number
   multiplier: number
-}
-
-export interface ShapeOptions {
-  baseUrl: string
-  offset?: Offset
-  shapeId?: string
-  shape: ShapeDefinition
-  backoffOptions?: BackoffOptions
 }
 
 export const BackoffDefaults = {
@@ -31,7 +16,38 @@ export const BackoffDefaults = {
   multiplier: 1.3,
 }
 
-export interface ShapeStreamOptions extends ShapeOptions {
+/**
+ * Options for constructing a ShapeStream.
+ */
+export interface ShapeStreamOptions {
+  /**
+   * The full URL to where the Shape is hosted. This can either be the Electric server
+   * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape/foo`
+   */
+  url: string
+  /**
+   * where clauses for the shape.
+   */
+  where?: string
+  /**
+   * The "offset" on the shape log. This is typically not set as the ShapeStream
+   * will handle this automatically. A common scenario where you might pass an offset
+   * is if you're maintaining a local cache of the log. If you've gone offline
+   * and are re-starting a ShapeStream to catch-up to the latest state of the Shape,
+   * you'd pass in the last offset and shapeId you'd seen from the Electric server
+   * so it knows at what point in the shape to catch you up from.
+   */
+  offset?: Offset
+  /**
+   * Similar to `offset`, this isn't typically used unless you're maintaining
+   * a cache of the shape log.
+   */
+  shapeId?: string
+  backoffOptions?: BackoffOptions
+  /**
+   * Automatically fetch updates to the Shape. If you just want to sync the current
+   * shape and stop, pass false.
+   */
   subscribe?: boolean
   signal?: AbortSignal
   fetchClient?: typeof fetch
@@ -140,8 +156,7 @@ export class FetchError extends Error {
  *
  *   const aborter = new AbortController()
  *   const issueStream = new ShapeStream({
- *     shape: { table },
- *     baseUrl: `${BASE_URL}`,
+ *     url: `${BASE_URL}/${table}`
  *     subscribe: true,
  *     signal: aborter.signal,
  *   })
@@ -185,32 +200,30 @@ export class ShapeStream {
   async start() {
     this.isUpToDate = false
 
-    const { baseUrl, shape, signal } = this.options
+    const { url, where, signal } = this.options
     const { initialDelay, maxDelay, multiplier } = this.backoffOptions
 
     let attempt = 0
     let delay = initialDelay
 
     while ((!signal?.aborted && !this.isUpToDate) || this.options.subscribe) {
-      const url = new URL(
-        `${baseUrl}/v1/shape/${encodeURIComponent(shape.table)}`
-      )
-      if (shape.where) url.searchParams.set(`where`, shape.where)
-      url.searchParams.set(`offset`, this.lastOffset)
+      const fetchUrl = new URL(url)
+      if (where) fetchUrl.searchParams.set(`where`, where)
+      fetchUrl.searchParams.set(`offset`, this.lastOffset)
       if (this.isUpToDate) {
-        url.searchParams.set(`live`, `true`)
+        fetchUrl.searchParams.set(`live`, `true`)
       }
 
       if (this.shapeId) {
         // This should probably be a header for better cache breaking?
-        url.searchParams.set(`shape_id`, this.shapeId!)
+        fetchUrl.searchParams.set(`shape_id`, this.shapeId!)
       }
 
       try {
-        await this.fetchClient(url.toString(), { signal })
+        await this.fetchClient(fetchUrl.toString(), { signal })
           .then(async (response) => {
             if (!response.ok) {
-              throw await FetchError.fromResponse(response, url.toString())
+              throw await FetchError.fromResponse(response, fetchUrl.toString())
             }
 
             const { headers, status } = response
@@ -360,17 +373,8 @@ export class ShapeStream {
   }
 
   private validateOptions(options: ShapeStreamOptions): void {
-    if (
-      !options.shape ||
-      !options.shape.table ||
-      typeof options.shape.table !== `string`
-    ) {
-      throw new Error(
-        `Invalid shape option. It must be an object with a "table" property that is a string.`
-      )
-    }
-    if (!options.baseUrl) {
-      throw new Error(`Invalid shape option. It must provide the baseUrl`)
+    if (!options.url) {
+      throw new Error(`Invalid shape option. It must provide the url`)
     }
     if (options.signal && !(options.signal instanceof AbortSignal)) {
       throw new Error(
@@ -399,9 +403,9 @@ export class ShapeStream {
  * to simplify developing framework hooks.
  *
  * @constructor
- * @param {ShapeOptions}
+ * @param {Shape}
  *
- *     const shapeStream = new ShapeStream({table: `foo`, baseUrl: 'http://localhost:3000'})
+ *     const shapeStream = new ShapeStream(url: 'http://localhost:3000/v1/shape/foo'})
  *     const shape = new Shape(shapeStream)
  *
  * `value` returns a promise that resolves the Shape data once the Shape has been

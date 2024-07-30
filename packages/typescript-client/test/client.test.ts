@@ -9,8 +9,7 @@ const BASE_URL = inject(`baseUrl`)
 describe(`Shape`, () => {
   it(`should sync an empty shape`, async ({ issuesTableUrl }) => {
     const shapeStream = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: BASE_URL,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
     })
     const shape = new Shape(shapeStream)
     const map = await shape.value
@@ -27,8 +26,7 @@ describe(`Shape`, () => {
     const [id] = await insertIssues({ title: `test title` })
 
     const shapeStream = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: BASE_URL,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter.signal,
     })
     const shape = new Shape(shapeStream)
@@ -58,8 +56,7 @@ describe(`Shape`, () => {
     const [id] = await insertIssues({ title: `test title` })
 
     const shapeStream = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: BASE_URL,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter.signal,
     })
     const shape = new Shape(shapeStream)
@@ -137,9 +134,7 @@ describe(`Shape`, () => {
     }
 
     const shapeStream = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      subscribe: true,
-      baseUrl: BASE_URL,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter.signal,
       fetchClient: fetchWrapper,
     })
@@ -171,8 +166,7 @@ describe(`Shape`, () => {
     const [id] = await insertIssues({ title: `test title` })
 
     const shapeStream = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: BASE_URL,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter.signal,
     })
     const shape = new Shape(shapeStream)
@@ -202,8 +196,7 @@ describe(`Shape`, () => {
 
   it(`should support unsubscribe`, async ({ issuesTableUrl }) => {
     const shapeStream = new ShapeStream({
-      shape: { table: issuesTableUrl },
-      baseUrl: BASE_URL,
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
     })
     const shape = new Shape(shapeStream)
 
