@@ -12,7 +12,6 @@
     "backend:up": "PROJECT_NAME=redis-client pnpm -C ../../ run example-backend:up",
     "backend:down": "PROJECT_NAME=redis-client pnpm -C ../../ run example-backend:down",
     "typecheck": "tsc -p tsconfig.json",
-    "build": "shx rm -rf dist && concurrently \"tsup\" \"tsc -p tsconfig.build.json\"",
     "stylecheck": "eslint './*.{ts,js,tsx,jsx}' './tests/**/*.{ts,tsx}' './examples/**/*.{ts,tsx}' --no-error-on-unmatched-pattern"
   },
   "repository": {

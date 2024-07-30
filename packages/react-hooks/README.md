@@ -6,6 +6,8 @@ Electric provides an HTTP interface to Postgres to enable massive number of clie
 
 This packages exposes a `useShape` hook for pulling shape data into your React components.
 
+The `ShapesProvider` caches shapes globally so re-using shapes in multiple components is cheap.
+
 ## Install
 
 `npm i @electricsql/react`
@@ -29,8 +31,7 @@ import { useShape } from "@electric-sql/react"
 
 export default function MyComponent () {
   const { isUpToDate, data as fooData } = useShape({
-    shape: { table: `foo` },
-    baseUrl: "http://my-api.com/",
+    url: "http://my-api.com/shape/foo",
   })
 
   if (!isUpToDate) {

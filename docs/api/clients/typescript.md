@@ -33,8 +33,7 @@ import { ShapeStream } from '@electric-sql/next'
 
 // Passes subscribers rows as they're inserted, updated, or deleted
 const stream = new ShapeStream({
-  baseUrl: `${BASE_URL}`,
-  shape: { table: `foo` }
+  url: `http://localhost:3000/v1/shape/foo`,
 })
 
 stream.subscribe(messages => {
@@ -48,8 +47,7 @@ stream.subscribe(messages => {
 import { ShapeStream, Shape } from '@electric-sql/next'
 
 const stream = new ShapeStream({
-  baseUrl: `${BASE_URL}`,
-  shape: { table: `foo` }
+  url: `http://localhost:3000/v1/shape/foo`,
 })
 const shape = new Shape(stream)
 

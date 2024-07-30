@@ -17,14 +17,12 @@ describe(`sortedOptionsHash`, () => {
     `should create the same hash from options sorted in different ways`,
     () => {
       const hash1 = sortedOptionsHash({
-        shape: { table: `foo` },
-        baseUrl: `http://whatever`,
+        url: `http://whatever/foo`,
         offset: `-1`,
       })
       const hash2 = sortedOptionsHash({
-        baseUrl: `http://whatever`,
         offset: `-1`,
-        shape: { table: `foo` },
+        url: `http://whatever/foo`,
       })
       expect(hash1).toEqual(hash2)
     }
@@ -40,8 +38,7 @@ describe(`useShape`, () => {
     const { result } = renderHook(
       () =>
         useShape({
-          baseUrl: BASE_URL,
-          shape: { table: issuesTableUrl },
+          url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
           signal: aborter.signal,
           subscribe: false,
         }),
@@ -69,8 +66,7 @@ describe(`useShape`, () => {
     const { result } = renderHook(
       () =>
         useShape({
-          baseUrl: BASE_URL,
-          shape: { table: issuesTableUrl },
+          url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
           signal: aborter?.signal,
           subscribe: false,
         }),
@@ -96,8 +92,7 @@ describe(`useShape`, () => {
     const { result } = renderHook(
       () =>
         useShape({
-          baseUrl: BASE_URL,
-          shape: { table: issuesTableUrl },
+          url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
           signal: aborter.signal,
           subscribe: true,
         }),
@@ -132,8 +127,7 @@ describe(`useShape`, () => {
     const { result } = renderHook(
       () =>
         useShape({
-          baseUrl: BASE_URL,
-          shape: { table: issuesTableUrl },
+          url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
           signal: aborter.signal,
           subscribe: true,
           selector: (result) => {
@@ -175,8 +169,7 @@ describe(`useShape`, () => {
     const { result, unmount } = renderHook(
       () =>
         useShape({
-          baseUrl: BASE_URL,
-          shape: { table: issuesTableUrl },
+          url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
           signal: aborter.signal,
           subscribe: true,
         }),
