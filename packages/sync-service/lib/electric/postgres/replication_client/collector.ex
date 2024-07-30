@@ -85,6 +85,11 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
 
     data =
       data_tuple_to_map(relation.columns, msg.tuple_data, fn
+        # Postgres always de-toasts and writes values in old tuple data to WAL for tables that have
+        # `REPLICA IDENTITY FULL`. Thanks to that we can replace the `:unchanged_toast`
+        # placeholder with actual values before returning the decoded record update.
+        #
+        # For more info, see https://github.com/electric-sql/electric-next/issues/171.
         column_name, :unchanged_toast -> Map.fetch!(old_data, column_name)
         _, value -> value
       end)
