@@ -28,10 +28,7 @@ export async function preloadShape(
 }
 
 export function sortedOptionsHash(options: ShapeStreamOptions): string {
-  const allOptions = JSON.stringify(options, Object.keys(options).sort())
-  const shapeHash = allOptions
-
-  return shapeHash
+  return JSON.stringify(options, Object.keys(options).sort())
 }
 
 export function getShapeStream(options: ShapeStreamOptions): ShapeStream {
