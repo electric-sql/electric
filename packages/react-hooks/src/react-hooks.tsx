@@ -28,14 +28,8 @@ export async function preloadShape(
 }
 
 export function sortedOptionsHash(options: ShapeStreamOptions): string {
-  // const shapeDef = JSON.stringify(
-  // options.shape,
-  // Object.keys(options.shape).sort()
-  // )
-  // eslint-disable-next-line
-  // const { shape, ...optionsWithoutShapeDef } = options
   const allOptions = JSON.stringify(options, Object.keys(options).sort())
-  const shapeHash = allOptions //shapeDef + allOptions
+  const shapeHash = allOptions
 
   return shapeHash
 }
