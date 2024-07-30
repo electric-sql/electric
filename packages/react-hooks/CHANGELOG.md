@@ -1,5 +1,16 @@
 # @electric-sql/react
 
+## 0.1.0
+
+### Minor Changes
+
+- 1ca40a7: feat: refactor ShapeStream API to combine and to better support API proxies
+
+### Patch Changes
+
+- Updated dependencies [1ca40a7]
+  - @electric-sql/next@0.2.0
+
 ## 0.0.10
 
 ### Patch Changes
