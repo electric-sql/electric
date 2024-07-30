@@ -34,8 +34,6 @@ defmodule Electric.Schema do
     %{unit: "MINUTE", mask: 1 <<< 11},
     %{unit: "SECOND", mask: 1 <<< 12}
   ]
-  # -1 encoded as a binary signed 2s' complement (16 bits)
-  @minus_1 0b1111111111111111
   # all bits set in a binary signed 2s' complement (16 bits)
   @all_set 0b0111111111111111
 
@@ -77,8 +75,7 @@ defmodule Electric.Schema do
     # Postgres stores the range of the interval in the high 16 bits of the type_mod
     # and the precision in the low 16 bits of the type_mod
     # cf. https://github.com/postgres/postgres/blob/master/src/backend/utils/adt/timestamp.c#L1045
-    range = type_mod >>> 16
-    precision = type_mod &&& 65535
+    <<range::signed-integer-16, precision::signed-integer-16>> = <<type_mod::signed-integer-32>>
 
     schema
     |> Map.merge(interval_fields(range))
@@ -93,16 +90,16 @@ defmodule Electric.Schema do
   defp add_modifier(%{type: "numeric"} = schema, %{type_mod: type_mod}) when type_mod > -1 do
     # The scale and precision are two 16 bit values encoded in one 32 bit value
     # that is stored in the type_mod column: type_mod = precision . scale
-    # so we have to do some bit manipulations to extract them
-    precision = (type_mod - 4) >>> 16
-    scale = type_mod - 4 &&& 65535
+    <<precision::signed-integer-16, scale::signed-integer-16>> =
+      <<type_mod - 4::signed-integer-32>>
+
     Map.merge(schema, %{precision: precision, scale: scale})
   end
 
   defp add_modifier(schema, _), do: schema
 
   # When precision is -1 that means it was not provided
-  defp interval_precision(@minus_1), do: %{}
+  defp interval_precision(-1), do: %{}
   defp interval_precision(precision), do: %{precision: precision}
 
   # When all range bits are set
