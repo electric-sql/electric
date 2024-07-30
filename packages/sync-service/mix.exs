@@ -41,7 +41,6 @@ defmodule Electric.MixProject do
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
   def application do
     [
       extra_applications: [:logger],
@@ -55,23 +54,20 @@ defmodule Electric.MixProject do
   defp deps do
     List.flatten([
       [
-        {:bandit, "~> 1.5"},
-        {:plug, "~> 1.16"},
-        {:gen_stage, "~> 1.2"},
-        {:epgsql, "~> 4.2"},
         {:backoff, "~> 1.1"},
-        {:gproc, "~> 0.9"},
-        {:postgrex, "~> 0.18"},
-        {:postgresql_uri, "~> 0.1"},
-        {:pg_query_ex, github: "electric-sql/pg_query_ex"},
+        {:bandit, "~> 1.5"},
+        {:cubdb, "~> 2.0.2"},
+        {:dotenvy, "~> 0.8"},
+        {:ecto, "~> 3.11"},
         {:jason, "~> 1.4"},
         {:nimble_options, "~> 1.1"},
-        {:dotenvy, "~> 0.8"},
-        {:telemetry_poller, "~> 1.1"},
+        {:pg_query_ex, github: "electric-sql/pg_query_ex"},
+        {:plug, "~> 1.16"},
+        {:postgresql_uri, "~> 0.1"},
+        {:postgrex, "~> 0.18"},
         {:telemetry_metrics_statsd, "~> 0.7"},
-        {:ecto, "~> 3.11"},
-        {:tz, "~> 0.26.5"},
-        {:cubdb, "~> 2.0.2"}
+        {:telemetry_poller, "~> 1.1"},
+        {:tz, "~> 0.27"}
       ],
       dev_and_test_deps()
     ])
@@ -79,9 +75,9 @@ defmodule Electric.MixProject do
 
   defp dev_and_test_deps do
     [
-      {:mox, "~> 1.1", only: [:test]},
       {:dialyxir, "~> 1.4", only: [:test], runtime: false},
-      {:excoveralls, "~> 0.18", only: [:test], runtime: false}
+      {:excoveralls, "~> 0.18", only: [:test], runtime: false},
+      {:mox, "~> 1.1", only: [:test]}
     ]
   end
 

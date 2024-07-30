@@ -1,11 +1,7 @@
 defmodule Electric.Application do
-  # See https://hexdocs.pm/elixir/Application.html
-  # for more information on OTP Applications
-  @moduledoc false
-  alias Electric.Postgres.ReplicationClient
-  require Logger
-
   use Application
+
+  alias Electric.Postgres.ReplicationClient
 
   @impl true
   def start(_type, _args) do
@@ -71,8 +67,6 @@ defmodule Electric.Application do
           []
         end
 
-      # See https://hexdocs.pm/elixir/Supervisor.html
-      # for other strategies and supported options
       opts = [strategy: :one_for_one, name: Electric.Supervisor]
       Supervisor.start_link(children, opts)
     end
