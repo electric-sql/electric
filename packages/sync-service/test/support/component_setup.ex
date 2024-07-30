@@ -102,7 +102,8 @@ defmodule Support.ComponentSetup do
     server = :"inspector #{full_test_name(ctx)}"
     pg_info_table = :"pg_info_table #{full_test_name(ctx)}"
 
-    {:ok, _} = EtsInspector.start_link(pg_info_table: pg_info_table, pool: ctx.pool, name: server)
+    {:ok, _} =
+      EtsInspector.start_link(pg_info_table: pg_info_table, pool: ctx.db_conn, name: server)
 
     %{inspector: {EtsInspector, pg_info_table: pg_info_table, server: server}}
   end
