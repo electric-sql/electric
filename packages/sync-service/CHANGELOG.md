@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.2.2
+
+### Patch Changes
+
+- 9205315: Fix issue that would return a 500 for one of the requests when there are two concurrent requests for the same shape that is not already in cache
+
 ## 0.2.1
 
 ### Patch Changes
