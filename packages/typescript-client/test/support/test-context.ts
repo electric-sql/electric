@@ -35,7 +35,7 @@ export const testWithDbClient = test.extend<{
   baseUrl: async ({}, use) => use(inject(`baseUrl`)),
   pgSchema: async ({}, use) => use(inject(`testPgSchema`)),
   clearShape: async ({}, use) => {
-    use(async (table: string, shapeId?: string) => {
+    await use(async (table: string, shapeId?: string) => {
       const baseUrl = inject(`baseUrl`)
       const resp = await fetch(
         `${baseUrl}/v1/shape/${table}${shapeId ? `?shape_id=${shapeId}` : ``}`,
@@ -116,5 +116,65 @@ export const testWithIssuesTable = testWithDbClient.extend<{
 
   clearIssuesShape: async ({ clearShape, issuesTableUrl }, use) => {
     use((shapeId?: string) => clearShape(issuesTableUrl, shapeId))
+  },
+})
+
+export const testWithMultitypeTable = testWithDbClient.extend<{
+  tableSql: string
+  tableUrl: string
+}>({
+  tableSql: async ({ dbClient, task }, use) => {
+    const tableName = `"multitype table for ${task.id}"`
+
+    await dbClient.query(`
+      DROP TABLE IF EXISTS ${tableName};
+      DROP TYPE IF EXISTS mood;
+      DROP TYPE IF EXISTS complex;
+      DROP DOMAIN IF EXISTS posint;
+      CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy');
+      CREATE TYPE complex AS (r double precision, i double precision);
+      CREATE DOMAIN posint AS integer CHECK (VALUE > 0);
+      CREATE TABLE ${tableName} (
+        txt VARCHAR,
+        i2 INT2 PRIMARY KEY,
+        i4 INT4,
+        i8 INT8,
+        f8 FLOAT8,
+        b  BOOLEAN,
+        json JSON,
+        jsonb JSONB,
+        ints INT8[],
+        ints2 INT8[][],
+        int4s INT4[],
+        doubles FLOAT8[],
+        bools BOOLEAN[],
+        moods mood[],
+        moods2 mood[][],
+        complexes complex[],
+        posints posint[],
+        jsons JSONB[],
+        txts TEXT[],
+        value JSON
+      )`)
+
+    await use(tableName)
+
+    // Cleanup
+    await dbClient.query(`
+      DROP TABLE ${tableName};
+      DROP TYPE IF EXISTS mood;
+      DROP TYPE IF EXISTS complex;
+      DROP DOMAIN IF EXISTS posint;
+    `)
+  },
+  tableUrl: async ({ tableSql, clearShape, pgSchema }, use) => {
+    const urlAppropriateTable = pgSchema + `.` + tableSql.slice(1, -1)
+    await use(urlAppropriateTable)
+    try {
+      await clearShape(urlAppropriateTable)
+    } catch (_) {
+      // ignore - clearShape has its own logging
+      // we don't want to interrupt cleanup
+    }
   },
 })

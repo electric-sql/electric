@@ -1,4 +1,4 @@
-import { ShapeStream, JsonSerializable, Message } from '@electric-sql/next'
+import { ShapeStream, Value, Message } from '@electric-sql/next'
 import { Client, ClientConfig } from 'pg'
 
 export function makePgClient(overrides: ClientConfig = {}) {
@@ -13,7 +13,7 @@ export function makePgClient(overrides: ClientConfig = {}) {
   })
 }
 
-export function forEachMessage<T extends JsonSerializable>(
+export function forEachMessage<T extends Value>(
   stream: ShapeStream,
   controller: AbortController,
   handler: (

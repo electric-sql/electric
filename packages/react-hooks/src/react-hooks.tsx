@@ -1,5 +1,5 @@
 import {
-  JsonSerializable,
+  Value,
   Shape,
   ShapeStream,
   ShapeStreamOptions,
@@ -88,9 +88,9 @@ export function useShapeContext() {
 interface UseShapeResult {
   /**
    * The array of rows that make up the Shape.
-   * @type {{ [key: string]: JsonSerializable }[]}
+   * @type {{ [key: string]: Value }[]}
    */
-  data: { [key: string]: JsonSerializable }[]
+  data: { [key: string]: Value }[]
   /**
    * The Shape instance used by this useShape
    * @type(Shape)
