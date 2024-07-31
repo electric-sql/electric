@@ -81,20 +81,14 @@ defmodule Support.ComponentSetup do
   end
 
   def with_replication_client(ctx) do
-    {:ok, pid} =
-      ReplicationClient.start_link(
-        ctx.db_config ++
-          [
-            init_opts: [
-              publication_name: ctx.publication_name,
-              transaction_received:
-                {Electric.Replication.ShapeLogCollector, :store_transaction,
-                 [ctx.shape_log_collector]},
-              try_creating_publication?: true
-            ]
-          ]
-      )
+    replication_opts = [
+      publication_name: ctx.publication_name,
+      transaction_received:
+        {Electric.Replication.ShapeLogCollector, :store_transaction, [ctx.shape_log_collector]},
+      try_creating_publication?: true
+    ]
 
+    {:ok, pid} = ReplicationClient.start_link(ctx.db_config, replication_opts)
     %{replication_client: pid}
   end
 
