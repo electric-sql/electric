@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.2.3
+
+### Patch Changes
+
+- bcef81c: Handle database connection failures gracefully and implement reconnection logic with exponential backoff.
+
 ## 0.2.2
 
 ### Patch Changes
