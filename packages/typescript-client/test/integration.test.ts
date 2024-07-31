@@ -2,9 +2,13 @@ import { parse } from 'cache-control-parser'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
 import { ArgumentsType, assert, describe, expect, inject, vi } from 'vitest'
-import { ShapeStream } from '../src/client'
+import { Shape, ShapeStream } from '../src/client'
 import { Message, Offset } from '../src/types'
-import { IssueRow, testWithIssuesTable as it } from './support/test-context'
+import {
+  IssueRow,
+  testWithIssuesTable as it,
+  testWithMultitypeTable as mit,
+} from './support/test-context'
 import * as h from './support/test-helpers'
 
 const BASE_URL = inject(`baseUrl`)
@@ -159,6 +163,169 @@ describe(`HTTP Sync`, () => {
     expect(values).toMatchObject([{ title: `foo + ${uuid}` }])
   })
 
+  mit(
+    `should parse incoming data`,
+    async ({ dbClient, aborter, tableSql, tableUrl }) => {
+      // Create a table with data we want to be parsed
+      await dbClient.query(
+        `
+      INSERT INTO ${tableSql} (txt, i2, i4, i8, f8, b, json, jsonb, ints, ints2, int4s, bools, moods, moods2, complexes, posints, jsons, txts, value, doubles)
+      VALUES (
+        'test',
+        1,
+        2,
+        3,
+        4.5,
+        TRUE,
+        '{"foo": "bar"}',
+        '{"foo": "bar"}',
+        '{1,2,3}',
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11
+      )
+    `,
+        [
+          [
+            [1, 2, 3],
+            [4, 5, 6],
+          ],
+          [1, 2, 3],
+          [true, false, true],
+          [`sad`, `ok`, `happy`],
+          [
+            [`sad`, `ok`],
+            [`ok`, `happy`],
+          ],
+          [`(1.1, 2.2)`, `(3.3, 4.4)`],
+          [5, 9, 2],
+          [{ foo: `bar` }, { bar: `baz` }],
+          [`foo`, `bar`, `baz`],
+          { a: 5, b: [{ c: `foo` }] },
+          [Infinity, -Infinity, NaN],
+        ]
+      )
+
+      // Now fetch the data from the HTTP endpoint
+      const issueStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape/${tableUrl}`,
+        signal: aborter.signal,
+      })
+      const client = new Shape(issueStream)
+      const data = await client.value
+
+      expect([...data.values()]).toMatchObject([
+        {
+          txt: `test`,
+          i2: 1,
+          i4: 2,
+          i8: BigInt(3),
+          f8: 4.5,
+          b: true,
+          json: { foo: `bar` },
+          jsonb: { foo: `bar` },
+          ints: [BigInt(1), BigInt(2), BigInt(3)],
+          ints2: [
+            [BigInt(1), BigInt(2), BigInt(3)],
+            [BigInt(4), BigInt(5), BigInt(6)],
+          ],
+          int4s: [1, 2, 3],
+          bools: [true, false, true],
+          moods: [`sad`, `ok`, `happy`],
+          moods2: [
+            [`sad`, `ok`],
+            [`ok`, `happy`],
+          ],
+          // It does not parse composite types and domain types
+          complexes: [`(1.1,2.2)`, `(3.3,4.4)`],
+          posints: [`5`, `9`, `2`],
+          jsons: [{ foo: `bar` }, { bar: `baz` }],
+          txts: [`foo`, `bar`, `baz`],
+          value: { a: 5, b: [{ c: `foo` }] },
+          doubles: [Infinity, -Infinity, NaN],
+        },
+      ])
+
+      // Now update the data
+      await dbClient.query(
+        `
+      UPDATE ${tableSql}
+      SET
+        txt = 'changed',        
+        i4 = 20,
+        i8 = 30,
+        f8 = 40.5,
+        b = FALSE,
+        json = '{"bar": "foo"}',
+        jsonb = '{"bar": "foo"}',
+        ints = '{4,5,6}',
+        ints2 = '{{4,5,6},{7,8,9}}',
+        int4s = '{4,5,6}',
+        bools = $1,
+        moods = '{sad,happy}',
+        moods2 = '{{sad,happy},{happy,ok}}',
+        complexes = $2,
+        posints = '{6,10,3}',
+        jsons = $3,
+        txts = $4,
+        value = $5,
+        doubles = $6
+      WHERE i2 = 1
+    `,
+        [
+          [false, true, false],
+          [`(2.2,3.3)`, `(4.4,5.5)`],
+          [{}],
+          [`new`, `values`],
+          { a: 6 },
+          [Infinity, NaN, -Infinity],
+        ]
+      )
+
+      await sleep(100)
+      const updatedData = client.valueSync
+
+      expect([...updatedData.values()]).toMatchObject([
+        {
+          txt: `changed`,
+          i2: 1,
+          i4: 20,
+          i8: BigInt(30),
+          f8: 40.5,
+          b: false,
+          json: { bar: `foo` },
+          jsonb: { bar: `foo` },
+          ints: [BigInt(4), BigInt(5), BigInt(6)],
+          ints2: [
+            [BigInt(4), BigInt(5), BigInt(6)],
+            [BigInt(7), BigInt(8), BigInt(9)],
+          ],
+          int4s: [4, 5, 6],
+          bools: [false, true, false],
+          moods: [`sad`, `happy`],
+          moods2: [
+            [`sad`, `happy`],
+            [`happy`, `ok`],
+          ],
+          complexes: [`(2.2,3.3)`, `(4.4,5.5)`],
+          posints: [`6`, `10`, `3`],
+          jsons: [{}],
+          txts: [`new`, `values`],
+          value: { a: 6 },
+          doubles: [Infinity, NaN, -Infinity],
+        },
+      ])
+    }
+  )
+
   it(`should get initial data and then receive updates`, async ({
     aborter,
     issuesTableUrl,
@@ -196,7 +363,7 @@ describe(`HTTP Sync`, () => {
         [`${issuesTableKey}/"${rowId}"`, { id: rowId, title: `foo1` }],
         [
           `${issuesTableKey}/"${secondRowId}"`,
-          { id: secondRowId, title: `foo2`, priority: `10` },
+          { id: secondRowId, title: `foo2`, priority: 10 },
         ],
       ])
     )
@@ -509,7 +676,7 @@ describe(`HTTP Sync`, () => {
             expect(msg.value).toEqual({
               id: rowId,
               title: `foo1`,
-              priority: `10`,
+              priority: 10,
             })
             expect(issueStream.shapeId).to.exist
             originalShapeId = issueStream.shapeId
@@ -525,7 +692,7 @@ describe(`HTTP Sync`, () => {
               expect(msg.value).toEqual({
                 id: rowId,
                 title: `foo1`,
-                priority: `10`,
+                priority: 10,
               })
               expect(issueStream.shapeId).not.toBe(originalShapeId)
             } else {
@@ -533,7 +700,7 @@ describe(`HTTP Sync`, () => {
               expect(msg.value).toEqual({
                 id: secondRowId,
                 title: `foo2`,
-                priority: `10`,
+                priority: 10,
               })
               expect(issueStream.shapeId).not.toBe(originalShapeId)
             }

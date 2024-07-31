@@ -39,7 +39,7 @@ describe(`Shape`, () => {
     expectedValue.set(`${issuesTableKey}/"${id}"`, {
       id: id,
       title: `test title`,
-      priority: `10`,
+      priority: 10,
     })
 
     expect(map).toEqual(expectedValue)
@@ -66,7 +66,7 @@ describe(`Shape`, () => {
     expectedValue.set(`${issuesTableKey}/"${id}"`, {
       id: id,
       title: `test title`,
-      priority: `10`,
+      priority: 10,
     })
     expect(map).toEqual(expectedValue)
 
@@ -85,7 +85,7 @@ describe(`Shape`, () => {
     expectedValue.set(`${issuesTableKey}/"${id2}"`, {
       id: id2,
       title: `new title`,
-      priority: `10`,
+      priority: 10,
     })
     expect(shape.valueSync).toEqual(expectedValue)
 
@@ -108,14 +108,14 @@ describe(`Shape`, () => {
     expectedValue1.set(`${issuesTableKey}/"${id1}"`, {
       id: id1,
       title: `foo1`,
-      priority: `10`,
+      priority: 10,
     })
 
     const expectedValue2 = new Map()
     expectedValue2.set(`${issuesTableKey}/"${id2}"`, {
       id: id2,
       title: `foo2`,
-      priority: `10`,
+      priority: 10,
     })
 
     let requestsMade = 0
@@ -182,12 +182,12 @@ describe(`Shape`, () => {
     expectedValue.set(`${issuesTableKey}/"${id}"`, {
       id: id,
       title: `test title`,
-      priority: `10`,
+      priority: 10,
     })
     expectedValue.set(`${issuesTableKey}/"${id2}"`, {
       id: id2,
       title: `other title`,
-      priority: `10`,
+      priority: 10,
     })
     expect(value).toEqual(expectedValue)
 
