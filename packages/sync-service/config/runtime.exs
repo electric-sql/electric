@@ -12,7 +12,7 @@ end
 
 service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
 instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
-version = Mix.Project.config()[:version]
+version = Electric.version()
 
 config :telemetry_poller, :default, period: 500
 
