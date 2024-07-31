@@ -13,6 +13,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :transaction_received,
       :publication_name,
       :try_creating_publication?,
+      :start_streaming?,
       origin: "postgres",
       txn_collector: %Collector{},
       step: :disconnected
@@ -22,15 +23,18 @@ defmodule Electric.Postgres.ReplicationClient do
             transaction_received: {module(), atom(), [term()]},
             publication_name: String.t(),
             try_creating_publication?: boolean(),
+            start_streaming?: boolean(),
             origin: String.t(),
             txn_collector: Collector.t(),
-            step: :disconnected | :create_slot | :streaming | :create_publication
+            step:
+              :disconnected | :create_publication | :create_slot | :ready_to_stream | :streaming
           }
 
     @opts_schema NimbleOptions.new!(
                    transaction_received: [required: true, type: :mfa],
                    publication_name: [required: true, type: :string],
-                   try_creating_publication?: [type: :boolean, required: true]
+                   try_creating_publication?: [type: :boolean, required: true],
+                   start_streaming?: [type: :boolean, default: true]
                  )
 
     @spec new(Access.t()) :: t()
@@ -40,50 +44,64 @@ defmodule Electric.Postgres.ReplicationClient do
     end
   end
 
-  def start_link(opts) do
-    # Automatically reconnect if we lose connection.
-    extra_opts = [
-      auto_reconnect: true
-    ]
+  def start_link(connection_opts, replication_opts) do
+    Postgrex.ReplicationConnection.start_link(__MODULE__, replication_opts, connection_opts)
+  end
 
-    init_opts = State.new(Keyword.get(opts, :init_opts, []))
-
-    Postgrex.ReplicationConnection.start_link(__MODULE__, init_opts, extra_opts ++ opts)
+  def start_streaming(client) do
+    send(client, :start_streaming)
   end
 
   @impl true
-  def init(%State{} = state) do
-    {:ok, state}
+  def init(replication_opts) do
+    {:ok, State.new(replication_opts)}
   end
 
   @impl true
-  def handle_connect(%State{try_creating_publication?: true} = state) do
-    # We're creating an "empty" publication because first snapshot creation should add the table
-    query = "CREATE PUBLICATION #{state.publication_name}"
-    {:query, query, %{state | step: :create_publication}}
-  end
-
   def handle_connect(state) do
-    query = "CREATE_REPLICATION_SLOT electric TEMPORARY LOGICAL pgoutput NOEXPORT_SNAPSHOT"
-    {:query, query, %{state | step: :create_slot}}
+    if state.try_creating_publication? do
+      create_publication_step(state)
+    else
+      create_replication_slot_step(state)
+    end
   end
 
   @impl true
-  def handle_result(results, %State{step: :create_slot} = state) when is_list(results) do
-    query =
-      "START_REPLICATION SLOT electric LOGICAL 0/0 (proto_version '1', publication_names '#{state.publication_name}')"
-
-    Logger.info("Started replication from postgres")
-
-    {:stream, query, [], %{state | step: :streaming}}
+  def handle_result(
+        [%Postgrex.Result{command: :create_publication}],
+        %State{step: :create_publication} = state
+      ) do
+    create_replication_slot_step(state)
   end
 
-  def handle_result(result, %State{step: :create_publication} = state)
-      when is_list(result)
-      when is_struct(result, Postgrex.Error) and result.postgres.code == :duplicate_object and
-             result.postgres.routine == "CreatePublication" do
-    # Either a success in publication or a "duplicate object" error are fine here
-    handle_connect(%{state | try_creating_publication?: false})
+  def handle_result(%Postgrex.Error{} = error, %State{step: :create_publication} = state) do
+    error_message = "publication \"#{state.publication_name}\" already exists"
+
+    case error.postgres do
+      %{code: :duplicate_object, pg_code: "42710", message: ^error_message} ->
+        create_replication_slot_step(state)
+
+      other ->
+        {:disconnect, other}
+    end
+  end
+
+  def handle_result([_result], %State{step: :create_slot} = state) do
+    if state.start_streaming? do
+      start_streaming_step(state)
+    else
+      {:noreply, %{state | step: :ready_to_stream}}
+    end
+  end
+
+  @impl true
+  def handle_info(:start_streaming, state) do
+    if state.step == :ready_to_stream do
+      start_streaming_step(state)
+    else
+      Logger.debug("Replication client requested to start streaming while step=#{state.step}")
+      {:noreply, state}
+    end
   end
 
   @impl true
@@ -119,4 +137,24 @@ defmodule Electric.Postgres.ReplicationClient do
 
   @epoch DateTime.to_unix(~U[2000-01-01 00:00:00Z], :microsecond)
   defp current_time(), do: System.os_time(:microsecond) - @epoch
+
+  defp create_publication_step(state) do
+    # We're creating an "empty" publication because first snapshot creation should add the table
+    query = "CREATE PUBLICATION #{state.publication_name}"
+    {:query, query, %{state | step: :create_publication}}
+  end
+
+  defp create_replication_slot_step(state) do
+    query = "CREATE_REPLICATION_SLOT electric TEMPORARY LOGICAL pgoutput NOEXPORT_SNAPSHOT"
+    {:query, query, %{state | step: :create_slot}}
+  end
+
+  defp start_streaming_step(state) do
+    query =
+      "START_REPLICATION SLOT electric LOGICAL 0/0 (proto_version '1', publication_names '#{state.publication_name}')"
+
+    Logger.info("Started replication from postgres")
+
+    {:stream, query, [], %{state | step: :streaming}}
+  end
 end

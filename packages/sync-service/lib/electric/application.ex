@@ -1,8 +1,6 @@
 defmodule Electric.Application do
   use Application
 
-  alias Electric.Postgres.ReplicationClient
-
   @impl true
   def start(_type, _args) do
     :erlang.system_flag(:backtrace_depth, 50)
@@ -33,23 +31,19 @@ defmodule Electric.Application do
             shape_cache,
             {Electric.Replication.ShapeLogCollector,
              registry: Registry.ShapeChanges, shape_cache: shape_cache, inspector: inspector},
-            {Postgrex,
-             Application.fetch_env!(:electric, :database_config) ++
-               [
-                 name: Electric.DbPool,
-                 pool_size: 10
-               ]},
+            {Electric.ConnectionManager,
+             connection_opts: Application.fetch_env!(:electric, :database_config),
+             replication_opts: [
+               publication_name: publication_name,
+               try_creating_publication?: true,
+               transaction_received:
+                 {Electric.Replication.ShapeLogCollector, :store_transaction, []}
+             ],
+             pool_opts: [
+               name: Electric.DbPool,
+               pool_size: 10
+             ]},
             {Electric.Postgres.Inspector.EtsInspector, pool: Electric.DbPool},
-            {ReplicationClient,
-             Application.fetch_env!(:electric, :database_config) ++
-               [
-                 init_opts: [
-                   publication_name: publication_name,
-                   transaction_received:
-                     {Electric.Replication.ShapeLogCollector, :store_transaction, []},
-                   try_creating_publication?: true
-                 ]
-               ]},
             {Bandit,
              plug:
                {Electric.Plug.Router,

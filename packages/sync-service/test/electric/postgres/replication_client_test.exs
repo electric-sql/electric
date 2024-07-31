@@ -20,7 +20,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
     setup do
       %{
-        init_opts: [
+        replication_opts: [
           publication_name: @publication_name,
           transaction_received: {__MODULE__, :test_transaction_received, [self()]}
         ]
@@ -29,11 +29,11 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
     test "creates an empty publication on startup if requested", %{
       db_config: config,
-      init_opts: init_opts,
+      replication_opts: replication_opts,
       db_conn: conn
     } do
-      init_opts = Keyword.put(init_opts, :try_creating_publication?, true)
-      assert {:ok, _} = ReplicationClient.start_link(config ++ [init_opts: init_opts])
+      replication_opts = Keyword.put(replication_opts, :try_creating_publication?, true)
+      assert {:ok, _} = ReplicationClient.start_link(config, replication_opts)
 
       assert %{rows: [[@publication_name]]} =
                Postgrex.query!(conn, "SELECT pubname FROM pg_publication", [])
@@ -46,12 +46,12 @@ defmodule Electric.Postgres.ReplicationClientTest do
     setup [
       {Support.DbSetup, :with_unique_db},
       {Support.DbStructureSetup, :with_basic_tables},
-      :setup_publication_and_init_opts
+      :setup_publication_and_replication_opts
     ]
 
     test "calls a provided function when receiving it from the PG",
-         %{db_config: config, init_opts: init_opts, db_conn: conn} do
-      assert {:ok, _pid} = ReplicationClient.start_link(config ++ [init_opts: init_opts])
+         %{db_config: config, replication_opts: replication_opts, db_conn: conn} do
+      assert {:ok, _pid} = ReplicationClient.start_link(config, replication_opts)
 
       {:ok, _} =
         Postgrex.query(conn, "INSERT INTO items (id, value) VALUES ($1, $2)", [
@@ -64,10 +64,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
     end
 
     test "logs a message when connected & replication has started",
-         %{db_config: config, init_opts: init_opts, db_conn: conn} do
+         %{db_config: config, replication_opts: replication_opts, db_conn: conn} do
       log =
         ExUnit.CaptureLog.capture_log(fn ->
-          assert {:ok, _pid} = ReplicationClient.start_link(config ++ [init_opts: init_opts])
+          assert {:ok, _pid} = ReplicationClient.start_link(config, replication_opts)
 
           {:ok, _} =
             Postgrex.query(conn, "INSERT INTO items (id, value) VALUES ($1, $2)", [
@@ -84,10 +84,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
     test "doesn't fail to start when publicaiton already exists", %{
       db_config: config,
-      init_opts: init_opts
+      replication_opts: replication_opts
     } do
-      init_opts = Keyword.put(init_opts, :try_creating_publication?, true)
-      assert {:ok, _} = ReplicationClient.start_link(config ++ [init_opts: init_opts])
+      replication_opts = Keyword.put(replication_opts, :try_creating_publication?, true)
+      assert {:ok, _} = ReplicationClient.start_link(config, replication_opts)
     end
   end
 
@@ -95,10 +95,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
     setup [
       {Support.DbSetup, :with_unique_db},
       {Support.DbStructureSetup, :with_basic_tables},
-      :setup_publication_and_init_opts
+      :setup_publication_and_replication_opts
     ]
 
-    setup %{db_config: config, init_opts: init_opts, db_conn: conn} do
+    setup %{db_config: config, replication_opts: replication_opts, db_conn: conn} do
       Postgrex.query!(
         conn,
         "CREATE TABLE items2 (id UUID PRIMARY KEY, val1 TEXT, val2 TEXT, num INTEGER)",
@@ -107,7 +107,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       Postgrex.query!(conn, "ALTER TABLE items2 REPLICA IDENTITY FULL", [])
 
-      assert {:ok, _pid} = ReplicationClient.start_link(config ++ [init_opts: init_opts])
+      assert {:ok, _pid} = ReplicationClient.start_link(config, replication_opts)
 
       :ok
     end
@@ -188,11 +188,11 @@ defmodule Electric.Postgres.ReplicationClientTest do
     assert Lsn.from_integer(wal) == Lsn.from_string("0/11")
   end
 
-  defp setup_publication_and_init_opts(%{db_conn: conn}) do
+  defp setup_publication_and_replication_opts(%{db_conn: conn}) do
     create_publication_for_all_tables(conn)
 
     %{
-      init_opts: [
+      replication_opts: [
         publication_name: @publication_name,
         transaction_received: {__MODULE__, :test_transaction_received, [self()]},
         try_creating_publication?: false
