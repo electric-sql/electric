@@ -305,6 +305,7 @@ defmodule Electric.ShapeCache do
           |> Task.start()
         end
       )
+      |> Task.start()
 
       add_waiter(state, shape_id, nil)
     else
