@@ -1,5 +1,11 @@
 # @electric-sql/next
 
+## 0.2.1
+
+### Patch Changes
+
+- 5c43a31: Parse values of basic types (int2, int4, int8, float8, bool, json/jsonb) and arrays of those types into JS values on the client.
+
 ## 0.2.0
 
 ### Minor Changes

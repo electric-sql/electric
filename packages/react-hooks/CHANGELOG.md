@@ -1,5 +1,12 @@
 # @electric-sql/react
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [5c43a31]
+  - @electric-sql/next@0.2.1
+
 ## 0.1.0
 
 ### Minor Changes
