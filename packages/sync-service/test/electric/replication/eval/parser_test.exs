@@ -279,8 +279,7 @@ defmodule Electric.Replication.Eval.ParserTest do
     end
 
     test "should work with LIKE clauses" do
-      env =
-        Env.new()
+      env = Env.new()
 
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
@@ -290,6 +289,21 @@ defmodule Electric.Replication.Eval.ParserTest do
                )
 
       assert %Const{value: true, type: :bool} = result
+    end
+
+    test "should work with BETWEEN clauses" do
+      env = Env.new()
+
+      for {expr, expected} <- [
+            {~S|2 BETWEEN 1 AND 3|, true},
+            {~S|0 BETWEEN 1 AND 3|, false},
+            {~S|'2024-07-31'::date BETWEEN '2024-07-01'::date AND '2024-07-31'::date|, true}
+          ] do
+        assert {:ok, %Expr{eval: result}} =
+                 Parser.parse_and_validate_expression(expr, %{}, env)
+
+        assert %Const{value: ^expected, type: :bool} = result
+      end
     end
 
     test "should work with explicit casts" do
