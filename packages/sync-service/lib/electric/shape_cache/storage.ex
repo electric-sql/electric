@@ -25,7 +25,7 @@ defmodule Electric.ShapeCache.Storage do
           headers: log_header(),
           offset: LogOffset.t()
         }
-  @type log :: [log_entry()]
+  @type log :: Enumerable.t(log_entry())
 
   @type serialised_log_entry :: %{
           key: String.t(),
