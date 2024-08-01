@@ -116,6 +116,7 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :put_resp_content_type, "application/json"
   plug :validate_query_params
   plug :load_shape_info
+  plug :put_schema_header
 
   # We're starting listening as soon as possible to not miss stuff that was added since we've asked for last offset
   plug :listen_for_new_changes
@@ -154,7 +155,6 @@ defmodule Electric.Plug.ServeShapePlug do
     |> assign(:last_offset, last_offset)
     |> put_resp_header("x-electric-shape-id", shape_id)
     |> put_resp_header("x-electric-chunk-last-offset", "#{last_offset}")
-    |> put_resp_header("x-electric-schema", schema(shape))
   end
 
   defp schema(shape) do
@@ -164,6 +164,14 @@ defmodule Electric.Plug.ServeShapePlug do
     |> Schema.from_column_info()
     |> Jason.encode!()
   end
+
+  # Only adds schema header when not in live mode
+  defp put_schema_header(conn, _) when not conn.assigns.live do
+    shape = conn.assigns.shape_definition
+    put_resp_header(conn, "x-electric-schema", schema(shape))
+  end
+
+  defp put_schema_header(conn, _), do: conn
 
   # If the offset requested is -1, noop as we can always serve it
   def validate_shape_offset(%Conn{assigns: %{offset: @before_all_offset}} = conn, _) do

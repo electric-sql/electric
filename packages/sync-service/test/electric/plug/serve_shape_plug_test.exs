@@ -322,6 +322,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Plug.Conn.get_resp_header(conn, "pragma") == ["no-cache"]
       assert Plug.Conn.get_resp_header(conn, "expires") == ["0"]
       assert Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset") == [next_offset_str]
+      assert Plug.Conn.get_resp_header(conn, "x-electric-schema") == []
     end
 
     test "handles shape rotation" do
