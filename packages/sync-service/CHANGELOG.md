@@ -1,5 +1,18 @@
 # @core/sync-service
 
+## 0.2.4
+
+### Patch Changes
+
+- bd0aaed: Configure logical replication stream with display settings.
+- 437bc42: Support connecting to the database using SSL by include an appropriate sslmode parameter in the DATABASE_URL setting.
+- 06e843c: Only include schema in header of responses to non-live requests.
+- c201e88: Only include dims for array types in schema information in HTTP response headers.
+- d5c268d: Reduce memory footprint of initial sync by streaming data from storage, for example a 35MB / 200k row table did require 550MB but now requires 50MB
+- 358e0ab: Add PK index of column is part of the PK in the column information that is part of the schema information returned in the x-electric-schema
+  HTTP header.
+- 8e4e57c: Support connecting to the database over IPv6 by configuring the sync service with DATABASE_USE_IPV6=true.
+
 ## 0.2.3
 
 ### Patch Changes

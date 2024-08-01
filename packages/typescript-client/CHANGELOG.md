@@ -1,5 +1,12 @@
 # @electric-sql/next
 
+## 0.2.2
+
+### Patch Changes
+
+- 06e843c: Only include schema in header of responses to non-live requests.
+- 22f388f: Parse float4 into a JS Number in the JS ShapeStream abstraction.
+
 ## 0.2.1
 
 ### Patch Changes
