@@ -243,6 +243,15 @@ paths:
                         - for inserts it will contain the whole row
                         - for updates it will contain the primary key and the changed values
                         - for deletes it will contain just the primary key
+                        
+                        The values are strings that are formatted according to Postgres' display settings.
+                        Some Postgres types support several display settings, we format values consistently according to the following display settings:
+                        
+                        - `bytea_output = 'hex'`
+                        - `DateStyle = 'ISO, DMY'`
+                        - `TimeZone = 'UTC'`
+                        - `IntervalStyle = 'iso_8601'`
+                        - `extra_float_digits = 1`
                 example:
                   - headers:
                       action: insert

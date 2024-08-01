@@ -38,7 +38,7 @@ When you sync a shape from Electric, you get the data in the form of a log of lo
 
 The `offset` that you see in the messages and provide as the `?offset=...` query parameter in your request identifies a position in the log. The messages you see in the response are shape log entries (the ones with `value`s and `action` headers) and control messages (the ones with `control` headers).
 
-The Shape Log is similar conceptually to the logical replication stream from Postgres. Except that instead of getting all the database operations, you're getting the ones that affect the data in your Shape. It's then the responsibility of the client to consume the log and materialize out the current value of the shape.
+The Shape Log is similar conceptually to the logical replication stream from Postgres. Except that instead of getting all the database operations, you're getting the ones that affect the data in your Shape. It's then the responsibility of the client to consume the log and materialize out the current value of the shape. The values included in the shape log are strings formatted according to Postgres' display settings. The [OpenAPI](https://www.openapis.org/what-is-openapi) specification defines the display settings the HTTP API adheres to.
 
 <figure>
   <a href="/img/api/shape-log.jpg">
@@ -63,13 +63,13 @@ Sometimes a log can fit in a single response. Sometimes it's too big and require
 
 ### Control messages
 
-The client will then recieve an `up-to-date` control message at the end of the response data:
+The client will then receive an `up-to-date` control message at the end of the response data:
 
 ```json
 {"headers": {"control": "up-to-date"}}
 ```
 
-This indicates that the client has all the data that the server was aware of when fulfilling the request. The client can then switch into live mode to recieve real-time updates.
+This indicates that the client has all the data that the server was aware of when fulfilling the request. The client can then switch into live mode to receive real-time updates.
 
 ::: info Must-refetch
 Note that the other control message is `must-refetch` which indicates that the client must throwaway their local shape data and re-sync from scratch:
