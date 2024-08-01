@@ -16,6 +16,7 @@ export const defaultParser: Parser = {
   int4: parseNumber,
   int8: parseBigInt,
   bool: parseBool,
+  float4: parseNumber,
   float8: parseNumber,
   json: parseJson,
   jsonb: parseJson,
