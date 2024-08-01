@@ -36,7 +36,9 @@ defmodule Electric.Plug.RouterTest do
     setup {DbStructureSetup, :with_basic_tables}
     setup {DbStructureSetup, :with_sql_execute}
 
-    setup(do: %{publication_name: "electric_test_pub"})
+    setup do
+      %{publication_name: "electric_test_publication", slot_name: "electric_test_slot"}
+    end
 
     setup :with_complete_stack
 

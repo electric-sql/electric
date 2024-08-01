@@ -134,15 +134,44 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
   end
 
   def handle_message(
-        %LR.Commit{lsn: commit_lsn},
+        %LR.Commit{lsn: commit_lsn, end_lsn: end_lsn},
         %__MODULE__{transaction: txn} = state
       )
-      # NOTE: keeping the commit LSN rather than the end_lsn as the
-      # transaction's identifying LSN for convenience
       when not is_nil(txn) and commit_lsn == txn.lsn do
+    # Here, `commit_lsn` is the same value as `final_lsn` on the Begin message that preceded
+    # this Commit.  To better understand the difference between `commit_lsn` and `end_lsn`,
+    # let's consult Postgres' source code[1]:
+    #
+    #     /* ----
+    #      * LSN of the record that lead to this xact to be prepared or committed or
+    #      * aborted. This can be a
+    #      * * plain commit record
+    #      * * plain commit record, of a parent transaction
+    #      * * prepared transaction
+    #      * * prepared transaction commit
+    #      * * plain abort record
+    #      * * prepared transaction abort
+    #      *
+    #      * This can also become set to earlier values than transaction end when
+    #      * a transaction is spilled to disk; specifically it's set to the LSN of
+    #      * the latest change written to disk so far.
+    #      * ----
+    #      */
+    #     XLogRecPtr  final_lsn;
+    #
+    #     /*
+    #      * LSN pointing to the end of the commit record + 1.
+    #      */
+    #     XLogRecPtr  end_lsn;
+    #
+    # [1]: https://github.com/postgres/postgres/blob/c671e142bf4b568434eb8559baff34d32eed5b29/src/include/replication/reorderbuffer.h#L276-L296
+    #
+    # For our purposes, we're setting transaction's LSN to `end_lsn` which seems like a more
+    # stable value based on the above comments.
     {%Transaction{
        txn
-       | changes: Enum.reverse(txn.changes),
+       | lsn: end_lsn,
+         changes: Enum.reverse(txn.changes),
          last_log_offset: LogOffset.new(txn.lsn, max(0, state.tx_op_index - 2))
      }, %__MODULE__{state | transaction: nil, tx_op_index: nil}}
   end
