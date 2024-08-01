@@ -8,6 +8,7 @@ defmodule Electric.Application do
     {storage_module, init_params} = Application.fetch_env!(:electric, :storage)
 
     publication_name = "electric_publication"
+    slot_name = "electric_slot"
 
     with {:ok, storage_opts} <- storage_module.shared_opts(init_params) do
       storage = {storage_module, storage_opts}
@@ -36,12 +37,14 @@ defmodule Electric.Application do
              replication_opts: [
                publication_name: publication_name,
                try_creating_publication?: true,
+               slot_name: slot_name,
                transaction_received:
                  {Electric.Replication.ShapeLogCollector, :store_transaction, []}
              ],
              pool_opts: [
                name: Electric.DbPool,
-               pool_size: 10
+               pool_size: 10,
+               types: PgInterop.Postgrex.Types
              ]},
             {Electric.Postgres.Inspector.EtsInspector, pool: Electric.DbPool},
             {Bandit,

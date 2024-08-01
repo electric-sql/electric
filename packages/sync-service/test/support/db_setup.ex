@@ -1,12 +1,16 @@
 defmodule Support.DbSetup do
   import ExUnit.Callbacks
 
+  @postgrex_start_opts [
+    backoff_type: :stop,
+    max_restarts: 0,
+    pool_size: 2,
+    types: PgInterop.Postgrex.Types
+  ]
+
   def with_unique_db(ctx) do
     base_config = Application.fetch_env!(:electric, :connection_opts)
-
-    {:ok, utility_pool} =
-      Postgrex.start_link(base_config ++ [backoff_type: :stop, max_restarts: 0])
-
+    {:ok, utility_pool} = Postgrex.start_link(base_config ++ @postgrex_start_opts)
     Process.unlink(utility_pool)
 
     db_name = to_string(ctx.test)
@@ -30,9 +34,7 @@ defmodule Support.DbSetup do
     end)
 
     updated_config = Keyword.put(base_config, :database, db_name)
-
-    {:ok, pool} =
-      Postgrex.start_link(updated_config ++ [backoff_type: :stop, max_restarts: 0, pool_size: 2])
+    {:ok, pool} = Postgrex.start_link(updated_config ++ @postgrex_start_opts)
 
     {:ok, %{utility_pool: utility_pool, db_config: updated_config, pool: pool, db_conn: pool}}
   end
@@ -44,10 +46,7 @@ defmodule Support.DbSetup do
 
   def with_shared_db(_ctx) do
     config = Application.fetch_env!(:electric, :connection_opts)
-
-    {:ok, pool} =
-      Postgrex.start_link(config ++ [backoff_type: :stop, max_restarts: 0])
-
+    {:ok, pool} = Postgrex.start_link(config ++ @postgrex_start_opts)
     {:ok, %{pool: pool, db_config: config, db_conn: pool}}
   end
 
