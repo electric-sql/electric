@@ -190,7 +190,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> ServeShapePlug.call([])
 
       assert Plug.Conn.get_resp_header(conn, "x-electric-schema") == [
-               ~s|{"id":{"type":"int8","dims":0}}|
+               ~s|{"id":{"type":"int8"}}|
              ]
     end
 
