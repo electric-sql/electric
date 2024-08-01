@@ -2,7 +2,7 @@ defmodule Support.DbSetup do
   import ExUnit.Callbacks
 
   def with_unique_db(ctx) do
-    base_config = Application.fetch_env!(:electric, :database_config)
+    base_config = Application.fetch_env!(:electric, :connection_opts)
 
     {:ok, utility_pool} =
       Postgrex.start_link(base_config ++ [backoff_type: :stop, max_restarts: 0])
@@ -43,7 +43,7 @@ defmodule Support.DbSetup do
   end
 
   def with_shared_db(_ctx) do
-    config = Application.fetch_env!(:electric, :database_config)
+    config = Application.fetch_env!(:electric, :connection_opts)
 
     {:ok, pool} =
       Postgrex.start_link(config ++ [backoff_type: :stop, max_restarts: 0])

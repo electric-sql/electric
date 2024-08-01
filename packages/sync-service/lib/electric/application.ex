@@ -32,7 +32,7 @@ defmodule Electric.Application do
             {Electric.Replication.ShapeLogCollector,
              registry: Registry.ShapeChanges, shape_cache: shape_cache, inspector: inspector},
             {Electric.ConnectionManager,
-             connection_opts: Application.fetch_env!(:electric, :database_config),
+             connection_opts: Application.fetch_env!(:electric, :connection_opts),
              replication_opts: [
                publication_name: publication_name,
                try_creating_publication?: true,
