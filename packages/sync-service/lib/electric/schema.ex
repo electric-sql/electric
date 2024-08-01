@@ -13,7 +13,8 @@ defmodule Electric.Schema do
           optional(:length) => String.t(),
           optional(:precision) => String.t(),
           optional(:scale) => String.t(),
-          optional(:fields) => String.t()
+          optional(:fields) => String.t(),
+          optional(:type_mod) => integer()
         }
 
   @bit_types ["bit", "varbit"]
@@ -106,6 +107,12 @@ defmodule Electric.Schema do
       <<type_mod - 4::signed-integer-32>>
 
     Map.merge(schema, %{precision: precision, scale: scale})
+  end
+
+  defp add_modifier(schema, %{type_mod: type_mod}) when type_mod > -1 do
+    # It's not a built-in type so we don't know how to interpret its type modifier.
+    # Therefore we include the type modifier as is in the schema.
+    Map.put(schema, :type_mod, type_mod)
   end
 
   defp add_modifier(schema, _), do: schema
