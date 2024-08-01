@@ -1,6 +1,9 @@
 defmodule Electric.Postgres.ReplicationClientTest do
   use ExUnit.Case, async: true
 
+  import Support.DbSetup, except: [with_publication: 1]
+  import Support.DbStructureSetup
+
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient
 
@@ -16,8 +19,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   @slot_name "test_electric_slot"
 
   describe "ReplicationClient init" do
-    setup {Support.DbSetup, :with_unique_db}
-    setup {Support.DbStructureSetup, :with_basic_tables}
+    setup [:with_unique_db, :with_basic_tables]
 
     test "creates an empty publication on startup if requested", %{
       db_config: config,
@@ -40,11 +42,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   describe "ReplicationClient against real db" do
-    setup [
-      {Support.DbSetup, :with_unique_db},
-      {Support.DbStructureSetup, :with_basic_tables},
-      :setup_publication_and_replication_opts
-    ]
+    setup [:with_unique_db, :with_basic_tables, :with_publication, :with_replication_opts]
 
     test "calls a provided function when receiving it from the PG",
          %{db_config: config, replication_opts: replication_opts, db_conn: conn} do
@@ -168,6 +166,14 @@ defmodule Electric.Postgres.ReplicationClientTest do
       refute_receive _
     end
 
+    # Set the DB's display settings to something else than Electric.Postgres.display_settings
+    @tag database_settings: [
+           "DateStyle='Postgres, DMY'",
+           "TimeZone='CET'",
+           "extra_float_digits=-1",
+           "bytea_output='escape'",
+           "IntervalStyle='postgres'"
+         ]
     @tag additional_fields:
            "date DATE, timestamptz TIMESTAMPTZ, float FLOAT8, bytea BYTEA, interval INTERVAL"
     test "returns data formatted according to display settings", %{
@@ -175,39 +181,33 @@ defmodule Electric.Postgres.ReplicationClientTest do
       replication_opts: replication_opts,
       db_conn: conn
     } do
-      replication_opts = Keyword.put(replication_opts, :try_creating_publication?, true)
-      db_name = Keyword.get(config, :database)
-
-      # Set the DB's display settings to something else than Electric.Postgres.display_settings
-      Postgrex.query!(conn, "ALTER DATABASE \"#{db_name}\" SET DateStyle='Postgres, DMY';", [])
-      Postgrex.query!(conn, "ALTER DATABASE \"#{db_name}\" SET TimeZone='CET';", [])
-      Postgrex.query!(conn, "ALTER DATABASE \"#{db_name}\" SET extra_float_digits=-1;", [])
-      Postgrex.query!(conn, "ALTER DATABASE \"#{db_name}\" SET bytea_output='escape';", [])
-      Postgrex.query!(conn, "ALTER DATABASE \"#{db_name}\" SET IntervalStyle='postgres';", [])
-
       assert {:ok, _} = ReplicationClient.start_link(config, replication_opts)
 
-      {:ok, _} =
-        Postgrex.query(
-          conn,
-          "INSERT INTO items (id, value, date, timestamptz, float, bytea, interval) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-          [
-            Ecto.UUID.bingenerate(),
-            "test value",
-            ~D[2022-05-17],
-            ~U[2022-01-12 00:01:00.00Z],
-            1.234567890123456,
-            # 5 in hex
-            "0x5",
-            %Postgrex.Interval{
-              days: 1,
-              months: 0,
-              # 12 hours, 59 minutes, 10 seconds
-              secs: 46750,
-              microsecs: 0
-            }
-          ]
+      Postgrex.query!(
+        conn,
+        """
+        INSERT INTO items (
+          id, value, date, timestamptz, float, bytea, interval
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7
         )
+        """,
+        [
+          Ecto.UUID.bingenerate(),
+          "test value",
+          ~D[2022-05-17],
+          ~U[2022-01-12 00:01:00.00Z],
+          1.234567890123456,
+          <<0x5, 0x10, 0xFA>>,
+          %Postgrex.Interval{
+            days: 1,
+            months: 0,
+            # 12 hours, 59 minutes, 10 seconds
+            secs: 46750,
+            microsecs: 0
+          }
+        ]
+      )
 
       # Check that the incoming data is formatted according to Electric.Postgres.display_settings
       assert_receive {:from_replication, %Transaction{changes: [change]}}
@@ -215,23 +215,17 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert %NewRecord{
                record: %{
                  "date" => "2022-05-17",
-                 "timestamptz" => timestamp,
+                 "timestamptz" => "2022-01-12 00:01:00+00",
                  "float" => "1.234567890123456",
-                 "bytea" => "\\x307835",
+                 "bytea" => "\\x0510fa",
                  "interval" => "P1DT12H59M10S"
                }
              } = change
-
-      assert String.ends_with?(timestamp, "+00")
     end
   end
 
   describe "ReplicationClient against real db (toast)" do
-    setup [
-      {Support.DbSetup, :with_unique_db},
-      {Support.DbStructureSetup, :with_basic_tables},
-      :setup_publication_and_replication_opts
-    ]
+    setup [:with_unique_db, :with_basic_tables, :with_publication, :with_replication_opts]
 
     setup %{db_config: config, replication_opts: replication_opts, db_conn: conn} do
       Postgrex.query!(
@@ -341,9 +335,12 @@ defmodule Electric.Postgres.ReplicationClientTest do
     assert app_wal == state.applied_wal
   end
 
-  defp setup_publication_and_replication_opts(%{db_conn: conn}) do
-    create_publication_for_all_tables(conn)
+  defp with_publication(%{db_conn: conn}) do
+    Postgrex.query!(conn, "CREATE PUBLICATION #{@publication_name} FOR ALL TABLES", [])
+    :ok
+  end
 
+  defp with_replication_opts(_) do
     %{
       replication_opts: [
         publication_name: @publication_name,
@@ -384,9 +381,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
     send(test_pid, {:from_replication, transaction})
     :ok
   end
-
-  defp create_publication_for_all_tables(conn),
-    do: Postgrex.query!(conn, "CREATE PUBLICATION #{@publication_name} FOR ALL TABLES", [])
 
   defp gen_random_string(length) do
     Stream.repeatedly(fn -> :rand.uniform(125 - 32) + 32 end)

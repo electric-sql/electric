@@ -19,6 +19,10 @@ defmodule Support.DbSetup do
     Postgrex.query!(utility_pool, "DROP DATABASE IF EXISTS \"#{escaped_db_name}\"", [])
     Postgrex.query!(utility_pool, "CREATE DATABASE \"#{escaped_db_name}\"", [])
 
+    Enum.each(database_settings(ctx), fn setting ->
+      Postgrex.query!(utility_pool, "ALTER DATABASE \"#{db_name}\" SET #{setting}", [])
+    end)
+
     on_exit(fn ->
       Process.link(utility_pool)
 
@@ -97,4 +101,7 @@ defmodule Support.DbSetup do
 
     {:ok, %{db_conn: conn}}
   end
+
+  defp database_settings(%{database_settings: settings}), do: settings
+  defp database_settings(_), do: []
 end
