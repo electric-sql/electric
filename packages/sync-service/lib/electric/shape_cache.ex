@@ -330,6 +330,10 @@ defmodule Electric.ShapeCache do
       %{rows: [[xmin]]} =
         Postgrex.query!(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())", [])
 
+      # Enforce display settings *before* querying initial data to maintain consistent
+      # formatting between snapshot and live log entries.
+      Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
+
       GenServer.cast(parent, {:snapshot_xmin_known, shape_id, xmin})
       {query, stream} = Querying.stream_initial_data(conn, shape)
 

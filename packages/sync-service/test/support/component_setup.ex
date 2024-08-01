@@ -26,6 +26,10 @@ defmodule Support.ComponentSetup do
     %{storage: {InMemoryStorage, storage_opts}}
   end
 
+  def with_no_pool(_ctx) do
+    %{pool: :no_pool}
+  end
+
   def with_cub_db_storage(ctx) do
     {:ok, storage_opts} =
       CubDbStorage.shared_opts(

@@ -6,13 +6,14 @@ defmodule Electric.Plug.RouterTest do
   """
   use ExUnit.Case
 
-  alias Electric.Replication.LogOffset
-  alias Support.DbStructureSetup
-  alias Electric.Plug.Router
-  alias Support.DbSetup
-  alias Electric.Replication.Changes
   import Support.ComponentSetup
+  import Support.DbSetup
+  import Support.DbStructureSetup
   import Plug.Test
+
+  alias Electric.Plug.Router
+  alias Electric.Replication.Changes
+  alias Electric.Replication.LogOffset
 
   @moduletag :tmp_dir
   @moduletag :capture_log
@@ -32,9 +33,7 @@ defmodule Electric.Plug.RouterTest do
   end
 
   describe "/v1/shapes" do
-    setup {DbSetup, :with_unique_db}
-    setup {DbStructureSetup, :with_basic_tables}
-    setup {DbStructureSetup, :with_sql_execute}
+    setup [:with_unique_db, :with_basic_tables, :with_sql_execute]
 
     setup do
       %{publication_name: "electric_test_publication", slot_name: "electric_test_slot"}
