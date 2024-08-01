@@ -28,6 +28,17 @@ describe(`Default parser`, () => {
     expect(defaultParser.bool(`false`)).toBe(false)
   })
 
+  it(`should parse float4`, () => {
+    expect(defaultParser.float4(`1.1754944e-38`)).toBe(1.1754944e-38)
+    expect(defaultParser.float4(`3.4028235e38`)).toBe(3.4028235e38)
+    expect(defaultParser.float4(`-3.4028235e38`)).toBe(-3.4028235e38)
+    expect(defaultParser.float4(`-1.1754944e-38`)).toBe(-1.1754944e-38)
+    expect(defaultParser.float4(`0`)).toBe(0)
+    expect(defaultParser.float4(`Infinity`)).toBe(Infinity)
+    expect(defaultParser.float4(`-Infinity`)).toBe(-Infinity)
+    expect(defaultParser.float4(`NaN`)).toBe(NaN)
+  })
+
   it(`should parse float8`, () => {
     expect(defaultParser.float8(`1.797e308`)).toBe(1.797e308)
     expect(defaultParser.float8(`-1.797e+308`)).toBe(-1.797e308)
