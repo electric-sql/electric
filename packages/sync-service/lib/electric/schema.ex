@@ -8,6 +8,7 @@ defmodule Electric.Schema do
   @type schema :: %{
           :type => type_name(),
           optional(:dims) => non_neg_integer(),
+          optional(:pk_index) => non_neg_integer(),
           optional(:max_length) => String.t(),
           optional(:length) => String.t(),
           optional(:precision) => String.t(),
@@ -49,6 +50,7 @@ defmodule Electric.Schema do
   defp schema(col_info) do
     %{type: type(col_info)}
     |> add_dims(col_info)
+    |> add_pk(col_info)
     |> add_modifier(col_info)
   end
 
@@ -59,6 +61,12 @@ defmodule Electric.Schema do
 
   defp add_dims(schema, %{array_dimensions: array_dimensions}) do
     Map.put(schema, :dims, array_dimensions)
+  end
+
+  defp add_pk(schema, %{pk_position: nil}), do: schema
+
+  defp add_pk(schema, %{pk_position: idx}) do
+    Map.put(schema, :pk_index, idx)
   end
 
   defp add_modifier(%{type: type} = schema, %{type_mod: type_mod})
