@@ -83,7 +83,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
   end
 
   def get_snapshot(shape_id, opts) do
-    results =
+    stream =
       opts.db
       |> CubDB.select(
         min_key: snapshot_start(shape_id),
@@ -91,10 +91,9 @@ defmodule Electric.ShapeCache.CubDbStorage do
       )
       |> Stream.flat_map(fn {_, items} -> items end)
       |> Stream.map(&storage_item_to_log_item/1)
-      |> Enum.to_list()
 
     # FIXME: this is naive while we don't have snapshot metadata to get real offset
-    {LogOffset.first(), results}
+    {LogOffset.first(), stream}
   end
 
   def get_log_stream(shape_id, offset, max_offset, opts) do

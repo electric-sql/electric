@@ -72,8 +72,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
       setup :start_storage
 
-      test "returns empty list when shape does not exist", %{module: storage, opts: opts} do
-        assert {_, []} = storage.get_snapshot(@shape_id, opts)
+      test "returns empty stream when shape does not exist", %{module: storage, opts: opts} do
+        {_, stream} = storage.get_snapshot(@shape_id, opts)
+        assert [] = Enum.to_list(stream)
       end
 
       test "returns the zero offset when shape does not exist", %{module: storage, opts: opts} do
@@ -83,21 +84,22 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       test "returns snapshot when shape does exist", %{module: storage, opts: opts} do
         storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
-        assert {@snapshot_offset,
-                [
-                  %{
-                    offset: @snapshot_offset,
-                    value: %{"id" => "00000000-0000-0000-0000-000000000001", "title" => "row1"},
-                    key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
-                    headers: %{action: :insert}
-                  },
-                  %{
-                    offset: @snapshot_offset,
-                    value: %{"id" => "00000000-0000-0000-0000-000000000002", "title" => "row2"},
-                    key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
-                    headers: %{action: :insert}
-                  }
-                ]} = storage.get_snapshot(@shape_id, opts)
+        {@snapshot_offset, stream} = storage.get_snapshot(@shape_id, opts)
+
+        assert [
+                 %{
+                   offset: @snapshot_offset,
+                   value: %{"id" => "00000000-0000-0000-0000-000000000001", "title" => "row1"},
+                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
+                   headers: %{action: :insert}
+                 },
+                 %{
+                   offset: @snapshot_offset,
+                   value: %{"id" => "00000000-0000-0000-0000-000000000002", "title" => "row2"},
+                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
+                   headers: %{action: :insert}
+                 }
+               ] = Enum.to_list(stream)
       end
 
       test "does not leak results from other snapshots", %{module: storage, opts: opts} do
@@ -116,21 +118,22 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           opts
         )
 
-        assert {@snapshot_offset,
-                [
-                  %{
-                    offset: @snapshot_offset,
-                    value: %{"id" => "00000000-0000-0000-0000-000000000001", "title" => "row1"},
-                    key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
-                    headers: %{action: :insert}
-                  },
-                  %{
-                    offset: @snapshot_offset,
-                    value: %{"id" => "00000000-0000-0000-0000-000000000002", "title" => "row2"},
-                    key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
-                    headers: %{action: :insert}
-                  }
-                ]} = storage.get_snapshot(@shape_id, opts)
+        {@snapshot_offset, stream} = storage.get_snapshot(@shape_id, opts)
+
+        assert [
+                 %{
+                   offset: @snapshot_offset,
+                   value: %{"id" => "00000000-0000-0000-0000-000000000001", "title" => "row1"},
+                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
+                   headers: %{action: :insert}
+                 },
+                 %{
+                   offset: @snapshot_offset,
+                   value: %{"id" => "00000000-0000-0000-0000-000000000002", "title" => "row2"},
+                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
+                   headers: %{action: :insert}
+                 }
+               ] = Enum.to_list(stream)
       end
 
       test "returns snapshot offset when shape does exist", %{module: storage, opts: opts} do
@@ -152,7 +155,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         :ok = storage.append_to_log!(@shape_id, changes, opts)
 
-        assert {@snapshot_offset, []} = storage.get_snapshot(@shape_id, opts)
+        {@snapshot_offset, stream} = storage.get_snapshot(@shape_id, opts)
+        assert [] = Enum.to_list(stream)
       end
     end
 
@@ -383,12 +387,14 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         assert storage.snapshot_exists?(@shape_id, opts) == false
       end
 
-      test "causes get_snapshot/2 to return empty list", %{module: storage, opts: opts} do
+      test "causes get_snapshot/2 to return empty stream", %{module: storage, opts: opts} do
         storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
         storage.cleanup!(@shape_id, opts)
 
-        assert {_, []} = storage.get_snapshot(@shape_id, opts)
+        {_, stream} = storage.get_snapshot(@shape_id, opts)
+
+        assert [] = Enum.to_list(stream)
       end
 
       test "causes get_snapshot/2 to return a zero offset", %{module: storage, opts: opts} do
