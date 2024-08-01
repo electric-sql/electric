@@ -14,11 +14,19 @@ config :telemetry_poller, :default, period: 500
 
 if Config.config_env() == :test do
   config :electric,
-    database_config:
-      PostgresqlUri.parse("postgresql://postgres:password@localhost:54321/postgres")
+    connection_opts: [
+      hostname: "localhost",
+      port: 54321,
+      username: "postgres",
+      password: "password",
+      database: "postgres"
+    ]
 else
-  config :electric,
-    database_config: PostgresqlUri.parse(env!("DATABASE_URL"))
+  {:ok, connection_opts} =
+    env!("DATABASE_URL", :string)
+    |> Electric.Config.parse_postgresql_uri()
+
+  config :electric, connection_opts: connection_opts
 end
 
 enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)

@@ -65,7 +65,10 @@ defmodule Electric.ConnectionManager do
     # implement our custom error handling logic.
     Process.flag(:trap_exit, true)
 
-    connection_opts = Keyword.fetch!(opts, :connection_opts)
+    connection_opts =
+      opts
+      |> Keyword.fetch!(:connection_opts)
+      |> update_ssl_opts()
 
     replication_opts =
       opts
@@ -147,6 +150,22 @@ defmodule Electric.ConnectionManager do
     case do_start_replication_client(connection_opts, replication_opts) do
       {:ok, pid} ->
         {:ok, pid, connection_opts}
+
+      {:error, %Postgrex.Error{message: "ssl not available"}} = error ->
+        if connection_opts[:sslmode] == :require do
+          error
+        else
+          if connection_opts[:sslmode] do
+            # Only log a warning when there's an explicit sslmode parameter in the database
+            # config, meaning the user has requested a certain sslmode.
+            Logger.warning(
+              "Failed to connect to the database using SSL. Trying again, using an unencrypted connection."
+            )
+          end
+
+          connection_opts = Keyword.put(connection_opts, :ssl, false)
+          start_replication_client(connection_opts, replication_opts)
+        end
 
       other ->
         other
@@ -231,4 +250,61 @@ defmodule Electric.ConnectionManager do
   defp known_pid?(_, %{replication_client_pid: nil, pool_pid: nil}), do: true
 
   defp known_pid?(_, _), do: false
+
+  defp update_ssl_opts(connection_opts) do
+    ssl_opts =
+      case connection_opts[:sslmode] do
+        :disable ->
+          false
+
+        _ ->
+          hostname = String.to_charlist(connection_opts[:hostname])
+
+          ssl_verify_opts()
+          |> Keyword.put(:server_name_indication, hostname)
+      end
+
+    Keyword.put(connection_opts, :ssl, ssl_opts)
+  end
+
+  # We explicitly set `verify` to `verify_none` because it's currently the only way to ensure
+  # encrypted connections work even when a faulty certificate chain is presented by the PG host.
+  # This behaviour matches that of `psql <DATABASE_URL>?sslmode=require`.
+  #
+  # Here's an example of connecting to DigitalOcean's Managed PostgreSQL to illustrate the point.
+  # Specifying `sslmode=require` does not result in any certificate validation, it only instructs
+  # `psql` to use SSL for the connection:
+  #
+  #     $ psql 'postgresql://...?sslmode=require'
+  #     psql (16.1, server 16.3)
+  #     SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off)
+  #     Type "help" for help.
+  #
+  #     [db-postgresql-do-user-13160360-0] doadmin:defaultdb=> \q
+  #
+  # Now if we request certificate validation, we get a different result:
+  #
+  #     $ psql 'postgresql://...?sslmode=verify-full'
+  #     psql: error: connection to server at "***.db.ondigitalocean.com" (167.99.250.38), o
+  #     port 25060 failed: root certificate file "/home/alco/.postgresql/root.crt" does not exist
+  #     Either provide the file, use the system's trusted roots with sslrootcert=system, or change
+  #     sslmode to disable server certificate verification.
+  #
+  #     $ psql 'sslrootcert=system sslmode=verify-full host=***.db.ondigitalocean.com ...'
+  #     psql: error: connection to server at "***.db.ondigitalocean.com" (167.99.250.38), port 25060
+  #     failed: SSL error: certificate verify failed
+  #
+  # We can a better idea of what's wrong with the certificate with `openssl`'s help:
+  #
+  #     $ openssl s_client -starttls postgres -showcerts -connect ***.db.ondigitalocean.com:25060 -CApath /etc/ssl/certs/
+  #     [...]
+  #     SSL handshake has read 3990 bytes and written 885 bytes
+  #     Verification error: self-signed certificate in certificate chain
+  #
+  # So, until we find a way to deal with such PG hosts, we'll use `verify_none` to explicitly
+  # silence any warnings originating in Postgrex, since we're already forbidding the use of
+  # `sslmode=verify-ca` and `sslmode=verify-full` in the database URL parsing code.
+  defp ssl_verify_opts do
+    [verify: :verify_none]
+  end
 end

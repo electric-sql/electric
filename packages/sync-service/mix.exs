@@ -63,7 +63,6 @@ defmodule Electric.MixProject do
         {:nimble_options, "~> 1.1"},
         {:pg_query_ex, github: "electric-sql/pg_query_ex"},
         {:plug, "~> 1.16"},
-        {:postgresql_uri, "~> 0.1"},
         {:postgrex, "~> 0.18"},
         {:telemetry_metrics_statsd, "~> 0.7"},
         {:telemetry_poller, "~> 1.1"},
