@@ -21,6 +21,7 @@ config :opentelemetry,
   resource: %{service: %{name: service_name, version: version}, instance: %{id: instance_id}}
 
 otel_export = env!("OTEL_EXPORT", :string, nil)
+prometheus_port = env!("PROMETHEUS_PORT", :integer, nil)
 
 case otel_export do
   "otlp" ->
@@ -98,4 +99,5 @@ config :electric,
   environment: config_env(),
   instance_id: instance_id,
   telemetry_statsd_host: statsd_host,
+  prometheus_port: prometheus_port,
   storage: storage

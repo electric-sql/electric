@@ -64,6 +64,7 @@ defmodule Electric.MixProject do
         {:pg_query_ex, github: "electric-sql/pg_query_ex"},
         {:plug, "~> 1.16"},
         {:postgrex, "~> 0.19"},
+        {:telemetry_metrics_prometheus_core, "~> 1.1"},
         {:telemetry_metrics_statsd, "~> 0.7"},
         {:telemetry_poller, "~> 1.1"},
         {:tz, "~> 0.27"}
