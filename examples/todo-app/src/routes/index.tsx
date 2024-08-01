@@ -13,7 +13,7 @@ import { v4 as uuidv4 } from "uuid"
 type ToDo = {
   id: string
   title: string
-  completed: string
+  completed: boolean
   created_at: number
 }
 
@@ -35,7 +35,7 @@ export default function Index() {
                 <Text as="label">
                   <Flex gap="2" align="center">
                     <Checkbox
-                      checked={todo.completed === `t`}
+                      checked={todo.completed}
                       onClick={async () => {
                         console.log(`completed`)
                         await fetch(`http://localhost:3010/todos/${todo.id}`, {
@@ -44,7 +44,7 @@ export default function Index() {
                             "Content-Type": `application/json`,
                           },
                           body: JSON.stringify({
-                            completed: todo.completed === `t` ? false : true,
+                            completed: !todo.completed,
                           }),
                         })
                       }}
