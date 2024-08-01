@@ -7,7 +7,7 @@ defmodule Electric.Schema do
   @type type_name :: String.t()
   @type schema :: %{
           :type => type_name(),
-          :dims => non_neg_integer(),
+          optional(:dims) => non_neg_integer(),
           optional(:max_length) => String.t(),
           optional(:length) => String.t(),
           optional(:precision) => String.t(),
@@ -46,16 +46,20 @@ defmodule Electric.Schema do
   end
 
   @spec schema(Inspector.column_info()) :: schema()
-  defp schema(%{array_dimensions: array_dimensions} = col_info) do
-    %{
-      type: type(col_info),
-      dims: array_dimensions
-    }
+  defp schema(col_info) do
+    %{type: type(col_info)}
+    |> add_dims(col_info)
     |> add_modifier(col_info)
   end
 
   defp type(%{type: type, array_dimensions: 0}), do: type
   defp type(%{array_type: type}), do: type
+
+  defp add_dims(schema, %{array_dimensions: 0}), do: schema
+
+  defp add_dims(schema, %{array_dimensions: array_dimensions}) do
+    Map.put(schema, :dims, array_dimensions)
+  end
 
   defp add_modifier(%{type: type} = schema, %{type_mod: type_mod})
        when type_mod > 0 and type in @variable_length_character_types do
