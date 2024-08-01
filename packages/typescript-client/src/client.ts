@@ -1,5 +1,5 @@
 import { ArgumentsType } from 'vitest'
-import { Message, Value, Offset } from './types'
+import { Message, Value, Offset, Schema } from './types'
 import { MessageParser, Parser } from './parser'
 
 export type ShapeData = Map<string, { [key: string]: Value }>
@@ -169,6 +169,7 @@ export class ShapeStream {
   private options: ShapeStreamOptions
   private backoffOptions: BackoffOptions
   private fetchClient: typeof fetch
+  private schema?: Schema
 
   private subscribers = new Map<
     number,
@@ -255,12 +256,15 @@ export class ShapeStream {
         this.lastOffset = lastOffset as Offset
       }
 
-      const schemaHeader = headers.get(`X-Electric-Schema`)!
-      const schema = schemaHeader ? JSON.parse(schemaHeader) : {}
+      const getSchema = (): Schema => {
+        const schemaHeader = headers.get(`X-Electric-Schema`)
+        return schemaHeader ? JSON.parse(schemaHeader) : {}
+      }
+      this.schema = this.schema ?? getSchema()
 
       const messages = status === 204 ? `[]` : await response.text()
 
-      const batch = this.messageParser.parse(messages, schema)
+      const batch = this.messageParser.parse(messages, this.schema)
 
       // Update isUpToDate
       if (batch.length > 0) {
@@ -346,6 +350,7 @@ export class ShapeStream {
     this.lastOffset = `-1`
     this.shapeId = shapeId
     this.isUpToDate = false
+    this.schema = undefined
   }
 
   private validateOptions(options: ShapeStreamOptions): void {
