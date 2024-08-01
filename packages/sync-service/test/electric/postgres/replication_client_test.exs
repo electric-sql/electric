@@ -82,12 +82,69 @@ defmodule Electric.Postgres.ReplicationClientTest do
       log =~ "Started replication from postgres"
     end
 
-    test "doesn't fail to start when publicaiton already exists", %{
+    test "doesn't fail to start when publication already exists", %{
       db_config: config,
       replication_opts: replication_opts
     } do
       replication_opts = Keyword.put(replication_opts, :try_creating_publication?, true)
       assert {:ok, _} = ReplicationClient.start_link(config, replication_opts)
+    end
+
+    @tag additional_fields:
+           "date DATE, timestamptz TIMESTAMPTZ, float FLOAT8, bytea BYTEA, interval INTERVAL"
+    test "returns data formatted according to display settings", %{
+      db_config: config,
+      replication_opts: replication_opts,
+      db_conn: conn
+    } do
+      replication_opts = Keyword.put(replication_opts, :try_creating_publication?, true)
+      db_name = Keyword.get(config, :database)
+
+      # Set the DB's display settings to something else than Electric.Postgres.display_settings
+      Postgrex.query!(conn, "ALTER DATABASE \"#{db_name}\" SET DateStyle='Postgres, DMY';", [])
+      Postgrex.query!(conn, "ALTER DATABASE \"#{db_name}\" SET TimeZone='CET';", [])
+      Postgrex.query!(conn, "ALTER DATABASE \"#{db_name}\" SET extra_float_digits=-1;", [])
+      Postgrex.query!(conn, "ALTER DATABASE \"#{db_name}\" SET bytea_output='escape';", [])
+      Postgrex.query!(conn, "ALTER DATABASE \"#{db_name}\" SET IntervalStyle='postgres';", [])
+
+      assert {:ok, _} = ReplicationClient.start_link(config, replication_opts)
+
+      {:ok, _} =
+        Postgrex.query(
+          conn,
+          "INSERT INTO items (id, value, date, timestamptz, float, bytea, interval) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+          [
+            Ecto.UUID.bingenerate(),
+            "test value",
+            ~D[2022-05-17],
+            ~U[2022-01-12 00:01:00.00Z],
+            1.234567890123456,
+            # 5 in hex
+            "0x5",
+            %Postgrex.Interval{
+              days: 1,
+              months: 0,
+              # 12 hours, 59 minutes, 10 seconds
+              secs: 46750,
+              microsecs: 0
+            }
+          ]
+        )
+
+      # Check that the incoming data is formatted according to Electric.Postgres.display_settings
+      assert_receive {:from_replication, %Transaction{changes: [change]}}
+
+      assert %NewRecord{
+               record: %{
+                 "date" => "2022-05-17",
+                 "timestamptz" => timestamp,
+                 "float" => "1.234567890123456",
+                 "bytea" => "\\x307835",
+                 "interval" => "P1DT12H59M10S"
+               }
+             } = change
+
+      assert String.ends_with?(timestamp, "+00")
     end
   end
 

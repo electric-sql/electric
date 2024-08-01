@@ -14,6 +14,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :publication_name,
       :try_creating_publication?,
       :start_streaming?,
+      :display_settings,
       origin: "postgres",
       txn_collector: %Collector{},
       step: :disconnected
@@ -27,7 +28,13 @@ defmodule Electric.Postgres.ReplicationClient do
             origin: String.t(),
             txn_collector: Collector.t(),
             step:
-              :disconnected | :create_publication | :create_slot | :ready_to_stream | :streaming
+              :disconnected
+              | :create_publication
+              | :create_slot
+              | :ready_to_stream
+              | :streaming
+              | :set_display_setting,
+            display_settings: [String.t()]
           }
 
     @opts_schema NimbleOptions.new!(
@@ -40,6 +47,8 @@ defmodule Electric.Postgres.ReplicationClient do
     @spec new(Access.t()) :: t()
     def new(opts) do
       opts = NimbleOptions.validate!(opts, @opts_schema)
+      settings = [display_settings: Electric.Postgres.display_settings()]
+      opts = settings ++ opts
       struct!(__MODULE__, opts)
     end
   end
@@ -58,6 +67,10 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   @impl true
+  def handle_connect(%State{display_settings: [query | rest]} = state) do
+    {:query, query, %{state | display_settings: rest, step: :set_display_setting}}
+  end
+
   def handle_connect(state) do
     if state.try_creating_publication? do
       create_publication_step(state)
@@ -72,6 +85,14 @@ defmodule Electric.Postgres.ReplicationClient do
         %State{step: :create_publication} = state
       ) do
     create_replication_slot_step(state)
+  end
+
+  def handle_result(result, %State{step: :set_display_setting} = state) do
+    if is_struct(result, Postgrex.Error) do
+      Logger.error("Failed to set display setting: #{inspect(result)}")
+    end
+
+    handle_connect(state)
   end
 
   def handle_result(%Postgrex.Error{} = error, %State{step: :create_publication} = state) do
