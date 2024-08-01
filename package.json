@@ -9,7 +9,7 @@
     "example-backend:up": "dotenv -e .env.dev -- docker compose -f ./.support/docker-compose.yml up -d ",
     "example-backend:down": "dotenv  -e .env.dev -- docker compose -f .support/docker-compose.yml down --volumes",
     "stylecheck-all": "pnpm --if-present --recursive run stylecheck",
-    "ci:version": "pnpm exec changeset version",
+    "ci:version": "pnpm exec changeset version && pnpm exec changeset tag",
     "ci:publish": "pnpm publish -r"
   }
 }
