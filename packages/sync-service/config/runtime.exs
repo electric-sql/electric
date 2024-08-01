@@ -22,9 +22,14 @@ if Config.config_env() == :test do
       database: "postgres"
     ]
 else
-  {:ok, connection_opts} =
+  {:ok, database_url_config} =
     env!("DATABASE_URL", :string)
     |> Electric.Config.parse_postgresql_uri()
+
+  database_ipv6_config =
+    env!("DATABASE_USE_IPV6", :boolean, false)
+
+  connection_opts = [ipv6: database_ipv6_config] ++ database_url_config
 
   config :electric, connection_opts: connection_opts
 end

@@ -69,6 +69,7 @@ defmodule Electric.ConnectionManager do
       opts
       |> Keyword.fetch!(:connection_opts)
       |> update_ssl_opts()
+      |> update_tcp_opts()
 
     replication_opts =
       opts
@@ -306,5 +307,16 @@ defmodule Electric.ConnectionManager do
   # `sslmode=verify-ca` and `sslmode=verify-full` in the database URL parsing code.
   defp ssl_verify_opts do
     [verify: :verify_none]
+  end
+
+  defp update_tcp_opts(connection_opts) do
+    tcp_opts =
+      if connection_opts[:ipv6] do
+        [:inet6]
+      else
+        []
+      end
+
+    Keyword.put(connection_opts, :socket_options, tcp_opts)
   end
 end
