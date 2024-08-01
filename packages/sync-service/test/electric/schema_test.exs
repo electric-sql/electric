@@ -495,5 +495,29 @@ defmodule Electric.SchemaTest do
         assert schema == unquote(Macro.escape(expected_schema))
       end
     end
+
+    test "returns the correct schema for a table with a composite primary key", %{db_conn: conn} do
+      Postgrex.query!(
+        conn,
+        """
+        CREATE TABLE items (
+          i INTEGER,
+          name VARCHAR,
+          value BOOLEAN,
+          PRIMARY KEY (i, value)
+        )
+        """,
+        []
+      )
+
+      {:ok, column_info} = DirectInspector.load_column_info({"public", "items"}, conn)
+
+      %{"i" => i_schema, "name" => name_schema, "value" => value_schema} =
+        Schema.from_column_info(column_info)
+
+      assert i_schema == %{type: "int4", pk_index: 0}
+      assert name_schema == %{type: "varchar"}
+      assert value_schema == %{type: "bool", pk_index: 1}
+    end
   end
 end
