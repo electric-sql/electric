@@ -25,7 +25,6 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
     const findUpdatePromise = matchStream({
       stream: itemsStream,
       operations: [`insert`],
-      // First insert will match
       matchFn: ({ message }) => message.value.id === body.get(`new-id`),
     });
 
