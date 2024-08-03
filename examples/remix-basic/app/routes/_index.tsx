@@ -60,7 +60,7 @@ export default function Example() {
   const submissions = useFetchers()
     .filter((fetcher) => fetcher.formData?.get(`intent`) === `add`)
     .map((fetcher) => {
-      return { id: Object.fromEntries(fetcher.formData)[`new-id`] } as Item;
+      return { id: fetcher.formData?.get(`new-id`) } as Item;
     });
 
   const isClearing = useFetchers().some(
