@@ -101,3 +101,7 @@ export default function Example() {
     </div>
   );
 }
+
+export function HydrateFallback() {
+  return ``;
+}

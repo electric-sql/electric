@@ -1,12 +1,11 @@
-import { defineConfig } from 'vite'
-import { vitePlugin as remix } from "@remix-run/dev"
-
+import { defineConfig } from "vite";
+import { vitePlugin as remix } from "@remix-run/dev";
 
 // https://vitejs.dev/config/
 export default defineConfig({
-    plugins: [
+  plugins: [
     remix({
-      ssr: false,
+      // ssr: false,
       future: {
         v3_fetcherPersist: true,
         v3_relativeSplatPath: true,
@@ -14,4 +13,4 @@ export default defineConfig({
       },
     }),
   ],
-})
+});
