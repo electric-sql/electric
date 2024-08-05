@@ -244,24 +244,22 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Const{value: ~N[2024-01-01 20:00:00], type: :timestamp} = result
     end
 
-    test "should work with IS DISTINCT FROM clauses" do
-      env =
-        Env.empty(
-          operators: %{
-            {~s|"="|, 2} => [
-              %{args: [:int4, :int4], returns: :bool, implementation: & &1, name: "="}
-            ]
-          }
-        )
+    test "should work with IS [NOT] DISTINCT FROM clauses" do
+      env = Env.new()
 
-      assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(
-                 ~S|1 IS DISTINCT FROM NULL|,
-                 %{["test"] => :int4},
-                 env
-               )
+      for {expr, expected} <- [
+            {~S|1 IS DISTINCT FROM 2|, true},
+            {~S|1 IS DISTINCT FROM NULL|, true},
+            {~S|NULL IS DISTINCT FROM NULL|, false},
+            {~S|1 IS NOT DISTINCT FROM 2|, false},
+            {~S|'foo' IS NOT DISTINCT FROM NULL|, false},
+            {~S|NULL IS NOT DISTINCT FROM NULL|, true}
+          ] do
+        assert {{:ok, %Expr{eval: result}}, ^expr} =
+                 {Parser.parse_and_validate_expression(expr, %{}, env), expr}
 
-      assert %Const{value: true, type: :bool} = result
+        assert {%Const{value: ^expected, type: :bool}, ^expr} = {result, expr}
+      end
     end
 
     test "should work with LIKE clauses" do
@@ -369,7 +367,7 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Const{value: true, type: :bool} = result
     end
 
-    test "should support IS and IS NOT NULL" do
+    test "should support IS [NOT] NULL" do
       env = Env.new()
 
       assert {:ok, %Expr{eval: result}} =
@@ -388,7 +386,7 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Const{value: true, type: :bool} = result
     end
 
-    test "should support IS and IS NOT TRUE/FALSE" do
+    test "should support IS [NOT] TRUE/FALSE" do
       env = Env.new()
 
       assert {:ok, %Expr{eval: result}} =
@@ -397,9 +395,9 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Const{value: true, type: :bool} = result
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|false IS NOT FALSE|, %{}, env)
+               Parser.parse_and_validate_expression(~S|false IS NOT TRUE|, %{}, env)
 
-      assert %Const{value: false, type: :bool} = result
+      assert %Const{value: true, type: :bool} = result
 
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(~S|null IS NOT FALSE|, %{}, env)
@@ -407,7 +405,7 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Const{value: true, type: :bool} = result
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|null IS TRUE|, %{}, env)
+               Parser.parse_and_validate_expression(~S|null IS FALSE|, %{}, env)
 
       assert %Const{value: false, type: :bool} = result
 
@@ -419,6 +417,7 @@ defmodule Electric.Replication.Eval.ParserTest do
   describe "parse_and_validate_expression/3 default env" do
     test "can compare integers" do
       assert {:ok, _} = Parser.parse_and_validate_expression(~S|id != 1|, %{["id"] => :int8})
+      assert {:ok, _} = Parser.parse_and_validate_expression(~S|id <> 1|, %{["id"] => :int8})
       assert {:ok, _} = Parser.parse_and_validate_expression(~S|id > 1|, %{["id"] => :int8})
       assert {:ok, _} = Parser.parse_and_validate_expression(~S|id < 1|, %{["id"] => :int8})
       assert {:ok, _} = Parser.parse_and_validate_expression(~S|id >= 1|, %{["id"] => :int8})
