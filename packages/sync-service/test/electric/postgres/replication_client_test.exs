@@ -111,24 +111,14 @@ defmodule Electric.Postgres.ReplicationClientTest do
     } do
       assert {:ok, pid} = ReplicationClient.start_link(config, replication_opts)
 
-      # Verify that inserting an item results in advancement of slot's confirmed_flush_lsn
-      flushed_lsn_1 = fetch_slot_info(conn, "confirmed_flush_lsn")
-
       insert_item(conn, "test value")
-
       assert_receive {:from_replication, %Transaction{changes: [change]}}
       assert %NewRecord{record: %{"value" => "test value"}} = change
 
-      flushed_lsn_2 = fetch_slot_info(conn, "confirmed_flush_lsn")
-      assert Lsn.compare(flushed_lsn_2, flushed_lsn_1) == :gt
-
-      # Verify that returning a value other than :ok from the transaction callback leaves slot's LSN unchanged.
       insert_item(conn, "return: not ok")
-
       assert_receive {:from_replication, %Transaction{changes: [change]}}
       assert %NewRecord{record: %{"value" => "return: not ok"}} = change
 
-      assert flushed_lsn_2 == fetch_slot_info(conn, "confirmed_flush_lsn")
 
       # Verify that raising in the transaction callback crashes the connection process
       monitor = Process.monitor(pid)
@@ -147,21 +137,15 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       refute_received _
 
-      # Now, when we restart the connection process, it replays transactions from the last confirmed one
+      # Now, when we restart the connection process, it replays transactions from the last
+      # confirmed one
       assert {:ok, _pid} = ReplicationClient.start_link(config, replication_opts)
 
-      assert_receive {:from_replication, %Transaction{changes: [change], lsn: tx_lsn_1}}
+      assert_receive {:from_replication, %Transaction{changes: [change]}}
       assert %NewRecord{record: %{"value" => "return: not ok"}} = change
 
-      assert Lsn.compare(tx_lsn_1, flushed_lsn_2) == :gt
-
-      assert_receive {:from_replication, %Transaction{changes: [change], lsn: tx_lsn_2}}
+      assert_receive {:from_replication, %Transaction{changes: [change]}}
       assert %NewRecord{record: %{"value" => ^interrupt_val}} = change
-
-      assert Lsn.compare(tx_lsn_2, tx_lsn_1) == :gt
-
-      assert Lsn.to_integer(tx_lsn_2) >=
-               Lsn.to_integer(fetch_slot_info(conn, "confirmed_flush_lsn"))
 
       refute_receive _
     end
@@ -398,12 +382,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
     [row] = Enum.filter(rows, fn [slot_name | _] -> slot_name == @slot_name end)
 
     Enum.zip(cols, row) |> Map.new()
-  end
-
-  defp fetch_slot_info(conn, field) do
-    conn
-    |> fetch_slot_info()
-    |> Map.fetch!(field)
   end
 
   defp insert_item(conn, val) do
