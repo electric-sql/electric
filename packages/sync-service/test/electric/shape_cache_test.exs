@@ -206,7 +206,7 @@ defmodule Electric.ShapeCacheTest do
       assert Storage.snapshot_exists?(shape_id, storage)
       assert {@zero_offset, stream} = Storage.get_snapshot(shape_id, storage)
 
-      assert [%{value: %{"value" => "test1"}}, %{value: %{"value" => "test2"}}] =
+      assert [%{"value" => %{"value" => "test1"}}, %{"value" => %{"value" => "test2"}}] =
                stream_to_list(stream)
     end
 
@@ -268,7 +268,11 @@ defmodule Electric.ShapeCacheTest do
       assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
       assert {@zero_offset, stream} = Storage.get_snapshot(shape_id, storage)
 
-      assert [%{value: map}, %{value: %{"value" => "test1"}}, %{value: %{"value" => "test2"}}] =
+      assert [
+               %{"value" => map},
+               %{"value" => %{"value" => "test1"}},
+               %{"value" => %{"value" => "test2"}}
+             ] =
                stream_to_list(stream)
 
       assert %{
@@ -700,6 +704,9 @@ defmodule Electric.ShapeCacheTest do
 
   def prepare_tables_noop(_, _), do: :ok
 
-  defp stream_to_list(stream),
-    do: Enum.sort_by(stream, fn %{value: %{"value" => val}} -> val end)
+  defp stream_to_list(stream) do
+    stream
+    |> Enum.map(&Jason.decode!/1)
+    |> Enum.sort_by(fn %{"value" => %{"value" => val}} -> val end)
+  end
 end

@@ -10,7 +10,7 @@ defmodule Electric.Plug.ServeShapePlug do
   @before_all_offset LogOffset.before_all()
 
   # Control messages
-  @up_to_date [%{headers: %{control: "up-to-date"}}]
+  @up_to_date [Jason.encode!(%{headers: %{control: "up-to-date"}})]
   @must_refetch [%{headers: %{control: "must-refetch"}}]
 
   defmodule Params do
@@ -308,7 +308,14 @@ defmodule Electric.Plug.ServeShapePlug do
     if log == [] and conn.assigns.live do
       hold_until_change(conn, shape_id)
     else
-      send_resp(conn, 200, Jason.encode_to_iodata!(log ++ @up_to_date))
+      send_resp(
+        conn,
+        200,
+        [log, @up_to_date]
+        |> Stream.concat()
+        |> to_json_stream()
+        |> Enum.to_list()
+      )
     end
   end
 
@@ -318,9 +325,7 @@ defmodule Electric.Plug.ServeShapePlug do
   defp to_json_stream(items) do
     Stream.concat([
       [@json_list_start],
-      items
-      |> Stream.map(&Jason.encode_to_iodata!/1)
-      |> Stream.intersperse(@json_item_separator),
+      Stream.intersperse(items, @json_item_separator),
       [@json_list_end]
     ])
   end
@@ -374,10 +379,10 @@ defmodule Electric.Plug.ServeShapePlug do
       {^ref, :shape_rotation} ->
         # We may want to notify the client better that the shape ID had changed, but just closing the response
         # and letting the client handle it on reconnection is good enough.
-        send_resp(conn, 200, Jason.encode_to_iodata!(@up_to_date))
+        send_resp(conn, 200, ["[", @up_to_date, "]"])
     after
       # If we timeout, return an empty body and 204 as there's no response body.
-      long_poll_timeout -> send_resp(conn, 204, Jason.encode_to_iodata!(@up_to_date))
+      long_poll_timeout -> send_resp(conn, 204, ["[", @up_to_date, "]"])
     end
   end
 end

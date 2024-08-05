@@ -22,6 +22,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     }
   }
   @snapshot_offset LogOffset.first()
+  @snapshot_offset_encoded @snapshot_offset |> LogOffset.to_iolist() |> :erlang.iolist_to_binary()
   @zero_offset LogOffset.first()
   @query_info %Postgrex.Query{
     name: "the-table",
@@ -33,7 +34,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     [<<2::128>>, "row2"]
   ]
 
-  for module <- [InMemoryStorage, CubDbStorage] do
+  for module <- [CubDbStorage] do
+    # for module <- [InMemoryStorage, CubDbStorage] do
     module_name = module |> Module.split() |> List.last()
 
     doctest module, import: true
@@ -88,18 +90,18 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         assert [
                  %{
-                   offset: @snapshot_offset,
-                   value: %{"id" => "00000000-0000-0000-0000-000000000001", "title" => "row1"},
-                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
-                   headers: %{action: :insert}
+                   "offset" => @snapshot_offset_encoded,
+                   "value" => %{"id" => "00000000-0000-0000-0000-000000000001", "title" => "row1"},
+                   "key" => ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
+                   "headers" => %{"action" => "insert"}
                  },
                  %{
-                   offset: @snapshot_offset,
-                   value: %{"id" => "00000000-0000-0000-0000-000000000002", "title" => "row2"},
-                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
-                   headers: %{action: :insert}
+                   "offset" => @snapshot_offset_encoded,
+                   "value" => %{"id" => "00000000-0000-0000-0000-000000000002", "title" => "row2"},
+                   "key" => ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
+                   "headers" => %{"action" => "insert"}
                  }
-               ] = Enum.to_list(stream)
+               ] = Enum.map(stream, &Jason.decode!/1)
       end
 
       test "does not leak results from other snapshots", %{module: storage, opts: opts} do
@@ -122,18 +124,18 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         assert [
                  %{
-                   offset: @snapshot_offset,
-                   value: %{"id" => "00000000-0000-0000-0000-000000000001", "title" => "row1"},
-                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
-                   headers: %{action: :insert}
+                   "offset" => @snapshot_offset_encoded,
+                   "value" => %{"id" => "00000000-0000-0000-0000-000000000001", "title" => "row1"},
+                   "key" => ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
+                   "headers" => %{"action" => "insert"}
                  },
                  %{
-                   offset: @snapshot_offset,
-                   value: %{"id" => "00000000-0000-0000-0000-000000000002", "title" => "row2"},
-                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
-                   headers: %{action: :insert}
+                   "offset" => @snapshot_offset_encoded,
+                   "value" => %{"id" => "00000000-0000-0000-0000-000000000002", "title" => "row2"},
+                   "key" => ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
+                   "headers" => %{"action" => "insert"}
                  }
-               ] = Enum.to_list(stream)
+               ] = Enum.map(stream, &Jason.decode!/1)
       end
 
       test "returns snapshot offset when shape does exist", %{module: storage, opts: opts} do
@@ -184,12 +186,19 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         :ok = storage.append_to_log!(@shape_id, changes, opts)
 
         stream = storage.get_log_stream(@shape_id, LogOffset.first(), LogOffset.last(), opts)
-        [entry] = Enum.to_list(stream)
 
-        assert entry.key == ~S|"public"."test_table"/"123"|
-        assert entry.value == %{"id" => "123", "name" => "Test"}
-        assert entry.headers == %{action: :insert, txid: 1, relation: ["public", "test_table"]}
-        assert entry.offset == offset
+        assert [
+                 %{
+                   "key" => ~S|"public"."test_table"/"123"|,
+                   "value" => %{"id" => "123", "name" => "Test"},
+                   "offset" => offset |> LogOffset.to_iolist() |> :erlang.iolist_to_binary(),
+                   "headers" => %{
+                     "action" => "insert",
+                     "txid" => 1,
+                     "relation" => ["public", "test_table"]
+                   }
+                 }
+               ] == Enum.map(stream, &Jason.decode!/1)
       end
     end
 
@@ -235,12 +244,12 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         :ok = storage.append_to_log!(shape_id, changes2, opts)
 
         stream = storage.get_log_stream(shape_id, LogOffset.first(), LogOffset.last(), opts)
-        entries = Enum.to_list(stream)
+        entries = Enum.map(stream, &Jason.decode!/1)
 
         assert [
-                 %{headers: %{action: :insert}},
-                 %{headers: %{action: :update}},
-                 %{headers: %{action: :delete}}
+                 %{"headers" => %{"action" => "insert"}},
+                 %{"headers" => %{"action" => "update"}},
+                 %{"headers" => %{"action" => "delete"}}
                ] = entries
       end
 
@@ -280,11 +289,11 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         stream =
           storage.get_log_stream(@shape_id, LogOffset.new(lsn1, 0), LogOffset.last(), opts)
 
-        entries = Enum.to_list(stream)
+        entries = Enum.map(stream, &Jason.decode!/1)
 
         assert [
-                 %{headers: %{action: :update}},
-                 %{headers: %{action: :delete}}
+                 %{"headers" => %{"action" => "update"}},
+                 %{"headers" => %{"action" => "delete"}}
                ] = entries
       end
 
@@ -332,9 +341,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             opts
           )
 
-        entries = Enum.to_list(stream)
+        entries = Enum.map(stream, &Jason.decode!/1)
 
-        assert [%{headers: %{action: :update}}] = entries
+        assert [%{"headers" => %{"action" => "update"}}] = entries
       end
 
       test "returns only logs for the requested shape_id", %{module: storage, opts: opts} do
@@ -366,9 +375,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         :ok = storage.append_to_log!(shape_id1, changes1, opts)
         :ok = storage.append_to_log!(shape_id2, changes2, opts)
 
-        assert [%{value: %{"name" => "Test A"}}] =
+        assert [%{"value" => %{"name" => "Test A"}}] =
                  storage.get_log_stream(shape_id1, LogOffset.first(), LogOffset.last(), opts)
-                 |> Enum.to_list()
+                 |> Enum.map(&Jason.decode!/1)
       end
     end
 

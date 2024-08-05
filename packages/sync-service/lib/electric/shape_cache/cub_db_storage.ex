@@ -90,7 +90,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
         max_key: snapshot_end(shape_id)
       )
       |> Stream.flat_map(fn {_, items} -> items end)
-      |> Stream.map(&storage_item_to_log_item/1)
+      |> Stream.map(fn {_, item} -> item end)
 
     # FIXME: this is naive while we don't have snapshot metadata to get real offset
     {LogOffset.first(), stream}
@@ -106,7 +106,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
       max_key: max_key,
       min_key_inclusive: false
     )
-    |> Stream.map(&storage_item_to_log_item/1)
+    |> Stream.map(fn {_, item} -> item end)
   end
 
   def has_log_entry?(shape_id, offset, opts) do
@@ -119,6 +119,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
     data_stream
     |> Stream.with_index()
     |> Stream.map(&row_to_snapshot_item(&1, shape_id, shape, query_info))
+    |> Stream.map(&storage_item_to_log_item/1)
     |> Stream.chunk_every(500)
     |> Stream.each(fn [{key, _} | _] = chunk -> CubDB.put(opts.db, key, chunk) end)
     |> Stream.run()
@@ -131,6 +132,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
     |> Enum.map(fn {offset, key, action, value, header_data} ->
       {log_key(shape_id, offset), {key, action, value, header_data}}
     end)
+    |> Enum.map(&storage_item_to_log_item/1)
     |> then(&CubDB.put_multi(opts.db, &1))
 
     :ok
@@ -206,11 +208,12 @@ defmodule Electric.ShapeCache.CubDbStorage do
 
   defp storage_item_to_log_item({key, {change_key, action, value, header_data}})
        when is_binary(change_key) do
-    %{
-      key: change_key,
-      value: value,
-      headers: Map.put(header_data, :action, action),
-      offset: offset(key)
-    }
+    {key,
+     Jason.encode!(%{
+       key: change_key,
+       value: value,
+       headers: Map.put(header_data, :action, action),
+       offset: offset(key)
+     })}
   end
 end

@@ -41,14 +41,13 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def get_snapshot(shape_id, opts) do
     offset = LogOffset.first()
 
-    results =
+    stream =
       :ets.select(opts.snapshot_ets_table, [
         {{{:data, shape_id, :"$1"}, :"$2"}, [], [{{:"$1", :"$2"}}]}
       ])
-      |> Stream.map(&snapshot_storage_item_to_log_item({shape_id, offset}, &1))
-      |> Enum.to_list()
+      |> Stream.map(fn {_, item} -> item end)
 
-    {offset, results}
+    {offset, stream}
   end
 
   def get_log_stream(shape_id, offset, max_offset, opts) do
@@ -66,15 +65,15 @@ defmodule Electric.ShapeCache.InMemoryStorage do
         {{^shape_id, position}, _} when position > max_offset ->
           nil
 
-        {{^shape_id, position}, [item]} ->
-          {log_storage_item_to_log_item({shape_id, position}, item), position}
+        {{^shape_id, position}, [{_, item}]} ->
+          {item, position}
       end
     end)
   end
 
   def has_log_entry?(shape_id, offset, opts) do
     case :ets.select(opts.log_ets_table, [
-           {{{shape_id, storage_offset(offset)}, :_, :_, :_, :_}, [], [true]}
+           {{{shape_id, storage_offset(offset)}, :_}, [], [true]}
          ]) do
       [true] -> true
       # FIXME: this is naive while we don't have snapshot metadata to get real offset
@@ -90,10 +89,12 @@ defmodule Electric.ShapeCache.InMemoryStorage do
           map()
         ) :: :ok
   def make_new_snapshot!(shape_id, shape, query_info, data_stream, opts) do
+    offset = LogOffset.first()
     ets_table = opts.snapshot_ets_table
 
     data_stream
-    |> Stream.map(&__MODULE__.row_to_snapshot_entry(&1, shape_id, shape, query_info))
+    |> Stream.map(&row_to_snapshot_entry(&1, shape_id, shape, query_info))
+    |> Stream.map(&snapshot_storage_item_to_log_item({shape_id, offset}, &1))
     |> Stream.chunk_every(500)
     |> Stream.each(fn chunk -> :ets.insert(ets_table, chunk) end)
     |> Stream.run()
@@ -108,7 +109,8 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     changes
     |> Enum.map(fn {offset, key, action, value, header_data} ->
       offset = storage_offset(offset)
-      {{shape_id, offset}, key, action, value, header_data}
+      item = {key, action, value, header_data}
+      log_storage_item_to_log_item({shape_id, offset}, item)
     end)
     |> then(&:ets.insert(ets_table, &1))
 
@@ -118,7 +120,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def cleanup!(shape_id, opts) do
     :ets.match_delete(opts.snapshot_ets_table, {{:data, shape_id, :_}, :_})
     :ets.match_delete(opts.snapshot_ets_table, {{:metadata, shape_id}, :_})
-    :ets.match_delete(opts.log_ets_table, {{shape_id, :_}, :_, :_, :_, :_})
+    :ets.match_delete(opts.log_ets_table, {{shape_id, :_}, :_})
     :ok
   end
 
@@ -140,16 +142,35 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     {{:data, shape_id, key}, serialized_row}
   end
 
-  defp snapshot_storage_item_to_log_item({_shape_id, snapshot_log_offset}, {key, value}) do
-    %{key: key, value: value, headers: %{action: :insert}, offset: snapshot_log_offset}
+  defp snapshot_storage_item_to_log_item(
+         {_shape_id, snapshot_log_offset},
+         {{_, _, change_key} = key, value}
+       ) do
+    {key,
+     Jason.encode!(%{
+       key: change_key,
+       value: value,
+       headers: %{action: :insert},
+       offset: snapshot_log_offset
+     })}
   end
 
   # Turns a stored log item into a log item
   # by modifying the turning the tuple offset
   # back into a LogOffset value.
-  defp log_storage_item_to_log_item({_shape_id, position}, {_, key, action, value, header_data}) do
+  defp log_storage_item_to_log_item(
+         {_shape_id, position} = key,
+         {change_key, action, value, header_data}
+       ) do
     offset = LogOffset.new(position)
-    %{key: key, value: value, headers: Map.put(header_data, :action, action), offset: offset}
+
+    {key,
+     Jason.encode!(%{
+       key: change_key,
+       value: value,
+       headers: Map.put(header_data, :action, action),
+       offset: offset
+     })}
   end
 
   # Turns a LogOffset into a tuple representation
