@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 0.2.5
+
+### Patch Changes
+
+- 10585f4: Add type modifier information in the schema for types that are not built-in.
+- 5522305: Enforce the use of consistent display formats for both the initial snapshot and the live replication stream.
+- e9a05f8: Use a persistent replication slot to maintain replication connection state between Electric/Postgres restarts.
+
 ## 0.2.4
 
 ### Patch Changes
