@@ -392,8 +392,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
     do: lsn_str |> Lsn.from_string() |> Lsn.to_integer()
 
   defp fetch_slot_info(conn) do
-    {:ok, result} = Postgrex.query(conn, "SELECT * FROM pg_replication_slots", [])
-    assert %Postgrex.Result{columns: cols, rows: [row], num_rows: 1} = result
+    %Postgrex.Result{columns: cols, rows: rows} =
+      Postgrex.query!(conn, "SELECT * FROM pg_replication_slots", [])
+
+    [row] = Enum.filter(rows, fn [slot_name | _] -> slot_name == @slot_name end)
 
     Enum.zip(cols, row) |> Map.new()
   end
