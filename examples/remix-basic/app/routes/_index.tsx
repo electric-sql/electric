@@ -67,19 +67,13 @@ export default function Example() {
     (fetcher) => fetcher.formData?.get(`intent`) === `clear`
   )
 
-  // Combine data from shape & optimistic data from fetchers. Combine while
-  // removing duplicates as there's the possibility for a race condition where
-  // useShape updates before the action has finished.
-  const ids = new Set()
-  const combined = items.concat(submissions).filter((item) => {
-    if (ids.has(item.id)) {
-      return false
-    } else {
-      ids.add(item.id)
-      return true
-    }
+  // Merge data from shape & optimistic data from fetchers. This removes
+  // possible duplicates as there's a potential race condition where
+  // useShape updates from the stream slightly before the action has finished.
+  const itemsMap = new Map()
+  items.concat(submissions).forEach((item) => {
+    itemsMap.set(item.id, { ...itemsMap.get(item.id), ...item })
   })
-
   return (
     <div>
       <Form navigate={false} method="POST" className="controls">
@@ -93,7 +87,7 @@ export default function Example() {
       </Form>
       {isClearing
         ? ``
-        : combined.map((item: Item, index: number) => (
+        : [...itemsMap.values()].map((item: Item, index: number) => (
             <p key={index} className="item">
               <code>{item.id}</code>
             </p>
