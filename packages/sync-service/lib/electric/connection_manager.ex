@@ -148,7 +148,11 @@ defmodule Electric.ConnectionManager do
   end
 
   defp start_replication_client(connection_opts, replication_opts) do
-    case do_start_replication_client(connection_opts, replication_opts) do
+    # Disable the reconnection logic in Postgex.ReplicationConnection to force it to exit with
+    # the connection error.
+    connection_opts = [auto_reconnect: false] ++ connection_opts
+
+    case Electric.Postgres.ReplicationClient.start_link(connection_opts, replication_opts) do
       {:ok, pid} ->
         {:ok, pid, connection_opts}
 
@@ -173,38 +177,6 @@ defmodule Electric.ConnectionManager do
     end
   end
 
-  defp do_start_replication_client(connection_opts, replication_opts) do
-    # Disable the reconnection logic in Postgex.ReplicationConnection to force it to exit with
-    # the connection error.
-    connection_opts = [auto_reconnect: false] ++ connection_opts
-
-    case Electric.Postgres.ReplicationClient.start_link(connection_opts, replication_opts) do
-      {:ok, pid} ->
-        {:ok, pid}
-
-      # There is a bug in Postgrex: it returns a tuple `{:stop, <reason>, <state>}` from an
-      # `init()` callback where `gen_statem` expects just `{:stop, <reason>}`. This is the origin
-      # of the `:bad_return_from_init` error that wraps the root-cause error in the following example:
-      #
-      #     16:28:07.982 [error] :gen_statem #PID<0.282.0> terminating
-      #     ** (stop) {:bad_return_from_init, {:stop, %Postgrex.Error{message: "ssl not available", postgres: nil, connection_id: nil, query: nil}, %Postgrex.ReplicationConnection{}}}
-      #         (stdlib 6.0) gen_statem.erl:2748: :gen_statem.init_result/8
-      #         (stdlib 6.0) proc_lib.erl:329: :proc_lib.init_p_do_apply/3
-      #     Queue: []
-      #     Postponed: []
-      #     State: {:undefined, :undefined}
-      #     Callback mode: :state_functions, state_enter: false
-      #
-      # You can reproduce the above failure by adding `?sslmode=prefer` or `?sslmode=require`
-      # to the `DATABASE_URL` configuration.
-      {:error, {:bad_return_from_init, {:stop, reason, _state}}} ->
-        {:error, reason}
-
-      other ->
-        other
-    end
-  end
-
   defp start_connection_pool(connection_opts, pool_opts) do
     # Disable the reconnection logic in DBConnection to force it to exit with the connection
     # error.
@@ -220,8 +192,8 @@ defmodule Electric.ConnectionManager do
         %Postgrex.Error{message: message} when not is_nil(message) ->
           message
 
-        %Postgrex.Error{postgres: %{message: message, pg_code: code, routine: routine}} ->
-          message <> " (PG code: #{code}, PG routine: #{routine})"
+        %Postgrex.Error{postgres: %{message: message} = pg_error} ->
+          message <> pg_error_extra_info(pg_error)
       end
 
     Logger.warning("Database connection failed: #{message}")
@@ -234,6 +206,22 @@ defmodule Electric.ConnectionManager do
 
     state = schedule_reconnection(step, state)
     {:noreply, state}
+  end
+
+  defp pg_error_extra_info(pg_error) do
+    extra_info_items =
+      [
+        {"PG code:", Map.get(pg_error, :pg_code)},
+        {"PG routine:", Map.get(pg_error, :routine)}
+      ]
+      |> Enum.reject(fn {_, val} -> is_nil(val) end)
+      |> Enum.map(fn {label, val} -> "#{label} #{val}" end)
+
+    if extra_info_items != [] do
+      " (" <> Enum.join(extra_info_items, ", ") <> ")"
+    else
+      ""
+    end
   end
 
   defp schedule_reconnection(step, %State{backoff: {backoff, _}} = state) do
