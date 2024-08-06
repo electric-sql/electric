@@ -80,6 +80,10 @@ defmodule Electric.Postgres.ReplicationClient do
   @repl_msg_standby_status_update ?r
 
   def start_link(connection_opts, replication_opts) do
+    # Disable the reconnection logic in Postgex.ReplicationConnection to force it to exit with
+    # the connection error. Without this, we may observe undesirable restarts in tests between
+    # one test process exiting and the next one starting.
+    connection_opts = [auto_reconnect: false] ++ connection_opts
     Postgrex.ReplicationConnection.start_link(__MODULE__, replication_opts, connection_opts)
   end
 
