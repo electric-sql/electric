@@ -19,7 +19,8 @@ if Config.config_env() == :test do
       port: 54321,
       username: "postgres",
       password: "password",
-      database: "postgres"
+      database: "postgres",
+      sslmode: :disable
     ]
 else
   {:ok, database_url_config} =

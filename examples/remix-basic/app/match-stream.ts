@@ -19,13 +19,13 @@ export async function matchStream({
 }): Promise<ChangeMessage<any>> {
   return new Promise((resolve, reject) => {
     const unsubscribe = stream.subscribe((messages) => {
-      messages.forEach((message) => {
+      for (const message of messages) {
         if (`key` in message && operations.includes(message.headers.action)) {
           if (matchFn({ operationType: message.headers.action, message })) {
-            finish(message)
+            return finish(message)
           }
         }
-      })
+      }
     })
 
     const timeoutId = setTimeout(() => {
