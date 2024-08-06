@@ -307,10 +307,10 @@ If you have any questions or need support, ask on the `#help-and-support` channe
 
 ### Get involved in development
 
-`electric-next` is open source (Apache 2.0) and developed on GitHub at [electric-sql/electric-next](https://github.com/electric-sql/electric-next).
+`electric` is open source (Apache 2.0) and developed on GitHub at [electric-sql/electric](https://github.com/electric-sql/electric).
 
 See:
 
-- the [open issues](https://github.com/electric-sql/electric-next/issues) on the repo
+- the [open issues](https://github.com/electric-sql/electric/issues) on the repo
 - the public RFCs at [electric-sql/rfcs](https://github.com/electric-sql/rfcs)
 - the [contributing guide](https://github.com/electric-sql/electric/blob/main/CONTRIBUTING.md) here

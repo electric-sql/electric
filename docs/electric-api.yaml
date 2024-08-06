@@ -48,7 +48,7 @@ paths:
             a schema prefix, then the table is assumed to be in the `public.` schema.
 
             Note that tablenames with special characters may not be parsed correctly
-            pending https://github.com/electric-sql/electric-next/issues/185
+            pending https://github.com/electric-sql/electric/issues/185
         # Query parameters
         - name: offset
           in: query

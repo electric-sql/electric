@@ -4,7 +4,7 @@ outline: 2
 
 # Quickstart
 
-This guide will get you up and running with `electric-next` and real-time sync of your Postgres data. First using the [HTTP API](/api/http) directly. Then using our [TypeScript client](/api/clients/typescript) with a [React hook](/api/connectors/react) to sync data into a simple application.
+This guide will get you up and running with `electric` and real-time sync of your Postgres data. First using the [HTTP API](/api/http) directly. Then using our [TypeScript client](/api/clients/typescript) with a [React hook](/api/connectors/react) to sync data into a simple application.
 
 ## Setup
 
@@ -12,7 +12,7 @@ You need to have a Postgres database and to run Electric in front of it.
 
 You can use any Postgres (new or existing) that has logical replication enabled. You also need to connect as a database user that has the [`REPLICATION` privilege](https://www.postgresql.org/docs/current/logical-replication-security.html).
 
-Electric is an [Elixir](https://elixir-lang.org) web application published as a Docker image at [electricsql/electric-next](https://hub.docker.com/r/electricsql/electric-next). It connects to Postgres via a `DATABASE_URL`.
+Electric is an [Elixir](https://elixir-lang.org) web application published as a Docker image at [electricsql/electric](https://hub.docker.com/r/electricsql/electric). It connects to Postgres via a `DATABASE_URL`.
 
 Make sure you have Docker running with [Docker Compose](https://docs.docker.com/compose). Then create a new folder to work in:
 
@@ -21,7 +21,7 @@ mkdir my-first-electric
 cd my-first-electric
 ```
 
-Run a fresh Postgres and Electric using this [docker-compose.yaml](https://github.com/electric-sql/electric-next/blob/main/docs/public/docker-compose.yaml) file:
+Run a fresh Postgres and Electric using this [docker-compose.yaml](https://github.com/electric-sql/electric/blob/main/docs/public/docker-compose.yaml) file:
 
 ```sh
 curl -O https://next.electric-sql.com/docker-compose.yaml
@@ -229,4 +229,4 @@ Note that the row with id `2` has the name `"Bob"`. Go back to your Postgres cli
 UPDATE foo SET name = 'James' WHERE id = 2;
 ```
 
-Congratulations! You've built your first real-time, reactive `electric-next` app!
+Congratulations! You've built your first real-time, reactive `electric` app!
