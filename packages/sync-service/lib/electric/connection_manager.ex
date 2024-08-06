@@ -127,24 +127,18 @@ defmodule Electric.ConnectionManager do
 
   # When either the replication client or the connection pool shuts down, let the OTP
   # supervisor restart the connection manager to initiate a new connection procedure from a clean
-  # slate.
-  def handle_info({:EXIT, pid, _reason} = message, state) do
-    if known_pid?(pid, state) do
-      reason =
-        if pid == state.replication_client_pid do
-          :replication_connection_closed
-        else
-          :database_connection_closed
-        end
+  # slate. That is, unless the error that caused the shutdown is unrecoverable and requires
+  # manual resolution in Postgres. In that case, we crash the whole server.
+  def handle_info({:EXIT, pid, reason}, state) do
+    halt_if_fatal_error!(reason)
 
-      {:stop, reason, state}
-    else
-      Logger.warning(
-        "#{inspect(__MODULE__)} process received #{inspect(message)} for an unknown PID."
-      )
+    tag =
+      cond do
+        pid == state.replication_client_pid -> :replication_connection
+        pid == state.pool_pid -> :database_pool
+      end
 
-      {:noreply, state}
-    end
+    {:stop, {tag, reason}, state}
   end
 
   defp start_replication_client(connection_opts, replication_opts) do
@@ -184,6 +178,8 @@ defmodule Electric.ConnectionManager do
   end
 
   defp handle_connection_error(error, state) do
+    halt_if_fatal_error!(error)
+
     message =
       case error do
         %DBConnection.ConnectionError{message: message} ->
@@ -224,21 +220,30 @@ defmodule Electric.ConnectionManager do
     end
   end
 
+  @invalid_slot_detail "This slot has been invalidated because it exceeded the maximum reserved size."
+
+  defp halt_if_fatal_error!(
+         %Postgrex.Error{
+           postgres: %{
+             code: :object_not_in_prerequisite_state,
+             detail: @invalid_slot_detail,
+             pg_code: "55000",
+             routine: "StartLogicalReplication"
+           }
+         } = error
+       ) do
+    System.stop(1)
+    exit(error)
+  end
+
+  defp halt_if_fatal_error!(_), do: nil
+
   defp schedule_reconnection(step, %State{backoff: {backoff, _}} = state) do
     {time, backoff} = :backoff.fail(backoff)
     tref = :erlang.start_timer(time, self(), step)
     Logger.warning("Reconnecting in #{inspect(time)}ms")
     %State{state | backoff: {backoff, tref}}
   end
-
-  defp known_pid?(pid, %{replication_client_pid: pid}), do: true
-  defp known_pid?(pid, %{pool_pid: pid}), do: true
-
-  # This is an edge case that's possible when we've starting the reconnection procedure already
-  # but still receive an EXIT message from the remaining one of the two processes.
-  defp known_pid?(_, %{replication_client_pid: nil, pool_pid: nil}), do: true
-
-  defp known_pid?(_, _), do: false
 
   defp update_ssl_opts(connection_opts) do
     ssl_opts =

@@ -146,7 +146,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
     query =
       "START_REPLICATION SLOT #{state.slot_name} LOGICAL 0/0 (proto_version '1', publication_names '#{state.publication_name}')"
 
-    Logger.info("Started replication from postgres")
+    Logger.info("Starting replication from postgres")
 
     {:stream, query, [], state}
   end
