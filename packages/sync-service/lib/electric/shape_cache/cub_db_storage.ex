@@ -204,12 +204,12 @@ defmodule Electric.ShapeCache.CubDbStorage do
     {snapshot_key(shape_id, index), {change_key, :insert, serialized_row, %{}}}
   end
 
-  defp storage_item_to_log_item({key, {change_key, action, value, header_data}})
+  defp storage_item_to_log_item({key, {change_key, operation, value, header_data}})
        when is_binary(change_key) do
     %{
       key: change_key,
       value: value,
-      headers: Map.put(header_data, :action, action),
+      headers: Map.put(header_data, :operation, operation),
       offset: offset(key)
     }
   end
