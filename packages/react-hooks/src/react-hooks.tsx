@@ -3,7 +3,7 @@ import {
   Shape,
   ShapeStream,
   ShapeStreamOptions,
-} from '@electric-sql/next'
+} from '@electric-sql/client'
 import React, { createContext, useCallback, useContext, useRef } from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
 

@@ -1,5 +1,5 @@
 {
-  "name": "@electric-sql/next",
+  "name": "@electric-sql/client",
   "version": "0.2.2",
   "description": "Postgres everywhere - your data, in sync, wherever you need it.",
   "type": "module",

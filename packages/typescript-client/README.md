@@ -33,10 +33,10 @@ The TypeScript client helps ease reading Shapes from the HTTP API in the browser
 
 ## Install
 
-The client is published on NPM as [`@electric-sql/next`](https://www.npmjs.com/package/@electric-sql/next):
+The client is published on NPM as [`@electric-sql/client`](https://www.npmjs.com/package/@electric-sql/client):
 
 ```sh
-npm i @electric-sql/next
+npm i @electric-sql/client
 ```
 
 ## How to use
