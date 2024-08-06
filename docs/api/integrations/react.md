@@ -10,10 +10,9 @@ Example usage in a component.
 ```tsx
 import { useShape } from "@electric-sql/react"
 
-export default function MyComponent () {
-  const { isUpToDate, data as fooData } = useShape({
-    shape: { table: `foo` },
-    baseUrl: "http://my-api.com/",
+export default function MyComponent() {
+  const { isUpToDate, data: fooData } = useShape({
+    url: `http://localhost:3000/v1/shape/foo`,
   })
 
   if (!isUpToDate) {
