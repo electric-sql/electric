@@ -1,0 +1,56 @@
+[doc Verify handling of invalidated replication slot while Electric is running]
+
+[include replication-slot-invalidation.luxinc]
+
+[global pg_container_name=replication-slot-invalidated-while-running__pg]
+
+[my invalidated_slot_error=
+  """
+  [error] GenServer Electric.ConnectionManager terminating
+  ** (Postgrex.Error) ERROR 55000 (object_not_in_prerequisite_state) cannot read from logical replication slot "electric_slot"
+
+  This slot has been invalidated because it exceeded the maximum reserved size.
+  """]
+
+###
+
+## Start a new Postgres cluster configured for easy replication slot invalidation.
+[invoke setup_pg \
+  "--wal-segsize=1" \
+  "-c max_slot_wal_keep_size=1MB -c max_wal_size=2MB"]
+
+## Start the sync service.
+[invoke setup_electric]
+
+[shell electric]
+  ??[info] Starting replication from postgres
+
+  # Reset the failure pattern because we'll be matching on an error.
+  -
+
+## Seed the database with enough data to exceed max_wal_size and force a checkpoint that
+## will invalidate the replication slot.
+[invoke seed_pg]
+
+## Confirm slot invalidation in Postgres.
+[shell pg]
+  ?invalidating slot "electric_slot" because its restart_lsn \d+/\d+ exceeds max_slot_wal_keep_size
+
+## Observe the fatal connection error.
+[shell electric]
+  ??$invalidated_slot_error
+
+  # Confirm Electric process exit.
+  ??$PS1
+
+## Start the sync service once again to verify that it crashes due to the invalidated slot error.
+[invoke setup_electric]
+
+[shell electric]
+  ??[info] Starting replication from postgres
+  -
+  ??$invalidated_slot_error
+  ??$PS1
+
+[cleanup]
+  [invoke teardown]

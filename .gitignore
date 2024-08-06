@@ -1,6 +1,8 @@
 docs/.vitepress/dist
 docs/.vitepress/cache
 docs/public/openapi.html
+integration-tests/lux/
+integration-tests/lux_logs/
 json_files
 file.jsonl
 node_modules
