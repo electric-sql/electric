@@ -36,7 +36,7 @@ What started as tinkering in private now looks certain to be the way forward for
 
 We created a new repo at [electric-sql/electric-next](https://github.com/electric-sql/electric-next) and started by porting the absolute minimum code necessary from the previous repo.
 
-It provides an [HTTP API](/api/http) for syncing [Shapes](/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/api/clients/typescript) and [connectors](/api/connectors/react).
+It provides an [HTTP API](/api/http) for syncing [Shapes](/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/api/clients/typescript) and [integrations](/api/integrations/react).
 
 It's also simple to write your own client in any language.
 
@@ -248,7 +248,7 @@ You can sync data into:
 
 - apps, replacing data fetching with data sync
 - development environments, for example syncing data into [an embedded PGlite](/product/pglite)
-- edge workers and services, for example maintaining a low-latency [edge data cache](/api/connectors/redis)
+- edge workers and services, for example maintaining a low-latency [edge data cache](/api/integrations/redis)
 - local AI systems running RAG, as per the example below
 
 <figure>
@@ -282,8 +282,8 @@ At the time of writing this document, we are early in the development of `electr
 However, even just with the first release of `electric-next` you can already sync partial subsets of data from a Postgres database into a wide variety of clients and environments, for example:
 
 - syncing data into local apps using the [TypeScript](/api/clients/typescript) and [Elixir](/api/clients/elixir) clients
-- replacing hot-path data fetching and database queries in apps using [React](/api/connectors/react), [MobX](/api/connectors/react) and [TanStack](/api/connectors/tanstack)
-- maintain live caches with automatic invalidation, as per [our Redis connector](/api/connectors/redis)
+- replacing hot-path data fetching and database queries in apps using [React](/api/integrations/react), [MobX](/api/integrations/react) and [TanStack](/api/integrations/tanstack)
+- maintain live caches with automatic invalidation, as per [our Redis example](https://github.com/electric-sql/electric/blob/main/examples/redis-client/src/index.ts)
 
 ### Roadmap
 
@@ -301,7 +301,7 @@ See the:
 
 - [Quickstart guide](/guides/quickstart)
 - [API docs](/api/http)
-- [Examples](/examples/basic)
+- [Examples](https://github.com/electric-sql/electric/tree/main/examples)
 
 If you have any questions or need support, ask on the `#help-and-support` channel in the [Electric Discord](https://discord.electric-sql.com).
 
