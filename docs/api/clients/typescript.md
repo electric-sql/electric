@@ -81,4 +81,4 @@ shape.subscribe(shapeData => {
 })
 ```
 
-See the [Examples](/examples/basic) and [Connectors](/api/connectors/react) for more usage examples.
+See the [Examples](https://github.com/electric-sql/electric/tree/main/examples) and [integrations](/api/integrations/react) for more usage examples.
