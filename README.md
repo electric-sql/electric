@@ -23,7 +23,7 @@
   <a href="https://x.com/ElectricSQL" target="_blank"><img src="https://img.shields.io/twitter/follow/ElectricSQL.svg?style=social&label=Follow @ElectricSQL"></a>
 </p>
 
-# Electric Next
+# Electric
 
 Your Postgres data, in sync, wherever you need it.
 
@@ -33,14 +33,14 @@ Your Postgres data, in sync, wherever you need it.
 - [Docs](https://next.electric-sql.com)
 - [Examples](./examples)
 
-## What is Electric Next?
+## What is Electric?
 
-This is a clean rebuild of the [ElectricSQL](https://electric-sql.com) sync engine. One that's informed by the lessons learned building the [previous system](https://github.com/electric-sql/electric). See
+Electric provides an [HTTP API](https://next.electric-sql.com/api/http) for syncing [Shapes](https://next.electric-sql.com/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](https://next.electric-sql.com/api/clients/typescript) and [connectors](https://next.electric-sql.com/api/connectors/react).
+
+### This looks a bit different than the last time I visited?
+
+We started a clean rebuild of the sync engine in July 2024. One that's informed by the lessons learned building the [previous system](https://github.com/electric-sql/electric-old). See
 James' blog post for background on the change: https://next.electric-sql.com/about
-
-It provides an [HTTP API](https://next.electric-sql.com/api/http) for syncing [Shapes](https://next.electric-sql.com/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](https://next.electric-sql.com/api/clients/typescript) and [connectors](https://next.electric-sql.com/api/connectors/react).
-
-It's also simple to [write your own client](https://next.electric-sql.com/guides/write-your-own-client) in any language.
 
 ## Getting Started
 
