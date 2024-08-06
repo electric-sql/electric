@@ -1,11 +1,11 @@
 defmodule Electric.ShapeCache.InMemoryStorage do
+  alias Electric.LogItems
   alias Electric.Replication.LogOffset
-  alias Electric.Replication.Changes
-  alias Electric.Utils
-  alias Electric.Shapes.Shape
   use Agent
 
   @behaviour Electric.ShapeCache.Storage
+
+  @snapshot_offset LogOffset.first()
 
   def shared_opts(opts) do
     snapshot_ets_table_name = Access.get(opts, :snapshot_ets_table, :snapshot_ets_table)
@@ -39,15 +39,13 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   def get_snapshot(shape_id, opts) do
-    offset = LogOffset.first()
-
     stream =
       :ets.select(opts.snapshot_ets_table, [
         {{{:data, shape_id, :"$1"}, :"$2"}, [], [{{:"$1", :"$2"}}]}
       ])
       |> Stream.map(fn {_, item} -> item end)
 
-    {offset, stream}
+    {@snapshot_offset, stream}
   end
 
   def get_log_stream(shape_id, offset, max_offset, opts) do
@@ -77,7 +75,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
          ]) do
       [true] -> true
       # FIXME: this is naive while we don't have snapshot metadata to get real offset
-      [] -> snapshot_exists?(shape_id, opts) and offset == LogOffset.first()
+      [] -> snapshot_exists?(shape_id, opts) and offset == @snapshot_offset
     end
   end
 
@@ -89,12 +87,13 @@ defmodule Electric.ShapeCache.InMemoryStorage do
           map()
         ) :: :ok
   def make_new_snapshot!(shape_id, shape, query_info, data_stream, opts) do
-    offset = LogOffset.first()
     ets_table = opts.snapshot_ets_table
 
     data_stream
-    |> Stream.map(&row_to_snapshot_entry(&1, shape_id, shape, query_info))
-    |> Stream.map(&snapshot_storage_item_to_log_item({shape_id, offset}, &1))
+    |> LogItems.from_snapshot_row_stream(@snapshot_offset, shape, query_info)
+    |> Stream.map(fn log_item ->
+      {{:data, shape_id, log_item.key}, Jason.encode!(log_item)}
+    end)
     |> Stream.chunk_every(500)
     |> Stream.each(fn chunk -> :ets.insert(ets_table, chunk) end)
     |> Stream.run()
@@ -103,14 +102,13 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     :ok
   end
 
-  def append_to_log!(shape_id, changes, opts) do
+  def append_to_log!(shape_id, log_items, opts) do
     ets_table = opts.log_ets_table
 
-    changes
-    |> Enum.map(fn {offset, key, action, value, header_data} ->
-      offset = storage_offset(offset)
-      item = {key, action, value, header_data}
-      log_storage_item_to_log_item({shape_id, offset}, item)
+    log_items
+    |> Enum.map(fn log_item ->
+      offset = storage_offset(log_item.offset)
+      {{shape_id, offset}, Jason.encode!(log_item)}
     end)
     |> then(&:ets.insert(ets_table, &1))
 
@@ -122,55 +120,6 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     :ets.match_delete(opts.snapshot_ets_table, {{:metadata, shape_id}, :_})
     :ets.match_delete(opts.log_ets_table, {{shape_id, :_}, :_})
     :ok
-  end
-
-  @doc false
-  def row_to_snapshot_entry(row, shape_id, shape, %Postgrex.Query{
-        columns: columns,
-        result_types: types
-      }) do
-    serialized_row =
-      [columns, types, row]
-      |> Enum.zip_with(fn
-        [col, Postgrex.Extensions.UUID, val] -> {col, Utils.encode_uuid(val)}
-        [col, _, val] -> {col, to_string(val)}
-      end)
-      |> Map.new()
-
-    key = Changes.build_key(shape.root_table, serialized_row, Shape.pk(shape))
-
-    {{:data, shape_id, key}, serialized_row}
-  end
-
-  defp snapshot_storage_item_to_log_item(
-         {_shape_id, snapshot_log_offset},
-         {{_, _, change_key} = key, value}
-       ) do
-    {key,
-     Jason.encode!(%{
-       key: change_key,
-       value: value,
-       headers: %{action: :insert},
-       offset: snapshot_log_offset
-     })}
-  end
-
-  # Turns a stored log item into a log item
-  # by modifying the turning the tuple offset
-  # back into a LogOffset value.
-  defp log_storage_item_to_log_item(
-         {_shape_id, position} = key,
-         {change_key, action, value, header_data}
-       ) do
-    offset = LogOffset.new(position)
-
-    {key,
-     Jason.encode!(%{
-       key: change_key,
-       value: value,
-       headers: Map.put(header_data, :action, action),
-       offset: offset
-     })}
   end
 
   # Turns a LogOffset into a tuple representation

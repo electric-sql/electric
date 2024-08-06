@@ -2,7 +2,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   use ExUnit.Case, async: true
   import Support.TestUtils
 
-  alias Electric.ShapeCache.Storage
+  alias Electric.LogItems
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes
@@ -144,8 +144,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         {@snapshot_offset, _} = storage.get_snapshot(@shape_id, opts)
       end
 
-      test "does not return log entries", %{module: storage, opts: opts} do
-        changes =
+      test "does not return log items", %{module: storage, opts: opts} do
+        log_items =
           [
             %Changes.NewRecord{
               relation: {"public", "test_table"},
@@ -153,9 +153,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
               log_offset: LogOffset.new(Lsn.from_integer(1000), 0)
             }
           ]
-          |> preprocess_changes()
+          |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, changes, opts)
+        :ok = storage.append_to_log!(@shape_id, log_items, opts)
 
         {@snapshot_offset, stream} = storage.get_snapshot(@shape_id, opts)
         assert [] = Enum.to_list(stream)
@@ -169,11 +169,11 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
       setup :start_storage
 
-      test "adds changes to the log", %{module: storage, opts: opts} do
+      test "adds itemd to the log", %{module: storage, opts: opts} do
         lsn = Lsn.from_integer(1000)
         offset = LogOffset.new(lsn, 0)
 
-        changes =
+        log_items =
           [
             %Changes.NewRecord{
               relation: {"public", "test_table"},
@@ -181,9 +181,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
               log_offset: offset
             }
           ]
-          |> preprocess_changes()
+          |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, changes, opts)
+        :ok = storage.append_to_log!(@shape_id, log_items, opts)
 
         stream = storage.get_log_stream(@shape_id, LogOffset.first(), LogOffset.last(), opts)
 
@@ -209,12 +209,12 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
       setup :start_storage
 
-      test "returns correct stream of changes", %{module: storage, opts: opts} do
+      test "returns correct stream of log items", %{module: storage, opts: opts} do
         shape_id = "test_shape"
         lsn1 = Lsn.from_integer(1000)
         lsn2 = Lsn.from_integer(2000)
 
-        changes1 =
+        log_items1 =
           [
             %Changes.NewRecord{
               relation: {"public", "test_table"},
@@ -222,9 +222,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
               log_offset: LogOffset.new(lsn1, 0)
             }
           ]
-          |> preprocess_changes()
+          |> changes_to_log_items()
 
-        changes2 =
+        log_items2 =
           [
             %Changes.UpdatedRecord{
               relation: {"public", "test_table"},
@@ -238,10 +238,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
               log_offset: LogOffset.new(lsn2, 1)
             }
           ]
-          |> preprocess_changes()
+          |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(shape_id, changes1, opts)
-        :ok = storage.append_to_log!(shape_id, changes2, opts)
+        :ok = storage.append_to_log!(shape_id, log_items1, opts)
+        :ok = storage.append_to_log!(shape_id, log_items2, opts)
 
         stream = storage.get_log_stream(shape_id, LogOffset.first(), LogOffset.last(), opts)
         entries = Enum.map(stream, &Jason.decode!/1)
@@ -253,11 +253,11 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                ] = entries
       end
 
-      test "returns stream of changes after offset", %{module: storage, opts: opts} do
+      test "returns stream of log items after offset", %{module: storage, opts: opts} do
         lsn1 = Lsn.from_integer(1000)
         lsn2 = Lsn.from_integer(2000)
 
-        changes1 =
+        log_items1 =
           [
             %Changes.NewRecord{
               relation: {"public", "test_table"},
@@ -265,9 +265,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
               log_offset: LogOffset.new(lsn1, 0)
             }
           ]
-          |> preprocess_changes()
+          |> changes_to_log_items()
 
-        changes2 =
+        log_items2 =
           [
             %Changes.UpdatedRecord{
               relation: {"public", "test_table"},
@@ -281,10 +281,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
               log_offset: LogOffset.new(lsn2, 1)
             }
           ]
-          |> preprocess_changes()
+          |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, changes1, opts)
-        :ok = storage.append_to_log!(@shape_id, changes2, opts)
+        :ok = storage.append_to_log!(@shape_id, log_items1, opts)
+        :ok = storage.append_to_log!(@shape_id, log_items2, opts)
 
         stream =
           storage.get_log_stream(@shape_id, LogOffset.new(lsn1, 0), LogOffset.last(), opts)
@@ -297,14 +297,14 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                ] = entries
       end
 
-      test "returns stream of changes after offset and before max_offset (inclusive)", %{
+      test "returns stream of log items after offset and before max_offset (inclusive)", %{
         module: storage,
         opts: opts
       } do
         lsn1 = Lsn.from_integer(1000)
         lsn2 = Lsn.from_integer(2000)
 
-        changes1 =
+        log_items1 =
           [
             %Changes.NewRecord{
               relation: {"public", "test_table"},
@@ -312,9 +312,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
               log_offset: LogOffset.new(lsn1, 0)
             }
           ]
-          |> preprocess_changes()
+          |> changes_to_log_items()
 
-        changes2 =
+        log_items2 =
           [
             %Changes.UpdatedRecord{
               relation: {"public", "test_table"},
@@ -328,10 +328,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
               log_offset: LogOffset.new(lsn2, 1)
             }
           ]
-          |> preprocess_changes()
+          |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, changes1, opts)
-        :ok = storage.append_to_log!(@shape_id, changes2, opts)
+        :ok = storage.append_to_log!(@shape_id, log_items1, opts)
+        :ok = storage.append_to_log!(@shape_id, log_items2, opts)
 
         stream =
           storage.get_log_stream(
@@ -352,7 +352,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         lsn1 = Lsn.from_integer(1000)
         lsn2 = Lsn.from_integer(2000)
 
-        changes1 =
+        log_items1 =
           [
             %Changes.NewRecord{
               relation: {"public", "test_table"},
@@ -360,9 +360,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
               log_offset: LogOffset.new(lsn1, 0)
             }
           ]
-          |> preprocess_changes()
+          |> changes_to_log_items()
 
-        changes2 =
+        log_items2 =
           [
             %Changes.NewRecord{
               relation: {"public", "test_table"},
@@ -370,10 +370,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
               log_offset: LogOffset.new(lsn2, 0)
             }
           ]
-          |> preprocess_changes()
+          |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(shape_id1, changes1, opts)
-        :ok = storage.append_to_log!(shape_id2, changes2, opts)
+        :ok = storage.append_to_log!(shape_id1, log_items1, opts)
+        :ok = storage.append_to_log!(shape_id2, log_items2, opts)
 
         assert [%{"value" => %{"name" => "Test A"}}] =
                  storage.get_log_stream(shape_id1, LogOffset.first(), LogOffset.last(), opts)
@@ -417,7 +417,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       test "causes get_log_stream/4 to return empty stream", %{module: storage, opts: opts} do
         lsn = Lsn.from_integer(1000)
 
-        changes =
+        log_items =
           [
             %Changes.NewRecord{
               relation: {"public", "test_table"},
@@ -425,9 +425,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
               log_offset: LogOffset.new(lsn, 0)
             }
           ]
-          |> preprocess_changes()
+          |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, changes, opts)
+        :ok = storage.append_to_log!(@shape_id, log_items, opts)
 
         storage.cleanup!(@shape_id, opts)
 
@@ -449,7 +449,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       } do
         lsn = Lsn.from_integer(1000)
 
-        changes =
+        log_items =
           [
             %Changes.NewRecord{
               relation: {"public", "test_table"},
@@ -457,9 +457,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
               log_offset: LogOffset.new(lsn, 0)
             }
           ]
-          |> preprocess_changes()
+          |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, changes, opts)
+        :ok = storage.append_to_log!(@shape_id, log_items, opts)
 
         assert storage.has_log_entry?(@shape_id, LogOffset.new(lsn, 0), opts)
         refute storage.has_log_entry?(@shape_id, LogOffset.new(lsn, 1), opts)
@@ -496,15 +496,15 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       }
       @first_offset LogOffset.first()
       @change_offset LogOffset.new(Lsn.from_integer(123), 0)
-      @changes [
-                 %Changes.NewRecord{
-                   relation: {"public", "test_table"},
-                   record: %{"id" => "123", "name" => "Test"},
-                   log_offset: @change_offset
-                 }
-               ]
-               |> Enum.map(&Changes.fill_key(&1, ["id"]))
-               |> Enum.flat_map(&Storage.prepare_change_for_storage(&1, 0, ["id"]))
+      @log_items [
+                   %Changes.NewRecord{
+                     relation: {"public", "test_table"},
+                     record: %{"id" => "123", "name" => "Test"},
+                     log_offset: @change_offset
+                   }
+                 ]
+                 |> Enum.map(&Changes.fill_key(&1, ["id"]))
+                 |> Enum.flat_map(&LogItems.from_change(&1, 0, ["id"]))
 
       setup do
         {:ok, %{module: unquote(module)}}
@@ -531,7 +531,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.add_shape("shape-3", @shape, opts)
 
         storage.make_new_snapshot!("shape-1", @shape, @query_info, @data_stream, opts)
-        storage.append_to_log!("shape-1", @changes, opts)
+        storage.append_to_log!("shape-1", @log_items, opts)
 
         storage.make_new_snapshot!("shape-2", @shape, @query_info, @data_stream, opts)
 

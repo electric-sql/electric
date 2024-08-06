@@ -25,17 +25,17 @@ defmodule Electric.ShapeCacheTest do
   @basic_query_meta %Postgrex.Query{columns: ["id"], result_types: [:text], name: "key_prefix"}
   @change_offset LogOffset.new(13, 2)
   @xid 99
-  @changes preprocess_changes(
-             [
-               %Changes.NewRecord{
-                 relation: {"public", "test_table"},
-                 record: %{"id" => "123", "value" => "Test"},
-                 log_offset: @change_offset
-               }
-             ],
-             ["id"],
-             @xid
-           )
+  @log_items changes_to_log_items(
+               [
+                 %Changes.NewRecord{
+                   relation: {"public", "test_table"},
+                   record: %{"id" => "123", "value" => "Test"},
+                   log_offset: @change_offset
+                 }
+               ],
+               ["id"],
+               @xid
+             )
 
   @zero_offset LogOffset.first()
 
@@ -298,7 +298,7 @@ defmodule Electric.ShapeCacheTest do
         ShapeCache.append_to_log!(
           shape_id,
           expected_offset_after_log_entry,
-          @changes,
+          @log_items,
           opts
         )
 
@@ -315,7 +315,7 @@ defmodule Electric.ShapeCacheTest do
       log_offset = LogOffset.new(1000, 0)
 
       {:error, log} =
-        with_log(fn -> ShapeCache.append_to_log!(shape_id, log_offset, @changes, opts) end)
+        with_log(fn -> ShapeCache.append_to_log!(shape_id, log_offset, @log_items, opts) end)
 
       assert log =~ "Tried to update latest offset for shape #{shape_id} which doesn't exist"
     end
@@ -520,7 +520,7 @@ defmodule Electric.ShapeCacheTest do
 
       Storage.append_to_log!(
         shape_id,
-        preprocess_changes([
+        changes_to_log_items([
           %Electric.Replication.Changes.NewRecord{
             relation: {"public", "items"},
             record: %{"id" => "1", "value" => "Alice"},
@@ -567,7 +567,7 @@ defmodule Electric.ShapeCacheTest do
 
       Storage.append_to_log!(
         shape_id,
-        preprocess_changes([
+        changes_to_log_items([
           %Electric.Replication.Changes.NewRecord{
             relation: {"public", "items"},
             record: %{"id" => "1", "value" => "Alice"},
@@ -654,7 +654,7 @@ defmodule Electric.ShapeCacheTest do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
 
-      :ok = ShapeCache.append_to_log!(shape_id, offset, @changes, opts)
+      :ok = ShapeCache.append_to_log!(shape_id, offset, @log_items, opts)
 
       {^shape_id, ^offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
       restart_shape_cache(context)

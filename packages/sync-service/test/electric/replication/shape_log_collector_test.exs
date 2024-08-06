@@ -252,11 +252,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           {shape2, @other_shape, xmin}
         ]
       end)
-      |> expect(:append_to_log!, fn ^shape1, ^last_log_offset, [{_, _, _, record, _}], _ ->
+      |> expect(:append_to_log!, fn ^shape1, ^last_log_offset, [%{value: record}], _ ->
         assert record["id"] == "1"
         :ok
       end)
-      |> expect(:append_to_log!, fn ^shape2, ^last_log_offset, [{_, _, _, record, _}], _ ->
+      |> expect(:append_to_log!, fn ^shape2, ^last_log_offset, [%{value: record}], _ ->
         assert record["id"] == "2"
         :ok
       end)
