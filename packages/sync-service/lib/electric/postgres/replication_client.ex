@@ -219,20 +219,6 @@ defmodule Electric.Postgres.ReplicationClient do
   @epoch DateTime.to_unix(~U[2000-01-01 00:00:00Z], :microsecond)
   defp current_time(), do: System.os_time(:microsecond) - @epoch
 
-  # This is an edge case that seems to be caused by the documented requirement to respond to `Primary
-  # keepalive message`[1] with a `Standby status update`[2] message that has all of the WAL byte
-  # offset values incremented by 1. Perhaps, it is a bug in Postgres: when Electric opens a new
-  # replication connection, Postgres immediately sends a "keepalive" message where the value of
-  # `wal_end` is the last "flushed to disk" WAL offset that Electric reported prior to closing
-  # the replication connection. This looks suspicious because in subsequent "keepalive"
-  # messages that Postgres sends to Electric throughout the lifetime of the replication
-  # connection it *does not* use the incremented value reported by Electric for `wal_end` but
-  # instead uses the original offset that does not have 1 added to it.
-  #
-  # [1]: https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-PRIMARY-KEEPALIVE-MESSAGE
-  # [2]: https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-STANDBY-STATUS-UPDATE
-  defp update_received_wal(state, wal) when wal == state.received_wal - 1, do: state
-
   # wal can be 0 if the incoming logical message is e.g. Relation.
   defp update_received_wal(state, 0), do: state
 
