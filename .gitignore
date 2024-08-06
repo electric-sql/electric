@@ -11,3 +11,4 @@ caching/nginx_cache
 .vscode
 .DS_store
 **/dist/**
+build
