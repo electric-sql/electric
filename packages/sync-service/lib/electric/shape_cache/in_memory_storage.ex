@@ -147,9 +147,18 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   # Turns a stored log item into a log item
   # by modifying the turning the tuple offset
   # back into a LogOffset value.
-  defp log_storage_item_to_log_item({_shape_id, position}, {_, key, operation, value, header_data}) do
+  defp log_storage_item_to_log_item(
+         {_shape_id, position},
+         {_, key, operation, value, header_data}
+       ) do
     offset = LogOffset.new(position)
-    %{key: key, value: value, headers: Map.put(header_data, :operation, operation), offset: offset}
+
+    %{
+      key: key,
+      value: value,
+      headers: Map.put(header_data, :operation, operation),
+      offset: offset
+    }
   end
 
   # Turns a LogOffset into a tuple representation
