@@ -1,4 +1,4 @@
-# @electric-sql/next
+# @electric-sql/client
 
 ## 0.2.2
 

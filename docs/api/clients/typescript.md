@@ -16,10 +16,10 @@ The TypeScript client helps ease reading Shapes from the HTTP API in the browser
 
 ## Install
 
-The client is published on NPM as [`@electric-sql/next`](https://www.npmjs.com/package/@electric-sql/next):
+The client is published on NPM as [`@electric-sql/client`](https://www.npmjs.com/package/@electric-sql/client):
 
 ```sh
-npm i @electric-sql/next
+npm i @electric-sql/client
 ```
 
 ## How to use
@@ -29,7 +29,7 @@ The client exports a `ShapeStream` class for getting updates to shapes on a row-
 ### `ShapeStream`
 
 ```tsx
-import { ShapeStream } from '@electric-sql/next'
+import { ShapeStream } from '@electric-sql/client'
 
 // Passes subscribers rows as they're inserted, updated, or deleted
 const stream = new ShapeStream({
@@ -65,7 +65,7 @@ const stream = new ShapeStream({
 ### `Shape`
 
 ```tsx
-import { ShapeStream, Shape } from '@electric-sql/next'
+import { ShapeStream, Shape } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape/foo`,

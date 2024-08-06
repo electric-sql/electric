@@ -35,7 +35,7 @@
     "classnames": "^2.5.1",
     "dayjs": "^1.11.11",
     "dotenv": "^16.4.5",
-    "@electric-sql/next": "workspace:*",
+    "@electric-sql/client": "workspace:*",
     "fractional-indexing": "^3.2.0",
     "jsonwebtoken": "^9.0.2",
     "lodash.debounce": "^4.0.8",

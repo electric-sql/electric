@@ -31,7 +31,7 @@
   "homepage": "https://next.electric-sql.com",
   "dependencies": {
     "use-sync-external-store": "^1.2.2",
-    "@electric-sql/next": "workspace:*"
+    "@electric-sql/client": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/react": "^16.0.0",
