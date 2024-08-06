@@ -55,7 +55,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert [
                %{
-                 "headers" => %{"action" => "insert"},
+                 "headers" => %{"operation" => "insert"},
                  "key" => _,
                  "offset" => @first_offset,
                  "value" => %{
@@ -159,7 +159,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert [
                %{
-                 "headers" => %{"action" => "insert"},
+                 "headers" => %{"operation" => "insert"},
                  "key" => ^key,
                  "offset" => @first_offset,
                  "value" => %{
@@ -198,7 +198,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert [
                %{
-                 "headers" => %{"action" => "insert"},
+                 "headers" => %{"operation" => "insert"},
                  "key" => ^key2,
                  "offset" => _,
                  "value" => %{
@@ -290,17 +290,17 @@ defmodule Electric.Plug.RouterTest do
 
       assert [
                %{
-                 "headers" => %{"action" => "delete"},
+                 "headers" => %{"operation" => "delete"},
                  "value" => %{"id" => "1"},
                  "key" => ^key
                },
                %{
-                 "headers" => %{"action" => "insert"},
+                 "headers" => %{"operation" => "insert"},
                  "value" => %{"id" => "2", "value1" => _, "value2" => _, "value3" => _},
                  "key" => key2
                },
                %{
-                 "headers" => %{"action" => "insert"},
+                 "headers" => %{"operation" => "insert"},
                  "value" => %{"id" => "3", "value1" => _, "value2" => _, "value3" => _},
                  "key" => key3
                },
@@ -341,17 +341,17 @@ defmodule Electric.Plug.RouterTest do
 
       assert [
                %{
-                 "headers" => %{"action" => "delete"},
+                 "headers" => %{"operation" => "delete"},
                  "value" => %{"col1" => "test1", "col2" => "test2"},
                  "key" => ^key
                },
                %{
-                 "headers" => %{"action" => "insert"},
+                 "headers" => %{"operation" => "insert"},
                  "value" => %{"col1" => "test3", "col2" => "test2"},
                  "key" => key2
                },
                %{
-                 "headers" => %{"action" => "insert"},
+                 "headers" => %{"operation" => "insert"},
                  "value" => %{"col1" => "test4", "col2" => "test5"},
                  "key" => key3
                },

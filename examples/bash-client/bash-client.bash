@@ -49,9 +49,9 @@ process_json() {
 
     # Read the JSON file line by line and save each JSON object to an individual file
     while IFS= read -r line; do
-        # Check if the headers array contains an object with key "action"
-        if echo "$line" | jq -e '.headers | map(select(.key == "action")) | length == 0' > /dev/null; then
-            # echo "Skipping line without an action: $action"  # Log skipping non-data objects
+        # Check if the headers array contains an object with key "operation"
+        if echo "$line" | jq -e '.headers | map(select(.key == "operation")) | length == 0' > /dev/null; then
+            # echo "Skipping line without an operation: $operation"  # Log skipping non-data objects
             continue
         fi
 

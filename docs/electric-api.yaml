@@ -202,14 +202,14 @@ paths:
 
                         Messages can be `control` messages, providing information or
                         instructions to the client. Or they can be operations that
-                        performed a certain `action` on a row of data in the shape.
+                        performed a certain `operation` on a row of data in the shape.
                       properties:
                         control:
                           type: string
                           enum:
                             - up-to-date
                             - must-refetch
-                        action:
+                        operation:
                           type: string
                           enum:
                             - insert
@@ -254,7 +254,7 @@ paths:
                         - `extra_float_digits = 1`
                 example:
                   - headers:
-                      action: insert
+                      operation: insert
                     offset: 0/0
                     key: issue-1
                     value:
@@ -262,7 +262,7 @@ paths:
                       title: Electric
                       status: backlog
                   - headers:
-                      action: insert
+                      operation: insert
                       control: up-to-date
                     offset: 1934/0
                     key: issue-2

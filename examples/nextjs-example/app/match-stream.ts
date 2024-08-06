@@ -20,10 +20,13 @@ export async function matchStream<T>({
   return new Promise((resolve, reject) => {
     const unsubscribe = stream.subscribe((messages) => {
       for (const message of messages) {
-        if (`key` in message && operations.includes(message.headers.action)) {
+        if (
+          `key` in message &&
+          operations.includes(message.headers.operation)
+        ) {
           if (
             matchFn({
-              operationType: message.headers.action,
+              operationType: message.headers.operation,
               message: message as ChangeMessage<{ [key: string]: T }>,
             })
           ) {

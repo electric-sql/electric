@@ -36,7 +36,7 @@ export function forEachMessage<T extends Value>(
             message as Message<T>,
             messageIdx
           )
-          if (`action` in message.headers) messageIdx++
+          if (`operation` in message.headers) messageIdx++
         } catch (e) {
           controller.abort()
           return reject(e)

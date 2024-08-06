@@ -516,10 +516,10 @@ export class Shape {
     messages.forEach((message) => {
       if (`key` in message) {
         dataMayHaveChanged = [`insert`, `update`, `delete`].includes(
-          message.headers.action
+          message.headers.operation
         )
 
-        switch (message.headers.action) {
+        switch (message.headers.operation) {
           case `insert`:
             this.data.set(message.key, message.value)
             break

@@ -13,7 +13,7 @@ defmodule Electric.ShapeCache.Storage do
           {
             offset :: LogOffset.t(),
             key :: String.t(),
-            action :: :insert | :update | :delete,
+            operation :: :insert | :update | :delete,
             value :: %{String.t() => String.t()},
             header_data :: %{optional(atom()) => Jason.Encoder.t()}
           }
