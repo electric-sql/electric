@@ -1,4 +1,4 @@
-import { ShapeStream, Value, Message } from '@electric-sql/next'
+import { ShapeStream, Value, Message } from '@electric-sql/client'
 import { Client, ClientConfig } from 'pg'
 
 export function makePgClient(overrides: ClientConfig = {}) {

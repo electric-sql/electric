@@ -1,4 +1,4 @@
-import { ShapeStream, ChangeMessage } from "@electric-sql/next"
+import { ShapeStream, ChangeMessage } from "@electric-sql/client"
 
 export async function matchStream<T>({
   stream,

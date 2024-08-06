@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@electric-sql/next": "workspace:*",
+    "@electric-sql/client": "workspace:*",
     "@electric-sql/react": "workspace:*",
     "next": "^14.2.5",
     "pg": "^8.12.0",

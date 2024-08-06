@@ -56,7 +56,7 @@ importers:
 
   examples/linearlite:
     dependencies:
-      '@electric-sql/next':
+      '@electric-sql/client':
         specifier: workspace:*
         version: link:../../packages/typescript-client
       '@electric-sql/react':
@@ -249,7 +249,7 @@ importers:
 
   examples/nextjs-example:
     dependencies:
-      '@electric-sql/next':
+      '@electric-sql/client':
         specifier: workspace:*
         version: link:../../packages/typescript-client
       '@electric-sql/react':
@@ -307,7 +307,7 @@ importers:
 
   examples/redis-client:
     dependencies:
-      '@electric-sql/next':
+      '@electric-sql/client':
         specifier: workspace:*
         version: link:../../packages/typescript-client
       redis:
@@ -354,7 +354,7 @@ importers:
 
   examples/remix-basic:
     dependencies:
-      '@electric-sql/next':
+      '@electric-sql/client':
         specifier: workspace:*
         version: link:../../packages/typescript-client
       '@electric-sql/react':
@@ -518,7 +518,7 @@ importers:
 
   packages/react-hooks:
     dependencies:
-      '@electric-sql/next':
+      '@electric-sql/client':
         specifier: workspace:*
         version: link:../typescript-client
       use-sync-external-store:
