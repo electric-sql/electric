@@ -38,7 +38,7 @@ We created a new repo at [electric-sql/electric-next](https://github.com/electri
 
 It provides an [HTTP API](/api/http) for syncing [Shapes](/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/api/clients/typescript) and [connectors](/api/connectors/react).
 
-It's also simple to [write your own client](/guides/write-your-own-client) in any language.
+It's also simple to write your own client in any language.
 
 ## Why build a new system?
 
