@@ -6,7 +6,7 @@
   "author": "Kyle Mathews <mathews.kyle@gmail.com>",
   "private": true,
   "bugs": {
-    "url": "https://github.com/electric-sql/electric-next/issues"
+    "url": "https://github.com/electric-sql/electric/issues"
   },
   "dependencies": {
     "@electric-sql/react": "workspace:*",

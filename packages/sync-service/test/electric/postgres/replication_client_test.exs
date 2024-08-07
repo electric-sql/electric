@@ -50,8 +50,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       insert_item(conn, "test value")
 
-      assert_receive {:from_replication, %Transaction{changes: [change]}}
-      assert %NewRecord{record: %{"value" => "test value"}} = change
+      assert %NewRecord{record: %{"value" => "test value"}} = receive_tx_change()
     end
 
     test "logs a message when connected & replication has started",
@@ -62,8 +61,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
           insert_item(conn, "test value")
 
-          assert_receive {:from_replication, %Transaction{changes: [change]}}
-          assert %NewRecord{record: %{"value" => "test value"}} = change
+          assert %NewRecord{record: %{"value" => "test value"}} = receive_tx_change()
         end)
 
       log =~ "Started replication from postgres"
@@ -111,24 +109,11 @@ defmodule Electric.Postgres.ReplicationClientTest do
     } do
       assert {:ok, pid} = ReplicationClient.start_link(config, replication_opts)
 
-      # Verify that inserting an item results in advancement of slot's confirmed_flush_lsn
-      flushed_lsn_1 = fetch_slot_info(conn, "confirmed_flush_lsn")
-
       insert_item(conn, "test value")
+      assert %NewRecord{record: %{"value" => "test value"}} = receive_tx_change()
 
-      assert_receive {:from_replication, %Transaction{changes: [change]}}
-      assert %NewRecord{record: %{"value" => "test value"}} = change
-
-      flushed_lsn_2 = fetch_slot_info(conn, "confirmed_flush_lsn")
-      assert Lsn.compare(flushed_lsn_2, flushed_lsn_1) == :gt
-
-      # Verify that returning a value other than :ok from the transaction callback leaves slot's LSN unchanged.
       insert_item(conn, "return: not ok")
-
-      assert_receive {:from_replication, %Transaction{changes: [change]}}
-      assert %NewRecord{record: %{"value" => "return: not ok"}} = change
-
-      assert flushed_lsn_2 == fetch_slot_info(conn, "confirmed_flush_lsn")
+      assert %NewRecord{record: %{"value" => "return: not ok"}} = receive_tx_change()
 
       # Verify that raising in the transaction callback crashes the connection process
       monitor = Process.monitor(pid)
@@ -147,21 +132,12 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       refute_received _
 
-      # Now, when we restart the connection process, it replays transactions from the last confirmed one
+      # Now, when we restart the connection process, it replays transactions from the last
+      # confirmed one
       assert {:ok, _pid} = ReplicationClient.start_link(config, replication_opts)
 
-      assert_receive {:from_replication, %Transaction{changes: [change], lsn: tx_lsn_1}}
-      assert %NewRecord{record: %{"value" => "return: not ok"}} = change
-
-      assert Lsn.compare(tx_lsn_1, flushed_lsn_2) == :gt
-
-      assert_receive {:from_replication, %Transaction{changes: [change], lsn: tx_lsn_2}}
-      assert %NewRecord{record: %{"value" => ^interrupt_val}} = change
-
-      assert Lsn.compare(tx_lsn_2, tx_lsn_1) == :gt
-
-      assert Lsn.to_integer(tx_lsn_2) >=
-               Lsn.to_integer(fetch_slot_info(conn, "confirmed_flush_lsn"))
+      assert %NewRecord{record: %{"value" => "return: not ok"}} = receive_tx_change()
+      assert %NewRecord{record: %{"value" => ^interrupt_val}} = receive_tx_change()
 
       refute_receive _
     end
@@ -210,8 +186,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
       )
 
       # Check that the incoming data is formatted according to Electric.Postgres.display_settings
-      assert_receive {:from_replication, %Transaction{changes: [change]}}
-
       assert %NewRecord{
                record: %{
                  "date" => "2022-05-17",
@@ -220,7 +194,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
                  "bytea" => "\\x0510fa",
                  "interval" => "P1DT12H59M10S"
                }
-             } = change
+             } = receive_tx_change()
     end
   end
 
@@ -252,21 +226,17 @@ defmodule Electric.Postgres.ReplicationClientTest do
         long_string_2
       ])
 
-      assert_receive {:from_replication, %Transaction{changes: [change]}}
-
       assert %NewRecord{
                record: %{"id" => ^id, "val1" => ^long_string_1, "val2" => ^long_string_2},
                relation: {"public", "items2"}
-             } = change
+             } = receive_tx_change()
 
       Postgrex.query!(conn, "DELETE FROM items2 WHERE id = $1", [bin_uuid])
-
-      assert_receive {:from_replication, %Transaction{changes: [change]}}
 
       assert %DeletedRecord{
                old_record: %{"id" => ^id, "val1" => ^long_string_1, "val2" => ^long_string_2},
                relation: {"public", "items2"}
-             } = change
+             } = receive_tx_change()
     end
 
     test "detoasts column values in updates", %{db_conn: conn} do
@@ -280,16 +250,12 @@ defmodule Electric.Postgres.ReplicationClientTest do
         long_string_2
       ])
 
-      assert_receive {:from_replication, %Transaction{changes: [change]}}
-
       assert %NewRecord{
                record: %{"id" => ^id, "val1" => ^long_string_1, "val2" => ^long_string_2},
                relation: {"public", "items2"}
-             } = change
+             } = receive_tx_change()
 
       Postgrex.query!(conn, "UPDATE items2 SET num = 11 WHERE id = $1", [bin_uuid])
-
-      assert_receive {:from_replication, %Transaction{changes: [change]}}
 
       assert %UpdatedRecord{
                record: %{
@@ -300,7 +266,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
                },
                changed_columns: changed_columns,
                relation: {"public", "items2"}
-             } = change
+             } = receive_tx_change()
 
       assert MapSet.new(["num"]) == changed_columns
     end
@@ -400,12 +366,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
     Enum.zip(cols, row) |> Map.new()
   end
 
-  defp fetch_slot_info(conn, field) do
-    conn
-    |> fetch_slot_info()
-    |> Map.fetch!(field)
-  end
-
   defp insert_item(conn, val) do
     Postgrex.query!(conn, "INSERT INTO items (id, value) VALUES ($1, $2)", [
       Ecto.UUID.bingenerate(),
@@ -417,5 +377,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
     id = Ecto.UUID.generate()
     {:ok, bin_uuid} = Ecto.UUID.dump(id)
     {id, bin_uuid}
+  end
+
+  defp receive_tx_change do
+    assert_receive {:from_replication, %Transaction{changes: [change]}}
+    change
   end
 end

@@ -24,13 +24,13 @@ export default defineConfig({
       { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
       { text: 'Guides', link: '/guides/quickstart', activeMatch: '/guides/'},
       { text: 'API', link: '/api/http', activeMatch: '/api/'},
-      { text: 'Examples', link: '/examples/basic', activeMatch: '/examples/'},
+      { text: 'Examples', link: 'https://github.com/electric-sql/electric/tree/main/examples'},
     ],
     sidebar: [
       {
         text: 'About',
         items: [
-          { text: '<code>electric-next</code>', link: '/about' }
+          { text: '<code>electric</code>', link: '/about' }
         ]
       },
       {
@@ -48,7 +48,8 @@ export default defineConfig({
           // { text: 'Usage', link: '/guides/usage' },
           { text: 'Shapes', link: '/guides/shapes' },
           // { text: 'Deployment', link: '/guides/deployment' },
-          { text: 'Writing clients', link: '/guides/write-your-own-client' }
+          // { text: 'Writing clients', link: '/guides/write-your-own-client' },
+          { text: 'Telemetry', link: '/guides/telemetry' }
         ]
       },
       {
@@ -64,12 +65,12 @@ export default defineConfig({
             collapsed: false
           },
           {
-            text: 'Connectors',
+            text: 'Integrations',
             items: [
-              // { text: 'MobX', link: '/api/connectors/mobx' },
-              { text: 'React', link: '/api/connectors/react' },
-              { text: 'Redis', link: '/api/connectors/redis' },
-              // { text: 'TanStack', link: '/api/connectors/tanstack' },
+              // { text: 'MobX', link: '/api/integrations/mobx' },
+              { text: 'React', link: '/api/integrations/react' },
+              // { text: 'Redis', link: '/api/integrations/redis' },
+              // { text: 'TanStack', link: '/api/integrations/tanstack' },
             ],
             collapsed: false
           }
@@ -79,7 +80,7 @@ export default defineConfig({
     siteTitle: false,
     socialLinks: [
       { icon: 'discord', link: 'https://discord.electric-sql.com' },
-      { icon: 'github', link: 'https://github.com/electric-sql/electric-next' }
+      { icon: 'github', link: 'https://github.com/electric-sql/electric' }
     ]
   }
 })

@@ -8,7 +8,7 @@ The HTTP API is the primary, low level API for syncing data with Electric Next.
 
 Normative API documentation is published as an [OpenAPI](https://www.openapis.org/what-is-openapi) specification:
 
-- [download the specification file](https://github.com/electric-sql/electric-next/blob/main/docs/electric-api.yaml) to view or use with other OpenAPI [tooling](https://tools.openapis.org/)
+- [download the specification file](https://github.com/electric-sql/electric/blob/main/docs/electric-api.yaml) to view or use with other OpenAPI [tooling](https://tools.openapis.org/)
 - <a href="/openapi.html" target="_blank">view the HTML documentation</a> generated using [Redocly](https://redocly.com)
 
 The rest of this page will describe the features of the API.
@@ -95,4 +95,4 @@ The server holds open the request until either a timeout (returning `204 No cont
 
 The algorithm for consuming the HTTP API described above can be implemented from scratch for your application. Howerver, it's typically implemented by clients that can be re-used and provide a simpler interface for application code.
 
-There are a number of existing clients, such as the [TypeScript](/api/clients/typescript) and [Elixir](/api/clients/elixir) clients. If one doesn't exist for your language or environment, we hope that the pattern is simple enough that you should be able to [write your own client](/guides/write-your-own-client) quite simply.
+There are a number of existing clients, such as the [TypeScript](/api/clients/typescript) and [Elixir](/api/clients/elixir) clients. If one doesn't exist for your language or environment, we hope that the pattern is simple enough that you should be able to write your own client quite simply.

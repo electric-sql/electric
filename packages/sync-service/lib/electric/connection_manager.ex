@@ -142,10 +142,6 @@ defmodule Electric.ConnectionManager do
   end
 
   defp start_replication_client(connection_opts, replication_opts) do
-    # Disable the reconnection logic in Postgex.ReplicationConnection to force it to exit with
-    # the connection error.
-    connection_opts = [auto_reconnect: false] ++ connection_opts
-
     case Electric.Postgres.ReplicationClient.start_link(connection_opts, replication_opts) do
       {:ok, pid} ->
         {:ok, pid, connection_opts}

@@ -4,7 +4,7 @@ outline: deep
 
 # TypeScript client
 
-The client is defined in [packages/typescript-client](https://github.com/electric-sql/electric-next/tree/main/packages/typescript-client). It provides [ShapeStream](#shapestream) and [Shape](#shape) primitives to stream and materialize shapes.
+The client is defined in [packages/typescript-client](https://github.com/electric-sql/electric/tree/main/packages/typescript-client). It provides [ShapeStream](#shapestream) and [Shape](#shape) primitives to stream and materialize shapes.
 
 ## Use cases
 
@@ -51,7 +51,7 @@ By default, `ShapeStream` parses the following Postgres types into native JavaSc
 All other types aren't parsed and are left in the string format as they were served by the HTTP endpoint.
 
 The `ShapeStream` can be configured with a custom parser that is an object mapping Postgres types to parsing functions for those types.
-For example, we can extend the [default parser](https://github.com/electric-sql/electric-next/blob/main/packages/typescript-client/src/parser.ts#L14-L22) to parse booleans into `1` or `0` instead of `true` or `false`:
+For example, we can extend the [default parser](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/parser.ts#L14-L22) to parse booleans into `1` or `0` instead of `true` or `false`:
 
 ```ts
 const stream = new ShapeStream({
@@ -81,4 +81,4 @@ shape.subscribe(shapeData => {
 })
 ```
 
-See the [Examples](/examples/basic) and [Connectors](/api/connectors/react) for more usage examples.
+See the [Examples](https://github.com/electric-sql/electric/tree/main/examples) and [integrations](/api/integrations/react) for more usage examples.

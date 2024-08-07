@@ -1,12 +1,12 @@
 defmodule Electric.ShapeCache.CubDbStorage do
+  alias Electric.LogItems
   alias Electric.Replication.LogOffset
-  alias Electric.Replication.Changes
-  alias Electric.Utils
-  alias Electric.Shapes.Shape
+  alias Electric.Telemetry.OpenTelemetry
   @behaviour Electric.ShapeCache.Storage
 
   @snapshot_key_type 0
   @log_key_type 1
+  @snapshot_offset LogOffset.first()
 
   def shared_opts(opts) do
     file_path = Access.get(opts, :file_path, "./shapes")
@@ -90,10 +90,10 @@ defmodule Electric.ShapeCache.CubDbStorage do
         max_key: snapshot_end(shape_id)
       )
       |> Stream.flat_map(fn {_, items} -> items end)
-      |> Stream.map(&storage_item_to_log_item/1)
+      |> Stream.map(fn {_, item} -> item end)
 
     # FIXME: this is naive while we don't have snapshot metadata to get real offset
-    {LogOffset.first(), stream}
+    {@snapshot_offset, stream}
   end
 
   def get_log_stream(shape_id, offset, max_offset, opts) do
@@ -106,31 +106,34 @@ defmodule Electric.ShapeCache.CubDbStorage do
       max_key: max_key,
       min_key_inclusive: false
     )
-    |> Stream.map(&storage_item_to_log_item/1)
+    |> Stream.map(fn {_, item} -> item end)
   end
 
   def has_log_entry?(shape_id, offset, opts) do
     # FIXME: this is naive while we don't have snapshot metadata to get real offsets
     CubDB.has_key?(opts.db, log_key(shape_id, offset)) or
-      (snapshot_exists?(shape_id, opts) and offset == LogOffset.first())
+      (snapshot_exists?(shape_id, opts) and offset == @snapshot_offset)
   end
 
   def make_new_snapshot!(shape_id, shape, query_info, data_stream, opts) do
-    data_stream
-    |> Stream.with_index()
-    |> Stream.map(&row_to_snapshot_item(&1, shape_id, shape, query_info))
-    |> Stream.chunk_every(500)
-    |> Stream.each(fn [{key, _} | _] = chunk -> CubDB.put(opts.db, key, chunk) end)
-    |> Stream.run()
+    OpenTelemetry.with_span("storage.make_new_snapshot", [storage_impl: "cub_db"], fn ->
+      data_stream
+      |> LogItems.from_snapshot_row_stream(@snapshot_offset, shape, query_info)
+      |> Stream.with_index()
+      |> Stream.map(fn {log_item, index} ->
+        {snapshot_key(shape_id, index), Jason.encode!(log_item)}
+      end)
+      |> Stream.chunk_every(500)
+      |> Stream.each(fn [{key, _} | _] = chunk -> CubDB.put(opts.db, key, chunk) end)
+      |> Stream.run()
 
-    CubDB.put(opts.db, snapshot_meta_key(shape_id), 0)
+      CubDB.put(opts.db, snapshot_meta_key(shape_id), 0)
+    end)
   end
 
-  def append_to_log!(shape_id, changes, opts) do
-    changes
-    |> Enum.map(fn {offset, key, action, value, header_data} ->
-      {log_key(shape_id, offset), {key, action, value, header_data}}
-    end)
+  def append_to_log!(shape_id, log_items, opts) do
+    log_items
+    |> Enum.map(fn log_item -> {log_key(shape_id, log_item.offset), Jason.encode!(log_item)} end)
     |> then(&CubDB.put_multi(opts.db, &1))
 
     :ok
@@ -176,7 +179,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
   defp shapes_end, do: shape_key("zzz-end")
 
   # FIXME: this is naive while we don't have snapshot metadata to get real offsets
-  defp offset({_shape_id, @snapshot_key_type, _index}), do: LogOffset.first()
+  defp offset({_shape_id, @snapshot_key_type, _index}), do: @snapshot_offset
 
   defp offset({_shape_id, @log_key_type, tuple_offset}),
     do: LogOffset.new(tuple_offset)
@@ -186,6 +189,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
 
   defp snapshot_start(shape_id), do: snapshot_key(shape_id, 0)
   defp snapshot_end(shape_id), do: snapshot_key(shape_id, :end)
+<<<<<<< HEAD
 
   defp row_to_snapshot_item({row, index}, shape_id, shape, %Postgrex.Query{
          columns: columns,
