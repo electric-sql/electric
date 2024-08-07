@@ -189,32 +189,4 @@ defmodule Electric.ShapeCache.CubDbStorage do
 
   defp snapshot_start(shape_id), do: snapshot_key(shape_id, 0)
   defp snapshot_end(shape_id), do: snapshot_key(shape_id, :end)
-<<<<<<< HEAD
-
-  defp row_to_snapshot_item({row, index}, shape_id, shape, %Postgrex.Query{
-         columns: columns,
-         result_types: types
-       }) do
-    serialized_row =
-      [columns, types, row]
-      |> Enum.zip_with(fn
-        [col, Postgrex.Extensions.UUID, val] -> {col, Utils.encode_uuid(val)}
-        [col, _, val] -> {col, val}
-      end)
-      |> Map.new()
-
-    change_key = Changes.build_key(shape.root_table, serialized_row, Shape.pk(shape))
-
-    {snapshot_key(shape_id, index), {change_key, :insert, serialized_row, %{}}}
-  end
-
-  defp storage_item_to_log_item({key, {change_key, operation, value, header_data}})
-       when is_binary(change_key) do
-    %{
-      key: change_key,
-      value: value,
-      headers: Map.put(header_data, :operation, operation),
-      offset: offset(key)
-    }
-  end
 end
