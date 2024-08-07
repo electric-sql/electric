@@ -1,4 +1,4 @@
-# Telemetry 
+# Telemetry
 
 Electric provides telemetry data — such as traces, logs, and metrics — for real-time system monitoring. 
 

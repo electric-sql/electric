@@ -61,6 +61,8 @@ defmodule Electric.MixProject do
         {:ecto, "~> 3.11"},
         {:jason, "~> 1.4"},
         {:nimble_options, "~> 1.1"},
+        {:opentelemetry, "~> 1.4"},
+        {:opentelemetry_exporter, "~> 1.6"},
         {:pg_query_ex, github: "electric-sql/pg_query_ex"},
         {:plug, "~> 1.16"},
         {:postgrex, "~> 0.19"},
