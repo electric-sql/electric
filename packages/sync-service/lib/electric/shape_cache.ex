@@ -302,7 +302,6 @@ defmodule Electric.ShapeCache do
           rescue
             error -> GenServer.cast(parent, {:snapshot_failed, shape_id, error, __STACKTRACE__})
           end
-          |> Task.start()
         end
       )
       |> Task.start()
