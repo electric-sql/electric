@@ -1,5 +1,5 @@
 version: "3.8"
-name: "electric_dev"
+name: "electric_dev_otel"
 
 services:
   postgres:
