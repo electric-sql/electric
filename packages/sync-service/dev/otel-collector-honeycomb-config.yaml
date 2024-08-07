@@ -1,0 +1,57 @@
+exporters:
+  otlp/honeycomb:
+    endpoint: api.honeycomb.io:443
+    headers:
+      x-honeycomb-team: ${env:HNY_API_KEY}
+      x-honeycomb-dataset: ${env:HNY_DATASET}
+  logging:
+    loglevel: info
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: '0.0.0.0:4317'
+      http:
+        endpoint: '0.0.0.0:4318'
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: otel-prometheus
+          scrape_interval: 5s
+          static_configs:
+            - targets: ["${env:PROMETHEUS_SCRAPE_ENDPOINT}"]
+processors:
+  resourcedetection:
+    detectors:
+      - env
+      - system
+  transform:
+    error_mode: ignore
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(time, TruncateTime(time, Duration("1s")))
+  batch:
+    send_batch_size: 8192
+    timeout: 200ms
+service:
+  pipelines:
+    metrics:
+      receivers:
+        - prometheus
+      processors:
+        - transform
+        - resourcedetection
+        - batch
+      exporters:
+        - otlp/honeycomb
+        - logging
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - resourcedetection
+        - batch
+      exporters:
+        - otlp/honeycomb
+        - logging
