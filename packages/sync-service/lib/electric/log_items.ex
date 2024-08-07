@@ -29,7 +29,7 @@ defmodule Electric.LogItems do
       %{
         key: change.key,
         value: change.record,
-        headers: %{action: :insert, txid: txid, relation: Tuple.to_list(change.relation)},
+        headers: %{operation: :insert, txid: txid, relation: Tuple.to_list(change.relation)},
         offset: change.log_offset
       }
     ]
@@ -40,7 +40,7 @@ defmodule Electric.LogItems do
       %{
         key: change.key,
         value: take_pks_or_all(change.old_record, pk_cols),
-        headers: %{action: :delete, txid: txid, relation: Tuple.to_list(change.relation)},
+        headers: %{operation: :delete, txid: txid, relation: Tuple.to_list(change.relation)},
         offset: change.log_offset
       }
     ]
@@ -52,7 +52,7 @@ defmodule Electric.LogItems do
       %{
         key: change.key,
         value: Map.take(change.record, Enum.concat(pk_cols, change.changed_columns)),
-        headers: %{action: :update, txid: txid, relation: Tuple.to_list(change.relation)},
+        headers: %{operation: :update, txid: txid, relation: Tuple.to_list(change.relation)},
         offset: change.log_offset
       }
     ]
@@ -64,7 +64,7 @@ defmodule Electric.LogItems do
         key: change.old_key,
         value: take_pks_or_all(change.old_record, pk_cols),
         headers: %{
-          action: :delete,
+          operation: :delete,
           txid: txid,
           relation: Tuple.to_list(change.relation),
           key_change_to: change.key
@@ -75,7 +75,7 @@ defmodule Electric.LogItems do
         key: change.key,
         value: change.record,
         headers: %{
-          action: :insert,
+          operation: :insert,
           txid: txid,
           relation: Tuple.to_list(change.relation),
           key_change_from: change.old_key
@@ -106,7 +106,7 @@ defmodule Electric.LogItems do
     %{
       key: key,
       value: value,
-      headers: %{action: :insert},
+      headers: %{operation: :insert},
       offset: offset
     }
   end
