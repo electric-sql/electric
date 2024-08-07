@@ -29,7 +29,7 @@ You can sync data into:
 
 ## How does it work?
 
-The Electric sync engine is an [Elixir](https://elixir-lang.org) application, developed at [electric-sql/electric-next/tree/main/packages/sync-service](https://github.com/electric-sql/electric-next/tree/main/packages/sync-service).
+The Electric sync engine is an [Elixir](https://elixir-lang.org) application, developed at [electric-sql/electric/tree/main/packages/sync-service](https://github.com/electric-sql/electric/tree/main/packages/sync-service).
 
 It connects to your Postgres using a `DATABASE_URL`, consumes the logical replication stream and provides [an HTTP API](/api/http) for replicating [Shapes](/guides/shapes).
 

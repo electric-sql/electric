@@ -89,7 +89,7 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
         # `REPLICA IDENTITY FULL`. Thanks to that we can replace the `:unchanged_toast`
         # placeholder with actual values before returning the decoded record update.
         #
-        # For more info, see https://github.com/electric-sql/electric-next/issues/171.
+        # For more info, see https://github.com/electric-sql/electric/issues/171.
         column_name, :unchanged_toast -> Map.fetch!(old_data, column_name)
         _, value -> value
       end)
