@@ -298,21 +298,16 @@ defmodule Electric.Plug.ServeShapePlug do
          } = conn,
          _
        ) do
-    log =
-      Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset, up_to: last_offset)
-      |> Enum.to_list()
+    log = Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset, up_to: last_offset)
 
-    if log == [] and conn.assigns.live do
+    if Enum.take(log, 1) == [] and conn.assigns.live do
       hold_until_change(conn, shape_id)
     else
-      send_resp(
-        conn,
-        200,
-        [log, @up_to_date]
-        |> Stream.concat()
-        |> to_json_stream()
-        |> Enum.to_list()
-      )
+      [log, @up_to_date]
+      |> Stream.concat()
+      |> to_json_stream()
+      |> Stream.chunk_every(500)
+      |> send_stream(conn, 200)
     end
   end
 
