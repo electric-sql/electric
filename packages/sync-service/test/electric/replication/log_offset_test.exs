@@ -19,9 +19,9 @@ defmodule Electric.Replication.LogOffsetTest do
   end
 
   test "LogOffset implements `Json.Encoder` protocol" do
-    assert {:ok, "\"0_0\""} = Jason.encode(LogOffset.new(0, 0))
-    assert {:ok, "\"10_2\""} = Jason.encode(LogOffset.new(10, 2))
-    assert {:ok, "\"-1\""} = Jason.encode(LogOffset.before_all())
+    assert {:ok, ~s|"0_0"|} = Jason.encode(LogOffset.new(0, 0))
+    assert {:ok, ~s|"10_2"|} = Jason.encode(LogOffset.new(10, 2))
+    assert {:ok, ~s|"-1"|} = Jason.encode(LogOffset.before_all())
   end
 
   test "LogOffset implements `String.Chars` protocol" do

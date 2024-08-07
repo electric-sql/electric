@@ -1,5 +1,5 @@
 defmodule Electric.ShapeCache.Storage do
-  alias Electric.Replication.Changes
+  alias Electric.LogItem
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
 
@@ -9,15 +9,6 @@ defmodule Electric.ShapeCache.Storage do
   @typedoc """
   Prepared change that will be passed to the storage layer from the replication log.
   """
-  @type prepared_change ::
-          {
-            offset :: LogOffset.t(),
-            key :: String.t(),
-            action :: :insert | :update | :delete,
-            value :: %{String.t() => String.t()},
-            header_data :: %{optional(atom()) => Jason.Encoder.t()}
-          }
-
   @type log_header :: map()
   @type log_entry :: %{
           key: String.t(),
@@ -66,10 +57,10 @@ defmodule Electric.ShapeCache.Storage do
               Enumerable.t(row()),
               compiled_opts()
             ) :: :ok
-  @doc "Append changes from one transaction to the log"
+  @doc "Append log items from one transaction to the log"
   @callback append_to_log!(
               shape_id(),
-              [prepared_change()],
+              [LogItem.t()],
               compiled_opts()
             ) :: :ok
   @doc "Get stream of the log for a shape since a given offset"
@@ -124,11 +115,11 @@ defmodule Electric.ShapeCache.Storage do
     do: mod.make_new_snapshot!(shape_id, shape, meta, stream, opts)
 
   @doc """
-  Append changes from one transaction to the log
+  Append log items from one transaction to the log
   """
-  @spec append_to_log!(shape_id(), [prepared_change()], storage()) :: :ok
-  def append_to_log!(shape_id, changes, {mod, opts}),
-    do: mod.append_to_log!(shape_id, changes, opts)
+  @spec append_to_log!(shape_id(), [LogItem.t()], storage()) :: :ok
+  def append_to_log!(shape_id, log_items, {mod, opts}),
+    do: mod.append_to_log!(shape_id, log_items, opts)
 
   import LogOffset, only: :macros
   @doc "Get stream of the log for a shape since a given offset"
@@ -146,46 +137,4 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Clean up snapshots/logs for a shape id"
   @spec cleanup!(shape_id(), storage()) :: :ok
   def cleanup!(shape_id, {mod, opts}), do: mod.cleanup!(shape_id, opts)
-
-  @doc """
-  Prepare a given change for storage.
-
-  Preparation involves repacking it in a more efficient and uniform manner and
-  splitting up updates with a changed key into 2 operations.
-  """
-  @spec prepare_change_for_storage(
-          Changes.data_change(),
-          txid :: non_neg_integer() | nil,
-          pk_cols :: [String.t()]
-        ) :: [prepared_change(), ...]
-  def prepare_change_for_storage(%Changes.NewRecord{} = change, txid, _),
-    do: [
-      {change.log_offset, change.key, :insert, change.record,
-       %{txid: txid, relation: Tuple.to_list(change.relation)}}
-    ]
-
-  def prepare_change_for_storage(%Changes.DeletedRecord{} = change, txid, pk_cols),
-    do: [
-      {change.log_offset, change.key, :delete, take_pks_or_all(change.old_record, pk_cols),
-       %{txid: txid, relation: Tuple.to_list(change.relation)}}
-    ]
-
-  # `old_key` is nil when it's unchanged. This is not possible when there is no PK defined.
-  def prepare_change_for_storage(%Changes.UpdatedRecord{old_key: nil} = change, txid, pk_cols),
-    do: [
-      {change.log_offset, change.key, :update,
-       Map.take(change.record, Enum.concat(pk_cols, change.changed_columns)),
-       %{txid: txid, relation: Tuple.to_list(change.relation)}}
-    ]
-
-  def prepare_change_for_storage(%Changes.UpdatedRecord{} = change, txid, pk_cols),
-    do: [
-      {change.log_offset, change.old_key, :delete, take_pks_or_all(change.old_record, pk_cols),
-       %{txid: txid, relation: Tuple.to_list(change.relation), key_change_to: change.key}},
-      {LogOffset.increment(change.log_offset), change.key, :insert, change.record,
-       %{txid: txid, relation: Tuple.to_list(change.relation), key_change_from: change.old_key}}
-    ]
-
-  defp take_pks_or_all(record, []), do: record
-  defp take_pks_or_all(record, pks), do: Map.take(record, pks)
 end
