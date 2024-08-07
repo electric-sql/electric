@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.2.8
+
+### Patch Changes
+
+- b629d22: First publish to Docker Hub.
+
 ## 0.2.7
 
 ### Patch Changes
