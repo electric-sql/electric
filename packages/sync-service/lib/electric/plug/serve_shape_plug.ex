@@ -10,8 +10,8 @@ defmodule Electric.Plug.ServeShapePlug do
   @before_all_offset LogOffset.before_all()
 
   # Control messages
-  @up_to_date [%{headers: %{control: "up-to-date"}}]
-  @must_refetch [%{headers: %{control: "must-refetch"}}]
+  @up_to_date [Jason.encode!(%{headers: %{control: "up-to-date"}})]
+  @must_refetch Jason.encode!([%{headers: %{control: "must-refetch"}}])
 
   defmodule Params do
     use Ecto.Schema
@@ -194,10 +194,7 @@ defmodule Electric.Plug.ServeShapePlug do
         "location",
         "#{conn.request_path}?shape_id=#{active_shape_id}&offset=-1"
       )
-      |> send_resp(
-        409,
-        Jason.encode_to_iodata!(@must_refetch)
-      )
+      |> send_resp(409, @must_refetch)
       |> halt()
     else
       conn
@@ -301,14 +298,16 @@ defmodule Electric.Plug.ServeShapePlug do
          } = conn,
          _
        ) do
-    log =
-      Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset, up_to: last_offset)
-      |> Enum.to_list()
+    log = Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset, up_to: last_offset)
 
-    if log == [] and conn.assigns.live do
+    if Enum.take(log, 1) == [] and conn.assigns.live do
       hold_until_change(conn, shape_id)
     else
-      send_resp(conn, 200, Jason.encode_to_iodata!(log ++ @up_to_date))
+      [log, @up_to_date]
+      |> Stream.concat()
+      |> to_json_stream()
+      |> Stream.chunk_every(500)
+      |> send_stream(conn, 200)
     end
   end
 
@@ -318,9 +317,7 @@ defmodule Electric.Plug.ServeShapePlug do
   defp to_json_stream(items) do
     Stream.concat([
       [@json_list_start],
-      items
-      |> Stream.map(&Jason.encode_to_iodata!/1)
-      |> Stream.intersperse(@json_item_separator),
+      Stream.intersperse(items, @json_item_separator),
       [@json_list_end]
     ])
   end
@@ -374,10 +371,10 @@ defmodule Electric.Plug.ServeShapePlug do
       {^ref, :shape_rotation} ->
         # We may want to notify the client better that the shape ID had changed, but just closing the response
         # and letting the client handle it on reconnection is good enough.
-        send_resp(conn, 200, Jason.encode_to_iodata!(@up_to_date))
+        send_resp(conn, 200, ["[", @up_to_date, "]"])
     after
       # If we timeout, return an empty body and 204 as there's no response body.
-      long_poll_timeout -> send_resp(conn, 204, Jason.encode_to_iodata!(@up_to_date))
+      long_poll_timeout -> send_resp(conn, 204, ["[", @up_to_date, "]"])
     end
   end
 end
