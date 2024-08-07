@@ -1,5 +1,6 @@
 {
   "name": "@electric-sql/docs",
+  "private": true,
   "scripts": {
     "api:generate": "redocly build-docs ./electric-api.yaml --output=./public/openapi.html",
     "api:watch": "nodemon -w ./ -x \"npm run api:generate\" -e \"*.yaml\"",
