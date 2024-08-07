@@ -2,8 +2,8 @@ exporters:
   otlp/honeycomb:
     endpoint: api.honeycomb.io:443
     headers:
-      x-honeycomb-team: ${HNY_API_KEY}
-      x-honeycomb-dataset: ${HNY_DATASET}
+      x-honeycomb-team: ${env:HNY_API_KEY}
+      x-honeycomb-dataset: ${env:HNY_DATASET}
   logging:
     loglevel: info
 receivers:
@@ -19,7 +19,7 @@ receivers:
         - job_name: otel-prometheus
           scrape_interval: 5s
           static_configs:
-            - targets: [electric:4000]
+            - targets: ["${env:PROMETHEUS_SCRAPE_ENDPOINT}"]
 processors:
   resourcedetection:
     detectors:
