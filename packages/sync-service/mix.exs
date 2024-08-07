@@ -43,7 +43,7 @@ defmodule Electric.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:logger, :tls_certificate_check],
       mod: {Electric.Application, []}
     ]
   end
@@ -69,6 +69,7 @@ defmodule Electric.MixProject do
         {:telemetry_metrics_prometheus_core, "~> 1.1"},
         {:telemetry_metrics_statsd, "~> 0.7"},
         {:telemetry_poller, "~> 1.1"},
+        {:tls_certificate_check, "~> 1.23"},
         {:tz, "~> 0.27"}
       ],
       dev_and_test_deps()
