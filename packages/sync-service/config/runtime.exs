@@ -10,7 +10,38 @@ if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
 
+service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
+instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
+version = Electric.version()
+
 config :telemetry_poller, :default, period: 500
+
+config :opentelemetry,
+  resource_detectors: [:otel_resource_env_var, :otel_resource_app_env],
+  resource: %{service: %{name: service_name, version: version}, instance: %{id: instance_id}}
+
+otel_export = env!("OTEL_EXPORT", :string, nil)
+prometheus_port = env!("PROMETHEUS_PORT", :integer, nil)
+
+case otel_export do
+  "otlp" ->
+    if endpoint = env!("OTLP_ENDPOINT", :string, nil) do
+      config :opentelemetry_exporter,
+        otlp_protocol: :http_protobuf,
+        otlp_endpoint: endpoint,
+        otlp_compression: :gzip
+    end
+
+  "debug" ->
+    # In this mode, each span is printed to stdout as soon as it ends, without batching.
+    config :opentelemetry, :processors,
+      otel_simple_processor: %{exporter: {:otel_exporter_stdout, []}}
+
+  _ ->
+    config :opentelemetry,
+      processors: [],
+      traces_exporter: :none
+end
 
 if Config.config_env() == :test do
   config :electric,
@@ -66,6 +97,7 @@ config :electric,
   cache_stale_age: cache_stale_age,
   # Used in telemetry
   environment: config_env(),
-  instance_id: env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4()),
+  instance_id: instance_id,
   telemetry_statsd_host: statsd_host,
+  prometheus_port: prometheus_port,
   storage: storage
