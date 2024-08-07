@@ -21,12 +21,12 @@
   "sideEffects": false,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/electric-sql/electric-next.git"
+    "url": "git+https://github.com/electric-sql/electric.git"
   },
   "author": "ElectricSQL team and contributors.",
   "license": "Apache-2",
   "bugs": {
-    "url": "https://github.com/electric-sql/electric-next/issues"
+    "url": "https://github.com/electric-sql/electric/issues"
   },
   "homepage": "https://next.electric-sql.com",
   "dependencies": {},

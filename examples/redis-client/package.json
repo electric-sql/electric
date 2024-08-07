@@ -16,14 +16,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/electric-sql/electric-next.git"
+    "url": "git+https://github.com/electric-sql/electric.git"
   },
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/electric-sql/electric-next/issues"
+    "url": "https://github.com/electric-sql/electric/issues"
   },
-  "homepage": "https://github.com/electric-sql/electric-next#readme",
+  "homepage": "https://github.com/electric-sql/electric#readme",
   "dependencies": {
     "@electric-sql/client": "workspace:*",
     "redis": "^4.6.14"
