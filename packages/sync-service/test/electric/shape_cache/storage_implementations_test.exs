@@ -92,13 +92,13 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                    offset: @snapshot_offset_encoded,
                    value: %{id: "00000000-0000-0000-0000-000000000001", title: "row1"},
                    key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
-                   headers: %{operation: :insert}
+                   headers: %{operation: "insert"}
                  },
                  %{
                    offset: @snapshot_offset_encoded,
                    value: %{id: "00000000-0000-0000-0000-000000000002", title: "row2"},
                    key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
-                   headers: %{operation: :insert}
+                   headers: %{operation: "insert"}
                  }
                ] = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
       end
@@ -126,13 +126,13 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                    offset: @snapshot_offset_encoded,
                    value: %{id: "00000000-0000-0000-0000-000000000001", title: "row1"},
                    key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
-                   headers: %{operation: :insert}
+                   headers: %{operation: "insert"}
                  },
                  %{
                    offset: @snapshot_offset_encoded,
                    value: %{id: "00000000-0000-0000-0000-000000000002", title: "row2"},
                    key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
-                   headers: %{operation: :insert}
+                   headers: %{operation: "insert"}
                  }
                ] = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
       end
@@ -246,9 +246,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         entries = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
         assert [
-                 %{headers: %{operation: :insert}},
-                 %{headers: %{operation: :update}},
-                 %{headers: %{operation: :delete}}
+                 %{headers: %{operation: "insert"}},
+                 %{headers: %{operation: "update"}},
+                 %{headers: %{operation: "delete"}}
                ] = entries
       end
 
@@ -291,8 +291,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         entries = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
         assert [
-                 %{headers: %{operation: :update}},
-                 %{headers: %{operation: :delete}}
+                 %{headers: %{operation: "update"}},
+                 %{headers: %{operation: "delete"}}
                ] = entries
       end
 
@@ -342,7 +342,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         entries = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
-        assert [%{headers: %{operation: :update}}] = entries
+        assert [%{headers: %{operation: "update"}}] = entries
       end
 
       test "returns only logs for the requested shape_id", %{module: storage, opts: opts} do
