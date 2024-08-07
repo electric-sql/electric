@@ -88,7 +88,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
           map()
         ) :: :ok
   def make_new_snapshot!(shape_id, shape, query_info, data_stream, opts) do
-    OpenTelemetry.with_span("make_new_snapshot", [], fn ->
+    OpenTelemetry.with_span("storage.make_new_snapshot", [storage_impl: "in_memory"], fn ->
       ets_table = opts.snapshot_ets_table
 
       data_stream

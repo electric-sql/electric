@@ -291,7 +291,7 @@ defmodule Electric.ShapeCache do
       affected_tables = Shape.affected_tables(shape)
 
       OpenTelemetry.async_fun(
-        "create_snapshot_task",
+        "shape_cache.create_snapshot_task",
         [],
         fn ->
           try do
@@ -328,7 +328,7 @@ defmodule Electric.ShapeCache do
   @doc false
   def query_in_readonly_txn(parent, shape_id, shape, db_pool, storage) do
     Postgrex.transaction(db_pool, fn conn ->
-      OpenTelemetry.with_span("snapshot_query_txn", [], fn ->
+      OpenTelemetry.with_span("shape_cache.query_in_readonly_txn", [], fn ->
         Postgrex.query!(
           conn,
           "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
