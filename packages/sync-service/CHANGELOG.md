@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 0.2.7
+
+### Patch Changes
+
+- d24993b: Fix error that occurs when a `/shape` response stream is closed before it is complete,
+  for example when `curl --head` is used to call the endpoint.
+
 ## 0.2.6
 
 ### Patch Changes
