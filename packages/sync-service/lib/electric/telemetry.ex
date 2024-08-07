@@ -13,6 +13,7 @@ defmodule Electric.Telemetry do
 
     children
     |> add_statsd_reporter(Application.fetch_env!(:electric, :telemetry_statsd_host))
+    |> add_prometheus_reporter(Application.fetch_env!(:electric, :prometheus_port))
     |> Supervisor.init(strategy: :one_for_one)
   end
 
@@ -27,6 +28,12 @@ defmodule Electric.Telemetry do
          global_tags: [instance_id: Electric.instance_id()],
          metrics: statsd_metrics()}
       ]
+  end
+
+  defp add_prometheus_reporter(children, nil), do: children
+
+  defp add_prometheus_reporter(children, _) do
+    children ++ [{TelemetryMetricsPrometheus.Core, metrics: prometheus_metrics()}]
   end
 
   defp statsd_metrics() do
@@ -52,6 +59,30 @@ defmodule Electric.Telemetry do
       summary("electric.snapshot.encoding", unit: {:native, :millisecond})
     ]
     |> Enum.map(&%{&1 | tags: [:instance_id | &1.tags]})
+  end
+
+  defp prometheus_metrics() do
+    [
+      last_value("vm.memory.total", unit: :byte),
+      last_value("vm.memory.processes_used", unit: :byte),
+      last_value("vm.memory.binary", unit: :byte),
+      last_value("vm.memory.ets", unit: :byte),
+      last_value("vm.total_run_queue_lengths.total"),
+      last_value("vm.total_run_queue_lengths.cpu"),
+      last_value("vm.total_run_queue_lengths.io")
+      # distribution("plug.router_dispatch.stop.duration",
+      #   tags: [:route],
+      #   unit: {:native, :millisecond}
+      # ),
+      # distribution("plug.router_dispatch.exception.duration",
+      #   tags: [:route],
+      #   unit: {:native, :millisecond}
+      # ),
+      # distribution("electric.query.duration", unit: {:native, :millisecond}),
+      # distribution("electric.query.serialization_duration", unit: {:native, :millisecond}),
+      # distribution("electric.snapshot.storage", unit: {:native, :millisecond}),
+      # distribution("electric.snapshot.encoding", unit: {:native, :millisecond})
+    ]
   end
 
   defp periodic_measurements do

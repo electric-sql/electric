@@ -105,10 +105,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       MockStorage
       |> expect(:get_snapshot, fn @test_shape_id, _opts ->
-        {@first_offset, [%{key: "snapshot"}]}
+        {@first_offset, [Jason.encode!(%{key: "snapshot"})]}
       end)
       |> expect(:get_log_stream, fn @test_shape_id, @first_offset, _, _opts ->
-        [%{key: "log", value: "foo", headers: %{}, offset: next_offset}]
+        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
       end)
 
       conn =
@@ -146,10 +146,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       MockStorage
       |> expect(:get_snapshot, fn @test_shape_id, _opts ->
-        {@first_offset, [%{key: "snapshot"}]}
+        {@first_offset, [Jason.encode!(%{key: "snapshot"})]}
       end)
       |> expect(:get_log_stream, fn @test_shape_id, @first_offset, _, _opts ->
-        [%{key: "log", value: "foo", headers: %{}, offset: next_offset}]
+        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
       end)
 
       max_age = 62
@@ -179,10 +179,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       MockStorage
       |> expect(:get_snapshot, fn @test_shape_id, _opts ->
-        {@first_offset, [%{key: "snapshot"}]}
+        {@first_offset, [Jason.encode!(%{key: "snapshot"})]}
       end)
       |> expect(:get_log_stream, fn @test_shape_id, @first_offset, _, _opts ->
-        [%{key: "log", value: "foo", headers: %{}, offset: next_offset}]
+        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
       end)
 
       conn =
@@ -205,8 +205,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       MockStorage
       |> expect(:get_log_stream, fn @test_shape_id, @start_offset_50, _, _opts ->
         [
-          %{key: "log1", value: "foo", headers: %{}, offset: next_offset},
-          %{key: "log2", value: "bar", headers: %{}, offset: next_next_offset}
+          Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
+          Jason.encode!(%{key: "log2", value: "bar", headers: %{}, offset: next_next_offset})
         ]
       end)
       |> expect(:has_log_entry?, fn @test_shape_id, @start_offset_50, _ -> true end)
@@ -283,7 +283,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         []
       end)
       |> expect(:get_log_stream, fn @test_shape_id, @test_offset, ^next_offset, _opts ->
-        ["test result"]
+        [Jason.encode!("test result")]
       end)
 
       task =

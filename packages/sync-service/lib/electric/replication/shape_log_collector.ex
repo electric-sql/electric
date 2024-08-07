@@ -3,7 +3,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   When any txn comes from postgres, we need to store it into the
   log for this shape if and only if it has txid >= xmin of the snapshot.
   """
-  alias Electric.ShapeCache.Storage
+  alias Electric.LogItems
   alias Electric.Postgres.Inspector
   alias Electric.Shapes.Shape
   alias Electric.Replication.Changes
@@ -74,9 +74,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
         relevant_changes != [] ->
           relevant_changes
-          |> Enum.flat_map(
-            &Storage.prepare_change_for_storage(&1, xid, Shape.pk(shape_def, &1.relation))
-          )
+          |> Enum.flat_map(&LogItems.from_change(&1, xid, Shape.pk(shape_def, &1.relation)))
           # TODO: what's a graceful way to handle failure to append to log?
           #       Right now we'll just fail everything
           |> then(&shape_cache.append_to_log!(shape_id, last_log_offset, &1, opts))

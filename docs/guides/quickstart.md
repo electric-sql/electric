@@ -4,7 +4,7 @@ outline: 2
 
 # Quickstart
 
-This guide will get you up and running with `electric` and real-time sync of your Postgres data. First using the [HTTP API](/api/http) directly. Then using our [TypeScript client](/api/clients/typescript) with a [React hook](/api/connectors/react) to sync data into a simple application.
+This guide will get you up and running with `electric` and real-time sync of your Postgres data. First using the [HTTP API](/api/http) directly. Then using our [TypeScript client](/api/clients/typescript) with a [React hook](/api/integrations/react) to sync data into a simple application.
 
 ## Setup
 

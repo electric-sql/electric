@@ -60,6 +60,7 @@ defmodule Electric.Application do
                 allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},
              port: 3000}
           ]
+          |> add_prometheus_router(Application.fetch_env!(:electric, :prometheus_port))
         else
           []
         end
@@ -67,5 +68,17 @@ defmodule Electric.Application do
       opts = [strategy: :one_for_one, name: Electric.Supervisor]
       Supervisor.start_link(children, opts)
     end
+  end
+
+  defp add_prometheus_router(children, nil), do: children
+
+  defp add_prometheus_router(children, port) do
+    children ++
+      [
+        {
+          Bandit,
+          plug: {Electric.Plug.UtilityRouter, []}, port: port
+        }
+      ]
   end
 end

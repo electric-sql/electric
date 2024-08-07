@@ -35,7 +35,7 @@ Your Postgres data, in sync, wherever you need it.
 
 ## What is Electric?
 
-Electric provides an [HTTP API](https://next.electric-sql.com/api/http) for syncing [Shapes](https://next.electric-sql.com/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](https://next.electric-sql.com/api/clients/typescript) and [connectors](https://next.electric-sql.com/api/connectors/react).
+Electric provides an [HTTP API](https://next.electric-sql.com/api/http) for syncing [Shapes](https://next.electric-sql.com/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](https://next.electric-sql.com/api/clients/typescript) and [integrations](https://next.electric-sql.com/api/integrations/react).
 
 ### This looks a bit different than the last time I visited?
 
@@ -61,7 +61,7 @@ You can then use the [HTTP API](https://next.electric-sql/api/http) to sync data
 curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
 ```
 
-Or use one of the clients or connectors, such as the [`useShape`](https://next.electric-sql/api/connectors/react) React hook:
+Or use one of the clients or integrations, such as the [`useShape`](https://next.electric-sql/api/integrations/react) React hook:
 
 ```jsx
 import { useShape } from '@electric-sql/react'

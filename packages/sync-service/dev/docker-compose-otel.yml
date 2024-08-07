@@ -1,0 +1,60 @@
+version: "3.8"
+name: "electric_dev_otel"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: electric
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "54321:5432"
+    volumes:
+      - ./postgres.conf:/etc/postgresql.conf:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/00_shared_init.sql:ro
+    tmpfs:
+      - /var/lib/postgresql/data
+      - /tmp
+    entrypoint:
+      - docker-entrypoint.sh
+      - -c
+      - config_file=/etc/postgresql.conf
+  electric:
+    image: electricsql/electric-next:latest
+    environment:
+      OTEL_EXPORT: ${OTEL_EXPORT:-otlp}
+      OTLP_ENDPOINT: http://otel:4318/
+      PROMETHEUS_PORT: ${PROMETHEUS_PORT:-4000}
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/electric
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES_FOR_DOCKER_COMPOSE}
+    ports:
+      - 3000:3000
+      - 4000:4000
+  otel:
+    image: otel/opentelemetry-collector-contrib:0.105.0
+    environment:
+      HNY_DATASET: ${HNY_DATASET}
+      HNY_API_KEY: ${HNY_API_KEY}
+      PROMETHEUS_SCRAPE_ENDPOINT: electric:4000
+      # Need to set OTEL_RESOURCE_ATTRIBUTES_FOR_DOCKER_COMPOSE
+      # see https://github.com/docker/cli/issues/4958
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES_FOR_DOCKER_COMPOSE}
+    ports:
+      - 4317:4317
+      - 4318:4318
+    command: ['--config=/conf/otel-collector-config.yaml']
+    volumes:
+      - ./otel-collector-honeycomb-config.yaml:/conf/otel-collector-config.yaml
+    depends_on:
+      - electric
+  nginx:
+    image: nginx:latest
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - electric
