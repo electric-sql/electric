@@ -332,6 +332,10 @@ defmodule Electric.Plug.ServeShapePlug do
 
         {:error, "closed"} ->
           {:halt, conn}
+
+        {:error, reason} ->
+          Logger.error("Error while streaming response: #{inspect(reason)}")
+          {:halt, conn}
       end
     end)
   end
