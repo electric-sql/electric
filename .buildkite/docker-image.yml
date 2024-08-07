@@ -1,6 +1,6 @@
 env:
   DOCKERHUB_REPO: electricsql
-  IMAGE_NAME: electric-next
+  IMAGE_NAME: electric
 
 agent:
   docker: true
