@@ -330,12 +330,6 @@ defmodule Electric.Plug.ServeShapePlug do
         {:ok, conn} ->
           {:cont, conn}
 
-        # The documented way to handle closed connections
-        # See https://hexdocs.pm/plug/Plug.Conn.html#chunk/2
-        {:error, :closed} ->
-          {:halt, conn}
-
-        # This also occurs, for example when `curl --head` is used to call the endpoint
         {:error, "closed"} ->
           {:halt, conn}
       end
