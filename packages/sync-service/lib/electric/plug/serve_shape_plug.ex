@@ -11,7 +11,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # Control messages
   @up_to_date [Jason.encode!(%{headers: %{control: "up-to-date"}})]
-  @must_refetch [%{headers: %{control: "must-refetch"}}]
+  @must_refetch Jason.encode!([%{headers: %{control: "must-refetch"}}])
 
   defmodule Params do
     use Ecto.Schema
@@ -194,10 +194,7 @@ defmodule Electric.Plug.ServeShapePlug do
         "location",
         "#{conn.request_path}?shape_id=#{active_shape_id}&offset=-1"
       )
-      |> send_resp(
-        409,
-        Jason.encode_to_iodata!(@must_refetch)
-      )
+      |> send_resp(409, @must_refetch)
       |> halt()
     else
       conn

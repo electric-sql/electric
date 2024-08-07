@@ -22,7 +22,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     }
   }
   @snapshot_offset LogOffset.first()
-  @snapshot_offset_encoded @snapshot_offset |> LogOffset.to_iolist() |> :erlang.iolist_to_binary()
+  @snapshot_offset_encoded to_string(@snapshot_offset)
   @zero_offset LogOffset.first()
   @query_info %Postgrex.Query{
     name: "the-table",
@@ -34,8 +34,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     [<<2::128>>, "row2"]
   ]
 
-  for module <- [CubDbStorage] do
-    # for module <- [InMemoryStorage, CubDbStorage] do
+  for module <- [InMemoryStorage, CubDbStorage] do
     module_name = module |> Module.split() |> List.last()
 
     doctest module, import: true
