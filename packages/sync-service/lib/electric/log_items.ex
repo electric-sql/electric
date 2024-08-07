@@ -8,7 +8,8 @@ defmodule Electric.LogItems do
   Defines the structure and how to create the items in the log that the electric client reads.
 
   The log_item() data structure is a map for ease of consumption in the Elixir code, 
-  however when JSON encoded it's the format that the electric client accepts.  
+  however when JSON encoded (not done in this module) it's the format that the electric
+  client accepts.
   """
 
   @type log_item :: %{
