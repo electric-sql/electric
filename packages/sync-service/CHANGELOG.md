@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.3.1
+
+### Patch Changes
+
+- cb153b4: feat: make DB pool size configurable via `DB_POOL_SIZE` environment variable & raise the default to 50
+
 ## 0.3.0
 
 ### Minor Changes
