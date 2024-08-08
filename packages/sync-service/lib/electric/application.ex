@@ -43,7 +43,7 @@ defmodule Electric.Application do
              ],
              pool_opts: [
                name: Electric.DbPool,
-               pool_size: 10,
+               pool_size: Application.fetch_env!(:electric, :db_pool_size),
                types: PgInterop.Postgrex.Types
              ]},
             {Electric.Postgres.Inspector.EtsInspector, pool: Electric.DbPool},
