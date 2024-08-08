@@ -136,7 +136,7 @@ defmodule Electric.ShapeCache do
 
   @spec wait_for_snapshot(GenServer.name(), String.t()) :: :ready | {:error, term()}
   def wait_for_snapshot(server \\ __MODULE__, shape_id) when is_binary(shape_id) do
-    GenServer.call(server, {:wait_for_snapshot, shape_id})
+    GenServer.call(server, {:wait_for_snapshot, shape_id}, 30_000)
   end
 
   def init(opts) do
