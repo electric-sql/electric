@@ -1,5 +1,16 @@
 # @electric-sql/react
 
+## 0.2.0
+
+### Minor Changes
+
+- 8e584a1: Fix: rename "action" header -> "operation" to match Postgres's name for inserts, updates, deletes
+
+### Patch Changes
+
+- Updated dependencies [8e584a1]
+  - @electric-sql/client@0.3.0
+
 ## 0.1.2
 
 ### Patch Changes
