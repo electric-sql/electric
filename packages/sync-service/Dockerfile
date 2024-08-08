@@ -30,9 +30,10 @@ COPY lib /app/lib/
 COPY package.json /app/
 COPY config/*runtime.exs /app/config/
 
-ARG ELECTRIC_VERSION=local
-RUN MIX_ENV="prod" mix compile
-RUN MIX_ENV="prod" mix release
+ARG ELECTRIC_VERSION
+
+RUN mix compile
+RUN mix release
 
 FROM ${RUNNER_IMAGE} AS runner_setup
 
