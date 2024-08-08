@@ -120,18 +120,18 @@ x-electric-shape-id: 3833821-1721299734314
 x-electric-chunk-last-offset: 0_0
 etag: 3833821-1721299734314:-1:0_0
 
-[{"offset":"0_0","value":{"id":"1","name":"Alice","value":"3.14"},"key":"\"public\".\"foo\"/1","headers":{"action"
+[{"offset":"0_0","value":{"id":"1","name":"Alice","value":"3.14"},"key":"\"public\".\"foo\"/1","headers":{"operation"
 :"insert"}},{"offset":"0_0","value":{"id":"2","name":"Bob","value":"2.71"},"key":"\"public\".\"foo\"/2","headers":
-{"action":"insert"}},{"offset":"0_0","value":{"id":"3","name":"Charlie","value":"-1.618"},"key":"\"public\".\"foo\
-"/3","headers":{"action":"insert"}},{"offset":"0_0","value":{"id":"4","name":"David","value":"1.414"},"key":"\"pub
-lic\".\"foo\"/4","headers":{"action":"insert"}},{"offset":"0_0","value":{"id":"5","name":"Eve","value":"0.0"},"key
-":"\"public\".\"foo\"/5","headers":{"action":"insert"}},{"headers":{"control":"up-to-date"}}]
+{"operation":"insert"}},{"offset":"0_0","value":{"id":"3","name":"Charlie","value":"-1.618"},"key":"\"public\".\"foo\
+"/3","headers":{"operation":"insert"}},{"offset":"0_0","value":{"id":"4","name":"David","value":"1.414"},"key":"\"pub
+lic\".\"foo\"/4","headers":{"operation":"insert"}},{"offset":"0_0","value":{"id":"5","name":"Eve","value":"0.0"},"key
+":"\"public\".\"foo\"/5","headers":{"operation":"insert"}},{"headers":{"control":"up-to-date"}}]
 ```
 
 ::: info What are those messages in the response data?
 When you request shape data using the HTTP API you're actually requesting entries from a log of database operations affecting the data in the shape. This is called the [Shape Log](/api/http#shape-log).
 
-The `offset` that you see in the messages and provide as the `?offset=...` query parameter in your request identifies a position in the log. The messages you see in the response are shape log entries (the ones with `value`s and `action` headers) and control messages (the ones with `control` headers).
+The `offset` that you see in the messages and provide as the `?offset=...` query parameter in your request identifies a position in the log. The messages you see in the response are shape log entries (the ones with `value`s and `operation` headers) and control messages (the ones with `control` headers).
 :::
 
 At this point, you could continue to fetch data using HTTP requests. However, let's switch up to fetch the same shape to use in a React app instead.

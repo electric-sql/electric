@@ -20,8 +20,11 @@ export async function matchStream({
   return new Promise((resolve, reject) => {
     const unsubscribe = stream.subscribe((messages) => {
       for (const message of messages) {
-        if (`key` in message && operations.includes(message.headers.action)) {
-          if (matchFn({ operationType: message.headers.action, message })) {
+        if (
+          `key` in message &&
+          operations.includes(message.headers.operation)
+        ) {
+          if (matchFn({ operationType: message.headers.operation, message })) {
             return finish(message)
           }
         }

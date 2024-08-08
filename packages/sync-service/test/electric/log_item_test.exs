@@ -19,7 +19,7 @@ defmodule Electric.LogItemsTest do
                    offset: LogOffset.new(0, 0),
                    value: %{"hello" => "world", "pk" => "10"},
                    key: "my_key",
-                   headers: %{relation: ["public", "test"], action: :insert, txid: 1}
+                   headers: %{relation: ["public", "test"], operation: :insert, txid: 1}
                  }
                ]
 
@@ -30,7 +30,7 @@ defmodule Electric.LogItemsTest do
                    offset: LogOffset.new(0, 0),
                    value: %{"hello" => "world", "pk" => "10"},
                    key: "my_key",
-                   headers: %{relation: ["public", "test"], action: :insert, txid: 1}
+                   headers: %{relation: ["public", "test"], operation: :insert, txid: 1}
                  }
                ]
     end
@@ -49,7 +49,7 @@ defmodule Electric.LogItemsTest do
                    offset: LogOffset.new(0, 0),
                    value: %{"pk" => "10"},
                    key: "my_key",
-                   headers: %{relation: ["public", "test"], action: :delete, txid: 1}
+                   headers: %{relation: ["public", "test"], operation: :delete, txid: 1}
                  }
                ]
     end
@@ -68,7 +68,7 @@ defmodule Electric.LogItemsTest do
                    offset: LogOffset.new(0, 0),
                    value: %{"hello" => "world", "value" => "10"},
                    key: "my_key",
-                   headers: %{relation: ["public", "test"], action: :delete, txid: 1}
+                   headers: %{relation: ["public", "test"], operation: :delete, txid: 1}
                  }
                ]
     end
@@ -89,7 +89,7 @@ defmodule Electric.LogItemsTest do
                    offset: LogOffset.new(0, 0),
                    value: %{"pk" => "10", "test" => "new"},
                    key: "my_key",
-                   headers: %{relation: ["public", "test"], action: :update, txid: 1}
+                   headers: %{relation: ["public", "test"], operation: :update, txid: 1}
                  }
                ]
     end
@@ -113,7 +113,7 @@ defmodule Electric.LogItemsTest do
                    key: "old_key",
                    headers: %{
                      relation: ["public", "test"],
-                     action: :delete,
+                     operation: :delete,
                      txid: 1,
                      key_change_to: "new_key"
                    }
@@ -124,7 +124,7 @@ defmodule Electric.LogItemsTest do
                    key: "new_key",
                    headers: %{
                      relation: ["public", "test"],
-                     action: :insert,
+                     operation: :insert,
                      txid: 1,
                      key_change_from: "old_key"
                    }
@@ -151,7 +151,7 @@ defmodule Electric.LogItemsTest do
                    key: "old_key",
                    headers: %{
                      relation: ["public", "test"],
-                     action: :delete,
+                     operation: :delete,
                      txid: 1,
                      key_change_to: "new_key"
                    }
@@ -162,7 +162,7 @@ defmodule Electric.LogItemsTest do
                    key: "new_key",
                    headers: %{
                      relation: ["public", "test"],
-                     action: :insert,
+                     operation: :insert,
                      txid: 1,
                      key_change_from: "old_key"
                    }
