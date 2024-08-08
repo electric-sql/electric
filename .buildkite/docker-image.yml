@@ -11,7 +11,7 @@ steps:
     if: build.branch == "main"
     command:
       - git fetch --tags
-      - export ELECTRIC_IMAGE_NAME="${DOCKER_REPO}/${IMAGE_NAME}"
+      - export ELECTRIC_IMAGE_NAME="${DOCKERHUB_REPO}/${IMAGE_NAME}"
       - cd ./packages/sync-service
       - export ELECTRIC_VERSION=$(git describe --abbrev=7 --tags --always --first-parent --match '@core/sync-service@*' | sed -En 's|^@core/sync-service@||p')
       - docker buildx build --platform linux/arm64/v8,linux/amd64 --push
