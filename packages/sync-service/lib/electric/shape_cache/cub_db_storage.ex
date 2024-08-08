@@ -1,4 +1,5 @@
 defmodule Electric.ShapeCache.CubDbStorage do
+  alias Electric.ConcurrentStream
   alias Electric.LogItems
   alias Electric.Replication.LogOffset
   alias Electric.Telemetry.OpenTelemetry
@@ -79,15 +80,22 @@ defmodule Electric.ShapeCache.CubDbStorage do
 
   @spec snapshot_exists?(any(), any()) :: false
   def snapshot_exists?(shape_id, opts) do
-    CubDB.has_key?(opts.db, snapshot_meta_key(shape_id))
+    CubDB.has_key?(opts.db, snapshot_end(shape_id))
   end
 
   def get_snapshot(shape_id, opts) do
     stream =
-      opts.db
-      |> CubDB.select(
-        min_key: snapshot_start(shape_id),
-        max_key: snapshot_end(shape_id)
+      ConcurrentStream.stream_to_end(
+        excluded_start_key: snapshot_start(shape_id),
+        end_marker_key: snapshot_end(shape_id),
+        poll_time_in_ms: 10,
+        stream_fun: fn excluded_start_key, included_end_key ->
+          CubDB.select(opts.db,
+            min_key: excluded_start_key,
+            max_key: included_end_key,
+            min_key_inclusive: false
+          )
+        end
       )
       |> Stream.flat_map(fn {_, items} -> items end)
       |> Stream.map(fn {_, item} -> item end)
@@ -119,7 +127,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
     OpenTelemetry.with_span("storage.make_new_snapshot", [storage_impl: "cub_db"], fn ->
       data_stream
       |> LogItems.from_snapshot_row_stream(@snapshot_offset, shape, query_info)
-      |> Stream.with_index()
+      |> Stream.with_index(1)
       |> Stream.map(fn {log_item, index} ->
         {snapshot_key(shape_id, index), Jason.encode!(log_item)}
       end)
@@ -127,7 +135,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
       |> Stream.each(fn [{key, _} | _] = chunk -> CubDB.put(opts.db, key, chunk) end)
       |> Stream.run()
 
-      CubDB.put(opts.db, snapshot_meta_key(shape_id), 0)
+      CubDB.put(opts.db, snapshot_end(shape_id), 0)
     end)
   end
 
@@ -141,7 +149,6 @@ defmodule Electric.ShapeCache.CubDbStorage do
 
   def cleanup!(shape_id, opts) do
     [
-      snapshot_meta_key(shape_id),
       shape_key(shape_id),
       xmin_key(shape_id)
     ]
@@ -153,10 +160,6 @@ defmodule Electric.ShapeCache.CubDbStorage do
   defp keys_from_range(min_key, max_key, opts) do
     CubDB.select(opts.db, min_key: min_key, max_key: max_key)
     |> Stream.map(&elem(&1, 0))
-  end
-
-  defp snapshot_meta_key(shape_id) do
-    {:snapshot_metadata, shape_id}
   end
 
   defp snapshot_key(shape_id, index) do
