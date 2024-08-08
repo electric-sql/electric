@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.3.0
+
+### Minor Changes
+
+- 8e584a1: Fix: rename "action" header -> "operation" to match Postgres's name for inserts, updates, deletes
+
 ## 0.2.8
 
 ### Patch Changes

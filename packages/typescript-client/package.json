@@ -1,6 +1,6 @@
 {
   "name": "@electric-sql/client",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Postgres everywhere - your data, in sync, wherever you need it.",
   "type": "module",
   "main": "dist/cjs/index.cjs",
