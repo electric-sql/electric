@@ -91,10 +91,25 @@ defmodule Electric.MixProject do
     ]
   end
 
-  defp version() do
+  defp version do
+    with :error <- version_from_env(),
+         :error <- version_from_package_json() do
+      "0.0.0"
+    end
+  end
+
+  defp version_from_env do
+    with {:ok, version} <- System.fetch_env("ELECTRIC_VERSION"),
+         trimmed = String.trim(version),
+         {:ok, _} <- Version.parse(trimmed) do
+      trimmed
+    end
+  end
+
+  defp version_from_package_json do
     case File.read("./package.json") do
       {:ok, binary} -> binary |> :json.decode() |> Map.fetch!("version")
-      {:error, _} -> "0.0.0"
+      {:error, _} -> :error
     end
   end
 end
