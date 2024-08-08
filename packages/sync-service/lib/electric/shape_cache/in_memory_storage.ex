@@ -1,4 +1,5 @@
 defmodule Electric.ShapeCache.InMemoryStorage do
+  alias Electric.ConcurrentStream
   alias Electric.LogItems
   alias Electric.Replication.LogOffset
   alias Electric.Telemetry.OpenTelemetry
@@ -33,17 +34,33 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def cleanup_shapes_without_xmins(_opts), do: :ok
 
   def snapshot_exists?(shape_id, opts) do
-    case :ets.match(opts.snapshot_ets_table, {{:metadata, shape_id}, :_}, 1) do
+    case :ets.match(opts.snapshot_ets_table, {snapshot_end(shape_id), :_}, 1) do
       {[_], _} -> true
       :"$end_of_table" -> false
     end
   end
 
+  defp snapshot_key(shape_id, index) do
+    {:data, shape_id, index}
+  end
+
+  # defp snapshot_start(shape_id), do: snapshot_key(shape_id, 0)
+  defp snapshot_end(shape_id), do: snapshot_key(shape_id, :end)
+
   def get_snapshot(shape_id, opts) do
     stream =
-      :ets.select(opts.snapshot_ets_table, [
-        {{{:data, shape_id, :"$1"}, :"$2"}, [], [{{:"$1", :"$2"}}]}
-      ])
+      ConcurrentStream.stream_to_end(
+        excluded_start_key: 0,
+        end_marker_key: :end,
+        poll_time_in_ms: 10,
+        stream_fun: fn excluded_start_key, included_end_key ->
+          :ets.select(opts.snapshot_ets_table, [
+            {{{:data, shape_id, :"$1"}, :"$2"},
+             [{:andalso, {:>, :"$1", excluded_start_key}, {:"=<", :"$1", included_end_key}}],
+             [{{:"$1", :"$2"}}]}
+          ])
+        end
+      )
       |> Stream.map(fn {_, item} -> item end)
 
     {@snapshot_offset, stream}
@@ -93,14 +110,15 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
       data_stream
       |> LogItems.from_snapshot_row_stream(@snapshot_offset, shape, query_info)
-      |> Stream.map(fn log_item ->
-        {{:data, shape_id, log_item.key}, Jason.encode!(log_item)}
+      |> Stream.with_index(1)
+      |> Stream.map(fn {log_item, index} ->
+        {snapshot_key(shape_id, index), Jason.encode!(log_item)}
       end)
       |> Stream.chunk_every(500)
       |> Stream.each(fn chunk -> :ets.insert(ets_table, chunk) end)
       |> Stream.run()
 
-      :ets.insert(ets_table, {{:metadata, shape_id}, 0})
+      :ets.insert(ets_table, {snapshot_end(shape_id), 0})
       :ok
     end)
   end
@@ -120,7 +138,6 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   def cleanup!(shape_id, opts) do
     :ets.match_delete(opts.snapshot_ets_table, {{:data, shape_id, :_}, :_})
-    :ets.match_delete(opts.snapshot_ets_table, {{:metadata, shape_id}, :_})
     :ets.match_delete(opts.log_ets_table, {{shape_id, :_}, :_})
     :ok
   end
