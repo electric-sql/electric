@@ -17,6 +17,7 @@ steps:
       - docker buildx build --platform linux/arm64/v8,linux/amd64 --push
         --build-arg ELECTRIC_VERSION=$${ELECTRIC_VERSION}
         -t $${ELECTRIC_IMAGE_NAME}:canary
+        .
   - wait
   - label: "🚀 Build & publish the release image to Docker Hub"
     if: build.tag =~ /@core\/sync-service@/
