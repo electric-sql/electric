@@ -127,7 +127,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
     OpenTelemetry.with_span("storage.make_new_snapshot", [storage_impl: "cub_db"], fn ->
       data_stream
       |> LogItems.from_snapshot_row_stream(@snapshot_offset, shape, query_info)
-      |> Stream.with_index(1)
+      |> Stream.with_index()
       |> Stream.map(fn {log_item, index} ->
         {snapshot_key(shape_id, index), Jason.encode!(log_item)}
       end)
@@ -190,6 +190,6 @@ defmodule Electric.ShapeCache.CubDbStorage do
   defp log_start(shape_id), do: log_key(shape_id, LogOffset.first())
   defp log_end(shape_id), do: log_key(shape_id, LogOffset.last())
 
-  defp snapshot_start(shape_id), do: snapshot_key(shape_id, 0)
+  defp snapshot_start(shape_id), do: snapshot_key(shape_id, -1)
   defp snapshot_end(shape_id), do: snapshot_key(shape_id, :end)
 end
