@@ -44,18 +44,19 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     {:data, shape_id, index}
   end
 
-  # defp snapshot_start(shape_id), do: snapshot_key(shape_id, 0)
-  defp snapshot_end(shape_id), do: snapshot_key(shape_id, :end)
+  @snapshot_start_index 0
+  @snapshot_end_index :end
+  defp snapshot_end(shape_id), do: snapshot_key(shape_id, @snapshot_end_index)
 
   def get_snapshot(shape_id, opts) do
     stream =
       ConcurrentStream.stream_to_end(
-        excluded_start_key: 0,
-        end_marker_key: :end,
+        excluded_start_key: @snapshot_start_index,
+        end_marker_key: @snapshot_end_index,
         poll_time_in_ms: 10,
         stream_fun: fn excluded_start_key, included_end_key ->
           :ets.select(opts.snapshot_ets_table, [
-            {{{:data, shape_id, :"$1"}, :"$2"},
+            {{snapshot_key(shape_id, :"$1"), :"$2"},
              [{:andalso, {:>, :"$1", excluded_start_key}, {:"=<", :"$1", included_end_key}}],
              [{{:"$1", :"$2"}}]}
           ])
@@ -137,7 +138,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   def cleanup!(shape_id, opts) do
-    :ets.match_delete(opts.snapshot_ets_table, {{:data, shape_id, :_}, :_})
+    :ets.match_delete(opts.snapshot_ets_table, {snapshot_key(shape_id, :_), :_})
     :ets.match_delete(opts.log_ets_table, {{shape_id, :_}, :_})
     :ok
   end
