@@ -1,0 +1,35 @@
+{
+  "name": "@electric-examples/yjs-codemirror",
+  "private": true,
+  "version": "0.0.1",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "backend:up": "PROJECT_NAME=yjs-codemirror pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=yjs-codemirror pnpm -C ../../ run example-backend:down",
+    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electric-sql/client": "workspace:*",
+    "abort-controller": "^3.0.0",
+    "js-base64": "^3.7.7",
+    "lib0": "^0.2.96",
+    "y-protocols": "^1.0.5",
+    "codemirror": "^5.64.0",
+    "y-codemirror": "^2.1.1",
+    "yjs": "^13.5.22"
+    
+  },
+  "devDependencies": {
+    "@databases/pg-migrations": "^5.0.3",
+    "dotenv": "^16.4.5",
+    "eslint": "^8.57.0",
+    "vite": "^5.3.4"
+  }
+}
