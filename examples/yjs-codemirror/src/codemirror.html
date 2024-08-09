@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Yjs CodeMirror Example</title>
+    <script type="text/javascript" src="./dist/codemirror.bundle.js" async></script>
+    <link rel=stylesheet href="./codemirror.css"  async defer>
+    <style>
+      .remote-caret {
+        position: relative;
+        border-left: 2px solid black;
+        margin-left: -1px;
+        margin-right: -1px;
+        box-sizing: border-box;
+      }
+      .remote-caret > div {
+        position: absolute;
+        top: -1.05em;
+        left: -2px;
+        font-size: .6em;
+        background-color: rgb(250, 129, 0);
+        font-family: serif;
+        font-style: normal;
+        font-weight: normal;
+        line-height: normal;
+        user-select: none;
+        color: white;
+        padding-left: 2px;
+        padding-right: 2px;
+        z-index: 3;
+        transition: opacity .3s ease-in-out;
+      }
+      .remote-caret.hide-name > div {
+        transition-delay: .7s;
+        opacity: 0;
+      }
+      .remote-caret:hover > div {
+        opacity: 1;
+        transition-delay: 0s;
+      }
+      </style>
+  </head>
+  <body>
+    <button type="button" id="y-connect-btn">Disconnect</button>
+    <p></p>
+    <p>
+      This is a demo of the <a href="https://github.com/yjs/yjs">Yjs</a> ⇔
+      <a href="https://codemirror.net">CodeMirror</a> binding:
+      <a href="https://github.com/yjs/y-codemirror">y-codemirror</a>.
+    </p>
+    <p>
+      The content of this editor is shared with every client that visits this
+      domain.
+    </p>
+  </body>
+</html>
