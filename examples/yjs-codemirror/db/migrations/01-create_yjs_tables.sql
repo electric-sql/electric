@@ -1,5 +1,5 @@
 CREATE TABLE ydoc_updates(
-  id uuid PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   name TEXT,
   op TEXT NOT NULL 
 );
