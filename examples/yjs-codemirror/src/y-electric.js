@@ -5,23 +5,23 @@
 /* eslint-env browser */
 
 import * as Y from 'yjs' // eslint-disable-line
-import * as time from 'lib0/time'
-import * as encoding from 'lib0/encoding'
-import * as decoding from 'lib0/decoding'
-import * as syncProtocol from 'y-protocols/sync'
-import * as awarenessProtocol from 'y-protocols/awareness'
-import { Observable } from 'lib0/observable'
-import * as url from 'lib0/url'
-import * as env from 'lib0/environment'
+import * as time from "lib0/time"
+import * as encoding from "lib0/encoding"
+import * as decoding from "lib0/decoding"
+import * as syncProtocol from "y-protocols/sync"
+import * as awarenessProtocol from "y-protocols/awareness"
+import { Observable } from "lib0/observable"
+import * as url from "lib0/url"
+import * as env from "lib0/environment"
 
 export const messageSync = 0
 export const messageQueryAwareness = 3
 export const messageAwareness = 1
 
-import { ShapeStream } from '@electric-sql/client'
+import { ShapeStream } from "@electric-sql/client"
 
 // Check if we can handle encoding another way
-import {Base64} from 'js-base64';
+import { Base64 } from "js-base64"
 
 /**
  *                       encoder,          decoder,          provider,          emitSynced, messageType
@@ -44,7 +44,8 @@ messageHandlers[messageSync] = (
     provider
   )
   if (
-    emitSynced && syncMessageType === syncProtocol.messageYjsSyncStep2 &&
+    emitSynced &&
+    syncMessageType === syncProtocol.messageYjsSyncStep2 &&
     !provider.synced
   ) {
     provider.synced = true
@@ -93,39 +94,39 @@ const setupShapeStream = (provider) => {
 
     provider.stream = new ShapeStream({
       url: provider.url,
-      signal: new AbortController().signal
+      signal: new AbortController().signal,
     })
 
-  const readMessage = (provider, buf, emitSynced) => {
-    const decoder = decoding.createDecoder(buf)
-    const encoder = encoding.createEncoder()
-    const messageType = decoding.readVarUint(decoder)
-    const messageHandler = provider.messageHandlers[messageType]
-    if (/** @type {any} */ (messageHandler)) {
-      messageHandler(encoder, decoder, provider, emitSynced, messageType)
-    } else {
-      console.error('Unable to compute message')
+    const readMessage = (provider, buf, emitSynced) => {
+      const decoder = decoding.createDecoder(buf)
+      const encoder = encoding.createEncoder()
+      const messageType = decoding.readVarUint(decoder)
+      const messageHandler = provider.messageHandlers[messageType]
+      if (/** @type {any} */ (messageHandler)) {
+        messageHandler(encoder, decoder, provider, emitSynced, messageType)
+      } else {
+        console.error(`Unable to compute message`)
+      }
+      return encoder
     }
-    return encoder
-  }
 
     const handleSyncMessage = (messages) => {
-      provider.lastMessageReceived = time.getUnixTime() 
-      messages.forEach(message => {
-        if(message['key']){
-          const buf = Base64.toUint8Array(message['value']['op'])
+      provider.lastMessageReceived = time.getUnixTime()
+      messages.forEach((message) => {
+        if (message[`key`]) {
+          const buf = Base64.toUint8Array(message[`value`][`op`])
           readMessage(provider, buf, true)
         }
       })
     }
 
     const handleError = (event) => {
-      console.warn('fetch shape error', event)
-      provider.emit('connection-error', [event, provider])
+      console.warn(`fetch shape error`, event)
+      provider.emit(`connection-error`, [event, provider])
     }
 
     const unsubscribeSyncHandler = provider.stream.subscribe(
-      handleSyncMessage, 
+      handleSyncMessage,
       handleError
     )
 
@@ -135,12 +136,11 @@ const setupShapeStream = (provider) => {
       encoding.writeVarUint8Array(
         encoderAwarenessState,
         awarenessProtocol.encodeAwarenessUpdate(provider.awareness, [
-          provider.doc.clientID
+          provider.doc.clientID,
         ])
       )
       // websocket.send(encoding.toUint8Array(encoderAwarenessState))
     }
-    
 
     provider.closeHandler = (event) => {
       provider.stream = null
@@ -151,42 +151,48 @@ const setupShapeStream = (provider) => {
         // update awareness (all users except local left)
         awarenessProtocol.removeAwarenessStates(
           provider.awareness,
-          Array.from(provider.awareness.getStates().keys()).filter((client) =>
-            client !== provider.doc.clientID
+          Array.from(provider.awareness.getStates().keys()).filter(
+            (client) => client !== provider.doc.clientID
           ),
           provider
         )
-        provider.emit('status', [{
-          status: 'disconnected'
-        }])
+        provider.emit(`status`, [
+          {
+            status: `disconnected`,
+          },
+        ])
       }
 
       unsubscribeSyncHandler()
       provider.closeHandler = null
-      provider.emit('connection-close', [event, provider])
+      provider.emit(`connection-close`, [event, provider])
     }
 
     const handleOnceUpToDate = () => {
       provider.lastMessageReceived = time.getUnixTime()
       provider.connecting = false
       provider.connected = true
-      provider.emit('status', [{
-        status: 'connected'
-      }])
+      provider.emit(`status`, [
+        {
+          status: `connected`,
+        },
+      ])
 
-      provider.pending.splice(0).forEach(
-        (buf) => broadcastMessage(provider, buf))
-
+      provider.pending
+        .splice(0)
+        .forEach((buf) => broadcastMessage(provider, buf))
     }
 
-   provider.stream.subscribeOnceToUpToDate(
-    () => handleOnceUpToDate(), 
-    () => handleError()
+    provider.stream.subscribeOnceToUpToDate(
+      () => handleOnceUpToDate(),
+      () => handleError()
     )
 
-    provider.emit('status', [{
-      status: 'connecting'
-    }])
+    provider.emit(`status`, [
+      {
+        status: `connecting`,
+      },
+    ])
   }
 }
 
@@ -204,25 +210,21 @@ const broadcastMessage = (provider, buf) => {
       action: `insert`,
       schema: `public`,
       tablename: `ydoc_updates`,
-      row: {name, op}
+      row: { name, op },
     }
     const req = buildRequest(clientId, new Date().getTime(), [mutation])
     fetch(req)
   }
 }
 
-function buildRequest(
-  clientId,
-  requestId,
-  mutations
-) {
+function buildRequest(clientId, requestId, mutations) {
   const url = `http://localhost:8080/`
   return new Request(url, {
     method: `POST`,
     headers: {
-      'Content-Type': `application/json`,
-      'X-Electric-Request-Id': requestId,
-      'X-Electric-User-Id': clientId, // TODO: drop this
+      "Content-Type": `application/json`,
+      "X-Electric-Request-Id": requestId,
+      "X-Electric-User-Id": clientId, // TODO: drop this
     },
     body: JSON.stringify(mutations),
   })
@@ -253,13 +255,15 @@ export class ElectricProvider extends Observable {
    * @param {Array<string>} [opts.protocols] specify websocket protocols
    * @param {number} [opts.maxBackoffTime] Maximum amount of time to wait before trying to reconnect (we try to reconnect using exponential backoff)
    */
-  constructor (serverUrl, roomname, doc, {
-    connect = true,
-    awareness = new awarenessProtocol.Awareness(doc)
-  } = {}) {
+  constructor(
+    serverUrl,
+    roomname,
+    doc,
+    { connect = true, awareness = new awarenessProtocol.Awareness(doc) } = {}
+  ) {
     super()
     // ensure that url is always ends with /
-    while (serverUrl[serverUrl.length - 1] === '/') {
+    while (serverUrl[serverUrl.length - 1] === `/`) {
       serverUrl = serverUrl.slice(0, serverUrl.length - 1)
     }
     this.serverUrl = serverUrl
@@ -268,7 +272,7 @@ export class ElectricProvider extends Observable {
     this.awareness = awareness
     this.connected = false
     this.connecting = false
-  
+
     this.messageHandlers = messageHandlers.slice()
     /**
      * @type {boolean}
@@ -282,16 +286,15 @@ export class ElectricProvider extends Observable {
      */
     this.shouldConnect = connect
 
-    
     /**
      * @type {ShapeStream?}
-    */
-   
-   this.stream = null
-   
-   this.pending = new Array()
+     */
 
-   this.closeHandler = null
+    this.stream = null
+
+    this.pending = []
+
+    this.closeHandler = null
 
     /**
      * Listens to Yjs updates and sends them to remote peers (ws and broadcastchannel)
@@ -305,8 +308,8 @@ export class ElectricProvider extends Observable {
           const encoder = encoding.createEncoder()
           encoding.writeVarUint(encoder, messageSync)
           syncProtocol.writeUpdate(encoder, update)
-          
-          this.pending.push( encoding.toUint8Array(encoder))
+
+          this.pending.push(encoding.toUint8Array(encoder))
         } else {
           const encoder = encoding.createEncoder()
           encoding.writeVarUint(encoder, messageSync)
@@ -315,7 +318,7 @@ export class ElectricProvider extends Observable {
         }
       }
     }
-    this.doc.on('update', this._updateHandler)
+    this.doc.on(`update`, this._updateHandler)
 
     /**
      * @param {any} changed
@@ -335,56 +338,56 @@ export class ElectricProvider extends Observable {
       awarenessProtocol.removeAwarenessStates(
         this.awareness,
         [doc.clientID],
-        'app closed'
+        `app closed`
       )
     }
-    if (env.isNode && typeof process !== 'undefined') {
-      process.on('exit', this._exitHandler)
+    if (env.isNode && typeof process !== `undefined`) {
+      process.on(`exit`, this._exitHandler)
     }
-    awareness.on('update', this._awarenessUpdateHandler)
-    
+    awareness.on(`update`, this._awarenessUpdateHandler)
+
     if (connect) {
       this.connect()
     }
   }
 
-  get url () {
-    const params = {"where": `name = '${this.roomname}'`}
+  get url() {
+    const params = { where: `name = '${this.roomname}'` }
     const encodedParams = url.encodeQueryParams(params)
-    return this.serverUrl + '/v1/shape/ydoc_updates?' + encodedParams
+    return this.serverUrl + `/v1/shape/ydoc_updates?` + encodedParams
   }
 
   /**
    * @type {boolean}
    */
-  get synced () {
+  get synced() {
     return this._synced
   }
 
-  set synced (state) {
+  set synced(state) {
     if (this._synced !== state) {
       this._synced = state
-      this.emit('synced', [state])
-      this.emit('sync', [state])
+      this.emit(`synced`, [state])
+      this.emit(`sync`, [state])
     }
   }
 
-  destroy () {
+  destroy() {
     this.disconnect()
-    if (env.isNode && typeof process !== 'undefined') {
-      process.off('exit', this._exitHandler)
+    if (env.isNode && typeof process !== `undefined`) {
+      process.off(`exit`, this._exitHandler)
     }
-    this.awareness.off('update', this._awarenessUpdateHandler)
-    this.doc.off('update', this._updateHandler)
+    this.awareness.off(`update`, this._awarenessUpdateHandler)
+    this.doc.off(`update`, this._updateHandler)
     super.destroy()
   }
 
-  disconnect () {
+  disconnect() {
     this.shouldConnect = false
     this.closeHandler()
   }
 
-  connect () {
+  connect() {
     this.shouldConnect = true
     if (!this.connected && this.stream === null) {
       setupShapeStream(this)
