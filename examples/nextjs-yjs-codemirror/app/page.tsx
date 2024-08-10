@@ -1,0 +1,104 @@
+"use client"
+
+import "./Example.css"
+import { useEffect, useRef, useState } from "react"
+
+import * as Y from "yjs"
+import { yCollab, yUndoManagerKeymap } from "y-codemirror.next"
+import { ElectricProvider } from "./y-electric"
+
+import { EditorState, EditorView, basicSetup } from "@codemirror/basic-setup"
+import { keymap } from "@codemirror/view"
+import { javascript } from "@codemirror/lang-javascript"
+
+import * as random from "lib0/random"
+
+const usercolors = [
+  { color: `#30bced`, light: `#30bced33` },
+  { color: `#6eeb83`, light: `#6eeb8333` },
+  { color: `#ffbc42`, light: `#ffbc4233` },
+  { color: `#ecd444`, light: `#ecd44433` },
+  { color: `#ee6352`, light: `#ee635233` },
+  { color: `#9ac2c9`, light: `#9ac2c933` },
+  { color: `#8acb88`, light: `#8acb8833` },
+  { color: `#1be7ff`, light: `#1be7ff33` },
+]
+
+const userColor = usercolors[random.uint32() % usercolors.length]
+
+const theme = EditorView.theme(
+  {
+    ".cm-content": {
+      minWidth: `400px`,
+      textAlign: `left`,
+      backgroundColor: `#223239`,
+    },
+    ".cm-content .cm-gutter": {
+      minHeight: `200px`,
+    },
+  },
+  { dark: true }
+)
+
+const ydoc = new Y.Doc()
+const provider = new ElectricProvider(
+  `http://localhost:3000/`,
+  `electric-demo`,
+  ydoc
+)
+
+export default function Home() {
+  const editor = useRef(null)
+
+  const [connect, setConnect] = useState(`connected`)
+
+  const toggle = () => {
+    if (connect === `connected`) {
+      provider.disconnect()
+      setConnect(`disconnected`)
+    } else {
+      provider.connect()
+      setConnect(`connected`)
+    }
+  }
+
+  useEffect(() => {
+    const ytext = ydoc.getText(`codemirror`)
+
+    provider.awareness.setLocalStateField(`user`, {
+      name: `Anonymous ` + Math.floor(Math.random() * 100),
+      color: userColor.color,
+      colorLight: userColor.light,
+    })
+
+    const state = EditorState.create({
+      doc: ytext.toString(),
+      extensions: [
+        keymap.of([...yUndoManagerKeymap]),
+        basicSetup,
+        javascript(),
+        EditorView.lineWrapping,
+        yCollab(ytext, provider.awareness),
+        theme,
+      ],
+    })
+
+    const view = new EditorView({ state, parent: editor.current ?? undefined })
+
+    return () => {
+      view.destroy()
+      // editor.current.removeEventListener("input", log);
+    }
+  })
+
+  return (
+    <div>
+      <form action={async () => toggle()}>
+        <button type="submit" className="button" name="intent" value="add">
+          {connect}
+        </button>
+      </form>
+      <div className="App-editor" ref={editor}></div>
+    </div>
+  )
+}
