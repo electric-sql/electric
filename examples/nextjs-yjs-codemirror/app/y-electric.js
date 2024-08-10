@@ -87,13 +87,18 @@ messageHandlers[messageAwareness] = (
  * @param {ElectricProvider} provider
  */
 const setupShapeStream = (provider) => {
-  if (provider.shouldConnect && provider.stream === null) {
+  if (provider.shouldConnect && provider.operationsStream === null) {
     provider.connecting = true
     provider.connected = false
     provider.synced = false
 
-    provider.stream = new ShapeStream({
-      url: provider.url,
+    provider.operationsStream = new ShapeStream({
+      url: provider.operationsUrl,
+      signal: new AbortController().signal,
+    })
+
+    provider.awarenessStrean = new ShapeStream({
+      url: provider.awarenessUrl,
       signal: new AbortController().signal,
     })
 
@@ -113,7 +118,8 @@ const setupShapeStream = (provider) => {
     const handleSyncMessage = (messages) => {
       provider.lastMessageReceived = time.getUnixTime()
       messages.forEach((message) => {
-        if (message[`key`]) {
+        // ignore DELETE operations
+        if (message[`key`] && message[`value`][`op`]) {
           const buf = Base64.toUint8Array(message[`value`][`op`])
           readMessage(provider, buf, true)
         }
@@ -125,25 +131,19 @@ const setupShapeStream = (provider) => {
       provider.emit(`connection-error`, [event, provider])
     }
 
-    const unsubscribeSyncHandler = provider.stream.subscribe(
+    const unsubscribeSyncHandler = provider.operationsStream.subscribe(
       handleSyncMessage,
       handleError
     )
 
-    if (provider.awareness.getLocalState() !== null) {
-      const encoderAwarenessState = encoding.createEncoder()
-      encoding.writeVarUint(encoderAwarenessState, messageAwareness)
-      encoding.writeVarUint8Array(
-        encoderAwarenessState,
-        awarenessProtocol.encodeAwarenessUpdate(provider.awareness, [
-          provider.doc.clientID,
-        ])
-      )
-      // websocket.send(encoding.toUint8Array(encoderAwarenessState))
-    }
+    const unsubscribeAwarenessHandler = provider.awarenessStrean.subscribe(
+      handleSyncMessage,
+      handleError
+    )
 
     provider.closeHandler = (event) => {
-      provider.stream = null
+      provider.operationsStream = null
+      provider.awarenessStrean = null
       provider.connecting = false
       if (provider.connected) {
         provider.connected = false
@@ -164,11 +164,12 @@ const setupShapeStream = (provider) => {
       }
 
       unsubscribeSyncHandler()
+      unsubscribeAwarenessHandler()
       provider.closeHandler = null
       provider.emit(`connection-close`, [event, provider])
     }
 
-    const handleOnceUpToDate = () => {
+    const handleOperationsFirstSync = () => {
       provider.lastMessageReceived = time.getUnixTime()
       provider.connecting = false
       provider.connected = true
@@ -178,13 +179,30 @@ const setupShapeStream = (provider) => {
         },
       ])
 
-      provider.pending
-        .splice(0)
-        .forEach((buf) => broadcastMessage(provider, buf))
+      provider.pending.splice(0).forEach((buf) => sendOperation(provider, buf))
     }
 
-    provider.stream.subscribeOnceToUpToDate(
-      () => handleOnceUpToDate(),
+    provider.operationsStream.subscribeOnceToUpToDate(
+      () => handleOperationsFirstSync(),
+      () => handleError()
+    )
+
+    const handleAwarenessFirstSync = () => {
+      if (provider.awareness.getLocalState() !== null) {
+        const encoderAwarenessState = encoding.createEncoder()
+        encoding.writeVarUint(encoderAwarenessState, messageAwareness)
+        encoding.writeVarUint8Array(
+          encoderAwarenessState,
+          awarenessProtocol.encodeAwarenessUpdate(provider.awareness, [
+            provider.doc.clientID,
+          ])
+        )
+        sendAwareness(provider, encoding.toUint8Array(encoderAwarenessState))
+      }
+    }
+
+    provider.awarenessStrean.subscribeOnceToUpToDate(
+      () => handleAwarenessFirstSync(),
       () => handleError()
     )
 
@@ -200,49 +218,35 @@ const setupShapeStream = (provider) => {
  * @param {ElectricProvider} provider
  * @param {Uint8Array} buf
  */
-const broadcastMessage = (provider, buf) => {
-  if (provider.connected && provider.stream !== null) {
-    const clientId = provider.doc.clientID
+const sendOperation = (provider, buf) => {
+  if (provider.connected && provider.operationsStream !== null) {
     const name = provider.roomname
     const op = Base64.fromUint8Array(buf)
 
-    const mutation = {
-      action: `insert`,
-      schema: `public`,
-      tablename: `ydoc_updates`,
-      row: { name, op },
-    }
-    const req = buildRequest(clientId, new Date().getTime(), [mutation])
-    fetch(req)
+    fetch(`/api/operation`, {
+      method: `POST`,
+      body: JSON.stringify({ name, op }),
+    })
   }
 }
 
-function buildRequest(clientId, requestId, mutations) {
-  const url = `http://localhost:8080/`
-  return new Request(url, {
-    method: `POST`,
-    headers: {
-      "Content-Type": `application/json`,
-      "X-Electric-Request-Id": requestId,
-      "X-Electric-User-Id": clientId, // TODO: drop this
-    },
-    body: JSON.stringify(mutations),
-  })
+/**
+ * @param {ElectricProvider} provider
+ * @param {Uint8Array} buf
+ */
+const sendAwareness = async (provider, buf) => {
+  if (provider.connected && provider.operationsStream !== null) {
+    const name = provider.roomname
+    const clientID = provider.doc.clientID
+    const op = Base64.fromUint8Array(buf)
+
+    fetch(`/api/awareness`, {
+      method: `POST`,
+      body: JSON.stringify({ client: clientID, name, op }),
+    })
+  }
 }
 
-/**
- * Websocket Provider for Yjs. Creates a websocket connection to sync the shared document.
- * The document name is attached to the provided url. I.e. the following example
- * creates a websocket connection to http://localhost:1234/my-document-name
- *
- * @example
- *   import * as Y from 'yjs'
- *   import { ElectricProvider } from 'y-websocket'
- *   const doc = new Y.Doc()
- *   const provider = new ElectricProvider('http://localhost:1234', 'my-document-name', doc)
- *
- * @extends {Observable<string>}
- */
 export class ElectricProvider extends Observable {
   /**
    * @param {string} serverUrl
@@ -290,14 +294,14 @@ export class ElectricProvider extends Observable {
      * @type {ShapeStream?}
      */
 
-    this.stream = null
+    this.operationsStream = null
 
     this.pending = []
 
     this.closeHandler = null
 
     /**
-     * Listens to Yjs updates and sends them to remote peers (ws and broadcastchannel)
+     * Listens to Yjs updates and sends them to remote peers
      * @param {Uint8Array} update
      * @param {any} origin
      */
@@ -314,7 +318,7 @@ export class ElectricProvider extends Observable {
           const encoder = encoding.createEncoder()
           encoding.writeVarUint(encoder, messageSync)
           syncProtocol.writeUpdate(encoder, update)
-          broadcastMessage(this, encoding.toUint8Array(encoder))
+          sendOperation(this, encoding.toUint8Array(encoder))
         }
       }
     }
@@ -324,16 +328,19 @@ export class ElectricProvider extends Observable {
      * @param {any} changed
      * @param {any} _origin
      */
-    this._awarenessUpdateHandler = ({ added, updated, removed }, _origin) => {
-      const changedClients = added.concat(updated).concat(removed)
-      const encoder = encoding.createEncoder()
-      encoding.writeVarUint(encoder, messageAwareness)
-      encoding.writeVarUint8Array(
-        encoder,
-        awarenessProtocol.encodeAwarenessUpdate(awareness, changedClients)
-      )
-      // broadcastMessage(this, encoding.toUint8Array(encoder))
+    this._awarenessUpdateHandler = ({ added, updated, removed }, origin) => {
+      if (origin === `local`) {
+        const changedClients = added.concat(updated).concat(removed)
+        const encoder = encoding.createEncoder()
+        encoding.writeVarUint(encoder, messageAwareness)
+        encoding.writeVarUint8Array(
+          encoder,
+          awarenessProtocol.encodeAwarenessUpdate(awareness, changedClients)
+        )
+        sendAwareness(this, encoding.toUint8Array(encoder))
+      }
     }
+
     this._exitHandler = () => {
       awarenessProtocol.removeAwarenessStates(
         this.awareness,
@@ -351,10 +358,16 @@ export class ElectricProvider extends Observable {
     }
   }
 
-  get url() {
+  get operationsUrl() {
     const params = { where: `name = '${this.roomname}'` }
     const encodedParams = url.encodeQueryParams(params)
     return this.serverUrl + `/v1/shape/ydoc_updates?` + encodedParams
+  }
+
+  get awarenessUrl() {
+    const params = { where: `name = '${this.roomname}'` }
+    const encodedParams = url.encodeQueryParams(params)
+    return this.serverUrl + `/v1/shape/ydoc_awareness?` + encodedParams
   }
 
   /**
@@ -389,7 +402,7 @@ export class ElectricProvider extends Observable {
 
   connect() {
     this.shouldConnect = true
-    if (!this.connected && this.stream === null) {
+    if (!this.connected && this.operationsStream === null) {
       setupShapeStream(this)
     }
   }

@@ -1,0 +1,52 @@
+body {
+  margin: 0;
+  font-family: "Helvetica Neue", Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #1c1e20;
+  min-width: 360px;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+    monospace;
+}
+
+
+/* YJS awareness */
+
+.remote-caret {
+  position: relative;
+  border-left: 2px solid black;
+  margin-left: -1px;
+  margin-right: -1px;
+  box-sizing: border-box;
+}
+
+.remote-caret>div {
+  position: absolute;
+  top: -1.05em;
+  left: -2px;
+  font-size: .6em;
+  background-color: rgb(250, 129, 0);
+  font-family: serif;
+  font-style: normal;
+  font-weight: normal;
+  line-height: normal;
+  user-select: none;
+  color: white;
+  padding-left: 2px;
+  padding-right: 2px;
+  z-index: 3;
+  transition: opacity .3s ease-in-out;
+}
+
+.remote-caret.hide-name>div {
+  transition-delay: .7s;
+  opacity: 0;
+}
+
+.remote-caret:hover>div {
+  opacity: 1;
+  transition-delay: 0s;
+}
