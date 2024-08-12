@@ -108,23 +108,36 @@ export class MessageParser {
       return value
     }
 
-    // Pick the right parser for the type
-    const parser = this.parser[columnInfo.type]
-
     // Copy the object but don't include `dimensions` and `type`
-    const { type: _typ, dims: dimensions, ...additionalInfo } = columnInfo
+    const { type: typ, dims: dimensions, ...additionalInfo } = columnInfo
 
-    if (dimensions > 0) {
+    // Pick the right parser for the type
+    // and support parsing null values if needed
+    // if no parser is provided for the given type, just return the value as is
+    const identityParser = (v: string) => v
+    const typParser = this.parser[typ] ?? identityParser
+    const parser = makeNullableParser(typParser, columnInfo.not_null)
+
+    if (dimensions && dimensions > 0) {
       // It's an array
-      const identityParser = (v: string) => v
-      return pgArrayParser(value, parser ?? identityParser)
-    }
-
-    if (!parser) {
-      // No parser was provided for this type of values
-      return value
+      return pgArrayParser(value, parser)
     }
 
     return parser(value, additionalInfo)
   }
+}
+
+function makeNullableParser(
+  parser: ParseFunction,
+  notNullable?: boolean
+): ParseFunction {
+  const isNullable = !(notNullable ?? false)
+  if (isNullable) {
+    // The sync service contains `null` value for a column whose value is NULL
+    // but if the column value is an array that contains a NULL value
+    // then it will be included in the array string as `NULL`, e.g.: `"{1,NULL,3}"`
+    return (value: string) =>
+      value === null || value === `NULL` ? null : parser(value)
+  }
+  return parser
 }
