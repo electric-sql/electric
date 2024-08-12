@@ -29,9 +29,14 @@ export type Message<T extends Value = { [key: string]: Value }> =
   | ControlMessage
   | ChangeMessage<T>
 
+/**
+ * Common properties for all columns.
+ * `dims` is the number of dimensions of the column. Only provided if the column is an array.
+ * `not_null` is true if the column has a `NOT NULL` constraint and is omitted otherwise.
+ */
 export type CommonColumnProps = {
-  dims?: number // only provided if the column is an array
-  not_null?: boolean // assumed to be false if not provided
+  dims?: number
+  not_null?: boolean
 }
 
 export type RegularColumn = {
