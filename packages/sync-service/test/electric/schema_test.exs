@@ -23,7 +23,7 @@ defmodule Electric.SchemaTest do
     },
     %{
       postgres_type: "SERIAL",
-      schema: %{type: "int4"}
+      schema: %{type: "int4", not_null: true}
     },
     %{
       postgres_type: "BIGINT",
@@ -496,6 +496,29 @@ defmodule Electric.SchemaTest do
       end
     end
 
+    test "indicates non-null columns in schema", %{db_conn: conn} do
+      Postgrex.query!(
+        conn,
+        """
+        CREATE TABLE items (
+          i INTEGER PRIMARY KEY,
+          name VARCHAR,
+          value BOOLEAN NOT NULL
+        )
+        """,
+        []
+      )
+
+      {:ok, column_info} = DirectInspector.load_column_info({"public", "items"}, conn)
+
+      %{"i" => i_schema, "name" => name_schema, "value" => value_schema} =
+        Schema.from_column_info(column_info)
+
+      assert i_schema == %{type: "int4", pk_index: 0, not_null: true}
+      assert name_schema == %{type: "varchar"}
+      assert value_schema == %{type: "bool", not_null: true}
+    end
+
     test "returns the correct schema for a table with a composite primary key", %{db_conn: conn} do
       Postgrex.query!(
         conn,
@@ -515,9 +538,9 @@ defmodule Electric.SchemaTest do
       %{"i" => i_schema, "name" => name_schema, "value" => value_schema} =
         Schema.from_column_info(column_info)
 
-      assert i_schema == %{type: "int4", pk_index: 0}
+      assert i_schema == %{type: "int4", pk_index: 0, not_null: true}
       assert name_schema == %{type: "varchar"}
-      assert value_schema == %{type: "bool", pk_index: 1}
+      assert value_schema == %{type: "bool", pk_index: 1, not_null: true}
     end
   end
 end

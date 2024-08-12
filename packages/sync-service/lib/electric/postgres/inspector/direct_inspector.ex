@@ -11,6 +11,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
       (atttypid, atttypmod) as type_id,
       attndims as array_dimensions,
       atttypmod as type_mod,
+      attnotnull as not_null,
       pg_type.typname as type,
       elem_pg_type.typname as array_type, -- type of the element inside the array or nil if it's not an array
       format_type(pg_attribute.atttypid, pg_attribute.atttypmod) AS formatted_type,

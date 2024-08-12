@@ -52,6 +52,7 @@ defmodule Electric.Schema do
     %{type: type(col_info)}
     |> add_dims(col_info)
     |> add_pk(col_info)
+    |> add_nullability(col_info)
     |> add_modifier(col_info)
   end
 
@@ -69,6 +70,9 @@ defmodule Electric.Schema do
   defp add_pk(schema, %{pk_position: idx}) do
     Map.put(schema, :pk_index, idx)
   end
+
+  defp add_nullability(schema, %{not_null: true}), do: Map.put(schema, :not_null, true)
+  defp add_nullability(schema, _), do: schema
 
   defp add_modifier(%{type: type} = schema, %{type_mod: type_mod})
        when type_mod > 0 and type in @variable_length_character_types do
