@@ -41,7 +41,7 @@ defmodule Electric.ShapeCache.Storage do
   @callback add_shape(shape_id(), Shape.t(), storage()) :: :ok
   @callback set_snapshot_xmin(shape_id(), non_neg_integer(), storage()) :: :ok
   @doc "Check if snapshot for a given shape id already exists"
-  @callback snapshot_exists?(shape_id(), compiled_opts()) :: boolean()
+  @callback snapshot_started?(shape_id(), compiled_opts()) :: boolean()
   @doc "Get the full snapshot for a given shape, also returning the offset this snapshot includes"
   @callback get_snapshot(shape_id(), compiled_opts()) :: {offset :: LogOffset.t(), log()}
   @doc """
@@ -94,8 +94,8 @@ defmodule Electric.ShapeCache.Storage do
     do: apply(mod, :set_snapshot_xmin, [shape_id, xmin, opts])
 
   @doc "Check if snapshot for a given shape id already exists"
-  @spec snapshot_exists?(shape_id(), storage()) :: boolean()
-  def snapshot_exists?(shape_id, {mod, opts}), do: mod.snapshot_exists?(shape_id, opts)
+  @spec snapshot_started?(shape_id(), storage()) :: boolean()
+  def snapshot_started?(shape_id, {mod, opts}), do: mod.snapshot_started?(shape_id, opts)
   @doc "Get the full snapshot for a given shape, also returning the offset this snapshot includes"
   @spec get_snapshot(shape_id(), storage()) :: {offset :: LogOffset.t(), log()}
   def get_snapshot(shape_id, {mod, opts}), do: mod.get_snapshot(shape_id, opts)

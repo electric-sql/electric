@@ -33,7 +33,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def set_snapshot_xmin(_shape_id, _xmin, _opts), do: :ok
   def cleanup_shapes_without_xmins(_opts), do: :ok
 
-  def snapshot_exists?(shape_id, opts) do
+  def snapshot_started?(shape_id, opts) do
     case :ets.match(opts.snapshot_ets_table, {snapshot_end(shape_id), :_}, 1) do
       {[_], _} -> true
       :"$end_of_table" -> false
@@ -94,7 +94,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
          ]) do
       [true] -> true
       # FIXME: this is naive while we don't have snapshot metadata to get real offset
-      [] -> snapshot_exists?(shape_id, opts) and offset == @snapshot_offset
+      [] -> snapshot_started?(shape_id, opts) and offset == @snapshot_offset
     end
   end
 

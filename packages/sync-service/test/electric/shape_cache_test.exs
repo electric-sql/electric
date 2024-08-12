@@ -80,7 +80,7 @@ defmodule Electric.ShapeCacheTest do
       {shape_id, offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert offset == @zero_offset
       assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
-      assert Storage.snapshot_exists?(shape_id, storage)
+      assert Storage.snapshot_started?(shape_id, storage)
     end
 
     test "triggers table prep and snapshot creation only once", ctx do
@@ -203,7 +203,7 @@ defmodule Electric.ShapeCacheTest do
     test "creates initial snapshot from DB data", %{storage: storage, shape_cache_opts: opts} do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
-      assert Storage.snapshot_exists?(shape_id, storage)
+      assert Storage.snapshot_started?(shape_id, storage)
       assert {@zero_offset, stream} = Storage.get_snapshot(shape_id, storage)
 
       assert [%{"value" => %{"value" => "test1"}}, %{"value" => %{"value" => "test2"}}] =
@@ -288,7 +288,7 @@ defmodule Electric.ShapeCacheTest do
          %{storage: storage, shape_cache_opts: opts} do
       {shape_id, initial_offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
-      assert Storage.snapshot_exists?(shape_id, storage)
+      assert Storage.snapshot_started?(shape_id, storage)
       assert {^shape_id, offset_after_snapshot} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
       expected_offset_after_log_entry =
@@ -430,7 +430,7 @@ defmodule Electric.ShapeCacheTest do
 
       assert {:error, :unknown} = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
-      refute Storage.snapshot_exists?(shape_id, storage)
+      refute Storage.snapshot_started?(shape_id, storage)
     end
 
     test "handles buffering multiple callers correctly", ctx do
@@ -530,7 +530,7 @@ defmodule Electric.ShapeCacheTest do
         storage
       )
 
-      assert Storage.snapshot_exists?(shape_id, storage)
+      assert Storage.snapshot_started?(shape_id, storage)
       assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 1
 
       log = capture_log(fn -> ShapeCache.handle_truncate(opts[:server], shape_id) end)
@@ -539,7 +539,7 @@ defmodule Electric.ShapeCacheTest do
       # Wait a bit for the async cleanup to complete
       Process.sleep(100)
 
-      refute Storage.snapshot_exists?(shape_id, storage)
+      refute Storage.snapshot_started?(shape_id, storage)
       assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 0
       {shape_id2, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert shape_id != shape_id2
@@ -577,7 +577,7 @@ defmodule Electric.ShapeCacheTest do
         storage
       )
 
-      assert Storage.snapshot_exists?(shape_id, storage)
+      assert Storage.snapshot_started?(shape_id, storage)
       assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 1
 
       log = capture_log(fn -> ShapeCache.clean_shape(opts[:server], shape_id) end)
@@ -586,7 +586,7 @@ defmodule Electric.ShapeCacheTest do
       # Wait a bit for the async cleanup to complete
       Process.sleep(100)
 
-      refute Storage.snapshot_exists?(shape_id, storage)
+      refute Storage.snapshot_started?(shape_id, storage)
       assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 0
       {shape_id2, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert shape_id != shape_id2

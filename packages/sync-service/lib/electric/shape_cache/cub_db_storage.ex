@@ -78,8 +78,8 @@ defmodule Electric.ShapeCache.CubDbStorage do
     end
   end
 
-  @spec snapshot_exists?(any(), any()) :: false
-  def snapshot_exists?(shape_id, opts) do
+  @spec snapshot_started?(any(), any()) :: false
+  def snapshot_started?(shape_id, opts) do
     CubDB.has_key?(opts.db, snapshot_end(shape_id))
   end
 
@@ -120,7 +120,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
   def has_log_entry?(shape_id, offset, opts) do
     # FIXME: this is naive while we don't have snapshot metadata to get real offsets
     CubDB.has_key?(opts.db, log_key(shape_id, offset)) or
-      (snapshot_exists?(shape_id, opts) and offset == @snapshot_offset)
+      (snapshot_started?(shape_id, opts) and offset == @snapshot_offset)
   end
 
   def make_new_snapshot!(shape_id, shape, query_info, data_stream, opts) do

@@ -39,7 +39,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
     doctest module, import: true
 
-    describe "#{module_name}.snapshot_exists?/2" do
+    describe "#{module_name}.snapshot_started?/2" do
       setup do
         {:ok, %{module: unquote(module)}}
       end
@@ -47,13 +47,13 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       setup :start_storage
 
       test "returns false when shape does not exist", %{module: storage, opts: opts} do
-        assert storage.snapshot_exists?(@shape_id, opts) == false
+        assert storage.snapshot_started?(@shape_id, opts) == false
       end
 
       test "returns true when shape does exist", %{module: storage, opts: opts} do
         storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
-        assert storage.snapshot_exists?(@shape_id, opts) == true
+        assert storage.snapshot_started?(@shape_id, opts) == true
       end
 
       test "returns true when shape does exist even from empty query results", %{
@@ -62,7 +62,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       } do
         storage.make_new_snapshot!(@shape_id, @shape, @query_info, [], opts)
 
-        assert storage.snapshot_exists?(@shape_id, opts) == true
+        assert storage.snapshot_started?(@shape_id, opts) == true
       end
     end
 
@@ -439,12 +439,12 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
       setup :start_storage
 
-      test "causes snapshot_exists?/2 to return false", %{module: storage, opts: opts} do
+      test "causes snapshot_started?/2 to return false", %{module: storage, opts: opts} do
         storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
         storage.cleanup!(@shape_id, opts)
 
-        assert storage.snapshot_exists?(@shape_id, opts) == false
+        assert storage.snapshot_started?(@shape_id, opts) == false
       end
 
       test "causes get_snapshot/2 to return a zero offset", %{module: storage, opts: opts} do
@@ -618,9 +618,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         storage.cleanup_shapes_without_xmins(opts)
 
-        assert storage.snapshot_exists?("shape-1", opts) == true
-        assert storage.snapshot_exists?("shape-2", opts) == false
-        assert storage.snapshot_exists?("shape-3", opts) == true
+        assert storage.snapshot_started?("shape-1", opts) == true
+        assert storage.snapshot_started?("shape-2", opts) == false
+        assert storage.snapshot_started?("shape-3", opts) == true
       end
     end
   end
