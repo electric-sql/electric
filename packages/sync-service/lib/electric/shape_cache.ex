@@ -22,7 +22,7 @@ defmodule Electric.ShapeCacheBehaviour do
               {shape_id(), current_snapshot_offset :: LogOffset.t()}
 
   @callback list_active_shapes(opts :: keyword()) :: [{shape_id(), shape_def(), xmin()}]
-  @callback wait_for_snapshot(GenServer.name(), shape_id()) :: :ready | {:error, term()}
+  @callback await_snapshot_start(GenServer.name(), shape_id()) :: :ready | {:error, term()}
   @callback handle_truncate(GenServer.name(), shape_id()) :: :ok
   @callback clean_shape(GenServer.name(), shape_id()) :: :ok
 end
@@ -136,9 +136,9 @@ defmodule Electric.ShapeCache do
     GenServer.call(server, {:truncate, shape_id})
   end
 
-  @spec wait_for_snapshot(GenServer.name(), String.t()) :: :ready | {:error, term()}
-  def wait_for_snapshot(server \\ __MODULE__, shape_id) when is_binary(shape_id) do
-    GenServer.call(server, {:wait_for_snapshot, shape_id}, 30_000)
+  @spec await_snapshot_start(GenServer.name(), String.t()) :: :ready | {:error, term()}
+  def await_snapshot_start(server \\ __MODULE__, shape_id) when is_binary(shape_id) do
+    GenServer.call(server, {:await_snapshot_start, shape_id})
   end
 
   def init(opts) do
@@ -188,7 +188,7 @@ defmodule Electric.ShapeCache do
     {:reply, {shape_id, latest_offset}, state}
   end
 
-  def handle_call({:wait_for_snapshot, shape_id}, from, state) do
+  def handle_call({:await_snapshot_start, shape_id}, from, state) do
     cond do
       not is_known_shape_id?(state, shape_id) ->
         {:reply, {:error, :unknown}, state}
