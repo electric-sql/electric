@@ -62,7 +62,13 @@ defmodule Electric.Telemetry.OpenTelemetry do
       kind: :internal
     }
 
-    :otel_tracer.with_span(tracer(), name, span_opts, fn _span_ctx -> fun.() end)
+    erlang_telemetry_event = [
+      :electric | name |> String.split(".", trim: true) |> Enum.map(&String.to_atom/1)
+    ]
+
+    :telemetry.span(erlang_telemetry_event, Map.new(attributes), fn ->
+      {:otel_tracer.with_span(tracer(), name, span_opts, fn _span_ctx -> fun.() end), %{}}
+    end)
   end
 
   @doc """
