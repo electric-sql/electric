@@ -361,7 +361,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       assert [^op1, ^op2] =
                Storage.get_log_stream(shape_id, LogOffset.before_all(), storage)
-               |> Enum.to_list()
                |> Enum.map(&:json.decode/1)
     end
   end
