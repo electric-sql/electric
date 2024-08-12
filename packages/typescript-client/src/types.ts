@@ -29,32 +29,32 @@ export type Message<T extends Value = { [key: string]: Value }> =
   | ControlMessage
   | ChangeMessage<T>
 
+export type CommonColumnProps = {
+  dims?: number // only provided if the column is an array
+  not_null?: boolean // assumed to be false if not provided
+}
+
 export type RegularColumn = {
   type: string
-  dims: number
-}
+} & CommonColumnProps
 
 export type VarcharColumn = {
   type: `varchar`
-  dims: number
   max_length?: number
-}
+} & CommonColumnProps
 
 export type BpcharColumn = {
   type: `bpchar`
-  dims: number
   length?: number
-}
+} & CommonColumnProps
 
 export type TimeColumn = {
   type: `time` | `timetz` | `timestamp` | `timestamptz`
-  dims: number
   precision?: number
-}
+} & CommonColumnProps
 
 export type IntervalColumn = {
   type: `interval`
-  dims: number
   fields?:
     | `YEAR`
     | `MONTH`
@@ -68,27 +68,24 @@ export type IntervalColumn = {
     | `HOUR TO MINUTE`
     | `HOUR TO SECOND`
     | `MINUTE TO SECOND`
-}
+} & CommonColumnProps
 
 export type IntervalColumnWithPrecision = {
   type: `interval`
-  dims: number
   precision?: 0 | 1 | 2 | 3 | 4 | 5 | 6
   fields?: `SECOND`
-}
+} & CommonColumnProps
 
 export type BitColumn = {
   type: `bit`
-  dims: number
   length: number
-}
+} & CommonColumnProps
 
 export type NumericColumn = {
   type: `numeric`
-  dims: number
   precision?: number
   scale?: number
-}
+} & CommonColumnProps
 
 export type ColumnInfo =
   | RegularColumn
