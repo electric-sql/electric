@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultParser, pgArrayParser } from '../src/parser'
+import { MessageParser, defaultParser, pgArrayParser } from '../src/parser'
 
 describe(`Default parser`, () => {
   it(`should parse integers`, () => {
@@ -153,5 +153,54 @@ describe(`Postgres array parser`, () => {
       [Infinity, -Infinity, NaN],
       [NaN, Infinity, -Infinity],
     ])
+  })
+})
+
+describe(`Message parser`, () => {
+  const parser = new MessageParser()
+
+  it(`should parse null values`, () => {
+    const messages = `[ { "value": { "a": null } } ]`
+    const expectedParsedMessages = [{ value: { a: null } }]
+
+    // If it's not nullable it should parse as a number
+    expect(
+      parser.parse(messages, { a: { type: `int2`, not_null: true } })
+    ).toEqual([{ value: { a: 0 } }])
+    // Otherwise, it should parse as null
+    expect(parser.parse(messages, { a: { type: `int2` } })).toEqual(
+      expectedParsedMessages
+    )
+    expect(parser.parse(messages, { a: { type: `int4` } })).toEqual(
+      expectedParsedMessages
+    )
+    expect(parser.parse(messages, { a: { type: `int8` } })).toEqual(
+      expectedParsedMessages
+    )
+    expect(parser.parse(messages, { a: { type: `bool` } })).toEqual(
+      expectedParsedMessages
+    )
+    expect(parser.parse(messages, { a: { type: `float4` } })).toEqual(
+      expectedParsedMessages
+    )
+    expect(parser.parse(messages, { a: { type: `float8` } })).toEqual(
+      expectedParsedMessages
+    )
+    expect(parser.parse(messages, { a: { type: `json` } })).toEqual(
+      expectedParsedMessages
+    )
+    expect(parser.parse(messages, { a: { type: `jsonb` } })).toEqual(
+      expectedParsedMessages
+    )
+  })
+
+  it(`should parse arrays including null values`, () => {
+    const schema = {
+      a: { type: `int2`, dims: 1, nullable: true },
+    }
+
+    expect(
+      parser.parse(`[ { "value": { "a": "{1,2,NULL,4,5}" } } ]`, schema)
+    ).toEqual([{ value: { a: [1, 2, null, 4, 5] } }])
   })
 })
