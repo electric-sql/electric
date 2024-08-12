@@ -2,6 +2,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   use ExUnit.Case, async: true
   import Mox
 
+  alias Electric.ShapeCache
+  alias Electric.ShapeCache.Storage
   alias Support.StubInspector
   alias Electric.Replication.Eval.Parser
   alias Electric.Shapes.Shape
@@ -20,23 +22,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
   setup :verify_on_exit!
 
-  setup do
-    # Start a test Registry
-    registry_name = Module.concat(__MODULE__, Registry)
-    start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
-
-    # Start the ShapeLogCollector process
-    opts = [
-      name: :test_shape_log_storage,
-      registry: registry_name,
-      shape_cache: {MockShapeCache, []},
-      inspector: {MockInspector, []}
-    ]
-
-    {:ok, pid} = start_supervised({ShapeLogCollector, opts})
-    %{server: pid, registry: registry_name}
-  end
-
   @shape Shape.new!("public.test_table",
            inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
          )
@@ -46,6 +31,23 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                )
 
   describe "store_transaction/2" do
+    setup do
+      # Start a test Registry
+      registry_name = Module.concat(__MODULE__, Registry)
+      start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
+
+      # Start the ShapeLogCollector process
+      opts = [
+        name: :test_shape_log_storage,
+        registry: registry_name,
+        shape_cache: {MockShapeCache, []},
+        inspector: {MockInspector, []}
+      ]
+
+      {:ok, pid} = start_supervised({ShapeLogCollector, opts})
+      %{server: pid, registry: registry_name}
+    end
+
     test "appends to log when xid >= xmin", %{server: server} do
       shape_id = "shape1"
       shape = @shape
@@ -286,6 +288,80 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, server)
+    end
+  end
+
+  @basic_query_meta %Postgrex.Query{columns: ["id"], result_types: [:text], name: "key_prefix"}
+
+  describe "store_transaction/2 with real storage" do
+    setup [
+      {Support.ComponentSetup, :with_registry},
+      {Support.ComponentSetup, :with_in_memory_storage}
+    ]
+
+    setup %{registry: registry} = ctx do
+      %{shape_cache: shape_cache, shape_cache_opts: shape_cache_opts} =
+        Support.ComponentSetup.with_shape_cache(Map.put(ctx, :pool, nil),
+          prepare_tables_fn: fn _, _ -> :ok end,
+          create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
+            GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
+            Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
+            GenServer.cast(parent, {:snapshot_ready, shape_id})
+          end
+        )
+
+      {:ok, server} =
+        ShapeLogCollector.start_link(
+          name: :test_shape_log_storage,
+          registry: registry,
+          shape_cache: shape_cache,
+          inspector: {MockInspector, []}
+        )
+
+      MockInspector
+      |> stub(:load_column_info, fn {"public", "test_table"}, _ ->
+        {:ok, [%{pk_position: 0, name: "id"}]}
+      end)
+      |> allow(self(), server)
+
+      %{server: server, shape_cache_opts: shape_cache_opts}
+    end
+
+    test "duplicate transactions storage is idempotent", %{
+      server: server,
+      storage: storage,
+      shape_cache_opts: shape_cache_opts
+    } do
+      {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, shape_cache_opts)
+      :ready = ShapeCache.wait_for_snapshot(Keyword.fetch!(shape_cache_opts, :server), shape_id)
+
+      lsn = Lsn.from_integer(10)
+
+      txn =
+        %Transaction{xid: 11, lsn: lsn, last_log_offset: LogOffset.new(lsn, 2)}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "2"},
+          log_offset: LogOffset.new(lsn, 2)
+        })
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "1"},
+          log_offset: LogOffset.new(lsn, 0)
+        })
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, server)
+
+      assert [op1, op2] =
+               Storage.get_log_stream(shape_id, LogOffset.before_all(), storage)
+               |> Enum.map(&:json.decode/1)
+
+      # If we encounter & store the same transaction, log stream should be stable
+      assert :ok = ShapeLogCollector.store_transaction(txn, server)
+
+      assert [^op1, ^op2] =
+               Storage.get_log_stream(shape_id, LogOffset.before_all(), storage)
+               |> Enum.map(&:json.decode/1)
     end
   end
 end
