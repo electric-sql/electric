@@ -50,17 +50,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         assert storage.snapshot_started?(@shape_id, opts) == false
       end
 
-      test "returns true when shape does exist", %{module: storage, opts: opts} do
-        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
-
-        assert storage.snapshot_started?(@shape_id, opts) == true
-      end
-
-      test "returns true when shape does exist even from empty query results", %{
-        module: storage,
-        opts: opts
-      } do
-        storage.make_new_snapshot!(@shape_id, @shape, @query_info, [], opts)
+      test "returns true when snapshot has started", %{module: storage, opts: opts} do
+        storage.mark_snapshot_as_started(@shape_id, opts)
 
         assert storage.snapshot_started?(@shape_id, opts) == true
       end
@@ -512,7 +503,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         opts: opts
       } do
         refute storage.has_log_entry?(@shape_id, @snapshot_offset, opts)
-        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
+        storage.mark_snapshot_as_started(@shape_id, opts)
         assert storage.has_log_entry?(@shape_id, @snapshot_offset, opts)
       end
 
@@ -610,6 +601,11 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.add_shape("shape-1", @shape, opts)
         storage.add_shape("shape-2", @shape, opts)
         storage.add_shape("shape-3", @shape, opts)
+        storage.mark_snapshot_as_started("shape-1", opts)
+        storage.mark_snapshot_as_started("shape-2", opts)
+        storage.mark_snapshot_as_started("shape-3", opts)
+        storage.make_new_snapshot!("shape-2", @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-3", @shape, @query_info, @data_stream, opts)
         storage.make_new_snapshot!("shape-1", @shape, @query_info, @data_stream, opts)
         storage.make_new_snapshot!("shape-2", @shape, @query_info, @data_stream, opts)
         storage.make_new_snapshot!("shape-3", @shape, @query_info, @data_stream, opts)

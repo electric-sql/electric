@@ -237,6 +237,7 @@ defmodule Electric.ShapeCache do
 
   def handle_cast({:snapshot_started, shape_id}, state) do
     Logger.debug("Snapshot for #{shape_id} is ready")
+    Storage.mark_snapshot_as_started(shape_id, state.storage)
     {waiting, state} = pop_in(state, [:awaiting_snapshot_start, shape_id])
     for client <- List.wrap(waiting), not is_nil(client), do: GenServer.reply(client, :started)
     {:noreply, state}

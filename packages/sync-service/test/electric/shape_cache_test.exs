@@ -400,7 +400,7 @@ defmodule Electric.ShapeCacheTest do
   describe "await_snapshot_start/4" do
     setup :with_in_memory_storage
 
-    test "returns :started for existing snapshot", %{storage: storage} = ctx do
+    test "returns :started for snapshots that have started", %{storage: storage} = ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.put(ctx, :pool, nil),
           prepare_tables_fn: @prepare_tables_noop,
@@ -409,8 +409,7 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
-      # Manually create a snapshot
-      Storage.make_new_snapshot!(shape_id, @shape, @basic_query_meta, [["test"]], storage)
+      Storage.mark_snapshot_as_started(shape_id, storage)
 
       assert ShapeCache.await_snapshot_start(opts[:server], shape_id) == :started
     end

@@ -34,7 +34,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def cleanup_shapes_without_xmins(_opts), do: :ok
 
   def snapshot_started?(shape_id, opts) do
-    case :ets.match(opts.snapshot_ets_table, {snapshot_end(shape_id), :_}, 1) do
+    case :ets.match(opts.snapshot_ets_table, {snapshot_start(shape_id), :_}, 1) do
       {[_], _} -> true
       :"$end_of_table" -> false
     end
@@ -46,6 +46,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   @snapshot_start_index 0
   @snapshot_end_index :end
+  defp snapshot_start(shape_id), do: snapshot_key(shape_id, @snapshot_start_index)
   defp snapshot_end(shape_id), do: snapshot_key(shape_id, @snapshot_end_index)
 
   def get_snapshot(shape_id, opts) do
@@ -96,6 +97,10 @@ defmodule Electric.ShapeCache.InMemoryStorage do
       # FIXME: this is naive while we don't have snapshot metadata to get real offset
       [] -> snapshot_started?(shape_id, opts) and offset == @snapshot_offset
     end
+  end
+
+  def mark_snapshot_as_started(shape_id, opts) do
+    :ets.insert(opts.snapshot_ets_table, {snapshot_start(shape_id), 0})
   end
 
   @spec make_new_snapshot!(

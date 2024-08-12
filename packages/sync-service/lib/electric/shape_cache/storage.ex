@@ -57,6 +57,7 @@ defmodule Electric.ShapeCache.Storage do
               Enumerable.t(row()),
               compiled_opts()
             ) :: :ok
+  @callback mark_snapshot_as_started(shape_id, compiled_opts()) :: :ok
   @doc "Append log items from one transaction to the log"
   @callback append_to_log!(
               shape_id(),
@@ -113,6 +114,10 @@ defmodule Electric.ShapeCache.Storage do
         ) :: :ok
   def make_new_snapshot!(shape_id, shape, meta, stream, {mod, opts}),
     do: mod.make_new_snapshot!(shape_id, shape, meta, stream, opts)
+
+  @spec mark_snapshot_as_started(shape_id, compiled_opts()) :: :ok
+  def mark_snapshot_as_started(shape_id, {mod, opts}),
+    do: mod.mark_snapshot_as_started(shape_id, opts)
 
   @doc """
   Append log items from one transaction to the log
