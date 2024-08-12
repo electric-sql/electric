@@ -22,7 +22,7 @@ defmodule Electric.ShapeCacheBehaviour do
               {shape_id(), current_snapshot_offset :: LogOffset.t()}
 
   @callback list_active_shapes(opts :: keyword()) :: [{shape_id(), shape_def(), xmin()}]
-  @callback await_snapshot_start(GenServer.name(), shape_id()) :: :ready | {:error, term()}
+  @callback await_snapshot_start(GenServer.name(), shape_id()) :: :started | {:error, term()}
   @callback handle_truncate(GenServer.name(), shape_id()) :: :ok
   @callback clean_shape(GenServer.name(), shape_id()) :: :ok
 end
@@ -136,7 +136,7 @@ defmodule Electric.ShapeCache do
     GenServer.call(server, {:truncate, shape_id})
   end
 
-  @spec await_snapshot_start(GenServer.name(), String.t()) :: :ready | {:error, term()}
+  @spec await_snapshot_start(GenServer.name(), String.t()) :: :started | {:error, term()}
   def await_snapshot_start(server \\ __MODULE__, shape_id) when is_binary(shape_id) do
     GenServer.call(server, {:await_snapshot_start, shape_id})
   end
@@ -194,7 +194,7 @@ defmodule Electric.ShapeCache do
         {:reply, {:error, :unknown}, state}
 
       Storage.snapshot_exists?(shape_id, state.storage) ->
-        {:reply, :ready, state}
+        {:reply, :started, state}
 
       true ->
         Logger.debug("Starting a wait on the snapshot #{shape_id} for #{inspect(from)}}")
@@ -238,7 +238,7 @@ defmodule Electric.ShapeCache do
   def handle_cast({:snapshot_ready, shape_id}, state) do
     Logger.debug("Snapshot for #{shape_id} is ready")
     {waiting, state} = pop_in(state, [:waiting_for_creation, shape_id])
-    for client <- List.wrap(waiting), not is_nil(client), do: GenServer.reply(client, :ready)
+    for client <- List.wrap(waiting), not is_nil(client), do: GenServer.reply(client, :started)
     {:noreply, state}
   end
 

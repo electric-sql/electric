@@ -79,7 +79,7 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert offset == @zero_offset
-      assert :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert Storage.snapshot_exists?(shape_id, storage)
     end
 
@@ -104,7 +104,7 @@ defmodule Electric.ShapeCacheTest do
       # subsequent calls return the same shape_id
       for _ <- 1..10, do: assert({^shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts))
 
-      assert :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
       assert_received {:called, :prepare_tables_fn}
       assert_received {:called, :create_snapshot_fn}
@@ -147,7 +147,7 @@ defmodule Electric.ShapeCacheTest do
       shape_id = Task.await(create_call_1)
       assert shape_id == Task.await(create_call_2)
 
-      assert :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
       # any queued calls should still return the existing shape_id
       # after the snapshot has been created (simulated by directly
@@ -202,7 +202,7 @@ defmodule Electric.ShapeCacheTest do
 
     test "creates initial snapshot from DB data", %{storage: storage, shape_cache_opts: opts} do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      assert :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert Storage.snapshot_exists?(shape_id, storage)
       assert {@zero_offset, stream} = Storage.get_snapshot(shape_id, storage)
 
@@ -265,7 +265,7 @@ defmodule Electric.ShapeCacheTest do
       )
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(shape, opts)
-      assert :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert {@zero_offset, stream} = Storage.get_snapshot(shape_id, storage)
 
       assert [
@@ -287,7 +287,7 @@ defmodule Electric.ShapeCacheTest do
     test "updates latest offset correctly",
          %{storage: storage, shape_cache_opts: opts} do
       {shape_id, initial_offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      assert :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert Storage.snapshot_exists?(shape_id, storage)
       assert {^shape_id, offset_after_snapshot} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
@@ -362,7 +362,7 @@ defmodule Electric.ShapeCacheTest do
         )
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      assert :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert [{^shape_id, @shape, 10}] = ShapeCache.list_active_shapes(opts)
     end
 
@@ -391,7 +391,7 @@ defmodule Electric.ShapeCacheTest do
 
       send(pid, {:continue, ref})
 
-      assert :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert [{^shape_id, @shape, 10}] = ShapeCache.list_active_shapes(opts)
     end
   end
@@ -399,7 +399,7 @@ defmodule Electric.ShapeCacheTest do
   describe "await_snapshot_start/4" do
     setup :with_in_memory_storage
 
-    test "returns :ready for existing snapshot", %{storage: storage} = ctx do
+    test "returns :started for existing snapshot", %{storage: storage} = ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.put(ctx, :pool, nil),
           prepare_tables_fn: @prepare_tables_noop,
@@ -411,7 +411,7 @@ defmodule Electric.ShapeCacheTest do
       # Manually create a snapshot
       Storage.make_new_snapshot!(shape_id, @shape, @basic_query_meta, [["test"]], storage)
 
-      assert ShapeCache.await_snapshot_start(opts[:server], shape_id) == :ready
+      assert ShapeCache.await_snapshot_start(opts[:server], shape_id) == :started
     end
 
     test "returns an error if waiting is for an unknown shape id",
@@ -447,7 +447,7 @@ defmodule Electric.ShapeCacheTest do
 
             # Sometimes only some tasks subscribe before reaching this point, and then hang
             # if we don't actually have a snapshot. This is kind of part of the test, because
-            # `await_snapshot_start/3` should always resolve to `:ready` in concurrent situations
+            # `await_snapshot_start/3` should always resolve to `:started` in concurrent situations
             Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
             GenServer.cast(parent, {:snapshot_ready, shape_id})
           end
@@ -461,7 +461,7 @@ defmodule Electric.ShapeCacheTest do
       assert_receive {:waiting_point, ref, pid}
       send(pid, {:continue, ref})
 
-      assert Enum.all?(Task.await_many(tasks), &(&1 == :ready))
+      assert Enum.all?(Task.await_many(tasks), &(&1 == :started))
     end
 
     test "propagates error in snapshot creation to listeners", ctx do
@@ -516,7 +516,7 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       Process.sleep(50)
-      assert :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
       Storage.append_to_log!(
         shape_id,
@@ -563,7 +563,7 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       Process.sleep(50)
-      assert :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
       Storage.append_to_log!(
         shape_id,
@@ -632,7 +632,7 @@ defmodule Electric.ShapeCacheTest do
 
     test "restores shape_ids", %{shape_cache_opts: opts} = context do
       {shape_id1, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id1)
+      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id1)
       restart_shape_cache(context)
       {shape_id2, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert shape_id1 == shape_id2
@@ -640,11 +640,11 @@ defmodule Electric.ShapeCacheTest do
 
     test "restores snapshot xmins", %{shape_cache_opts: opts} = context do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       [{^shape_id, @shape, @snapshot_xmin}] = ShapeCache.list_active_shapes(opts)
 
       restart_shape_cache(context)
-      :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
       assert [{^shape_id, @shape, @snapshot_xmin}] = ShapeCache.list_active_shapes(opts)
     end
@@ -652,13 +652,13 @@ defmodule Electric.ShapeCacheTest do
     test "restores latest offset", %{shape_cache_opts: opts} = context do
       offset = @change_offset
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
       :ok = ShapeCache.append_to_log!(shape_id, offset, @log_items, opts)
 
       {^shape_id, ^offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
       restart_shape_cache(context)
-      :ready = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert {^shape_id, ^offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
     end
 

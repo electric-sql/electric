@@ -13,7 +13,7 @@ defmodule Electric.Shapes do
     storage = Access.fetch!(config, :storage)
     server = Access.get(opts, :server, shape_cache)
 
-    with :ready <- shape_cache.await_snapshot_start(server, shape_id) do
+    with :started <- shape_cache.await_snapshot_start(server, shape_id) do
       {:ok, Storage.get_snapshot(shape_id, storage)}
     end
   end
