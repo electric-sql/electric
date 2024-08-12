@@ -148,7 +148,7 @@ defmodule Electric.ShapeCache do
     state = %{
       storage: opts.storage,
       shape_meta_table: shape_meta_table,
-      waiting_for_creation: %{},
+      awaiting_snapshot_start: %{},
       db_pool: opts.db_pool,
       create_snapshot_fn: opts.create_snapshot_fn,
       prepare_tables_fn: opts.prepare_tables_fn
@@ -237,7 +237,7 @@ defmodule Electric.ShapeCache do
 
   def handle_cast({:snapshot_ready, shape_id}, state) do
     Logger.debug("Snapshot for #{shape_id} is ready")
-    {waiting, state} = pop_in(state, [:waiting_for_creation, shape_id])
+    {waiting, state} = pop_in(state, [:awaiting_snapshot_start, shape_id])
     for client <- List.wrap(waiting), not is_nil(client), do: GenServer.reply(client, :started)
     {:noreply, state}
   end
@@ -248,7 +248,7 @@ defmodule Electric.ShapeCache do
     )
 
     clean_up_shape(state, shape_id)
-    {waiting, state} = pop_in(state, [:waiting_for_creation, shape_id])
+    {waiting, state} = pop_in(state, [:awaiting_snapshot_start, shape_id])
     for client <- waiting, not is_nil(client), do: GenServer.reply(client, {:error, error})
     {:noreply, state}
   end
@@ -275,7 +275,7 @@ defmodule Electric.ShapeCache do
     shape
   end
 
-  defp maybe_start_snapshot(%{waiting_for_creation: map} = state, shape_id, _)
+  defp maybe_start_snapshot(%{awaiting_snapshot_start: map} = state, shape_id, _)
        when is_map_key(map, shape_id),
        do: state
 
@@ -321,10 +321,10 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  defp add_waiter(%{waiting_for_creation: waiters} = state, shape_id, waiter),
+  defp add_waiter(%{awaiting_snapshot_start: waiters} = state, shape_id, waiter),
     do: %{
       state
-      | waiting_for_creation: Map.update(waiters, shape_id, [waiter], &[waiter | &1])
+      | awaiting_snapshot_start: Map.update(waiters, shape_id, [waiter], &[waiter | &1])
     }
 
   @doc false
