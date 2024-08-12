@@ -61,12 +61,15 @@ defmodule Support.ComponentSetup do
 
     {:ok, _pid} = ShapeCache.start_link(start_opts)
 
+    shape_cache_opts = [
+      server: server,
+      shape_meta_table: shape_meta_table,
+      storage: ctx.storage
+    ]
+
     %{
-      shape_cache_opts: [
-        server: server,
-        shape_meta_table: shape_meta_table,
-        storage: ctx.storage
-      ]
+      shape_cache_opts: shape_cache_opts,
+      shape_cache: {ShapeCache, shape_cache_opts}
     }
   end
 
@@ -123,7 +126,7 @@ defmodule Support.ComponentSetup do
     [
       storage: ctx.storage,
       registry: ctx.registry,
-      shape_cache: {Electric.ShapeCache, ctx.shape_cache_opts},
+      shape_cache: ctx.shape_cache,
       inspector: ctx.inspector,
       long_poll_timeout: Access.get(overrides, :long_poll_timeout, 5_000),
       max_age: Access.get(overrides, :max_age, 60),

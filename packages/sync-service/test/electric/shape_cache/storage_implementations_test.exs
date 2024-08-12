@@ -168,7 +168,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
       setup :start_storage
 
-      test "adds itemd to the log", %{module: storage, opts: opts} do
+      test "adds items to the log", %{module: storage, opts: opts} do
         lsn = Lsn.from_integer(1000)
         offset = LogOffset.new(lsn, 0)
 
@@ -198,6 +198,35 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                    }
                  }
                ] == Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
+      end
+
+      test "adds items to the log in idempotent way", %{module: storage, opts: opts} do
+        lsn = Lsn.from_integer(1000)
+        offset = LogOffset.new(lsn, 0)
+
+        log_items =
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "123", "name" => "Test"},
+              log_offset: offset
+            }
+          ]
+          |> changes_to_log_items()
+
+        :ok = storage.append_to_log!(@shape_id, log_items, opts)
+
+        log1 =
+          storage.get_log_stream(@shape_id, LogOffset.first(), LogOffset.last(), opts)
+          |> Enum.map(&:json.decode/1)
+
+        :ok = storage.append_to_log!(@shape_id, log_items, opts)
+
+        log2 =
+          storage.get_log_stream(@shape_id, LogOffset.first(), LogOffset.last(), opts)
+          |> Enum.map(&:json.decode/1)
+
+        assert log1 == log2
       end
     end
 
