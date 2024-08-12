@@ -16,6 +16,16 @@
   --pglite-color: #F6F95C;
 }
 
+.vp-doc a.VPButton {
+  text-decoration: none;
+}
+.VPButton.pglite,
+.VPButton.pglite:hover {
+  background-color: var(--pglite-color);
+  border-color: var(--pglite-color);
+  color: var(--vp-c-bg);
+}
+
 .img-row {
   display: grid;
   grid-template-columns: repeat(1, 1fr);

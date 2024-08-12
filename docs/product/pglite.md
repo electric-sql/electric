@@ -2,12 +2,29 @@
 outline: deep
 ---
 
+<script setup>
+import { VPButton } from 'vitepress/theme-without-fonts'
+</script>
+
 <img src="/img/icons/pglite.svg" class="product-icon" />
 
 # PGlite
 
 Embed a lightweight client Postgres with
 real-time, reactive bindings.
+
+<VPButton
+    href="https://pglite.dev"
+    target="_blank"
+    text="PGlite website ↗"
+    theme="pglite"
+/>
+&nbsp;
+<VPButton href="https://github.com/electric-sql/pglite"
+    target="_blank"
+    text="GitHub repo ↗"
+    theme="alt"
+/>
 
 ## Use cases
 
@@ -35,4 +52,17 @@ Unlike previous "Postgres in the browser" projects, PGlite does not use a Linux 
 
 ## How do I use it?
 
-See the [electric-sql/pglite](https://github.com/electric-sql/pglite) repo for more details.
+See the website and repo for more details:
+
+<VPButton
+    href="https://pglite.dev"
+    target="_blank"
+    text="PGlite website ↗"
+    theme="pglite"
+/>
+&nbsp;
+<VPButton href="https://github.com/electric-sql/pglite"
+    target="_blank"
+    text="GitHub repo ↗"
+    theme="alt"
+/>
