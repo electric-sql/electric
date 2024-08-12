@@ -113,20 +113,14 @@ export class MessageParser {
 
     // Pick the right parser for the type
     // and support parsing null values if needed
-    const parser = makeNullableParser(this.parser[typ], columnInfo.not_null)
+    // if no parser is provided for the given type, just return the value as is
+    const identityParser = (v: string) => v
+    const typParser = this.parser[typ] ?? identityParser
+    const parser = makeNullableParser(typParser, columnInfo.not_null)
 
     if (dimensions && dimensions > 0) {
       // It's an array
-      const identityParser = makeNullableParser(
-        (v: string) => v,
-        columnInfo.not_null
-      )
-      return pgArrayParser(value, parser ?? identityParser)
-    }
-
-    if (!parser) {
-      // No parser was provided for this type of values
-      return value
+      return pgArrayParser(value, parser)
     }
 
     return parser(value, additionalInfo)
