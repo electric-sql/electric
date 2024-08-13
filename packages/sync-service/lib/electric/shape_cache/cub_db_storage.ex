@@ -42,7 +42,8 @@ defmodule Electric.ShapeCache.CubDbStorage do
     |> Stream.map(fn {{:shapes, shape_id}, _} -> shape_id end)
     |> Stream.filter(fn shape_id ->
       stored_version != opts.version ||
-        snapshot_xmin(shape_id, opts) == nil
+        snapshot_xmin(shape_id, opts) == nil ||
+        CubDB.has_key?(opts.db, snapshot_end(shape_id)) == false
     end)
     |> Enum.each(&cleanup!(&1, opts))
 
