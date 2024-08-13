@@ -12,6 +12,7 @@ defmodule Electric.ShapeCacheTest do
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache
   alias Electric.ShapeCache.Storage
+  alias Electric.Shapes
   alias Electric.Shapes.Shape
 
   @shape %Shape{
@@ -23,26 +24,32 @@ defmodule Electric.ShapeCacheTest do
       }
     }
   }
-  @change_offset LogOffset.new(13, 2)
+  @lsn Electric.Postgres.Lsn.from_integer(13)
+  @change_offset LogOffset.new(@lsn, 2)
   @xid 99
-  @log_items changes_to_log_items(
-               [
-                 %Changes.NewRecord{
-                   relation: {"public", "test_table"},
-                   record: %{"id" => "123", "value" => "Test"},
-                   log_offset: @change_offset
-                 }
-               ],
-               ["id"],
-               @xid
-             )
+  @changes [
+    Changes.fill_key(
+      %Changes.NewRecord{
+        relation: {"public", "items"},
+        record: %{"id" => "123", "value" => "Test"},
+        log_offset: @change_offset
+      },
+      ["id"]
+    )
+  ]
 
   @zero_offset LogOffset.first()
 
   @prepare_tables_noop {__MODULE__, :prepare_tables_noop, []}
 
   describe "get_or_create_shape_id/2" do
-    setup [:with_in_memory_storage, :with_no_pool]
+    setup [
+      :with_in_memory_storage,
+      :with_persistent_kv,
+      :with_no_pool,
+      :with_registry,
+      :with_transaction_producer
+    ]
 
     setup ctx do
       with_shape_cache(ctx,
@@ -64,7 +71,12 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "get_or_create_shape_id/2 shape initialization" do
-    setup :with_in_memory_storage
+    setup [
+      :with_in_memory_storage,
+      :with_persistent_kv,
+      :with_registry,
+      :with_transaction_producer
+    ]
 
     test "creates initial snapshot if one doesn't exist", %{storage: storage} = ctx do
       %{shape_cache_opts: opts} =
@@ -79,7 +91,8 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert offset == @zero_offset
-      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
+      Process.sleep(100)
       assert Storage.snapshot_started?(shape_id, storage)
     end
 
@@ -104,7 +117,7 @@ defmodule Electric.ShapeCacheTest do
       # subsequent calls return the same shape_id
       for _ <- 1..10, do: assert({^shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts))
 
-      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
       assert_received {:called, :prepare_tables_fn}
       assert_received {:called, :create_snapshot_fn}
@@ -147,7 +160,7 @@ defmodule Electric.ShapeCacheTest do
       shape_id = Task.await(create_call_1)
       assert shape_id == Task.await(create_call_2)
 
-      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
       # any queued calls should still return the existing shape_id
       # after the snapshot has been created (simulated by directly
@@ -183,9 +196,13 @@ defmodule Electric.ShapeCacheTest do
   describe "get_or_create_shape_id/2 against real db" do
     setup [
       :with_in_memory_storage,
+      :with_persistent_kv,
+      :with_registry,
       :with_unique_db,
       :with_publication,
       :with_basic_tables,
+      :with_inspector,
+      :with_shape_log_collector,
       :with_shape_cache
     ]
 
@@ -202,7 +219,7 @@ defmodule Electric.ShapeCacheTest do
 
     test "creates initial snapshot from DB data", %{storage: storage, shape_cache_opts: opts} do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
       assert {@zero_offset, stream} = Storage.get_snapshot(shape_id, storage)
 
       assert [%{"value" => %{"value" => "test1"}}, %{"value" => %{"value" => "test2"}}] =
@@ -264,7 +281,7 @@ defmodule Electric.ShapeCacheTest do
       )
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(shape, opts)
-      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
       assert {@zero_offset, stream} = Storage.get_snapshot(shape_id, storage)
 
       assert [
@@ -285,19 +302,15 @@ defmodule Electric.ShapeCacheTest do
 
     test "updates latest offset correctly", %{shape_cache_opts: opts, storage: storage} do
       {shape_id, initial_offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
-      assert {^shape_id, offset_after_snapshot} = ShapeCache.get_or_create_shape_id(@shape, opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
+
+      assert {^shape_id, offset_after_snapshot} =
+               ShapeCache.get_or_create_shape_id(@shape, opts)
 
       expected_offset_after_log_entry =
         LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
 
-      :ok =
-        ShapeCache.append_to_log!(
-          shape_id,
-          expected_offset_after_log_entry,
-          @log_items,
-          opts
-        )
+      :ok = ShapeCache.update_shape_latest_offset(shape_id, expected_offset_after_log_entry, opts)
 
       assert {^shape_id, offset_after_log_entry} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
@@ -316,7 +329,7 @@ defmodule Electric.ShapeCacheTest do
       log_offset = LogOffset.new(1000, 0)
 
       {:error, log} =
-        with_log(fn -> ShapeCache.append_to_log!(shape_id, log_offset, @log_items, opts) end)
+        with_log(fn -> ShapeCache.update_shape_latest_offset(shape_id, log_offset, opts) end)
 
       assert log =~ "Tried to update latest offset for shape #{shape_id} which doesn't exist"
     end
@@ -329,7 +342,7 @@ defmodule Electric.ShapeCacheTest do
           {shape_id, _} = ShapeCache.get_or_create_shape_id(shape, opts)
 
           assert {:error, %Postgrex.Error{postgres: %{code: :undefined_table}}} =
-                   ShapeCache.await_snapshot_start(opts[:server], shape_id)
+                   ShapeCache.await_snapshot_start(shape_id, opts)
 
           shape_id
         end)
@@ -342,7 +355,12 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "list_active_shapes/1" do
-    setup :with_in_memory_storage
+    setup [
+      :with_in_memory_storage,
+      :with_persistent_kv,
+      :with_registry,
+      :with_transaction_producer
+    ]
 
     test "returns empty list initially", ctx do
       %{shape_cache_opts: opts} =
@@ -363,7 +381,7 @@ defmodule Electric.ShapeCacheTest do
         )
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
       assert [{^shape_id, @shape, 10}] = ShapeCache.list_active_shapes(opts)
     end
 
@@ -392,31 +410,77 @@ defmodule Electric.ShapeCacheTest do
 
       send(pid, {:continue, ref})
 
-      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
       assert [{^shape_id, @shape, 10}] = ShapeCache.list_active_shapes(opts)
     end
   end
 
-  describe "await_snapshot_start/4" do
-    setup :with_in_memory_storage
+  describe "has_shape?/2" do
+    setup [
+      :with_in_memory_storage,
+      :with_persistent_kv,
+      :with_registry,
+      :with_transaction_producer
+    ]
 
-    test "returns :started for snapshots that have started", %{storage: storage} = ctx do
+    test "returns true for known shape id", ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.put(ctx, :pool, nil),
           prepare_tables_fn: @prepare_tables_noop,
-          create_snapshot_fn: fn _, _, _, _, _ -> :ok end
+          create_snapshot_fn: fn parent, shape_id, _, _, _ ->
+            GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 100})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
+          end
+        )
+
+      refute ShapeCache.has_shape?("some-random-id", opts)
+      {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
+      assert ShapeCache.has_shape?(shape_id, opts)
+    end
+
+    test "works with slow snapshot generation", ctx do
+      %{shape_cache_opts: opts} =
+        with_shape_cache(Map.put(ctx, :pool, nil),
+          prepare_tables_fn: @prepare_tables_noop,
+          create_snapshot_fn: fn parent, shape_id, _, _, _ ->
+            Process.sleep(100)
+            GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 100})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
+          end
+        )
+
+      {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
+      assert ShapeCache.has_shape?(shape_id, opts)
+    end
+  end
+
+  describe "await_snapshot_start/4" do
+    setup [
+      :with_in_memory_storage,
+      :with_persistent_kv,
+      :with_registry,
+      :with_transaction_producer
+    ]
+
+    test "returns :started for snapshots that have started", ctx do
+      %{shape_cache_opts: opts} =
+        with_shape_cache(Map.put(ctx, :pool, nil),
+          prepare_tables_fn: @prepare_tables_noop,
+          create_snapshot_fn: fn parent, shape_id, _, _, _ ->
+            GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 100})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
+          end
         )
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
-      Storage.mark_snapshot_as_started(shape_id, storage)
-
-      assert ShapeCache.await_snapshot_start(opts[:server], shape_id) == :started
+      assert ShapeCache.await_snapshot_start(shape_id, opts) == :started
     end
 
-    test "returns an error if waiting is for an unknown shape id",
-         %{storage: storage} = ctx do
+    test "returns an error if waiting is for an unknown shape id", ctx do
       shape_id = "orphaned_id"
+
+      storage = Storage.for_shape(shape_id, ctx.storage)
 
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.put(ctx, :pool, nil),
@@ -428,7 +492,7 @@ defmodule Electric.ShapeCacheTest do
           end
         )
 
-      assert {:error, :unknown} = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert {:error, :unknown} = ShapeCache.await_snapshot_start(shape_id, opts)
 
       refute Storage.snapshot_started?(shape_id, storage)
     end
@@ -448,7 +512,6 @@ defmodule Electric.ShapeCacheTest do
             # Sometimes only some tasks subscribe before reaching this point, and then hang
             # if we don't actually have a snapshot. This is kind of part of the test, because
             # `await_snapshot_start/3` should always resolve to `:started` in concurrent situations
-            Storage.mark_snapshot_as_started(shape_id, storage)
             GenServer.cast(parent, {:snapshot_started, shape_id})
             Storage.make_new_snapshot!(shape_id, [[1], [2]], storage)
           end
@@ -457,9 +520,9 @@ defmodule Electric.ShapeCacheTest do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
       tasks =
-        for _ <- 1..10 do
+        for _id <- 1..10 do
           Task.async(fn ->
-            assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+            assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
             {_, stream} = Storage.get_snapshot(shape_id, ctx.storage)
             assert Enum.count(stream) == 2
           end)
@@ -489,7 +552,6 @@ defmodule Electric.ShapeCacheTest do
           prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_id, _shape, _, storage ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
-            Storage.mark_snapshot_as_started(shape_id, storage)
             GenServer.cast(parent, {:snapshot_started, shape_id})
 
             Storage.make_new_snapshot!(shape_id, stream_from_database, storage)
@@ -498,11 +560,14 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
+      storage = Storage.for_shape(shape_id, ctx.storage)
+
       tasks =
         for _ <- 1..10 do
           Task.async(fn ->
-            :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
-            {_, stream} = Storage.get_snapshot(shape_id, ctx.storage)
+            :started = ShapeCache.await_snapshot_start(shape_id, opts)
+            {_, stream} = Storage.get_snapshot(shape_id, storage)
+
             assert_raise RuntimeError, fn -> Stream.run(stream) end
           end)
         end
@@ -530,7 +595,7 @@ defmodule Electric.ShapeCacheTest do
         )
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      task = Task.async(fn -> ShapeCache.await_snapshot_start(opts[:server], shape_id) end)
+      task = Task.async(fn -> ShapeCache.await_snapshot_start(shape_id, opts) end)
 
       log =
         capture_log(fn ->
@@ -546,10 +611,14 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "handle_truncate/2" do
-    setup :with_in_memory_storage
+    setup [
+      :with_in_memory_storage,
+      :with_persistent_kv,
+      :with_registry,
+      :with_transaction_producer
+    ]
 
-    test "cleans up shape data and rotates the shape id",
-         %{storage: storage} = ctx do
+    test "cleans up shape data and rotates the shape id", ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.put(ctx, :pool, nil),
           prepare_tables_fn: @prepare_tables_noop,
@@ -562,7 +631,9 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       Process.sleep(50)
-      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
+
+      storage = Storage.for_shape(shape_id, ctx.storage)
 
       Storage.append_to_log!(
         shape_id,
@@ -579,24 +650,27 @@ defmodule Electric.ShapeCacheTest do
       assert Storage.snapshot_started?(shape_id, storage)
       assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 1
 
-      log = capture_log(fn -> ShapeCache.handle_truncate(opts[:server], shape_id) end)
+      ref = shape_id |> Shapes.Consumer.name() |> GenServer.whereis() |> Process.monitor()
+
+      log = capture_log(fn -> ShapeCache.handle_truncate(shape_id, opts) end)
       assert log =~ "Truncating and rotating shape id"
 
+      assert_receive {:DOWN, ^ref, :process, _pid, _}
       # Wait a bit for the async cleanup to complete
-      Process.sleep(100)
 
       refute Storage.snapshot_started?(shape_id, storage)
-      assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 0
-      {shape_id2, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      assert shape_id != shape_id2
     end
   end
 
   describe "clean_shape/2" do
-    setup :with_in_memory_storage
+    setup [
+      :with_in_memory_storage,
+      :with_persistent_kv,
+      :with_registry,
+      :with_transaction_producer
+    ]
 
-    test "cleans up shape data and rotates the shape id",
-         %{storage: storage} = ctx do
+    test "cleans up shape data and rotates the shape id", ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.put(ctx, :pool, nil),
           prepare_tables_fn: @prepare_tables_noop,
@@ -609,7 +683,9 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       Process.sleep(50)
-      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
+
+      storage = Storage.for_shape(shape_id, ctx.storage)
 
       Storage.append_to_log!(
         shape_id,
@@ -626,14 +702,14 @@ defmodule Electric.ShapeCacheTest do
       assert Storage.snapshot_started?(shape_id, storage)
       assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 1
 
-      log = capture_log(fn -> ShapeCache.clean_shape(opts[:server], shape_id) end)
+      {module, _} = storage
+      ref = Process.monitor(module.name(shape_id) |> GenServer.whereis())
+
+      log = capture_log(fn -> :ok = ShapeCache.clean_shape(opts[:server], shape_id) end)
       assert log =~ "Cleaning up shape"
 
-      # Wait a bit for the async cleanup to complete
-      Process.sleep(100)
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}
 
-      refute Storage.snapshot_started?(shape_id, storage)
-      assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 0
       {shape_id2, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert shape_id != shape_id2
     end
@@ -662,7 +738,13 @@ defmodule Electric.ShapeCacheTest do
     @describetag :tmp_dir
     @snapshot_xmin 10
 
-    setup [:with_cub_db_storage, :with_no_pool]
+    setup [
+      :with_cub_db_storage,
+      :with_persistent_kv,
+      :with_registry,
+      :with_transaction_producer,
+      :with_no_pool
+    ]
 
     setup(ctx,
       do:
@@ -678,7 +760,7 @@ defmodule Electric.ShapeCacheTest do
 
     test "restores shape_ids", %{shape_cache_opts: opts} = context do
       {shape_id1, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id1)
+      :started = ShapeCache.await_snapshot_start(shape_id1, opts)
       restart_shape_cache(context)
       {shape_id2, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert shape_id1 == shape_id2
@@ -686,11 +768,11 @@ defmodule Electric.ShapeCacheTest do
 
     test "restores snapshot xmins", %{shape_cache_opts: opts} = context do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      :started = ShapeCache.await_snapshot_start(shape_id, opts)
       [{^shape_id, @shape, @snapshot_xmin}] = ShapeCache.list_active_shapes(opts)
 
       restart_shape_cache(context)
-      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
       assert [{^shape_id, @shape, @snapshot_xmin}] = ShapeCache.list_active_shapes(opts)
     end
@@ -698,13 +780,26 @@ defmodule Electric.ShapeCacheTest do
     test "restores latest offset", %{shape_cache_opts: opts} = context do
       offset = @change_offset
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
-      :ok = ShapeCache.append_to_log!(shape_id, offset, @log_items, opts)
+      ref = Shapes.Consumer.monitor(shape_id)
+
+      Support.TransactionProducer.emit(context.transaction_producer, [
+        %Changes.Transaction{
+          changes: @changes,
+          xid: @xid,
+          last_log_offset: @change_offset,
+          lsn: @lsn
+        }
+      ])
+
+      assert_receive {Shapes.Consumer, ^ref, @xid}
 
       {^shape_id, ^offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
+
       restart_shape_cache(context)
-      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_id, opts)
       assert {^shape_id, ^offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
     end
 
@@ -742,14 +837,14 @@ defmodule Electric.ShapeCacheTest do
       )
     end
 
-    defp stop_shape_cache(%{storage: {_, %{db: shape_db}}, shape_cache_opts: shape_cache_opts}) do
-      stop_processes([shape_cache_opts[:server], shape_db])
+    defp stop_shape_cache(%{storage: {_, _}, shape_cache_opts: shape_cache_opts}) do
+      stop_processes([shape_cache_opts[:server]])
+      ShapeCache.ShapeSupervisor.stop_all_consumers()
     end
 
     defp stop_processes(process_names) do
       processes =
-        for name <- process_names do
-          pid = Process.whereis(name)
+        for name <- process_names, pid = Process.whereis(name) do
           Process.unlink(pid)
           Process.monitor(pid)
           Process.exit(pid, :kill)

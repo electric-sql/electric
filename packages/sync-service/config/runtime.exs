@@ -72,6 +72,25 @@ cache_stale_age = env!("CACHE_STALE_AGE", :integer, 60 * 5)
 statsd_host = env!("STATSD_HOST", :string?, nil)
 
 cubdb_file_path = env!("CUBDB_FILE_PATH", :string, "./shapes")
+persistent_state_path = env!("PERSISTENT_STATE_FILE_PATH", :string, "./state")
+
+persistent_kv =
+  env!(
+    "PERSISTENT_STATE",
+    fn storage ->
+      case String.downcase(storage) do
+        "memory" ->
+          {Electric.PersistentKV.Memory, :new!, []}
+
+        "file" ->
+          {Electric.PersistentKV.Filesystem, :new!, root: persistent_state_path}
+
+        _ ->
+          raise Dotenvy.Error, message: "PERSISTENT_STATE must be one of: MEMORY, FILE"
+      end
+    end,
+    {Electric.PersistentKV.Filesystem, :new!, root: persistent_state_path}
+  )
 
 storage =
   env!(
@@ -101,4 +120,5 @@ config :electric,
   telemetry_statsd_host: statsd_host,
   db_pool_size: env!("DB_POOL_SIZE", :integer, 50),
   prometheus_port: prometheus_port,
-  storage: storage
+  storage: storage,
+  persistent_kv: persistent_kv

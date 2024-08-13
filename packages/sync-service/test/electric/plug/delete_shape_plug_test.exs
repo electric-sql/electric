@@ -5,7 +5,10 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   alias Electric.Plug.DeleteShapePlug
   alias Electric.Shapes.Shape
 
+  alias Support.Mock
+
   import Mox
+
   setup :verify_on_exit!
   @moduletag :capture_log
 
@@ -33,7 +36,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   def conn(method, "?" <> _ = query_string, allow \\ true) do
     # Pass mock dependencies to the plug
     config = %{
-      shape_cache: {Electric.ShapeCacheMock, []},
+      shape_cache: {Mock.ShapeCache, []},
       inspector: {__MODULE__, []},
       registry: @registry,
       long_poll_timeout: 20_000,
@@ -72,7 +75,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     end
 
     test "should clean shape based on shape definition" do
-      Electric.ShapeCacheMock
+      Mock.ShapeCache
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts -> {@test_shape_id, 0} end)
       |> expect(:clean_shape, fn _, @test_shape_id -> :ok end)
 
@@ -84,7 +87,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     end
 
     test "should clean shape based on shape_id" do
-      Electric.ShapeCacheMock
+      Mock.ShapeCache
       |> expect(:clean_shape, fn _, @test_shape_id -> :ok end)
 
       conn =

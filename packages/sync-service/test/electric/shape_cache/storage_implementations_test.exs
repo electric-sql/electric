@@ -732,9 +732,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   defp start_storage(%{module: module} = context) do
     {:ok, opts} = module |> opts(context) |> module.shared_opts()
-    {:ok, _} = module.start_link(opts)
+    shape_opts = module.for_shape(@shape_id, opts)
+    {:ok, _} = module.start_link(shape_opts)
 
-    {:ok, %{module: module, opts: opts}}
+    {:ok, %{module: module, opts: shape_opts}}
   end
 
   defp opts(InMemoryStorage, _context) do

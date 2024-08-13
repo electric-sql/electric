@@ -14,18 +14,50 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     snapshot_ets_table_name = Access.get(opts, :snapshot_ets_table, :snapshot_ets_table)
     log_ets_table_name = Access.get(opts, :log_ets_table, :log_ets_table)
 
-    {:ok, %{snapshot_ets_table: snapshot_ets_table_name, log_ets_table: log_ets_table_name}}
+    {:ok,
+     %{
+       snapshot_ets_table_base: snapshot_ets_table_name,
+       log_ets_table_base: log_ets_table_name,
+       snapshot_ets_table: nil,
+       log_ets_table: nil,
+       shape_id: nil
+     }}
+  end
+
+  def name(shape_id) when is_binary(shape_id) do
+    Electric.Application.process_name(__MODULE__, shape_id)
   end
 
   def start_link(compiled_opts) do
-    Agent.start_link(fn ->
-      %{
-        snapshot_ets_table:
-          :ets.new(compiled_opts.snapshot_ets_table, [:public, :named_table, :ordered_set]),
-        log_ets_table:
-          :ets.new(compiled_opts.log_ets_table, [:public, :named_table, :ordered_set])
-      }
-    end)
+    if is_nil(compiled_opts.shape_id), do: raise("cannot start an un-attached storage instance")
+
+    Agent.start_link(
+      fn ->
+        %{
+          snapshot_ets_table:
+            :ets.new(compiled_opts.snapshot_ets_table, [:public, :named_table, :ordered_set]),
+          log_ets_table:
+            :ets.new(compiled_opts.log_ets_table, [:public, :named_table, :ordered_set])
+        }
+      end,
+      name: name(compiled_opts.shape_id)
+    )
+  end
+
+  def for_shape(shape_id, %{shape_id: shape_id} = compiled_opts) do
+    compiled_opts
+  end
+
+  def for_shape(shape_id, compiled_opts) do
+    snapshot_ets_table_name = Map.fetch!(compiled_opts, :snapshot_ets_table_base)
+    log_ets_table_name = Map.fetch!(compiled_opts, :log_ets_table_base)
+
+    %{
+      compiled_opts
+      | shape_id: shape_id,
+        snapshot_ets_table: :"#{snapshot_ets_table_name}-#{shape_id}",
+        log_ets_table: :"#{log_ets_table_name}-#{shape_id}"
+    }
   end
 
   # Service restart recovery functions that are pointless implimenting for in memory storage
@@ -35,7 +67,12 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def initialise(_opts), do: :ok
 
   def snapshot_started?(shape_id, opts) do
-    :ets.member(opts.snapshot_ets_table, snapshot_start(shape_id))
+    try do
+      :ets.member(opts.snapshot_ets_table, snapshot_start(shape_id))
+    rescue
+      ArgumentError ->
+        false
+    end
   end
 
   defp snapshot_key(shape_id, index) do
@@ -71,6 +108,8 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def get_log_stream(shape_id, offset, max_offset, opts) do
     offset = storage_offset(offset)
     max_offset = storage_offset(max_offset)
+
+    :ets.tab2list(opts.log_ets_table)
 
     Stream.unfold(offset, fn offset ->
       case :ets.next_lookup(opts.log_ets_table, {shape_id, offset}) do

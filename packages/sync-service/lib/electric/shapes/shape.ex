@@ -12,18 +12,33 @@ defmodule Electric.Shapes.Shape do
   @enforce_keys [:root_table]
   defstruct [:root_table, :table_info, :where]
 
+  @type table_info() :: %{
+          columns: [Inspector.column_info(), ...],
+          pk: [String.t(), ...]
+        }
   @type t() :: %__MODULE__{
           root_table: Electric.relation(),
           table_info: %{
-            Electric.relation() => %{
-              columns: [Inspector.column_info(), ...],
-              pk: [String.t(), ...]
-            }
+            Electric.relation() => table_info()
           },
           where: Electric.Replication.Eval.Expr.t() | nil
         }
 
+  @type json_relation() :: [String.t(), ...]
+  @type json_table_info() :: table_info() | json_relation()
+  @type json_table_list() :: [json_table_info(), ...]
+  @type json_safe() :: %{
+          root_table: json_relation(),
+          where: String.t(),
+          table_info: [json_table_list(), ...]
+        }
+
   def hash(%__MODULE__{} = shape), do: shape |> Map.drop([:table_info]) |> :erlang.phash2()
+
+  def generate_id(%__MODULE__{} = shape) do
+    hash = hash(shape)
+    {hash, "#{hash}-#{DateTime.utc_now() |> DateTime.to_unix(:millisecond)}"}
+  end
 
   def new!(table, opts \\ []) do
     case new(table, opts) do
@@ -148,6 +163,66 @@ defmodule Electric.Shapes.Shape do
       _ -> false
     end
   end
+
+  @spec from_json_safe!(t()) :: json_safe()
+  def to_json_safe(%__MODULE__{} = shape) do
+    %{root_table: {schema, name}, where: where, table_info: table_info} = shape
+
+    query =
+      case where do
+        %{query: query} -> query
+        nil -> nil
+      end
+
+    %{
+      root_table: [schema, name],
+      where: query,
+      table_info:
+        if(table_info,
+          do:
+            Enum.map(table_info, fn {{schema, name}, columns} ->
+              [[schema, name], json_safe_columns(columns)]
+            end)
+        )
+    }
+  end
+
+  defp json_safe_columns(column_info) do
+    Map.update!(column_info, :columns, fn columns ->
+      Enum.map(columns, fn column ->
+        Map.new(column, &column_info_to_json_safe/1)
+      end)
+    end)
+  end
+
+  defp column_info_to_json_safe({:type, type}), do: {:type, to_string(type)}
+  defp column_info_to_json_safe({:type_id, {id, mod}}), do: {:type_id, [id, mod]}
+  defp column_info_to_json_safe({k, v}), do: {k, v}
+
+  @spec from_json_safe!(json_safe()) :: t() | no_return()
+  def from_json_safe!(map) do
+    %{"root_table" => [schema, name], "where" => where, "table_info" => info} = map
+
+    table_info =
+      Enum.reduce(info, %{}, fn [[schema, name], table_info], info ->
+        %{"columns" => columns, "pk" => pk} = table_info
+
+        Map.put(info, {schema, name}, %{
+          columns: Enum.map(columns, fn column -> Map.new(column, &column_info_from_json/1) end),
+          pk: pk
+        })
+      end)
+
+    {:ok, %{columns: column_info}} = Map.fetch(table_info, {schema, name})
+    refs = Inspector.columns_to_expr(column_info)
+    {:ok, where} = maybe_parse_where_clause(where, refs)
+
+    %__MODULE__{root_table: {schema, name}, where: where, table_info: table_info}
+  end
+
+  defp column_info_from_json({"type_id", [id, mod]}), do: {:type_id, {id, mod}}
+  defp column_info_from_json({"type", type}), do: {:type, String.to_atom(type)}
+  defp column_info_from_json({key, value}), do: {String.to_atom(key), value}
 end
 
 defimpl Inspect, for: Electric.Shapes.Shape do
@@ -159,5 +234,13 @@ defimpl Inspect, for: Electric.Shapes.Shape do
     where = if shape.where, do: concat([", where: \"", shape.where.query, "\""]), else: ""
 
     concat(["Shape.new!(\"", schema, ".", table, "\"", where, ")"])
+  end
+end
+
+defimpl Jason.Encoder, for: Electric.Shapes.Shape do
+  def encode(shape, opts) do
+    shape
+    |> Electric.Shapes.Shape.to_json_safe()
+    |> Jason.Encode.map(opts)
   end
 end

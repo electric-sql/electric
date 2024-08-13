@@ -14,24 +14,35 @@ defmodule Electric.ShapeCache.CubDbStorage do
   @snapshot_offset LogOffset.first()
 
   def shared_opts(opts) do
-    file_path = Access.get(opts, :file_path, "./shapes")
-    db = Access.get(opts, :db, :shape_db)
+    base_path = Access.get(opts, :file_path, "./shapes")
 
-    {:ok, %{file_path: file_path, db: db, version: @version}}
+    {:ok, %{base_path: base_path, shape_id: nil, db: nil, version: @version}}
   end
 
-  def child_spec(opts) do
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [opts]},
-      type: :worker,
-      restart: :permanent
-    }
+  def for_shape(shape_id, %{shape_id: shape_id} = opts) do
+    opts
   end
 
-  def start_link(opts) do
-    File.mkdir_p(opts.file_path)
-    CubDB.start_link(data_dir: opts.file_path, name: opts.db)
+  def for_shape(shape_id, %{} = opts) do
+    %{opts | shape_id: shape_id, db: name(shape_id)}
+  end
+
+  def start_link(%{shape_id: shape_id, db: db} = opts) when is_binary(shape_id) do
+    with {:ok, path} <- initialise_filesystem(shape_id, opts) do
+      CubDB.start_link(data_dir: path, name: db)
+    end
+  end
+
+  defp name(shape_id) do
+    Electric.Application.process_name(__MODULE__, shape_id)
+  end
+
+  defp initialise_filesystem(shape_id, opts) do
+    path = Path.join(opts.base_path, shape_id)
+
+    with :ok <- File.mkdir_p(path) do
+      {:ok, path}
+    end
   end
 
   def initialise(opts) do
