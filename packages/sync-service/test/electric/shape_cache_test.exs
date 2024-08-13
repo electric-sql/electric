@@ -283,7 +283,7 @@ defmodule Electric.ShapeCacheTest do
              } = map
     end
 
-    test "updates latest offset correctly", %{shape_cache_opts: opts} do
+    test "updates latest offset correctly", %{shape_cache_opts: opts, storage: storage} do
       {shape_id, initial_offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert {^shape_id, offset_after_snapshot} = ShapeCache.get_or_create_shape_id(@shape, opts)
@@ -306,9 +306,8 @@ defmodule Electric.ShapeCacheTest do
       assert offset_after_log_entry > offset_after_snapshot
       assert offset_after_log_entry == expected_offset_after_log_entry
 
-      # Sleep to allow snapshot process to finish rather than it erroring
-      # TODO: Find a better way than to sleep
-      Process.sleep(1_000)
+      # Stop snapshot process gracefully to prevent errors being logged in the test
+      Storage.get_snapshot(shape_id, storage)
     end
 
     test "errors if appending to untracked shape_id", %{shape_cache_opts: opts} do
