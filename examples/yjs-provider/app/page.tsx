@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from "react"
 import * as Y from "yjs"
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next"
 import { ElectricProvider } from "./y-electric"
+import { IndexeddbPersistence } from "y-indexeddb"
+import * as awarenessProtocol from "y-protocols/awareness"
 
 import { EditorState, EditorView, basicSetup } from "@codemirror/basic-setup"
 import { keymap } from "@codemirror/view"
@@ -42,10 +44,15 @@ const theme = EditorView.theme(
   { dark: true }
 )
 const ydoc = new Y.Doc()
-let provider: ElectricProvider | null = null
+let network: ElectricProvider | null = null
 
 if (typeof window !== `undefined`) {
-  provider = new ElectricProvider(`http://localhost:3000/`, room, ydoc)
+  const opts = {
+    connect: true,
+    awareness: new awarenessProtocol.Awareness(ydoc),
+    // persistence: new IndexeddbPersistence(room, ydoc),
+  }
+  network = new ElectricProvider(`http://localhost:3000/`, room, ydoc, opts)
 }
 
 export default function Home() {
@@ -55,20 +62,20 @@ export default function Home() {
 
   const toggle = () => {
     if (connect === `connected`) {
-      provider?.disconnect()
+      network?.disconnect()
       setConnect(`disconnected`)
     } else {
-      provider?.connect()
+      network?.connect()
       setConnect(`connected`)
     }
   }
 
   useEffect(() => {
-    if (provider === null) return
+    if (network === null) return
 
     const ytext = ydoc.getText(room)
 
-    provider.awareness.setLocalStateField(`user`, {
+    network.awareness.setLocalStateField(`user`, {
       name: `Anonymous ` + Math.floor(Math.random() * 100),
       color: userColor.color,
       colorLight: userColor.light,
@@ -81,7 +88,7 @@ export default function Home() {
         basicSetup,
         javascript(),
         EditorView.lineWrapping,
-        yCollab(ytext, provider.awareness),
+        yCollab(ytext, network.awareness),
         theme,
       ],
     })
