@@ -37,6 +37,5 @@ module.exports = {
     `tsup.config.ts`,
     `vitest.config.ts`,
     `.eslintrc.js`,
-    `*.css`,
   ],
 };
