@@ -1,13 +1,13 @@
 {
-  "name": "@electric-examples/basic-example",
+  "name": "@electric-examples/yjs-provider",
   "private": true,
   "version": "0.0.1",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "backend:up": "PROJECT_NAME=nextjs-basic-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
-    "backend:down": "PROJECT_NAME=nextjs-basic-example pnpm -C ../../ run example-backend:down",
+    "backend:up": "PROJECT_NAME=yjs-provider pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=yjs-provider pnpm -C ../../ run example-backend:down",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
     "dev": "next dev --turbo -p 5173",
     "build": "next build",

@@ -1,4 +1,4 @@
-# Basic Remix example
+# Yjs Electric provider example
 
 ## Setup
 
