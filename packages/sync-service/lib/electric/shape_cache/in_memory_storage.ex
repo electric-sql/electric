@@ -34,10 +34,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def cleanup_shapes_without_xmins(_opts), do: :ok
 
   def snapshot_started?(shape_id, opts) do
-    case :ets.match(opts.snapshot_ets_table, {snapshot_start(shape_id), :_}, 1) do
-      {[_], _} -> true
-      :"$end_of_table" -> false
-    end
+    :ets.member(opts.snapshot_ets_table, snapshot_start(shape_id))
   end
 
   defp snapshot_key(shape_id, index) do
@@ -56,6 +53,8 @@ defmodule Electric.ShapeCache.InMemoryStorage do
         end_marker_key: @snapshot_end_index,
         poll_time_in_ms: 10,
         stream_fun: fn excluded_start_key, included_end_key ->
+          if !snapshot_started?(shape_id, opts), do: raise("Snapshot no longer available")
+
           :ets.select(opts.snapshot_ets_table, [
             {{snapshot_key(shape_id, :"$1"), :"$2"},
              [{:andalso, {:>, :"$1", excluded_start_key}, {:"=<", :"$1", included_end_key}}],

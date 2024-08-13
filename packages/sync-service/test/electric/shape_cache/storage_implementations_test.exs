@@ -65,6 +65,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       setup :start_storage
 
       test "returns snapshot when shape does exist", %{module: storage, opts: opts} do
+        storage.mark_snapshot_as_started(@shape_id, opts)
         storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
         {@snapshot_offset, stream} = storage.get_snapshot(@shape_id, opts)
@@ -91,7 +92,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           [<<4::128>>, "row4"]
         ]
 
+        storage.mark_snapshot_as_started(@shape_id, opts)
         storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
+
+        storage.mark_snapshot_as_started("another-shape-id", opts)
 
         storage.make_new_snapshot!(
           "another-shape-id",
@@ -120,6 +124,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
 
       test "returns snapshot offset when shape does exist", %{module: storage, opts: opts} do
+        storage.mark_snapshot_as_started(@shape_id, opts)
         storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
         {@snapshot_offset, _} = storage.get_snapshot(@shape_id, opts)
@@ -136,6 +141,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
+        storage.mark_snapshot_as_started(@shape_id, opts)
         storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
         :ok = storage.append_to_log!(@shape_id, log_items, opts)
 
@@ -156,6 +162,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             [<<i::128>>, "row#{i}"]
           end)
 
+        storage.mark_snapshot_as_started(@shape_id, opts)
         {@snapshot_offset, stream} = storage.get_snapshot(@shape_id, opts)
 
         read_task =
@@ -438,12 +445,16 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         assert storage.snapshot_started?(@shape_id, opts) == false
       end
 
-      test "causes get_snapshot/2 to return a zero offset", %{module: storage, opts: opts} do
+      test "causes get_snapshot/2 to raise an error", %{module: storage, opts: opts} do
+        storage.mark_snapshot_as_started(@shape_id, opts)
         storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
 
         storage.cleanup!(@shape_id, opts)
 
-        assert {@zero_offset, _} = storage.get_snapshot(@shape_id, opts)
+        assert_raise RuntimeError, fn ->
+          {@zero_offset, stream} = storage.get_snapshot(@shape_id, opts)
+          Stream.run(stream)
+        end
       end
 
       test "causes get_log_stream/4 to return empty stream", %{module: storage, opts: opts} do

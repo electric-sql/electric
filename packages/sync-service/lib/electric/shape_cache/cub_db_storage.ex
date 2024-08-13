@@ -90,6 +90,8 @@ defmodule Electric.ShapeCache.CubDbStorage do
         end_marker_key: snapshot_end(shape_id),
         poll_time_in_ms: 10,
         stream_fun: fn excluded_start_key, included_end_key ->
+          if !snapshot_started?(shape_id, opts), do: raise("Snapshot no longer available")
+
           CubDB.select(opts.db,
             min_key: excluded_start_key,
             max_key: included_end_key,

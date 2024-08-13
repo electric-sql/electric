@@ -307,7 +307,8 @@ defmodule Electric.ShapeCacheTest do
       assert offset_after_log_entry == expected_offset_after_log_entry
 
       # Stop snapshot process gracefully to prevent errors being logged in the test
-      Storage.get_snapshot(shape_id, storage)
+      {_, stream} = Storage.get_snapshot(shape_id, storage)
+      Stream.run(stream)
     end
 
     test "errors if appending to untracked shape_id", %{shape_cache_opts: opts} do
@@ -447,21 +448,72 @@ defmodule Electric.ShapeCacheTest do
             # Sometimes only some tasks subscribe before reaching this point, and then hang
             # if we don't actually have a snapshot. This is kind of part of the test, because
             # `await_snapshot_start/3` should always resolve to `:started` in concurrent situations
-            Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
+            Storage.mark_snapshot_as_started(shape_id, storage)
             GenServer.cast(parent, {:snapshot_started, shape_id})
+            Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [[1], [2]], storage)
           end
         )
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
       tasks =
-        for _ <- 1..10,
-            do: Task.async(ShapeCache, :await_snapshot_start, [opts[:server], shape_id])
+        for _ <- 1..10 do
+          Task.async(fn ->
+            assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+            {_, stream} = Storage.get_snapshot(shape_id, ctx.storage)
+            assert Enum.count(stream) == 2
+          end)
+        end
 
       assert_receive {:waiting_point, ref, pid}
       send(pid, {:continue, ref})
 
-      assert Enum.all?(Task.await_many(tasks), &(&1 == :started))
+      Task.await_many(tasks)
+    end
+
+    @tag :capture_log
+    test "errors while streaming from database are sent to all callers", ctx do
+      stream_from_database =
+        Stream.map(1..5, fn
+          5 ->
+            raise "some error"
+
+          n ->
+            # Sleep to allow read processes to run
+            Process.sleep(1)
+            [n]
+        end)
+
+      %{shape_cache_opts: opts} =
+        with_shape_cache(Map.put(ctx, :pool, nil),
+          prepare_tables_fn: @prepare_tables_noop,
+          create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
+            GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
+            Storage.mark_snapshot_as_started(shape_id, storage)
+            GenServer.cast(parent, {:snapshot_started, shape_id})
+
+            Storage.make_new_snapshot!(
+              shape_id,
+              shape,
+              @basic_query_meta,
+              stream_from_database,
+              storage
+            )
+          end
+        )
+
+      {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
+
+      tasks =
+        for _ <- 1..10 do
+          Task.async(fn ->
+            :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+            {_, stream} = Storage.get_snapshot(shape_id, ctx.storage)
+            assert_raise RuntimeError, fn -> Stream.run(stream) end
+          end)
+        end
+
+      Task.await_many(tasks)
     end
 
     test "propagates error in snapshot creation to listeners", ctx do

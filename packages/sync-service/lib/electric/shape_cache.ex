@@ -250,7 +250,12 @@ defmodule Electric.ShapeCache do
 
     clean_up_shape(state, shape_id)
     {waiting, state} = pop_in(state, [:awaiting_snapshot_start, shape_id])
-    for client <- waiting, not is_nil(client), do: GenServer.reply(client, {:error, error})
+
+    # waiting may nil here if :snapshot_failed happens after :snapshot_started
+    if waiting do
+      for client <- waiting, not is_nil(client), do: GenServer.reply(client, {:error, error})
+    end
+
     {:noreply, state}
   end
 
@@ -299,11 +304,10 @@ defmodule Electric.ShapeCache do
         fn ->
           try do
             Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [pool, affected_tables])
+            apply(create_snapshot_fn, [parent, shape_id, shape, pool, storage])
           rescue
             error -> GenServer.cast(parent, {:snapshot_failed, shape_id, error, __STACKTRACE__})
           end
-
-          apply(create_snapshot_fn, [parent, shape_id, shape, pool, storage])
         end
       )
       |> Task.start()
@@ -331,39 +335,27 @@ defmodule Electric.ShapeCache do
   def query_in_readonly_txn(parent, shape_id, shape, db_pool, storage) do
     Postgrex.transaction(db_pool, fn conn ->
       OpenTelemetry.with_span("shape_cache.query_in_readonly_txn", [], fn ->
-        try do
-          Postgrex.query!(
-            conn,
-            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
-            []
-          )
+        Postgrex.query!(
+          conn,
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+          []
+        )
 
-          %{rows: [[xmin]]} =
-            Postgrex.query!(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())", [])
+        %{rows: [[xmin]]} =
+          Postgrex.query!(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())", [])
 
-          GenServer.cast(parent, {:snapshot_xmin_known, shape_id, xmin})
+        GenServer.cast(parent, {:snapshot_xmin_known, shape_id, xmin})
 
-          # Enforce display settings *before* querying initial data to maintain consistent
-          # formatting between snapshot and live log entries.
-          Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
+        # Enforce display settings *before* querying initial data to maintain consistent
+        # formatting between snapshot and live log entries.
+        Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
 
-          {query, stream} = Querying.stream_initial_data(conn, shape)
-          GenServer.cast(parent, {:snapshot_started, shape_id})
-          {:ok, {query, stream}}
-        rescue
-          error ->
-            GenServer.cast(parent, {:snapshot_failed, shape_id, error, __STACKTRACE__})
-            error
-        end
-        |> case do
-          {:ok, {query, stream}} ->
-            # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
-            # that way it has the relation, but it is still missing the pk_cols
-            Storage.make_new_snapshot!(shape_id, shape, query, stream, storage)
+        {query, stream} = Querying.stream_initial_data(conn, shape)
+        GenServer.cast(parent, {:snapshot_started, shape_id})
 
-          error ->
-            error
-        end
+        # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
+        # that way it has the relation, but it is still missing the pk_cols
+        Storage.make_new_snapshot!(shape_id, shape, query, stream, storage)
       end)
     end)
   end
