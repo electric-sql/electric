@@ -200,6 +200,30 @@ defmodule Electric.Utils do
   def escape_quotes(text), do: :binary.replace(text, ~S|"|, ~S|""|, [:global])
 
   @doc """
+  Parses quoted names.
+
+  ## Examples
+      iex> parse_quoted_name("foo")
+      "foo"
+
+      iex> parse_quoted_name(~S|"foo"|)
+      "foo"
+
+      iex> parse_quoted_name(~S|"fo""o"|)
+      ~S|fo\"o|
+  """
+  def parse_quoted_name(str) do
+    if String.first(str) == ~s(") && String.last(str) == ~s(") do
+      # Remove the surrounding quotes and also unescape any escaped quotes
+      str
+      |> String.slice(1..-2//1)
+      |> String.replace(~r/""/, ~s("))
+    else
+      str
+    end
+  end
+
+  @doc """
   Applies either an anonymous function or a MFA tuple, prepending the given arguments
   in case of an MFA.
 

@@ -85,30 +85,18 @@ defmodule Electric.Shapes.Shape do
 
     case Regex.run(regex, definition, capture: :all_names) do
       ["", table_name] when table_name != "" ->
-        table_name = parse_name(table_name)
+        table_name = parse_quoted_name(table_name)
         IO.puts("table: public.#{table_name}")
         {:ok, {"public", table_name}}
 
       [schema_name, table_name] when table_name != "" ->
-        schema_name = parse_name(schema_name)
-        table_name = parse_name(table_name)
+        schema_name = parse_quoted_name(schema_name)
+        table_name = parse_quoted_name(table_name)
         IO.puts("table: #{schema_name}.#{table_name}")
         {:ok, {schema_name, table_name}}
 
       _ ->
         {:error, ["table name does not match expected format"]}
-    end
-  end
-
-  # Parses Postgres schema and table names
-  defp parse_name(str) do
-    if String.first(str) == ~s(") && String.last(str) == ~s(") do
-      # Remove the surrounding quotes and also unescape any escaped quotes
-      str
-      |> String.slice(1..-2//1)
-      |> String.replace(~r/""/, ~s("))
-    else
-      str
     end
   end
 
