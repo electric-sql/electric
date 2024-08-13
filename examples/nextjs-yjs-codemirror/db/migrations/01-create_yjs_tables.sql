@@ -1,4 +1,4 @@
-CREATE TABLE ydoc_updates(
+CREATE TABLE ydoc_operations(
   id SERIAL PRIMARY KEY,
   name TEXT,
   op TEXT NOT NULL 
