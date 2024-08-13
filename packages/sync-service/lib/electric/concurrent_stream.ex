@@ -1,6 +1,18 @@
 defmodule Electric.ConcurrentStream do
   @default_poll_time 10
 
+  @doc """
+  Allows concurrent reading while writing of a stream.
+  There can be mutiple reading processes however there must be only one writing process.
+
+  The writing process must append an end marker to the end of the stream when it has finished
+  to signal to the reading processes that the stream has ended.
+
+  If a read process runs out of data to read before the end marker has been written
+  it waits the `poll_time_in_ms` for more data to be written, then resumes the stream
+  with the `stream_fun`.
+  """
+
   def stream_to_end(opts) do
     excluded_start_key = Keyword.fetch!(opts, :excluded_start_key)
     end_marker_key = Keyword.fetch!(opts, :end_marker_key)
