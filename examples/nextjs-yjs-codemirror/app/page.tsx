@@ -13,6 +13,8 @@ import { javascript } from "@codemirror/lang-javascript"
 
 import * as random from "lib0/random"
 
+const room = `electric-demo`
+
 const usercolors = [
   { color: `#30bced`, light: `#30bced33` },
   { color: `#6eeb83`, light: `#6eeb8333` },
@@ -39,13 +41,12 @@ const theme = EditorView.theme(
   },
   { dark: true }
 )
-
 const ydoc = new Y.Doc()
-const provider = new ElectricProvider(
-  `http://localhost:3000/`,
-  `electric-demo`,
-  ydoc
-)
+let provider: ElectricProvider | null = null
+
+if (typeof window !== `undefined`) {
+  provider = new ElectricProvider(`http://localhost:3000/`, room, ydoc)
+}
 
 export default function Home() {
   const editor = useRef(null)
@@ -54,16 +55,18 @@ export default function Home() {
 
   const toggle = () => {
     if (connect === `connected`) {
-      provider.disconnect()
+      provider?.disconnect()
       setConnect(`disconnected`)
     } else {
-      provider.connect()
+      provider?.connect()
       setConnect(`connected`)
     }
   }
 
   useEffect(() => {
-    const ytext = ydoc.getText(`codemirror`)
+    if (provider === null) return
+
+    const ytext = ydoc.getText(room)
 
     provider.awareness.setLocalStateField(`user`, {
       name: `Anonymous ` + Math.floor(Math.random() * 100),
@@ -85,10 +88,7 @@ export default function Home() {
 
     const view = new EditorView({ state, parent: editor.current ?? undefined })
 
-    return () => {
-      view.destroy()
-      // editor.current.removeEventListener("input", log);
-    }
+    return () => view.destroy()
   })
 
   return (
