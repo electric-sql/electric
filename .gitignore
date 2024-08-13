@@ -15,3 +15,4 @@ caching/nginx_cache
 **/dist/**
 build
 tsconfig.tsbuildinfo
+.cache

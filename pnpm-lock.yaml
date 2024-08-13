@@ -272,7 +272,7 @@ importers:
         version: link:../../packages/react-hooks
       next:
         specifier: ^14.2.5
-        version: 14.2.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 14.2.5(@babel/core@7.24.9)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       pg:
         specifier: ^8.12.0
         version: 8.12.0
@@ -663,6 +663,82 @@ importers:
       vitest:
         specifier: ^2.0.2
         version: 2.0.3(@types/node@20.14.11)(jsdom@24.1.0)
+
+  templates/electric-tutorial:
+    dependencies:
+      '@electric-sql/client':
+        specifier: workspace:*
+        version: link:../../packages/typescript-client
+      '@electric-sql/react':
+        specifier: workspace:*
+        version: link:../../packages/react-hooks
+      '@fontsource/inter':
+        specifier: ^5.0.20
+        version: 5.0.20
+      '@radix-ui/themes':
+        specifier: ^3.1.0
+        version: 3.1.1(@types/react-dom@18.3.0)(@types/react@18.3.3)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@remix-run/dev':
+        specifier: ^2.11.0
+        version: 2.11.0(@remix-run/react@2.11.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.5.3))(@remix-run/serve@2.11.0(typescript@5.5.3))(@types/node@20.14.11)(typescript@5.5.3)(vite@5.3.4(@types/node@20.14.11))
+      '@remix-run/node':
+        specifier: ^2.11.0
+        version: 2.11.0(typescript@5.5.3)
+      '@remix-run/react':
+        specifier: ^2.11.0
+        version: 2.11.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.5.3)
+      '@remix-run/serve':
+        specifier: ^2.11.0
+        version: 2.11.0(typescript@5.5.3)
+      isbot:
+        specifier: ^4
+        version: 4.4.0
+      pg:
+        specifier: ^8.12.0
+        version: 8.12.0
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+      uuid:
+        specifier: ^10.0.0
+        version: 10.0.0
+      vite-plugin-capsize-radix:
+        specifier: ^0.0.9
+        version: 0.0.9
+    devDependencies:
+      '@databases/pg-migrations':
+        specifier: ^5.0.3
+        version: 5.0.3(typescript@5.5.3)
+      '@types/pg':
+        specifier: ^8.11.6
+        version: 8.11.6
+      '@types/react':
+        specifier: ^18.3.3
+        version: 18.3.3
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.0
+      '@types/uuid':
+        specifier: '*'
+        version: 10.0.0
+      '@vitejs/plugin-react':
+        specifier: ^4.3.1
+        version: 4.3.1(vite@5.3.4(@types/node@20.14.11))
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.4.5
+      eslint:
+        specifier: ^8.57.0
+        version: 8.57.0
+      typescript:
+        specifier: ^5.5.3
+        version: 5.5.3
+      vite:
+        specifier: ^5.3.4
+        version: 5.3.4(@types/node@20.14.11)
 
 packages:
 
@@ -1689,6 +1765,9 @@ packages:
 
   '@fontsource/alegreya-sans@5.0.13':
     resolution: {integrity: sha512-ny5U9TLm/tzjik6j9TazBMsr4fAxVGEjtp+c4wW2+muyUVtmGeeUy0qHpZ1v/xWij9fJjo0qQeSx59XMKsFDlQ==}
+
+  '@fontsource/inter@5.0.20':
+    resolution: {integrity: sha512-rtw2F7xfM7rJmmnncXnR4ADr5wXsp4GyN1O1jmQJ1PMjAK+bm620/ZkQkeOYOkGoa09OksGinOeMA+Mkt6K9PQ==}
 
   '@headlessui/react@1.7.19':
     resolution: {integrity: sha512-Ll+8q3OlMJfJbAKM/+/Y2q6PPYbryqNTXDbryx7SXLIDamkF6iQFbriYHga0dY44PvDhvvBWCx1Xj4U5+G4hOw==}
@@ -8805,6 +8884,8 @@ snapshots:
 
   '@fontsource/alegreya-sans@5.0.13': {}
 
+  '@fontsource/inter@5.0.20': {}
+
   '@headlessui/react@1.7.19(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@tanstack/react-virtual': 3.8.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -10567,7 +10648,7 @@ snapshots:
     dependencies:
       '@typescript-eslint/typescript-estree': 6.21.0(typescript@5.5.3)
       '@typescript-eslint/utils': 6.21.0(eslint@8.57.0)(typescript@5.5.3)
-      debug: 4.3.5
+      debug: 4.3.6(supports-color@5.5.0)
       eslint: 8.57.0
       ts-api-utils: 1.3.0(typescript@5.5.3)
     optionalDependencies:
@@ -10579,7 +10660,7 @@ snapshots:
     dependencies:
       '@typescript-eslint/typescript-estree': 7.16.1(typescript@5.5.3)
       '@typescript-eslint/utils': 7.16.1(eslint@8.57.0)(typescript@5.5.3)
-      debug: 4.3.5
+      debug: 4.3.6(supports-color@5.5.0)
       eslint: 8.57.0
       ts-api-utils: 1.3.0(typescript@5.5.3)
     optionalDependencies:
@@ -10595,7 +10676,7 @@ snapshots:
     dependencies:
       '@typescript-eslint/types': 6.21.0
       '@typescript-eslint/visitor-keys': 6.21.0
-      debug: 4.3.5
+      debug: 4.3.6(supports-color@5.5.0)
       globby: 11.1.0
       is-glob: 4.0.3
       minimatch: 9.0.3
@@ -10610,7 +10691,7 @@ snapshots:
     dependencies:
       '@typescript-eslint/types': 7.16.1
       '@typescript-eslint/visitor-keys': 7.16.1
-      debug: 4.3.5
+      debug: 4.3.6(supports-color@5.5.0)
       globby: 11.1.0
       is-glob: 4.0.3
       minimatch: 9.0.5
@@ -13529,7 +13610,7 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  next@14.2.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  next@14.2.5(@babel/core@7.24.9)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@next/env': 14.2.5
       '@swc/helpers': 0.5.5
@@ -13539,7 +13620,7 @@ snapshots:
       postcss: 8.4.31
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
-      styled-jsx: 5.1.1(react@18.3.1)
+      styled-jsx: 5.1.1(@babel/core@7.24.9)(react@18.3.1)
     optionalDependencies:
       '@next/swc-darwin-arm64': 14.2.5
       '@next/swc-darwin-x64': 14.2.5
@@ -14995,10 +15076,12 @@ snapshots:
       stylis: 4.3.2
       tslib: 2.6.2
 
-  styled-jsx@5.1.1(react@18.3.1):
+  styled-jsx@5.1.1(@babel/core@7.24.9)(react@18.3.1):
     dependencies:
       client-only: 0.0.1
       react: 18.3.1
+    optionalDependencies:
+      '@babel/core': 7.24.9
 
   stylis@4.3.2: {}
 
@@ -15472,7 +15555,7 @@ snapshots:
   vite-node@2.0.3(@types/node@20.14.11):
     dependencies:
       cac: 6.7.14
-      debug: 4.3.5
+      debug: 4.3.6(supports-color@5.5.0)
       pathe: 1.1.2
       tinyrainbow: 1.2.0
       vite: 5.3.4(@types/node@20.14.11)

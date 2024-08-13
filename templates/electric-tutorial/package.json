@@ -1,0 +1,46 @@
+{
+  "name": "electric-tutorial",
+  "private": true,
+  "description": "Template for the Electric tutorial",
+  "version": "1.0.0",
+  "dependencies": {
+    "@electric-sql/client": "workspace:*",
+    "@electric-sql/react": "workspace:*",
+    "@fontsource/inter": "^5.0.20",
+    "@radix-ui/themes": "^3.1.0",
+    "@remix-run/dev": "^2.11.0",
+    "@remix-run/node": "^2.11.0",
+    "@remix-run/react": "^2.11.0",
+    "@remix-run/serve": "^2.11.0",
+    "isbot": "^4",
+    "pg": "^8.12.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "uuid": "^10.0.0",
+    "vite-plugin-capsize-radix": "^0.0.9"
+  },
+  "devDependencies": {
+    "@databases/pg-migrations": "^5.0.3",
+    "@types/pg": "^8.11.6",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/uuid": "*",
+    "@vitejs/plugin-react": "^4.3.1",
+    "dotenv": "^16.4.5",
+    "eslint": "^8.57.0",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4"
+  },
+  "keywords": [],
+  "license": "ISC",
+  "scripts": {
+    "backend:up": "PROJECT_NAME=tutorial-template pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=tutorial-template pnpm -C ../../ run example-backend:down",
+    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  }
+}
