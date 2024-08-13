@@ -194,13 +194,14 @@ export class ElectricProvider extends Observable {
    * @param {object} opts
    * @param {boolean} [opts.connect]
    * @param {awarenessProtocol.Awareness} [opts.awareness]
+   * @param {IndexeddbPersistence} [opts.persistence]
    * @param {Object<string,string>} [opts.params] specify url parameters
    */
   constructor(
     serverUrl,
     roomname,
     doc,
-    { connect = true, awareness = new awarenessProtocol.Awareness(doc) } = {}
+    { connect = false, awareness = null, persistence = null } = {}
   ) {
     super()
 
@@ -221,6 +222,12 @@ export class ElectricProvider extends Observable {
     this.pending = []
 
     this.closeHandler = null
+
+    this.loaded = persistence === null
+    persistence?.on(`synced`, () => {
+      this.loaded = true
+      this.connect()
+    })
 
     /**
      * Listens to Yjs updates and sends to the backend
@@ -255,9 +262,9 @@ export class ElectricProvider extends Observable {
     if (env.isNode && typeof process !== `undefined`) {
       process.on(`exit`, this._exitHandler)
     }
-    awareness.on(`update`, this._awarenessUpdateHandler)
+    awareness?.on(`update`, this._awarenessUpdateHandler)
 
-    if (connect) {
+    if (connect && this.loaded) {
       this.connect()
     }
   }
@@ -294,7 +301,7 @@ export class ElectricProvider extends Observable {
     if (env.isNode && typeof process !== `undefined`) {
       process.off(`exit`, this._exitHandler)
     }
-    this.awareness.off(`update`, this._awarenessUpdateHandler)
+    this.awareness?.off(`update`, this._awarenessUpdateHandler)
     this.doc.off(`update`, this._updateHandler)
     super.destroy()
   }
@@ -305,7 +312,7 @@ export class ElectricProvider extends Observable {
   }
 
   connect() {
-    this.shouldConnect = true
+    this.shouldConnect = true && this.loaded
     if (!this.connected && this.operationsStream === null) {
       setupShapeStream(this)
     }

@@ -29,6 +29,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "y-codemirror.next": "^0.1.0",
+    "y-indexeddb": "^9.0.12",
     "y-protocols": "1.0.6",
     "yjs": "^13.6.18"
   },
