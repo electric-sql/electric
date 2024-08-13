@@ -5,6 +5,10 @@ defmodule Electric.ShapeCache.CubDbStorage do
   alias Electric.Telemetry.OpenTelemetry
   @behaviour Electric.ShapeCache.Storage
 
+  # If the storage format changes, increase `@version` to prevent
+  # the incompatable older versions being read
+  @version 1
+  @version_key :version
   @snapshot_key_type 0
   @log_key_type 1
   @snapshot_offset LogOffset.first()
@@ -13,7 +17,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
     file_path = Access.get(opts, :file_path, "./shapes")
     db = Access.get(opts, :db, :shape_db)
 
-    {:ok, %{file_path: file_path, db: db}}
+    {:ok, %{file_path: file_path, db: db, version: @version}}
   end
 
   def child_spec(opts) do
@@ -30,12 +34,19 @@ defmodule Electric.ShapeCache.CubDbStorage do
     CubDB.start_link(data_dir: opts.file_path, name: opts.db)
   end
 
-  def cleanup_shapes_without_xmins(opts) do
+  def initialise(opts) do
+    stored_version = stored_version(opts)
+
     opts.db
     |> CubDB.select(min_key: shapes_start(), max_key: shapes_end())
     |> Stream.map(fn {{:shapes, shape_id}, _} -> shape_id end)
-    |> Stream.reject(&snapshot_xmin(&1, opts))
+    |> Stream.filter(fn shape_id ->
+      stored_version != opts.version ||
+        snapshot_xmin(shape_id, opts) == nil
+    end)
     |> Enum.each(&cleanup!(&1, opts))
+
+    CubDB.put(opts.db, @version_key, @version)
   end
 
   def list_shapes(opts) do
@@ -198,4 +209,8 @@ defmodule Electric.ShapeCache.CubDbStorage do
 
   defp snapshot_start(shape_id), do: snapshot_key(shape_id, -1)
   defp snapshot_end(shape_id), do: snapshot_key(shape_id, :end)
+
+  defp stored_version(opts) do
+    CubDB.get(opts.db, @version_key)
+  end
 end

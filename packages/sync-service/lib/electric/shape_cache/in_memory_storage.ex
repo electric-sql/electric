@@ -31,7 +31,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def list_shapes(_opts), do: []
   def add_shape(_shape_id, _shape, _opts), do: :ok
   def set_snapshot_xmin(_shape_id, _xmin, _opts), do: :ok
-  def cleanup_shapes_without_xmins(_opts), do: :ok
+  def initialise(_opts), do: :ok
 
   def snapshot_started?(shape_id, opts) do
     :ets.member(opts.snapshot_ets_table, snapshot_start(shape_id))

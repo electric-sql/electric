@@ -598,17 +598,19 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
-    describe "#{module_name}.cleanup_shapes_without_xmins/1" do
+    describe "#{module_name}.initialise/1" do
       setup do
         {:ok, %{module: unquote(module)}}
       end
 
       setup :start_storage
 
-      test "cleans up the shape if the snapshot_xmin has not been set", %{
+      test "removes the shape if the snapshot_xmin has not been set", %{
         module: storage,
         opts: opts
       } do
+        storage.initialise(opts)
+
         storage.add_shape("shape-1", @shape, opts)
         storage.add_shape("shape-2", @shape, opts)
         storage.add_shape("shape-3", @shape, opts)
@@ -623,11 +625,37 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.set_snapshot_xmin("shape-1", 11, opts)
         storage.set_snapshot_xmin("shape-3", 33, opts)
 
-        storage.cleanup_shapes_without_xmins(opts)
+        storage.initialise(opts)
 
         assert storage.snapshot_started?("shape-1", opts) == true
         assert storage.snapshot_started?("shape-2", opts) == false
         assert storage.snapshot_started?("shape-3", opts) == true
+      end
+
+      test "removes all shapes if the storage version has changed", %{
+        module: storage,
+        opts: opts
+      } do
+        storage.initialise(opts)
+
+        storage.add_shape("shape-1", @shape, opts)
+        storage.add_shape("shape-2", @shape, opts)
+        storage.add_shape("shape-3", @shape, opts)
+        storage.mark_snapshot_as_started("shape-1", opts)
+        storage.mark_snapshot_as_started("shape-2", opts)
+        storage.mark_snapshot_as_started("shape-3", opts)
+        storage.make_new_snapshot!("shape-1", @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-2", @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-3", @shape, @query_info, @data_stream, opts)
+        storage.set_snapshot_xmin("shape-1", 11, opts)
+        storage.set_snapshot_xmin("shape-2", 22, opts)
+        storage.set_snapshot_xmin("shape-3", 33, opts)
+
+        storage.initialise(%{opts | version: "new-version"})
+
+        assert storage.snapshot_started?("shape-1", opts) == false
+        assert storage.snapshot_started?("shape-2", opts) == false
+        assert storage.snapshot_started?("shape-3", opts) == false
       end
     end
   end

@@ -31,7 +31,7 @@ defmodule Electric.ShapeCache.Storage do
   @callback shared_opts(term()) :: {:ok, compiled_opts()} | {:error, term()}
   @doc "Start any processes required to run the storage backend"
   @callback start_link(compiled_opts()) :: GenServer.on_start()
-  @callback cleanup_shapes_without_xmins(storage()) :: :ok
+  @callback initialise(storage()) :: :ok
   @callback list_shapes(storage()) :: [
               shape_id: shape_id(),
               shape: Shape.t(),
@@ -74,9 +74,9 @@ defmodule Electric.ShapeCache.Storage do
 
   @type storage() :: {module(), compiled_opts()}
 
-  @spec cleanup_shapes_without_xmins(storage()) :: :ok
-  def cleanup_shapes_without_xmins({mod, opts}),
-    do: apply(mod, :cleanup_shapes_without_xmins, [opts])
+  @spec initialise(storage()) :: :ok
+  def initialise({mod, opts}),
+    do: apply(mod, :initialise, [opts])
 
   @spec list_shapes(storage()) :: [
           shape_id: shape_id(),
