@@ -1,5 +1,5 @@
 defmodule Electric.ShapeCache.Storage do
-  alias Electric.LogItem
+  alias Electric.LogItems
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
 
@@ -60,7 +60,7 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Append log items from one transaction to the log"
   @callback append_to_log!(
               shape_id(),
-              [LogItem.t()],
+              [LogItems.log_item()],
               compiled_opts()
             ) :: :ok
   @doc "Get stream of the log for a shape since a given offset"
@@ -117,7 +117,7 @@ defmodule Electric.ShapeCache.Storage do
   @doc """
   Append log items from one transaction to the log
   """
-  @spec append_to_log!(shape_id(), [LogItem.t()], storage()) :: :ok
+  @spec append_to_log!(shape_id(), [LogItems.log_item()], storage()) :: :ok
   def append_to_log!(shape_id, log_items, {mod, opts}),
     do: mod.append_to_log!(shape_id, log_items, opts)
 
