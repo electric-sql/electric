@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 0.3.1
+
+### Patch Changes
+
+- 09f8636: Include nullability information in schema. Also parse null values in the JS client.
+
 ## 0.3.0
 
 ### Minor Changes

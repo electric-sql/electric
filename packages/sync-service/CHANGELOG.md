@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 0.3.2
+
+### Patch Changes
+
+- 1803392: Support larger shapes (1 million row, 170MB +) and faster time to first byte
+- 09f8636: Include nullability information in schema. Also parse null values in the JS client.
+
 ## 0.3.1
 
 ### Patch Changes
