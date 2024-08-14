@@ -99,7 +99,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
       end)
-      |> expect(:wait_for_snapshot, fn _, @test_shape_id -> :ready end)
+      |> expect(:await_snapshot_start, fn _, @test_shape_id -> :started end)
 
       next_offset = LogOffset.increment(@first_offset)
 
@@ -140,7 +140,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
       end)
-      |> expect(:wait_for_snapshot, fn _, @test_shape_id -> :ready end)
+      |> expect(:await_snapshot_start, fn _, @test_shape_id -> :started end)
 
       next_offset = LogOffset.increment(@first_offset)
 
@@ -173,7 +173,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
       end)
-      |> expect(:wait_for_snapshot, fn _, @test_shape_id -> :ready end)
+      |> expect(:await_snapshot_start, fn _, @test_shape_id -> :started end)
 
       next_offset = LogOffset.increment(@first_offset)
 

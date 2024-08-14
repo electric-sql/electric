@@ -31,7 +31,7 @@ defmodule Electric.ShapeCache.Storage do
   @callback shared_opts(term()) :: {:ok, compiled_opts()} | {:error, term()}
   @doc "Start any processes required to run the storage backend"
   @callback start_link(compiled_opts()) :: GenServer.on_start()
-  @callback cleanup_shapes_without_xmins(storage()) :: :ok
+  @callback initialise(storage()) :: :ok
   @callback list_shapes(storage()) :: [
               shape_id: shape_id(),
               shape: Shape.t(),
@@ -41,7 +41,7 @@ defmodule Electric.ShapeCache.Storage do
   @callback add_shape(shape_id(), Shape.t(), storage()) :: :ok
   @callback set_snapshot_xmin(shape_id(), non_neg_integer(), storage()) :: :ok
   @doc "Check if snapshot for a given shape id already exists"
-  @callback snapshot_exists?(shape_id(), compiled_opts()) :: boolean()
+  @callback snapshot_started?(shape_id(), compiled_opts()) :: boolean()
   @doc "Get the full snapshot for a given shape, also returning the offset this snapshot includes"
   @callback get_snapshot(shape_id(), compiled_opts()) :: {offset :: LogOffset.t(), log()}
   @doc """
@@ -57,6 +57,7 @@ defmodule Electric.ShapeCache.Storage do
               Enumerable.t(row()),
               compiled_opts()
             ) :: :ok
+  @callback mark_snapshot_as_started(shape_id, compiled_opts()) :: :ok
   @doc "Append log items from one transaction to the log"
   @callback append_to_log!(
               shape_id(),
@@ -73,9 +74,9 @@ defmodule Electric.ShapeCache.Storage do
 
   @type storage() :: {module(), compiled_opts()}
 
-  @spec cleanup_shapes_without_xmins(storage()) :: :ok
-  def cleanup_shapes_without_xmins({mod, opts}),
-    do: apply(mod, :cleanup_shapes_without_xmins, [opts])
+  @spec initialise(storage()) :: :ok
+  def initialise({mod, opts}),
+    do: apply(mod, :initialise, [opts])
 
   @spec list_shapes(storage()) :: [
           shape_id: shape_id(),
@@ -94,8 +95,8 @@ defmodule Electric.ShapeCache.Storage do
     do: apply(mod, :set_snapshot_xmin, [shape_id, xmin, opts])
 
   @doc "Check if snapshot for a given shape id already exists"
-  @spec snapshot_exists?(shape_id(), storage()) :: boolean()
-  def snapshot_exists?(shape_id, {mod, opts}), do: mod.snapshot_exists?(shape_id, opts)
+  @spec snapshot_started?(shape_id(), storage()) :: boolean()
+  def snapshot_started?(shape_id, {mod, opts}), do: mod.snapshot_started?(shape_id, opts)
   @doc "Get the full snapshot for a given shape, also returning the offset this snapshot includes"
   @spec get_snapshot(shape_id(), storage()) :: {offset :: LogOffset.t(), log()}
   def get_snapshot(shape_id, {mod, opts}), do: mod.get_snapshot(shape_id, opts)
@@ -113,6 +114,10 @@ defmodule Electric.ShapeCache.Storage do
         ) :: :ok
   def make_new_snapshot!(shape_id, shape, meta, stream, {mod, opts}),
     do: mod.make_new_snapshot!(shape_id, shape, meta, stream, opts)
+
+  @spec mark_snapshot_as_started(shape_id, compiled_opts()) :: :ok
+  def mark_snapshot_as_started(shape_id, {mod, opts}),
+    do: mod.mark_snapshot_as_started(shape_id, opts)
 
   @doc """
   Append log items from one transaction to the log
