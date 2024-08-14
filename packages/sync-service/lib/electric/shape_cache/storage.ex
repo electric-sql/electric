@@ -45,16 +45,13 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Get the full snapshot for a given shape, also returning the offset this snapshot includes"
   @callback get_snapshot(shape_id(), compiled_opts()) :: {offset :: LogOffset.t(), log()}
   @doc """
-  Make a new snapshot for a shape ID based on the meta information about the table and a stream of plain string rows
+  Make a new snapshot for a shape ID based on the meta information about the table and a stream of log entries preformatted as JSON strings.
 
   Should raise an error if making the snapshot had failed for any reason.
   """
-  @doc unstable: "The meta information about the single table is subject to change"
   @callback make_new_snapshot!(
               shape_id(),
-              Electric.Shapes.Shape.t(),
-              Postgrex.Query.t(),
-              Enumerable.t(row()),
+              Enumerable.t(String.t()),
               compiled_opts()
             ) :: :ok
   @callback mark_snapshot_as_started(shape_id, compiled_opts()) :: :ok
@@ -102,18 +99,15 @@ defmodule Electric.ShapeCache.Storage do
   def get_snapshot(shape_id, {mod, opts}), do: mod.get_snapshot(shape_id, opts)
 
   @doc """
-  Make a new snapshot for a shape ID based on the meta information about the table and a stream of plain string rows
+  Make a new snapshot for a shape ID based on the meta information about the table and a stream of log entries preformatted as JSON strings.
   """
-  @doc unstable: "The meta information about the single table is subject to change"
   @spec make_new_snapshot!(
           shape_id(),
-          Electric.Shapes.Shape.t(),
-          Postgrex.Query.t(),
           Enumerable.t(row()),
           storage()
         ) :: :ok
-  def make_new_snapshot!(shape_id, shape, meta, stream, {mod, opts}),
-    do: mod.make_new_snapshot!(shape_id, shape, meta, stream, opts)
+  def make_new_snapshot!(shape_id, stream, {mod, opts}),
+    do: mod.make_new_snapshot!(shape_id, stream, opts)
 
   @spec mark_snapshot_as_started(shape_id, compiled_opts()) :: :ok
   def mark_snapshot_as_started(shape_id, {mod, opts}),

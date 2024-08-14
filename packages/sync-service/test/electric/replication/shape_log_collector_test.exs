@@ -291,8 +291,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
   end
 
-  @basic_query_meta %Postgrex.Query{columns: ["id"], result_types: [:text], name: "key_prefix"}
-
   describe "store_transaction/2 with real storage" do
     setup [
       {Support.ComponentSetup, :with_registry},
@@ -303,9 +301,9 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       %{shape_cache: shape_cache, shape_cache_opts: shape_cache_opts} =
         Support.ComponentSetup.with_shape_cache(Map.put(ctx, :pool, nil),
           prepare_tables_fn: fn _, _ -> :ok end,
-          create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
+          create_snapshot_fn: fn parent, shape_id, _, _, storage ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
-            Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
+            Storage.make_new_snapshot!(shape_id, [["test"]], storage)
             GenServer.cast(parent, {:snapshot_started, shape_id})
           end
         )
