@@ -94,6 +94,7 @@ const setupShapeStream = (provider) => {
       provider.connecting = false
       if (provider.connected) {
         provider.connected = false
+        
         provider.synced = false
 
         awarenessProtocol.removeAwarenessStates(
@@ -148,17 +149,17 @@ const setupShapeStream = (provider) => {
  * @param {Uint8Array} op
  */
 const sendOperation = async (provider, update) => {
-  if (!(provider.connected && provider.operationsStream !== null)) {
+  if (!provider.connected) {
     provider.pending.push(update)
   } else {
     const encoder = encoding.createEncoder()
     syncProtocol.writeUpdate(encoder, update)
     const op = toBase64(encoding.toUint8Array(encoder))
-    const name = provider.roomname
+    const room = provider.roomname
 
     await fetch(`/api/operation`, {
       method: `POST`,
-      body: JSON.stringify({ name, op }),
+      body: JSON.stringify({ room, op }),
     })
   }
 }
@@ -175,13 +176,13 @@ const sendAwareness = async (provider, changedClients) => {
   )
   const op = toBase64(encoding.toUint8Array(encoder))
 
-  if (provider.connected && provider.operationsStream !== null) {
-    const name = provider.roomname
+  if (provider.connected) {
+    const room = provider.roomname
     const clientID = `${provider.doc.clientID}`
 
     await fetch(`/api/awareness`, {
       method: `POST`,
-      body: JSON.stringify({ client: clientID, name, op }),
+      body: JSON.stringify({ client: clientID, room, op }),
     })
   }
 }
@@ -270,13 +271,13 @@ export class ElectricProvider extends Observable {
   }
 
   get operationsUrl() {
-    const params = { where: `name = '${this.roomname}'` }
+    const params = { where: `room = '${this.roomname}'` }
     const encodedParams = url.encodeQueryParams(params)
     return this.serverUrl + `/v1/shape/ydoc_operations?` + encodedParams
   }
 
   get awarenessUrl() {
-    const params = { where: `name = '${this.roomname}'` }
+    const params = { where: `room = '${this.roomname}'` }
     const encodedParams = url.encodeQueryParams(params)
     return this.serverUrl + `/v1/shape/ydoc_awareness?` + encodedParams
   }

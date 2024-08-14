@@ -1,15 +1,15 @@
 CREATE TABLE ydoc_operations(
   id SERIAL PRIMARY KEY,
-  name TEXT,
+  room TEXT,
   op TEXT NOT NULL 
 );
 
 CREATE TABLE ydoc_awareness(
   client TEXT, 
-  name TEXT,
+  room TEXT,
   op TEXT NOT NULL,
   updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (client, name)
+  PRIMARY KEY (client, room)
 );
 
 CREATE OR REPLACE FUNCTION delete_old_rows()
