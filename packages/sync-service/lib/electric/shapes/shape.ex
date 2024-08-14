@@ -87,13 +87,11 @@ defmodule Electric.Shapes.Shape do
     case Regex.run(regex, definition, capture: :all_names) do
       ["", table_name] when table_name != "" ->
         table_name = Utils.parse_quoted_name(table_name)
-        IO.puts("table: public.#{table_name}")
         {:ok, {"public", table_name}}
 
       [schema_name, table_name] when table_name != "" ->
         schema_name = Utils.parse_quoted_name(schema_name)
         table_name = Utils.parse_quoted_name(table_name)
-        IO.puts("table: #{schema_name}.#{table_name}")
         {:ok, {schema_name, table_name}}
 
       _ ->
