@@ -122,12 +122,33 @@ defmodule Electric.Shapes.ShapeTest do
 
   describe "new/2" do
     test "builds up a table correctly" do
-      assert {:ok, %Shape{root_table: {"public", "table"}}} = Shape.new("table", @opts)
-      assert {:ok, %Shape{root_table: {"test", "table"}}} = Shape.new("test.table", @opts)
+      assert {:ok, %Shape{root_table: {"public", "table"}}} = Shape.new(~S|table|, @opts)
+      assert {:ok, %Shape{root_table: {"public", "_table123"}}} = Shape.new(~S|_table123|, @opts)
+      assert {:ok, %Shape{root_table: {"public", "Table"}}} = Shape.new(~S|"Table"|, @opts)
+
+      assert {:ok, %Shape{root_table: {"public", ~S|!table ".a|}}} =
+               Shape.new(~S|"!table "".a"|, @opts)
+
+      assert {:ok, %Shape{root_table: {"test", "table"}}} = Shape.new(~S|test.table|, @opts)
+      assert {:ok, %Shape{root_table: {"test", "table"}}} = Shape.new(~S|"test".table|, @opts)
+      assert {:ok, %Shape{root_table: {"test", "table"}}} = Shape.new(~S|test."table"|, @opts)
+      assert {:ok, %Shape{root_table: {"test", "table"}}} = Shape.new(~S|"test"."table"|, @opts)
+
+      assert {:ok, %Shape{root_table: {"public", "foo.bar.baz"}}} =
+               Shape.new(~S|"foo.bar.baz"|, @opts)
+
+      assert {:ok, %Shape{root_table: {"foo", "bar.baz"}}} = Shape.new(~S|"foo"."bar.baz"|, @opts)
+      assert {:ok, %Shape{root_table: {"foo.bar", "baz"}}} = Shape.new(~S|"foo.bar"."baz"|, @opts)
     end
 
     test "errors on malformed strings" do
       {:error, ["table name does not match expected format"]} = Shape.new("", @opts)
+      {:error, ["table name does not match expected format"]} = Shape.new("123table", @opts)
+      {:error, ["table name does not match expected format"]} = Shape.new("Table", @opts)
+      {:error, ["table name does not match expected format"]} = Shape.new(" table", @opts)
+      {:error, ["table name does not match expected format"]} = Shape.new("$table", @opts)
+      {:error, ["table name does not match expected format"]} = Shape.new(~S|ta"ble|, @opts)
+      {:error, ["table name does not match expected format"]} = Shape.new(~S|ta""ble|, @opts)
     end
 
     test "errors when the table doesn't exist" do
@@ -176,6 +197,9 @@ defmodule Electric.Shapes.ShapeTest do
   def load_column_info({"public", "table"}, _),
     do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
 
+  def load_column_info({"public", "Table"}, _),
+    do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
+
   def load_column_info({"test", "table"}, _),
     do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
 
@@ -186,6 +210,21 @@ defmodule Electric.Shapes.ShapeTest do
          %{name: "id", type: "int8", pk_position: 0},
          %{name: "value", type: "text", pk_position: nil}
        ]}
+
+  def load_column_info({"public", "_table123"}, _),
+    do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
+
+  def load_column_info({"public", ~S|!table ".a|}, _),
+    do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
+
+  def load_column_info({"public", "foo.bar.baz"}, _),
+    do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
+
+  def load_column_info({"foo", "bar.baz"}, _),
+    do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
+
+  def load_column_info({"foo.bar", "baz"}, _),
+    do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
 
   def load_column_info(_, _), do: :table_not_found
 end

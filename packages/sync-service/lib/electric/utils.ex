@@ -210,7 +210,7 @@ defmodule Electric.Utils do
       "foo"
 
       iex> parse_quoted_name(~S|"fo""o"|)
-      ~S|fo\"o|
+      ~S|fo"o|
   """
   def parse_quoted_name(str) do
     if String.first(str) == ~s(") && String.last(str) == ~s(") do

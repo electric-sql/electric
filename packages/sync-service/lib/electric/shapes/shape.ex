@@ -7,6 +7,7 @@ defmodule Electric.Shapes.Shape do
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Runner
   alias Electric.Replication.Changes
+  alias Electric.Utils
 
   @enforce_keys [:root_table]
   defstruct [:root_table, :table_info, :where]
@@ -85,13 +86,13 @@ defmodule Electric.Shapes.Shape do
 
     case Regex.run(regex, definition, capture: :all_names) do
       ["", table_name] when table_name != "" ->
-        table_name = parse_quoted_name(table_name)
+        table_name = Utils.parse_quoted_name(table_name)
         IO.puts("table: public.#{table_name}")
         {:ok, {"public", table_name}}
 
       [schema_name, table_name] when table_name != "" ->
-        schema_name = parse_quoted_name(schema_name)
-        table_name = parse_quoted_name(table_name)
+        schema_name = Utils.parse_quoted_name(schema_name)
+        table_name = Utils.parse_quoted_name(table_name)
         IO.puts("table: #{schema_name}.#{table_name}")
         {:ok, {schema_name, table_name}}
 
