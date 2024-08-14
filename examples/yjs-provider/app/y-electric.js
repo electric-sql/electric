@@ -45,7 +45,25 @@ const setupShapeStream = (provider) => {
         })
     }
 
-    const handleSyncMessage = (messages) =>
+    // Should handle multiple clients
+    const updateShapeState = (name, offset, shapeId) => {
+      if (provider.persistence === null) {
+        return
+      }
+      provider.persistence.set(name, { offset, shape_id: shapeId })
+    }
+
+    const handleSyncMessage = (messages) => {
+      if (messages.length < 2) {
+        return
+      }
+      const { offset } = messages[messages.length - 2]
+      updateShapeState(
+        `operations_state`,
+        Number(offset.split(`_`)[0]),
+        provider.operationsStream.shapeId
+      )
+
       handleMessages(messages).forEach((decoder) => {
         const encoder = encoding.createEncoder()
         encoding.writeVarUint(encoder, messageSync)
@@ -62,8 +80,19 @@ const setupShapeStream = (provider) => {
           provider.synced = true
         }
       })
+    }
 
-    const handleAwarenessMessage = (messages) =>
+    const handleAwarenessMessage = (messages) => {
+      if (messages.length < 2) {
+        return
+      }
+      const { offset } = messages[messages.length - 2]
+      updateShapeState(
+        `awareness_state`,
+        Number(offset.split(`_`)[0]),
+        provider.awarenessStream.shapeId
+      )
+
       handleMessages(messages).forEach((decoder) => {
         awarenessProtocol.applyAwarenessUpdate(
           provider.awareness,
@@ -71,6 +100,7 @@ const setupShapeStream = (provider) => {
           provider
         )
       })
+    }
 
     // TODO: need to improve error handling
     const handleError = (event) => {
@@ -94,7 +124,7 @@ const setupShapeStream = (provider) => {
       provider.connecting = false
       if (provider.connected) {
         provider.connected = false
-        
+
         provider.synced = false
 
         awarenessProtocol.removeAwarenessStates(
@@ -196,13 +226,13 @@ export class ElectricProvider extends Observable {
    * @param {boolean} [opts.connect]
    * @param {awarenessProtocol.Awareness} [opts.awareness]
    * @param {IndexeddbPersistence} [opts.persistence]
-   * @param {Object<string,string>} [opts.params] specify url parameters
+   * @param {Object<string,string>} [opts.resume]
    */
   constructor(
     serverUrl,
     roomname,
     doc,
-    { connect = false, awareness = null, persistence = null } = {}
+    { connect = false, awareness = null, persistence = null, resume = {} } = {}
   ) {
     super()
 
@@ -221,13 +251,27 @@ export class ElectricProvider extends Observable {
     this.awarenessStream = null
 
     this.pending = []
+    this.resume = resume ?? {}
 
     this.closeHandler = null
 
+    this.persistence = persistence
     this.loaded = persistence === null
+
     persistence?.on(`synced`, () => {
-      this.loaded = true
-      this.connect()
+      persistence
+        .get(`operations_state`)
+        .then((opsState) => {
+          this.resume.operations = opsState
+          return persistence.get(`awareness_state`)
+        })
+        .then((awarenessState) => {
+          this.resume.awareness = awarenessState
+        })
+        .then(() => {
+          this.loaded = true
+          this.connect()
+        })
     })
 
     /**
@@ -271,14 +315,22 @@ export class ElectricProvider extends Observable {
   }
 
   get operationsUrl() {
-    const params = { where: `room = '${this.roomname}'` }
+    const params = {
+      where: `room = '${this.roomname}'`,
+      ...this.resume.operations,
+    }
     const encodedParams = url.encodeQueryParams(params)
+    console.log(params)
     return this.serverUrl + `/v1/shape/ydoc_operations?` + encodedParams
   }
 
   get awarenessUrl() {
-    const params = { where: `room = '${this.roomname}'` }
+    const params = {
+      where: `room = '${this.roomname}'`,
+      ...this.resume.awareness,
+    }
     const encodedParams = url.encodeQueryParams(params)
+    console.log(params)
     return this.serverUrl + `/v1/shape/ydoc_awareness?` + encodedParams
   }
 

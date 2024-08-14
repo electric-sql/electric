@@ -24,8 +24,6 @@ const usercolors = [
   { color: `#ecd444`, light: `#ecd44433` },
   { color: `#ee6352`, light: `#ee635233` },
   { color: `#9ac2c9`, light: `#9ac2c933` },
-  { color: `#8acb88`, light: `#8acb8833` },
-  { color: `#1be7ff`, light: `#1be7ff33` },
 ]
 
 const userColor = usercolors[random.uint32() % usercolors.length]
@@ -44,16 +42,13 @@ const theme = EditorView.theme(
   { dark: true }
 )
 const ydoc = new Y.Doc()
-let network: ElectricProvider | null = null
 
-if (typeof window !== `undefined`) {
-  const opts = {
-    connect: true,
-    awareness: new awarenessProtocol.Awareness(ydoc),
-    // persistence: new IndexeddbPersistence(room, ydoc),
-  }
-  network = new ElectricProvider(`http://localhost:3000/`, room, ydoc, opts)
+const opts = {
+  connect: true,
+  awareness: new awarenessProtocol.Awareness(ydoc),
+  persistence: new IndexeddbPersistence(room, ydoc),
 }
+const network = new ElectricProvider(`http://localhost:3000/`, room, ydoc, opts)
 
 export default function Home() {
   const editor = useRef(null)
@@ -71,12 +66,10 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (typeof window === `undefined`) return
-
     const ytext = ydoc.getText(room)
 
-    network!.awareness.setLocalStateField(`user`, {
-      name: `Anonymous ` + Math.floor(Math.random() * 100),
+    network.awareness.setLocalStateField(`user`, {
+      name: userColor.color,
       color: userColor.color,
       colorLight: userColor.light,
     })
@@ -88,7 +81,7 @@ export default function Home() {
         basicSetup,
         javascript(),
         EditorView.lineWrapping,
-        yCollab(ytext, network!.awareness),
+        yCollab(ytext, network.awareness),
         theme,
       ],
     })
