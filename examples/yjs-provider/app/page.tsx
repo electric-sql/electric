@@ -71,11 +71,11 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (network === null) return
+    if (typeof window === `undefined`) return
 
     const ytext = ydoc.getText(room)
 
-    network.awareness.setLocalStateField(`user`, {
+    network!.awareness.setLocalStateField(`user`, {
       name: `Anonymous ` + Math.floor(Math.random() * 100),
       color: userColor.color,
       colorLight: userColor.light,
@@ -88,7 +88,7 @@ export default function Home() {
         basicSetup,
         javascript(),
         EditorView.lineWrapping,
-        yCollab(ytext, network.awareness),
+        yCollab(ytext, network!.awareness),
         theme,
       ],
     })
