@@ -31,6 +31,7 @@ module.exports = {
         caughtErrorsIgnorePattern: `^_`,
       },
     ],
+    "@next/next/no-img-element": "off"
   },
   ignorePatterns: [
     `**/node_modules/**`,

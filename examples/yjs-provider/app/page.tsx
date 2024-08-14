@@ -7,6 +7,7 @@ import * as Y from "yjs"
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next"
 import { ElectricProvider } from "./y-electric"
 import { IndexeddbPersistence } from "y-indexeddb"
+import { BroadcastProvider } from "./y-broadcast"
 import * as awarenessProtocol from "y-protocols/awareness"
 
 import { EditorState, EditorView, basicSetup } from "@codemirror/basic-setup"
@@ -42,13 +43,21 @@ const theme = EditorView.theme(
   { dark: true }
 )
 const ydoc = new Y.Doc()
+let network: ElectricProvider | null = null
 
-const opts = {
-  connect: true,
-  awareness: new awarenessProtocol.Awareness(ydoc),
-  persistence: new IndexeddbPersistence(room, ydoc),
+if (typeof window !== `undefined`) {
+  const awareness = new awarenessProtocol.Awareness(ydoc)
+  const opts = {
+    connect: true,
+    awareness,
+    persistence: new IndexeddbPersistence(room, ydoc),
+  }
+  network = new ElectricProvider(`http://localhost:3000/`, room, ydoc, opts)
+
+  new BroadcastProvider(room, ydoc, {
+    awareness,
+  })
 }
-const network = new ElectricProvider(`http://localhost:3000/`, room, ydoc, opts)
 
 export default function Home() {
   const editor = useRef(null)
@@ -66,9 +75,13 @@ export default function Home() {
   }
 
   useEffect(() => {
+    if (typeof window === `undefined`) {
+      return
+    }
+
     const ytext = ydoc.getText(room)
 
-    network.awareness.setLocalStateField(`user`, {
+    network?.awareness.setLocalStateField(`user`, {
       name: userColor.color,
       color: userColor.color,
       colorLight: userColor.light,
@@ -81,7 +94,7 @@ export default function Home() {
         basicSetup,
         javascript(),
         EditorView.lineWrapping,
-        yCollab(ytext, network.awareness),
+        yCollab(ytext, network?.awareness),
         theme,
       ],
     })
