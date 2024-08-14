@@ -2,6 +2,7 @@ defmodule Electric.ShapeCacheBehaviour do
   @moduledoc """
   Behaviour defining the ShapeCache functions to be used in mocks
   """
+  alias Electric.LogItems
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
@@ -13,7 +14,7 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback append_to_log!(
               shape_id(),
               LogOffset.t(),
-              [Storage.prepared_change()],
+              [LogItems.log_item()],
               keyword()
             ) :: :ok
 
@@ -28,6 +29,7 @@ end
 
 defmodule Electric.ShapeCache do
   require Logger
+  alias Electric.LogItems
   alias Electric.Utils
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Querying
@@ -87,7 +89,7 @@ defmodule Electric.ShapeCache do
   @spec append_to_log!(
           shape_id(),
           LogOffset.t(),
-          [Storage.prepared_change()],
+          [LogItems.log_item()],
           keyword()
         ) :: :ok
   def append_to_log!(shape_id, latest_offset, relevant_changes, opts) do
