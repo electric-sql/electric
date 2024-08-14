@@ -306,7 +306,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
             Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
-            GenServer.cast(parent, {:snapshot_ready, shape_id})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
           end
         )
 
@@ -333,7 +333,9 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       shape_cache_opts: shape_cache_opts
     } do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, shape_cache_opts)
-      :ready = ShapeCache.wait_for_snapshot(Keyword.fetch!(shape_cache_opts, :server), shape_id)
+
+      :started =
+        ShapeCache.await_snapshot_start(Keyword.fetch!(shape_cache_opts, :server), shape_id)
 
       lsn = Lsn.from_integer(10)
 

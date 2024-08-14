@@ -22,7 +22,7 @@ defmodule Electric.ShapeCacheBehaviour do
               {shape_id(), current_snapshot_offset :: LogOffset.t()}
 
   @callback list_active_shapes(opts :: keyword()) :: [{shape_id(), shape_def(), xmin()}]
-  @callback wait_for_snapshot(GenServer.name(), shape_id()) :: :ready | {:error, term()}
+  @callback await_snapshot_start(GenServer.name(), shape_id()) :: :started | {:error, term()}
   @callback handle_truncate(GenServer.name(), shape_id()) :: :ok
   @callback clean_shape(GenServer.name(), shape_id()) :: :ok
 end
@@ -136,9 +136,9 @@ defmodule Electric.ShapeCache do
     GenServer.call(server, {:truncate, shape_id})
   end
 
-  @spec wait_for_snapshot(GenServer.name(), String.t()) :: :ready | {:error, term()}
-  def wait_for_snapshot(server \\ __MODULE__, shape_id) when is_binary(shape_id) do
-    GenServer.call(server, {:wait_for_snapshot, shape_id}, 30_000)
+  @spec await_snapshot_start(GenServer.name(), String.t()) :: :started | {:error, term()}
+  def await_snapshot_start(server \\ __MODULE__, shape_id) when is_binary(shape_id) do
+    GenServer.call(server, {:await_snapshot_start, shape_id})
   end
 
   def init(opts) do
@@ -148,7 +148,7 @@ defmodule Electric.ShapeCache do
     state = %{
       storage: opts.storage,
       shape_meta_table: shape_meta_table,
-      waiting_for_creation: %{},
+      awaiting_snapshot_start: %{},
       db_pool: opts.db_pool,
       create_snapshot_fn: opts.create_snapshot_fn,
       prepare_tables_fn: opts.prepare_tables_fn
@@ -188,13 +188,13 @@ defmodule Electric.ShapeCache do
     {:reply, {shape_id, latest_offset}, state}
   end
 
-  def handle_call({:wait_for_snapshot, shape_id}, from, state) do
+  def handle_call({:await_snapshot_start, shape_id}, from, state) do
     cond do
       not is_known_shape_id?(state, shape_id) ->
         {:reply, {:error, :unknown}, state}
 
-      Storage.snapshot_exists?(shape_id, state.storage) ->
-        {:reply, :ready, state}
+      Storage.snapshot_started?(shape_id, state.storage) ->
+        {:reply, :started, state}
 
       true ->
         Logger.debug("Starting a wait on the snapshot #{shape_id} for #{inspect(from)}}")
@@ -235,10 +235,11 @@ defmodule Electric.ShapeCache do
     {:noreply, state}
   end
 
-  def handle_cast({:snapshot_ready, shape_id}, state) do
+  def handle_cast({:snapshot_started, shape_id}, state) do
     Logger.debug("Snapshot for #{shape_id} is ready")
-    {waiting, state} = pop_in(state, [:waiting_for_creation, shape_id])
-    for client <- List.wrap(waiting), not is_nil(client), do: GenServer.reply(client, :ready)
+    Storage.mark_snapshot_as_started(shape_id, state.storage)
+    {waiting, state} = pop_in(state, [:awaiting_snapshot_start, shape_id])
+    for client <- List.wrap(waiting), not is_nil(client), do: GenServer.reply(client, :started)
     {:noreply, state}
   end
 
@@ -248,8 +249,13 @@ defmodule Electric.ShapeCache do
     )
 
     clean_up_shape(state, shape_id)
-    {waiting, state} = pop_in(state, [:waiting_for_creation, shape_id])
-    for client <- waiting, not is_nil(client), do: GenServer.reply(client, {:error, error})
+    {waiting, state} = pop_in(state, [:awaiting_snapshot_start, shape_id])
+
+    # waiting may nil here if :snapshot_failed happens after :snapshot_started
+    if waiting do
+      for client <- waiting, not is_nil(client), do: GenServer.reply(client, {:error, error})
+    end
+
     {:noreply, state}
   end
 
@@ -275,12 +281,12 @@ defmodule Electric.ShapeCache do
     shape
   end
 
-  defp maybe_start_snapshot(%{waiting_for_creation: map} = state, shape_id, _)
+  defp maybe_start_snapshot(%{awaiting_snapshot_start: map} = state, shape_id, _)
        when is_map_key(map, shape_id),
        do: state
 
   defp maybe_start_snapshot(state, shape_id, shape) do
-    if not Storage.snapshot_exists?(shape_id, state.storage) do
+    if not Storage.snapshot_started?(shape_id, state.storage) do
       parent = self()
 
       %{
@@ -298,9 +304,7 @@ defmodule Electric.ShapeCache do
         fn ->
           try do
             Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [pool, affected_tables])
-
             apply(create_snapshot_fn, [parent, shape_id, shape, pool, storage])
-            GenServer.cast(parent, {:snapshot_ready, shape_id})
           rescue
             error -> GenServer.cast(parent, {:snapshot_failed, shape_id, error, __STACKTRACE__})
           end
@@ -321,10 +325,10 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  defp add_waiter(%{waiting_for_creation: waiters} = state, shape_id, waiter),
+  defp add_waiter(%{awaiting_snapshot_start: waiters} = state, shape_id, waiter),
     do: %{
       state
-      | waiting_for_creation: Map.update(waiters, shape_id, [waiter], &[waiter | &1])
+      | awaiting_snapshot_start: Map.update(waiters, shape_id, [waiter], &[waiter | &1])
     }
 
   @doc false
@@ -340,12 +344,14 @@ defmodule Electric.ShapeCache do
         %{rows: [[xmin]]} =
           Postgrex.query!(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())", [])
 
+        GenServer.cast(parent, {:snapshot_xmin_known, shape_id, xmin})
+
         # Enforce display settings *before* querying initial data to maintain consistent
         # formatting between snapshot and live log entries.
         Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
 
-        GenServer.cast(parent, {:snapshot_xmin_known, shape_id, xmin})
         {query, stream} = Querying.stream_initial_data(conn, shape)
+        GenServer.cast(parent, {:snapshot_started, shape_id})
 
         # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
         # that way it has the relation, but it is still missing the pk_cols
@@ -355,7 +361,7 @@ defmodule Electric.ShapeCache do
   end
 
   defp recover_shapes(state) do
-    Storage.cleanup_shapes_without_xmins(state.storage)
+    Storage.initialise(state.storage)
 
     state.storage
     |> Storage.list_shapes()

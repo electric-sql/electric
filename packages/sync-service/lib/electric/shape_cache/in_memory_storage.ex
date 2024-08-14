@@ -1,4 +1,5 @@
 defmodule Electric.ShapeCache.InMemoryStorage do
+  alias Electric.ConcurrentStream
   alias Electric.LogItems
   alias Electric.Replication.LogOffset
   alias Electric.Telemetry.OpenTelemetry
@@ -30,20 +31,37 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def list_shapes(_opts), do: []
   def add_shape(_shape_id, _shape, _opts), do: :ok
   def set_snapshot_xmin(_shape_id, _xmin, _opts), do: :ok
-  def cleanup_shapes_without_xmins(_opts), do: :ok
+  def initialise(_opts), do: :ok
 
-  def snapshot_exists?(shape_id, opts) do
-    case :ets.match(opts.snapshot_ets_table, {{:metadata, shape_id}, :_}, 1) do
-      {[_], _} -> true
-      :"$end_of_table" -> false
-    end
+  def snapshot_started?(shape_id, opts) do
+    :ets.member(opts.snapshot_ets_table, snapshot_start(shape_id))
   end
+
+  defp snapshot_key(shape_id, index) do
+    {:data, shape_id, index}
+  end
+
+  @snapshot_start_index 0
+  @snapshot_end_index :end
+  defp snapshot_start(shape_id), do: snapshot_key(shape_id, @snapshot_start_index)
+  defp snapshot_end(shape_id), do: snapshot_key(shape_id, @snapshot_end_index)
 
   def get_snapshot(shape_id, opts) do
     stream =
-      :ets.select(opts.snapshot_ets_table, [
-        {{{:data, shape_id, :"$1"}, :"$2"}, [], [{{:"$1", :"$2"}}]}
-      ])
+      ConcurrentStream.stream_to_end(
+        excluded_start_key: @snapshot_start_index,
+        end_marker_key: @snapshot_end_index,
+        poll_time_in_ms: 10,
+        stream_fun: fn excluded_start_key, included_end_key ->
+          if !snapshot_started?(shape_id, opts), do: raise("Snapshot no longer available")
+
+          :ets.select(opts.snapshot_ets_table, [
+            {{snapshot_key(shape_id, :"$1"), :"$2"},
+             [{:andalso, {:>, :"$1", excluded_start_key}, {:"=<", :"$1", included_end_key}}],
+             [{{:"$1", :"$2"}}]}
+          ])
+        end
+      )
       |> Stream.map(fn {_, item} -> item end)
 
     {@snapshot_offset, stream}
@@ -76,8 +94,12 @@ defmodule Electric.ShapeCache.InMemoryStorage do
          ]) do
       [true] -> true
       # FIXME: this is naive while we don't have snapshot metadata to get real offset
-      [] -> snapshot_exists?(shape_id, opts) and offset == @snapshot_offset
+      [] -> snapshot_started?(shape_id, opts) and offset == @snapshot_offset
     end
+  end
+
+  def mark_snapshot_as_started(shape_id, opts) do
+    :ets.insert(opts.snapshot_ets_table, {snapshot_start(shape_id), 0})
   end
 
   @spec make_new_snapshot!(
@@ -93,14 +115,15 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
       data_stream
       |> LogItems.from_snapshot_row_stream(@snapshot_offset, shape, query_info)
-      |> Stream.map(fn log_item ->
-        {{:data, shape_id, log_item.key}, Jason.encode!(log_item)}
+      |> Stream.with_index(1)
+      |> Stream.map(fn {log_item, index} ->
+        {snapshot_key(shape_id, index), Jason.encode!(log_item)}
       end)
       |> Stream.chunk_every(500)
       |> Stream.each(fn chunk -> :ets.insert(ets_table, chunk) end)
       |> Stream.run()
 
-      :ets.insert(ets_table, {{:metadata, shape_id}, 0})
+      :ets.insert(ets_table, {snapshot_end(shape_id), 0})
       :ok
     end)
   end
@@ -119,8 +142,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   def cleanup!(shape_id, opts) do
-    :ets.match_delete(opts.snapshot_ets_table, {{:data, shape_id, :_}, :_})
-    :ets.match_delete(opts.snapshot_ets_table, {{:metadata, shape_id}, :_})
+    :ets.match_delete(opts.snapshot_ets_table, {snapshot_key(shape_id, :_), :_})
     :ets.match_delete(opts.log_ets_table, {{shape_id, :_}, :_})
     :ok
   end

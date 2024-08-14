@@ -73,14 +73,14 @@ defmodule Electric.ShapeCacheTest do
           create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
             Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
-            GenServer.cast(parent, {:snapshot_ready, shape_id})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
           end
         )
 
       {shape_id, offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert offset == @zero_offset
-      assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
-      assert Storage.snapshot_exists?(shape_id, storage)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+      assert Storage.snapshot_started?(shape_id, storage)
     end
 
     test "triggers table prep and snapshot creation only once", ctx do
@@ -95,7 +95,7 @@ defmodule Electric.ShapeCacheTest do
             send(test_pid, {:called, :create_snapshot_fn})
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
             Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
-            GenServer.cast(parent, {:snapshot_ready, shape_id})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
           end
         )
 
@@ -104,7 +104,7 @@ defmodule Electric.ShapeCacheTest do
       # subsequent calls return the same shape_id
       for _ <- 1..10, do: assert({^shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts))
 
-      assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
       assert_received {:called, :prepare_tables_fn}
       assert_received {:called, :create_snapshot_fn}
@@ -121,7 +121,7 @@ defmodule Electric.ShapeCacheTest do
             send(test_pid, {:called, :create_snapshot_fn})
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
             Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
-            GenServer.cast(parent, {:snapshot_ready, shape_id})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
           end
         )
 
@@ -147,7 +147,7 @@ defmodule Electric.ShapeCacheTest do
       shape_id = Task.await(create_call_1)
       assert shape_id == Task.await(create_call_2)
 
-      assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
       # any queued calls should still return the existing shape_id
       # after the snapshot has been created (simulated by directly
@@ -202,8 +202,7 @@ defmodule Electric.ShapeCacheTest do
 
     test "creates initial snapshot from DB data", %{storage: storage, shape_cache_opts: opts} do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
-      assert Storage.snapshot_exists?(shape_id, storage)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert {@zero_offset, stream} = Storage.get_snapshot(shape_id, storage)
 
       assert [%{"value" => %{"value" => "test1"}}, %{"value" => %{"value" => "test2"}}] =
@@ -265,7 +264,7 @@ defmodule Electric.ShapeCacheTest do
       )
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(shape, opts)
-      assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert {@zero_offset, stream} = Storage.get_snapshot(shape_id, storage)
 
       assert [
@@ -284,11 +283,9 @@ defmodule Electric.ShapeCacheTest do
              } = map
     end
 
-    test "updates latest offset correctly",
-         %{storage: storage, shape_cache_opts: opts} do
+    test "updates latest offset correctly", %{shape_cache_opts: opts, storage: storage} do
       {shape_id, initial_offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
-      assert Storage.snapshot_exists?(shape_id, storage)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert {^shape_id, offset_after_snapshot} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
       expected_offset_after_log_entry =
@@ -308,6 +305,10 @@ defmodule Electric.ShapeCacheTest do
       assert initial_offset == offset_after_snapshot
       assert offset_after_log_entry > offset_after_snapshot
       assert offset_after_log_entry == expected_offset_after_log_entry
+
+      # Stop snapshot process gracefully to prevent errors being logged in the test
+      {_, stream} = Storage.get_snapshot(shape_id, storage)
+      Stream.run(stream)
     end
 
     test "errors if appending to untracked shape_id", %{shape_cache_opts: opts} do
@@ -328,7 +329,7 @@ defmodule Electric.ShapeCacheTest do
           {shape_id, _} = ShapeCache.get_or_create_shape_id(shape, opts)
 
           assert {:error, %Postgrex.Error{postgres: %{code: :undefined_table}}} =
-                   ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+                   ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
           shape_id
         end)
@@ -357,12 +358,12 @@ defmodule Electric.ShapeCacheTest do
           create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
             Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
-            GenServer.cast(parent, {:snapshot_ready, shape_id})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
           end
         )
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert [{^shape_id, @shape, 10}] = ShapeCache.list_active_shapes(opts)
     end
 
@@ -378,7 +379,7 @@ defmodule Electric.ShapeCacheTest do
             receive(do: ({:continue, ^ref} -> :ok))
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
             Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
-            GenServer.cast(parent, {:snapshot_ready, shape_id})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
           end
         )
 
@@ -391,15 +392,15 @@ defmodule Electric.ShapeCacheTest do
 
       send(pid, {:continue, ref})
 
-      assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert [{^shape_id, @shape, 10}] = ShapeCache.list_active_shapes(opts)
     end
   end
 
-  describe "wait_for_snapshot/4" do
+  describe "await_snapshot_start/4" do
     setup :with_in_memory_storage
 
-    test "returns :ready for existing snapshot", %{storage: storage} = ctx do
+    test "returns :started for snapshots that have started", %{storage: storage} = ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.put(ctx, :pool, nil),
           prepare_tables_fn: @prepare_tables_noop,
@@ -408,10 +409,9 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
-      # Manually create a snapshot
-      Storage.make_new_snapshot!(shape_id, @shape, @basic_query_meta, [["test"]], storage)
+      Storage.mark_snapshot_as_started(shape_id, storage)
 
-      assert ShapeCache.wait_for_snapshot(opts[:server], shape_id) == :ready
+      assert ShapeCache.await_snapshot_start(opts[:server], shape_id) == :started
     end
 
     test "returns an error if waiting is for an unknown shape id",
@@ -424,13 +424,13 @@ defmodule Electric.ShapeCacheTest do
           create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
             Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
-            GenServer.cast(parent, {:snapshot_ready, shape_id})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
           end
         )
 
-      assert {:error, :unknown} = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      assert {:error, :unknown} = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
-      refute Storage.snapshot_exists?(shape_id, storage)
+      refute Storage.snapshot_started?(shape_id, storage)
     end
 
     test "handles buffering multiple callers correctly", ctx do
@@ -447,21 +447,73 @@ defmodule Electric.ShapeCacheTest do
 
             # Sometimes only some tasks subscribe before reaching this point, and then hang
             # if we don't actually have a snapshot. This is kind of part of the test, because
-            # `wait_for_snapshot/3` should always resolve to `:ready` in concurrent situations
-            Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
-            GenServer.cast(parent, {:snapshot_ready, shape_id})
+            # `await_snapshot_start/3` should always resolve to `:started` in concurrent situations
+            Storage.mark_snapshot_as_started(shape_id, storage)
+            GenServer.cast(parent, {:snapshot_started, shape_id})
+            Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [[1], [2]], storage)
           end
         )
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
       tasks =
-        for _ <- 1..10, do: Task.async(ShapeCache, :wait_for_snapshot, [opts[:server], shape_id])
+        for _ <- 1..10 do
+          Task.async(fn ->
+            assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+            {_, stream} = Storage.get_snapshot(shape_id, ctx.storage)
+            assert Enum.count(stream) == 2
+          end)
+        end
 
       assert_receive {:waiting_point, ref, pid}
       send(pid, {:continue, ref})
 
-      assert Enum.all?(Task.await_many(tasks), &(&1 == :ready))
+      Task.await_many(tasks)
+    end
+
+    @tag :capture_log
+    test "errors while streaming from database are sent to all callers", ctx do
+      stream_from_database =
+        Stream.map(1..5, fn
+          5 ->
+            raise "some error"
+
+          n ->
+            # Sleep to allow read processes to run
+            Process.sleep(1)
+            [n]
+        end)
+
+      %{shape_cache_opts: opts} =
+        with_shape_cache(Map.put(ctx, :pool, nil),
+          prepare_tables_fn: @prepare_tables_noop,
+          create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
+            GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
+            Storage.mark_snapshot_as_started(shape_id, storage)
+            GenServer.cast(parent, {:snapshot_started, shape_id})
+
+            Storage.make_new_snapshot!(
+              shape_id,
+              shape,
+              @basic_query_meta,
+              stream_from_database,
+              storage
+            )
+          end
+        )
+
+      {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
+
+      tasks =
+        for _ <- 1..10 do
+          Task.async(fn ->
+            :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
+            {_, stream} = Storage.get_snapshot(shape_id, ctx.storage)
+            assert_raise RuntimeError, fn -> Stream.run(stream) end
+          end)
+        end
+
+      Task.await_many(tasks)
     end
 
     test "propagates error in snapshot creation to listeners", ctx do
@@ -484,7 +536,7 @@ defmodule Electric.ShapeCacheTest do
         )
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      task = Task.async(fn -> ShapeCache.wait_for_snapshot(opts[:server], shape_id) end)
+      task = Task.async(fn -> ShapeCache.await_snapshot_start(opts[:server], shape_id) end)
 
       log =
         capture_log(fn ->
@@ -510,13 +562,13 @@ defmodule Electric.ShapeCacheTest do
           create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
             Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
-            GenServer.cast(parent, {:snapshot_ready, shape_id})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
           end
         )
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       Process.sleep(50)
-      assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
       Storage.append_to_log!(
         shape_id,
@@ -530,7 +582,7 @@ defmodule Electric.ShapeCacheTest do
         storage
       )
 
-      assert Storage.snapshot_exists?(shape_id, storage)
+      assert Storage.snapshot_started?(shape_id, storage)
       assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 1
 
       log = capture_log(fn -> ShapeCache.handle_truncate(opts[:server], shape_id) end)
@@ -539,7 +591,7 @@ defmodule Electric.ShapeCacheTest do
       # Wait a bit for the async cleanup to complete
       Process.sleep(100)
 
-      refute Storage.snapshot_exists?(shape_id, storage)
+      refute Storage.snapshot_started?(shape_id, storage)
       assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 0
       {shape_id2, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert shape_id != shape_id2
@@ -557,13 +609,13 @@ defmodule Electric.ShapeCacheTest do
           create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
             Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
-            GenServer.cast(parent, {:snapshot_ready, shape_id})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
           end
         )
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       Process.sleep(50)
-      assert :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      assert :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
       Storage.append_to_log!(
         shape_id,
@@ -577,7 +629,7 @@ defmodule Electric.ShapeCacheTest do
         storage
       )
 
-      assert Storage.snapshot_exists?(shape_id, storage)
+      assert Storage.snapshot_started?(shape_id, storage)
       assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 1
 
       log = capture_log(fn -> ShapeCache.clean_shape(opts[:server], shape_id) end)
@@ -586,7 +638,7 @@ defmodule Electric.ShapeCacheTest do
       # Wait a bit for the async cleanup to complete
       Process.sleep(100)
 
-      refute Storage.snapshot_exists?(shape_id, storage)
+      refute Storage.snapshot_started?(shape_id, storage)
       assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 0
       {shape_id2, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert shape_id != shape_id2
@@ -601,7 +653,7 @@ defmodule Electric.ShapeCacheTest do
           create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
             Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
-            GenServer.cast(parent, {:snapshot_ready, shape_id})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
           end
         )
 
@@ -625,14 +677,14 @@ defmodule Electric.ShapeCacheTest do
           create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, @snapshot_xmin})
             Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
-            GenServer.cast(parent, {:snapshot_ready, shape_id})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
           end
         )
     )
 
     test "restores shape_ids", %{shape_cache_opts: opts} = context do
       {shape_id1, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id1)
+      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id1)
       restart_shape_cache(context)
       {shape_id2, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert shape_id1 == shape_id2
@@ -640,11 +692,11 @@ defmodule Electric.ShapeCacheTest do
 
     test "restores snapshot xmins", %{shape_cache_opts: opts} = context do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       [{^shape_id, @shape, @snapshot_xmin}] = ShapeCache.list_active_shapes(opts)
 
       restart_shape_cache(context)
-      :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
       assert [{^shape_id, @shape, @snapshot_xmin}] = ShapeCache.list_active_shapes(opts)
     end
@@ -652,13 +704,13 @@ defmodule Electric.ShapeCacheTest do
     test "restores latest offset", %{shape_cache_opts: opts} = context do
       offset = @change_offset
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
-      :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
 
       :ok = ShapeCache.append_to_log!(shape_id, offset, @log_items, opts)
 
       {^shape_id, ^offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
       restart_shape_cache(context)
-      :ready = ShapeCache.wait_for_snapshot(opts[:server], shape_id)
+      :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert {^shape_id, ^offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
     end
 
@@ -673,7 +725,7 @@ defmodule Electric.ShapeCacheTest do
         create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
           GenServer.cast(parent, {:snapshot_xmin_known, shape_id, @snapshot_xmin})
           Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
-          GenServer.cast(parent, {:snapshot_ready, shape_id})
+          GenServer.cast(parent, {:snapshot_started, shape_id})
         end
       )
     end
