@@ -118,6 +118,7 @@ access-control-allow-methods: GET, POST, OPTIONS
 content-type: application/json; charset=utf-8
 x-electric-shape-id: 3833821-1721299734314
 x-electric-chunk-last-offset: 0_0
+x-electric-schema: {"id":{"type":"int4","pk_index":0},"name":{"type":"varchar","max_length":255},"value":{"type":"float8"}}
 etag: 3833821-1721299734314:-1:0_0
 
 [{"offset":"0_0","value":{"id":"1","name":"Alice","value":"3.14"},"key":"\"public\".\"foo\"/1","headers":{"operation"
