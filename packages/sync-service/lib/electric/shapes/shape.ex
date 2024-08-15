@@ -7,6 +7,7 @@ defmodule Electric.Shapes.Shape do
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Runner
   alias Electric.Replication.Changes
+  alias Electric.Utils
 
   @enforce_keys [:root_table]
   defstruct [:root_table, :table_info, :where]
@@ -80,11 +81,17 @@ defmodule Electric.Shapes.Shape do
   end
 
   defp validate_table(definition) when is_binary(definition) do
-    case String.split(definition, ".") do
-      [table_name] when table_name != "" ->
+    regex =
+      ~r/^((?<schema>([a-z_][a-zA-Z0-9_]*|"(""|[^"])+"))\.)?(?<table>([a-z_][a-zA-Z0-9_]*|"(""|[^"])+"))$/
+
+    case Regex.run(regex, definition, capture: :all_names) do
+      ["", table_name] when table_name != "" ->
+        table_name = Utils.parse_quoted_name(table_name)
         {:ok, {"public", table_name}}
 
-      [schema_name, table_name] when schema_name != "" and table_name != "" ->
+      [schema_name, table_name] when table_name != "" ->
+        schema_name = Utils.parse_quoted_name(schema_name)
+        table_name = Utils.parse_quoted_name(table_name)
         {:ok, {schema_name, table_name}}
 
       _ ->

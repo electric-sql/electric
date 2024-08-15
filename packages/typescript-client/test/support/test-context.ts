@@ -80,7 +80,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
     await dbClient.query(`DROP TABLE ${tableName}`)
   },
   issuesTableUrl: async ({ issuesTableSql, pgSchema, clearShape }, use) => {
-    const urlAppropriateTable = pgSchema + `.` + issuesTableSql.slice(1, -1)
+    const urlAppropriateTable = pgSchema + `.` + issuesTableSql
     await use(urlAppropriateTable)
     try {
       await clearShape(urlAppropriateTable)
@@ -168,7 +168,7 @@ export const testWithMultitypeTable = testWithDbClient.extend<{
     `)
   },
   tableUrl: async ({ tableSql, clearShape, pgSchema }, use) => {
-    const urlAppropriateTable = pgSchema + `.` + tableSql.slice(1, -1)
+    const urlAppropriateTable = pgSchema + `.` + tableSql
     await use(urlAppropriateTable)
     try {
       await clearShape(urlAppropriateTable)
