@@ -8,6 +8,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   alias Electric.Replication.Changes
   alias Electric.ShapeCache.CubDbStorage
   alias Electric.ShapeCache.InMemoryStorage
+  alias Electric.ShapeCache.MixedDiskStorage
   alias Electric.Shapes.Shape
   alias Electric.Utils
   @moduletag :tmp_dir
@@ -39,9 +40,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                  }
                ]
                |> Enum.map(&Jason.encode!/1)
-               |> Enum.map(&List.wrap/1)
 
-  for module <- [InMemoryStorage, CubDbStorage] do
+  for module <- [InMemoryStorage, CubDbStorage, MixedDiskStorage] do
     module_name = module |> Module.split() |> List.last()
 
     doctest module, import: true
@@ -94,10 +94,22 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
 
       test "does not leak results from other snapshots", %{module: storage, opts: opts} do
-        another_data_stream = [
-          [<<3::128>>, "row3"],
-          [<<4::128>>, "row4"]
-        ]
+        another_data_stream =
+          [
+            %{
+              key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000003"|,
+              value: %{id: "00000000-0000-0000-0000-000000000003", title: "row3"},
+              headers: %{operation: "insert"},
+              offset: @snapshot_offset_encoded
+            },
+            %{
+              key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000004"|,
+              value: %{id: "00000000-0000-0000-0000-000000000004", title: "row4"},
+              headers: %{operation: "insert"},
+              offset: @snapshot_offset_encoded
+            }
+          ]
+          |> Enum.map(&Jason.encode!/1)
 
         storage.mark_snapshot_as_started(@shape_id, opts)
         storage.make_new_snapshot!(@shape_id, @data_stream, opts)
@@ -168,7 +180,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
               offset: @snapshot_offset_encoded
             }
             |> Jason.encode!()
-            |> List.wrap()
           end)
 
         storage.mark_snapshot_as_started(@shape_id, opts)
@@ -534,7 +545,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   end
 
   # Tests for storage implimentations that are recoverable
-  for module <- [CubDbStorage] do
+  for module <- [CubDbStorage, MixedDiskStorage] do
     module_name = module |> Module.split() |> List.last()
 
     describe "#{module_name}.list_shapes/1" do
@@ -710,6 +721,13 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     [
       db: String.to_atom("shape_cubdb_#{Utils.uuid4()}"),
       file_path: tmp_dir
+    ]
+  end
+
+  defp opts(MixedDiskStorage, %{tmp_dir: tmp_dir}) do
+    [
+      db: String.to_atom("shape_cubdb_#{Utils.uuid4()}"),
+      storage_dir: tmp_dir
     ]
   end
 end

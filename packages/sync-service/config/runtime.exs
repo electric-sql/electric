@@ -72,6 +72,7 @@ cache_stale_age = env!("CACHE_STALE_AGE", :integer, 60 * 5)
 statsd_host = env!("STATSD_HOST", :string?, nil)
 
 cubdb_file_path = env!("CUBDB_FILE_PATH", :string, "./shapes")
+mixed_storage_dir = env!("MIXED_STORAGE_DIR", :string, "./mixed_storage")
 
 storage =
   env!(
@@ -84,8 +85,11 @@ storage =
         "cubdb" ->
           {Electric.ShapeCache.CubDbStorage, file_path: cubdb_file_path}
 
+        "mixed" ->
+          {Electric.ShapeCache.MixedDiskStorage, storage_dir: mixed_storage_dir}
+
         _ ->
-          raise Dotenvy.Error, message: "storage must be one of: MEMORY, CUBDB"
+          raise Dotenvy.Error, message: "storage must be one of: MEMORY, CUBDB, MIXED"
       end
     end,
     {Electric.ShapeCache.CubDbStorage, file_path: cubdb_file_path}
