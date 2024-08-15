@@ -45,12 +45,9 @@ const setupShapeStream = (provider) => {
         })
     }
 
-    // Should handle multiple clients
+    // Should deduplicate persistence
     const updateShapeState = (name, offset, shapeId) => {
-      if (provider.persistence === null) {
-        return
-      }
-      provider.persistence.set(name, { offset, shape_id: shapeId })
+      provider.persistence?.set(name, { offset, shape_id: shapeId })
     }
 
     const handleSyncMessage = (messages) => {
@@ -174,11 +171,7 @@ const setupShapeStream = (provider) => {
   }
 }
 
-/**
- * @param {ElectricProvider} provider
- * @param {Uint8Array} op
- */
-const sendOperation = async (provider, update) => {
+const sendOperation = (provider, update) => {
   if (!provider.connected) {
     provider.pending.push(update)
   } else {
@@ -187,18 +180,14 @@ const sendOperation = async (provider, update) => {
     const op = toBase64(encoding.toUint8Array(encoder))
     const room = provider.roomname
 
-    await fetch(`/api/operation`, {
+    fetch(`/api/operation`, {
       method: `POST`,
       body: JSON.stringify({ room, op }),
     })
   }
 }
 
-/**
- * @param {ElectricProvider} provider
- * @param {Uint8Array} op
- */
-const sendAwareness = async (provider, changedClients) => {
+const sendAwareness = (provider, changedClients) => {
   const encoder = encoding.createEncoder()
   encoding.writeVarUint8Array(
     encoder,
@@ -210,7 +199,7 @@ const sendAwareness = async (provider, changedClients) => {
     const room = provider.roomname
     const clientID = `${provider.doc.clientID}`
 
-    await fetch(`/api/awareness`, {
+    fetch(`/api/awareness`, {
       method: `POST`,
       body: JSON.stringify({ client: clientID, room, op }),
     })
@@ -274,13 +263,8 @@ export class ElectricProvider extends Observable {
         })
     })
 
-    /**
-     * Listens to Yjs updates and sends to the backend
-     * @param {Uint8Array} update
-     * @param {any} origin
-     */
     this._updateHandler = (update, origin) => {
-      if (origin !== this) {
+      if (origin !== this && !origin.bcChannel) {
         sendOperation(this, update)
       }
     }
@@ -320,7 +304,6 @@ export class ElectricProvider extends Observable {
       ...this.resume.operations,
     }
     const encodedParams = url.encodeQueryParams(params)
-    console.log(params)
     return this.serverUrl + `/v1/shape/ydoc_operations?` + encodedParams
   }
 
@@ -330,7 +313,6 @@ export class ElectricProvider extends Observable {
       ...this.resume.awareness,
     }
     const encodedParams = url.encodeQueryParams(params)
-    console.log(params)
     return this.serverUrl + `/v1/shape/ydoc_awareness?` + encodedParams
   }
 
