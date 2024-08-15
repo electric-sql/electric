@@ -2,50 +2,26 @@
  * Extracted this from y-websocket
  */
 
-/* eslint-env browser */
-
 import * as bc from "lib0/broadcastchannel"
 import * as encoding from "lib0/encoding"
 import * as decoding from "lib0/decoding"
 import * as syncProtocol from "y-protocols/sync"
 import * as awarenessProtocol from "y-protocols/awareness"
 import { Observable } from "lib0/observable"
+import * as env from "lib0/environment"
+
 export const messageSync = 0
 export const messageQueryAwareness = 3
 export const messageAwareness = 1
 
 const messageHandlers = []
 
-messageHandlers[messageSync] = (
-  encoder,
-  decoder,
-  provider,
-  emitSynced,
-  _messageType
-) => {
+messageHandlers[messageSync] = (encoder, decoder, provider) => {
   encoding.writeVarUint(encoder, messageSync)
-  const syncMessageType = syncProtocol.readSyncMessage(
-    decoder,
-    encoder,
-    provider.doc,
-    provider
-  )
-  if (
-    emitSynced &&
-    syncMessageType === syncProtocol.messageYjsSyncStep2 &&
-    !provider.synced
-  ) {
-    provider.synced = true
-  }
+  syncProtocol.readSyncMessage(decoder, encoder, provider.doc, provider)
 }
 
-messageHandlers[messageQueryAwareness] = (
-  encoder,
-  _decoder,
-  provider,
-  _emitSynced,
-  _messageType
-) => {
+messageHandlers[messageQueryAwareness] = (encoder, _decoder, provider) => {
   encoding.writeVarUint(encoder, messageAwareness)
   encoding.writeVarUint8Array(
     encoder,
@@ -56,13 +32,7 @@ messageHandlers[messageQueryAwareness] = (
   )
 }
 
-messageHandlers[messageAwareness] = (
-  _encoder,
-  decoder,
-  provider,
-  _emitSynced,
-  _messageType
-) => {
+messageHandlers[messageAwareness] = (_encoder, decoder, provider) => {
   awarenessProtocol.applyAwarenessUpdate(
     provider.awareness,
     decoding.readVarUint8Array(decoder),
@@ -70,33 +40,19 @@ messageHandlers[messageAwareness] = (
   )
 }
 
-/**
- * @param {BroadcastProvider} provider
- * @param {Uint8Array} buf
- * @param {boolean} emitSynced
- * @return {encoding.Encoder}
- */
-const readMessage = (provider, buf, emitSynced) => {
+const readMessage = (provider, buf) => {
   const decoder = decoding.createDecoder(buf)
   const encoder = encoding.createEncoder()
   const messageType = decoding.readVarUint(decoder)
   const messageHandler = provider.messageHandlers[messageType]
   if (/** @type {any} */ (messageHandler)) {
-    messageHandler(encoder, decoder, provider, emitSynced, messageType)
+    messageHandler(encoder, decoder, provider, false, messageType)
   } else {
     console.error(`Unable to compute message`)
   }
   return encoder
 }
 
-/**
- * @param {BroadcastProvider} provider
- */
-
-/**
- * @param {BroadcastProvider} provider
- * @param {ArrayBuffer} buf
- */
 const broadcastMessage = (provider, buf) => {
   if (provider.bcconnected) {
     bc.publish(provider.bcChannel, buf, provider)
@@ -107,11 +63,7 @@ export class BroadcastProvider extends Observable {
   constructor(
     roomname,
     doc,
-    {
-      connect = true,
-      disableBc = false,
-      awareness = new awarenessProtocol.Awareness(doc),
-    } = {}
+    { connect = true, awareness = new awarenessProtocol.Awareness(doc) } = {}
   ) {
     super()
 
@@ -120,11 +72,7 @@ export class BroadcastProvider extends Observable {
     this.roomname = roomname
     this.doc = doc
     this.bcconnected = false
-    this.disableBc = disableBc
     this.messageHandlers = messageHandlers.slice()
-
-    this._synced = false
-    this.wsLastMessageReceived = 0
 
     this._bcSubscriber = (data, origin) => {
       if (origin !== this) {
@@ -144,7 +92,7 @@ export class BroadcastProvider extends Observable {
       }
     }
     this.doc.on(`update`, this._updateHandler)
-    
+
     this._awarenessUpdateHandler = ({ added, updated, removed }, _origin) => {
       const changedClients = added.concat(updated).concat(removed)
       const encoder = encoding.createEncoder()
@@ -162,6 +110,9 @@ export class BroadcastProvider extends Observable {
         `app closed`
       )
     }
+    if (env.isNode && typeof process !== `undefined`) {
+      process.on(`exit`, this._exitHandler)
+    }
 
     awareness.on(`update`, this._awarenessUpdateHandler)
 
@@ -170,32 +121,17 @@ export class BroadcastProvider extends Observable {
     }
   }
 
-  /**
-   * @type {boolean}
-   */
-  get synced() {
-    return this._synced
-  }
-
-  set synced(state) {
-    if (this._synced !== state) {
-      this._synced = state
-      this.emit(`synced`, [state])
-      this.emit(`sync`, [state])
-    }
-  }
-
   destroy() {
     this.disconnect()
+    if (env.isNode && typeof process !== `undefined`) {
+      process.off(`exit`, this._exitHandler)
+    }
     this.awareness.off(`update`, this._awarenessUpdateHandler)
     this.doc.off(`update`, this._updateHandler)
     super.destroy()
   }
 
   connectBc() {
-    if (this.disableBc) {
-      return
-    }
     if (!this.bcconnected) {
       bc.subscribe(this.bcChannel, this._bcSubscriber)
       this.bcconnected = true

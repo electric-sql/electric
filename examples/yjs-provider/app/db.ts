@@ -1,14 +1,13 @@
-import pgPkg from "pg"
-const { Client } = pgPkg
+import { Pool } from "pg"
 
-const db = new Client({
+console.log(`init pool`)
+const pool = new Pool({
   host: `localhost`,
   port: 54321,
   password: `password`,
   user: `postgres`,
   database: `electric`,
+  max: 1,
 })
 
-db.connect()
-
-export { db }
+export { pool }
