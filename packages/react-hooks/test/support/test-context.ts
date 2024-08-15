@@ -80,7 +80,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
     await dbClient.query(`DROP TABLE ${tableName}`)
   },
   issuesTableUrl: async ({ issuesTableSql, pgSchema, clearShape }, use) => {
-    const urlAppropriateTable = pgSchema + `.` + issuesTableSql.slice(1, -1)
+    const urlAppropriateTable = pgSchema + `.` + issuesTableSql
     await use(urlAppropriateTable)
     try {
       await clearShape(urlAppropriateTable)
