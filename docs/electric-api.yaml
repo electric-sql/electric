@@ -255,7 +255,7 @@ paths:
                 example:
                   - headers:
                       operation: insert
-                    offset: 0/0
+                    offset: 0_0
                     key: issue-1
                     value:
                       id: issue-1
@@ -264,7 +264,7 @@ paths:
                   - headers:
                       operation: insert
                       control: up-to-date
-                    offset: 1934/0
+                    offset: 1934_0
                     key: issue-2
                     value:
                       id: issue-2
