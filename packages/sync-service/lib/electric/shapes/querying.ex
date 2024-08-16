@@ -72,7 +72,8 @@ defmodule Electric.Shapes.Querying do
     pk_part = join_primary_keys(pk_cols)
 
     # Because relation part of the key is known at query building time, we can use $1 to inject escaped version of the relation
-    ~s['"key":' || ] <> pg_escape_string_for_json(~s['#{escape_relation(root_table)}' || '/"' || #{pk_part} || '"'])
+    ~s['"key":' || ] <>
+      pg_escape_string_for_json(~s['#{escape_relation(root_table)}' || '/"' || #{pk_part} || '"'])
   end
 
   defp join_primary_keys(pk_cols) do
