@@ -1,6 +1,5 @@
 "use client"
 
-import "./Example.css"
 import { useEffect, useRef, useState } from "react"
 
 import * as Y from "yjs"
@@ -30,19 +29,6 @@ const usercolors = [
 
 const userColor = usercolors[random.uint32() % usercolors.length]
 
-const theme = EditorView.theme(
-  {
-    ".cm-content": {
-      minWidth: `400px`,
-      textAlign: `left`,
-      backgroundColor: `#223239`,
-    },
-    ".cm-content .cm-gutter": {
-      minHeight: `200px`,
-    },
-  },
-  { dark: true }
-)
 const ydoc = new Y.Doc()
 let network: ElectricProvider | null = null
 
@@ -96,7 +82,6 @@ export default function Home() {
         javascript(),
         EditorView.lineWrapping,
         yCollab(ytext, network?.awareness),
-        theme,
       ],
     })
 
@@ -112,7 +97,12 @@ export default function Home() {
           {connect}
         </button>
       </form>
-      <div className="App-editor" ref={editor}></div>
+      <p>
+        This is a demo of <a href="https://github.com/yjs/yjs">Yjs</a> shared
+        editor backed by Postgres using{` `}
+        <a href="https://github.com/electric-sql/electric">Electric</a>.
+      </p>
+      <div ref={editor}></div>
     </div>
   )
 }
