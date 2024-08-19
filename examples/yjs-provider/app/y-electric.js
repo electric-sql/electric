@@ -28,10 +28,12 @@ const setupShapeStream = (provider) => {
 
     provider.operationsStream = new ShapeStream({
       url: provider.operationsUrl,
+      ...provider.resume.operations,
     })
 
     provider.awarenessStream = new ShapeStream({
       url: provider.awarenessUrl,
+      ...provider.resume.awareness,
     })
 
     const handleMessages = (messages) => {
@@ -45,9 +47,10 @@ const setupShapeStream = (provider) => {
         })
     }
 
-    // Should deduplicate persistence
+    // is it necessary to deduplicate persistence?
+    // only for performance
     const updateShapeState = (name, offset, shapeId) => {
-      provider.persistence?.set(name, { offset, shape_id: shapeId })
+      provider.persistence?.set(name, { offset, shapeId })
     }
 
     const handleSyncMessage = (messages) => {
@@ -57,7 +60,7 @@ const setupShapeStream = (provider) => {
       const { offset } = messages[messages.length - 2]
       updateShapeState(
         `operations_state`,
-        Number(offset.split(`_`)[0]),
+        offset,
         provider.operationsStream.shapeId
       )
 
@@ -86,7 +89,7 @@ const setupShapeStream = (provider) => {
       const { offset } = messages[messages.length - 2]
       updateShapeState(
         `awareness_state`,
-        Number(offset.split(`_`)[0]),
+        offset,
         provider.awarenessStream.shapeId
       )
 
@@ -301,7 +304,6 @@ export class ElectricProvider extends Observable {
   get operationsUrl() {
     const params = {
       where: `room = '${this.roomname}'`,
-      ...this.resume.operations,
     }
     const encodedParams = url.encodeQueryParams(params)
     return this.serverUrl + `/v1/shape/ydoc_operations?` + encodedParams
@@ -310,7 +312,6 @@ export class ElectricProvider extends Observable {
   get awarenessUrl() {
     const params = {
       where: `room = '${this.roomname}'`,
-      ...this.resume.awareness,
     }
     const encodedParams = url.encodeQueryParams(params)
     return this.serverUrl + `/v1/shape/ydoc_awareness?` + encodedParams
