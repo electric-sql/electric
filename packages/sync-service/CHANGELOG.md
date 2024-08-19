@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.3.3
+
+### Patch Changes
+
+- 11f564d: Support quoted schema and table names
+
 ## 0.3.2
 
 ### Patch Changes
