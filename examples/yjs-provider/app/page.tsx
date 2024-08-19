@@ -10,7 +10,8 @@ import { IndexeddbPersistence } from "y-indexeddb"
 import { BroadcastProvider } from "./y-broadcast"
 import * as awarenessProtocol from "y-protocols/awareness"
 
-import { EditorState, EditorView, basicSetup } from "@codemirror/basic-setup"
+import { EditorState } from "@codemirror/state"
+import { EditorView, basicSetup } from "codemirror"
 import { keymap } from "@codemirror/view"
 import { javascript } from "@codemirror/lang-javascript"
 
