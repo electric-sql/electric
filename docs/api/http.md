@@ -59,7 +59,7 @@ When you make an initial sync request, with `offset=-1`, you're telling the serv
 
 When a shape is first requested, Electric queries Postgres for the data and populates the log by turning the query results into insert operations. This allows you to sync shapes without having to pre-define them. Electric then streams out the log data in the response.
 
-Sometimes a log can fit in a single response. Sometimes it's too big and requires multiple requests. In this case, the first request will return a batch of data and an `x-electric-chunk-last-offset` header. An HTTP client should then continue to make requests setting the `offset` parameter to the this header value. This allows the client to paginate through the shape log until it has recieved all the current data.
+Sometimes a log can fit in a single response. Sometimes it's too big and requires multiple requests. In this case, the first request will return a batch of data and an `x-electric-chunk-last-offset` header. An HTTP client should then continue to make requests setting the `offset` parameter to the this header value. This allows the client to paginate through the shape log until it has received all the current data.
 
 ### Control messages
 
