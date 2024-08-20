@@ -26,7 +26,7 @@ Electric always adds the following resource attributes to events:
 %{service: %{name: service_name, version: version}, instance: %{id: instance_id}}
 ```
 
-Attributes `service_name` and `instance_id` can be overriden with `ELECTRIC_SERVICE_NAME` and `ELECTRIC_INSTANCE_ID` respectively. By default, `instance_id` is an uuid.
+Attributes `service_name` and `instance_id` can be overridden with `ELECTRIC_SERVICE_NAME` and `ELECTRIC_INSTANCE_ID` respectively. By default, `instance_id` is an uuid.
 
 Electric will also load additional resource attributes from `OTEL_RESOURCE_ATTRIBUTES`. Learn more about resource attributes in [OpenTelemetry documentation](https://opentelemetry.io/docs/languages/js/resources/).
 

@@ -213,7 +213,7 @@ So, following the strategy of paring down to the core and then progressively lay
 
 This explicitly reduces the capability of the system in the short term, in order to build a better, more resilient system in the long term. The beauty is that, because we no longer prescribe a write-path strategy, you can choose and if necessary implement any write-path strategy you like.
 
-We will only focus on the more complex strategies ourseves once the simpler ones are bulletproof. And we hope that others, like [LiveStore](https://www.schickling.dev/projects/livestore) and [Drizzle](https://orm.drizzle.team/), for example, will build better client-side libraries that we can.
+We will only focus on the more complex strategies ourselves once the simpler ones are bulletproof. And we hope that others, like [LiveStore](https://www.schickling.dev/projects/livestore) and [Drizzle](https://orm.drizzle.team/), for example, will build better client-side libraries that we can.
 
 #### A note on finality of local writes
 

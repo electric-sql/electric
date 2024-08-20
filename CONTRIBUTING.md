@@ -26,7 +26,7 @@ The **ElectricSQL repositories** are defined as any repository hosted on the Git
 
 ## Contributor Guidelines
 
-Please read the guideance below about what to do if you:
+Please read the guidance below about what to do if you:
 
 - [found a bug](#did-you-find-a-bug)
 - [fixed a bug](#did-you-write-a-patch-that-fixes-a-bug)
