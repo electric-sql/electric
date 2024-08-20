@@ -10,6 +10,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Postgres.Lsn
   alias Electric.Replication.ShapeLogCollector
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.RelationChange
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
 
@@ -25,6 +26,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   @shape Shape.new!("public.test_table",
            inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
          )
+
+  @similar_shape Shape.new!("public.test_table",
+                   inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}]),
+                   where: "id > 5"
+                 )
 
   @other_shape Shape.new!("public.other_table",
                  inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
@@ -288,6 +294,83 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, server)
+    end
+  end
+
+  describe "handle_relation_change/2" do
+    setup do
+      # Start a test Registry
+      registry_name = Module.concat(__MODULE__, Registry)
+      start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
+
+      # Start the ShapeLogCollector process
+      opts = [
+        name: :test_shape_log_storage,
+        registry: registry_name,
+        shape_cache: {MockShapeCache, []},
+        inspector: {MockInspector, []}
+      ]
+
+      {:ok, pid} = start_supervised({ShapeLogCollector, opts})
+      %{server: pid, registry: registry_name}
+    end
+
+    test "cleans shapes affected by table renaming", %{server: server} do
+      shape_id1 = "shape1"
+      shape1 = @shape
+
+      shape_id2 = "shape2"
+      shape2 = @similar_shape
+
+      shape_id3 = "shape3"
+      shape3 = @other_shape
+
+      # doesn't matter, isn't used for this test
+      xmin = 100
+
+      MockShapeCache
+      |> expect(:list_active_shapes, fn _ ->
+        [{shape_id1, shape1, xmin}, {shape_id2, shape2, xmin}, {shape_id3, shape3, xmin}]
+      end)
+      |> expect(:clean_shape, 1, fn _, ^shape_id1 -> :ok end)
+      |> expect(:clean_shape, 1, fn _, ^shape_id2 -> :ok end)
+      |> allow(self(), server)
+
+      change = %RelationChange{
+        old_relation: {"public", "test_table", []},
+        new_relation: {"public", "renamed_test_table", []}
+      }
+
+      assert :ok = ShapeLogCollector.handle_relation_change(change, server)
+    end
+
+    test "cleans shapes affected by a relation change", %{server: server} do
+      shape_id1 = "shape1"
+      shape1 = @shape
+
+      shape_id2 = "shape2"
+      shape2 = @similar_shape
+
+      shape_id3 = "shape3"
+      shape3 = @other_shape
+
+      # doesn't matter, isn't used for this test
+      xmin = 100
+
+      MockShapeCache
+      |> expect(:list_active_shapes, fn _ ->
+        [{shape_id1, shape1, xmin}, {shape_id2, shape2, xmin}, {shape_id3, shape3, xmin}]
+      end)
+      |> expect(:clean_shape, 1, fn _, ^shape_id1 -> :ok end)
+      |> expect(:clean_shape, 1, fn _, ^shape_id2 -> :ok end)
+      |> allow(self(), server)
+
+      change = %RelationChange{
+        old_relation: {"public", "test_table", [{"id", "int8"}]},
+        new_relation: {"public", "test_table", [{"id", "float4"}]}
+      }
+
+      assert :ok = ShapeLogCollector.handle_relation_change(change, server)
     end
   end
 

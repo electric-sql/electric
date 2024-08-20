@@ -8,6 +8,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Shapes.Shape
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.RelationChange
   use GenServer
   require Logger
 
@@ -32,8 +33,27 @@ defmodule Electric.Replication.ShapeLogCollector do
     GenServer.call(server, {:new_txn, txn})
   end
 
+  def handle_relation_change(%RelationChange{} = change, server \\ __MODULE__) do
+    GenServer.call(server, {:relation_change, change})
+  end
+
   def init(opts) do
     {:ok, opts}
+  end
+
+  def handle_call(
+        {:relation_change, change},
+        _from,
+        state
+      ) do
+    {shape_cache, opts} = state.shape_cache
+    # Fetch all shapes that are affected by the relation change and clean them up
+    shape_cache.list_active_shapes(opts)
+    |> Enum.filter(&is_affected_by_relation_change?(&1, change))
+    |> Enum.map(&elem(&1, 0))
+    |> Electric.Shapes.clean_shapes(state)
+
+    {:reply, :ok, state}
   end
 
   def handle_call(
@@ -101,4 +121,30 @@ defmodule Electric.Replication.ShapeLogCollector do
           do: send(pid, {ref, :new_changes, latest_log_offset})
     end)
   end
+
+  defp is_affected_by_relation_change?(
+         shape,
+         %RelationChange{
+           old_relation: {old_schema, old_table, _},
+           new_relation: {new_schema, new_table, _}
+         }
+       )
+       when old_schema != new_schema or old_table != new_table do
+    # The table's qualified name changed
+    # so shapes that match the old schema or table name are affected
+    shape_matches?(shape, old_schema, old_table)
+  end
+
+  defp is_affected_by_relation_change?(shape, %RelationChange{new_relation: {schema, table, _}}) do
+    shape_matches?(shape, schema, table)
+  end
+
+  # TODO: test this machinery of cleaning shapes on any migration
+  #       once that works, then we can optimize it to only clean on relevant migrations
+
+  defp shape_matches?({_, %Shape{root_table: {ns, tbl}}, _}, schema, table)
+       when ns == schema and tbl == table,
+       do: true
+
+  defp shape_matches?(_, _, _), do: false
 end
