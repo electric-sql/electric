@@ -49,7 +49,8 @@ export default defineConfig({
           { text: 'Shapes', link: '/guides/shapes' },
           // { text: 'Deployment', link: '/guides/deployment' },
           // { text: 'Writing clients', link: '/guides/write-your-own-client' },
-          { text: 'Telemetry', link: '/guides/telemetry' }
+          { text: 'Telemetry', link: '/guides/telemetry' },
+          { text: 'Local Development', link: '/guides/local-development' }
         ]
       },
       {
