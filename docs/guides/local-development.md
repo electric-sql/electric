@@ -30,7 +30,9 @@ the 6 requests HTTP/1.1 limitation in the browser.
 
 ### Run Caddy
 This command runs Caddy so it's listening on port 3001 and proxying shape
-requests to Electric which listens on port 3000.
+requests to Electric which listens on port 3000. If you're loading shapes
+through your API or framework dev server, replaces 3000 with the port your API
+or dev server is listening on.
 
 ```cli
 npx @radically-straightforward/caddy run --config - --adapter caddyfile <<EOF
