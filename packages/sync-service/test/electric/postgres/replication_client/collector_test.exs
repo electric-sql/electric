@@ -63,18 +63,6 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
     assert %Collector{relations: %{1 => @relation, 2 => ^new_relation}} = updated_collector
   end
 
-  # TODO: move this test to the shape log collector tests
-  # test "collector logs a warning when receiving a new relation message that doesn't match the previous one",
-  #     %{collector: collector} do
-  #  new_relation = %{
-  #    @relation
-  #    | columns: [%LR.Relation.Column{name: "id", flags: [:key], type_oid: 20, type_modifier: -1}]
-  #  }
-  #
-  #  log = capture_log(fn -> Collector.handle_message(new_relation, collector) end)
-  #  assert log =~ "Schema for the table public.users had changed"
-  # end
-
   test "collector logs information when receiving a generic message",
        %{collector: collector} do
     message = %LR.Message{prefix: "test", content: "hello world"}

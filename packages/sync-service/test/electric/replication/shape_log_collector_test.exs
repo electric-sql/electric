@@ -345,6 +345,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       MockShapeCache
       |> expect(:get_relation, 1, fn ^relation_id, _ -> rel end)
+      |> expect(:clean_shape, 0, fn _, _ -> :ok end)
       |> allow(self(), server)
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, server)
