@@ -41,7 +41,7 @@ defmodule Electric.Application do
                transaction_received:
                  {Electric.Replication.ShapeLogCollector, :store_transaction, []},
                relation_received:
-                 {Electric.Replication.ShapeLogCollector, :handle_relation_change, []}
+                 {Electric.Replication.ShapeLogCollector, :handle_relation_msg, []}
              ],
              pool_opts: [
                name: Electric.DbPool,

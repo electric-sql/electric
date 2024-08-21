@@ -7,7 +7,7 @@ defmodule Electric.Postgres.ReplicationClient do
   alias Electric.Postgres.LogicalReplication.Decoder
   alias Electric.Postgres.ReplicationClient.Collector
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
-  alias Electric.Replication.Changes.RelationChange
+  alias Electric.Replication.Changes.Relation
 
   require Logger
 
@@ -163,7 +163,7 @@ defmodule Electric.Postgres.ReplicationClient do
       %Collector{} = txn_collector ->
         {:noreply, %{state | txn_collector: txn_collector}}
 
-      {%RelationChange{} = rel, %Collector{} = txn_collector} ->
+      {%Relation{} = rel, %Collector{} = txn_collector} ->
         {m, f, args} = state.relation_received
         apply(m, f, [rel | args])
         {:noreply, %{state | txn_collector: txn_collector}}

@@ -15,7 +15,8 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     UpdatedRecord,
     DeletedRecord,
     TruncatedRelation,
-    RelationChange
+    Relation,
+    Column
   }
 
   defstruct transaction: nil, tx_op_index: nil, relations: %{}
@@ -51,23 +52,21 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
   def handle_message(%LR.Origin{} = _msg, state), do: state
   def handle_message(%LR.Type{}, state), do: state
 
-  def handle_message(%LR.Relation{id: id} = rel, %__MODULE__{} = state) do
+  def handle_message(
+        %LR.Relation{id: id, namespace: ns, name: name, columns: cols} = rel,
+        %__MODULE__{} = state
+      ) do
     new_state = Map.update!(state, :relations, &Map.put(&1, rel.id, rel))
-    old_rel = Map.get(state.relations, id, rel)
 
-    if old_rel != rel do
-      Logger.warning("Schema for the table #{rel.namespace}.#{rel.name} had changed")
-
-      {
-        %RelationChange{
-          old_relation: relation_to_tuple(old_rel),
-          new_relation: relation_to_tuple(rel)
-        },
-        new_state
-      }
-    else
+    {
+      %Relation{
+        id: id,
+        schema: ns,
+        table: name,
+        columns: Enum.map(cols, fn col -> %Column{name: col.name, type_oid: col.type_oid} end)
+      },
       new_state
-    end
+    }
   end
 
   def handle_message(%LR.Insert{} = msg, %__MODULE__{} = state) do
@@ -202,14 +201,6 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     |> Map.new(fn {%{name: column_name}, value} ->
       {column_name, value_fun.(column_name, value)}
     end)
-  end
-
-  defp column_to_tuple(column) do
-    {column.name, column.type_oid}
-  end
-
-  defp relation_to_tuple(%LR.Relation{namespace: schema, name: table, columns: cols}) do
-    {schema, table, Enum.map(cols, &column_to_tuple/1)}
   end
 
   defp column_value(_column_name, value), do: value

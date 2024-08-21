@@ -18,8 +18,6 @@ defmodule Electric.Replication.Changes do
   @type db_identifier() :: String.t()
   @type xid() :: non_neg_integer()
   @type relation_name() :: {schema :: db_identifier(), table :: db_identifier()}
-  @type column() :: {name :: db_identifier(), type_oid :: pos_integer()}
-  @type relation() :: {schema :: db_identifier(), table :: db_identifier(), columns :: [column()]}
   @type record() :: %{(column_name :: db_identifier()) => column_data :: binary()}
   @type relation_id() :: non_neg_integer
 
@@ -164,12 +162,32 @@ defmodule Electric.Replication.Changes do
           }
   end
 
+  defmodule Column do
+    defstruct [:name, :type_oid]
+
+    @type t() :: %__MODULE__{
+            name: Changes.db_identifier(),
+            type_oid: pos_integer()
+          }
+  end
+
+  defmodule Relation do
+    defstruct [:id, :schema, :table, :columns]
+
+    @type t() :: %__MODULE__{
+            id: Changes.relation_id(),
+            schema: Changes.db_identifier(),
+            table: Changes.db_identifier(),
+            columns: [Column.t()]
+          }
+  end
+
   defmodule RelationChange do
     defstruct [:old_relation, :new_relation]
 
     @type t() :: %__MODULE__{
-            old_relation: Changes.relation(),
-            new_relation: Changes.relation()
+            old_relation: Relation.t(),
+            new_relation: Relation.t()
           }
   end
 

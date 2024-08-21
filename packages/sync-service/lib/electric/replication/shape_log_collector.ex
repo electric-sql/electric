@@ -7,8 +7,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Postgres.Inspector
   alias Electric.Shapes.Shape
   alias Electric.Replication.Changes
-  alias Electric.Replication.Changes.Transaction
-  alias Electric.Replication.Changes.RelationChange
+  alias Electric.Replication.Changes.{Transaction, Relation, RelationChange}
   use GenServer
   require Logger
 
@@ -33,8 +32,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     GenServer.call(server, {:new_txn, txn})
   end
 
-  def handle_relation_change(%RelationChange{} = change, server \\ __MODULE__) do
-    GenServer.call(server, {:relation_change, change})
+  def handle_relation_msg(%Relation{} = rel, server \\ __MODULE__) do
+    GenServer.call(server, {:relation_msg, rel})
   end
 
   def init(opts) do
@@ -42,16 +41,26 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_call(
-        {:relation_change, change},
+        {:relation_msg, rel},
         _from,
         state
       ) do
     {shape_cache, opts} = state.shape_cache
-    # Fetch all shapes that are affected by the relation change and clean them up
-    shape_cache.list_active_shapes(opts)
-    |> Enum.filter(&is_affected_by_relation_change?(&1, change))
-    |> Enum.map(&elem(&1, 0))
-    |> Electric.Shapes.clean_shapes(state)
+    old_rel = shape_cache.get_relation(rel.id, opts)
+
+    if is_nil(old_rel) || old_rel != rel do
+      shape_cache.store_relation(rel, opts)
+    end
+
+    if !is_nil(old_rel) && old_rel != rel do
+      Logger.info("Schema for the table #{old_rel.schema}.#{old_rel.table} changed")
+      change = %RelationChange{old_relation: old_rel, new_relation: rel}
+      # Fetch all shapes that are affected by the relation change and clean them up
+      shape_cache.list_active_shapes(opts)
+      |> Enum.filter(&is_affected_by_relation_change?(&1, change))
+      |> Enum.map(&elem(&1, 0))
+      |> Electric.Shapes.clean_shapes(state)
+    end
 
     {:reply, :ok, state}
   end
@@ -125,8 +134,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   defp is_affected_by_relation_change?(
          shape,
          %RelationChange{
-           old_relation: {old_schema, old_table, _},
-           new_relation: {new_schema, new_table, _}
+           old_relation: %Relation{schema: old_schema, table: old_table},
+           new_relation: %Relation{schema: new_schema, table: new_table}
          }
        )
        when old_schema != new_schema or old_table != new_table do
@@ -135,7 +144,9 @@ defmodule Electric.Replication.ShapeLogCollector do
     shape_matches?(shape, old_schema, old_table)
   end
 
-  defp is_affected_by_relation_change?(shape, %RelationChange{new_relation: {schema, table, _}}) do
+  defp is_affected_by_relation_change?(shape, %RelationChange{
+         new_relation: %Relation{schema: schema, table: table}
+       }) do
     shape_matches?(shape, schema, table)
   end
 

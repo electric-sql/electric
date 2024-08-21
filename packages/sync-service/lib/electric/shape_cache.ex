@@ -6,6 +6,7 @@ defmodule Electric.ShapeCacheBehaviour do
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
+  alias Electric.Postgres.LogicalReplication.Messages
 
   @type shape_id :: String.t()
   @type shape_def :: Shape.t()
@@ -22,6 +23,8 @@ defmodule Electric.ShapeCacheBehaviour do
               {shape_id(), current_snapshot_offset :: LogOffset.t()}
 
   @callback list_active_shapes(opts :: keyword()) :: [{shape_id(), shape_def(), xmin()}]
+  @callback store_relation(Relation.t(), opts :: keyword()) :: :ok
+  @callback get_relation(Messages.relation_id(), opts :: keyword()) :: Relation.t() | nil
   @callback await_snapshot_start(GenServer.name(), shape_id()) :: :started | {:error, term()}
   @callback handle_truncate(GenServer.name(), shape_id()) :: :ok
   @callback clean_shape(GenServer.name(), shape_id()) :: :ok
@@ -35,6 +38,7 @@ defmodule Electric.ShapeCache do
   alias Electric.Shapes.Querying
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
+  alias Electric.Replication.Changes.{Relation, Column}
   alias Electric.Telemetry.OpenTelemetry
 
   use GenServer
@@ -48,6 +52,8 @@ defmodule Electric.ShapeCache do
   @shape_hash_lookup :shape_hash_lookup
   @shape_meta_xmin_pos 3
   @shape_meta_latest_offset_pos 4
+
+  @relation_data :relation_data
 
   @genserver_name_schema {:or, [:atom, {:tuple, [:atom, :atom, :any]}]}
   @schema NimbleOptions.new!(
@@ -124,6 +130,33 @@ defmodule Electric.ShapeCache do
         [{{:"$1", :"$2", :"$3"}}]
       }
     ])
+  end
+
+  @spec store_relation(Relation.t(), opts :: keyword()) :: :ok
+  def store_relation(%Relation{id: id, schema: schema, table: table, columns: columns}, opts) do
+    meta_table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
+    cols = Enum.map(columns, fn col -> {col.name, col.type_oid} end)
+    :ets.insert(meta_table, {{@relation_data, id}, schema, table, cols})
+    :ok
+  end
+
+  @spec get_relation(Messages.relation_id(), opts :: keyword()) :: Relation.t() | nil
+  def get_relation(relation_id, opts) do
+    meta_table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
+
+    case :ets.lookup(meta_table, {@relation_data, relation_id}) do
+      [] ->
+        nil
+
+      [{_, schema, table, cols}] ->
+        %Relation{
+          id: relation_id,
+          schema: schema,
+          table: table,
+          columns:
+            Enum.map(cols, fn {name, type_oid} -> %Column{name: name, type_oid: type_oid} end)
+        }
+    end
   end
 
   @spec clean_shape(GenServer.name(), String.t()) :: :ok
