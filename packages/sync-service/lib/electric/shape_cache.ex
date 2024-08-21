@@ -132,12 +132,18 @@ defmodule Electric.ShapeCache do
     ])
   end
 
-  @spec store_relation(Relation.t(), opts :: keyword()) :: :ok
-  def store_relation(%Relation{id: id, schema: schema, table: table, columns: columns}, opts) do
+  # TODO: introduce a recover_relations similar to recover_shapes
+  #       and call it in `init` to recover relations
+  @spec store_relation(Relation.t(), keyword()) :: :ok
+  def store_relation(%Relation{} = rel, opts) do
+    store_relation_ets(rel, opts)
+    Storage.store_relation(rel, opts[:storage])
+  end
+
+  defp store_relation_ets(%Relation{id: id, schema: schema, table: table, columns: columns}, opts) do
     meta_table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
     cols = Enum.map(columns, fn col -> {col.name, col.type_oid} end)
     :ets.insert(meta_table, {{@relation_data, id}, schema, table, cols})
-    :ok
   end
 
   @spec get_relation(Messages.relation_id(), opts :: keyword()) :: Relation.t() | nil
@@ -188,6 +194,7 @@ defmodule Electric.ShapeCache do
     }
 
     recover_shapes(state)
+    recover_relations(state)
 
     {:ok, state}
   end
@@ -414,5 +421,10 @@ defmodule Electric.ShapeCache do
         ]
       )
     end)
+  end
+
+  defp recover_relations(state) do
+    Storage.get_relations(state.storage)
+    |> Stream.each(&store_relation_ets(&1, state))
   end
 end

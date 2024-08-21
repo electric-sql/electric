@@ -2,6 +2,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
   alias Electric.ConcurrentStream
   alias Electric.LogItems
   alias Electric.Replication.LogOffset
+  alias Electric.Replication.Changes.Relation
   alias Electric.Telemetry.OpenTelemetry
   @behaviour Electric.ShapeCache.Storage
 
@@ -165,6 +166,15 @@ defmodule Electric.ShapeCache.CubDbStorage do
     :ok
   end
 
+  def store_relation(%Relation{id: id} = rel, opts) do
+    CubDB.put(opts.db, relation_key(id), rel)
+  end
+
+  def get_relations(opts) do
+    CubDB.select(opts.db, min_key: relations_start(), max_key: relations_end())
+    |> Stream.map(fn {_key, value} -> value end)
+  end
+
   def cleanup!(shape_id, opts) do
     [
       shape_key(shape_id),
@@ -191,6 +201,14 @@ defmodule Electric.ShapeCache.CubDbStorage do
   defp shape_key(shape_id) do
     {:shapes, shape_id}
   end
+
+  defp relation_key(relation_id) do
+    {:relations, relation_id}
+  end
+
+  defp relations_start, do: relation_key(0)
+  # We use the fact that 2-element tuples are always smaller than 3-element tuples
+  defp relations_end, do: {:relations, 0, 0}
 
   def xmin_key(shape_id) do
     {:snapshot_xmin, shape_id}
