@@ -39,7 +39,9 @@ defmodule Electric.Application do
                try_creating_publication?: true,
                slot_name: slot_name,
                transaction_received:
-                 {Electric.Replication.ShapeLogCollector, :store_transaction, []}
+                 {Electric.Replication.ShapeLogCollector, :store_transaction, []},
+               relation_received:
+                 {Electric.Replication.ShapeLogCollector, :handle_relation_msg, []}
              ],
              pool_opts: [
                name: Electric.DbPool,

@@ -29,7 +29,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
         publication_name: @publication_name,
         try_creating_publication?: true,
         slot_name: @slot_name,
-        transaction_received: nil
+        transaction_received: nil,
+        relation_received: nil
       ]
 
       assert {:ok, _} = ReplicationClient.start_link(config, replication_opts)
@@ -278,6 +279,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
     state =
       ReplicationClient.State.new(
         transaction_received: nil,
+        relation_received: nil,
         publication_name: "",
         try_creating_publication?: false,
         slot_name: ""
@@ -312,7 +314,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
         publication_name: @publication_name,
         try_creating_publication?: false,
         slot_name: @slot_name,
-        transaction_received: {__MODULE__, :test_transaction_received, [self()]}
+        transaction_received: {__MODULE__, :test_transaction_received, [self()]},
+        relation_received: {__MODULE__, :test_relation_received, [self()]}
       ]
     }
   end
@@ -345,6 +348,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
   def test_transaction_received(transaction, test_pid) do
     send(test_pid, {:from_replication, transaction})
+    :ok
+  end
+
+  def test_relation_received(_change, _test_pid) do
     :ok
   end
 
