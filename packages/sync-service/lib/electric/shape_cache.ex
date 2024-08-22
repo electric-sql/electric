@@ -132,8 +132,6 @@ defmodule Electric.ShapeCache do
     ])
   end
 
-  # TODO: introduce a recover_relations similar to recover_shapes
-  #       and call it in `init` to recover relations
   @spec store_relation(Relation.t(), keyword()) :: :ok
   def store_relation(%Relation{} = rel, opts) do
     store_relation_ets(rel, opts)
@@ -424,7 +422,11 @@ defmodule Electric.ShapeCache do
   end
 
   defp recover_relations(state) do
-    Storage.get_relations(state.storage)
-    |> Stream.each(&store_relation_ets(&1, state))
+    state.storage
+    |> Storage.get_relations()
+    |> Enum.each(&store_relation_ets(&1, state))
   end
 end
+
+# TODO:
+# - Write tests to check that shape cache recovers relations on restart
