@@ -427,6 +427,3 @@ defmodule Electric.ShapeCache do
     |> Enum.each(&store_relation_ets(&1, state))
   end
 end
-
-# TODO:
-# - Write tests to check that shape cache recovers relations on restart
