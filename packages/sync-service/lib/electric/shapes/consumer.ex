@@ -65,7 +65,7 @@ defmodule Electric.Shapes.Consumer do
         monitors: []
       })
 
-    {:consumer, state, subscribe_to: [{producer, []}]}
+    {:consumer, state, subscribe_to: [{producer, selector: &is_struct(&1, Changes.Transaction)}]}
   end
 
   def handle_call(:initial_state, _from, %{snapshot_xmin: xmin, latest_offset: offset} = state) do
@@ -192,9 +192,7 @@ defmodule Electric.Shapes.Consumer do
 
   defp cast_shape_cache(message, state) do
     %{shape_cache: {shape_cache, shape_cache_opts}} = state
-
-    server = Access.get(shape_cache_opts, :server, shape_cache)
-    GenServer.cast(server, message)
+    shape_cache.cast(message, shape_cache_opts)
   end
 
   defp notify(_txn, %{monitors: []} = state), do: state

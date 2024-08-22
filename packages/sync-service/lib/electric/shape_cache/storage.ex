@@ -72,10 +72,6 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Get stream of the log for a shape since a given offset"
   @callback get_log_stream(shape_id(), LogOffset.t(), LogOffset.t(), compiled_opts()) ::
               Enumerable.t()
-  @doc "Store a relation containing information about the schema of a table"
-  @callback store_relation(Relation.t(), compiled_opts()) :: :ok
-  @doc "Get all stored relations"
-  @callback get_relations(compiled_opts()) :: Enumerable.t(Relation.t())
 
   @doc "Clean up snapshots/logs for a shape id"
   @callback cleanup!(shape_id(), compiled_opts()) :: :ok
@@ -172,14 +168,12 @@ defmodule Electric.ShapeCache.Storage do
     mod.get_log_stream(shape_id, offset, max_offset, shape_opts)
   end
 
-  @doc "Store a relation containing information about the schema of a table"
-  @spec store_relation(Relation.t(), storage()) :: :ok
-  def store_relation(relation, {mod, opts}),
-    do: mod.store_relation(relation, opts)
-
-  @doc "Get all stored relations"
-  @spec get_relations(storage()) :: Enumerable.t(Relation.t())
-  def get_relations({mod, opts}), do: mod.get_relations(opts)
+  @doc "Check if log entry for given shape ID and offset exists"
+  @spec has_log_entry?(shape_id(), LogOffset.t(), storage()) :: boolean()
+  def has_log_entry?(shape_id, offset, {mod, opts}) do
+    shape_opts = mod.for_shape(shape_id, opts)
+    mod.has_log_entry?(shape_id, offset, shape_opts)
+  end
 
   @doc "Clean up snapshots/logs for a shape id"
   @spec cleanup!(shape_id(), storage()) :: :ok

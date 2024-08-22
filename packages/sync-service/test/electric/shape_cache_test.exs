@@ -15,6 +15,10 @@ defmodule Electric.ShapeCacheTest do
   alias Electric.Shapes
   alias Electric.Shapes.Shape
 
+  alias Support.StubInspector
+
+  @moduletag :capture_log
+
   @shape %Shape{
     root_table: {"public", "items"},
     table_info: %{
@@ -519,11 +523,13 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
+      storage = Storage.for_shape(shape_id, ctx.storage)
+
       tasks =
         for _id <- 1..10 do
           Task.async(fn ->
             assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
-            {_, stream} = Storage.get_snapshot(shape_id, ctx.storage)
+            {_, stream} = Storage.get_snapshot(shape_id, storage)
             assert Enum.count(stream) == 2
           end)
         end
@@ -534,7 +540,6 @@ defmodule Electric.ShapeCacheTest do
       Task.await_many(tasks)
     end
 
-    @tag :capture_log
     test "errors while streaming from database are sent to all callers", ctx do
       stream_from_database =
         Stream.map(1..5, fn
@@ -705,7 +710,7 @@ defmodule Electric.ShapeCacheTest do
       {module, _} = storage
       ref = Process.monitor(module.name(shape_id) |> GenServer.whereis())
 
-      log = capture_log(fn -> :ok = ShapeCache.clean_shape(opts[:server], shape_id) end)
+      log = capture_log(fn -> :ok = ShapeCache.clean_shape(shape_id, opts) end)
       assert log =~ "Cleaning up shape"
 
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}
@@ -727,7 +732,7 @@ defmodule Electric.ShapeCacheTest do
           end
         )
 
-      {:ok, _} = with_log(fn -> ShapeCache.clean_shape(opts[:server], shape_id) end)
+      {:ok, _} = with_log(fn -> ShapeCache.clean_shape(shape_id, opts) end)
     end
   end
 
@@ -814,10 +819,13 @@ defmodule Electric.ShapeCacheTest do
         ]
       }
 
-      :ok = ShapeCache.store_relation(rel, opts)
-      assert ^rel = ShapeCache.get_relation(rel.id, opts)
+      assert :ok = Support.TransactionProducer.emit(context.transaction_producer, [rel])
+      assert {:ok, ^rel} = wait_for_relation(context, rel.id)
 
+      assert_receive {Electric.PersistentKV.Memory, {:set, _, _}}
       restart_shape_cache(context)
+
+      assert {:ok, ^rel} = wait_for_relation(context, rel.id, 2_000)
       assert ^rel = ShapeCache.get_relation(rel.id, opts)
     end
 
@@ -861,11 +869,219 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
+  describe "relation messages" do
+    @describetag capture_log: true
+
+    @describetag :tmp_dir
+    @snapshot_xmin 10
+
+    setup [
+      :with_in_memory_storage,
+      :with_persistent_kv,
+      :with_registry,
+      :with_transaction_producer,
+      :with_no_pool
+    ]
+
+    setup(ctx) do
+      with_shape_cache(ctx,
+        prepare_tables_fn: @prepare_tables_noop,
+        create_snapshot_fn: fn parent, shape_id, shape, _, storage ->
+          GenServer.cast(parent, {:snapshot_xmin_known, shape_id, @snapshot_xmin})
+          Storage.make_new_snapshot!(shape_id, shape, @basic_query_meta, [["test"]], storage)
+          GenServer.cast(parent, {:snapshot_started, shape_id})
+        end
+      )
+    end
+
+    defp monitor_consumer(shape_id) do
+      shape_id |> Shapes.Consumer.name() |> GenServer.whereis() |> Process.monitor()
+    end
+
+    defp start_shapes({shape_cache, opts}) do
+      shape1 =
+        Shape.new!("public.test_table",
+          inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+        )
+
+      shape2 =
+        Shape.new!("public.test_table",
+          inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}]),
+          where: "id > 5"
+        )
+
+      shape3 =
+        Shape.new!("public.other_table",
+          inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+        )
+
+      {shape_id1, _} = shape_cache.get_or_create_shape_id(shape1, opts)
+      {shape_id2, _} = shape_cache.get_or_create_shape_id(shape2, opts)
+      {shape_id3, _} = shape_cache.get_or_create_shape_id(shape3, opts)
+
+      :started = shape_cache.await_snapshot_start(shape_id1, opts)
+      :started = shape_cache.await_snapshot_start(shape_id2, opts)
+      :started = shape_cache.await_snapshot_start(shape_id3, opts)
+
+      ref1 = monitor_consumer(shape_id1)
+      ref2 = monitor_consumer(shape_id2)
+      ref3 = monitor_consumer(shape_id3)
+
+      [
+        {shape_id1, ref1},
+        {shape_id2, ref2},
+        {shape_id3, ref3}
+      ]
+    end
+
+    test "stores relation if it is not known", ctx do
+      relation_id = "rel1"
+
+      rel = %Relation{
+        id: relation_id,
+        schema: "public",
+        table: "test_table",
+        columns: []
+      }
+
+      assert :ok = Support.TransactionProducer.emit(ctx.transaction_producer, [rel])
+
+      assert {:ok, ^rel} = wait_for_relation(ctx, relation_id)
+    end
+
+    test "does not clean shapes if relation didn't change", ctx do
+      %{shape_cache: {shape_cache, opts}} = ctx
+
+      relation_id = "rel1"
+
+      shape =
+        Shape.new!("public.test_table",
+          inspector: StubInspector.new([%{name: "id", type: :int8}])
+        )
+
+      {shape_id, _} = shape_cache.get_or_create_shape_id(shape, opts)
+
+      ref = monitor_consumer(shape_id)
+
+      rel = %Relation{
+        id: relation_id,
+        schema: "public",
+        table: "test_table",
+        columns: []
+      }
+
+      assert :ok = Support.TransactionProducer.emit(ctx.transaction_producer, [rel])
+
+      assert {:ok, ^rel} = wait_for_relation(ctx, relation_id)
+
+      refute_receive {:DOWN, ^ref, :process, _, _}
+    end
+
+    test "cleans shapes affected by table renaming and logs a warning", ctx do
+      relation_id = "rel1"
+
+      [
+        {_shape_id1, ref1},
+        {_shape_id2, ref2},
+        {_shape_id3, ref3}
+      ] = start_shapes(ctx.shape_cache)
+
+      old_rel = %Relation{
+        id: relation_id,
+        schema: "public",
+        table: "test_table",
+        columns: []
+      }
+
+      new_rel = %Relation{
+        id: relation_id,
+        schema: "public",
+        table: "renamed_test_table",
+        columns: []
+      }
+
+      assert :ok = Support.TransactionProducer.emit(ctx.transaction_producer, [old_rel])
+
+      assert {:ok, ^old_rel} = wait_for_relation(ctx, relation_id)
+
+      log =
+        capture_log(fn ->
+          assert :ok = Support.TransactionProducer.emit(ctx.transaction_producer, [new_rel])
+          assert_receive {:DOWN, ^ref1, :process, _, _}
+          assert_receive {:DOWN, ^ref2, :process, _, _}
+          refute_receive {:DOWN, ^ref3, :process, _, _}
+        end)
+
+      assert log =~ "Schema for the table public.test_table changed"
+    end
+
+    test "cleans shapes affected by a relation change", ctx do
+      relation_id = "rel1"
+
+      [
+        {_shape_id1, ref1},
+        {_shape_id2, ref2},
+        {_shape_id3, ref3}
+      ] = start_shapes(ctx.shape_cache)
+
+      old_rel = %Relation{
+        id: relation_id,
+        schema: "public",
+        table: "test_table",
+        columns: [%Column{name: "id", type_oid: 901}]
+      }
+
+      new_rel = %Relation{
+        id: relation_id,
+        schema: "public",
+        table: "test_table",
+        columns: [%Column{name: "id", type_oid: 123}]
+      }
+
+      assert :ok = Support.TransactionProducer.emit(ctx.transaction_producer, [old_rel])
+
+      assert {:ok, ^old_rel} = wait_for_relation(ctx, relation_id)
+
+      log =
+        capture_log(fn ->
+          assert :ok = Support.TransactionProducer.emit(ctx.transaction_producer, [new_rel])
+          assert_receive {:DOWN, ^ref1, :process, _, _}
+          assert_receive {:DOWN, ^ref2, :process, _, _}
+          refute_receive {:DOWN, ^ref3, :process, _, _}
+        end)
+
+      assert log =~ "Schema for the table public.test_table changed"
+    end
+  end
+
   def prepare_tables_noop(_, _), do: :ok
 
   defp stream_to_list(stream) do
     stream
     |> Enum.map(&Jason.decode!/1)
     |> Enum.sort_by(fn %{"value" => %{"value" => val}} -> val end)
+  end
+
+  defp wait_for_relation(ctx, relation_id, timeout \\ 1_000) do
+    parent = self()
+
+    Task.start(fn ->
+      do_wait_for_relation(ctx.shape_cache, relation_id, parent)
+    end)
+
+    receive do
+      {:relation, ^relation_id, relation} -> {:ok, relation}
+    after
+      timeout -> flunk("timed out waiting for relation #{inspect(relation_id)}")
+    end
+  end
+
+  defp do_wait_for_relation({shape_cache, shape_cache_opts}, relation_id, parent) do
+    if relation = shape_cache.get_relation(relation_id, shape_cache_opts) do
+      send(parent, {:relation, relation_id, relation})
+    else
+      Process.sleep(10)
+      do_wait_for_relation({shape_cache, shape_cache_opts}, relation_id, parent)
+    end
   end
 end

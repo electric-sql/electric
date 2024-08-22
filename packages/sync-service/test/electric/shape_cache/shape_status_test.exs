@@ -3,6 +3,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
   alias Electric.PersistentKV
   alias Electric.Replication.LogOffset
+  alias Electric.Replication.Changes.{Column, Relation}
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
 
@@ -186,6 +187,59 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert ShapeStatus.set_snapshot_xmin(state, shape_id, 1234)
     assert ShapeStatus.snapshot_xmin?(state, shape_id)
     assert ShapeStatus.snapshot_xmin?(state.meta_table, shape_id)
+  end
+
+  test "relation data", ctx do
+    relation_id = "relation_1"
+
+    relation = %Relation{
+      id: relation_id,
+      schema: "public",
+      table: "test_table",
+      columns: [
+        %Column{name: "id", type_oid: 1234},
+        %Column{name: "name", type_oid: 2222}
+      ]
+    }
+
+    {:ok, state, []} = new_state(ctx)
+
+    refute ShapeStatus.get_relation(state, relation_id)
+    assert :ok = ShapeStatus.store_relation(state, relation)
+
+    assert relation == ShapeStatus.get_relation(state, relation_id)
+
+    {:ok, state, []} = new_state(ctx)
+
+    assert relation == ShapeStatus.get_relation(state, relation_id)
+  end
+
+  test "relation data public api", ctx do
+    table = table_name()
+    relation_id = "relation_1"
+
+    relation = %Relation{
+      id: relation_id,
+      schema: "public",
+      table: "test_table",
+      columns: [
+        %Column{name: "id", type_oid: 1234},
+        %Column{name: "name", type_oid: 2222}
+      ]
+    }
+
+    {:ok, state, []} = new_state(ctx, table: table)
+
+    refute ShapeStatus.get_relation(table, relation_id)
+    assert :ok = ShapeStatus.store_relation(state, relation)
+
+    assert relation == ShapeStatus.get_relation(table, relation_id)
+
+    table = table_name()
+
+    {:ok, _state, []} = new_state(ctx, table: table)
+
+    assert relation == ShapeStatus.get_relation(table, relation_id)
   end
 
   def load_column_info({"public", "other_table"}, _),

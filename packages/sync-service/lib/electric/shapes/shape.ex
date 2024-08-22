@@ -164,6 +164,31 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
+  def is_affected_by_relation_change?(
+        shape,
+        %Changes.RelationChange{
+          old_relation: %Changes.Relation{schema: old_schema, table: old_table},
+          new_relation: %Changes.Relation{schema: new_schema, table: new_table}
+        }
+      )
+      when old_schema != new_schema or old_table != new_table do
+    # The table's qualified name changed
+    # so shapes that match the old schema or table name are affected
+    shape_matches?(shape, old_schema, old_table)
+  end
+
+  def is_affected_by_relation_change?(shape, %Changes.RelationChange{
+        new_relation: %Changes.Relation{schema: schema, table: table}
+      }) do
+    shape_matches?(shape, schema, table)
+  end
+
+  # TODO: test this machinery of cleaning shapes on any migration
+  #       once that works, then we can optimize it to only clean on relevant migrations
+
+  defp shape_matches?({_, %__MODULE__{root_table: {schema, table}}, _}, schema, table), do: true
+  defp shape_matches?(_, _, _), do: false
+
   @spec from_json_safe!(t()) :: json_safe()
   def to_json_safe(%__MODULE__{} = shape) do
     %{root_table: {schema, name}, where: where, table_info: table_info} = shape

@@ -77,7 +77,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     test "should clean shape based on shape definition" do
       Mock.ShapeCache
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts -> {@test_shape_id, 0} end)
-      |> expect(:clean_shape, fn _, @test_shape_id -> :ok end)
+      |> expect(:clean_shape, fn @test_shape_id, _ -> :ok end)
 
       conn =
         conn(:delete, "?root_table=public.users")
@@ -88,7 +88,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
     test "should clean shape based on shape_id" do
       Mock.ShapeCache
-      |> expect(:clean_shape, fn _, @test_shape_id -> :ok end)
+      |> expect(:clean_shape, fn @test_shape_id, _ -> :ok end)
 
       conn =
         conn(:delete, "?root_table=public.users&shape_id=#{@test_shape_id}")

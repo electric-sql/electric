@@ -1,11 +1,11 @@
 defmodule Electric.PersistentKV.Memory do
   use Agent
 
-  defstruct [:pid]
+  defstruct [:pid, :parent]
 
   def new!(data \\ []) do
     {:ok, pid} = start_link(data)
-    %__MODULE__{pid: pid}
+    %__MODULE__{pid: pid, parent: self()}
   end
 
   def start_link(data \\ []) do
@@ -28,6 +28,7 @@ defmodule Electric.PersistentKV.Memory do
   defimpl Electric.PersistentKV do
     def set(memory, key, value) do
       Agent.update(memory.pid, fn data ->
+        notify(memory, {:set, key, value})
         Map.put(data, key, value)
       end)
     end
@@ -40,6 +41,10 @@ defmodule Electric.PersistentKV.Memory do
         :error ->
           {:error, :not_found}
       end
+    end
+
+    defp notify(%{parent: parent}, msg) when is_pid(parent) do
+      send(parent, {Electric.PersistentKV.Memory, msg})
     end
   end
 end

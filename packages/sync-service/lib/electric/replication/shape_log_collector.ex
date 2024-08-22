@@ -7,7 +7,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
-  alias Electric.Replication.Changes.{Transaction, Relation, RelationChange}
+  alias Electric.Replication.Changes.{Transaction, Relation}
 
   require Logger
 
@@ -43,24 +43,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_call({:relation_msg, rel}, _from, state) do
-    {shape_cache, opts} = state.shape_cache
-    old_rel = shape_cache.get_relation(rel.id, opts)
-
-    if is_nil(old_rel) || old_rel != rel do
-      shape_cache.store_relation(rel, opts)
-    end
-
-    if !is_nil(old_rel) && old_rel != rel do
-      Logger.info("Schema for the table #{old_rel.schema}.#{old_rel.table} changed")
-      change = %RelationChange{old_relation: old_rel, new_relation: rel}
-      # Fetch all shapes that are affected by the relation change and clean them up
-      shape_cache.list_active_shapes(opts)
-      |> Enum.filter(&is_affected_by_relation_change?(&1, change))
-      |> Enum.map(&elem(&1, 0))
-      |> Electric.Shapes.clean_shapes(state)
-    end
-
-    {:reply, :ok, [], state}
+    {:reply, :ok, [rel], state}
   end
 
   def handle_call({:new_txn, %Transaction{xid: xid, lsn: lsn} = txn}, _from, state) do
@@ -81,32 +64,4 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     {:reply, :ok, [txn], state}
   end
-
-  defp is_affected_by_relation_change?(
-         shape,
-         %RelationChange{
-           old_relation: %Relation{schema: old_schema, table: old_table},
-           new_relation: %Relation{schema: new_schema, table: new_table}
-         }
-       )
-       when old_schema != new_schema or old_table != new_table do
-    # The table's qualified name changed
-    # so shapes that match the old schema or table name are affected
-    shape_matches?(shape, old_schema, old_table)
-  end
-
-  defp is_affected_by_relation_change?(shape, %RelationChange{
-         new_relation: %Relation{schema: schema, table: table}
-       }) do
-    shape_matches?(shape, schema, table)
-  end
-
-  # TODO: test this machinery of cleaning shapes on any migration
-  #       once that works, then we can optimize it to only clean on relevant migrations
-
-  defp shape_matches?({_, %Shape{root_table: {ns, tbl}}, _}, schema, table)
-       when ns == schema and tbl == table,
-       do: true
-
-  defp shape_matches?(_, _, _), do: false
 end

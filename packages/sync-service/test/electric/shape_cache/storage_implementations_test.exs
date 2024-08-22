@@ -6,7 +6,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes
-  alias Electric.Replication.Changes.{Relation, Column}
   alias Electric.ShapeCache.CubDbStorage
   alias Electric.ShapeCache.InMemoryStorage
   alias Electric.Shapes.Shape
@@ -679,53 +678,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         assert storage.snapshot_started?("shape-1", opts) == false
         assert storage.snapshot_started?("shape-2", opts) == false
         assert storage.snapshot_started?("shape-3", opts) == false
-      end
-    end
-
-    describe "#{module_name}.get_relations/1" do
-      setup do
-        {:ok, %{module: unquote(module)}}
-      end
-
-      setup :start_storage
-
-      test "returns all stored relations", %{module: storage, opts: opts} do
-        rel1 = %Relation{
-          id: 1,
-          schema: "public",
-          table: "table1",
-          columns: [
-            %Column{name: "a", type_oid: 1},
-            %Column{name: "b", type_oid: 2}
-          ]
-        }
-
-        rel1_updated = %Relation{
-          id: 1,
-          schema: "public",
-          table: "table1",
-          columns: [
-            %Column{name: "a", type_oid: 1},
-            %Column{name: "b", type_oid: 2},
-            %Column{name: "c", type_oid: 3}
-          ]
-        }
-
-        rel2 = %Relation{
-          id: 2,
-          schema: "public",
-          table: "table1",
-          columns: [
-            %Column{name: "a", type_oid: 1},
-            %Column{name: "b", type_oid: 2}
-          ]
-        }
-
-        storage.store_relation(rel1, opts)
-        storage.store_relation(rel1_updated, opts)
-        storage.store_relation(rel2, opts)
-
-        assert [^rel1_updated, ^rel2] = storage.get_relations(opts) |> Enum.to_list()
       end
     end
   end
