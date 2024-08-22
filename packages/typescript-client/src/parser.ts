@@ -92,7 +92,9 @@ export class MessageParser {
         // Parse the row values
         const row = value as Record<string, Value>
         Object.keys(row).forEach((key) => {
-          row[key] = this.parseRow(key, row[key] as string, schema)
+          if (row[key] != null) {
+            row[key] = this.parseRow(key, row[key] as string, schema)
+          }
         })
       }
       return value
