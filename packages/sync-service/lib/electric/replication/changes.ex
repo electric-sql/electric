@@ -17,7 +17,7 @@ defmodule Electric.Replication.Changes do
 
   @type db_identifier() :: String.t()
   @type xid() :: non_neg_integer()
-  @type relation() :: {schema :: db_identifier(), table :: db_identifier()}
+  @type relation_name() :: {schema :: db_identifier(), table :: db_identifier()}
   @type record() :: %{(column_name :: db_identifier()) => column_data :: binary()}
   @type relation_id() :: non_neg_integer
 
@@ -33,7 +33,7 @@ defmodule Electric.Replication.Changes do
           | Changes.UpdatedRecord.t()
           | Changes.DeletedRecord.t()
 
-  @type change() :: data_change() | Changes.TruncatedRelation.t()
+  @type change() :: data_change() | Changes.TruncatedRelation.t() | Changes.RelationChange.t()
 
   defmodule Transaction do
     alias Electric.Replication.Changes
@@ -41,7 +41,7 @@ defmodule Electric.Replication.Changes do
     @type t() :: %__MODULE__{
             xid: Changes.xid() | nil,
             changes: [Changes.change()],
-            affected_relations: MapSet.t(Changes.relation()),
+            affected_relations: MapSet.t(Changes.relation_name()),
             commit_timestamp: DateTime.t(),
             lsn: Electric.Postgres.Lsn.t(),
             last_log_offset: LogOffset.t()
@@ -79,7 +79,7 @@ defmodule Electric.Replication.Changes do
     defstruct [:relation, :record, :log_offset, :key]
 
     @type t() :: %__MODULE__{
-            relation: Changes.relation(),
+            relation: Changes.relation_name(),
             record: Changes.record(),
             log_offset: LogOffset.t(),
             key: String.t()
@@ -99,7 +99,7 @@ defmodule Electric.Replication.Changes do
     ]
 
     @type t() :: %__MODULE__{
-            relation: Changes.relation(),
+            relation: Changes.relation_name(),
             old_record: Changes.record() | nil,
             record: Changes.record(),
             log_offset: LogOffset.t(),
@@ -145,7 +145,7 @@ defmodule Electric.Replication.Changes do
     defstruct [:relation, :old_record, :log_offset, :key, tags: []]
 
     @type t() :: %__MODULE__{
-            relation: Changes.relation(),
+            relation: Changes.relation_name(),
             old_record: Changes.record(),
             log_offset: LogOffset.t(),
             key: String.t(),
@@ -157,8 +157,37 @@ defmodule Electric.Replication.Changes do
     defstruct [:relation, :log_offset]
 
     @type t() :: %__MODULE__{
-            relation: Changes.relation(),
+            relation: Changes.relation_name(),
             log_offset: LogOffset.t()
+          }
+  end
+
+  defmodule Column do
+    defstruct [:name, :type_oid]
+
+    @type t() :: %__MODULE__{
+            name: Changes.db_identifier(),
+            type_oid: pos_integer()
+          }
+  end
+
+  defmodule Relation do
+    defstruct [:id, :schema, :table, :columns]
+
+    @type t() :: %__MODULE__{
+            id: Changes.relation_id(),
+            schema: Changes.db_identifier(),
+            table: Changes.db_identifier(),
+            columns: [Column.t()]
+          }
+  end
+
+  defmodule RelationChange do
+    defstruct [:old_relation, :new_relation]
+
+    @type t() :: %__MODULE__{
+            old_relation: Relation.t(),
+            new_relation: Relation.t()
           }
   end
 

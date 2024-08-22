@@ -93,7 +93,9 @@ defmodule Support.ComponentSetup do
       try_creating_publication?: true,
       slot_name: ctx.slot_name,
       transaction_received:
-        {Electric.Replication.ShapeLogCollector, :store_transaction, [ctx.shape_log_collector]}
+        {Electric.Replication.ShapeLogCollector, :store_transaction, [ctx.shape_log_collector]},
+      relation_received:
+        {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [ctx.shape_log_collector]}
     ]
 
     {:ok, pid} = ReplicationClient.start_link(ctx.db_config, replication_opts)

@@ -7,6 +7,7 @@ defmodule Electric.Postgres.ReplicationClient do
   alias Electric.Postgres.LogicalReplication.Decoder
   alias Electric.Postgres.ReplicationClient.Collector
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
+  alias Electric.Replication.Changes.Relation
 
   require Logger
 
@@ -20,9 +21,10 @@ defmodule Electric.Postgres.ReplicationClient do
           | :streaming
 
   defmodule State do
-    @enforce_keys [:transaction_received, :publication_name]
+    @enforce_keys [:transaction_received, :relation_received, :publication_name]
     defstruct [
       :transaction_received,
+      :relation_received,
       :publication_name,
       :try_creating_publication?,
       :start_streaming?,
@@ -44,6 +46,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
     @type t() :: %__MODULE__{
             transaction_received: {module(), atom(), [term()]},
+            relation_received: {module(), atom(), [term()]},
             publication_name: String.t(),
             try_creating_publication?: boolean(),
             start_streaming?: boolean(),
@@ -58,6 +61,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
     @opts_schema NimbleOptions.new!(
                    transaction_received: [required: true, type: :mfa],
+                   relation_received: [required: true, type: :mfa],
                    publication_name: [required: true, type: :string],
                    try_creating_publication?: [required: true, type: :boolean],
                    start_streaming?: [type: :boolean, default: true],
@@ -157,6 +161,11 @@ defmodule Electric.Postgres.ReplicationClient do
     |> Collector.handle_message(state.txn_collector)
     |> case do
       %Collector{} = txn_collector ->
+        {:noreply, %{state | txn_collector: txn_collector}}
+
+      {%Relation{} = rel, %Collector{} = txn_collector} ->
+        {m, f, args} = state.relation_received
+        apply(m, f, [rel | args])
         {:noreply, %{state | txn_collector: txn_collector}}
 
       {txn, %Collector{} = txn_collector} ->

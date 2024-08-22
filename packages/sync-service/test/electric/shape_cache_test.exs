@@ -8,6 +8,7 @@ defmodule Electric.ShapeCacheTest do
   import Support.TestUtils
 
   alias Electric.Replication.Changes
+  alias Electric.Replication.Changes.{Relation, Column}
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache
   alias Electric.ShapeCache.Storage
@@ -712,6 +713,24 @@ defmodule Electric.ShapeCacheTest do
       restart_shape_cache(context)
       :started = ShapeCache.await_snapshot_start(opts[:server], shape_id)
       assert {^shape_id, ^offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
+    end
+
+    test "restores relations", %{shape_cache_opts: opts} = context do
+      rel = %Relation{
+        id: 42,
+        schema: "public",
+        table: "items",
+        columns: [
+          %Column{name: "id", type_oid: 9},
+          %Column{name: "value", type_oid: 2}
+        ]
+      }
+
+      :ok = ShapeCache.store_relation(rel, opts)
+      assert ^rel = ShapeCache.get_relation(rel.id, opts)
+
+      restart_shape_cache(context)
+      assert ^rel = ShapeCache.get_relation(rel.id, opts)
     end
 
     defp restart_shape_cache(context) do

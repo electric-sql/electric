@@ -2,6 +2,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   alias Electric.ConcurrentStream
   alias Electric.LogItems
   alias Electric.Replication.LogOffset
+  alias Electric.Replication.Changes.Relation
   alias Electric.Telemetry.OpenTelemetry
   use Agent
 
@@ -139,6 +140,15 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     |> then(&:ets.insert(ets_table, &1))
 
     :ok
+  end
+
+  def store_relation(%Relation{}, _opts) do
+    # Relations are already stored in memory by the shape cache
+    # so no need to do anything here
+  end
+
+  def get_relations(_opts) do
+    []
   end
 
   def cleanup!(shape_id, opts) do

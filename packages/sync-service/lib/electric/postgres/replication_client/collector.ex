@@ -14,7 +14,9 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     NewRecord,
     UpdatedRecord,
     DeletedRecord,
-    TruncatedRelation
+    TruncatedRelation,
+    Relation,
+    Column
   }
 
   defstruct transaction: nil, tx_op_index: nil, relations: %{}
@@ -50,12 +52,21 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
   def handle_message(%LR.Origin{} = _msg, state), do: state
   def handle_message(%LR.Type{}, state), do: state
 
-  def handle_message(%LR.Relation{id: id} = rel, %__MODULE__{} = state) do
-    if Map.get(state.relations, id, rel) != rel do
-      Logger.warning("Schema for the table #{rel.namespace}.#{rel.name} had changed")
-    end
+  def handle_message(
+        %LR.Relation{id: id, namespace: ns, name: name, columns: cols} = rel,
+        %__MODULE__{} = state
+      ) do
+    new_state = Map.update!(state, :relations, &Map.put(&1, rel.id, rel))
 
-    Map.update!(state, :relations, &Map.put(&1, rel.id, rel))
+    {
+      %Relation{
+        id: id,
+        schema: ns,
+        table: name,
+        columns: Enum.map(cols, fn col -> %Column{name: col.name, type_oid: col.type_oid} end)
+      },
+      new_state
+    }
   end
 
   def handle_message(%LR.Insert{} = msg, %__MODULE__{} = state) do

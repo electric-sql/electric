@@ -2,6 +2,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
   alias Electric.ConcurrentStream
   alias Electric.LogItems
   alias Electric.Replication.LogOffset
+  alias Electric.Replication.Changes.Relation
   alias Electric.Telemetry.OpenTelemetry
   @behaviour Electric.ShapeCache.Storage
 
@@ -165,6 +166,15 @@ defmodule Electric.ShapeCache.CubDbStorage do
     :ok
   end
 
+  def store_relation(%Relation{id: id} = rel, opts) do
+    CubDB.put(opts.db, relation_key(id), rel)
+  end
+
+  def get_relations(opts) do
+    CubDB.select(opts.db, min_key: relations_start(), max_key: relations_end())
+    |> Stream.map(fn {_key, value} -> value end)
+  end
+
   def cleanup!(shape_id, opts) do
     [
       shape_key(shape_id),
@@ -192,12 +202,24 @@ defmodule Electric.ShapeCache.CubDbStorage do
     {:shapes, shape_id}
   end
 
+  defp relation_key(relation_id) do
+    {:relations, relation_id}
+  end
+
+  defp relations_start, do: relation_key(0)
+  # Atoms are always bigger than numbers
+  # Thus this key is bigger than any possible relation key
+  defp relations_end, do: relation_key(:max)
+
   def xmin_key(shape_id) do
     {:snapshot_xmin, shape_id}
   end
 
-  defp shapes_start, do: shape_key(0)
-  defp shapes_end, do: shape_key("zzz-end")
+  defp shapes_start, do: shape_key("")
+  # Since strings in Elixir are encoded using UTF-8,
+  # it is impossible for any valid string to contain byte value 255.
+  # Thus any key will be smaller than this one.
+  defp shapes_end, do: shape_key(<<255>>)
 
   # FIXME: this is naive while we don't have snapshot metadata to get real offsets
   defp offset({_shape_id, @snapshot_key_type, _index}), do: @snapshot_offset

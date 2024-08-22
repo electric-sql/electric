@@ -31,7 +31,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
 
   setup do
     collector = %Collector{}
-    collector = Collector.handle_message(@relation, collector)
+    {_relation, collector} = Collector.handle_message(@relation, collector)
     {:ok, collector: collector}
   end
 
@@ -58,20 +58,9 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
       columns: [%LR.Relation.Column{name: "id", flags: [:key], type_oid: 23, type_modifier: -1}]
     }
 
-    updated_collector = Collector.handle_message(new_relation, collector)
+    {_rel, updated_collector} = Collector.handle_message(new_relation, collector)
 
     assert %Collector{relations: %{1 => @relation, 2 => ^new_relation}} = updated_collector
-  end
-
-  test "collector logs a warning when receiving a new relation message that doesn't match the previous one",
-       %{collector: collector} do
-    new_relation = %{
-      @relation
-      | columns: [%LR.Relation.Column{name: "id", flags: [:key], type_oid: 20, type_modifier: -1}]
-    }
-
-    log = capture_log(fn -> Collector.handle_message(new_relation, collector) end)
-    assert log =~ "Schema for the table public.users had changed"
   end
 
   test "collector logs information when receiving a generic message",
