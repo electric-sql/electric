@@ -143,6 +143,52 @@ defmodule Electric.Postgres.ReplicationClientTest do
       refute_receive _
     end
 
+    # Regression test for https://github.com/electric-sql/electric/issues/1548
+    test "fares well when multiple concurrent transactions are writing to WAL", %{
+      db_config: config,
+      replication_opts: replication_opts,
+      db_conn: conn
+    } do
+      assert {:ok, _pid} = ReplicationClient.start_link(config, replication_opts)
+
+      num_txn = 2
+      num_ops = 8
+
+      # Insert `num_txn` transactions, each in a separate process. Every transaction has
+      # `num_ops` INSERTs with a random delay between each operation.
+      # The end result is that INSERTs from different transactions get interleaved in
+      # the WAL, challenging any assumptions in ReplicationClient about cross-transaction operation
+      # ordering.
+      Enum.each(1..num_txn, fn i ->
+        tx_fun = fn conn ->
+          pid_str = inspect(self())
+
+          Enum.each(1..num_ops, fn j ->
+            insert_item(conn, "#{i}-#{j} in process #{pid_str}")
+            Process.sleep(:rand.uniform(20))
+          end)
+        end
+
+        spawn_link(Postgrex, :transaction, [conn, tx_fun])
+      end)
+
+      # Receive every transaction sent by ReplicationClient to the test process.
+      set =
+        Enum.reduce(1..num_txn, MapSet.new(1..num_txn), fn _, set ->
+          assert_receive {:from_replication, %Transaction{changes: records}}, (num_ops + 1) * 20
+          assert num_ops == length(records)
+
+          [%NewRecord{record: %{"value" => val}} | _] = records
+          {i, _} = Integer.parse(val)
+
+          MapSet.delete(set, i)
+        end)
+
+      # Make sure there are no extraneous messages left.
+      assert MapSet.size(set) == 0
+      refute_receive _
+    end
+
     # Set the DB's display settings to something else than Electric.Postgres.display_settings
     @tag database_settings: [
            "DateStyle='Postgres, DMY'",
@@ -285,22 +331,18 @@ defmodule Electric.Postgres.ReplicationClientTest do
         slot_name: ""
       )
 
-    # Received WAL is PG WAL while "applied" and "flushed" WAL are still at zero based on the `state`.
-    assert {:noreply, [<<?r, wal::64, 0::64, 0::64, _time::64, 0::8>>], state} =
+    # All offsets are 0+1 until we've processed a transaction and bumped `state.applied_wal`.
+    assert {:noreply, [<<?r, 1::64, 1::64, 1::64, _time::64, 0::8>>], state} =
              ReplicationClient.handle_data(<<?k, pg_wal::64, 0::64, 1::8>>, state)
-
-    assert wal == pg_wal
 
     ###
 
     state = %{state | applied_wal: lsn_to_wal("0/10")}
-    pg_wal = lsn_to_wal("1/20")
 
-    assert {:noreply, [<<?r, wal::64, app_wal::64, app_wal::64, _time::64, 0::8>>], state} =
+    assert {:noreply, [<<?r, app_wal::64, app_wal::64, app_wal::64, _time::64, 0::8>>], state} =
              ReplicationClient.handle_data(<<?k, pg_wal::64, 0::64, 1::8>>, state)
 
-    assert wal == pg_wal
-    assert app_wal == state.applied_wal
+    assert app_wal == state.applied_wal + 1
   end
 
   defp with_publication(%{db_conn: conn}) do

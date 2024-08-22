@@ -177,8 +177,8 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     #
     # [1]: https://github.com/postgres/postgres/blob/c671e142bf4b568434eb8559baff34d32eed5b29/src/include/replication/reorderbuffer.h#L276-L296
     #
-    # For our purposes, we're setting transaction's LSN to `end_lsn` which seems like a more
-    # stable value based on the above comments.
+    # For our purposes, we're setting transaction's LSN to `end_lsn` so that each successive
+    # incoming transaction's LSN is part of a strictly monotonically increasing number series.
     {%Transaction{
        txn
        | lsn: end_lsn,
