@@ -89,13 +89,12 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     end)
   end
 
-  def has_log_entry?(shape_id, offset, opts) do
+  def has_shape?(shape_id, opts) do
     case :ets.select(opts.log_ets_table, [
-           {{{shape_id, storage_offset(offset)}, :_}, [], [true]}
+           {{{shape_id, :_}, :_}, [], [true]}
          ]) do
       [true] -> true
-      # FIXME: this is naive while we don't have snapshot metadata to get real offset
-      [] -> snapshot_started?(shape_id, opts) and offset == @snapshot_offset
+      [] -> snapshot_started?(shape_id, opts)
     end
   end
 

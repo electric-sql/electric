@@ -67,8 +67,8 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Get stream of the log for a shape since a given offset"
   @callback get_log_stream(shape_id(), LogOffset.t(), LogOffset.t(), compiled_opts()) ::
               Enumerable.t()
-  @doc "Check if log entry for given shape ID and offset exists"
-  @callback has_log_entry?(shape_id(), LogOffset.t(), compiled_opts()) :: boolean()
+  @doc "Check if log entries for given shape ID exist"
+  @callback has_shape?(shape_id(), compiled_opts()) :: boolean()
   @doc "Store a relation containing information about the schema of a table"
   @callback store_relation(Relation.t(), compiled_opts()) :: :ok
   @doc "Get all stored relations"
@@ -138,10 +138,10 @@ defmodule Electric.ShapeCache.Storage do
       when max_offset == :infinity or not is_log_offset_lt(max_offset, offset),
       do: mod.get_log_stream(shape_id, offset, max_offset, opts)
 
-  @doc "Check if log entry for given shape ID and offset exists"
-  @spec has_log_entry?(shape_id(), LogOffset.t(), storage()) :: boolean()
-  def has_log_entry?(shape_id, offset, {mod, opts}),
-    do: mod.has_log_entry?(shape_id, offset, opts)
+  @doc "Check if log entries for given shape ID exist"
+  @spec has_shape?(shape_id(), storage()) :: boolean()
+  def has_shape?(shape_id, {mod, opts}),
+    do: mod.has_shape?(shape_id, opts)
 
   @doc "Store a relation containing information about the schema of a table"
   @spec store_relation(Relation.t(), storage()) :: :ok

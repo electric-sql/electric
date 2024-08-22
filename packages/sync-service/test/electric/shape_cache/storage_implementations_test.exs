@@ -480,14 +480,14 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
-    describe "#{module_name}.has_log_entry?/3" do
+    describe "#{module_name}.has_shape?/2" do
       setup do
         {:ok, %{module: unquote(module)}}
       end
 
       setup :start_storage
 
-      test "returns a boolean indicating whether there is a log entry with such an offset", %{
+      test "returns a boolean indicating whether the shape ID is known", %{
         module: storage,
         opts: opts
       } do
@@ -505,22 +505,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         :ok = storage.append_to_log!(@shape_id, log_items, opts)
 
-        assert storage.has_log_entry?(@shape_id, LogOffset.new(lsn, 0), opts)
-        refute storage.has_log_entry?(@shape_id, LogOffset.new(lsn, 1), opts)
-        refute storage.has_log_entry?(@shape_id, LogOffset.new(1001, 0), opts)
-      end
-
-      test "should detect whether there is a snapshot with given offset", %{
-        module: storage,
-        opts: opts
-      } do
-        refute storage.has_log_entry?(@shape_id, @snapshot_offset, opts)
-        storage.mark_snapshot_as_started(@shape_id, opts)
-        assert storage.has_log_entry?(@shape_id, @snapshot_offset, opts)
-      end
-
-      test "should return false when there is no log", %{module: storage, opts: opts} do
-        refute storage.has_log_entry?("another_shape_id", LogOffset.new(1001, 0), opts)
+        assert storage.has_shape?(@shape_id, opts)
+        refute storage.has_shape?("another_shape_id", opts)
       end
     end
   end
