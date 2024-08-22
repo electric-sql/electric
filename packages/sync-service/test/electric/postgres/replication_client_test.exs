@@ -153,6 +153,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       num_txn = 2
       num_ops = 8
+      max_sleep = 20
+      receive_timeout = (num_txn + num_ops) * max_sleep
 
       # Insert `num_txn` transactions, each in a separate process. Every transaction has
       # `num_ops` INSERTs with a random delay between each operation.
@@ -165,7 +167,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
           Enum.each(1..num_ops, fn j ->
             insert_item(conn, "#{i}-#{j} in process #{pid_str}")
-            Process.sleep(:rand.uniform(20))
+            Process.sleep(:rand.uniform(max_sleep))
           end)
         end
 
@@ -175,7 +177,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       # Receive every transaction sent by ReplicationClient to the test process.
       set =
         Enum.reduce(1..num_txn, MapSet.new(1..num_txn), fn _, set ->
-          assert_receive {:from_replication, %Transaction{changes: records}}, (num_ops + 1) * 20
+          assert_receive {:from_replication, %Transaction{changes: records}}, receive_timeout
           assert num_ops == length(records)
 
           [%NewRecord{record: %{"value" => val}} | _] = records

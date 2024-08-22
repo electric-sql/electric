@@ -227,7 +227,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
 
     {completed_txn, updated_collector} = Collector.handle_message(commit_msg, collector)
 
-    assert %Transaction{xid: 456, lsn: @test_end_lsn, last_log_offset: @test_log_offset} =
+    assert %Transaction{xid: 456, lsn: @test_lsn, last_log_offset: @test_log_offset} =
              completed_txn
 
     assert %Collector{transaction: nil, tx_op_index: nil} = updated_collector
