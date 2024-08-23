@@ -5,11 +5,11 @@ CREATE TABLE ydoc_operations(
 );
 
 CREATE TABLE ydoc_awareness(
-  client TEXT, 
+  clientId TEXT, 
   room TEXT,
   op TEXT NOT NULL,
   updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (client, room)
+  PRIMARY KEY (clientId, room)
 );
 
 CREATE OR REPLACE FUNCTION delete_old_rows()

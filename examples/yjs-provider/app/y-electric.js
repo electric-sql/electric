@@ -200,11 +200,11 @@ const sendAwareness = (provider, changedClients) => {
 
   if (provider.connected) {
     const room = provider.roomname
-    const clientID = `${provider.doc.clientID}`
+    const clientId = `${provider.doc.clientID}`
 
-    fetch(`/api/awareness`, {
+    fetch(`/api/operation`, {
       method: `POST`,
-      body: JSON.stringify({ client: clientID, room, op }),
+      body: JSON.stringify({ clientId, room, op }),
     })
   }
 }
@@ -267,6 +267,8 @@ export class ElectricProvider extends Observable {
     })
 
     this._updateHandler = (update, origin) => {
+      // prevent pushing operations that come from the
+      // broadcast provider, when it is being used
       if (origin !== this && !origin.bcChannel) {
         sendOperation(this, update)
       }

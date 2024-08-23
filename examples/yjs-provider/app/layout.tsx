@@ -1,6 +1,6 @@
 export const metadata = {
-  title: `Next.js Forms Example`,
-  description: `Example application with forms and Postgres.`,
+  title: `Yjs <> Electric`,
+  description: `Yjs synching with Electric`,
 }
 
 export default function RootLayout({

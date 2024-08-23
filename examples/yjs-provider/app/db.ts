@@ -1,6 +1,5 @@
 import { Pool } from "pg"
 
-console.log(`init pool`)
 const pool = new Pool({
   host: `localhost`,
   port: 54321,
