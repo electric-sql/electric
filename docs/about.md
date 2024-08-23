@@ -57,13 +57,13 @@ To go from core database replication technology to a viable solution for buildin
     <div class="img-border">
       <a href="/img/about/schema-evolution.jpg">
         <img src="/img/about/schema-evolution.jpg"
-            alt="Schema evolution diagramme"
+            alt="Schema evolution diagram"
         />
       </a>
     </div>
   </div>
   <figcaption className="figure-caption text-end">
-    Schema evolution diagramme from the previous
+    Schema evolution diagram from the previous
     <a href="https://electric-sql.com/docs/reference/architecture" target="_blank">
       architecture&nbsp;page</a>.
   </figcaption>
@@ -103,18 +103,17 @@ This has been echoed in conversations we've had with [Paul Copplestone](https://
 
 > Supabase is composable. Even though every product works in isolation, each product on the platform needs to 10x the other products.
 
-To make a system that's incremental and composable, we need to decouple the Electric stack. So it's not a one-size-fits-all vertical stack but, instead, more of a loosely coupled set of primitives around a smaller core. Where we do the essential bits and then allow our users to choose how to integrate and compose these with other layers of the stack.
+To make a system that's incremental and composable, we need to decouple the Electric stack. It's not a one-size-fits-all vertical stack but more of a loosely coupled set of primitives around a smaller core. Where we do the essential bits and then allow our users to choose how to integrate and compose these with other layers of the stack.
 
 This aligns with the principle of [Worse is Better](https://en.wikipedia.org/wiki/Worse_is_better), defined by Richard P. Gabriel:
 
 > Software quality does not necessarily increase with functionality: there is a point where less functionality ("worse") is a preferable option ("better") in terms of practicality and usability.
 
-Gabriel contrasts "Worse is Better" with a make the "Right Thing" approach that aims to create the optimal solution. Which sounds painfully like our ambitions to make an optimal local-first platform. Whereas moving functionality out of scope, will actually allow us to make the core better and deliver on the opportunity.
+Gabriel contrasts "Worse is Better" with a make the "Right Thing" approach that aims to create the optimal solution, which sounds painfully like our ambitions to make an optimal local-first platform. Moving functionality out of scope will actually allow us to make the core better and deliver on the opportunity.
 
 #### The motivation for `electric-next`
 
-So, hopefully now our motivation is clear. We needed to find a way to simplify Electric and make it more loosely coupled. To pare it back to it's core and iterate on solid foundations.
-
+We needed to find a way to simplify Electric and make it more loosely coupled, paring it back to its core and iterating on solid foundations.
 
 ## What's changed?
 
@@ -137,31 +136,31 @@ We now see Electric as a sync engine that does partial replication on top of Pos
     <div class="img-border">
       <a href="/img/about/in-and-out-of-scope.jpg">
         <img src="/img/about/in-and-out-of-scope.png"
-            alt="System responsibilities diagramme"
+            alt="System responsibilities diagram"
         />
       </a>
     </div>
   </div>
   <figcaption className="figure-caption text-end">
-    Diagramme illustrating core system responsibilities vs optional layers and integrations.
+    Diagram illustrating core system responsibilities vs optional layers and integrations.
   </figcaption>
 </figure>
 
-The diagramme above and table below summarise what we see as core and what we've pushed out of scope.
+The diagram above and table below summarise what we see as core and what we've pushed out of scope.
 
-| Aspect | Is it core? | Who should/can provide? |
+| Aspect | Core? | Who should/can provide? |
 | --- | --- | --- |
-| Syncing data | yes | Electric |
-| Partial replication ([Shapes](/guides/shapes)) | yes | Electric |
-| Schema management / propagation / matching | partial | Application specific. In some cases it may be useful or necessary to replicate and validate schema information. In others, it can be the responsibility of the client to connect with the correct schema. |
-| Type safety in the client | partial | Important in many cases for DX and can be assisted by the sync service (e.g.: by providing an endpoint to query types for a shape). But use of types is optional and in many cases types can be provided by ORMs and other client-libraries. |
-| Permissions / authorization | no | There are many valid patterns here. Auth middleware, proxies, rule systems. Authorize at connect, per shape, per row/operation. A sync engine may provide some hooks and options but should not prescribe a solution. |
-| Client-side data access library | no | There are many ways of mapping a replication stream to objects, graphs or databases in the client. For example using existing ORMs like Drizzle and Prisma, or reactivity frameworks like LiveStore and TinyBase. |
-| Client-side reactivity | no | Client specific. Can be provided by reactivity frameworks. |
-| Connection management | no | Client specific. |
-| Database adapters | no | Client specific. Can be provided by ORMs and reactivity frameworks. |
-| Framework integrations | no | Client specific. Can be provided by reactivity frameworks. |
-| Client-side debug tooling | no | Client specific. |
+| Syncing data | Yes | Electric |
+| Partial replication ([Shapes](/guides/shapes)) | Yes | Electric |
+| Schema management / propagation / matching | Partial | Application specific. In some cases it may be useful or necessary to replicate and validate schema information. In others, it can be the responsibility of the client to connect with the correct schema. |
+| Type safety in the client | Partial | Types are important in many cases for DX and can be assisted by the sync service (for example, by providing an endpoint to query types for a shape). With that said, use of types is optional and in many cases types can be provided by ORMs and other client-libraries. |
+| Permissions / authorization | No | There are many valid patterns here. Auth middleware, proxies, rule systems. Authorize at connect, per shape, per row/operation. A sync engine may provide some hooks and options but should not prescribe a solution. |
+| Client-side data access library | No | There are many ways of mapping a replication stream to objects, graphs or databases in the client. For example using existing ORMs like Drizzle and Prisma, or reactivity frameworks like LiveStore and TinyBase. |
+| Client-side reactivity | No | Client specific. Can be provided by reactivity frameworks. |
+| Connection management | No | Client specific. |
+| Database adapters | No | Client specific. Can be provided by ORMs and reactivity frameworks. |
+| Framework integrations | No | Client specific. Can be provided by reactivity frameworks. |
+| Client-side debug tooling | No | Client specific. |
 
 ### HTTP Protocol
 
@@ -174,7 +173,8 @@ By switching to the [new HTTP API](/api/http), the new system:
 - minimises state, making the sync engine more reliable and easier to scale out
 - integrates with standard HTTP tooling, including proxies and CDNs
 
-This allows us to optimise initial data sync by making sync requests cacheable. And it facilitates moving concerns like authentication and authorization out of scope, as these can be handled by HTTP proxies.
+This means that sync requests become cacheable, optimizing the initial data sync.
+Moreover, authentication and authorization can be handled by HTTP proxies, shifting those concerns out of scope. 
 
 ### Write patterns
 
@@ -187,41 +187,41 @@ The previous Electric supported a single primary write-path pattern &mdash; [wri
     <div class="img-border">
       <a href="/img/about/data-flow.jpg">
         <img src="/img/about/data-flow.jpg"
-            alt="Data flow diagramme"
+            alt="Data flow diagram"
         />
       </a>
     </div>
   </div>
   <figcaption className="figure-caption text-end">
-    Data flow diagramme from the previous
+    Data flow diagram from the previous
     <a href="https://electric-sql.com/docs/reference/architecture" target="_blank">
       architecture&nbsp;page</a>.
   </figcaption>
 </figure>
 
-This is very powerful (and [abstracts state transfer](https://electric-sql.com/blog/2022/12/16/evolution-state-transfer) out of the application domain). However, it is only one of many valid write patterns.
+This is very powerful &mdash; and [abstracts state transfer](https://electric-sql.com/blog/2022/12/16/evolution-state-transfer) out of the application domain &mdash; but it is only one of many valid write patterns.
 
-Many applications don't write data at all; for example, syncing data into an application for visualisation or analysis. Some fire-and-forget writes to an ingest API. Other applications write data via API calls, or mutation queues. Some of these are online writes. Some use local optimistic state.
+Many applications don't write data at all. Some sync data into an application for visualisation or analysis, while others use fire-and-forget writes to an ingest API, and still others write data via API calls or mutation queues. Some of these are online writes while others use local optimistic state.
 
-For example, when applying a mutation with [Relay](https://relay.dev) you can [define an `optimisticResponse`](https://relay.dev/docs/guided-tour/updating-data/imperatively-modifying-store-data/#optimistic-updaters-vs-updaters) to update the client store with temporary optimistic state whilst the write is sent to the server. Or to give another example, when [making secure transactions](https://electric-sql.com/blog/2023/12/15/secure-transactions-with-local-first) a local-first app will explicitly want to send writes to the server, in order to validate and apply them in a secure and strongly consistent environment.
+As a practical example, when applying a mutation with [Relay](https://relay.dev) you can [define an `optimisticResponse`](https://relay.dev/docs/guided-tour/updating-data/imperatively-modifying-store-data/#optimistic-updaters-vs-updaters) to update the client store with temporary optimistic state whilst the write is sent to the server. Similarly, when [making secure transactions](https://electric-sql.com/blog/2023/12/15/secure-transactions-with-local-first), a local-first app would explicitly send writes to the server in order to validate and apply them in a secure and strongly consistent manner.
 
-So, following the strategy of paring down to the core and then progressively layering on more complex functionality, `electric-next` has taken the following approach:
+Following the strategy of paring down to the core and then progressively layering on more complex functionality, `electric-next` has taken the following approach:
 
 1. start with read-path only
 2. then add support for optimistic write patterns with tentativity
 3. then add support for through-the-DB writes
 
-This explicitly reduces the capability of the system in the short term, in order to build a better, more resilient system in the long term. The beauty is that, because we no longer prescribe a write-path strategy, you can choose and if necessary implement any write-path strategy you like.
+This explicitly reduces the capability of the system in the short term, in order to build a better, more resilient system in the long term. The advantage is that, by no longer prescribing a specific write-path strategy, you have the flexibility to implement any strategy that suits your needs.
 
-We will only focus on the more complex strategies ourselves once the simpler ones are bulletproof. And we hope that others, like [LiveStore](https://www.schickling.dev/projects/livestore) and [Drizzle](https://orm.drizzle.team/), for example, will build better client-side libraries that we can.
+Making the initial strategies bulletproof is our current focus. After that we will be able to dedicate energy to deeper consideration of complex strategies. Regarding client-side libraries and related packages, knowing the calibre of the teams behind projects such as [LiveStore](https://www.schickling.dev/projects/livestore) and [Drizzle](https://orm.drizzle.team/), those projects will keep delivering world-class client-side libraries that play nicely with `electric-next`.
 
 #### A note on finality of local writes
 
-One of the key differentiators of the previous ElectricSQL system was the ability to write to the local database without conflicts or rollbacks. The principle is [finality of local-writes](https://electric-sql.com/docs/reference/architecture#local-writes), which means that writes are final, not tentative. I.e.: once a write is accepted locally, it won't be rejected as invalid later on.
+One of the key differentiators of the previous ElectricSQL system was the ability to write to the local database without conflicts or rollbacks. The principle is [finality of local-writes](https://electric-sql.com/docs/reference/architecture#local-writes), which means that writes are final, not tentative. In other words, a write will not be rejected as invalid by the server after it is accepted locally.
 
 In contrast, `electric-next` embraces tentativity. With the new system, you can choose your write pattern(s) and the guarantees you want them to provide.
 
-We still believe that a local-first stack that provides finality of local writes can provide a better DX and UX than one that doesn't. Because of the absence of rollbacks. So we are committed in the longer term to building support for finality of local writes. However, it is no longer a key tenet of the system design.
+We still believe that a local-first stack that provides finality of local writes can provide a better DX and UX than one that doesn't, in part because of the absence of rollbacks. We are committed in the longer term to building support for finality of local writes. However, it is no longer a key tenet of the system design.
 
 ### Use cases
 
@@ -234,22 +234,22 @@ The core use case for Electric is to sync subsets of data out of Postgres into l
         <img srcset="/img/about/use-cases.sm.png 1098w, /img/about/use-cases.png 1484w"
             sizes="(max-width: 767px) 600px, 1484px"
             src="/img/about/use-cases.png"
-            alt="Use cases diagramme"
+            alt="Use cases diagram"
         />
       </a>
     </div>
   </div>
   <figcaption className="figure-caption text-end">
-    Diagramme illustrating the use-cases and environments you can sync data into with Electric.
+    Diagram illustrating the use-cases and environments you can sync data into with Electric.
   </figcaption>
 </figure>
 
 You can sync data into:
 
-- apps, replacing data fetching with data sync
-- development environments, for example syncing data into [an embedded PGlite](/product/pglite)
-- edge workers and services, for example maintaining a low-latency [edge data cache](/api/integrations/redis)
-- local AI systems running RAG, as per the example below
+- apps &mdash; e.g. replacing data fetching with data sync
+- development environments &mdash; e.g. syncing data into [an embedded PGlite](/product/pglite)
+- edge workers and services &mdash; e.g. maintaining a low-latency [edge data cache](/api/integrations/redis)
+- local AI systems running RAG &mdash; as per the example below
 
 <figure>
   <video controls="true" poster="https://electric-sql.com/videos/blog/local-first-ai-with-tauri-postgres-pgvector-llama/intro.jpg">

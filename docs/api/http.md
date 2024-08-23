@@ -45,11 +45,11 @@ The Shape Log is similar conceptually to the logical replication stream from Pos
     <img srcset="/img/api/shape-log.sm.png 1064w, /img/api/shape-log.png 1396w"
         sizes="(max-width: 767px) 600px, 1396px"
         src="/img/api/shape-log.png"
-        alt="Shape log flow diagramme"
+        alt="Shape log flow diagram"
     />
   </a>
   <figcaption className="figure-caption text-end">
-    Shape log flow diagramme.
+    Shape log flow diagram.
   </figcaption>
 </figure>
 

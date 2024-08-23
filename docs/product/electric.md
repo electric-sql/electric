@@ -16,7 +16,7 @@ The Electric Sync Engine syncs subsets of data out of Postgres into local apps, 
 <img srcset="/img/about/use-cases.sm.png 1098w, /img/about/use-cases.png 1484w"
     sizes="(max-width: 767px) 600px, 1484px"
     src="/img/about/use-cases.png"
-    alt="Use cases diagramme"
+    alt="Use cases diagram"
 />
 
 You can sync data into:
