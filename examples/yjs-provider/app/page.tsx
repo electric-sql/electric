@@ -42,6 +42,7 @@ if (typeof window !== `undefined`) {
   network = new ElectricProvider(`http://localhost:3000/`, room, ydoc, opts)
 
   new BroadcastProvider(room, ydoc, {
+    connect: true,
     awareness,
   })
 }
@@ -99,7 +100,7 @@ export default function Home() {
       </form>
       <p>
         This is a demo of <a href="https://github.com/yjs/yjs">Yjs</a> shared
-        editor backed by Postgres using{` `}
+        editor synching with {` `}
         <a href="https://github.com/electric-sql/electric">Electric</a>.
       </p>
       <div ref={editor}></div>

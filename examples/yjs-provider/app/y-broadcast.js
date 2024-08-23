@@ -63,7 +63,7 @@ export class BroadcastProvider extends Observable {
   constructor(
     roomname,
     doc,
-    { connect = true, awareness = new awarenessProtocol.Awareness(doc) } = {}
+    { connect = false, awareness = new awarenessProtocol.Awareness(doc) } = {}
   ) {
     super()
 
