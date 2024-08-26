@@ -10,7 +10,6 @@
     "backend:down": "PROJECT_NAME=auth-example pnpm -C ../../ run example-backend:down",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
     "dev": "next dev --turbo -p 5173",
-    "build": "next build",
     "start": "next start",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "stylecheck": "eslint . --quiet",
