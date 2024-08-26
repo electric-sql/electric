@@ -103,7 +103,7 @@ defmodule Electric.ShapeCache.Storage do
           latest_offset: non_neg_integer(),
           snapshot_xmin: non_neg_integer()
         ]
-  # TODO: remove this, or assert that opts are per-shape?
+  # TODO: remove this
   def list_shapes({mod, shape_opts}) do
     apply(mod, :list_shapes, [shape_opts])
   end

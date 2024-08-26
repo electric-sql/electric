@@ -3,6 +3,11 @@ defmodule Electric.PersistentKV.Memory do
 
   defstruct [:pid, :parent]
 
+  @type t() :: %__MODULE__{pid: pid(), parent: pid()}
+
+  @type seed_data() :: [{binary(), term()}] | %{binary() => term()}
+
+  @spec new!(seed_data()) :: t()
   def new!(data \\ []) do
     {:ok, pid} = start_link(data)
     %__MODULE__{pid: pid, parent: self()}
