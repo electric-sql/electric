@@ -362,5 +362,54 @@ defmodule Electric.Plug.RouterTest do
       assert key3 != key2
       assert key3 != key
     end
+
+    test "GET works when there are changes not related to the shape in the same txn", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      where = "value ILIKE 'yes%'"
+
+      conn =
+        conn("GET", "/v1/shape/items", %{offset: "-1", where: where})
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      [shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+
+      assert [_] = Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape/items", %{
+            offset: "0_0",
+            shape_id: shape_id,
+            where: where,
+            live: true
+          })
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(
+        db_conn,
+        "INSERT INTO items (id, value) VALUES (gen_random_uuid(), $1), (gen_random_uuid(), $2)",
+        ["yes!", "no :("]
+      )
+
+      assert %{status: 200} = conn = Task.await(task)
+
+      assert [%{"value" => %{"value" => "yes!"}}, _] = Jason.decode!(conn.resp_body)
+      assert [new_offset] = Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset")
+
+      assert %{status: 200} =
+               conn =
+               conn("GET", "/v1/shape/items", %{
+                 offset: new_offset,
+                 shape_id: shape_id,
+                 where: where
+               })
+               |> Router.call(opts)
+
+      assert [_] = Jason.decode!(conn.resp_body)
+    end
   end
 end
