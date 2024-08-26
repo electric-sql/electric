@@ -19,4 +19,7 @@ defmodule Support.StubInspector do
     |> Map.fetch!(relation)
     |> then(&load_column_info(relation, &1))
   end
+
+  @impl true
+  def clean_column_info(_, _), do: true
 end

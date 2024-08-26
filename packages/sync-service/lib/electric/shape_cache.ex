@@ -55,6 +55,7 @@ defmodule Electric.ShapeCache do
               default: Electric.Replication.ShapeLogCollector
             ],
             storage: [type: :mod_arg, required: true],
+            inspector: [type: :mod_arg, required: true],
             registry: [type: {:or, [:atom, :pid]}, required: true],
             # NimbleOptions has no "implementation of protocol" type
             persistent_kv: [type: :any, required: true],
@@ -226,6 +227,18 @@ defmodule Electric.ShapeCache do
         |> Enum.filter(&Shape.is_affected_by_relation_change?(&1, change))
         |> Enum.map(&elem(&1, 0))
         |> Enum.each(fn shape_id -> clean_up_shape(state, shape_id) end)
+      end
+
+      if old_rel != relation do
+        # Clean column information from ETS
+        # also when old_rel is nil because column info
+        # may already be loaded into ETS by the initial shape request
+        {inspector, inspector_opts} = state.inspector
+        # if the old relation exists we use that one
+        # because the table name may have changed in the new relation
+        # if there is no old relation, we use the new one
+        rel = old_rel || relation
+        inspector.clean_column_info({rel.schema, rel.table}, inspector_opts)
       end
     end)
 

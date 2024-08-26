@@ -17,6 +17,8 @@ defmodule Electric.Postgres.Inspector do
   @callback load_column_info(relation(), opts :: term()) ::
               {:ok, [column_info()]} | :table_not_found
 
+  @callback clean_column_info(relation(), opts :: term()) :: true
+
   @type inspector :: {module(), opts :: term()}
 
   @doc """

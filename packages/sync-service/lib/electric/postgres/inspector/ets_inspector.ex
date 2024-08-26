@@ -29,6 +29,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     end
   end
 
+  @impl Electric.Postgres.Inspector
   def clean_column_info(table, opts_or_state) do
     ets_table = Access.get(opts_or_state, :pg_info_table, @default_pg_info_table)
 

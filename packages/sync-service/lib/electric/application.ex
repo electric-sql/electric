@@ -26,17 +26,18 @@ defmodule Electric.Application do
       prepare_tables_fn =
         {Electric.Postgres.Configuration, :configure_tables_for_replication!, [publication_name]}
 
+      inspector =
+        {Electric.Postgres.Inspector.EtsInspector,
+          server: Electric.Postgres.Inspector.EtsInspector}
+
       shape_cache =
         {Electric.ShapeCache,
          storage: storage,
+         inspector: inspector,
          prepare_tables_fn: prepare_tables_fn,
          log_producer: Electric.Replication.ShapeLogCollector,
          persistent_kv: persistent_kv,
          registry: Registry.ShapeChanges}
-
-      inspector =
-        {Electric.Postgres.Inspector.EtsInspector,
-         server: Electric.Postgres.Inspector.EtsInspector}
 
       core_processes = [
         {Registry,
