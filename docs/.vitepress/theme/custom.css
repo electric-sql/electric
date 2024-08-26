@@ -21,6 +21,11 @@
 .no-wrap {
   white-space: nowrap;
 }
+@media (min-width: 450px) {
+  .no-wrap-xs {
+    white-space: nowrap;
+  }
+}
 @media (min-width: 560px) {
   .no-wrap-sm {
     white-space: nowrap;
@@ -39,6 +44,10 @@
 .hidden {
   display: none !important;
 }
+.inline-xs,
+.block-xs {
+  display: none !important;
+}
 @media (max-width: 859px) {
   .hidden-md {
     display: none !important;
@@ -47,6 +56,17 @@
 @media (max-width: 559px) {
   .hidden-sm {
     display: none !important;
+  }
+}
+@media (max-width: 449px) {
+  .hidden-xs {
+    display: none !important;
+  }
+  .block-xs {
+    display: block !important;
+  }
+  .inline-xs {
+    display: inline !important;
   }
 }
 
@@ -107,6 +127,18 @@
 .home-use-cases-diagramme img {
   width: 100%;
 }
+@media (max-width: 449px) {
+  .home-use-cases-diagramme {
+    margin-left: -10px !important;
+    margin-right: -10px !important;
+  }
+}
+@media (max-width: 409px) {
+  .home-use-cases-diagramme {
+    margin-left: -20px !important;
+    margin-right: -20px !important;
+  }
+}
 
 .vp-doc a.VPButton {
   text-decoration: none;
@@ -153,7 +185,7 @@ iframe {
   color-scheme: auto;
 }
 .twitter-tweet {
-  margin: 35px auto -95px !important;
+  margin: 1rem auto -95px !important;
 }
 .twitter-tweet iframe {
   transform: scale(0.8);
@@ -198,7 +230,7 @@ iframe {
 }
 
 .VPFeature .details {
-  font-weight: 600 !important;
+  font-weight: 550 !important;
   align-items: stretch;
   display: flex;
   flex-direction: column;
@@ -229,4 +261,50 @@ iframe {
 
 .custom-block-no-title {
   margin-bottom: 10px !important;
+}
+
+.VPFooter p {
+  margin-bottom: 12px;
+}
+.VPFooter p.footer-nav {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+}
+.VPFooter .footer-nav-inner {
+  flex-direction: row;
+  align-items: center;
+  margin: 0.2rem 0;
+}
+@media (max-width: 449px) {
+  .VPFooter p.footer-nav {
+    flex-direction: column;
+  }
+}
+.VPFooter p.footer-nav a {
+  margin: 0.3rem;
+}
+.VPFooter p.footer-nav .vpi-social-github,
+.VPFooter p.footer-nav .vpi-social-discord {
+  display: inline-block;
+  width: 1.24rem;
+  height: 1.24rem;
+  position: relative;
+}
+.VPFooter p.footer-nav .vpi-social-github,
+.VPFooter p.footer-nav .vpi-social-discord {
+  margin: 2px 4px -5px 0;
+}
+
+.VPFooter .footer-logo {
+  text-align: center;
+  width: 100%;
+}
+.VPFooter .footer-logo img {
+  width: 108px;
+  margin: 12px auto;
+}
+.VPFooter a {
+  text-decoration: none !important;
+  color: var(--vp-c-indigo-1);
 }

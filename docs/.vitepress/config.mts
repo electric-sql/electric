@@ -83,6 +83,47 @@ export default defineConfig({
     socialLinks: [
       { icon: 'discord', link: 'https://discord.electric-sql.com' },
       { icon: 'github', link: 'https://github.com/electric-sql' }
-    ]
+    ],
+    footer: {
+      message: `
+        <p class="footer-logo">
+          <img src="/img/brand/logo.svg" />
+        </p>
+        <p class="footer-nav">
+          <span class="footer-nav-inner">
+            <a href="/about">
+              About</a>
+            <a href="/about/community">
+              Community</a>
+            <a href="/about/contact">
+              Contact</a>&nbsp;
+          </span>
+          <span class="footer-nav-inner">
+            <a href="/guides">
+              Docs</a>
+            <a href="/about/terms">
+              Legal</a>&nbsp;
+            <a href="https://github.com/electric-sql">
+              <span class="vpi-social-github"></span></a>
+            <a href="https://discord.electric-sql.com">
+              <span class="vpi-social-discord"></span></a>
+          </span>
+        </p>
+      `,
+      copyright: `
+        <p>
+          Released under the
+          <a href="https://github.com/electric-sql/electric/blob/main/LICENSE" target="_blank">
+            Apache 2.0</a>
+          License.
+          <span class="no-wrap">
+            Copyright © 2024
+            <a href="https://find-and-update.company-information.service.gov.uk/company/13573370"
+              target="_blank">
+              ElectricSQL</a>.
+          </span>
+        </p>
+      `
+    }
   }
 })

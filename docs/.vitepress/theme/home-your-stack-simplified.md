@@ -1,3 +1,3 @@
-## Simplifies your stack
+## Solves the hard problems, <span class="no-wrap-xs">so you don't have to</span>
 
-Electric sync solves the hard problems of state transfer, cache&nbsp;invalidation, scaling and high&nbsp;availability. <span class="hidden-md">Making your software simpler, smaller, faster and more&nbsp;reliable.</span>
+Electric solves state transfer, cache&nbsp;invalidation, <span class="no-wrap-sm">scaling and availability</span>. <br class="hidden-sm">Making your software simpler, faster and more&nbsp;reliable.

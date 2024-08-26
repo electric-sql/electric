@@ -1,13 +1,13 @@
 ---
 layout: home
-title: 'Postgres Everywhere'
+title: 'ElectricSQL'
+titleTemplate: 'Postgres Sync'
 description: 'Your data, in sync, wherever you need it.'
 hero:
   name: "Why fetch when"
   text: "you can sync?"
   tagline: >-
-    Swap out your queries, data fetching and caching
-    for bulletproof sync that just works.
+    Swap out your queries, data fetching and caching for bulletproof sync<span class="hidden-xs"> that just works</span>.
   image:
     src: /img/home/zap-with-halo.svg
   actions:
@@ -103,11 +103,35 @@ const tweets = [
 const propositions = [
   {
     title: "Solves state transfer",
-    details: "Lala",
-    icon: {
-      src: '/img/icons/electric.svg'
-    },
-    link: '/product/electric'
+    details: `
+      Replace APIs, data fetching and network error handling
+      with automated data synchronisation.
+    `,
+    image: '/img/home/state-transfer-trans.png'
+  },
+  {
+    title: "Solves cache invalidation",
+    details: `
+      Replace ttls and expiry policies with realtime sync
+      and automated invalidation.
+    `,
+    image: '/img/home/cache-invalidation-trans.png'
+  },
+  {
+    title: "Solves scaling",
+    details: `
+      Take the query workload off your database and the
+      compute workload off your cloud.
+    `,
+    image: '/img/home/scalability-trans.png'
+  },
+  {
+    title: "Solves availability",
+    details: `
+      Take the network off the interaction path and build
+      systems that are resilient and work offline.
+    `,
+    image: '/img/home/high-availability-trans.png'
   }
 ]
 
@@ -151,7 +175,7 @@ const forceResize = () => {
   const wrapper = document.querySelector('.masonry-wall-wrapper')
   const wall = document.querySelector('.masonry-wall')
 
-  wrapper.style.height = `${wall.offsetHeight * 0.7}px`
+  wrapper.style.height = `${wall.offsetHeight * 0.75}px`
 }
 
 const finishResize = () => {
@@ -178,13 +202,17 @@ const handleTweetLoad = () => {
 
 onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {
-    const icon = document.createElement('span')
-    icon.classList.add('vpi-social-github')
-
     const action = document.querySelector(
       '.VPHero .actions a[href="https://github.com/electric-sql"]'
     )
-    action.prepend(icon)
+
+    let icon = action.querySelector('.vpi-social-github')
+    if (!icon) {
+      const icon = document.createElement('span')
+      icon.classList.add('vpi-social-github')
+
+      action.prepend(icon)
+    }
 
     renderStarCount('electric', initialStarCounts.electric)
     renderStarCount('pglite', initialStarCounts.pglite)
@@ -230,6 +258,7 @@ onMounted(async () => {
     margin: 0 0.5rem 0 0;
     position: relative;
   }
+
   .action a .vpi-electric-icon,
   .feature-cta a .vpi-electric-icon {
     --icon: url(./public/img/brand/icon.svg);
@@ -245,34 +274,36 @@ onMounted(async () => {
 
     text-align: center;
 
-    overflow: hidden;
+    overflow-y: hidden;
+    overflow-x: show;
 
     margin-top: 64px;
   }
 
   .masonry-wall {
     columns: 4 300px;
-    column-gap: 2rem;
+    column-gap: 1.5rem;
 
-    transform: scale(0.7);
+    transform: scale(0.75);
     transform-origin: top center;
 
-    margin: 0 -23% -0.43% -23%;
+    margin: 0 -16.66% -0.33% -16.66%;
   }
   .masonry-item {
     width: 100%;
+    max-width: 462px;
     margin: 0;
     display: inline-block;
   }
   .masonry-item .twitter-tweet iframe {
     transform: scale(1);
   }
-  @media (max-width: 1015px) {
+  @media (max-width: 1082px) {
     .masonry-item.tweet-hide-md {
       display: none;
     }
   }
-  @media (max-width: 756px) {
+  @media (max-width: 807px) {
     .masonry-item.tweet-hide-sm {
       display: none;
     }
@@ -280,7 +311,6 @@ onMounted(async () => {
   .masonry-tweet {
     position: relative;
     display: block;
-    margin-bottom: 64px;
   }
   .loading-tweet {
     border: 1px solid rgba(238 238 238 0.8);
@@ -291,6 +321,73 @@ onMounted(async () => {
     width: 100%;
     position: relative;
     display: block;
+  }
+
+  .home-propositions {
+    text-align: center;
+    margin: 32px 0;
+  }
+  .home-propositions .proposition {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    margin: 12px 0;
+    gap: 24px;
+  }
+  .home-propositions .proposition-image {
+    width: 25vw;
+    max-width: 300px;
+    min-width: 180px;
+  }
+  .home-propositions .proposition-image img {
+    width: 100%;
+  }
+  .home-propositions .proposition-content {
+    width: 50vw;
+    max-width: 460px;
+    min-width: 200px;
+    text-align: left;
+  }
+  .home-propositions .proposition-content h3 {
+    border: none;
+    margin-top: 12px;
+    padding-top: 0;
+    font-size: 24px;
+  }
+  .home-propositions .proposition-content p {
+    font-weight: 550;
+    font-size: 15px;
+    color: var(--vp-c-text-2);
+  }
+  @media (max-width: 559px) {
+    .home-propositions .proposition {
+      flex-direction: column;
+    }
+    .home-propositions .proposition-image {
+      width: 50vw;
+      max-width: none;
+      min-width: none;
+    }
+    .home-propositions .proposition-content {
+      width: 100%;
+      max-width: 400px;
+      min-width: none;
+      text-align: center;
+    }
+    .home-propositions .proposition-content h3 {
+      margin-top: -12px;
+    }
+  }
+  @media (max-width: 759px) {
+    .home-propositions .proposition-content p {
+      font-size: 14.5px;
+    }
+  }
+  @media (max-width: 559px) {
+    .home-propositions .proposition-content p {
+      font-size: 14px;
+    }
   }
 </style>
 
@@ -319,15 +416,23 @@ onMounted(async () => {
   </div>
 </div>
 
-<div class="vp-doc">
-  <div class="container">
-    <div class="features-content your-stack-simplified">
-      <HomeYourStackSimplified />
+<div class="features-content your-stack-simplified">
+  <HomeYourStackSimplified />
+</div>
+
+<div class="home-propositions">
+  <div v-for="(item, index) in propositions" :key="item.id"
+      class="proposition">
+    <div class="proposition-image">
+      <img :src="item.image" />
+    </div>
+    <div class="proposition-content">
+      <h3>
+        {{ item.title }}
+      </h3>
+      <p>
+        {{ item.details }}
+      </p>
     </div>
   </div>
 </div>
-
-<VPFeatures
-    class="VPHomeFeatures"
-    :features="propositions"
-/>
