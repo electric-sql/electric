@@ -25,15 +25,21 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   @snapshot_offset LogOffset.first()
   @snapshot_offset_encoded to_string(@snapshot_offset)
   @zero_offset LogOffset.first()
-  @query_info %Postgrex.Query{
-    name: "the-table",
-    columns: ["id", "title"],
-    result_types: [Postgrex.Extensions.UUID, Postgrex.Extensions.Raw]
-  }
   @data_stream [
-    [<<1::128>>, "row1"],
-    [<<2::128>>, "row2"]
-  ]
+                 %{
+                   offset: @snapshot_offset,
+                   value: %{id: "00000000-0000-0000-0000-000000000001", title: "row1"},
+                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
+                   headers: %{operation: "insert"}
+                 },
+                 %{
+                   offset: @snapshot_offset,
+                   value: %{id: "00000000-0000-0000-0000-000000000002", title: "row2"},
+                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
+                   headers: %{operation: "insert"}
+                 }
+               ]
+               |> Enum.map(&Jason.encode_to_iodata!/1)
 
   for module <- [InMemoryStorage, CubDbStorage] do
     module_name = module |> Module.split() |> List.last()
@@ -67,7 +73,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
       test "returns snapshot when shape does exist", %{module: storage, opts: opts} do
         storage.mark_snapshot_as_started(@shape_id, opts)
-        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @data_stream, opts)
 
         {@snapshot_offset, stream} = storage.get_snapshot(@shape_id, opts)
 
@@ -94,14 +100,12 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         ]
 
         storage.mark_snapshot_as_started(@shape_id, opts)
-        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @data_stream, opts)
 
         storage.mark_snapshot_as_started("another-shape-id", opts)
 
         storage.make_new_snapshot!(
           "another-shape-id",
-          @shape,
-          @query_info,
           another_data_stream,
           opts
         )
@@ -126,7 +130,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
       test "returns snapshot offset when shape does exist", %{module: storage, opts: opts} do
         storage.mark_snapshot_as_started(@shape_id, opts)
-        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @data_stream, opts)
 
         {@snapshot_offset, _} = storage.get_snapshot(@shape_id, opts)
       end
@@ -143,7 +147,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           |> changes_to_log_items()
 
         storage.mark_snapshot_as_started(@shape_id, opts)
-        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @data_stream, opts)
         :ok = storage.append_to_log!(@shape_id, log_items, opts)
 
         {@snapshot_offset, stream} = storage.get_snapshot(@shape_id, opts)
@@ -160,7 +164,16 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           Stream.map(1..row_count, fn i ->
             # Sleep to give the read process time to run
             Process.sleep(1)
-            [<<i::128>>, "row#{i}"]
+
+            [
+              %{
+                offset: @snapshot_offset_encoded,
+                value: %{id: "00000000-0000-0000-0000-00000000000#{i}", title: "row#{i}"},
+                key: ~S|"public"."the-table"/"00000000-0000-0000-0000-00000000000#{i}"|,
+                headers: %{operation: "insert"}
+              }
+              |> Jason.encode_to_iodata!()
+            ]
           end)
 
         storage.mark_snapshot_as_started(@shape_id, opts)
@@ -177,7 +190,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             end
           end)
 
-        storage.make_new_snapshot!(@shape_id, @shape, @query_info, data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, data_stream, opts)
 
         Task.await(read_task)
       end
@@ -439,7 +452,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       setup :start_storage
 
       test "causes snapshot_started?/2 to return false", %{module: storage, opts: opts} do
-        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @data_stream, opts)
 
         storage.cleanup!(@shape_id, opts)
 
@@ -448,7 +461,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
       test "causes get_snapshot/2 to raise an error", %{module: storage, opts: opts} do
         storage.mark_snapshot_as_started(@shape_id, opts)
-        storage.make_new_snapshot!(@shape_id, @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!(@shape_id, @data_stream, opts)
 
         storage.cleanup!(@shape_id, opts)
 
@@ -574,10 +587,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.add_shape("shape-2", @shape, opts)
         storage.add_shape("shape-3", @shape, opts)
 
-        storage.make_new_snapshot!("shape-1", @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-1", @data_stream, opts)
         storage.append_to_log!("shape-1", @log_items, opts)
 
-        storage.make_new_snapshot!("shape-2", @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-2", @data_stream, opts)
 
         assert [
                  %{shape_id: "shape-1", latest_offset: @change_offset},
@@ -618,9 +631,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.mark_snapshot_as_started("shape-1", opts)
         storage.mark_snapshot_as_started("shape-2", opts)
         storage.mark_snapshot_as_started("shape-3", opts)
-        storage.make_new_snapshot!("shape-1", @shape, @query_info, @data_stream, opts)
-        storage.make_new_snapshot!("shape-2", @shape, @query_info, @data_stream, opts)
-        storage.make_new_snapshot!("shape-3", @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-1", @data_stream, opts)
+        storage.make_new_snapshot!("shape-2", @data_stream, opts)
+        storage.make_new_snapshot!("shape-3", @data_stream, opts)
         storage.set_snapshot_xmin("shape-1", 11, opts)
         storage.set_snapshot_xmin("shape-3", 33, opts)
 
@@ -643,8 +656,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.mark_snapshot_as_started("shape-1", opts)
         storage.mark_snapshot_as_started("shape-2", opts)
         storage.mark_snapshot_as_started("shape-3", opts)
-        storage.make_new_snapshot!("shape-1", @shape, @query_info, @data_stream, opts)
-        storage.make_new_snapshot!("shape-3", @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-1", @data_stream, opts)
+        storage.make_new_snapshot!("shape-3", @data_stream, opts)
         storage.set_snapshot_xmin("shape-1", 11, opts)
         storage.set_snapshot_xmin("shape-2", 22, opts)
         storage.set_snapshot_xmin("shape-3", 33, opts)
@@ -668,9 +681,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.mark_snapshot_as_started("shape-1", opts)
         storage.mark_snapshot_as_started("shape-2", opts)
         storage.mark_snapshot_as_started("shape-3", opts)
-        storage.make_new_snapshot!("shape-1", @shape, @query_info, @data_stream, opts)
-        storage.make_new_snapshot!("shape-2", @shape, @query_info, @data_stream, opts)
-        storage.make_new_snapshot!("shape-3", @shape, @query_info, @data_stream, opts)
+        storage.make_new_snapshot!("shape-1", @data_stream, opts)
+        storage.make_new_snapshot!("shape-2", @data_stream, opts)
+        storage.make_new_snapshot!("shape-3", @data_stream, opts)
         storage.set_snapshot_xmin("shape-1", 11, opts)
         storage.set_snapshot_xmin("shape-2", 22, opts)
         storage.set_snapshot_xmin("shape-3", 33, opts)
