@@ -29,6 +29,12 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     end
   end
 
+  def clean_column_info(table, opts_or_state) do
+    ets_table = Access.get(opts_or_state, :pg_info_table, @default_pg_info_table)
+
+    :ets.delete(ets_table, {table, :columns})
+  end
+
   ## Internal API
 
   @impl GenServer

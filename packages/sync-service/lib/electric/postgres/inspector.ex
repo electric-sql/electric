@@ -26,6 +26,12 @@ defmodule Electric.Postgres.Inspector do
   def load_column_info(relation, {module, opts}), do: module.load_column_info(relation, opts)
 
   @doc """
+  Clean up column information about a given table using a provided inspector.
+  """
+  @spec clean_column_info(relation(), inspector()) :: true
+  def clean_column_info(relation, {module, opts}), do: module.clean_column_info(relation, opts)
+
+  @doc """
   Get columns that should be considered a PK for table. If the table
   has no PK, then we're considering all columns as identifying.
   """
