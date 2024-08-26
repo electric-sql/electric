@@ -430,7 +430,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
       end)
-      |> stub(:has_shape?, fn "foo", _opts -> true end)
+      |> stub(:has_shape?, fn "foo", _opts -> false end)
 
       Mock.Storage
       |> stub(:for_shape, fn "foo", opts -> {"foo", opts} end)
