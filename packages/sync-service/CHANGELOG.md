@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 0.3.4
+
+### Patch Changes
+
+- fa88719: clean shapes affected by migrations
+- e3b0040: Fix a bug in ReplicationClient caused by an invalid assumption about cross-transaction operation LSN ordering.
+
 ## 0.3.3
 
 ### Patch Changes
