@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.3.5
+
+### Patch Changes
+
+- 5f31867: Don't search for exact log entry with provided offset. Fixes a bug that caused an infinite loop of initial syncs followed by 409s.
+
 ## 0.3.4
 
 ### Patch Changes
