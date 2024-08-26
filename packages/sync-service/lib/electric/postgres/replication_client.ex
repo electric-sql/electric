@@ -5,6 +5,7 @@ defmodule Electric.Postgres.ReplicationClient do
   use Postgrex.ReplicationConnection
 
   alias Electric.Postgres.LogicalReplication.Decoder
+  alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient.Collector
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
   alias Electric.Replication.Changes.Relation
@@ -33,14 +34,14 @@ defmodule Electric.Postgres.ReplicationClient do
       origin: "postgres",
       txn_collector: %Collector{},
       step: :disconnected,
-      # Keep track of the latest received and applied WAL offsets so that we can report them
-      # back to Postgres in standby status update messages -
+      # Cache the end_lsn of the last processed Commit message to report it back to Postgres
+      # on demand via standby status update messages -
       # https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-STANDBY-STATUS-UPDATE
       #
-      # Postgres defines separate "flushed" and "applied" offsets but we merge those into one
-      # concept of "applied WAL" which is defined as the offset we have successfully processed
-      # and persisted in our shape log storage.
-      received_wal: 0,
+      # Postgres defines separate "received and written to disk", "flushed to disk" and
+      # "applied" offsets but we only keep track of the "applied" offset which we define as the
+      # end LSN of the last transaction that we have successfully processed and persisted in the
+      # shape log storage.
       applied_wal: 0
     ]
 
@@ -55,7 +56,6 @@ defmodule Electric.Postgres.ReplicationClient do
             txn_collector: Collector.t(),
             step: Electric.Postgres.ReplicationClient.step(),
             display_settings: [String.t()],
-            received_wal: non_neg_integer,
             applied_wal: non_neg_integer
           }
 
@@ -149,15 +149,21 @@ defmodule Electric.Postgres.ReplicationClient do
   @spec handle_data(binary(), State.t()) ::
           {:noreply, State.t()} | {:noreply, list(binary()), State.t()}
   def handle_data(
-        <<@repl_msg_x_log_data, wal_start::64, wal_end::64, _clock::64, rest::binary>>,
+        <<@repl_msg_x_log_data, _wal_start::64, wal_end::64, _clock::64, rest::binary>>,
         %State{} = state
       ) do
-    Logger.debug("XLogData: wal_start=#{wal_start}, wal_end=#{wal_end}")
-
-    state = update_received_wal(:xlog_data, state, wal_start, wal_end)
-
     rest
     |> Decoder.decode()
+    # # Useful for debugging:
+    # |> tap(fn %struct{} = msg ->
+    #   message_type = struct |> to_string() |> String.split(".") |> List.last()
+    #
+    #   Logger.debug(
+    #     "XLogData: wal_start=#{wal_start} (#{Lsn.from_integer(wal_start)}), " <>
+    #       "wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)})\n" <>
+    #       message_type <> " :: " <> inspect(Map.from_struct(msg))
+    #   )
+    # end)
     |> Collector.handle_message(state.txn_collector)
     |> case do
       %Collector{} = txn_collector ->
@@ -194,9 +200,9 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   def handle_data(<<@repl_msg_primary_keepalive, wal_end::64, _clock::64, reply>>, state) do
-    Logger.debug("Primary Keepalive: wal_end=#{wal_end} reply=#{reply}")
-
-    state = update_received_wal(:keepalive, state, nil, wal_end)
+    Logger.debug(fn ->
+      "Primary Keepalive: wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)}) reply=#{reply}"
+    end)
 
     messages =
       case reply do
@@ -208,20 +214,11 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   defp encode_standby_status_update(state) do
-    # Even though Postgres docs say[1] that these values need to be incremented by 1,
-    # Postgres' own walreceiver process does not seem to be doing that.
-    # Given the fact that `state.applied_wal` is set to the `wal_end` value of the most
-    # recently processed XLogData message (which itself appears to be the end LSN + 1 of the last
-    # transaction's Commit message) I'm worried about Postgres skipping the next transaction by
-    # treating the "flushed LSN" we're reporting back to it as having passed the transaction.
-    # TODO: needs more testing/PG source reading/whatever.
-    #
-    # [1]: https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-STANDBY-STATUS-UPDATE
     <<
       @repl_msg_standby_status_update,
-      state.received_wal::64,
-      state.applied_wal::64,
-      state.applied_wal::64,
+      state.applied_wal + 1::64,
+      state.applied_wal + 1::64,
+      state.applied_wal + 1::64,
       current_time()::64,
       0
     >>
@@ -230,17 +227,6 @@ defmodule Electric.Postgres.ReplicationClient do
   @epoch DateTime.to_unix(~U[2000-01-01 00:00:00Z], :microsecond)
   defp current_time(), do: System.os_time(:microsecond) - @epoch
 
-  # wal can be 0 if the incoming logical message is e.g. Relation.
-  defp update_received_wal(_step, state, _, 0), do: state
-
-  defp update_received_wal(_step, %{received_wal: wal} = state, _, wal), do: state
-
-  defp update_received_wal(_step, state, _, wal) when wal > state.received_wal,
-    do: %{state | received_wal: wal}
-
   defp update_applied_wal(state, wal) when wal > state.applied_wal,
     do: %{state | applied_wal: wal}
-
-  # wal can be 0 if the incoming logical message is e.g. Relation.
-  defp update_applied_wal(state, 0), do: state
 end
