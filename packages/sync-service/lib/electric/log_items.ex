@@ -2,12 +2,11 @@ defmodule Electric.LogItems do
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Shape
-  alias Electric.Utils
 
   @moduledoc """
   Defines the structure and how to create the items in the log that the electric client reads.
 
-  The log_item() data structure is a map for ease of consumption in the Elixir code, 
+  The log_item() data structure is a map for ease of consumption in the Elixir code,
   however when JSON encoded (not done in this module) it's the format that the electric
   client accepts.
   """
@@ -92,8 +91,8 @@ defmodule Electric.LogItems do
           row_stream :: Stream.t(list()),
           offset :: LogOffset.t(),
           shape :: Shape.t(),
-          query_info :: %Postgrex.Query{}
-        ) :: log_item()
+          query_info :: Postgrex.Query.t()
+        ) :: Enumerable.t(log_item())
   def from_snapshot_row_stream(row_stream, offset, shape, query_info) do
     Stream.map(row_stream, &from_snapshot_row(&1, offset, shape, query_info))
   end
@@ -106,17 +105,15 @@ defmodule Electric.LogItems do
     %{
       key: key,
       value: value,
-      headers: %{operation: :insert},
+      headers: %{operation: :insert, relation: shape.root_table |> Tuple.to_list()},
       offset: offset
     }
   end
 
-  defp value(row, %Postgrex.Query{columns: columns, result_types: types}) do
-    [columns, types, row]
-    |> Enum.zip_with(fn
-      [col, Postgrex.Extensions.UUID, val] -> {col, Utils.encode_uuid(val)}
-      [col, _, val] -> {col, to_string(val)}
-    end)
+  # We're assuming the the postgres query casts every column to string
+  defp value(row, %Postgrex.Query{columns: columns}) do
+    [columns, row]
+    |> Enum.zip()
     |> Map.new()
   end
 end
