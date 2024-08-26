@@ -1,5 +1,11 @@
-// .vitepress/theme/index.js
-import DefaultTheme from 'vitepress/theme-without-fonts'
+import DefaultTheme, { VPButton } from 'vitepress/theme-without-fonts'
+import Layout from './Layout.vue'
 import './custom.css'
 
-export default DefaultTheme
+export default {
+  enhanceApp({ app }) {
+    app.component('VPButton', VPButton)
+  },
+  extends: DefaultTheme,
+  Layout: Layout
+}

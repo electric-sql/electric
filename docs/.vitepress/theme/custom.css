@@ -15,6 +15,98 @@
   --ddn-color: #D0BCFF;
   --pglite-color: #F6F95C;
 }
+.highlight {
+  color: var(--vp-home-hero-name-color);
+}
+.no-wrap {
+  white-space: nowrap;
+}
+@media (min-width: 560px) {
+  .no-wrap-sm {
+    white-space: nowrap;
+  }
+}
+@media (min-width: 860px) {
+  .no-wrap-md {
+    white-space: nowrap;
+  }
+}
+@media (min-width: 960px) {
+  .no-wrap-lg {
+    white-space: nowrap;
+  }
+}
+.hidden {
+  display: none !important;
+}
+@media (max-width: 859px) {
+  .hidden-md {
+    display: none !important;
+  }
+}
+@media (max-width: 559px) {
+  .hidden-sm {
+    display: none !important;
+  }
+}
+
+.container {
+  max-width: 1152px;
+  margin: 0 auto;
+}
+.features-content {
+  margin: 32px 24px 24px;
+  text-align: center;
+}
+@media (min-width: 640px) {
+  .features-content {
+    margin: 48px 48px 28px;
+  }
+}
+@media (min-width: 960px) {
+  .features-content {
+    margin: 64px 64px 32px;
+/*    text-align: left;*/
+  }
+}
+.vp-doc .features-content h2 {
+  font-size: 28px;
+  padding-top: 32px;
+  line-height: 1.3;
+  border: none;
+}
+@media (min-width: 640px) {
+  .vp-doc .features-content h2 {
+    font-size: 30px;
+    padding-top: 36px;
+  }
+}
+@media (min-width: 960px) {
+  .vp-doc .features-content h2 {
+    font-size: 32px;
+    padding-top: 48px;
+  }
+}
+.vp-doc .features-content p {
+  max-width: 820px;
+  color: var(--vp-c-text-2);
+  font-weight: 550;
+  margin-left: auto;
+  margin-right: auto;
+}
+.vp-doc .features-content a {
+  text-decoration: none;
+}
+.vp-doc .features-content a.header-anchor {
+  display: none;
+}
+.home-use-cases-diagramme {
+  max-width: 920px !important;
+  margin: 10px auto !important;
+}
+.home-use-cases-diagramme img {
+  width: 100%;
+}
 
 .vp-doc a.VPButton {
   text-decoration: none;
@@ -82,6 +174,11 @@ iframe {
     margin-left: 0px;
   }
 }
+@media (min-width: 960px) {
+  .VPHomeHero .name {
+    margin-top: 3rem !important;
+  }
+}
 
 .VPFeatures {
   padding-top: 15px !important;
@@ -102,6 +199,13 @@ iframe {
 
 .VPFeature .details {
   font-weight: 600 !important;
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+}
+.VPFeature .details .para {
+  flex-grow: 1;
+  margin-bottom: 0.5rem;
 }
 
 .product-icon {
