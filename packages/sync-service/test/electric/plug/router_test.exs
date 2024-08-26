@@ -367,10 +367,10 @@ defmodule Electric.Plug.RouterTest do
       opts: opts,
       db_conn: db_conn
     } do
-      params = %{offset: "-1", where: "value ILIKE 'yes%'"}
+      where = "value ILIKE 'yes%'"
 
       conn =
-        conn("GET", "/v1/shape/items", params)
+        conn("GET", "/v1/shape/items", %{offset: "-1", where: where})
         |> Router.call(opts)
 
       assert %{status: 200} = conn
@@ -378,10 +378,16 @@ defmodule Electric.Plug.RouterTest do
 
       assert [_] = Jason.decode!(conn.resp_body)
 
-      params = Map.merge(params, %{offset: "0_0", shape_id: shape_id, live: true})
-
       task =
-        Task.async(fn -> conn("GET", "/v1/shape/items", params) |> Router.call(opts) end)
+        Task.async(fn ->
+          conn("GET", "/v1/shape/items", %{
+            offset: "0_0",
+            shape_id: shape_id,
+            where: where,
+            live: true
+          })
+          |> Router.call(opts)
+        end)
 
       Postgrex.query!(
         db_conn,
@@ -394,11 +400,13 @@ defmodule Electric.Plug.RouterTest do
       assert [%{"value" => %{"value" => "yes!"}}, _] = Jason.decode!(conn.resp_body)
       assert [new_offset] = Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset")
 
-      params = params |> Map.put(:offset, new_offset) |> Map.delete(:live)
-
       assert %{status: 200} =
                conn =
-               conn("GET", "/v1/shape/items", params)
+               conn("GET", "/v1/shape/items", %{
+                 offset: new_offset,
+                 shape_id: shape_id,
+                 where: where
+               })
                |> Router.call(opts)
 
       assert [_] = Jason.decode!(conn.resp_body)
