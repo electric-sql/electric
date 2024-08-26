@@ -41,13 +41,12 @@ defmodule Electric.Shapes do
   end
 
   @doc """
-  Check whether the log has an entry for a given shape ID and offset
+  Check whether the log has an entry for a given shape ID
   """
-  @spec has_log_entry?(keyword(), Storage.shape_id(), LogOffset.t()) ::
-          boolean()
-  def has_log_entry?(config, shape_id, offset) do
+  @spec has_shape?(keyword(), Storage.shape_id()) :: boolean()
+  def has_shape?(config, shape_id) do
     storage = Access.fetch!(config, :storage)
-    Storage.has_log_entry?(shape_id, offset, storage)
+    Storage.has_shape?(shape_id, storage)
   end
 
   @doc """

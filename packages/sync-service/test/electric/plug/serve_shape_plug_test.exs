@@ -209,7 +209,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
           Jason.encode!(%{key: "log2", value: "bar", headers: %{}, offset: next_next_offset})
         ]
       end)
-      |> expect(:has_log_entry?, fn @test_shape_id, @start_offset_50, _ -> true end)
+      |> expect(:has_shape?, fn @test_shape_id, _ -> true end)
 
       conn =
         conn(
@@ -249,7 +249,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         {@test_shape_id, @test_offset}
       end)
 
-      expect(MockStorage, :has_log_entry?, fn @test_shape_id, @start_offset_50, _ -> true end)
+      expect(MockStorage, :has_shape?, fn @test_shape_id, _ -> true end)
 
       conn =
         conn(
@@ -277,7 +277,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset_str = "#{next_offset}"
 
       MockStorage
-      |> expect(:has_log_entry?, fn @test_shape_id, @test_offset, _ -> true end)
+      |> expect(:has_shape?, fn @test_shape_id, _ -> true end)
       |> expect(:get_log_stream, fn @test_shape_id, @test_offset, @test_offset, _opts ->
         send(test_pid, :got_log_stream)
         []
@@ -337,7 +337,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         send(test_pid, :got_log_stream)
         []
       end)
-      |> expect(:has_log_entry?, fn @test_shape_id, @test_offset, _ -> true end)
+      |> expect(:has_shape?, fn @test_shape_id, _ -> true end)
 
       task =
         Task.async(fn ->
@@ -374,7 +374,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       MockStorage
       |> expect(:get_log_stream, fn @test_shape_id, @test_offset, _, _opts -> [] end)
-      |> expect(:has_log_entry?, fn @test_shape_id, @test_offset, _ -> true end)
+      |> expect(:has_shape?, fn @test_shape_id, _ -> true end)
 
       conn =
         conn(
@@ -397,36 +397,13 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Plug.Conn.get_resp_header(conn, "expires") == ["0"]
     end
 
-    test "send 409 when shape offset is not known" do
-      expect(Electric.ShapeCacheMock, :get_or_create_shape_id, fn @test_shape, _opts ->
-        {@test_shape_id, @test_offset}
-      end)
-
-      MockStorage
-      |> expect(:has_log_entry?, fn @test_shape_id, @start_offset_50, _ -> false end)
-
-      conn =
-        conn(
-          :get,
-          %{"root_table" => "public.users"},
-          "?offset=#{@start_offset_50}&shape_id=#{@test_shape_id}"
-        )
-        |> ServeShapePlug.call([])
-
-      assert conn.status == 409
-
-      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
-      assert get_resp_header(conn, "x-electric-shape-id") == [@test_shape_id]
-      assert get_resp_header(conn, "location") == ["/?shape_id=#{@test_shape_id}&offset=-1"]
-    end
-
     test "send 409 when shape ID requested does not exist" do
       expect(Electric.ShapeCacheMock, :get_or_create_shape_id, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
       end)
 
       MockStorage
-      |> expect(:has_log_entry?, fn "foo", _, _ -> false end)
+      |> expect(:has_shape?, fn "foo", _ -> false end)
 
       conn =
         conn(
