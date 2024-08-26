@@ -1,17 +1,17 @@
 "use client"
 
-import { useShape, getShapeStream } from "@electric-sql/react"
+import { useShape } from "@electric-sql/react"
 import { ShapeStreamOptions } from "@electric-sql/client"
 import "./Example.css"
 
 interface User {
-  id: number;
-  name: string;
-  org_id: number;
+  id: number
+  name: string
+  org_id: number
 }
 
 interface UserAccumulator {
-  [key: number]: User[];
+  [key: number]: User[]
 }
 
 const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
