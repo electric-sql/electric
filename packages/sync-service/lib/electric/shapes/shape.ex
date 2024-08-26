@@ -183,9 +183,6 @@ defmodule Electric.Shapes.Shape do
     shape_matches?(shape, schema, table)
   end
 
-  # TODO: test this machinery of cleaning shapes on any migration
-  #       once that works, then we can optimize it to only clean on relevant migrations
-
   defp shape_matches?({_, %__MODULE__{root_table: {schema, table}}, _}, schema, table), do: true
   defp shape_matches?(_, _, _), do: false
 
