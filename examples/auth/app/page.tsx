@@ -1,15 +1,17 @@
 "use client"
 
-import { v4 as uuidv4 } from "uuid"
-import { useOptimistic } from "react"
 import { useShape, getShapeStream } from "@electric-sql/react"
 import { ShapeStreamOptions } from "@electric-sql/client"
 import "./Example.css"
 
 interface User {
-  id: number
-  name: string
-  org_id: number
+  id: number;
+  name: string;
+  org_id: number;
+}
+
+interface UserAccumulator {
+  [key: number]: User[];
 }
 
 const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
@@ -123,15 +125,16 @@ export default function Home() {
         </div>
       ) : (
         Object.entries(
-          users.reduce((acc, user) => {
-            acc[user.org_id] = acc[user.org_id] || []
-            acc[user.org_id].push(user)
+          users.reduce<UserAccumulator>((acc, user) => {
+            const orgIdKey = user.org_id as number
+            acc[orgIdKey] = acc[orgIdKey] || []
+            acc[orgIdKey].push(user as unknown as User)
             return acc
-          }, {})
+          }, {} as UserAccumulator)
         ).map(([orgId, usersInOrg]) => (
           <div key={orgId}>
             <h2>Org ID: {orgId}</h2>
-            {usersInOrg.map((user) => (
+            {usersInOrg.map((user: User) => (
               <p key={user.id} className="item">
                 <code>{user.name}</code>
               </p>
