@@ -1,4 +1,6 @@
-# Basic Remix example
+# Auth example
+
+https://github.com/user-attachments/assets/eab62c23-513c-4ed8-a6fa-249b761f8667
 
 ## Setup
 
