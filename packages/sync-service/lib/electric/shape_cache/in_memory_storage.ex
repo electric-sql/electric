@@ -1,6 +1,6 @@
 defmodule Electric.ShapeCache.InMemoryStorage do
+  alias Electric.Shapes.Querying
   alias Electric.ConcurrentStream
-  alias Electric.LogItems
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes.Relation
   alias Electric.Telemetry.OpenTelemetry
@@ -101,25 +101,21 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   def mark_snapshot_as_started(shape_id, opts) do
     :ets.insert(opts.snapshot_ets_table, {snapshot_start(shape_id), 0})
+    :ok
   end
 
   @spec make_new_snapshot!(
           String.t(),
-          Electric.Shapes.Shape.t(),
-          Postgrex.Query.t(),
-          Enumerable.t(),
+          Querying.json_result_stream(),
           map()
         ) :: :ok
-  def make_new_snapshot!(shape_id, shape, query_info, data_stream, opts) do
+  def make_new_snapshot!(shape_id, data_stream, opts) do
     OpenTelemetry.with_span("storage.make_new_snapshot", [storage_impl: "in_memory"], fn ->
       ets_table = opts.snapshot_ets_table
 
       data_stream
-      |> LogItems.from_snapshot_row_stream(@snapshot_offset, shape, query_info)
       |> Stream.with_index(1)
-      |> Stream.map(fn {log_item, index} ->
-        {snapshot_key(shape_id, index), Jason.encode!(log_item)}
-      end)
+      |> Stream.map(fn {log_item, index} -> {snapshot_key(shape_id, index), log_item} end)
       |> Stream.chunk_every(500)
       |> Stream.each(fn chunk -> :ets.insert(ets_table, chunk) end)
       |> Stream.run()

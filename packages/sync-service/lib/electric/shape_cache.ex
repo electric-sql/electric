@@ -388,12 +388,12 @@ defmodule Electric.ShapeCache do
         # formatting between snapshot and live log entries.
         Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
 
-        {query, stream} = Querying.stream_initial_data(conn, shape)
+        stream = Querying.stream_initial_data(conn, shape)
         GenServer.cast(parent, {:snapshot_started, shape_id})
 
         # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
         # that way it has the relation, but it is still missing the pk_cols
-        Storage.make_new_snapshot!(shape_id, shape, query, stream, storage)
+        Storage.make_new_snapshot!(shape_id, stream, storage)
       end)
     end)
   end

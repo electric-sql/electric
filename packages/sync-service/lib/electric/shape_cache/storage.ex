@@ -1,4 +1,5 @@
 defmodule Electric.ShapeCache.Storage do
+  alias Electric.Shapes.Querying
   alias Electric.LogItems
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
@@ -49,12 +50,9 @@ defmodule Electric.ShapeCache.Storage do
 
   Should raise an error if making the snapshot had failed for any reason.
   """
-  @doc unstable: "The meta information about the single table is subject to change"
   @callback make_new_snapshot!(
               shape_id(),
-              Electric.Shapes.Shape.t(),
-              Postgrex.Query.t(),
-              Enumerable.t(row()),
+              Querying.json_result_stream(),
               compiled_opts()
             ) :: :ok
   @callback mark_snapshot_as_started(shape_id, compiled_opts()) :: :ok
@@ -108,16 +106,9 @@ defmodule Electric.ShapeCache.Storage do
   @doc """
   Make a new snapshot for a shape ID based on the meta information about the table and a stream of plain string rows
   """
-  @doc unstable: "The meta information about the single table is subject to change"
-  @spec make_new_snapshot!(
-          shape_id(),
-          Electric.Shapes.Shape.t(),
-          Postgrex.Query.t(),
-          Enumerable.t(row()),
-          storage()
-        ) :: :ok
-  def make_new_snapshot!(shape_id, shape, meta, stream, {mod, opts}),
-    do: mod.make_new_snapshot!(shape_id, shape, meta, stream, opts)
+  @spec make_new_snapshot!(shape_id(), Querying.json_result_stream(), storage()) :: :ok
+  def make_new_snapshot!(shape_id, stream, {mod, opts}),
+    do: mod.make_new_snapshot!(shape_id, stream, opts)
 
   @spec mark_snapshot_as_started(shape_id, compiled_opts()) :: :ok
   def mark_snapshot_as_started(shape_id, {mod, opts}),
