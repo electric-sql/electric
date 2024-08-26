@@ -11,6 +11,7 @@ import * as awarenessProtocol from "y-protocols/awareness"
 import { Observable } from "lib0/observable"
 import * as url from "lib0/url"
 import * as env from "lib0/environment"
+import * as Y from "yjs"
 
 export const messageSync = 0
 export const messageAwareness = 1
@@ -47,8 +48,6 @@ const setupShapeStream = (provider) => {
         })
     }
 
-    // is it necessary to deduplicate persistence?
-    // only for performance
     const updateShapeState = (name, offset, shapeId) => {
       provider.persistence?.set(name, { offset, shapeId })
     }
@@ -118,7 +117,7 @@ const setupShapeStream = (provider) => {
       handleError
     )
 
-    provider.closeHandler = (event) => {
+    provider.disconnectHandler = (event) => {
       provider.operationsStream = null
       provider.awarenessStream = null
       provider.connecting = false
@@ -134,12 +133,13 @@ const setupShapeStream = (provider) => {
           ),
           provider
         )
+        provider.lastSyncedStateVector = Y.encodeStateVector(provider.doc)
         provider.emit(`status`, [{ status: `disconnected` }])
       }
 
       unsubscribeSyncHandler()
       unsubscribeAwarenessHandler()
-      provider.closeHandler = null
+      provider.disconnectHandler = null
       provider.emit(`connection-close`, [event, provider])
     }
 
@@ -147,11 +147,21 @@ const setupShapeStream = (provider) => {
       provider.lastMessageReceived = time.getUnixTime()
       provider.connecting = false
       provider.connected = true
-      provider.emit(`status`, [{ status: `connected` }])
 
-      provider.pending
-        .splice(0)
-        .forEach((update) => sendOperation(provider, update))
+      if (provider.modifiedWhileOffline) {
+        const pendingUpdates = Y.encodeStateAsUpdate(
+          provider.doc,
+          provider.lastSyncedStateVector
+        )
+        const encoderState = encoding.createEncoder()
+        syncProtocol.writeUpdate(encoderState, pendingUpdates)
+
+        sendOperation(provider, pendingUpdates)
+          .then(() => clearLastSyncedStateVector(provider))
+          .then(() => {
+            provider.emit(`status`, [{ status: `connected` }])
+          })
+      }
     }
 
     provider.operationsStream.subscribeOnceToUpToDate(
@@ -174,20 +184,43 @@ const setupShapeStream = (provider) => {
   }
 }
 
-const sendOperation = (provider, update) => {
-  if (!provider.connected) {
-    provider.pending.push(update)
-  } else {
-    const encoder = encoding.createEncoder()
-    syncProtocol.writeUpdate(encoder, update)
-    const op = toBase64(encoding.toUint8Array(encoder))
-    const room = provider.roomname
+const saveLastSyncedStateVector = (provider) => {
+  provider.modifiedWhileOffline = true
+  return provider.persistence?.set(
+    `last_synced_state_vector`,
+    provider.lastSyncedStateVector
+  )
+}
 
-    fetch(`/api/operation`, {
-      method: `POST`,
-      body: JSON.stringify({ room, op }),
-    })
+const clearLastSyncedStateVector = async (provider) => {
+  provider.lastSyncedStateVector = null
+  provider.modifiedWhileOffline = false
+  provider.persistence?.del(`last_synced_state_vector`)
+}
+
+const sendOperation = async (provider, update) => {
+  // ignore updates that have no updates
+  // there is probably a better way of checking this
+  if (update.length <= 2) {
+    return
   }
+
+  if (!provider.connected) {
+    if (!provider.modifiedWhileOffline) {
+      return saveLastSyncedStateVector(provider, update)
+    }
+    return
+  }
+
+  const encoder = encoding.createEncoder()
+  syncProtocol.writeUpdate(encoder, update)
+  const op = toBase64(encoding.toUint8Array(encoder))
+  const room = provider.roomname
+
+  return fetch(`/api/operation`, {
+    method: `POST`,
+    body: JSON.stringify({ room, op }),
+  })
 }
 
 const sendAwareness = (provider, changedClients) => {
@@ -242,10 +275,11 @@ export class ElectricProvider extends Observable {
     this.operationsStream = null
     this.awarenessStream = null
 
-    this.pending = []
+    this.lastSyncedStateVector = null
+    this.modifiedWhileOffline = false
     this.resume = resume ?? {}
 
-    this.closeHandler = null
+    this.disconnectHandler = null
 
     this.persistence = persistence
     this.loaded = persistence === null
@@ -259,6 +293,11 @@ export class ElectricProvider extends Observable {
         })
         .then((awarenessState) => {
           this.resume.awareness = awarenessState
+          return persistence.get(`last_synced_state_vector`)
+        })
+        .then((lastSyncedStateVector) => {
+          this.lastSyncedStateVector = lastSyncedStateVector ?? null
+          this.modifiedWhileOffline = lastSyncedStateVector ?? false
         })
         .then(() => {
           this.loaded = true
@@ -267,8 +306,7 @@ export class ElectricProvider extends Observable {
     })
 
     this._updateHandler = (update, origin) => {
-      // prevent pushing operations that come from the
-      // broadcast provider, when it is being used
+      // deduplicate events that come from broadcast provider
       if (origin !== this && !origin.bcChannel) {
         sendOperation(this, update)
       }
@@ -346,7 +384,7 @@ export class ElectricProvider extends Observable {
 
   disconnect() {
     this.shouldConnect = false
-    this.closeHandler()
+    this.disconnectHandler()
   }
 
   connect() {
