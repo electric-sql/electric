@@ -140,7 +140,7 @@ defmodule Electric.ShapeCache.Storage do
   @spec make_new_snapshot!(shape_id(), Querying.json_result_stream(), storage()) :: :ok
   def make_new_snapshot!(shape_id, stream, {mod, opts}) do
     shape_opts = mod.for_shape(shape_id, opts)
-    mod.make_new_snapshot!(shape_id, stream, opts)
+    mod.make_new_snapshot!(shape_id, stream, shape_opts)
   end
 
   @spec mark_snapshot_as_started(shape_id, compiled_opts()) :: :ok

@@ -356,8 +356,6 @@ defmodule Electric.Shapes.ConsumerTest do
     end
   end
 
-  @basic_query_meta %Postgrex.Query{columns: ["id"], result_types: [:text], name: "key_prefix"}
-
   describe "transaction handling with real storage" do
     setup [
       {Support.ComponentSetup, :with_registry},
