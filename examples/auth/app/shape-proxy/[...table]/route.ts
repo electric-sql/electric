@@ -12,16 +12,20 @@ export async function GET(
   })
 
   // authentication and authorization
-  const authorization = request.headers.get(`authorization`)
+  const org_id = request.headers.get(`authorization`)
+  let user
+  if (org_id) {
+    user = { org_id, isAdmin: org_id === `admin` }
+  }
 
-  // If the user isn't set, return 403
-  if (!authorization) {
-    return new Response(`authorization header not found`, { status: 403 })
+  // If the user isn't set, return 401
+  if (!user) {
+    return new Response(`authorization header not found`, { status: 401 })
   }
 
   // Only query orgs the user has access to.
-  if (authorization && authorization !== `admin`) {
-    originUrl.searchParams.set(`where`, `"org_id" = ${authorization}`)
+  if (!user.isAdmin) {
+    originUrl.searchParams.set(`where`, `"org_id" = ${user.org_id}`)
   }
 
   // When proxying long-polling requests, content-encoding & content-length are added

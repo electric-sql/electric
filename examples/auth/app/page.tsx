@@ -26,7 +26,6 @@ const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
 }
 
 const usersShape = (): ShapeStreamOptions => {
-  console.log(`getting usersShape`)
   if (typeof window !== `undefined`) {
     return {
       url: new URL(`/shape-proxy/users`, window.location.origin).href,
@@ -42,7 +41,6 @@ const usersShape = (): ShapeStreamOptions => {
 
 export default function Home() {
   const { data: users, isError, error } = useShape(usersShape())
-  console.log({ isError, error })
 
   return (
     <div>
