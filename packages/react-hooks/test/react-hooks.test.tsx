@@ -1,15 +1,13 @@
 import 'global-jsdom/register'
 // https://react-hooks-testing-library.com/usage/advanced-hooks#context
 
-import React from 'react'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, inject, it as bareIt } from 'vitest'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
-import { useShape, ShapesProvider, sortedOptionsHash } from '../src/react-hooks'
+import { useShape, sortedOptionsHash } from '../src/react-hooks'
 import { Shape, Message } from '@electric-sql/client'
 
-type FC = React.FC<React.PropsWithChildren>
 const BASE_URL = inject(`baseUrl`)
 
 describe(`sortedOptionsHash`, () => {
@@ -31,18 +29,12 @@ describe(`sortedOptionsHash`, () => {
 
 describe(`useShape`, () => {
   it(`should sync an empty shape`, async ({ aborter, issuesTableUrl }) => {
-    const wrapper: FC = ({ children }) => {
-      return <ShapesProvider>{children}</ShapesProvider>
-    }
-
-    const { result } = renderHook(
-      () =>
-        useShape({
-          url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
-          signal: aborter.signal,
-          subscribe: false,
-        }),
-      { wrapper }
+    const { result } = renderHook(() =>
+      useShape({
+        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        signal: aborter.signal,
+        subscribe: false,
+      })
     )
 
     await waitFor(() => expect(result.current.isUpToDate).toEqual(true))
@@ -59,18 +51,12 @@ describe(`useShape`, () => {
   }) => {
     const [id] = await insertIssues({ title: `test row` })
 
-    const wrapper: FC = ({ children }) => {
-      return <ShapesProvider>{children}</ShapesProvider>
-    }
-
-    const { result } = renderHook(
-      () =>
-        useShape({
-          url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
-          signal: aborter?.signal,
-          subscribe: false,
-        }),
-      { wrapper }
+    const { result } = renderHook(() =>
+      useShape({
+        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        signal: aborter?.signal,
+        subscribe: false,
+      })
     )
 
     await waitFor(() =>
@@ -85,18 +71,12 @@ describe(`useShape`, () => {
   }) => {
     const [id] = await insertIssues({ title: `test row` })
 
-    const wrapper: FC = ({ children }) => {
-      return <ShapesProvider>{children}</ShapesProvider>
-    }
-
-    const { result } = renderHook(
-      () =>
-        useShape({
-          url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
-          signal: aborter.signal,
-          subscribe: true,
-        }),
-      { wrapper }
+    const { result } = renderHook(() =>
+      useShape({
+        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        signal: aborter.signal,
+        subscribe: true,
+      })
     )
 
     await waitFor(() => expect(result.current.data).not.toEqual([]))
@@ -120,24 +100,16 @@ describe(`useShape`, () => {
     const [id] = await insertIssues({ title: `test row` })
     await insertIssues({ title: `test row2` })
 
-    const wrapper: FC = ({ children }) => {
-      return <ShapesProvider>{children}</ShapesProvider>
-    }
-
-    const { result } = renderHook(
-      () =>
-        useShape({
-          url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
-          signal: aborter.signal,
-          subscribe: true,
-          selector: (result) => {
-            result.data = result.data.filter(
-              (row) => row?.title !== `test row2`
-            )
-            return result
-          },
-        }),
-      { wrapper }
+    const { result } = renderHook(() =>
+      useShape({
+        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        signal: aborter.signal,
+        subscribe: true,
+        selector: (result) => {
+          result.data = result.data.filter((row) => row?.title !== `test row2`)
+          return result
+        },
+      })
     )
 
     await waitFor(() =>
@@ -162,18 +134,12 @@ describe(`useShape`, () => {
   }) => {
     await insertIssues({ title: `test row` })
 
-    const wrapper: FC = ({ children }) => {
-      return <ShapesProvider>{children}</ShapesProvider>
-    }
-
-    const { result, unmount } = renderHook(
-      () =>
-        useShape({
-          url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
-          signal: aborter.signal,
-          subscribe: true,
-        }),
-      { wrapper }
+    const { result, unmount } = renderHook(() =>
+      useShape({
+        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        signal: aborter.signal,
+        subscribe: true,
+      })
     )
 
     await waitFor(() => expect(result.current.data).not.toEqual([]))
