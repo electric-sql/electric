@@ -269,7 +269,9 @@ defmodule Electric.Replication.Eval.ParserTest do
             {~S|true IS UNKNOWN|, false},
             {~S|true IS NOT UNKNOWN|, true},
             {~S|NULL::boolean IS UNKNOWN|, true},
-            {~S|NULL::boolean IS NOT UNKNOWN|, false}
+            {~S|NULL::boolean IS NOT UNKNOWN|, false},
+            {~S|NULL IS UNKNOWN|, true},
+            {~S|NULL IS NOT UNKNOWN|, false}
           ] do
         assert {{:ok, %Expr{eval: result}}, ^expr} =
                  {Parser.parse_and_validate_expression(expr, %{}, env), expr}
