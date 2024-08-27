@@ -1,6 +1,5 @@
 import "./style.css"
 import "./App.css"
-import { Providers } from "./providers"
 
 export const metadata = {
   title: `Electric Auth Example`,
@@ -18,7 +17,7 @@ export default function RootLayout({
         <div className="App">
           <header className="App-header">
             <img src="/logo.svg" className="App-logo" alt="logo" />
-            <Providers>{children}</Providers>
+            {children}
           </header>
         </div>
       </body>

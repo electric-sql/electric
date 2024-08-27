@@ -4,16 +4,8 @@ import {
   ShapeStream,
   ShapeStreamOptions,
 } from '@electric-sql/client'
-import React, { createContext, useCallback, useContext, useRef } from 'react'
+import React, { useCallback, useRef } from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
-
-interface ShapeContextType {
-  getShape: (shapeStream: ShapeStream) => Shape
-  getShapeStream: (options: ShapeStreamOptions) => ShapeStream
-}
-
-// Create a Context
-const ShapesContext = createContext<ShapeContextType | null>(null)
 
 const streamCache = new Map<string, ShapeStream>()
 const shapeCache = new Map<ShapeStream, Shape>()
@@ -63,28 +55,6 @@ export function getShape(shapeStream: ShapeStream): Shape {
   }
 }
 
-interface ShapeProviderProps {
-  children: React.ReactNode
-}
-
-// Shapes Provider Component
-export function ShapesProvider({ children }: ShapeProviderProps): JSX.Element {
-  // Provide the context value
-  return (
-    <ShapesContext.Provider value={{ getShape, getShapeStream }}>
-      {children}
-    </ShapesContext.Provider>
-  )
-}
-
-export function useShapeContext() {
-  const context = useContext(ShapesContext)
-  if (!context) {
-    throw new Error(`useShapeContext must be used within a ShapeProvider`)
-  }
-  return context
-}
-
 interface UseShapeResult {
   /**
    * The array of rows that make up the Shape.
@@ -131,7 +101,6 @@ export function useShape<Selection = UseShapeResult>({
   selector = identity as never,
   ...options
 }: UseShapeOptions<Selection>): Selection {
-  const { getShape, getShapeStream } = useShapeContext()
   const shapeStream = getShapeStream(options as ShapeStreamOptions)
   const shape = getShape(shapeStream)
 
