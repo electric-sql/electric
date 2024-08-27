@@ -1,15 +1,25 @@
+CREATE TYPE user_role AS ENUM ('user', 'admin');
+
 create table users (
   id int primary key generated always as identity,
   name text not null,
-  org_id int not null
+  password text not null, -- Don't do this in production! Passwords should be hashed and salted.
+  org_id int,
+  role user_role not null default 'user',
+  CHECK (org_id IS NOT NULL OR role = 'admin')
 );
 
 insert into
-  users (name, org_id)
+  users (name, password, org_id)
 values
-  ('Alice', 1),
-  ('Bob', 1),
-  ('Charlie', 1),
-  ('David', 2),
-  ('Eve', 2),
-  ('Frank', 2);
+  ('Alice', 'alice42', 1),
+  ('Bob', 'bob42', 1),
+  ('Charlie', 'charlie42', 1),
+  ('David', 'david42', 2),
+  ('Eve', 'eve42', 2),
+  ('Frank', 'frank42', 2);
+
+insert into
+  users (name, password, role)
+values
+  ('Admin', 'admin42', 'admin');

@@ -16,11 +16,16 @@ interface UserAccumulator {
 
 const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
   const queryParams = new URLSearchParams(window.location.search)
-  const org_id = queryParams.get(`org_id`)
+  const username = queryParams.get(`username`)
   const modifiedArgs = [...args]
-  if (org_id) {
+  console.log("username: " + username)
+  if (username) {
     const headers = new Headers((modifiedArgs[1] as RequestInit)?.headers || {})
-    headers.set(`Authorization`, org_id)
+    const password = username.toLowerCase() + '42'
+    const creds = `${username}:${password}`
+    const base64Creds = bytesToBase64(new TextEncoder().encode(creds))
+    const credentials = `Basic ${base64Creds}`
+    headers.set(`Authorization`, credentials)
     modifiedArgs[1] = { ...(modifiedArgs[1] as RequestInit), headers }
   }
   const response = await fetch(...(modifiedArgs as [RequestInfo, RequestInit?]))
@@ -56,7 +61,7 @@ export default function Home() {
                 window.location.search = ``
               }}
               className={
-                window.location.search === `` ? `active-link` : `white-link`
+                (typeof window === 'undefined') || window.location.search === `` ? `active-link` : `white-link`
               }
             >
               Not logged in
@@ -68,10 +73,10 @@ export default function Home() {
               href="?user=1"
               onClick={(e) => {
                 e.preventDefault()
-                window.location.search = `?org_id=1`
+                window.location.search = `?username=Alice`
               }}
               className={
-                window.location.search.includes(`org_id=1`)
+                (typeof window !== 'undefined') && window.location.search.includes(`username=Alice`)
                   ? `active-link`
                   : `white-link`
               }
@@ -85,10 +90,10 @@ export default function Home() {
               href="?user=4"
               onClick={(e) => {
                 e.preventDefault()
-                window.location.search = `?org_id=2`
+                window.location.search = `?username=David`
               }}
               className={
-                window.location.search.includes(`org_id=2`)
+                (typeof window !== 'undefined') && window.location.search.includes(`username=David`)
                   ? `active-link`
                   : `white-link`
               }
@@ -102,10 +107,10 @@ export default function Home() {
               href="?user=admin"
               onClick={(e) => {
                 e.preventDefault()
-                window.location.search = `?org_id=admin`
+                window.location.search = `?username=Admin`
               }}
               className={
-                window.location.search.includes(`admin`)
+                (typeof window !== 'undefined') && window.location.search.includes(`username=Admin`)
                   ? `active-link`
                   : `white-link`
               }
@@ -126,6 +131,7 @@ export default function Home() {
       ) : (
         Object.entries(
           users.reduce<UserAccumulator>((acc, user) => {
+            if (!user.org_id) return acc // filters out admins that don't belong to an organization
             const orgIdKey = user.org_id as number
             acc[orgIdKey] = acc[orgIdKey] || []
             acc[orgIdKey].push(user as unknown as User)
@@ -144,4 +150,15 @@ export default function Home() {
       )}
     </div>
   )
+}
+
+/**
+ * Encodes a byte array as a base64 string.
+ * Taken from: https://developer.mozilla.org/en-US/docs/Glossary/Base64
+ */
+function bytesToBase64(bytes: Uint8Array): string {
+  const binString = Array.from(bytes, (byte) =>
+    String.fromCodePoint(byte),
+  ).join("")
+  return btoa(binString)
 }
