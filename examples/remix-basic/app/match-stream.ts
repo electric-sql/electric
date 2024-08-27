@@ -2,9 +2,10 @@ import {
   ShapeStream,
   ChangeMessage,
   isChangeMessage,
+  Value,
 } from "@electric-sql/client"
 
-export async function matchStream({
+export async function matchStream<T extends Value>({
   stream,
   operations,
   matchFn,
@@ -17,10 +18,10 @@ export async function matchStream({
     message,
   }: {
     operationType: string
-    message: ChangeMessage<any>
+    message: ChangeMessage<T>
   }) => boolean
   timeout?: number
-}): Promise<ChangeMessage<any>> {
+}): Promise<ChangeMessage<T>> {
   return new Promise((resolve, reject) => {
     const unsubscribe = stream.subscribe((messages) => {
       for (const message of messages) {
@@ -28,8 +29,13 @@ export async function matchStream({
           isChangeMessage(message) &&
           operations.includes(message.headers.operation)
         ) {
-          if (matchFn({ operationType: message.headers.operation, message })) {
-            return finish(message)
+          if (
+            matchFn({
+              operationType: message.headers.operation,
+              message: message as ChangeMessage<T>,
+            })
+          ) {
+            return finish(message as ChangeMessage<T>)
           }
         }
       }
@@ -40,7 +46,7 @@ export async function matchStream({
       reject(`matchStream timed out after ${timeout}ms`)
     }, timeout)
 
-    function finish(message: ChangeMessage<any>) {
+    function finish(message: ChangeMessage<T>) {
       clearTimeout(timeoutId)
       unsubscribe()
       return resolve(message)

@@ -21,10 +21,10 @@ async function createItem(newId: string) {
   const itemsStream = getShapeStream(itemShape())
 
   // Match the insert
-  const findUpdatePromise = matchStream({
+  const findUpdatePromise = matchStream<{ id: string }>({
     stream: itemsStream,
     operations: [`insert`],
-    matchFn: ({ message }) => (message.value as { id: string }).id === newId,
+    matchFn: ({ message }) => message.value.id === newId,
   })
 
   // Insert item
