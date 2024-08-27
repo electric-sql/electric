@@ -24,12 +24,12 @@ async function createItem(newId: string) {
   const findUpdatePromise = matchStream({
     stream: itemsStream,
     operations: [`insert`],
-    matchFn: ({ message }) => message.value.id === newId,
+    matchFn: ({ message }) => (message.value as { id: string }).id === newId,
   })
 
   // Insert item
   const fetchPromise = fetch(`${baseApiUrl}/items`, {
-    method: "POST",
+    method: `POST`,
     body: JSON.stringify({ id: newId }),
   })
 
@@ -48,7 +48,7 @@ async function clearItems() {
   })
 
   // Delete all items
-  const fetchPromise = fetch(`${baseApiUrl}/items`, { method: "DELETE" })
+  const fetchPromise = fetch(`${baseApiUrl}/items`, { method: `DELETE` })
 
   return await Promise.all([findUpdatePromise, fetchPromise])
 }
@@ -58,7 +58,7 @@ export const Example = () => {
 
   const { data: items } = useShape(itemShape()) as unknown as { data: Item[] }
   const submissions = useMutationState({
-    filters: { status: "pending" },
+    filters: { status: `pending` },
     select: (mutation) => mutation.state.context as Item,
   })
 
