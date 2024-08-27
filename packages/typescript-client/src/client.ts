@@ -1,4 +1,3 @@
-import { ArgumentsType } from 'vitest'
 import { Message, Value, Offset, Schema } from './types'
 import { MessageParser, Parser } from './parser'
 import { isChangeMessage, isControlMessage } from './helpers'
@@ -197,7 +196,7 @@ export class ShapeStream {
     this.backoffOptions = options.backoffOptions ?? BackoffDefaults
     this.fetchClient =
       options.fetchClient ??
-      ((...args: ArgumentsType<typeof fetch>) => fetch(...args))
+      ((...args: Parameters<typeof fetch>) => fetch(...args))
 
     this.start()
   }
