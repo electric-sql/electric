@@ -291,3 +291,14 @@ iframe {
 .custom-block-no-title {
   margin-bottom: 10px !important;
 }
+
+.vp-block,
+.vp-doc div[class*='language-'] {
+  border-radius: 14px !important;
+  margin: 12px 0 !important;
+}
+
+.vp-block pre,
+.vp-doc [class*='language-'] pre {
+  padding: 24px 0 !important;
+}

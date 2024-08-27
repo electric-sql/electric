@@ -102,7 +102,7 @@ const tweets = [
 
 const propositions = [
   {
-    title: "Solves state transfer",
+    title: "Solves data loading",
     concept: `
       Replace APIs, data fetching and network error handling
       with automated data synchronisation.
@@ -141,7 +141,7 @@ const propositions = [
     title: "Solves availability",
     concept: `
       Take the network off the interaction path and build
-      systems that are resilient and work offline by design.
+      systems that work offline and are resilient by design.
     `,
     benefits: [
       'Simplifies your ops',
@@ -460,6 +460,17 @@ onMounted(async () => {
     display: flex;
     justify-content: center;
     margin-top: -24px;
+  }
+
+  .home-cta div[class*='language-'] {
+    display: inline-block;
+  }
+
+  @media (min-width: 760px) {
+    .home-cta div[class*='language-'] code {
+      padding-left: 36px !important;
+      padding-right: 36px !important;
+    }
   }
 
   .home-cta .actions {

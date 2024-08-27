@@ -16,6 +16,20 @@ export default defineConfig({
       href: '/img/brand/favicon.svg'
     }]
   ],
+  markdown: {
+    theme: 'github-dark',
+    languages: [
+      'elixir',
+      'html',
+      'css',
+      'javascript',
+      'jsx',
+      'shellscript',
+      'sql',
+      'tsx',
+      'typescript'
+    ]
+  },
   // https://vitepress.dev/reference/default-theme-config
   themeConfig: {
     logo: '/img/brand/logo.svg',
