@@ -12,6 +12,9 @@ export async function GET(
   })
 
   // authentication and authorization
+  // Note: in a real-world authentication scheme, this is where you would
+  // veryify the authentication token and load the user. To keep this example simple,
+  // we're just passing directly through the org_id.
   const org_id = request.headers.get(`authorization`)
   let user
   if (org_id) {
