@@ -1,4 +1,3 @@
-import { ShapesProvider } from "@electric-sql/react"
 import { QueryClient } from "@tanstack/react-query"
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client"
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister"
@@ -32,9 +31,7 @@ export default function App() {
           client={queryClient}
           persistOptions={{ persister }}
         >
-          <ShapesProvider>
-            <Example />
-          </ShapesProvider>
+          <Example />
         </PersistQueryClientProvider>
       </header>
     </div>
