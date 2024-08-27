@@ -226,6 +226,7 @@ defmodule Electric.Replication.Eval.Parser do
       {:AEXPR_NOT_DISTINCT, _} -> handle_distinct(expr, refs, env)
       {:AEXPR_IN, _} -> handle_in(expr, refs, env)
       {:AEXPR_BETWEEN, _} -> handle_between(expr, refs, env)
+      {:AEXPR_NOT_BETWEEN, _} -> handle_between(expr, refs, env)
       _ -> {:error, {loc, "expression #{identifier(expr.name)} is not currently supported"}}
     end
   end
@@ -374,14 +375,7 @@ defmodule Electric.Replication.Eval.Parser do
       # x NOT IN y is exactly equivalent to NOT (x IN y)
       if name == "=",
         do: {:ok, reduced},
-        else:
-          maybe_reduce(%Func{
-            implementation: &Kernel.not/1,
-            name: "not",
-            type: :bool,
-            args: [reduced],
-            location: expr.location
-          })
+        else: negate(reduced, expr.location)
     end
   end
 
@@ -398,7 +392,10 @@ defmodule Electric.Replication.Eval.Parser do
          {:ok, comparisons} <- Utils.map_while_ok(comparisons, &maybe_reduce/1),
          {:ok, reduced} <-
            build_bool_chain(%{name: "and", impl: &Kernel.and/2}, comparisons, expr.location) do
-      {:ok, reduced}
+      case expr.kind do
+        :AEXPR_BETWEEN -> {:ok, reduced}
+        :AEXPR_NOT_BETWEEN -> negate(reduced, expr.location)
+      end
     end
   end
 
@@ -706,4 +703,14 @@ defmodule Electric.Replication.Eval.Parser do
 
   def unwrap_node_string(%PgQuery.Node{node: {:a_const, %PgQuery.A_Const{val: {:sval, sval}}}}),
     do: unwrap_node_string(sval)
+
+  defp negate(arg, location) do
+    maybe_reduce(%Func{
+      implementation: &Kernel.not/1,
+      name: "not",
+      type: :bool,
+      args: [arg],
+      location: location
+    })
+  end
 end
