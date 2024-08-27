@@ -26,9 +26,6 @@ export default function MyComponent() {
   )
 }
 ```
-
-You should wrap your application with a `ShapeProvider` which maintains a global cache of Shapes and ShapeStreams.
-
 Other helpful functions:
 
 - `useShapeContext` — access the Shape Context
