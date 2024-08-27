@@ -22,7 +22,7 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 
   if (body.get(`intent`) === `add`) {
     // Match the insert
-    const findUpdatePromise = matchStream({
+    const findUpdatePromise = matchStream<{ id: string }>({
       stream: itemsStream,
       operations: [`insert`],
       matchFn: ({ message }) => message.value.id === body.get(`new-id`),
