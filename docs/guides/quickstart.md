@@ -152,20 +152,6 @@ cd react-app
 npm install @electric-sql/react
 ```
 
-Edit `src/main.tsx` to wrap your `<App />` with a `ShapesProvider`:
-
-```tsx
-import { ShapesProvider } from '@electric-sql/react'
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ShapesProvider>
-      <App />
-    </ShapesProvider>
-  </React.StrictMode>,
-)
-```
-
 Replace the contents of `src/App.tsx` with the following. Note that we're requesting the same shape as before:
 
 ```tsx
