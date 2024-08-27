@@ -50,7 +50,8 @@ export default defineConfig({
           // { text: 'Deployment', link: '/guides/deployment' },
           // { text: 'Writing clients', link: '/guides/write-your-own-client' },
           { text: 'Telemetry', link: '/guides/telemetry' },
-          { text: 'Local Development', link: '/guides/local-development' }
+          { text: 'Local Development', link: '/guides/local-development' },
+          { text: 'Auth', link: '/guides/authentication-and-authorization' }
         ]
       },
       {
