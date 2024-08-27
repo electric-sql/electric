@@ -4,14 +4,14 @@ outline: deep
 
 <img src="/img/icons/electric.svg" class="product-icon" />
 
-# Electric Sync Engine
+# Electric Sync
 
 Sync partial replicas of your data into local
 apps and services.
 
 ## Use cases
 
-The Electric Sync Engine syncs subsets of data out of Postgres into local apps, services and environments &mdash; wherever you need the data.
+The Electric Sync engine syncs subsets of data out of Postgres into local apps, services and environments &mdash; wherever you need the data.
 
 <img srcset="/img/about/use-cases.sm.png 1098w, /img/about/use-cases.png 1484w"
     sizes="(max-width: 767px) 600px, 1484px"

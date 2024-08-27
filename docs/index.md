@@ -20,11 +20,11 @@ hero:
       target: '_blank'
       link: https://github.com/electric-sql
 features:
-  - title: Electric Sync Engine
+  - title: Electric Sync
     details: >-
       <span class="para">
         Sync subsets of your Postgres data into
-        local&nbsp;apps and&nbsp;services.
+        local&nbsp;apps and&nbsp;environments.
       </span>
       <span class="feature-cta electric-star-count">
         <a href="https://github.com/electric-sql/electric"
@@ -408,6 +408,7 @@ onMounted(async () => {
     font-weight: 550;
     font-size: 15px;
     color: var(--vp-c-text-2);
+    line-height: 26px;
   }
   .home-propositions .proposition-content ul.benefits {
     margin-bottom: 14px;
@@ -438,11 +439,10 @@ onMounted(async () => {
     .home-propositions .proposition-content h3 {
       margin-top: -12px;
     }
-  }
-  @media (max-width: 759px) {
     .home-propositions .proposition-content p,
     .home-propositions .proposition-content ul {
       font-size: 14.5px;
+      line-height: 24px;
     }
     .home-propositions .proposition-content ul.benefits {
       margin-bottom: 28px;

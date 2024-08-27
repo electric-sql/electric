@@ -1,6 +1,10 @@
 ## Get started now
 
-You can adopt Electric incrementally, replacing <span class="no-wrap">one fetch</span> <span class="no-wrap">at a time</span>.
+You can adopt Electric incrementally right now,
+<span class="no-wrap">
+  one data fetch</span>
+<span class="no-wrap">
+  at a time</span>.
 
 <div class="actions">
   <div class="action">

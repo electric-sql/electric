@@ -54,14 +54,22 @@
   display: none !important;
 }
 .inline-xs,
-.inline-sm,
+.inline-sm
+.inline-md,
 .block-xs,
-.block-sm {
+.block-sm,
+.block-md {
   display: none !important;
 }
 @media (max-width: 859px) {
   .hidden-md {
     display: none !important;
+  }
+  .inline-md {
+    display: inline !important;
+  }
+  .block-md {
+    display: block !important;
   }
 }
 @media (max-width: 559px) {
