@@ -18,6 +18,10 @@
 .highlight {
   color: var(--vp-home-hero-name-color);
 }
+.muted {
+  color: var(--vp-c-text-2);
+  font-weight: 400;
+}
 .no-wrap {
   white-space: nowrap;
 }
@@ -221,6 +225,7 @@ iframe {
   padding-top: 15px !important;
   padding-bottom: 45px;
 }
+
 .VPFeature .VPImage {
   width: 50px;
 }

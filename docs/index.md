@@ -23,8 +23,8 @@ features:
   - title: Electric Sync Engine
     details: >-
       <span class="para">
-        Sync partial replicas of your data into
-        local <span class="no-wrap-xl">apps <span class="no-wrap">and services</span></span>.
+        Sync little subsets of your Postgres data into
+        local&nbsp;apps and&nbsp;services.
       </span>
       <span class="feature-cta electric-star-count">
         <a href="https://github.com/electric-sql/electric"
@@ -39,8 +39,8 @@ features:
   - title: Data Delivery Network
     details: >-
       <span class="para">
-        Load data faster than you can query Postgres,
-        <span class="no-wrap-lg">scale out to</span>
+        Sync data faster than you can query it.
+        <span class="no-wrap-lg">Scale out to</span>
         millions
         <span class="no-wrap">of users</span>.
       </span>
@@ -83,6 +83,7 @@ import { data as initialStarCounts } from './count.data.ts'
 import { getStarCount } from './components/starCount.ts'
 
 import HomeYourStackSimplified from '.vitepress/theme/home-your-stack-simplified.md'
+import HomeCTA from '.vitepress/theme/home-cta.md'
 
 const tweets = [
   {name: 'kyle', id: '1825531359949173019'},
@@ -134,6 +135,10 @@ const propositions = [
   }
 ]
 
+const formatStarCount = (count) => (
+  `<span class="muted">(</span><span> ☆ </span><span>${Math.round(count / 100) / 10}k</span><span> </span><span class="muted">)</span>`
+)
+
 const renderStarCount = async (repoName, initialStarCount) => {
   const linkEl = document.querySelector(`.feature-cta.${repoName}-star-count a`)
 
@@ -142,7 +147,7 @@ const renderStarCount = async (repoName, initialStarCount) => {
   if (!countEl) {
     countEl = document.createElement('span')
     countEl.classList.add('count')
-    countEl.innerText = `( ${initialStarCount.toLocaleString()} )`;
+    countEl.innerHTML = formatStarCount(initialStarCount)
 
     const icon = document.createElement('span')
     icon.classList.add('vpi-social-github')
@@ -152,22 +157,7 @@ const renderStarCount = async (repoName, initialStarCount) => {
   linkEl.append(countEl)
 
   const count = await getStarCount(repoName, initialStarCount)
-
-  let currentCount = Math.max(count - 15, initialStarCount)
-
-  const animateCount = () => {
-    currentCount += 1;
-
-    if (currentCount >= count) {
-      currentCount = count;
-
-      clearInterval(intervalId);
-    }
-
-    countEl.innerText = `( ${currentCount.toLocaleString()} )`
-  }
-
-  const intervalId = setInterval(animateCount, 64)
+  countEl.innerHTML = formatStarCount(count)
 }
 
 const forceResize = () => {
@@ -201,16 +191,18 @@ const handleTweetLoad = () => {
 
 onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {
-    const action = document.querySelector(
-      '.VPHero .actions a[href="https://github.com/electric-sql"]'
+    const githubLinks = document.querySelectorAll(
+      'a[href="https://github.com/electric-sql"]'
     )
 
-    let icon = action.querySelector('.vpi-social-github')
+    let icon = document.querySelector('.actions .vpi-social-github')
     if (!icon) {
-      const icon = document.createElement('span')
-      icon.classList.add('vpi-social-github')
+      githubLinks.forEach((link) => {
+        const icon = document.createElement('span')
+        icon.classList.add('vpi-social-github')
 
-      action.prepend(icon)
+        link.prepend(icon)
+      })
     }
 
     renderStarCount('electric', initialStarCounts.electric)
@@ -327,6 +319,7 @@ onMounted(async () => {
   .masonry-tweet {
     position: relative;
     display: block;
+    filter: saturate(0.75);
   }
   .loading-tweet {
     border: 1px solid rgba(238 238 238 0.8);
@@ -380,6 +373,7 @@ onMounted(async () => {
   }
   .home-propositions .proposition-image img {
     width: 100%;
+    filter: drop-shadow(1px 2px calc(2px + 0.5vw) var(--vp-c-indigo-1));
   }
   .home-propositions .proposition-content {
     width: 40vw;
@@ -427,6 +421,19 @@ onMounted(async () => {
       font-size: 14px;
     }
   }
+
+  .home-cta {
+    display: flex;
+    justify-content: center;
+    margin-top: -24px;
+  }
+
+  .home-cta-actions {
+    display: flex;
+    gap: 12px;
+    margin: 24px 0;
+    justify-content: center;
+  }
 </style>
 
 <div class="masonry-wall-wrapper">
@@ -472,5 +479,11 @@ onMounted(async () => {
         {{ item.details }}
       </p>
     </div>
+  </div>
+</div>
+
+<div class="features-content">
+  <div class="home-cta">
+    <HomeCTA />
   </div>
 </div>
