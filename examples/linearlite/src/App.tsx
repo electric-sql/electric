@@ -6,7 +6,7 @@ import 'react-toastify/dist/ReactToastify.css'
 import List from './pages/List'
 import Root from './pages/root'
 import Issue from './pages/Issue'
-import { ShapesProvider, preloadShape } from '@electric-sql/react'
+import { preloadShape } from '@electric-sql/react'
 import { issueShape } from './shapes'
 
 interface MenuContextInterface {
@@ -51,11 +51,9 @@ const App = () => {
   const [showMenu, setShowMenu] = useState(false)
 
   return (
-    <ShapesProvider>
-      <MenuContext.Provider value={{ showMenu, setShowMenu }}>
-        <RouterProvider router={router} />
-      </MenuContext.Provider>
-    </ShapesProvider>
+    <MenuContext.Provider value={{ showMenu, setShowMenu }}>
+      <RouterProvider router={router} />
+    </MenuContext.Provider>
   )
 }
 

@@ -8,8 +8,6 @@ import {
   ScrollRestoration,
 } from "@remix-run/react"
 
-import { ShapesProvider } from "@electric-sql/react"
-
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -33,9 +31,7 @@ export default function App() {
     <div className="App">
       <header className="App-header">
         <img src="/logo.svg" className="App-logo" alt="logo" />
-        <ShapesProvider>
-          <Outlet />
-        </ShapesProvider>
+        <Outlet />
       </header>
     </div>
   )
