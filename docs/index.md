@@ -145,7 +145,7 @@ const propositions = [
     `,
     benefits: [
       'Simplifies your ops',
-      'Improves your sleep'
+      'Enhances your calm'
     ],
     image: '/img/home/high-availability-trans.png'
   }

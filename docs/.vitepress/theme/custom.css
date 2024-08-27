@@ -152,6 +152,9 @@
 .home-use-cases-diagramme img {
   width: 100%;
 }
+.home-use-cases-diagramme .sm-diagramme {
+  margin-top: 24px;
+}
 @media (max-width: 449px) {
   .home-use-cases-diagramme {
     margin-left: -10px !important;
@@ -160,8 +163,8 @@
 }
 @media (max-width: 409px) {
   .home-use-cases-diagramme {
-    margin-left: -20px !important;
-    margin-right: -20px !important;
+    margin-left: -15px !important;
+    margin-right: -15px !important;
   }
 }
 
