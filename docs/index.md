@@ -24,8 +24,7 @@ features:
     details: >-
       <span class="para">
         Sync partial replicas of your data into
-        <span class="no-wrap">local apps</span>
-        <span class="no-wrap">and services</span>.
+        local <span class="no-wrap-xl">apps <span class="no-wrap">and services</span></span>.
       </span>
       <span class="feature-cta electric-star-count">
         <a href="https://github.com/electric-sql/electric"
@@ -40,7 +39,7 @@ features:
   - title: Data Delivery Network
     details: >-
       <span class="para">
-        Load data faster than you can query,
+        Load data faster than you can query Postgres,
         <span class="no-wrap-lg">scale out to</span>
         millions
         <span class="no-wrap">of users</span>.
@@ -143,7 +142,7 @@ const renderStarCount = async (repoName, initialStarCount) => {
   if (!countEl) {
     countEl = document.createElement('span')
     countEl.classList.add('count')
-    countEl.innerText = `( ${initialStarCount.toLocaleString()} )`;
+    countEl.innerText = `( ${initialStarCount.toLocaleString()} )`;
 
     const icon = document.createElement('span')
     icon.classList.add('vpi-social-github')
@@ -165,7 +164,7 @@ const renderStarCount = async (repoName, initialStarCount) => {
       clearInterval(intervalId);
     }
 
-    countEl.innerText = `( ${currentCount.toLocaleString()} )`
+    countEl.innerText = `( ${currentCount.toLocaleString()} )`
   }
 
   const intervalId = setInterval(animateCount, 64)
@@ -231,6 +230,14 @@ onMounted(async () => {
   .feature-cta {
     margin: 14px 0 7px -2px;
   }
+  @media (min-width: 768px) and (max-width: 825px) {
+    .feature-cta {
+      margin-left: -6px;
+      margin-right: -16px;
+      transform: scale(0.95);
+      transform-origin: top left;
+    }
+  }
   .feature-cta a {
     display: inline-flex;
     align-items: center;
@@ -257,6 +264,15 @@ onMounted(async () => {
     height: 1.42rem;
     margin: 0 0.5rem 0 0;
     position: relative;
+  }
+  @media (min-width: 768px) and (max-width: 825px) {
+    .feature-cta a .vpi-social-github,
+    .feature-cta a .vpi-electric-icon {
+      width: 1.36rem;
+      height: 1.36rem;
+      margin-left: -0.2rem;
+      margin-right: 0.4rem;
+    }
   }
 
   .action a .vpi-electric-icon,
@@ -328,25 +344,47 @@ onMounted(async () => {
     margin: 32px 0;
   }
   .home-propositions .proposition {
-    display: flex;
+    display: inline-flex;
     flex-direction: row;
     justify-content: center;
     align-items: center;
-    margin: 12px 0;
+    margin: 15px 0;
     gap: 24px;
+
+    border: 1px solid var(--vp-c-bg-soft);
+    border-radius: 12px;
+    background-color: var(--vp-c-bg-soft);
+    transition: border-color 0.25s, background-color 0.25s;
+    padding: 12px;
   }
+  @media (min-width: 560px) {
+    .home-propositions .proposition {
+      padding: 12px 24px;
+    }
+  }
+  @media (min-width: 760px) {
+    .home-propositions .proposition {
+      padding: 12px 36px;
+    }
+  }
+  @media (min-width: 1024px) {
+    .home-propositions .proposition {
+      padding: 12px 48px;
+    }
+  }
+
   .home-propositions .proposition-image {
-    width: 25vw;
-    max-width: 300px;
+    width: 30vw;
+    max-width: 320px;
     min-width: 180px;
   }
   .home-propositions .proposition-image img {
     width: 100%;
   }
   .home-propositions .proposition-content {
-    width: 50vw;
+    width: 40vw;
     max-width: 460px;
-    min-width: 200px;
+    min-width: 180px;
     text-align: left;
   }
   .home-propositions .proposition-content h3 {

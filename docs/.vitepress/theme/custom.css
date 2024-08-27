@@ -41,6 +41,11 @@
     white-space: nowrap;
   }
 }
+@media (min-width: 1060px) {
+  .no-wrap-xl {
+    white-space: nowrap;
+  }
+}
 .hidden {
   display: none !important;
 }
