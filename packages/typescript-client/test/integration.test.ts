@@ -1,9 +1,10 @@
 import { parse } from 'cache-control-parser'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
-import { ArgumentsType, assert, describe, expect, inject, vi } from 'vitest'
+import { assert, describe, expect, inject, vi } from 'vitest'
 import { Shape, ShapeStream } from '../src/client'
 import { Message, Offset } from '../src/types'
+import { isChangeMessage } from '../src'
 import {
   IssueRow,
   testWithIssuesTable as it,
@@ -35,7 +36,7 @@ describe(`HTTP Sync`, () => {
     await new Promise<void>((resolve, reject) => {
       issueStream.subscribe((messages) => {
         messages.forEach((message) => {
-          if (`key` in message) {
+          if (isChangeMessage(message)) {
             shapeData.set(message.key, message.value)
           }
           if (message.headers?.[`control`] === `up-to-date`) {
@@ -55,7 +56,7 @@ describe(`HTTP Sync`, () => {
     aborter,
   }) => {
     const urlsRequested: URL[] = []
-    const fetchWrapper = (...args: ArgumentsType<typeof fetch>) => {
+    const fetchWrapper = (...args: Parameters<typeof fetch>) => {
       const url = new URL(args[0])
       urlsRequested.push(url)
       return fetch(...args)
@@ -74,7 +75,7 @@ describe(`HTTP Sync`, () => {
     await new Promise<void>((resolve, reject) => {
       issueStream.subscribe((messages) => {
         messages.forEach((message) => {
-          if (`key` in message) {
+          if (isChangeMessage(message)) {
             shapeData.set(message.key, message.value)
           }
           if (message.headers?.[`control`] === `up-to-date`) {
@@ -148,7 +149,7 @@ describe(`HTTP Sync`, () => {
     await new Promise<void>((resolve) => {
       issueStream.subscribe((messages) => {
         messages.forEach((message) => {
-          if (`key` in message) {
+          if (isChangeMessage(message)) {
             shapeData.set(message.key, message.value)
           }
           if (message.headers?.[`control`] === `up-to-date`) {
@@ -344,7 +345,7 @@ describe(`HTTP Sync`, () => {
     })
     let secondRowId = ``
     await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
-      if (!(`key` in msg)) return
+      if (!isChangeMessage(msg)) return
       shapeData.set(msg.key, msg.value)
 
       if (nth === 0) {
@@ -396,7 +397,7 @@ describe(`HTTP Sync`, () => {
     })
 
     const p1 = h.forEachMessage(issueStream1, aborter1, (res, msg, nth) => {
-      if (!(`key` in msg)) return
+      if (!isChangeMessage(msg)) return
       shapeData1.set(msg.key, msg.value)
 
       if (nth === 1) {
@@ -407,7 +408,7 @@ describe(`HTTP Sync`, () => {
     })
 
     const p2 = h.forEachMessage(issueStream2, aborter2, (res, msg, nth) => {
-      if (!(`key` in msg)) return
+      if (!isChangeMessage(msg)) return
       shapeData2.set(msg.key, msg.value)
 
       if (nth === 2) {
@@ -588,7 +589,7 @@ describe(`HTTP Sync`, () => {
     })
 
     await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
-      if (!(`key` in msg)) return
+      if (!isChangeMessage(msg)) return
       shapeData.set(msg.key, msg.value)
 
       if (nth === 0) {
@@ -620,7 +621,7 @@ describe(`HTTP Sync`, () => {
 
     const statusCodesReceived: number[] = []
 
-    const fetchWrapper = async (...args: ArgumentsType<typeof fetch>) => {
+    const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
       // before any subsequent requests after the initial one, ensure
       // that the existing shape is deleted and some more data is inserted
       if (statusCodesReceived.length === 1 && statusCodesReceived[0] === 200) {
@@ -668,7 +669,7 @@ describe(`HTTP Sync`, () => {
           return
         }
 
-        if (!(`key` in msg)) return
+        if (!isChangeMessage(msg)) return
 
         switch (nth) {
           case 0:

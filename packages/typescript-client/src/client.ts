@@ -270,7 +270,8 @@ export class ShapeStream {
       if (batch.length > 0) {
         const lastMessage = batch[batch.length - 1]
         if (
-          lastMessage.headers?.[`control`] === `up-to-date` &&
+          isControlMessage(lastMessage) &&
+          lastMessage.headers.control === `up-to-date` &&
           !this.isUpToDate
         ) {
           this.isUpToDate = true
