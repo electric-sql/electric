@@ -375,7 +375,7 @@ defmodule Electric.Replication.Eval.Parser do
       # x NOT IN y is exactly equivalent to NOT (x IN y)
       if name == "=",
         do: {:ok, reduced},
-        else: negate(reduced, expr.location)
+        else: negate(reduced)
     end
   end
 
@@ -394,7 +394,7 @@ defmodule Electric.Replication.Eval.Parser do
            build_bool_chain(%{name: "and", impl: &Kernel.and/2}, comparisons, expr.location) do
       case expr.kind do
         :AEXPR_BETWEEN -> {:ok, reduced}
-        :AEXPR_NOT_BETWEEN -> negate(reduced, expr.location)
+        :AEXPR_NOT_BETWEEN -> negate(reduced)
       end
     end
   end
@@ -704,13 +704,13 @@ defmodule Electric.Replication.Eval.Parser do
   def unwrap_node_string(%PgQuery.Node{node: {:a_const, %PgQuery.A_Const{val: {:sval, sval}}}}),
     do: unwrap_node_string(sval)
 
-  defp negate(arg, location) do
+  defp negate(tree_part) do
     maybe_reduce(%Func{
       implementation: &Kernel.not/1,
       name: "not",
       type: :bool,
-      args: [arg],
-      location: location
+      args: [tree_part],
+      location: tree_part.location
     })
   end
 end
