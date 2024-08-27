@@ -1,5 +1,6 @@
 "use client"
 
+import { useSearchParams } from 'next/navigation'
 import { useShape } from "@electric-sql/react"
 import { ShapeStreamOptions } from "@electric-sql/client"
 import "./Example.css"
@@ -18,7 +19,6 @@ const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
   const queryParams = new URLSearchParams(window.location.search)
   const username = queryParams.get(`username`)
   const modifiedArgs = [...args]
-  console.log("username: " + username)
   if (username) {
     const headers = new Headers((modifiedArgs[1] as RequestInit)?.headers || {})
     const password = username.toLowerCase() + "42"
@@ -47,7 +47,12 @@ const usersShape = (): ShapeStreamOptions => {
 }
 
 export default function Home() {
+  const searchParams = useSearchParams()
   const { data: users, isError, error } = useShape(usersShape())
+
+  const classFor = (user: string | null) => {
+    return searchParams.get(`username`) === user ? `active-link` : `white-link`
+  }
 
   return (
     <div>
@@ -60,11 +65,7 @@ export default function Home() {
                 e.preventDefault()
                 window.location.search = ``
               }}
-              className={
-                typeof window === "undefined" || window.location.search === ``
-                  ? `active-link`
-                  : `white-link`
-              }
+              className={classFor(null)}
             >
               Not logged in
             </a>
@@ -77,12 +78,7 @@ export default function Home() {
                 e.preventDefault()
                 window.location.search = `?username=Alice`
               }}
-              className={
-                typeof window !== "undefined" &&
-                window.location.search.includes(`username=Alice`)
-                  ? `active-link`
-                  : `white-link`
-              }
+              className={classFor(`Alice`)}
             >
               Alice — org 1
             </a>
@@ -95,12 +91,7 @@ export default function Home() {
                 e.preventDefault()
                 window.location.search = `?username=David`
               }}
-              className={
-                typeof window !== "undefined" &&
-                window.location.search.includes(`username=David`)
-                  ? `active-link`
-                  : `white-link`
-              }
+              className={classFor(`David`)}
             >
               David — org 2
             </a>
@@ -113,12 +104,7 @@ export default function Home() {
                 e.preventDefault()
                 window.location.search = `?username=Admin`
               }}
-              className={
-                typeof window !== "undefined" &&
-                window.location.search.includes(`username=Admin`)
-                  ? `active-link`
-                  : `white-link`
-              }
+              className={classFor(`Admin`)}
             >
               Admin
             </a>
