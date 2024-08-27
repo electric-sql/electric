@@ -1,4 +1,4 @@
-import { Client } from 'pg'
+import { Client } from "pg"
 
 export async function GET(
   request: Request,
@@ -29,7 +29,10 @@ export async function GET(
   // Check that the username and password are correct
   const userInfo = await checkCredentials(decoded)
   if (userInfo === false) {
-    return new Response(`user not found or invalid username and password combination`, { status: 401 })
+    return new Response(
+      `user not found or invalid username and password combination`,
+      { status: 401 }
+    )
   }
 
   if (userInfo === undefined) {
@@ -62,7 +65,7 @@ export async function GET(
 }
 
 /** Decodes basic auth header containing base64-encoded credentials. */
-type Credentials = { username: string, password: string }
+type Credentials = { username: string; password: string }
 function decodeCredentials(creds: string): Credentials | undefined {
   const base64Creds = creds.slice("Basic ".length)
   const buff = Buffer.from(base64Creds, "base64")
@@ -81,28 +84,33 @@ function decodeCredentials(creds: string): Credentials | undefined {
  * Returns false if the credentials are invalid.
  * Returns undefined if the database is unreachable.
  */
-async function checkCredentials({ username, password }: Credentials): Promise<{ orgId?: number, role: string } | false | undefined> {
-  const connectionUrl = process.env.DATABASE_URL ?? `postgresql://postgres:password@localhost:54321/electric`
+async function checkCredentials({
+  username,
+  password,
+}: Credentials): Promise<{ orgId?: number; role: string } | false | undefined> {
+  const connectionUrl =
+    process.env.DATABASE_URL ??
+    `postgresql://postgres:password@localhost:54321/electric`
 
   const client = new Client(connectionUrl)
   await client.connect()
 
   try {
     const { rows } = await client.query(
-      'SELECT org_id, role FROM users WHERE name = $1 AND password = $2',
+      "SELECT org_id, role FROM users WHERE name = $1 AND password = $2",
       [username, password]
     )
     if (rows.length === 0) {
       return false
     }
-    
+
     const { org_id, user_role } = rows[0]
     return { orgId: org_id, role: user_role }
   } catch (err: any) {
-      console.log("DB ERROR")
-      console.log(err.message)
-     return undefined
+    console.log("DB ERROR")
+    console.log(err.message)
+    return undefined
   } finally {
-     await client.end()
+    await client.end()
   }
 }

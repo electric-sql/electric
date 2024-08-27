@@ -21,7 +21,7 @@ const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
   console.log("username: " + username)
   if (username) {
     const headers = new Headers((modifiedArgs[1] as RequestInit)?.headers || {})
-    const password = username.toLowerCase() + '42'
+    const password = username.toLowerCase() + "42"
     const creds = `${username}:${password}`
     const base64Creds = bytesToBase64(new TextEncoder().encode(creds))
     const credentials = `Basic ${base64Creds}`
@@ -61,7 +61,9 @@ export default function Home() {
                 window.location.search = ``
               }}
               className={
-                (typeof window === 'undefined') || window.location.search === `` ? `active-link` : `white-link`
+                typeof window === "undefined" || window.location.search === ``
+                  ? `active-link`
+                  : `white-link`
               }
             >
               Not logged in
@@ -76,7 +78,8 @@ export default function Home() {
                 window.location.search = `?username=Alice`
               }}
               className={
-                (typeof window !== 'undefined') && window.location.search.includes(`username=Alice`)
+                typeof window !== "undefined" &&
+                window.location.search.includes(`username=Alice`)
                   ? `active-link`
                   : `white-link`
               }
@@ -93,7 +96,8 @@ export default function Home() {
                 window.location.search = `?username=David`
               }}
               className={
-                (typeof window !== 'undefined') && window.location.search.includes(`username=David`)
+                typeof window !== "undefined" &&
+                window.location.search.includes(`username=David`)
                   ? `active-link`
                   : `white-link`
               }
@@ -110,7 +114,8 @@ export default function Home() {
                 window.location.search = `?username=Admin`
               }}
               className={
-                (typeof window !== 'undefined') && window.location.search.includes(`username=Admin`)
+                typeof window !== "undefined" &&
+                window.location.search.includes(`username=Admin`)
                   ? `active-link`
                   : `white-link`
               }
@@ -158,7 +163,7 @@ export default function Home() {
  */
 function bytesToBase64(bytes: Uint8Array): string {
   const binString = Array.from(bytes, (byte) =>
-    String.fromCodePoint(byte),
+    String.fromCodePoint(byte)
   ).join("")
   return btoa(binString)
 }
