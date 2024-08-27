@@ -262,6 +262,22 @@ defmodule Electric.Replication.Eval.ParserTest do
       end
     end
 
+    test "should work with IS [NOT] UNKNOWN" do
+      env = Env.new()
+
+      for {expr, expected} <- [
+            {~S|true IS UNKNOWN|, false},
+            {~S|true IS NOT UNKNOWN|, true},
+            {~S|NULL::boolean IS UNKNOWN|, true},
+            {~S|NULL::boolean IS NOT UNKNOWN|, false}
+          ] do
+        assert {{:ok, %Expr{eval: result}}, ^expr} =
+                 {Parser.parse_and_validate_expression(expr, %{}, env), expr}
+
+        assert {%Const{value: ^expected, type: :bool}, ^expr} = {result, expr}
+      end
+    end
+
     test "should work with LIKE clauses" do
       env =
         Env.new()

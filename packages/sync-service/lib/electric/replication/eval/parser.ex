@@ -269,6 +269,8 @@ defmodule Electric.Replication.Eval.Parser do
             :IS_NOT_TRUE -> &(&1 != true)
             :IS_FALSE -> &(&1 == false)
             :IS_NOT_FALSE -> &(&1 != false)
+            :IS_UNKNOWN -> &(&1 == nil)
+            :IS_NOT_UNKNOWN -> &(&1 != nil)
           end
 
         maybe_reduce(%Func{
