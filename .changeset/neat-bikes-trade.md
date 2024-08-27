@@ -1,5 +1,5 @@
 ---
-"@electric-sql/react": patch
+"@electric-sql/react": minor
 ---
 
 Remove obsolete ShapesProvider.
