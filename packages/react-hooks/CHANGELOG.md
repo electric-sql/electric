@@ -1,5 +1,11 @@
 # @electric-sql/react
 
+## 0.3.1
+
+### Patch Changes
+
+- 55c8449: Update Readme for removing ShapesProvider
+
 ## 0.3.0
 
 ### Minor Changes
