@@ -4,6 +4,8 @@ import DefaultTheme from 'vitepress/theme-without-fonts'
 import HomeFeaturesAfter from './home-features-after.md'
 import HomeFeaturesBefore from './home-features-before.md'
 
+import Footer from './footer.md'
+
 const { Layout } = DefaultTheme
 </script>
 
@@ -26,6 +28,9 @@ const { Layout } = DefaultTheme
           </div>
         </div>
       </div>
+    </template>
+    <template #layout-bottom>
+      <Footer v-if="$frontmatter.layout == 'home'" />
     </template>
   </Layout>
 </template>
