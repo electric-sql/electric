@@ -9,7 +9,7 @@ Most sync engines require you to use their APIs for authentication and authoriza
 But as [Electric is built on the standard HTTP protocol](/api/http), you can handle
 auth for Electric exactly the same as you do the rest of the (HTTP) API calls in your app.
 
-At a high-level the pattern for auth is:
+At a high level the pattern for auth is:
 
 1. Add an `Authorization` header to authenticate the client when requesting [shape](/guides/shapes) data.
 2. The API uses the header to check that the client exists and has access to the requested data.
