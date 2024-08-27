@@ -1,6 +1,6 @@
-import { ArgumentsType } from 'vitest'
 import { Message, Value, Offset, Schema } from './types'
 import { MessageParser, Parser } from './parser'
+import { isChangeMessage, isControlMessage } from './helpers'
 
 export type ShapeData = Map<string, { [key: string]: Value }>
 export type ShapeChangedCallback = (value: ShapeData) => void
@@ -196,7 +196,7 @@ export class ShapeStream {
     this.backoffOptions = options.backoffOptions ?? BackoffDefaults
     this.fetchClient =
       options.fetchClient ??
-      ((...args: ArgumentsType<typeof fetch>) => fetch(...args))
+      ((...args: Parameters<typeof fetch>) => fetch(...args))
 
     this.start()
   }
@@ -270,7 +270,8 @@ export class ShapeStream {
       if (batch.length > 0) {
         const lastMessage = batch[batch.length - 1]
         if (
-          lastMessage.headers?.[`control`] === `up-to-date` &&
+          isControlMessage(lastMessage) &&
+          lastMessage.headers.control === `up-to-date` &&
           !this.isUpToDate
         ) {
           this.isUpToDate = true
@@ -514,7 +515,7 @@ export class Shape {
     let newlyUpToDate = false
 
     messages.forEach((message) => {
-      if (`key` in message) {
+      if (isChangeMessage(message)) {
         dataMayHaveChanged = [`insert`, `update`, `delete`].includes(
           message.headers.operation
         )
@@ -535,18 +536,21 @@ export class Shape {
         }
       }
 
-      if (message.headers?.[`control`] === `up-to-date`) {
-        isUpToDate = true
-        if (!this.hasNotifiedSubscribersUpToDate) {
-          newlyUpToDate = true
+      if (isControlMessage(message)) {
+        switch (message.headers.control) {
+          case `up-to-date`:
+            isUpToDate = true
+            if (!this.hasNotifiedSubscribersUpToDate) {
+              newlyUpToDate = true
+            }
+            break
+          case `must-refetch`:
+            this.data.clear()
+            this.error = false
+            isUpToDate = false
+            newlyUpToDate = false
+            break
         }
-      }
-
-      if (message.headers?.[`control`] === `must-refetch`) {
-        this.data.clear()
-        this.error = false
-        isUpToDate = false
-        newlyUpToDate = false
       }
     })
 

@@ -1,4 +1,4 @@
-import { ArgumentsType, describe, expect, inject, vi } from 'vitest'
+import { describe, expect, inject, vi } from 'vitest'
 import { v4 as uuidv4 } from 'uuid'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
@@ -119,7 +119,7 @@ describe(`Shape`, () => {
     })
 
     let requestsMade = 0
-    const fetchWrapper = async (...args: ArgumentsType<typeof fetch>) => {
+    const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
       // clear the shape and modify the data after the initial request
       if (requestsMade === 1) {
         await clearIssuesShape()
