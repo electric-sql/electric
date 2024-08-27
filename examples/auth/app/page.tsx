@@ -1,6 +1,6 @@
 "use client"
 
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams } from "next/navigation"
 import { useShape } from "@electric-sql/react"
 import { ShapeStreamOptions } from "@electric-sql/client"
 import "./Example.css"
@@ -21,7 +21,7 @@ const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
   const modifiedArgs = [...args]
   if (username) {
     const headers = new Headers((modifiedArgs[1] as RequestInit)?.headers || {})
-    const password = username.toLowerCase() + "42"
+    const password = username.toLowerCase() + `42`
     const creds = `${username}:${password}`
     const base64Creds = bytesToBase64(new TextEncoder().encode(creds))
     const credentials = `Basic ${base64Creds}`
@@ -150,6 +150,6 @@ export default function Home() {
 function bytesToBase64(bytes: Uint8Array): string {
   const binString = Array.from(bytes, (byte) =>
     String.fromCodePoint(byte)
-  ).join("")
+  ).join(``)
   return btoa(binString)
 }

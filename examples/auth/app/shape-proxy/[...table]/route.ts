@@ -67,11 +67,11 @@ export async function GET(
 /** Decodes basic auth header containing base64-encoded credentials. */
 type Credentials = { username: string; password: string }
 function decodeCredentials(creds: string): Credentials | undefined {
-  const base64Creds = creds.slice("Basic ".length)
-  const buff = Buffer.from(base64Creds, "base64")
-  const decoded = buff.toString("utf8")
-  if (decoded.includes(":")) {
-    const [username, password] = decoded.split(":") // username can't contain a colon in basic auth!
+  const base64Creds = creds.slice(`Basic `.length)
+  const buff = Buffer.from(base64Creds, `base64`)
+  const decoded = buff.toString(`utf8`)
+  if (decoded.includes(`:`)) {
+    const [username, password] = decoded.split(`:`) // username can't contain a colon in basic auth!
     return { username, password }
   } else {
     return undefined
@@ -97,7 +97,7 @@ async function checkCredentials({
 
   try {
     const { rows } = await client.query(
-      "SELECT org_id, role FROM users WHERE name = $1 AND password = $2",
+      `SELECT org_id, role FROM users WHERE name = $1 AND password = $2`,
       [username, password]
     )
     if (rows.length === 0) {
@@ -106,9 +106,7 @@ async function checkCredentials({
 
     const { org_id, user_role } = rows[0]
     return { orgId: org_id, role: user_role }
-  } catch (err: any) {
-    console.log("DB ERROR")
-    console.log(err.message)
+  } catch (_err: unknown) {
     return undefined
   } finally {
     await client.end()
