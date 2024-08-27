@@ -5,6 +5,7 @@
     border-top: 1px solid var(--vp-c-gutter);
     padding: 32px 24px;
     background-color: var(--vp-c-bg);
+    margin-bottom: 0.5rem;
   }
 
   .VPFooter.has-sidebar {

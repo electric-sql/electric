@@ -464,6 +464,7 @@ onMounted(async () => {
 
   .home-cta div[class*='language-'] {
     display: inline-block;
+    max-width: calc(100vw - 48px);
   }
 
   @media (min-width: 760px) {
@@ -476,7 +477,7 @@ onMounted(async () => {
   .home-cta .actions {
     display: flex;
     gap: 12px;
-    margin: 24px 0;
+    margin: 12px 0 36px;
     justify-content: center;
   }
 </style>

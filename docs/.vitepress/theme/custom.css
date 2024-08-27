@@ -14,7 +14,34 @@
   --electric-color: #00D2A0;
   --ddn-color: #D0BCFF;
   --pglite-color: #F6F95C;
+
+  --vp-code-font-size: 0.925em;
 }
+
+@media (max-width: 959px) {
+  :root, .dark {
+    --vp-code-font-size: 0.875em;
+  }
+}
+@media (max-width: 759px) {
+  :root, .dark {
+    --vp-code-font-size: 0.85em;
+  }
+}
+@media (max-width: 559px) {
+  :root, .dark {
+    --vp-code-font-size: 0.8em;
+  }
+}
+@media (max-width: 459px) {
+  :root, .dark {
+    --vp-code-font-size: 0.75em;
+  }
+}
+
+
+
+
 .highlight {
   color: var(--vp-home-hero-name-color);
 }
