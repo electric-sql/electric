@@ -36,16 +36,19 @@ async function createItem(newId: string) {
   return await Promise.all([findUpdatePromise, fetchPromise])
 }
 
-async function clearItems() {
+async function clearItems(numItems: number) {
   const itemsStream = getShapeStream(itemShape())
 
   // Match the delete
-  const findUpdatePromise = matchStream({
-    stream: itemsStream,
-    operations: [`delete`],
-    // First delete will match
-    matchFn: () => true,
-  })
+  const findUpdatePromise =
+    numItems > 0
+      ? matchStream({
+          stream: itemsStream,
+          operations: [`delete`],
+          // First delete will match
+          matchFn: () => true,
+        })
+      : Promise.resolve()
 
   // Delete all items
   const fetchPromise = fetch(`${baseApiUrl}/items`, { method: `DELETE` })
@@ -57,12 +60,14 @@ export const Example = () => {
   const queryClient = useQueryClient()
 
   const { data: items } = useShape(itemShape()) as unknown as { data: Item[] }
-  const submissions = useMutationState({
+  const submissions: Item[] = useMutationState({
     filters: { status: `pending` },
-    select: (mutation) => mutation.state.context as Item,
-  })
+    select: (mutation) => mutation.state.context as Item | undefined,
+  }).filter((item) => item !== undefined)
 
   const { mutateAsync: addItemMut } = useMutation({
+    scope: { id: `items` },
+    mutationKey: [`add-item`],
     mutationFn: (newId: string) => createItem(newId),
     onMutate: (id) => {
       const optimisticItem: Item = { id }
@@ -71,17 +76,28 @@ export const Example = () => {
   })
 
   const { mutateAsync: clearItemsMut, isPending: isClearing } = useMutation({
-    mutationFn: () => clearItems(),
-    onMutate: () => queryClient.getMutationCache().clear(),
+    scope: { id: `items` },
+    mutationKey: [`clear-items`],
+    mutationFn: (numItems: number) => clearItems(numItems),
+    onMutate: () => {
+      const addMutations = queryClient
+        .getMutationCache()
+        .findAll({ mutationKey: [`add-item`] })!
+      addMutations?.forEach((mut) => queryClient.getMutationCache().remove(mut))
+    },
   })
 
   // Merge data from shape & optimistic data from fetchers. This removes
   // possible duplicates as there's a potential race condition where
   // useShape updates from the stream slightly before the action has finished.
-  const itemsMap = new Map()
-  items.concat(submissions).forEach((item) => {
-    itemsMap.set(item.id, { ...itemsMap.get(item.id), ...item })
-  })
+  const itemsMap = new Map<string, Item>()
+  if (!isClearing) {
+    items.concat(submissions).forEach((item) => {
+      itemsMap.set(item.id, { ...itemsMap.get(item.id), ...item })
+    })
+  } else {
+    submissions.forEach((item) => itemsMap.set(item.id, item))
+  }
 
   return (
     <div>
@@ -96,18 +112,16 @@ export const Example = () => {
         <button
           type="submit"
           className="button"
-          onClick={() => clearItemsMut()}
+          onClick={() => clearItemsMut(items.length)}
         >
           Clear
         </button>
       </div>
-      {isClearing
-        ? ``
-        : [...itemsMap.values()].map((item: Item, index: number) => (
-            <p key={index} className="item">
-              <code>{item.id}</code>
-            </p>
-          ))}
+      {[...itemsMap.values()].map((item: Item, index: number) => (
+        <p key={index} className="item">
+          <code>{item.id}</code>
+        </p>
+      ))}
     </div>
   )
 }
