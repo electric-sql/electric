@@ -103,58 +103,50 @@ const tweets = [
 const propositions = [
   {
     title: "Solves state transfer",
-    details: `
-      <p>
-        Replace APIs, data fetching and network error handling
-        with automated data synchronisation.
-      </p>
-      <p class="benefits">
-        → Simplifies your code<br />
-        → No more loading spinners
-      </p>
+    concept: `
+      Replace APIs, data fetching and network error handling
+      with automated data synchronisation.
     `,
+    benefits: [
+      'Simplifies your code',
+      'No more loading spinners'
+    ],
     image: '/img/home/state-transfer-trans.png'
   },
   {
     title: "Solves cache invalidation",
-    details: `
-      <p>
-        Replace ttls and expiry policies with realtime sync
-        and automated invalidation.
-      </p>
-      <p class="benefits">
-        → Simplifies your stack<br />
-        → No more stale data
-      </p>
+    concept: `
+      Replace ttls and expiry policies with realtime sync
+      and automated invalidation.
     `,
+    benefits: [
+      'Simplifies your stack',
+      'No more stale data'
+    ],
     image: '/img/home/cache-invalidation-trans.png'
   },
   {
     title: "Solves scaling",
-    details: `
-      <p>
-        Take the query workload off your database and the
-        compute workload off your cloud.
-      </p>
-      <p class="benefits">
-        → Simplifies your infra<br />
-        → Reduces your cloud bill
-      </p>
+    concept: `
+      Take the query workload off your database and the
+      compute workload off your cloud.
     `,
+    benefits: [
+      'Simplifies your infra',
+      'Reduces your cloud bill'
+    ],
     image: '/img/home/scalability-trans.png'
   },
   {
     title: "Solves availability",
-    details: `
-      <p>
-        Take the network off the interaction path and build
-        systems that are resilient and work offline by design.
-      </p>
-      <p class="benefits">
-        → Simplifies your ops<br />
-        → Improves your sleep
-      </p>
+    concept: `
+      Take the network off the interaction path and build
+      systems that are resilient and work offline by design.
     `,
+    benefits: [
+      'Simplifies your ops',
+      'Improves your sleep'
+    ],
     image: '/img/home/high-availability-trans.png'
   }
 ]
@@ -411,14 +403,22 @@ onMounted(async () => {
     padding-top: 0;
     font-size: 24px;
   }
-  .home-propositions .proposition-content p {
+  .home-propositions .proposition-content p,
+  .home-propositions .proposition-content ul {
     font-weight: 550;
     font-size: 15px;
     color: var(--vp-c-text-2);
   }
-  .home-propositions .proposition-content .benefits {
-    margin-bottom: 6px;
+  .home-propositions .proposition-content ul.benefits {
+    margin-bottom: 14px;
     color: var(--vp-c-text-1);
+
+    list-style-type: "→ ";
+    list-style-position: inside;
+    padding: 0;
+  }
+  .home-propositions .proposition-content .benefits li + li {
+    margin-top: 4px;
   }
   @media (max-width: 759px) {
     .home-propositions .proposition {
@@ -440,15 +440,17 @@ onMounted(async () => {
     }
   }
   @media (max-width: 759px) {
-    .home-propositions .proposition-content p {
+    .home-propositions .proposition-content p,
+    .home-propositions .proposition-content ul {
       font-size: 14.5px;
     }
-    .home-propositions .proposition-content .benefits {
-      margin-bottom: 24px;
+    .home-propositions .proposition-content ul.benefits {
+      margin-bottom: 28px;
     }
   }
   @media (max-width: 559px) {
-    .home-propositions .proposition-content p {
+    .home-propositions .proposition-content p,
+    .home-propositions .proposition-content ul {
       font-size: 14px;
     }
   }
@@ -507,7 +509,14 @@ onMounted(async () => {
       <h3>
         {{ item.title }}
       </h3>
-      <p v-html="item.details" />
+      <p>
+        {{ item.concept }}
+      </p>
+      <ul class="benefits">
+        <li v-for="(benefit, index) in item.benefits" :key="index">
+          {{ benefit }}
+        </li>
+      </ul>
     </div>
   </div>
 </div>
