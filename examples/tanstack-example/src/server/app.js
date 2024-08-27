@@ -1,17 +1,13 @@
 import http from "http"
-import pgPkg from "pg"
+import pg from "pg"
 
-const { Client } = pgPkg
-
-const db = new Client({
+const db = new pg.Pool({
   host: `localhost`,
   port: 54321,
   password: `password`,
   user: `postgres`,
   database: `electric`,
 })
-
-db.connect()
 
 // Async function to handle reading the body of the request
 const getRequestBody = async (req) => {
