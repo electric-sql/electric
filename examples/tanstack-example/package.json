@@ -6,9 +6,11 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "backend:up": "PROJECT_NAME=tanstack-basic-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
-    "backend:down": "PROJECT_NAME=tanstack-basic-example pnpm -C ../../ run example-backend:down",
+    "backend:up": "PROJECT_NAME=tanstack-basic-example pnpm -C ../../ run example-backend:up && pnpm db:migrate && pnpm api:up",
+    "backend:down": "pnpm api:down && PROJECT_NAME=tanstack-basic-example pnpm -C ../../ run example-backend:down",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
+    "api:up": "forever start src/server/app.js",
+    "api:down": "forever stop src/server/app.js || echo 'API already stopped'",
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
@@ -16,18 +18,23 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@electric-sql/client": "workspace:*",
     "@electric-sql/react": "workspace:*",
     "@tanstack/react-query": "^5.52.2",
+    "pg": "^8.12.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "uuid": "^10.0.0"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^4.3.1",
     "dotenv": "^16.4.5",
     "eslint": "^8.57.0",
+    "forever": "^4.0.3",
     "typescript": "^5.5.3",
     "vite": "^5.3.4"
   }
