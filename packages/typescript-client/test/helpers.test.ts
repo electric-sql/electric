@@ -1,31 +1,25 @@
-import { describe, expect, expectTypeOf, it } from 'vitest'
-import {
-  ChangeMessage,
-  ControlMessage,
-  isChangeMessage,
-  isControlMessage,
-  Message,
-} from '../src'
+import { describe, expect, it } from 'vitest'
+import { isChangeMessage, isControlMessage, Message } from '../src'
 
-describe('helpers', () => {
-  it('should correctly detect ChangeMessages', () => {
+describe(`helpers`, () => {
+  it(`should correctly detect ChangeMessages`, () => {
     const message = {
       headers: {
-        operation: 'insert',
+        operation: `insert`,
       },
-      offset: '-1',
-      key: 'key',
-      value: { key: 'value' },
+      offset: `-1`,
+      key: `key`,
+      value: { key: `value` },
     } as Message
 
     expect(isChangeMessage(message)).toBe(true)
     expect(isControlMessage(message)).toBe(false)
   })
 
-  it('should correctly detect ControlMessages', () => {
+  it(`should correctly detect ControlMessages`, () => {
     const message = {
       headers: {
-        control: 'up-to-date',
+        control: `up-to-date`,
       },
     } as Message
     expect(isControlMessage(message)).toBe(true)

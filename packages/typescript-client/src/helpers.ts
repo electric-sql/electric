@@ -20,7 +20,7 @@ import { ChangeMessage, ControlMessage, Message, Value } from './types'
 export function isChangeMessage<T extends Value = { [key: string]: Value }>(
   message: Message<T>
 ): message is ChangeMessage<T> {
-  return 'key' in message
+  return `key` in message
 }
 
 /**

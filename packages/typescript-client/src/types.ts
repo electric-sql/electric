@@ -10,11 +10,11 @@ export type Value =
 export type Offset = `-1` | `${number}_${number}`
 
 interface Header {
-  [key: Exclude<string, 'operation' | 'control'>]: Value
+  [key: Exclude<string, `operation` | `control`>]: Value
 }
 
 export type ControlMessage = {
-  headers: Header & { control: 'up-to-date' | 'must-refetch' }
+  headers: Header & { control: `up-to-date` | `must-refetch` }
 }
 
 export type ChangeMessage<T> = {

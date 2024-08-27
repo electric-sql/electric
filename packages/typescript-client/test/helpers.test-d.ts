@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it } from 'vitest'
+import { describe, expectTypeOf, it } from 'vitest'
 import {
   ChangeMessage,
   ControlMessage,
@@ -7,39 +7,39 @@ import {
   Message,
 } from '../src'
 
-describe('helpers', () => {
-  it('should respect ChangeMessages type guard', () => {
+describe(`helpers`, () => {
+  it(`should respect ChangeMessages type guard`, () => {
     const message = {
       headers: {
-        operation: 'insert',
+        operation: `insert`,
       },
-      offset: '-1',
-      key: 'key',
-      value: { key: 'value' },
-    } as Message<any>
+      offset: `-1`,
+      key: `foo`,
+      value: { foo: `bar` },
+    } as Message<{ foo: string }>
 
     if (isChangeMessage(message)) {
-      const msgChng: ChangeMessage<any> = message
-      expectTypeOf(msgChng).toEqualTypeOf<ChangeMessage<any>>()
+      const msgChng: ChangeMessage<{ foo: string }> = message
+      expectTypeOf(msgChng).toEqualTypeOf<ChangeMessage<{ foo: string }>>()
 
       // @ts-expect-error - should have type mismatch
       message as ControlMessage
     }
   })
 
-  it('should respect ControlMessages type guard', () => {
+  it(`should respect ControlMessages type guard`, () => {
     const message = {
       headers: {
-        control: 'up-to-date',
+        control: `up-to-date`,
       },
-    } as Message<any>
+    } as Message<{ [key: string]: string }>
 
     if (isControlMessage(message)) {
       const msgCtrl: ControlMessage = message
       expectTypeOf(msgCtrl).toEqualTypeOf<ControlMessage>()
 
       // @ts-expect-error - should have type mismatch
-      message as ChangeMessage<any>
+      message as ChangeMessage<{ foo: string }>
     }
   })
 })
