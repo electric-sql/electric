@@ -1,4 +1,8 @@
-import { ShapeStream, ChangeMessage } from "@electric-sql/client"
+import {
+  ShapeStream,
+  ChangeMessage,
+  isChangeMessage,
+} from "@electric-sql/client"
 
 export async function matchStream<T>({
   stream,
@@ -21,7 +25,7 @@ export async function matchStream<T>({
     const unsubscribe = stream.subscribe((messages) => {
       for (const message of messages) {
         if (
-          `key` in message &&
+          isChangeMessage(message) &&
           operations.includes(message.headers.operation)
         ) {
           if (

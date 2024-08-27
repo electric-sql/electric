@@ -1,5 +1,5 @@
 import { createClient } from 'redis'
-import { ShapeStream, Message } from '@electric-sql/client'
+import { ShapeStream, Message, isChangeMessage } from '@electric-sql/client'
 
 // Create a Redis client
 const REDIS_HOST = `localhost`
@@ -21,7 +21,7 @@ client.connect().then(() => {
 
     // Loop through each message and make writes to the Redis hash for action messages
     messages.forEach((message) => {
-      if (!(`key` in message)) return
+      if (!isChangeMessage(message)) return
       // Upsert/delete
       switch (message.headers.action) {
         case `delete`:
