@@ -500,9 +500,15 @@ importers:
       '@electric-sql/react':
         specifier: workspace:*
         version: link:../../packages/react-hooks
+      '@tanstack/query-sync-storage-persister':
+        specifier: ^5.52.2
+        version: 5.52.2
       '@tanstack/react-query':
         specifier: ^5.52.2
         version: 5.52.2(react@18.3.1)
+      '@tanstack/react-query-persist-client':
+        specifier: ^5.52.2
+        version: 5.52.2(@tanstack/react-query@5.52.2(react@18.3.1))(react@18.3.1)
       pg:
         specifier: ^8.12.0
         version: 8.12.0
@@ -2916,6 +2922,18 @@ packages:
 
   '@tanstack/query-core@5.52.2':
     resolution: {integrity: sha512-9vvbFecK4A0nDnrc/ks41e3UHONF1DAnGz8Tgbxkl59QcvKWmc0ewhYuIKRh8NC4ja5LTHT9EH16KHbn2AIYWA==}
+
+  '@tanstack/query-persist-client-core@5.52.2':
+    resolution: {integrity: sha512-bzOYr1kKUPFZ8nyUL+M/LRdwZOLXh+j6RM1T4WnGtjIfXNCtL13QWGSyJYsb2f5JlqsESZ5DIKiMLmvzRK5+aw==}
+
+  '@tanstack/query-sync-storage-persister@5.52.2':
+    resolution: {integrity: sha512-mA3Rk9C283OiakZBgJqkdOlMAkD4T9kIp6PN9bGjXbd/eUx90hPgYT+mVchx1/XHr44rJDMX3cfqjf8rWKgHbg==}
+
+  '@tanstack/react-query-persist-client@5.52.2':
+    resolution: {integrity: sha512-iu2EqZZluJVpuBUhxulAZT+uVNlB9uYpzs8Jr53VbfqS7uDgRCzcO/XrQSEaW00MgNasx3wc0EVnMs95PpPkxw==}
+    peerDependencies:
+      '@tanstack/react-query': ^5.52.2
+      react: ^18 || ^19
 
   '@tanstack/react-query@5.52.2':
     resolution: {integrity: sha512-d4OwmobpP+6+SvuAxW1RzAY95Pv87Gu+0GjtErzFOUXo+n0FGcwxKvzhswCsXKxsgnAr3bU2eJ2u+GXQAutkCQ==}
@@ -10763,6 +10781,21 @@ snapshots:
 
   '@tanstack/query-core@5.52.2': {}
 
+  '@tanstack/query-persist-client-core@5.52.2':
+    dependencies:
+      '@tanstack/query-core': 5.52.2
+
+  '@tanstack/query-sync-storage-persister@5.52.2':
+    dependencies:
+      '@tanstack/query-core': 5.52.2
+      '@tanstack/query-persist-client-core': 5.52.2
+
+  '@tanstack/react-query-persist-client@5.52.2(@tanstack/react-query@5.52.2(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@tanstack/query-persist-client-core': 5.52.2
+      '@tanstack/react-query': 5.52.2(react@18.3.1)
+      react: 18.3.1
+
   '@tanstack/react-query@5.52.2(react@18.3.1)':
     dependencies:
       '@tanstack/query-core': 5.52.2
@@ -11360,7 +11393,7 @@ snapshots:
       '@babel/plugin-syntax-typescript': 7.25.4(@babel/core@7.25.2)
       '@vanilla-extract/babel-plugin-debug-ids': 1.0.6
       '@vanilla-extract/css': 1.15.5
-      esbuild: 0.17.6
+      esbuild: 0.18.20
       eval: 0.1.8
       find-up: 5.0.0
       javascript-stringify: 2.1.0
