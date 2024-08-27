@@ -54,7 +54,9 @@
   display: none !important;
 }
 .inline-xs,
-.block-xs {
+.inline-sm,
+.block-xs,
+.block-sm {
   display: none !important;
 }
 @media (max-width: 859px) {
@@ -65,6 +67,12 @@
 @media (max-width: 559px) {
   .hidden-sm {
     display: none !important;
+  }
+  .inline-sm {
+    display: inline !important;
+  }
+  .block-sm {
+    display: block !important;
   }
 }
 @media (max-width: 449px) {

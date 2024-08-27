@@ -23,7 +23,7 @@ features:
   - title: Electric Sync Engine
     details: >-
       <span class="para">
-        Sync little subsets of your Postgres data into
+        Sync subsets of your Postgres data into
         local&nbsp;apps and&nbsp;services.
       </span>
       <span class="feature-cta electric-star-count">

@@ -1,3 +1,3 @@
 ## Sync your Postgres data <span class="no-wrap">wherever you need it</span>
 
-Electric syncs [little subsets](/guides/shapes) of your Postgres data into local apps<span class="no-wrap-sm"><span class="hidden-xs">, services</span> and environments</span>. <span class="hidden-md"><span class="no-wrap-lg">So you can have the data you need</span>, <span class="no-wrap">in-sync</span>, <span class="no-wrap">wherever you need it</span>.</span>
+Electric syncs [little subsets](/guides/shapes) of your Postgres data into local apps<span class="no-wrap-sm"><span class="hidden-xs">, services</span> and environments</span>. <span class="hidden-sm"><span class="no-wrap-lg">So you can have the data you need</span>, <span class="no-wrap">in-sync</span>, <span class="no-wrap">wherever you need it</span>.</span>
