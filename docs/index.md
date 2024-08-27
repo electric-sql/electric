@@ -16,7 +16,7 @@ hero:
       link: /guides/quickstart
     - theme: alt
       text: >-
-        View on GitHub
+        Star on GitHub
       target: '_blank'
       link: https://github.com/electric-sql
 features:
@@ -104,32 +104,56 @@ const propositions = [
   {
     title: "Solves state transfer",
     details: `
-      Replace APIs, data fetching and network error handling
-      with automated data synchronisation.
+      <p>
+        Replace APIs, data fetching and network error handling
+        with automated data synchronisation.
+      </p>
+      <p class="benefits">
+        → Simplifies your code<br />
+        → No more loading spinners
+      </p>
     `,
     image: '/img/home/state-transfer-trans.png'
   },
   {
     title: "Solves cache invalidation",
     details: `
-      Replace ttls and expiry policies with realtime sync
-      and automated invalidation.
+      <p>
+        Replace ttls and expiry policies with realtime sync
+        and automated invalidation.
+      </p>
+      <p class="benefits">
+        → Simplifies your stack<br />
+        → No more stale data
+      </p>
     `,
     image: '/img/home/cache-invalidation-trans.png'
   },
   {
     title: "Solves scaling",
     details: `
-      Take the query workload off your database and the
-      compute workload off your cloud.
+      <p>
+        Take the query workload off your database and the
+        compute workload off your cloud.
+      </p>
+      <p class="benefits">
+        → Simplifies your infra<br />
+        → Reduces your cloud bill
+      </p>
     `,
     image: '/img/home/scalability-trans.png'
   },
   {
     title: "Solves availability",
     details: `
-      Take the network off the interaction path and build
-      systems that are resilient and work offline.
+      <p>
+        Take the network off the interaction path and build
+        systems that are resilient and work offline by design.
+      </p>
+      <p class="benefits">
+        → Simplifies your ops<br />
+        → Improves your sleep
+      </p>
     `,
     image: '/img/home/high-availability-trans.png'
   }
@@ -192,7 +216,7 @@ const handleTweetLoad = () => {
 onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {
     const githubLinks = document.querySelectorAll(
-      'a[href="https://github.com/electric-sql"]'
+      '.actions a[href="https://github.com/electric-sql"]'
     )
 
     let icon = document.querySelector('.actions .vpi-social-github')
@@ -239,7 +263,7 @@ onMounted(async () => {
     color: var(--vp-button-alt-text);
     background-color: var(--vp-button-alt-bg);
   }
-  .feature-cta a:hover, {
+  .feature-cta a:hover {
     border-color: var(--vp-button-alt-hover-border);
     color: var(--vp-button-alt-hover-text);
     background-color: var(--vp-button-alt-hover-bg)
@@ -269,7 +293,7 @@ onMounted(async () => {
 
   .action a .vpi-electric-icon,
   .feature-cta a .vpi-electric-icon {
-    --icon: url(./public/img/brand/icon.svg);
+    --icon: url(/img/brand/icon.svg);
   }
   .feature-cta a .count {
     margin-left: 0.25rem;
@@ -352,17 +376,17 @@ onMounted(async () => {
   }
   @media (min-width: 560px) {
     .home-propositions .proposition {
-      padding: 12px 24px;
+      padding: 14px 24px;
     }
   }
   @media (min-width: 760px) {
     .home-propositions .proposition {
-      padding: 12px 36px;
+      padding: 18px 36px;
     }
   }
   @media (min-width: 1024px) {
     .home-propositions .proposition {
-      padding: 12px 48px;
+      padding: 24px 48px;
     }
   }
 
@@ -392,7 +416,11 @@ onMounted(async () => {
     font-size: 15px;
     color: var(--vp-c-text-2);
   }
-  @media (max-width: 559px) {
+  .home-propositions .proposition-content .benefits {
+    margin-bottom: 6px;
+    color: var(--vp-c-text-1);
+  }
+  @media (max-width: 759px) {
     .home-propositions .proposition {
       flex-direction: column;
     }
@@ -415,6 +443,9 @@ onMounted(async () => {
     .home-propositions .proposition-content p {
       font-size: 14.5px;
     }
+    .home-propositions .proposition-content .benefits {
+      margin-bottom: 24px;
+    }
   }
   @media (max-width: 559px) {
     .home-propositions .proposition-content p {
@@ -422,13 +453,14 @@ onMounted(async () => {
     }
   }
 
+
   .home-cta {
     display: flex;
     justify-content: center;
     margin-top: -24px;
   }
 
-  .home-cta-actions {
+  .home-cta .actions {
     display: flex;
     gap: 12px;
     margin: 24px 0;
@@ -475,9 +507,7 @@ onMounted(async () => {
       <h3>
         {{ item.title }}
       </h3>
-      <p>
-        {{ item.details }}
-      </p>
+      <p v-html="item.details" />
     </div>
   </div>
 </div>
