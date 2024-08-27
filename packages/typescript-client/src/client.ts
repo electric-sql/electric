@@ -561,6 +561,7 @@ export class Shape {
   private handleError(e: Error): void {
     if (e instanceof FetchError) {
       this.error = e
+      this.notify()
     }
   }
 
