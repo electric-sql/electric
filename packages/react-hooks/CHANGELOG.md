@@ -1,5 +1,16 @@
 # @electric-sql/react
 
+## 0.3.0
+
+### Minor Changes
+
+- 914e768: Remove obsolete ShapesProvider.
+
+### Patch Changes
+
+- Updated dependencies [a6c7bed]
+  - @electric-sql/client@0.3.2
+
 ## 0.2.1
 
 ### Patch Changes

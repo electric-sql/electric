@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 0.3.2
+
+### Patch Changes
+
+- a6c7bed: Add `Message` type guard helpers `isChangeMessage` and `isControlMessage`.
+
 ## 0.3.1
 
 ### Patch Changes
