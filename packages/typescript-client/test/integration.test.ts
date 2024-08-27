@@ -3,8 +3,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
 import { assert, describe, expect, inject, vi } from 'vitest'
 import { Shape, ShapeStream } from '../src/client'
-import { Message, Offset } from '../src/types'
-import { isChangeMessage } from '../src'
+import { Message, Offset, Value } from '../src/types'
+import { isChangeMessage, isControlMessage } from '../src'
 import {
   IssueRow,
   testWithIssuesTable as it,
@@ -13,6 +13,9 @@ import {
 import * as h from './support/test-helpers'
 
 const BASE_URL = inject(`baseUrl`)
+
+const isUpToDateMessage = <T extends Value>(msg: Message<T>) =>
+  isControlMessage(msg) && msg.headers.control === `up-to-date`
 
 it(`sanity check`, async ({ dbClient, issuesTableSql }) => {
   const result = await dbClient.query(`SELECT * FROM ${issuesTableSql}`)
@@ -39,7 +42,7 @@ describe(`HTTP Sync`, () => {
           if (isChangeMessage(message)) {
             shapeData.set(message.key, message.value)
           }
-          if (message.headers?.[`control`] === `up-to-date`) {
+          if (isUpToDateMessage(message)) {
             aborter.abort()
             return resolve()
           }
@@ -78,7 +81,7 @@ describe(`HTTP Sync`, () => {
           if (isChangeMessage(message)) {
             shapeData.set(message.key, message.value)
           }
-          if (message.headers?.[`control`] === `up-to-date`) {
+          if (isUpToDateMessage(message)) {
             upToDateMessageCount += 1
           }
         })
@@ -152,7 +155,7 @@ describe(`HTTP Sync`, () => {
           if (isChangeMessage(message)) {
             shapeData.set(message.key, message.value)
           }
-          if (message.headers?.[`control`] === `up-to-date`) {
+          if (isUpToDateMessage(message)) {
             aborter.abort()
             return resolve()
           }
@@ -440,7 +443,7 @@ describe(`HTTP Sync`, () => {
       if (`offset` in msg) {
         expect(msg.offset).to.not.eq(`0_`)
         lastOffset = msg.offset
-      } else if (msg.headers?.[`control`] === `up-to-date`) {
+      } else if (isUpToDateMessage(msg)) {
         res()
       }
     })
@@ -468,7 +471,7 @@ describe(`HTTP Sync`, () => {
       shapeId: issueStream.shapeId,
     })
     await h.forEachMessage(newIssueStream, aborter, (res, msg, nth) => {
-      if (msg.headers?.[`control`] === `up-to-date`) {
+      if (isUpToDateMessage(msg)) {
         res()
       } else {
         catchupOpsCount = nth + 1
@@ -650,7 +653,7 @@ describe(`HTTP Sync`, () => {
       aborter,
       async (res, msg, nth) => {
         // shapeData.set(msg.key, msg.value)
-        if (msg.headers?.[`control`] === `up-to-date`) {
+        if (isUpToDateMessage(msg)) {
           upToDateReachedCount++
           if (upToDateReachedCount === 1) {
             // upon reaching up to date initially, we have one
