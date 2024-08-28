@@ -163,6 +163,7 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule Column do
+    @derive Jason.Encoder
     defstruct [:name, :type_oid]
 
     @type t() :: %__MODULE__{
@@ -172,6 +173,7 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule Relation do
+    @derive Jason.Encoder
     defstruct [:id, :schema, :table, :columns]
 
     @type t() :: %__MODULE__{

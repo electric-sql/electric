@@ -59,6 +59,7 @@ defmodule Electric.MixProject do
         {:cubdb, "~> 2.0.2"},
         {:dotenvy, "~> 0.8"},
         {:ecto, "~> 3.11"},
+        {:gen_stage, "~> 1.2"},
         {:jason, "~> 1.4"},
         {:nimble_options, "~> 1.1"},
         {:opentelemetry, "~> 1.4"},

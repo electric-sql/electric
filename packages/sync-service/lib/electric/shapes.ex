@@ -10,11 +10,14 @@ defmodule Electric.Shapes do
   """
   def get_snapshot(config, shape_id) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
-    storage = Access.fetch!(config, :storage)
-    server = Access.get(opts, :server, shape_cache)
+    storage = shape_storage(config, shape_id)
 
-    with :started <- shape_cache.await_snapshot_start(server, shape_id) do
-      {:ok, Storage.get_snapshot(shape_id, storage)}
+    if shape_cache.has_shape?(shape_id, opts) do
+      with :started <- shape_cache.await_snapshot_start(shape_id, opts) do
+        {:ok, Storage.get_snapshot(shape_id, storage)}
+      end
+    else
+      {:error, "invalid shape_id #{inspect(shape_id)}"}
     end
   end
 
@@ -22,11 +25,14 @@ defmodule Electric.Shapes do
   Get stream of the log since a given offset
   """
   def get_log_stream(config, shape_id, opts) do
+    {shape_cache, shape_cache_opts} = Access.get(config, :shape_cache, {ShapeCache, []})
     offset = Access.get(opts, :since, LogOffset.before_all())
     max_offset = Access.get(opts, :up_to, LogOffset.last())
-    storage = Access.fetch!(config, :storage)
+    storage = shape_storage(config, shape_id)
 
-    Storage.get_log_stream(shape_id, offset, max_offset, storage)
+    with true <- shape_cache.has_shape?(shape_id, shape_cache_opts) do
+      Storage.get_log_stream(shape_id, offset, max_offset, storage)
+    end
   end
 
   @doc """
@@ -45,8 +51,9 @@ defmodule Electric.Shapes do
   """
   @spec has_shape?(keyword(), Storage.shape_id()) :: boolean()
   def has_shape?(config, shape_id) do
-    storage = Access.fetch!(config, :storage)
-    Storage.has_shape?(shape_id, storage)
+    {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
+
+    shape_cache.has_shape?(shape_id, opts)
   end
 
   @doc """
@@ -55,20 +62,22 @@ defmodule Electric.Shapes do
   @spec clean_shape(Storage.shape_id(), keyword()) :: :ok
   def clean_shape(shape_id, opts \\ []) do
     {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
-    server = Access.get(opts, :server, shape_cache)
-    shape_cache.clean_shape(server, shape_id)
+    shape_cache.clean_shape(shape_id, opts)
     :ok
   end
 
   @spec clean_shapes([Storage.shape_id()], keyword()) :: :ok
   def clean_shapes(shape_ids, opts \\ []) do
     {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
-    server = Access.get(opts, :server, shape_cache)
 
     for shape_id <- shape_ids do
-      shape_cache.clean_shape(server, shape_id)
+      shape_cache.clean_shape(shape_id, opts)
     end
 
     :ok
+  end
+
+  defp shape_storage(config, shape_id) do
+    Storage.for_shape(shape_id, Access.fetch!(config, :storage))
   end
 end

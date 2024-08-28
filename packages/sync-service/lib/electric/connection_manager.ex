@@ -168,9 +168,15 @@ defmodule Electric.ConnectionManager do
   end
 
   defp start_connection_pool(connection_opts, pool_opts) do
-    # Disable the reconnection logic in DBConnection to force it to exit with the connection
-    # error.
-    Postgrex.start_link([backoff_type: :stop, max_restarts: 0] ++ pool_opts ++ connection_opts)
+    # Use default backoff strategy for connections to prevent pool from shutting down
+    # in the case of a connection error. Deleting a shape while its still generating
+    # its snapshot from the db can trigger this as the snapshot process and the storage
+    # process are both terminated when the shape is removed.
+    #
+    # See https://github.com/electric-sql/electric/issues/1554
+    Postgrex.start_link(
+      [backoff_type: :exp, max_restarts: 3, max_seconds: 5] ++ pool_opts ++ connection_opts
+    )
   end
 
   defp handle_connection_error(error, state) do

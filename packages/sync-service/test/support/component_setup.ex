@@ -21,8 +21,6 @@ defmodule Support.ComponentSetup do
         log_ets_table: :"log_ets_#{full_test_name(ctx)}"
       )
 
-    {:ok, _} = InMemoryStorage.start_link(storage_opts)
-
     %{storage: {InMemoryStorage, storage_opts}}
   end
 
@@ -37,9 +35,12 @@ defmodule Support.ComponentSetup do
         file_path: ctx.tmp_dir
       )
 
-    {:ok, _} = CubDbStorage.start_link(storage_opts)
-
     %{storage: {CubDbStorage, storage_opts}}
+  end
+
+  def with_persistent_kv(_ctx) do
+    kv = Electric.PersistentKV.Memory.new!()
+    %{persistent_kv: kv}
   end
 
   def with_shape_cache(ctx, additional_opts \\ []) do
@@ -51,7 +52,10 @@ defmodule Support.ComponentSetup do
         name: server,
         shape_meta_table: shape_meta_table,
         storage: ctx.storage,
-        db_pool: ctx.pool
+        db_pool: ctx.pool,
+        persistent_kv: ctx.persistent_kv,
+        registry: ctx.registry,
+        log_producer: ctx.shape_log_collector
       ]
       |> Keyword.merge(additional_opts)
       |> Keyword.put_new_lazy(:prepare_tables_fn, fn ->
@@ -73,18 +77,26 @@ defmodule Support.ComponentSetup do
     }
   end
 
+  def with_transaction_producer(ctx) do
+    name = :"transaction_producer_#{full_test_name(ctx)}"
+    {:ok, _pid} = Support.TransactionProducer.start_link(name: name)
+
+    %{
+      shape_log_collector: name,
+      transaction_producer: name
+    }
+  end
+
   def with_shape_log_collector(ctx) do
-    server = :"shape_log_collector #{full_test_name(ctx)}"
+    name = :"shape_log_collector_#{full_test_name(ctx)}"
 
     {:ok, _} =
       ShapeLogCollector.start_link(
-        name: server,
-        registry: ctx.registry,
-        shape_cache: {Electric.ShapeCache, ctx.shape_cache_opts},
+        name: name,
         inspector: ctx.inspector
       )
 
-    %{shape_log_collector: server}
+    %{shape_log_collector: name}
   end
 
   def with_replication_client(ctx) do
@@ -116,9 +128,10 @@ defmodule Support.ComponentSetup do
     [
       &with_registry/1,
       &with_inspector/1,
+      &with_persistent_kv/1,
       &with_cub_db_storage/1,
-      &with_shape_cache/1,
       &with_shape_log_collector/1,
+      &with_shape_cache/1,
       &with_replication_client/1
     ]
     |> Enum.reduce(ctx, &Map.merge(&2, apply(&1, [&2])))

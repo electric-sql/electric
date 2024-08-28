@@ -1,8 +1,8 @@
 defmodule Electric.ShapeCache.CubDbStorage do
   alias Electric.ConcurrentStream
   alias Electric.Replication.LogOffset
-  alias Electric.Replication.Changes.Relation
   alias Electric.Telemetry.OpenTelemetry
+
   @behaviour Electric.ShapeCache.Storage
 
   # If the storage format changes, increase `@version` to prevent
@@ -14,24 +14,35 @@ defmodule Electric.ShapeCache.CubDbStorage do
   @snapshot_offset LogOffset.first()
 
   def shared_opts(opts) do
-    file_path = Access.get(opts, :file_path, "./shapes")
-    db = Access.get(opts, :db, :shape_db)
+    base_path = Access.get(opts, :file_path, "./shapes")
 
-    {:ok, %{file_path: file_path, db: db, version: @version}}
+    {:ok, %{base_path: base_path, shape_id: nil, db: nil, version: @version}}
   end
 
-  def child_spec(opts) do
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [opts]},
-      type: :worker,
-      restart: :permanent
-    }
+  def for_shape(shape_id, %{shape_id: shape_id} = opts) do
+    opts
   end
 
-  def start_link(opts) do
-    File.mkdir_p(opts.file_path)
-    CubDB.start_link(data_dir: opts.file_path, name: opts.db)
+  def for_shape(shape_id, %{} = opts) do
+    %{opts | shape_id: shape_id, db: name(shape_id)}
+  end
+
+  def start_link(%{shape_id: shape_id, db: db} = opts) when is_binary(shape_id) do
+    with {:ok, path} <- initialise_filesystem(shape_id, opts) do
+      CubDB.start_link(data_dir: path, name: db)
+    end
+  end
+
+  defp name(shape_id) do
+    Electric.Application.process_name(__MODULE__, shape_id)
+  end
+
+  defp initialise_filesystem(shape_id, opts) do
+    path = Path.join(opts.base_path, shape_id)
+
+    with :ok <- File.mkdir_p(path) do
+      {:ok, path}
+    end
   end
 
   def initialise(opts) do
@@ -158,15 +169,6 @@ defmodule Electric.ShapeCache.CubDbStorage do
     :ok
   end
 
-  def store_relation(%Relation{id: id} = rel, opts) do
-    CubDB.put(opts.db, relation_key(id), rel)
-  end
-
-  def get_relations(opts) do
-    CubDB.select(opts.db, min_key: relations_start(), max_key: relations_end())
-    |> Stream.map(fn {_key, value} -> value end)
-  end
-
   def cleanup!(shape_id, opts) do
     [
       shape_key(shape_id),
@@ -193,15 +195,6 @@ defmodule Electric.ShapeCache.CubDbStorage do
   defp shape_key(shape_id) do
     {:shapes, shape_id}
   end
-
-  defp relation_key(relation_id) do
-    {:relations, relation_id}
-  end
-
-  defp relations_start, do: relation_key(0)
-  # Atoms are always bigger than numbers
-  # Thus this key is bigger than any possible relation key
-  defp relations_end, do: relation_key(:max)
 
   def xmin_key(shape_id) do
     {:snapshot_xmin, shape_id}
