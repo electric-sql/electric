@@ -411,5 +411,214 @@ defmodule Electric.Plug.RouterTest do
 
       assert [_] = Jason.decode!(conn.resp_body)
     end
+
+    @tag additional_fields: "num INTEGER NOT NULL"
+    @tag with_sql: [
+           "INSERT INTO serial_ids (id, num) VALUES (1, 1), (2, 10)"
+         ]
+    test "GET returns correct INSERT and DELETE operations that have been converted from UPDATEs",
+         %{opts: opts, db_conn: db_conn} do
+      where = "num > 5"
+
+      # Verify that a single row is in-shape initially.
+      conn =
+        conn("GET", "/v1/shape/serial_ids", %{offset: "-1", where: where})
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      shape_id = get_resp_shape_id(conn)
+
+      assert [op, %{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
+
+      assert op == %{
+               "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
+               "key" => ~s|"public"."serial_ids"/"2"|,
+               "offset" => "0_0",
+               "value" => %{"id" => "2", "num" => "10"}
+             }
+
+      # Insert more rows and verify their delivery to a live shape subscriber.
+      Postgrex.query!(db_conn, "INSERT INTO serial_ids(id, num) VALUES (3, 8), (4, 9)", [])
+
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape/serial_ids", %{
+            offset: "0_0",
+            shape_id: shape_id,
+            where: where,
+            live: true
+          })
+          |> Router.call(opts)
+        end)
+
+      assert %{status: 200} = conn = Task.await(task)
+      new_offset = get_resp_last_offset(conn)
+
+      assert [op1, op2, %{"headers" => %{"control" => "up-to-date"}}] =
+               Jason.decode!(conn.resp_body)
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
+                 "key" => ~s|"public"."serial_ids"/"3"|,
+                 "value" => %{"id" => "3", "num" => "8"}
+               },
+               %{
+                 "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
+                 "key" => ~s|"public"."serial_ids"/"4"|,
+                 "value" => %{"id" => "4", "num" => "9"}
+               }
+             ] = [op1, op2]
+
+      # Simulate a move-in and a move-out and verify their correct delivery as INSERT and
+      # DELETE operations, respectively.
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape/serial_ids", %{
+            offset: new_offset,
+            shape_id: shape_id,
+            where: where,
+            live: true
+          })
+          |> Router.call(opts)
+        end)
+
+      Postgrex.transaction(db_conn, fn conn ->
+        Postgrex.query!(conn, "UPDATE serial_ids SET num = 6 WHERE id = 1", [])
+        Postgrex.query!(conn, "UPDATE serial_ids SET num = 5 WHERE id = 3", [])
+      end)
+
+      assert %{status: 200} = conn = Task.await(task)
+
+      assert [op1, op2, %{"headers" => %{"control" => "up-to-date"}}] =
+               Jason.decode!(conn.resp_body)
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
+                 "key" => ~s|"public"."serial_ids"/"1"|,
+                 "value" => %{"id" => "1", "num" => "6"},
+                 "offset" => op1_offset
+               },
+               %{
+                 "headers" => %{"operation" => "delete", "relation" => ["public", "serial_ids"]},
+                 "key" => ~s|"public"."serial_ids"/"3"|,
+                 "value" => %{"id" => "3"},
+                 "offset" => op2_offset
+               }
+             ] = [op1, op2]
+
+      last_offset = get_resp_last_offset(conn)
+
+      # Verify that both ops share the same tx offset and differ in their op offset by a known
+      # amount.
+      [op1_log_offset, op2_log_offset, last_log_offset] =
+        Enum.map([op1_offset, op2_offset, last_offset], fn offset ->
+          {:ok, log_offset} = LogOffset.from_string(offset)
+          log_offset
+        end)
+
+      assert op2_log_offset == last_log_offset
+
+      # An UPDATE op always increments the log offset by two to accommodate a possible split
+      # into two operations when the PK changes. Hence the distance of 2 between op1 and op2.
+      assert op2_log_offset == LogOffset.increment(op1_log_offset, 2)
+    end
+
+    @tag additional_fields: "num INTEGER NOT NULL"
+    @tag with_sql: [
+           "INSERT INTO serial_ids (id, num) VALUES (1, 1), (2, 2), (10, 10), (20, 20)"
+         ]
+    test "GET returns correct INSERT and DELETE operations that have been converted from UPDATEs of PK columns",
+         %{opts: opts, db_conn: db_conn} do
+      where = "id < 10"
+
+      # Verify that a two rows are in-shape initially.
+      conn =
+        conn("GET", "/v1/shape/serial_ids", %{offset: "-1", where: where})
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      shape_id = get_resp_shape_id(conn)
+
+      assert [op1, op2, %{"headers" => %{"control" => "up-to-date"}}] =
+               Jason.decode!(conn.resp_body)
+
+      assert [op1, op2] == [
+               %{
+                 "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
+                 "key" => ~s|"public"."serial_ids"/"1"|,
+                 "offset" => "0_0",
+                 "value" => %{"id" => "1", "num" => "1"}
+               },
+               %{
+                 "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
+                 "key" => ~s|"public"."serial_ids"/"2"|,
+                 "offset" => "0_0",
+                 "value" => %{"id" => "2", "num" => "2"}
+               }
+             ]
+
+      # Simulate a move-in and a move-out by changing the PK of some rows.
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape/serial_ids", %{
+            offset: "0_0",
+            shape_id: shape_id,
+            where: where,
+            live: true
+          })
+          |> Router.call(opts)
+        end)
+
+      Postgrex.transaction(db_conn, fn conn ->
+        Postgrex.query!(conn, "UPDATE serial_ids SET id = 3 WHERE id = 20", [])
+        Postgrex.query!(conn, "UPDATE serial_ids SET id = 11 WHERE id = 2", [])
+      end)
+
+      assert %{status: 200} = conn = Task.await(task)
+
+      assert [op1, op2, %{"headers" => %{"control" => "up-to-date"}}] =
+               Jason.decode!(conn.resp_body)
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
+                 "key" => ~s|"public"."serial_ids"/"3"|,
+                 "value" => %{"id" => "3", "num" => "20"},
+                 "offset" => op1_offset
+               },
+               %{
+                 "headers" => %{"operation" => "delete", "relation" => ["public", "serial_ids"]},
+                 "key" => ~s|"public"."serial_ids"/"2"|,
+                 "value" => %{"id" => "2"},
+                 "offset" => op2_offset
+               }
+             ] = [op1, op2]
+
+      last_offset = get_resp_last_offset(conn)
+
+      # Verify that both ops share the same tx offset and differ in their op offset by a known
+      # amount.
+      [op1_log_offset, op2_log_offset, last_log_offset] =
+        Enum.map([op1_offset, op2_offset, last_offset], fn offset ->
+          {:ok, log_offset} = LogOffset.from_string(offset)
+          log_offset
+        end)
+
+      assert op2_log_offset == last_log_offset
+
+      # An UPDATE op always increments the log offset by two to accommodate a possible split
+      # into two operations when the PK changes. Hence the distance of 2 between op1 and op2.
+      assert op2_log_offset == LogOffset.increment(op1_log_offset, 2)
+    end
+  end
+
+  defp get_resp_shape_id(conn), do: get_resp_header(conn, "x-electric-shape-id")
+  defp get_resp_last_offset(conn), do: get_resp_header(conn, "x-electric-chunk-last-offset")
+
+  defp get_resp_header(conn, header) do
+    assert [val] = Plug.Conn.get_resp_header(conn, header)
+    val
   end
 end

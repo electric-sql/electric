@@ -140,9 +140,15 @@ defmodule Electric.Replication.LogOffset do
 
       iex> compare(new(10, 5) |> increment, new(10, 5))
       :gt
+
+      iex> increment(new(10, 5), 5)
+      %LogOffset{tx_offset: 10, op_offset: 10}
+
+      iex> compare(new(10, 1) |> increment(4), new(10, 5))
+      :eq
   """
-  def increment(%LogOffset{tx_offset: tx_offset, op_offset: op_offset}) do
-    %LogOffset{tx_offset: tx_offset, op_offset: op_offset + 1}
+  def increment(%LogOffset{op_offset: op_offset} = log_offset, increment \\ 1) do
+    %LogOffset{log_offset | op_offset: op_offset + increment}
   end
 
   @doc """
