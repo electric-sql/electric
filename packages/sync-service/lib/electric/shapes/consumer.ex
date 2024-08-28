@@ -37,6 +37,13 @@ defmodule Electric.Shapes.Consumer do
     GenStage.call(name(shape_id), {:monitor, pid})
   end
 
+  @spec whereis(ShapeCache.shape_id()) :: pid() | nil
+  def whereis(shape_id) do
+    shape_id
+    |> name()
+    |> GenServer.whereis()
+  end
+
   def start_link(config) when is_map(config) do
     GenStage.start_link(__MODULE__, config, name: name(config))
   end
@@ -66,10 +73,15 @@ defmodule Electric.Shapes.Consumer do
         snapshot_xmin: snapshot_xmin,
         log_state: @initial_log_state,
         buffer: [],
-        monitors: []
+        monitors: [],
+        producer: nil
       })
 
-    {:consumer, state, subscribe_to: [{producer, selector: &is_struct(&1, Changes.Transaction)}]}
+    {:consumer, state, subscribe_to: [{producer, []}]}
+  end
+
+  def handle_subscribe(:producer, _options, from, state) do
+    {:manual, ask(%{state | producer: from})}
   end
 
   def handle_call(:initial_state, _from, %{snapshot_xmin: xmin, latest_offset: offset} = state) do
@@ -113,6 +125,12 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, [], %{state | buffer: buffer ++ txns}}
   end
 
+  # Want to be careful with this case as we don't want to ask for more
+  # transactions unless we got one.
+  def handle_events([], _from, state) do
+    {:noreply, [], state}
+  end
+
   def handle_events(txns, _from, state) do
     handle_txns(txns, state)
   end
@@ -123,7 +141,7 @@ defmodule Electric.Shapes.Consumer do
         {:stop, {:shutdown, :truncate}, state}
 
       state ->
-        {:noreply, [], state}
+        {:noreply, [], ask(state)}
     end
   end
 

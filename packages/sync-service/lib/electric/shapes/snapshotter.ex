@@ -29,9 +29,7 @@ defmodule Electric.Shapes.Snapshotter do
   def handle_continue(:start_snapshot, state) do
     %{shape_id: shape_id, shape: shape} = state
 
-    consumer = Shapes.Consumer.name(shape_id)
-
-    case GenServer.whereis(consumer) do
+    case Shapes.Consumer.whereis(shape_id) do
       parent when is_pid(parent) ->
         if not Storage.snapshot_started?(state.shape_id, state.storage) do
           %{

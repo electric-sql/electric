@@ -23,10 +23,11 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback clean_shape(shape_id(), keyword()) :: :ok
   @callback has_shape?(shape_id(), keyword()) :: boolean()
   @callback cast(term(), keyword()) :: :ok
+  @callback handle_relation_msg(Changes.Relation.t(), keyword()) :: :ok
 end
 
 defmodule Electric.ShapeCache do
-  use GenStage
+  use GenServer
 
   alias Electric.Replication.Changes
   alias Electric.ShapeCache.ShapeStatus
@@ -76,14 +77,14 @@ defmodule Electric.ShapeCache do
 
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
-      GenStage.start_link(__MODULE__, Map.new(opts), name: opts[:name])
+      GenServer.start_link(__MODULE__, Map.new(opts), name: opts[:name])
     end
   end
 
   @impl Electric.ShapeCacheBehaviour
   def cast(message, opts) do
     server = Access.get(opts, :server, __MODULE__)
-    GenStage.cast(server, message)
+    GenServer.cast(server, message)
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -96,7 +97,7 @@ defmodule Electric.ShapeCache do
       shape_state
     else
       server = Access.get(opts, :server, __MODULE__)
-      GenStage.call(server, {:create_or_wait_shape_id, shape})
+      GenServer.call(server, {:create_or_wait_shape_id, shape})
     end
   end
 
@@ -134,14 +135,14 @@ defmodule Electric.ShapeCache do
   @spec clean_shape(shape_id(), keyword()) :: :ok
   def clean_shape(shape_id, opts) do
     server = Access.get(opts, :server, __MODULE__)
-    GenStage.call(server, {:clean, shape_id})
+    GenServer.call(server, {:clean, shape_id})
   end
 
   @impl Electric.ShapeCacheBehaviour
   @spec handle_truncate(shape_id(), keyword()) :: :ok
   def handle_truncate(shape_id, opts \\ []) do
     server = Access.get(opts, :server, __MODULE__)
-    GenStage.call(server, {:truncate, shape_id})
+    GenServer.call(server, {:truncate, shape_id})
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -154,7 +155,7 @@ defmodule Electric.ShapeCache do
       :started
     else
       server = Access.get(opts, :server, __MODULE__)
-      GenStage.call(server, {:await_snapshot_start, shape_id})
+      GenServer.call(server, {:await_snapshot_start, shape_id})
     end
   end
 
@@ -167,11 +168,17 @@ defmodule Electric.ShapeCache do
       true
     else
       server = Access.get(opts, :server, __MODULE__)
-      GenStage.call(server, {:wait_shape_id, shape_id})
+      GenServer.call(server, {:wait_shape_id, shape_id})
     end
   end
 
-  @impl GenStage
+  @impl Electric.ShapeCacheBehaviour
+  def handle_relation_msg(%Changes.Relation{} = rel, opts) do
+    server = Access.get(opts, :server, __MODULE__)
+    GenServer.call(server, {:relation_msg, rel})
+  end
+
+  @impl GenServer
   def init(opts) do
     {:ok, persistent_state} =
       opts.shape_status.initialise(
@@ -199,71 +206,58 @@ defmodule Electric.ShapeCache do
 
     recover_shapes(state)
 
-    {:consumer, state,
-     subscribe_to: [{opts.log_producer, selector: &is_struct(&1, Changes.Relation)}]}
+    {:ok, state, {:continue, :start_log_producer}}
   end
 
-  @impl GenStage
-  def handle_events(relations, _from, state) do
+  @impl GenServer
+  def handle_continue(:start_log_producer, state) do
+    :ok = GenStage.demand(state.log_producer, :forward)
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_call({:relation_msg, relation}, _from, state) do
     %{persistent_state: persistent_state, shape_status: shape_status} = state
     # NOTE: [@magnetised] this manages cleaning up shapes after a relation
     # change. it's not doing it in a consistent way, as the shape consumers
     # could still be receiving txns after a relation message that requires them
     # to terminate.
-    #
-    # if we decide this is a problem, then a potential solution is to pass the
-    # relation messages to the shape consumers (who currently filter them out)
-    # and have a relation message act as a block on the shape.
-    #
-    # 1. the shape consumer receives a relation message, stores it as some
-    #    block value then starts buffering data.
-    # 2. this process receives the same relation message, kills any shapes that
-    #    are affected then sends some `{:resume, %Relation{}}` message to all
-    #    living shape consumers.
-    # 3. shape consumers blocked on the relation then continue.
-    #
-    # If the shape consumer receives the `resume` message before the relation
-    # message then it adds the `%Relation{}` to some set of allowable
-    # relations, then when it receives the relation message through the
-    # replication stream, it knows that it can just continue.
 
-    Enum.each(relations, fn relation ->
-      old_rel = shape_status.get_relation(persistent_state, relation.id)
+    old_rel = shape_status.get_relation(persistent_state, relation.id)
 
-      if is_nil(old_rel) || old_rel != relation do
-        :ok = shape_status.store_relation(persistent_state, relation)
-      end
+    if is_nil(old_rel) || old_rel != relation do
+      :ok = shape_status.store_relation(persistent_state, relation)
+    end
 
-      if !is_nil(old_rel) && old_rel != relation do
-        Logger.info("Schema for the table #{old_rel.schema}.#{old_rel.table} changed")
+    if !is_nil(old_rel) && old_rel != relation do
+      Logger.info("Schema for the table #{old_rel.schema}.#{old_rel.table} changed")
 
-        change = %Changes.RelationChange{old_relation: old_rel, new_relation: relation}
+      change = %Changes.RelationChange{old_relation: old_rel, new_relation: relation}
 
-        # Fetch all shapes that are affected by the relation change and clean them up
-        persistent_state
-        |> shape_status.list_shapes()
-        |> Enum.filter(&Shape.is_affected_by_relation_change?(&1, change))
-        |> Enum.map(&elem(&1, 0))
-        |> Enum.each(fn shape_id -> clean_up_shape(state, shape_id) end)
-      end
+      # Fetch all shapes that are affected by the relation change and clean them up
+      persistent_state
+      |> shape_status.list_shapes()
+      |> Enum.filter(&Shape.is_affected_by_relation_change?(&1, change))
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.each(fn shape_id -> clean_up_shape(state, shape_id) end)
+    end
 
-      if old_rel != relation do
-        # Clean column information from ETS
-        # also when old_rel is nil because column info
-        # may already be loaded into ETS by the initial shape request
-        {inspector, inspector_opts} = state.inspector
-        # if the old relation exists we use that one
-        # because the table name may have changed in the new relation
-        # if there is no old relation, we use the new one
-        rel = old_rel || relation
-        inspector.clean_column_info({rel.schema, rel.table}, inspector_opts)
-      end
-    end)
+    if old_rel != relation do
+      # Clean column information from ETS
+      # also when old_rel is nil because column info
+      # may already be loaded into ETS by the initial shape request
+      {inspector, inspector_opts} = state.inspector
+      # if the old relation exists we use that one
+      # because the table name may have changed in the new relation
+      # if there is no old relation, we use the new one
+      rel = old_rel || relation
+      inspector.clean_column_info({rel.schema, rel.table}, inspector_opts)
+    end
 
-    {:noreply, [], state}
+    {:reply, :ok, state}
   end
 
-  @impl GenStage
+  @impl GenServer
   def handle_call({:create_or_wait_shape_id, shape}, _from, %{shape_status: shape_status} = state) do
     {{shape_id, latest_offset}, state} =
       if shape_state = shape_status.existing_shape(state.persistent_state, shape) do
@@ -271,19 +265,19 @@ defmodule Electric.ShapeCache do
       else
         {:ok, shape_id} = shape_status.add_shape(state.persistent_state, shape)
 
-        {:ok, _snapshot_xmin, latest_offset} = start_shape(shape_id, shape, state)
+        {:ok, _pid, _snapshot_xmin, latest_offset} = start_shape(shape_id, shape, state)
         {{shape_id, latest_offset}, state}
       end
 
     Logger.debug("Returning shape id #{shape_id} for shape #{inspect(shape)}")
 
-    {:reply, {shape_id, latest_offset}, [], state}
+    {:reply, {shape_id, latest_offset}, state}
   end
 
   def handle_call({:await_snapshot_start, shape_id}, from, %{shape_status: shape_status} = state) do
     cond do
       not is_known_shape_id?(state, shape_id) ->
-        {:reply, {:error, :unknown}, [], state}
+        {:reply, {:error, :unknown}, state}
 
       shape_status.snapshot_xmin?(state.persistent_state, shape_id) ->
         {:reply, :started, [], state}
@@ -291,12 +285,12 @@ defmodule Electric.ShapeCache do
       true ->
         Logger.debug("Starting a wait on the snapshot #{shape_id} for #{inspect(from)}}")
 
-        {:noreply, [], add_waiter(state, shape_id, from)}
+        {:noreply, add_waiter(state, shape_id, from)}
     end
   end
 
   def handle_call({:wait_shape_id, shape_id}, _from, %{shape_status: shape_status} = state) do
-    {:reply, !is_nil(shape_status.existing_shape(state.persistent_state, shape_id)), [], state}
+    {:reply, !is_nil(shape_status.existing_shape(state.persistent_state, shape_id)), state}
   end
 
   def handle_call({:truncate, shape_id}, _from, state) do
@@ -306,7 +300,7 @@ defmodule Electric.ShapeCache do
       )
     end
 
-    {:reply, :ok, [], state}
+    {:reply, :ok, state}
   end
 
   def handle_call({:clean, shape_id}, _from, state) do
@@ -315,10 +309,10 @@ defmodule Electric.ShapeCache do
       Logger.info("Cleaning up shape #{shape_id}, definition: #{inspect(cleaned_up_shape)}")
     end
 
-    {:reply, :ok, [], state}
+    {:reply, :ok, state}
   end
 
-  @impl GenStage
+  @impl GenServer
   def handle_cast({:snapshot_xmin_known, shape_id, xmin}, %{shape_status: shape_status} = state) do
     unless shape_status.set_snapshot_xmin(state.persistent_state, shape_id, xmin) do
       Logger.warning(
@@ -326,14 +320,14 @@ defmodule Electric.ShapeCache do
       )
     end
 
-    {:noreply, [], state}
+    {:noreply, state}
   end
 
   def handle_cast({:snapshot_started, shape_id}, state) do
     Logger.debug("Snapshot for #{shape_id} is ready")
     {waiting, state} = pop_in(state, [:awaiting_snapshot_start, shape_id])
-    for client <- List.wrap(waiting), not is_nil(client), do: GenStage.reply(client, :started)
-    {:noreply, [], state}
+    for client <- List.wrap(waiting), not is_nil(client), do: GenServer.reply(client, :started)
+    {:noreply, state}
   end
 
   def handle_cast({:snapshot_failed, shape_id, error, stacktrace}, state) do
@@ -346,10 +340,10 @@ defmodule Electric.ShapeCache do
 
     # waiting may nil here if :snapshot_failed happens after :snapshot_started
     if waiting do
-      for client <- waiting, not is_nil(client), do: GenStage.reply(client, {:error, error})
+      for client <- waiting, not is_nil(client), do: GenServer.reply(client, {:error, error})
     end
 
-    {:noreply, [], state}
+    {:noreply, state}
   end
 
   defp clean_up_shape(state, shape_id) do
@@ -376,7 +370,7 @@ defmodule Electric.ShapeCache do
     state.persistent_state
     |> state.shape_status.list_shapes()
     |> Enum.each(fn {shape_id, shape} ->
-      {:ok, _snapshot_xmin, _latest_offset} = start_shape(shape_id, shape, state)
+      {:ok, _pid, _snapshot_xmin, _latest_offset} = start_shape(shape_id, shape, state)
     end)
   end
 
@@ -408,7 +402,7 @@ defmodule Electric.ShapeCache do
           latest_offset
         )
 
-      {:ok, snapshot_xmin, latest_offset}
+      {:ok, pid, snapshot_xmin, latest_offset}
     end
   end
 end

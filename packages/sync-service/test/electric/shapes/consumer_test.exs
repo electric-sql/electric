@@ -14,6 +14,10 @@ defmodule Electric.Shapes.ConsumerTest do
   alias Support.Mock
   alias Support.StubInspector
 
+  import Support.ComponentSetup
+  import Support.DbSetup
+  import Support.DbStructureSetup
+
   import Mox
 
   @shape_id1 "#{__MODULE__}-shape1"
@@ -46,12 +50,6 @@ defmodule Electric.Shapes.ConsumerTest do
   setup :set_mox_from_context
   setup :verify_on_exit!
 
-  setup(ctx) do
-    shapes = Map.get(ctx, :shapes, %{@shape_id1 => @shape1, @shape_id2 => @shape2})
-    shape_position = Map.get(ctx, :shape_position, @shape_position)
-    [shape_position: shape_position, shapes: shapes]
-  end
-
   defp shape_status(shape_id, ctx) do
     get_in(ctx, [:shape_position, shape_id]) || raise "invalid shape_id #{shape_id}"
   end
@@ -74,6 +72,12 @@ defmodule Electric.Shapes.ConsumerTest do
   defp prepare_tables_fn(_pool, _affected_tables), do: :ok
 
   describe "transaction handling" do
+    setup(ctx) do
+      shapes = Map.get(ctx, :shapes, %{@shape_id1 => @shape1, @shape_id2 => @shape2})
+      shape_position = Map.get(ctx, :shape_position, @shape_position)
+      [shape_position: shape_position, shapes: shapes]
+    end
+
     setup(ctx) do
       registry_name = Module.concat(__MODULE__, Registry)
       start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
@@ -99,7 +103,7 @@ defmodule Electric.Shapes.ConsumerTest do
           end)
 
           allow(Mock.Storage, self(), fn ->
-            Shapes.Consumer.name(shape_id) |> GenServer.whereis()
+            Shapes.Consumer.whereis(shape_id)
           end)
 
           allow(Mock.Storage, self(), fn ->
@@ -697,12 +701,9 @@ defmodule Electric.Shapes.ConsumerTest do
       assert {shape_id2, _} =
                Electric.ShapeCache.get_or_create_shape_id(shape2, shape_cache_opts)
 
-      assert :started =
-               Electric.ShapeCache.await_snapshot_start(shape_id1, shape_cache_opts)
-
+      assert :started = Electric.ShapeCache.await_snapshot_start(shape_id1, shape_cache_opts)
       assert :started = Electric.ShapeCache.await_snapshot_start(shape_id2, shape_cache_opts)
 
-      dbg(insert: 1)
       insert_item(conn, "value 1")
 
       assert_receive {CrashingStorage, :append_to_log, ^shape_id1, xid1}
@@ -710,7 +711,6 @@ defmodule Electric.Shapes.ConsumerTest do
 
       :ok = CrashingStorageBackend.crash_once(pid, shape_id2)
 
-      dbg(insert: 2)
       insert_item(conn, "value 2")
 
       assert_receive {CrashingStorage, :append_to_log, ^shape_id1, xid2}

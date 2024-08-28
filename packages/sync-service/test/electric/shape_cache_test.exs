@@ -677,7 +677,7 @@ defmodule Electric.ShapeCacheTest do
       assert Storage.snapshot_started?(shape_id, storage)
       assert Enum.count(Storage.get_log_stream(shape_id, @zero_offset, storage)) == 1
 
-      ref = shape_id |> Shapes.Consumer.name() |> GenServer.whereis() |> Process.monitor()
+      ref = shape_id |> Shapes.Consumer.whereis() |> Process.monitor()
 
       log = capture_log(fn -> ShapeCache.handle_truncate(shape_id, opts) end)
       assert log =~ "Truncating and rotating shape id"
@@ -833,7 +833,7 @@ defmodule Electric.ShapeCacheTest do
       # delays in actually writing the data to cubdb/fsyncing the tx. I've
       # tried explicit `CubDb.file_sync/1` calls but it doesn't work, the only
       # reliable method is to wait just a little bit...
-      Process.sleep(5)
+      Process.sleep(10)
 
       restart_shape_cache(context)
 
@@ -841,7 +841,9 @@ defmodule Electric.ShapeCacheTest do
       assert {^shape_id, ^offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
     end
 
-    test "restores relations", %{shape_cache_opts: opts} = context do
+    test "restores relations", context do
+      %{shape_cache: {shape_cache, opts}} = context
+
       rel = %Relation{
         id: 42,
         schema: "public",
@@ -852,8 +854,7 @@ defmodule Electric.ShapeCacheTest do
         ]
       }
 
-      assert :ok = Support.TransactionProducer.emit(context.transaction_producer, [rel])
-      assert {:ok, ^rel} = wait_for_relation(context, rel.id)
+      assert :ok = shape_cache.handle_relation_msg(rel, opts)
 
       assert_receive {Electric.PersistentKV.Memory, {:set, _, _}}
       restart_shape_cache(context)
@@ -878,9 +879,22 @@ defmodule Electric.ShapeCacheTest do
       )
     end
 
-    defp stop_shape_cache(%{storage: {_, _}, shape_cache_opts: shape_cache_opts}) do
-      stop_processes([shape_cache_opts[:server]])
-      Shapes.ConsumerSupervisor.stop_all_consumers()
+    defp stop_shape_cache(ctx) do
+      %{shape_cache: {shape_cache, shape_cache_opts}} = ctx
+
+      consumers =
+        for {shape_id, _} <- shape_cache.list_active_shapes(shape_cache_opts) do
+          pid = Shapes.Consumer.whereis(shape_id)
+          {pid, Process.monitor(pid)}
+        end
+
+      Shapes.ConsumerSupervisor.stop_all_consumers(ctx.consumer_supervisor)
+
+      for {pid, ref} <- consumers do
+        assert_receive {:DOWN, ^ref, :process, ^pid, _}
+      end
+
+      stop_processes([shape_cache_opts[:server], ctx.consumer_supervisor])
     end
 
     defp stop_processes(process_names) do
@@ -929,7 +943,7 @@ defmodule Electric.ShapeCacheTest do
     end
 
     defp monitor_consumer(shape_id) do
-      shape_id |> Shapes.Consumer.name() |> GenServer.whereis() |> Process.monitor()
+      shape_id |> Shapes.Consumer.whereis() |> Process.monitor()
     end
 
     defp start_shapes({shape_cache, opts}) do
@@ -969,6 +983,8 @@ defmodule Electric.ShapeCacheTest do
     end
 
     test "stores relation if it is not known", ctx do
+      %{shape_cache: {shape_cache, opts}} = ctx
+
       relation_id = "rel1"
 
       rel = %Relation{
@@ -978,7 +994,7 @@ defmodule Electric.ShapeCacheTest do
         columns: []
       }
 
-      assert :ok = Support.TransactionProducer.emit(ctx.transaction_producer, [rel])
+      assert :ok = shape_cache.handle_relation_msg(rel, opts)
 
       assert {:ok, ^rel} = wait_for_relation(ctx, relation_id)
     end
@@ -1004,14 +1020,14 @@ defmodule Electric.ShapeCacheTest do
         columns: []
       }
 
-      assert :ok = Support.TransactionProducer.emit(ctx.transaction_producer, [rel])
-
-      assert {:ok, ^rel} = wait_for_relation(ctx, relation_id)
+      assert :ok = shape_cache.handle_relation_msg(rel, opts)
 
       refute_receive {:DOWN, ^ref, :process, _, _}
     end
 
     test "cleans shapes affected by table renaming and logs a warning", ctx do
+      %{shape_cache: {shape_cache, opts}} = ctx
+
       relation_id = "rel1"
 
       [
@@ -1034,13 +1050,11 @@ defmodule Electric.ShapeCacheTest do
         columns: []
       }
 
-      assert :ok = Support.TransactionProducer.emit(ctx.transaction_producer, [old_rel])
-
-      assert {:ok, ^old_rel} = wait_for_relation(ctx, relation_id)
+      assert :ok = shape_cache.handle_relation_msg(old_rel, opts)
 
       log =
         capture_log(fn ->
-          assert :ok = Support.TransactionProducer.emit(ctx.transaction_producer, [new_rel])
+          assert :ok = shape_cache.handle_relation_msg(new_rel, opts)
           assert_receive {:DOWN, ^ref1, :process, _, _}
           assert_receive {:DOWN, ^ref2, :process, _, _}
           refute_receive {:DOWN, ^ref3, :process, _, _}
@@ -1050,6 +1064,8 @@ defmodule Electric.ShapeCacheTest do
     end
 
     test "cleans shapes affected by a relation change", ctx do
+      %{shape_cache: {shape_cache, opts}} = ctx
+
       relation_id = "rel1"
 
       [
@@ -1072,13 +1088,11 @@ defmodule Electric.ShapeCacheTest do
         columns: [%Column{name: "id", type_oid: 123}]
       }
 
-      assert :ok = Support.TransactionProducer.emit(ctx.transaction_producer, [old_rel])
-
-      assert {:ok, ^old_rel} = wait_for_relation(ctx, relation_id)
+      assert :ok = shape_cache.handle_relation_msg(old_rel, opts)
 
       log =
         capture_log(fn ->
-          assert :ok = Support.TransactionProducer.emit(ctx.transaction_producer, [new_rel])
+          assert :ok = shape_cache.handle_relation_msg(new_rel, opts)
           assert_receive {:DOWN, ^ref1, :process, _, _}
           assert_receive {:DOWN, ^ref2, :process, _, _}
           refute_receive {:DOWN, ^ref3, :process, _, _}

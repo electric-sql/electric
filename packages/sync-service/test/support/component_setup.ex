@@ -80,7 +80,8 @@ defmodule Support.ComponentSetup do
 
     %{
       shape_cache_opts: shape_cache_opts,
-      shape_cache: {ShapeCache, shape_cache_opts}
+      shape_cache: {ShapeCache, shape_cache_opts},
+      consumer_supervisor: consumer_supervisor
     }
   end
 
@@ -106,15 +107,14 @@ defmodule Support.ComponentSetup do
     %{shape_log_collector: name}
   end
 
-  def with_replication_client(ctx) do
+  def with_replication_client(%{shape_cache: {shape_cache, shape_cache_opts}} = ctx) do
     replication_opts = [
       publication_name: ctx.publication_name,
       try_creating_publication?: true,
       slot_name: ctx.slot_name,
       transaction_received:
         {Electric.Replication.ShapeLogCollector, :store_transaction, [ctx.shape_log_collector]},
-      relation_received:
-        {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [ctx.shape_log_collector]}
+      relation_received: {shape_cache, :handle_relation_msg, [shape_cache_opts]}
     ]
 
     {:ok, pid} = ReplicationClient.start_link(ctx.db_config, replication_opts)
@@ -131,16 +131,16 @@ defmodule Support.ComponentSetup do
     %{inspector: {EtsInspector, pg_info_table: pg_info_table, server: server}}
   end
 
-  def with_complete_stack(ctx) do
+  def with_complete_stack(ctx, opts \\ []) do
     [
-      &with_registry/1,
-      &with_inspector/1,
-      &with_persistent_kv/1,
-      &with_log_chunking/1,
-      &with_cub_db_storage/1,
-      &with_shape_log_collector/1,
-      &with_shape_cache/1,
-      &with_replication_client/1
+      Keyword.get(opts, :registry, &with_registry/1),
+      Keyword.get(opts, :inspector, &with_inspector/1),
+      Keyword.get(opts, :persistent_kv, &with_persistent_kv/1),
+      Keyword.get(opts, :log_chunking, &with_log_chunking/1),
+      Keyword.get(opts, :storage, &with_cub_db_storage/1),
+      Keyword.get(opts, :log_collector, &with_shape_log_collector/1),
+      Keyword.get(opts, :shape_cache, &with_shape_cache/1),
+      Keyword.get(opts, :replication_client, &with_replication_client/1)
     ]
     |> Enum.reduce(ctx, &Map.merge(&2, apply(&1, [&2])))
   end

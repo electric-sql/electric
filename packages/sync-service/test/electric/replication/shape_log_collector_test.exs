@@ -46,10 +46,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       # Start the ShapeLogCollector process
       opts = [
         name: __MODULE__.ShapeLogCollector,
-        inspector: {Mock.Inspector, []}
+        inspector: {Mock.Inspector, []},
+        demand: :forward
       ]
 
       {:ok, pid} = start_supervised({ShapeLogCollector, opts})
+
       parent = self()
 
       consumers =

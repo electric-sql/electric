@@ -8,6 +8,8 @@ defmodule Electric.ConnectionManager do
     - adjusting connection options based on the response from the database
     - monitoring connections and initiating a reconnection procedure
     - custom reconnection logic with exponential backoff
+    - starting the shape consumer supervisor tree once a replication connection
+      has been established
 
   Your OTP application should start a singleton connection manager under its main supervision tree:
 
@@ -16,7 +18,9 @@ defmodule Electric.ConnectionManager do
         {Electric.ConnectionManager,
          connection_opts: [...],
          replication_opts: [...],
-         pool_opts: [...]},
+         pool_opts: [...],
+         log_collector: {LogCollector, [...]},
+         shape_cache: {ShapeCache, [...]}}
         ...
       ]
 
@@ -31,6 +35,10 @@ defmodule Electric.ConnectionManager do
       :replication_opts,
       # Database connection pool options.
       :pool_opts,
+      # Configuration for the log collector
+      :log_collector,
+      # Configuration for the shape cache that implements `Electric.ShapeCacheBehaviour`
+      :shape_cache,
       # PID of the replication client.
       :replication_client_pid,
       # PID of the database connection pool (a `Postgrex` process).
@@ -48,6 +56,8 @@ defmodule Electric.ConnectionManager do
           {:connection_opts, Keyword.t()}
           | {:replication_opts, Keyword.t()}
           | {:pool_opts, Keyword.t()}
+          | {:log_collector, {module(), Keyword.t()}}
+          | {:shape_cache, {module(), Keyword.t()}}
 
   @type options :: [option]
 
@@ -83,6 +93,8 @@ defmodule Electric.ConnectionManager do
         connection_opts: connection_opts,
         replication_opts: replication_opts,
         pool_opts: pool_opts,
+        log_collector: Keyword.fetch!(opts, :log_collector),
+        shape_cache: Keyword.fetch!(opts, :shape_cache),
         backoff: {:backoff.init(1000, 10_000), nil}
       }
 
@@ -94,13 +106,28 @@ defmodule Electric.ConnectionManager do
 
   @impl true
   def handle_continue(:start_replication_client, state) do
-    case start_replication_client(state.connection_opts, state.replication_opts) do
-      {:ok, pid, connection_opts} ->
-        state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
-        {:noreply, state, {:continue, :start_connection_pool}}
+    case start_replication_client(state) do
+      {:ok, _pid} ->
+        # we wait for the working connection_opts to come back from the replication client
+        # see `handle_call({:connection_opts, pid, connection_opts}, _, _)`
+        {:noreply, state}
 
       {:error, reason} ->
         handle_connection_error(reason, state, "replication")
+    end
+  end
+
+  # if the replication client is brought down by an error in one of the shape
+  # consumers it will reconnect and re-send this message, so we just ignore
+  # attempts to start the connection pool when it's already running
+  def handle_continue(:start_connection_pool, %{pool_pid: pool_pid} = state)
+      when is_pid(pool_pid) do
+    if Process.alive?(pool_pid) do
+      {:noreply, state}
+    else
+      # unlikely since the pool is linked to this process... but why not
+      Logger.debug(fn -> "Restarting connection pool" end)
+      {:noreply, %{state | pool_pid: nil}, {:continue, :start_connection_pool}}
     end
   end
 
@@ -141,30 +168,23 @@ defmodule Electric.ConnectionManager do
     {:stop, {tag, reason}, state}
   end
 
-  defp start_replication_client(connection_opts, replication_opts) do
-    case Electric.Postgres.ReplicationClient.start_link(connection_opts, replication_opts) do
-      {:ok, pid} ->
-        {:ok, pid, connection_opts}
+  @impl true
+  def handle_cast({:connection_opts, pid, connection_opts}, state) do
+    state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
+    {:noreply, state, {:continue, :start_connection_pool}}
+  end
 
-      {:error, %Postgrex.Error{message: "ssl not available"}} = error ->
-        if connection_opts[:sslmode] == :require do
-          error
-        else
-          if connection_opts[:sslmode] do
-            # Only log a warning when there's an explicit sslmode parameter in the database
-            # config, meaning the user has requested a certain sslmode.
-            Logger.warning(
-              "Failed to connect to the database using SSL. Trying again, using an unencrypted connection."
-            )
-          end
-
-          connection_opts = Keyword.put(connection_opts, :ssl, false)
-          start_replication_client(connection_opts, replication_opts)
-        end
-
-      other ->
-        other
-    end
+  defp start_replication_client(state) do
+    Electric.Shapes.Supervisor.start_link(
+      replication_client: {
+        Electric.Postgres.ReplicationClient,
+        connection_opts: state.connection_opts,
+        replication_opts: state.replication_opts,
+        connection_manager: self()
+      },
+      shape_cache: state.shape_cache,
+      log_collector: state.log_collector
+    )
   end
 
   defp start_connection_pool(connection_opts, pool_opts) do

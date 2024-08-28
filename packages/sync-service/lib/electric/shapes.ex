@@ -30,8 +30,10 @@ defmodule Electric.Shapes do
     max_offset = Access.get(opts, :up_to, LogOffset.last())
     storage = shape_storage(config, shape_id)
 
-    with true <- shape_cache.has_shape?(shape_id, shape_cache_opts) do
+    if shape_cache.has_shape?(shape_id, shape_cache_opts) do
       Storage.get_log_stream(shape_id, offset, max_offset, storage)
+    else
+      raise "Unknown shape: #{shape_id}"
     end
   end
 

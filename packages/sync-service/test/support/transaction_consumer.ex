@@ -30,11 +30,17 @@ defmodule Support.TransactionConsumer do
     {:ok, parent} = Keyword.fetch(opts, :parent)
     {:ok, id} = Keyword.fetch(opts, :id)
 
-    {:consumer, {id, parent}, subscribe_to: [{producer, []}]}
+    {:consumer, {id, nil, parent}, subscribe_to: [{producer, []}]}
   end
 
-  def handle_events(events, _from, {id, parent}) do
-    send(parent, {__MODULE__, {id, self()}, events})
-    {:noreply, [], {id, parent}}
+  def handle_subscribe(:producer, _options, from, {id, _, parent}) do
+    GenStage.ask(from, 1)
+    {:manual, {id, from, parent}}
+  end
+
+  def handle_events([txn], _from, {id, subscription, parent}) do
+    send(parent, {__MODULE__, {id, self()}, [txn]})
+    GenStage.ask(subscription, 1)
+    {:noreply, [], {id, subscription, parent}}
   end
 end
