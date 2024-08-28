@@ -7,8 +7,8 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   describe "load_column_info/2" do
     setup [:with_inspector, :with_basic_tables]
 
-    setup %{tables: [table | _], inspector: {EtsInspector, opts}} do
-      {:ok, %{opts: opts, table: table}}
+    setup %{inspector: {EtsInspector, opts}} do
+      {:ok, %{opts: opts, table: {"public", "items"}}}
     end
 
     test "returns column info for the table", %{opts: opts, table: table} do
