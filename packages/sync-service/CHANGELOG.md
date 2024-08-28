@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 0.3.6
+
+### Patch Changes
+
+- e5a1d8e: Fix a crash caused by incorrect conversion of an UPDATE into an INSERT or a DELETE depending on whether it is a shape move-in or a shape move-out case.
+- 9faab42: Move to process- and storage-per-shape
+
 ## 0.3.5
 
 ### Patch Changes
