@@ -880,7 +880,7 @@ defmodule Electric.ShapeCacheTest do
 
     defp stop_shape_cache(%{storage: {_, _}, shape_cache_opts: shape_cache_opts}) do
       stop_processes([shape_cache_opts[:server]])
-      ShapeCache.ShapeSupervisor.stop_all_consumers()
+      Shapes.ConsumerSupervisor.stop_all_consumers()
     end
 
     defp stop_processes(process_names) do

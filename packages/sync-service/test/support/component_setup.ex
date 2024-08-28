@@ -48,6 +48,7 @@ defmodule Support.ComponentSetup do
   def with_shape_cache(ctx, additional_opts \\ []) do
     shape_meta_table = :"shape_meta_#{full_test_name(ctx)}"
     server = :"shape_cache_#{full_test_name(ctx)}"
+    consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
 
     start_opts =
       [
@@ -59,7 +60,8 @@ defmodule Support.ComponentSetup do
         db_pool: ctx.pool,
         persistent_kv: ctx.persistent_kv,
         registry: ctx.registry,
-        log_producer: ctx.shape_log_collector
+        log_producer: ctx.shape_log_collector,
+        consumer_supervisor: consumer_supervisor
       ]
       |> Keyword.merge(additional_opts)
       |> Keyword.put_new_lazy(:prepare_tables_fn, fn ->
@@ -67,6 +69,7 @@ defmodule Support.ComponentSetup do
          [ctx.publication_name]}
       end)
 
+    {:ok, _pid} = Electric.Shapes.ConsumerSupervisor.start_link(name: consumer_supervisor)
     {:ok, _pid} = ShapeCache.start_link(start_opts)
 
     shape_cache_opts = [

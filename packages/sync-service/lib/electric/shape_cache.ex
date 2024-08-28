@@ -55,6 +55,10 @@ defmodule Electric.ShapeCache do
               type: {:or, [:atom, :pid]},
               default: Electric.Replication.ShapeLogCollector
             ],
+            consumer_supervisor: [
+              type: @genserver_name_schema,
+              default: Electric.Shapes.ConsumerSupervisor.name()
+            ],
             storage: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],
             inspector: [type: :mod_arg, required: true],
@@ -188,7 +192,9 @@ defmodule Electric.ShapeCache do
       create_snapshot_fn: opts.create_snapshot_fn,
       prepare_tables_fn: opts.prepare_tables_fn,
       log_producer: opts.log_producer,
-      registry: opts.registry
+      registry: opts.registry,
+      consumer_supervisor: opts.consumer_supervisor,
+      subscription: nil
     }
 
     recover_shapes(state)
@@ -347,7 +353,7 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_shape(state, shape_id) do
-    Electric.ShapeCache.ShapeSupervisor.stop_shape_consumer(shape_id)
+    Electric.Shapes.ConsumerSupervisor.stop_shape_consumer(state.consumer_supervisor, shape_id)
 
     state.shape_status.remove_shape(state.persistent_state, shape_id)
   end
@@ -375,8 +381,9 @@ defmodule Electric.ShapeCache do
   end
 
   defp start_shape(shape_id, shape, state) do
-    with {:ok, _pid} <-
-           Electric.ShapeCache.ShapeSupervisor.start_shape_consumer(
+    with {:ok, pid} <-
+           Electric.Shapes.ConsumerSupervisor.start_shape_consumer(
+             state.consumer_supervisor,
              shape_id: shape_id,
              shape: shape,
              storage: state.storage,

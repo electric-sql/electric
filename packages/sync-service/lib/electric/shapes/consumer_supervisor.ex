@@ -1,4 +1,4 @@
-defmodule Electric.ShapeCache.ShapeSupervisor do
+defmodule Electric.Shapes.ConsumerSupervisor do
   @moduledoc """
   Responsible for managing shape consumer processes
   """
@@ -13,12 +13,12 @@ defmodule Electric.ShapeCache.ShapeSupervisor do
   def start_shape_consumer(config) do
     DynamicSupervisor.start_child(
       @name,
-      {Electric.Shapes.Supervisor, config}
+      {Electric.Shapes.ShapeSupervisor, config}
     )
   end
 
   def stop_shape_consumer(shape_id) do
-    case GenServer.whereis(Electric.Shapes.Supervisor.name(shape_id)) do
+    case GenServer.whereis(Electric.Shapes.ShapeSupervisor.name(shape_id)) do
       nil ->
         {:error, "no consumer for shape id #{inspect(shape_id)}"}
 

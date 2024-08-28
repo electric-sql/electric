@@ -95,7 +95,7 @@ defmodule Electric.Shapes.ConsumerTest do
       consumers =
         for {shape_id, shape} <- ctx.shapes do
           allow(Mock.Storage, self(), fn ->
-            Shapes.Supervisor.name(shape_id) |> GenServer.whereis()
+            Shapes.ShapeSupervisor.name(shape_id) |> GenServer.whereis()
           end)
 
           allow(Mock.Storage, self(), fn ->
@@ -108,7 +108,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
           {:ok, consumer} =
             start_supervised(
-              {Shapes.Supervisor,
+              {Shapes.ShapeSupervisor,
                shape_id: shape_id,
                shape: shape,
                log_producer: producer,
@@ -117,7 +117,7 @@ defmodule Electric.Shapes.ConsumerTest do
                storage: {Mock.Storage, []},
                chunk_bytes_threshold: 10_000,
                prepare_tables_fn: &prepare_tables_fn/2},
-              id: {Shapes.Supervisor, shape_id}
+              id: {Shapes.ShapeSupervisor, shape_id}
             )
 
           consumer
@@ -289,7 +289,7 @@ defmodule Electric.Shapes.ConsumerTest do
     defp assert_consumer_shutdown(shape_id, fun) do
       monitors =
         for name <- [
-              Shapes.Supervisor.name(shape_id),
+              Shapes.ShapeSupervisor.name(shape_id),
               Shapes.Consumer.name(shape_id),
               Shapes.Snapshotter.name(shape_id)
             ],
@@ -502,6 +502,230 @@ defmodule Electric.Shapes.ConsumerTest do
       assert [_op1, _op2] =
                Storage.get_log_stream(shape_id, LogOffset.before_all(), shape_storage)
                |> Enum.map(&:json.decode/1)
+    end
+  end
+
+  defmodule CrashingStorageBackend do
+    use GenServer
+
+    alias Electric.Replication.LogOffset
+
+    def start_link(_opts) do
+      GenServer.start_link(__MODULE__, [], name: __MODULE__)
+    end
+
+    def crash_once(pid, shape_id) do
+      GenServer.call(pid, {:crash_once, shape_id})
+    end
+
+    def crash?(pid, shape_id) do
+      GenServer.call(pid, {:crash?, shape_id})
+    end
+
+    def init(_opts) do
+      {:ok, %{shapes: %{}, crashing: %{}}}
+    end
+
+    def handle_call({:crash_once, shape_id}, _from, state) do
+      {:reply, :ok, Map.update!(state, :crashing, &Map.put(&1, shape_id, true))}
+    end
+
+    def handle_call({:crash?, shape_id}, _from, state) do
+      {crash?, crashing} = Map.pop(state.crashing, shape_id, false)
+
+      {:reply, crash?, %{state | crashing: crashing}}
+    end
+
+    def handle_call({:list_shapes, shape_id}, _from, state) do
+      {:reply, Map.get(state.shapes, shape_id, nil) |> List.wrap(), state}
+    end
+
+    def handle_call({:snapshot_started?, shape_id}, _from, state) do
+      {:reply, Map.has_key?(state.shapes, shape_id), state}
+    end
+
+    def handle_call({:set_snapshot_xmin, shape_id, xmin}, _from, state) do
+      {:reply, :ok,
+       %{
+         state
+         | shapes:
+             Map.put(state.shapes, shape_id, %{
+               snapshot_xmin: xmin,
+               latest_offset: LogOffset.first()
+             })
+       }}
+    end
+  end
+
+  defmodule CrashingStorage do
+    # Between this module and the CrashingStorageBackend above, implement
+    # enough of the storage api to:
+    #
+    # 1. Only snapshot a given shape_id once
+    # 2. Allow for writing to the tx log of a given shape to crash
+
+    def start_link(%{} = _opts) do
+      :ignore
+    end
+
+    def for_shape(shape_id, opts) do
+      Map.put(opts, :shape_id, shape_id)
+    end
+
+    def initialise(_opts) do
+      :ok
+    end
+
+    def add_shape(_shape_id, _shape, _opts) do
+      :ok
+    end
+
+    def list_shapes(opts) do
+      GenServer.call(opts.backend, {:list_shapes, opts.shape_id})
+    end
+
+    def snapshot_started?(shape_id, opts) do
+      GenServer.call(opts.backend, {:snapshot_started?, shape_id})
+    end
+
+    def append_to_log!(shape_id, log_items, %{shape_id: shape_id} = opts) do
+      if CrashingStorageBackend.crash?(opts.backend, shape_id) do
+        send(opts.parent, {CrashingStorage, :crash, shape_id})
+        raise "crash from #{shape_id}"
+      else
+        for %{headers: %{txid: txid}} <- log_items do
+          send(opts.parent, {CrashingStorage, :append_to_log, shape_id, txid})
+        end
+      end
+
+      :ok
+    end
+
+    def set_snapshot_xmin(shape_id, xmin, opts) do
+      GenServer.call(opts.backend, {:set_snapshot_xmin, shape_id, xmin})
+    end
+
+    def mark_snapshot_as_started(_shape_id, _opts) do
+      :ok
+    end
+
+    def make_new_snapshot!(_shape_id, _data_stream, _opts) do
+      :ok
+    end
+  end
+
+  describe "replication consistency" do
+    setup [
+      :with_unique_db,
+      :with_basic_tables,
+      :with_publication,
+      :with_registry,
+      :with_inspector,
+      :with_persistent_kv
+    ]
+
+    setup do
+      %{slot_name: "electric_shapes_consumertest_replication_stream"}
+    end
+
+    test "crashing consumer resumes at a consistent point", ctx do
+      {:ok, pid} = start_supervised(CrashingStorageBackend)
+      parent = self()
+      storage = {CrashingStorage, %{backend: pid, parent: parent, shape_id: nil}}
+
+      shape_cache_name = __MODULE__.ShapeCache
+      shape_cache_opts = [server: shape_cache_name, shape_meta_table: __MODULE__.ShapeMeta]
+
+      replication_opts = [
+        publication_name: ctx.publication_name,
+        try_creating_publication?: true,
+        slot_name: ctx.slot_name,
+        transaction_received: {
+          Electric.Replication.ShapeLogCollector,
+          :store_transaction,
+          [__MODULE__.LogCollector]
+        },
+        relation_received: {Electric.ShapeCache, :handle_relation_msg, [shape_cache_opts]}
+      ]
+
+      shape_cache_config =
+        [
+          name: shape_cache_name,
+          shape_meta_table: __MODULE__.ShapeMeta,
+          storage: storage,
+          db_pool: ctx.pool,
+          persistent_kv: ctx.persistent_kv,
+          registry: ctx.registry,
+          log_producer: __MODULE__.LogCollector,
+          consumer_supervisor: __MODULE__.ConsumerSupervisor,
+          prepare_tables_fn: {
+            Electric.Postgres.Configuration,
+            :configure_tables_for_replication!,
+            [ctx.publication_name]
+          },
+          create_snapshot_fn: fn parent, shape_id, _shape, _, _storage ->
+            GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 0})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
+          end
+        ]
+
+      {:ok, _super} =
+        Electric.Shapes.Supervisor.start_link(
+          log_collector:
+            {Electric.Replication.ShapeLogCollector,
+             name: __MODULE__.LogCollector, inspector: ctx.inspector},
+          replication_client:
+            {Electric.Postgres.ReplicationClient,
+             connection_opts: ctx.db_config,
+             replication_opts: replication_opts,
+             connection_manager: nil},
+          shape_cache: {Electric.ShapeCache, shape_cache_config},
+          consumer_supervisor:
+            {Electric.Shapes.ConsumerSupervisor, name: __MODULE__.ConsumerSupervisor}
+        )
+
+      %{db_conn: conn} = ctx
+
+      shape1 = Shape.new!("public.items", inspector: ctx.inspector)
+
+      shape2 =
+        Shape.new!("public.items", where: "value != 'invalid'", inspector: ctx.inspector)
+
+      assert {shape_id1, _} =
+               Electric.ShapeCache.get_or_create_shape_id(shape1, shape_cache_opts)
+
+      assert {shape_id2, _} =
+               Electric.ShapeCache.get_or_create_shape_id(shape2, shape_cache_opts)
+
+      assert :started =
+               Electric.ShapeCache.await_snapshot_start(shape_id1, shape_cache_opts)
+
+      assert :started = Electric.ShapeCache.await_snapshot_start(shape_id2, shape_cache_opts)
+
+      dbg(insert: 1)
+      insert_item(conn, "value 1")
+
+      assert_receive {CrashingStorage, :append_to_log, ^shape_id1, xid1}
+      assert_receive {CrashingStorage, :append_to_log, ^shape_id2, ^xid1}
+
+      :ok = CrashingStorageBackend.crash_once(pid, shape_id2)
+
+      dbg(insert: 2)
+      insert_item(conn, "value 2")
+
+      assert_receive {CrashingStorage, :append_to_log, ^shape_id1, xid2}
+      assert_receive {CrashingStorage, :crash, ^shape_id2}
+
+      # the whole stack has restarted, but we still get this message
+      assert_receive {CrashingStorage, :append_to_log, ^shape_id1, ^xid2}, 5000
+      assert_receive {CrashingStorage, :append_to_log, ^shape_id2, ^xid2}
+    end
+
+    defp insert_item(conn, val) do
+      Postgrex.query!(conn, "INSERT INTO items (id, value) VALUES ($1, $2)", [
+        Ecto.UUID.bingenerate(),
+        val
+      ])
     end
   end
 end
