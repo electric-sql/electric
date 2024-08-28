@@ -391,16 +391,16 @@ defmodule Electric.Replication.Eval.Parser do
         between(expr, left_bound, right_bound, refs, env)
 
       :AEXPR_NOT_BETWEEN ->
-        with {:ok, reduced} <- between(expr, left_bound, right_bound, refs, env) do
-          negate(reduced)
+        with {:ok, comparison} <- between(expr, left_bound, right_bound, refs, env) do
+          negate(comparison)
         end
 
       :AEXPR_BETWEEN_SYM ->
         between_sym(expr, left_bound, right_bound, refs, env)
 
       :AEXPR_NOT_BETWEEN_SYM ->
-        with {:ok, reduced} <- between_sym(expr, left_bound, right_bound, refs, env) do
-          negate(reduced)
+        with {:ok, comparison} <- between_sym(expr, left_bound, right_bound, refs, env) do
+          negate(comparison)
         end
     end
   end
