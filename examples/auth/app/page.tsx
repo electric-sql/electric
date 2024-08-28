@@ -30,8 +30,13 @@ const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
 
 const usersShape = (): ShapeStreamOptions => {
   if (typeof window !== `undefined`) {
+    const queryParams = new URLSearchParams(window.location.search)
+    const org_id = queryParams.get(`org_id`)
     return {
-      url: new URL(`/shape-proxy/users`, window.location.origin).href,
+      url: new URL(
+        `/shape-proxy/users?org_id=${org_id}`,
+        window.location.origin
+      ).href,
       fetchClient: fetchWrapper,
     }
   } else {
@@ -46,8 +51,9 @@ export default function Home() {
   const searchParams = useSearchParams()
   const { data: users, isError, error } = useShape(usersShape())
 
-  const classFor = (user: string | null) => {
-    return searchParams.get(`username`) === user ? `active-link` : `white-link`
+  const classFor = (org_id: string | null) => {
+    const orgSearchParam = searchParams.get(`org_id`)
+    return orgSearchParam === org_id ? `active-link` : `white-link`
   }
 
   return (
@@ -74,7 +80,7 @@ export default function Home() {
                 e.preventDefault()
                 window.location.search = `?org_id=1`
               }}
-              className={classFor(`Alice`)}
+              className={classFor(`1`)}
             >
               Alice — org 1
             </a>
@@ -87,7 +93,7 @@ export default function Home() {
                 e.preventDefault()
                 window.location.search = `?org_id=2`
               }}
-              className={classFor(`David`)}
+              className={classFor(`2`)}
             >
               David — org 2
             </a>
@@ -100,7 +106,7 @@ export default function Home() {
                 e.preventDefault()
                 window.location.search = `?org_id=admin`
               }}
-              className={classFor(`Admin`)}
+              className={classFor(`admin`)}
             >
               Admin
             </a>
