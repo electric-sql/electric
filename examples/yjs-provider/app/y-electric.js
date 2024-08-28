@@ -251,7 +251,7 @@ export class ElectricProvider extends Observable {
    * @param {boolean} [opts.connect]
    * @param {awarenessProtocol.Awareness} [opts.awareness]
    * @param {IndexeddbPersistence} [opts.persistence]
-   * @param {Object<string,string>} [opts.resume]
+   * @param {Object<string, {offset: string, shapeId: string} >} [opts.resume]
    */
   constructor(
     serverUrl,
