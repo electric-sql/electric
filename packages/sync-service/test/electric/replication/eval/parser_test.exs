@@ -310,7 +310,11 @@ defmodule Electric.Replication.Eval.ParserTest do
             {~S|'2024-07-31'::date BETWEEN '2024-07-01'::date AND '2024-07-31'::date|, true},
             {~S|'2024-07-31'::date NOT BETWEEN '2024-07-01'::date AND '2024-07-31'::date|, false},
             {~S|'2024-06-30'::date BETWEEN '2024-07-01'::date AND '2024-07-31'::date|, false},
-            {~S|'2024-06-30'::date NOT BETWEEN '2024-07-01'::date AND '2024-07-31'::date|, true}
+            {~S|'2024-06-30'::date NOT BETWEEN '2024-07-01'::date AND '2024-07-31'::date|, true},
+            {~S|'2024-07-15'::date BETWEEN SYMMETRIC '2024-07-31'::date AND '2024-07-01'::date|,
+             true},
+            {~S|'2024-07-15'::date NOT BETWEEN SYMMETRIC '2024-07-31'::date AND '2024-07-01'::date|,
+             false}
           ] do
         assert {:ok, %Expr{eval: result}} =
                  Parser.parse_and_validate_expression(expr, %{}, env)
