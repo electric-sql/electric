@@ -297,10 +297,16 @@ defmodule Electric.Replication.Eval.ParserTest do
       env = Env.new()
 
       for {expr, expected} <- [
-            {~S|2 BETWEEN 1 AND 3|, true},
-            {~S|2 NOT BETWEEN 1 AND 3|, false},
             {~S|0 BETWEEN 1 AND 3|, false},
-            {~S|0 NOT BETWEEN 1 AND 3|, true},
+            {~S|1 BETWEEN 1 AND 3|, true},
+            {~S|2 BETWEEN 1 AND 3|, true},
+            {~S|3 BETWEEN 1 AND 3|, true},
+            {~S|4 BETWEEN 1 AND 3|, false},
+            {~S|2 NOT BETWEEN 1 AND 3|, false},
+            {~S|1 BETWEEN 3 AND 1|, false},
+            {~S|1 NOT BETWEEN 3 AND 1|, true},
+            {~S|2 BETWEEN SYMMETRIC 3 AND 1|, true},
+            {~S|2 NOT BETWEEN SYMMETRIC 3 AND 1|, false},
             {~S|'2024-07-31'::date BETWEEN '2024-07-01'::date AND '2024-07-31'::date|, true},
             {~S|'2024-07-31'::date NOT BETWEEN '2024-07-01'::date AND '2024-07-31'::date|, false},
             {~S|'2024-06-30'::date BETWEEN '2024-07-01'::date AND '2024-07-31'::date|, false},

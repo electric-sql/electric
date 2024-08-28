@@ -226,7 +226,9 @@ defmodule Electric.Replication.Eval.Parser do
       {:AEXPR_NOT_DISTINCT, _} -> handle_distinct(expr, refs, env)
       {:AEXPR_IN, _} -> handle_in(expr, refs, env)
       {:AEXPR_BETWEEN, _} -> handle_between(expr, refs, env)
+      {:AEXPR_BETWEEN_SYM, _} -> handle_between(expr, refs, env)
       {:AEXPR_NOT_BETWEEN, _} -> handle_between(expr, refs, env)
+      {:AEXPR_NOT_BETWEEN_SYM, _} -> handle_between(expr, refs, env)
       _ -> {:error, {loc, "expression #{identifier(expr.name)} is not currently supported"}}
     end
   end
@@ -384,18 +386,46 @@ defmodule Electric.Replication.Eval.Parser do
     # wouldn't be `A_Expr`.
     {:list, %PgQuery.List{items: [left_bound, right_bound]}} = expr.rexpr.node
 
-    with {:ok, lcmp} <-
+    case expr.kind do
+      :AEXPR_BETWEEN ->
+        between(expr, left_bound, right_bound, refs, env)
+
+      :AEXPR_NOT_BETWEEN ->
+        with {:ok, reduced} <- between(expr, left_bound, right_bound, refs, env) do
+          negate(reduced)
+        end
+
+      :AEXPR_BETWEEN_SYM ->
+        between_sym(expr, left_bound, right_bound, refs, env)
+
+      :AEXPR_NOT_BETWEEN_SYM ->
+        with {:ok, reduced} <- between_sym(expr, left_bound, right_bound, refs, env) do
+          negate(reduced)
+        end
+    end
+  end
+
+  defp between(expr, left_bound, right_bound, refs, env) do
+    with {:ok, left_comparison} <-
            find_operator_func(["<="], [left_bound, expr.lexpr], expr.location, refs, env),
-         {:ok, rcmp} <-
+         {:ok, right_comparison} <-
            find_operator_func(["<="], [expr.lexpr, right_bound], expr.location, refs, env),
-         comparisons = [lcmp, rcmp],
+         comparisons = [left_comparison, right_comparison],
          {:ok, comparisons} <- Utils.map_while_ok(comparisons, &maybe_reduce/1),
          {:ok, reduced} <-
            build_bool_chain(%{name: "and", impl: &Kernel.and/2}, comparisons, expr.location) do
-      case expr.kind do
-        :AEXPR_BETWEEN -> {:ok, reduced}
-        :AEXPR_NOT_BETWEEN -> negate(reduced)
-      end
+      {:ok, reduced}
+    end
+  end
+
+  defp between_sym(expr, left_bound, right_bound, refs, env) do
+    with {:ok, comparison1} <- between(expr, left_bound, right_bound, refs, env),
+         {:ok, comparison2} <- between(expr, right_bound, left_bound, refs, env) do
+      build_bool_chain(
+        %{name: "or", impl: &Kernel.or/2},
+        [comparison1, comparison2],
+        expr.location
+      )
     end
   end
 
