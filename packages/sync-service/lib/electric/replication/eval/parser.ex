@@ -513,12 +513,16 @@ defmodule Electric.Replication.Eval.Parser do
 
       :error ->
         case {from_type, to_type} do
+          {:unknown, _} -> {:ok, {__MODULE__, :cast_null}}
+          {_, :unknown} -> {:ok, {__MODULE__, :cast_null}}
           {:text, to_type} -> find_cast_in_function(env, to_type)
           {from_type, :text} -> find_cast_out_function(env, from_type)
           {from_type, to_type} -> find_explicit_cast(env, from_type, to_type)
         end
     end
   end
+
+  def cast_null(nil), do: nil
 
   defp find_cast_in_function(env, to_type) do
     case Map.fetch(env.funcs, {"#{to_type}", 1}) do
