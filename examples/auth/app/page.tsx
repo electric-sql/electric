@@ -53,10 +53,7 @@ export default function Home() {
 
   const classFor = (org_id: string | null) => {
     const orgSearchParam = searchParams.get(`org_id`)
-    return orgSearchParam === org_id ||
-      orgSearchParam?.includes(org_id as string)
-      ? `active-link`
-      : `white-link`
+    return orgSearchParam === org_id ? `active-link` : `white-link`
   }
 
   return (
