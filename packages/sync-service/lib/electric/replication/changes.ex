@@ -287,7 +287,7 @@ defmodule Electric.Replication.Changes do
     %DeletedRecord{
       relation: change.relation,
       old_record: change.old_record,
-      key: change.key,
+      key: change.old_key || change.key,
       log_offset: change.log_offset,
       tags: change.tags
     }
