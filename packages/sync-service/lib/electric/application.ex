@@ -1,37 +1,56 @@
 defmodule Electric.Application do
   use Application
 
+  @process_registry_name Electric.Registry.Processes
+
+  @spec process_name(atom(), term()) :: {:via, atom(), {atom(), term()}}
+  def process_name(module, id) when is_atom(module) do
+    {:via, Registry, {@process_registry_name, {module, id}}}
+  end
+
   @impl true
   def start(_type, _args) do
     :erlang.system_flag(:backtrace_depth, 50)
 
-    {storage_module, init_params} = Application.fetch_env!(:electric, :storage)
+    {storage_module, storage_opts} = Application.fetch_env!(:electric, :storage)
+    {kv_module, kv_fun, kv_params} = Application.fetch_env!(:electric, :persistent_kv)
+
+    persistent_kv = apply(kv_module, kv_fun, [kv_params])
 
     publication_name = "electric_publication"
     slot_name = "electric_slot"
 
-    with {:ok, storage_opts} <- storage_module.shared_opts(init_params) do
+    with {:ok, storage_opts} <- storage_module.shared_opts(storage_opts) do
       storage = {storage_module, storage_opts}
 
       prepare_tables_fn =
         {Electric.Postgres.Configuration, :configure_tables_for_replication!, [publication_name]}
 
-      shape_cache = {Electric.ShapeCache, storage: storage, prepare_tables_fn: prepare_tables_fn}
+      shape_cache =
+        {Electric.ShapeCache,
+         storage: storage,
+         prepare_tables_fn: prepare_tables_fn,
+         log_producer: Electric.Replication.ShapeLogCollector,
+         persistent_kv: persistent_kv,
+         registry: Registry.ShapeChanges}
 
       inspector =
         {Electric.Postgres.Inspector.EtsInspector,
          server: Electric.Postgres.Inspector.EtsInspector}
 
-      children =
+      core_processes = [
+        {Registry,
+         name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()},
+        {Electric.ShapeCache.ShapeSupervisor, []}
+      ]
+
+      per_env_processes =
         if Application.fetch_env!(:electric, :environment) != :test do
           [
             Electric.Telemetry,
-            {storage_module, storage_opts},
             {Registry,
              name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
-            shape_cache,
-            {Electric.Replication.ShapeLogCollector,
-             registry: Registry.ShapeChanges, shape_cache: shape_cache, inspector: inspector},
+            {Electric.Replication.ShapeLogCollector, inspector: inspector},
             {Electric.ConnectionManager,
              connection_opts: Application.fetch_env!(:electric, :connection_opts),
              replication_opts: [
@@ -48,6 +67,7 @@ defmodule Electric.Application do
                pool_size: Application.fetch_env!(:electric, :db_pool_size),
                types: PgInterop.Postgrex.Types
              ]},
+            shape_cache,
             {Electric.Postgres.Inspector.EtsInspector, pool: Electric.DbPool},
             {Bandit,
              plug:
@@ -67,8 +87,10 @@ defmodule Electric.Application do
           []
         end
 
-      opts = [strategy: :one_for_one, name: Electric.Supervisor]
-      Supervisor.start_link(children, opts)
+      Supervisor.start_link(core_processes ++ per_env_processes,
+        strategy: :one_for_one,
+        name: Electric.Supervisor
+      )
     end
   end
 

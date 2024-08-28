@@ -5,9 +5,13 @@ defmodule Electric.Postgres.Inspector do
   @type column_info :: %{
           name: String.t(),
           type: String.t(),
+          type_mod: integer() | nil,
           formatted_type: String.t(),
           pk_position: non_neg_integer() | nil,
-          type_id: {typid :: non_neg_integer(), typmod :: integer()}
+          type_id: {typid :: non_neg_integer(), typmod :: integer()},
+          array_dimensions: non_neg_integer(),
+          not_null: boolean(),
+          array_type: String.t()
         }
 
   @callback load_column_info(relation(), opts :: term()) ::
@@ -43,6 +47,9 @@ defmodule Electric.Postgres.Inspector do
   """
   @spec columns_to_expr([column_info(), ...]) :: Parser.refs_map()
   def columns_to_expr(columns) when is_list(columns) do
-    Map.new(columns, fn %{name: name, type: type} -> {[name], String.to_atom(type)} end)
+    Map.new(columns, fn %{name: name, type: type} -> {[name], atom_type(type)} end)
   end
+
+  defp atom_type(type) when is_binary(type), do: String.to_atom(type)
+  defp atom_type(type) when is_atom(type), do: type
 end

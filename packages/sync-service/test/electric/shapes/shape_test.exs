@@ -194,6 +194,69 @@ defmodule Electric.Shapes.ShapeTest do
     end
   end
 
+  describe "JSON" do
+    test "should serialize shape with complex columns" do
+      shape = %Electric.Shapes.Shape{
+        root_table: {"public", "foo"},
+        table_info: %{
+          {"public", "foo"} => %{
+            columns: [
+              %{
+                name: "second",
+                type: :text,
+                formatted_type: "text",
+                type_mod: -1,
+                pk_position: 1,
+                type_id: {25, -1},
+                array_dimensions: 0,
+                not_null: true,
+                array_type: nil
+              },
+              %{
+                name: "first",
+                type: :text,
+                formatted_type: "text",
+                type_mod: -1,
+                pk_position: 0,
+                type_id: {25, -1},
+                array_dimensions: 0,
+                not_null: true,
+                array_type: nil
+              },
+              %{
+                name: "fourth",
+                type: :text,
+                formatted_type: "text",
+                type_mod: -1,
+                pk_position: nil,
+                type_id: {25, -1},
+                array_dimensions: 0,
+                not_null: false,
+                array_type: nil
+              },
+              %{
+                name: "third",
+                type: :text,
+                formatted_type: "text",
+                type_mod: -1,
+                pk_position: 2,
+                type_id: {25, -1},
+                array_dimensions: 0,
+                not_null: true,
+                array_type: nil
+              }
+            ],
+            pk: ["first", "second", "third"]
+          }
+        },
+        where: nil
+      }
+
+      assert {:ok, json} = Jason.encode(shape)
+      assert ^shape = Jason.decode!(json) |> Shape.from_json_safe!()
+    end
+  end
+
   def load_column_info({"public", "table"}, _),
     do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
 
