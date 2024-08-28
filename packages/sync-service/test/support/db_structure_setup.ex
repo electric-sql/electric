@@ -1,18 +1,24 @@
 defmodule Support.DbStructureSetup do
   def with_basic_tables(%{db_conn: conn} = context) do
-    Postgrex.query!(
-      conn,
+    statements = [
+      """
+      CREATE TABLE serial_ids (
+        id BIGSERIAL PRIMARY KEY
+        #{additional_fields(context)}
+      );
+      """,
       """
       CREATE TABLE items (
         id UUID PRIMARY KEY,
         value TEXT NOT NULL
         #{additional_fields(context)}
       )
-      """,
-      []
-    )
+      """
+    ]
 
-    {:ok, tables: [{"public", "items"}]}
+    Enum.each(statements, &Postgrex.query!(conn, &1, []))
+
+    %{tables: [{"public", "serial_ids"}, {"public", "items"}]}
   end
 
   def with_sql_execute(%{db_conn: conn, with_sql: sql}) do
@@ -26,7 +32,7 @@ defmodule Support.DbStructureSetup do
         end)
       end)
 
-    {:ok, %{sql_execute: results}}
+    %{sql_execute: results}
   end
 
   def with_sql_execute(_), do: :ok
