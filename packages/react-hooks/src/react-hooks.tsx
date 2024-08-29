@@ -4,6 +4,7 @@ import {
   ShapeStreamOptions,
   Row,
   GetExtensions,
+  ShapeData,
 } from '@electric-sql/client'
 import React from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
@@ -53,7 +54,8 @@ export function getShapeStream<T extends Row<unknown>>(
 }
 
 export function getShape<T extends Row<unknown>>(
-  shapeStream: ShapeStream<T>
+  shapeStream: ShapeStream<T>,
+  shapeData?: ShapeData
 ): Shape<T> {
   // If the stream is already cached, return it if valid
   if (shapeCache.has(shapeStream)) {
@@ -69,7 +71,7 @@ export function getShape<T extends Row<unknown>>(
     shapeCache.delete(shapeStream)
   }
 
-  const newShape = new Shape<T>(shapeStream)
+  const newShape = new Shape<T>(shapeStream, shapeData)
 
   shapeCache.set(shapeStream, newShape)
 
@@ -126,6 +128,7 @@ function identity<T>(arg: T): T {
 interface UseShapeOptions<SourceData extends Row<unknown>, Selection>
   extends ShapeStreamOptions<GetExtensions<SourceData>> {
   selector?: (value: UseShapeResult<SourceData>) => Selection
+  shapeData?: ShapeData
 }
 
 export function useShape<
@@ -133,12 +136,13 @@ export function useShape<
   Selection = UseShapeResult<SourceData>,
 >({
   selector = identity as (arg: UseShapeResult<SourceData>) => Selection,
+  shapeData: data,
   ...options
 }: UseShapeOptions<SourceData, Selection>): Selection {
   const shapeStream = getShapeStream<SourceData>(
     options as ShapeStreamOptions<GetExtensions<SourceData>>
   )
-  const shape = getShape<SourceData>(shapeStream)
+  const shape = getShape<SourceData>(shapeStream, data)
 
   const useShapeData = React.useMemo(() => {
     let latestShapeData = parseShapeData(shape)
