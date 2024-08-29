@@ -19,6 +19,7 @@ defmodule Electric.Plug.RouterTest do
   @moduletag :capture_log
 
   @first_offset to_string(LogOffset.first())
+  @up_to_date %{"headers" => %{"control" => "up-to-date"}}
 
   describe "/" do
     test "returns 200" do
@@ -63,7 +64,7 @@ defmodule Electric.Plug.RouterTest do
                    "value" => "test value 1"
                  }
                },
-               %{"headers" => %{"control" => "up-to-date"}}
+               @up_to_date
              ] = Jason.decode!(conn.resp_body)
     end
 
@@ -169,7 +170,7 @@ defmodule Electric.Plug.RouterTest do
                    "fourth" => "d"
                  }
                },
-               %{"headers" => %{"control" => "up-to-date"}}
+               @up_to_date
              ] = Jason.decode!(conn.resp_body)
 
       task =
@@ -208,7 +209,7 @@ defmodule Electric.Plug.RouterTest do
                    "fourth" => "h"
                  }
                },
-               %{"headers" => %{"control" => "up-to-date"}}
+               @up_to_date
              ] = Jason.decode!(conn.resp_body)
     end
 
@@ -226,9 +227,8 @@ defmodule Electric.Plug.RouterTest do
                  "value" => %{"id" => _, "value1" => _, "value2" => _, "value3" => _},
                  "key" => key
                },
-               _
-             ] =
-               Jason.decode!(conn.resp_body)
+               @up_to_date
+             ] = Jason.decode!(conn.resp_body)
 
       task =
         Task.async(fn ->
@@ -262,9 +262,8 @@ defmodule Electric.Plug.RouterTest do
                  "value" => %{"id" => _, "value1" => _, "value2" => _, "value3" => _},
                  "key" => key
                },
-               _
-             ] =
-               Jason.decode!(conn.resp_body)
+               @up_to_date
+             ] = Jason.decode!(conn.resp_body)
 
       task =
         Task.async(fn ->
@@ -304,7 +303,7 @@ defmodule Electric.Plug.RouterTest do
                  "value" => %{"id" => "3", "value1" => _, "value2" => _, "value3" => _},
                  "key" => key3
                },
-               _
+               @up_to_date
              ] = Jason.decode!(conn.resp_body)
 
       assert key2 != key
@@ -355,7 +354,7 @@ defmodule Electric.Plug.RouterTest do
                  "value" => %{"col1" => "test4", "col2" => "test5"},
                  "key" => key3
                },
-               _
+               @up_to_date
              ] = Jason.decode!(conn.resp_body)
 
       assert key2 != key
@@ -427,8 +426,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 200} = conn
       shape_id = get_resp_shape_id(conn)
-
-      assert [op, %{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
+      assert [op, @up_to_date] = Jason.decode!(conn.resp_body)
 
       assert op == %{
                "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
@@ -453,9 +451,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 200} = conn = Task.await(task)
       new_offset = get_resp_last_offset(conn)
-
-      assert [op1, op2, %{"headers" => %{"control" => "up-to-date"}}] =
-               Jason.decode!(conn.resp_body)
+      assert [op1, op2, @up_to_date] = Jason.decode!(conn.resp_body)
 
       assert [
                %{
@@ -489,9 +485,7 @@ defmodule Electric.Plug.RouterTest do
       end)
 
       assert %{status: 200} = conn = Task.await(task)
-
-      assert [op1, op2, %{"headers" => %{"control" => "up-to-date"}}] =
-               Jason.decode!(conn.resp_body)
+      assert [op1, op2, @up_to_date] = Jason.decode!(conn.resp_body)
 
       assert [
                %{
@@ -540,9 +534,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 200} = conn
       shape_id = get_resp_shape_id(conn)
-
-      assert [op1, op2, %{"headers" => %{"control" => "up-to-date"}}] =
-               Jason.decode!(conn.resp_body)
+      assert [op1, op2, @up_to_date] = Jason.decode!(conn.resp_body)
 
       assert [op1, op2] == [
                %{
@@ -577,9 +569,7 @@ defmodule Electric.Plug.RouterTest do
       end)
 
       assert %{status: 200} = conn = Task.await(task)
-
-      assert [op1, op2, %{"headers" => %{"control" => "up-to-date"}}] =
-               Jason.decode!(conn.resp_body)
+      assert [op1, op2, @up_to_date] = Jason.decode!(conn.resp_body)
 
       assert [
                %{
