@@ -9,13 +9,13 @@ You can start by adopting Electric incrementally,
   <br class="hidden-md" />
   Using
   our
-  <a href="/api/http">
+  <a href="/docs/api/http">
     HTTP API</a>,
   <span class="no-wrap-sm">
-    <a href="/api/clients/typescript">
+    <a href="/docs/api/clients/typescript">
       client&nbsp;libraries</a>
     and
-    <a href="/api/integrations/react">
+    <a href="/docs/api/integrations/react">
       framework&nbsp;hooks</a></span>.
 </span>
 
@@ -28,7 +28,7 @@ const Component = () => {
   })
 
   return (
-    <pre>{ data }<pre>
+    <pre>{ JSON.stringify(data) }<pre>
   )
 }
 ```
@@ -36,13 +36,13 @@ const Component = () => {
 <div class="actions">
   <div class="action">
     <VPButton
-        href="/guides/quickstart"
+        href="/docs/quickstart"
         text="Quickstart"
         theme="brand"
     />
   </div>
   <div class="action">
-    <VPButton href="/api/http"
+    <VPButton href="/docs/api/http"
         text="API docs"
         theme="alt"
     />
@@ -107,7 +107,7 @@ const Component = () => {
   )
 
   return (
-    <pre>{ items }<pre>
+    <pre>{ JSON.stringify(items) }<pre>
   )
 }
 ```
@@ -115,7 +115,7 @@ const Component = () => {
 <div class="actions">
   <div class="action">
     <VPButton
-        href="/product/pglite"
+        href="/docs/intro"
         text="Learn more"
         theme="brand"
     />

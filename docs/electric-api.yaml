@@ -3,12 +3,12 @@ openapi: 3.1.0
 info:
   title: Electric HTTP API
   description: |-
-    [HTTP API](https://next.electric-sql.com/api/http) to sync
+    [HTTP API](https://electric-sql.com/docs/api/http) to sync
     partial replicas of your Postgres data into local apps
     and services.
 
-    See the [Electric Next](https://next.electric-sql.com)
-    documentation for more information.
+    See the [Electric documentation](https://electric-sql.com/docs)
+    for more information.
   # FIXME: set version dynamically
   # version: 0.0.1
 

@@ -13,7 +13,7 @@ hero:
   actions:
     - theme: brand
       text: Quickstart
-      link: /guides/quickstart
+      link: /docs/quickstart
     - theme: alt
       text: >-
         Star on GitHub
@@ -79,7 +79,9 @@ import Tweet from 'vue-tweet'
 
 import VPFeatures from 'vitepress/dist/client/theme-default/components/VPFeatures.vue'
 
-import { data as initialStarCounts } from './count.data.ts'
+import { data as initialStarCounts } from './data/count.data.ts'
+import { data as useCases } from './data/use-cases.data.ts'
+
 import { getStarCount } from './components/starCount.ts'
 
 import HomeYourStackSimplified from '.vitepress/theme/home-your-stack-simplified.md'
@@ -98,57 +100,6 @@ const tweets = [
   {name: 'materialisedview', id: '1769744384025829468', hideSmall: true},
   {name: 'devtools.fm', id: '1810328072236802198', hideMedium: true},
   {name: 'local-first conf', id: '1808473434575229096', hideMedium: true},
-]
-
-const propositions = [
-  {
-    title: "Solves data loading",
-    concept: `
-      Replace APIs, data fetching and network error handling
-      with automated data synchronisation.
-    `,
-    benefits: [
-      'Simplifies your code',
-      'No more loading spinners'
-    ],
-    image: '/img/home/state-transfer-trans.png'
-  },
-  {
-    title: "Solves cache invalidation",
-    concept: `
-      Replace ttls and expiry policies with realtime sync
-      and automated invalidation.
-    `,
-    benefits: [
-      'Simplifies your stack',
-      'No more stale data'
-    ],
-    image: '/img/home/cache-invalidation-trans.png'
-  },
-  {
-    title: "Solves scaling",
-    concept: `
-      Take the query workload off your database and the
-      compute workload off your cloud.
-    `,
-    benefits: [
-      'Simplifies your infra',
-      'Reduces your cloud bill'
-    ],
-    image: '/img/home/scalability-trans.png'
-  },
-  {
-    title: "Solves availability",
-    concept: `
-      Take the network off the interaction path and build
-      systems that work offline and are resilient by design.
-    `,
-    benefits: [
-      'Simplifies your ops',
-      'Enhances your calm'
-    ],
-    image: '/img/home/high-availability-trans.png'
-  }
 ]
 
 const formatStarCount = (count) => (
@@ -203,6 +154,9 @@ let loadTimer
 const handleTweetLoad = () => {
   clearTimeout(loadTimer)
   loadTimer = setTimeout(handleResize, 600)
+
+  const wrapper = document.querySelector('.masonry-wall-wrapper')
+  wrapper.classList.add('visible')
 }
 
 onMounted(async () => {
@@ -283,18 +237,15 @@ onMounted(async () => {
     }
   }
 
-  .action a .vpi-electric-icon,
-  .feature-cta a .vpi-electric-icon {
-    --icon: url(/img/brand/icon.svg);
-  }
   .feature-cta a .count {
     margin-left: 0.25rem;
     min-width: 55px;
   }
 
   .masonry-wall-wrapper {
-    position: relative;
+    position: absolute;
     display: block;
+    margin-left: 20000;
 
     text-align: center;
 
@@ -302,6 +253,10 @@ onMounted(async () => {
     overflow-x: show;
 
     margin-top: 64px;
+  }
+  .masonry-wall-wrapper.visible {
+    position: relative;
+    margin-left: auto;
   }
 
   .masonry-wall {
@@ -337,20 +292,10 @@ onMounted(async () => {
     display: block;
     filter: saturate(0.75);
   }
-  .loading-tweet {
-    border: 1px solid rgba(238 238 238 0.8);
-    border-radius: 5px;
-    background: rgba(23 32 42, 0.8);
-    min-height: 200px;
-    min-width: 200px;
-    width: 100%;
-    position: relative;
-    display: block;
-  }
 
   .home-propositions {
     text-align: center;
-    margin: 32px 0;
+    margin: 32px 0 -64px;
   }
   .home-propositions .proposition {
     display: inline-flex;
@@ -365,6 +310,9 @@ onMounted(async () => {
     background-color: var(--vp-c-bg-soft);
     transition: border-color 0.25s, background-color 0.25s;
     padding: 12px;
+  }
+  .home-propositions .proposition:hover {
+    border-color: var(--ddn-color);
   }
   @media (min-width: 560px) {
     .home-propositions .proposition {
@@ -412,11 +360,6 @@ onMounted(async () => {
   }
   .home-propositions .proposition-content ul.benefits {
     margin-bottom: 14px;
-    color: var(--vp-c-text-1);
-
-    list-style-type: "→ ";
-    list-style-position: inside;
-    padding: 0;
   }
   .home-propositions .proposition-content .benefits li + li {
     margin-top: 4px;
@@ -512,17 +455,19 @@ onMounted(async () => {
 </div>
 
 <div class="home-propositions">
-  <div v-for="(item, index) in propositions" :key="item.id"
-      class="proposition">
+  <a v-for="(item, index) in useCases"
+      :key="item.id"
+      class="proposition no-visual"
+      :href="item.link">
     <div class="proposition-image">
       <img :src="item.image" />
     </div>
     <div class="proposition-content">
       <h3>
-        {{ item.title }}
+        Solves {{ item.solves }}
       </h3>
       <p>
-        {{ item.concept }}
+        {{ item.description }}
       </p>
       <ul class="benefits">
         <li v-for="(benefit, index) in item.benefits" :key="index">
@@ -530,7 +475,7 @@ onMounted(async () => {
         </li>
       </ul>
     </div>
-  </div>
+  </a>
 </div>
 
 <div class="features-content">

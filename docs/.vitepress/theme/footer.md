@@ -96,18 +96,18 @@
     </p>
     <p class="footer-nav message">
       <span class="footer-nav-inner">
-        <a href="/about">
-          About</a>
         <a href="/about/community">
-          Community</a>
+          About</a>
         <a href="/about/contact">
-          Contact</a>&nbsp;
+          Contact</a>
+        <a href="/docs/intro">
+          Docs</a>&nbsp;
       </span>
       <span class="footer-nav-inner">
-        <a href="/guides">
-          Docs</a>
-        <a href="/about/terms">
+        <a href="/about/legal/terms">
           Legal</a>&nbsp;
+        <a href="https://pglite.dev">
+          PGlite ↗</a>&nbsp;
         <a href="https://github.com/electric-sql">
           <span class="vpi-social-github"></span></a>
         <a href="https://discord.electric-sql.com">

@@ -3,8 +3,8 @@ import { defineConfig } from 'vitepress'
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   lang: 'en',
-  title: "Electric Next",
-  description: "Your data, in sync, wherever you need it.",
+  title: "ElectricSQL",
+  description: "Sync little subsets of your Postgres data into local apps and services.",
   appearance: 'force-dark',
   base: '/',
   cleanUrls: true,
@@ -34,65 +34,142 @@ export default defineConfig({
   themeConfig: {
     logo: '/img/brand/logo.svg',
     nav: [
-      { text: 'About', link: '/about' },
       { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
-      { text: 'Guides', link: '/guides/quickstart', activeMatch: '/guides/'},
-      { text: 'API', link: '/api/http', activeMatch: '/api/'},
-      { text: 'Examples', link: 'https://github.com/electric-sql/electric/tree/main/examples'},
+      { text: 'Use cases', link: '/use-cases/state-transfer', activeMatch: '/use-cases/' },
+      { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/'},
+      { text: 'Blog', link: '/blog', activeMatch: '/blog/'},
+      { text: 'About', link: '/about/community', activeMatch: '/about/'}
     ],
-    sidebar: [
-      {
-        text: 'About',
-        items: [
-          { text: '<code>electric</code>', link: '/about' }
-        ]
-      },
-      {
-        text: 'Product',
-        items: [
-          { text: 'Electric', link: '/product/electric' },
-          { text: 'DDN', link: '/product/ddn' },
-          { text: 'PGlite', link: '/product/pglite' },
-        ]
-      },
-      {
-        text: 'Guides',
-        items: [
-          { text: 'Quickstart', link: '/guides/quickstart' },
-          // { text: 'Usage', link: '/guides/usage' },
-          { text: 'Shapes', link: '/guides/shapes' },
-          // { text: 'Deployment', link: '/guides/deployment' },
-          // { text: 'Writing clients', link: '/guides/write-your-own-client' },
-          { text: 'Telemetry', link: '/guides/telemetry' },
-          { text: 'Local Development', link: '/guides/local-development' },
-          { text: 'Auth', link: '/guides/authentication-and-authorization' }
-        ]
-      },
-      {
-        text: 'API',
-        items: [
-          { text: 'HTTP', link: '/api/http' },
-          {
-            text: 'Clients',
-            items: [
-              { text: 'TypeScript', link: '/api/clients/typescript' },
-              { text: 'Elixir', link: '/api/clients/elixir' },
-            ],
-            collapsed: false
-          },
-          {
-            text: 'Integrations',
-            items: [
-              // { text: 'MobX', link: '/api/integrations/mobx' },
-              { text: 'React', link: '/api/integrations/react' },
-              // { text: 'Redis', link: '/api/integrations/redis' },
-              // { text: 'TanStack', link: '/api/integrations/tanstack' },
-            ],
-            collapsed: false
-          }
-        ]
-      }
-    ],
+    sidebar: {
+      '/product': [
+        {
+          text: 'Product',
+          items: [
+            { text: 'Electric', link: '/product/electric' },
+            { text: 'DDN', link: '/product/ddn' },
+            { text: 'PGlite', link: '/product/pglite' },
+          ]
+        }
+      ],
+      '/use-cases': [
+        {
+          text: 'Use cases',
+          items: [
+            {
+              text: 'Replace data fetching with data sync',
+              link: '/use-cases/state-transfer'
+            },
+            {
+              text: 'Build resilient software that works offline',
+              link: '/use-cases/local-first-software'
+            },
+            {
+              text: 'Provision data into dev and test environments',
+              link: '/use-cases/dev-and-test'
+            },
+            //{
+            //  text: 'Add multi-user collaboration to your apps',
+            //  link: '/use-cases/multi-user'
+            //},
+            {
+              text: 'Automate cache invalidation',
+              link: '/use-cases/cache-invalidation'
+            },
+            //{
+            //  text: 'Hydrating edge workers',
+            //  link: '/use-cases/edge-workers'
+            //},
+            //{
+            //  text: 'Partial replicas for distributed cloud services',
+            //  link: '/use-cases/cloud-services'
+            //},
+            {
+              text: 'Retrieve data for local AI',
+              link: '/use-cases/local-ai'
+            },
+            {
+              text: 'Reduce your cloud costs',
+              link: '/use-cases/cloud-costs'
+            }
+          ]
+        }
+      ],
+      '/docs': [
+        {
+          text: 'Docs',
+          collapsed: false,
+          items: [
+            { text: 'Intro', link: '/docs/intro' },
+            { text: 'Quickstart', link: '/docs/quickstart' },
+          ]
+        },
+        {
+          text: 'Guides',
+          collapsed: false,
+          items: [
+            { text: 'Auth', link: '/docs/guides/auth' },
+            { text: 'Shapes', link: '/docs/guides/shapes' },
+            { text: 'Local development', link: '/docs/guides/local-development' },
+            { text: 'Deployment', link: '/docs/guides/deployment' },
+            { text: 'Writing your own client', link: '/docs/guides/writing-your-own-client' },
+          ]
+        },
+        {
+          text: 'API',
+          collapsed: false,
+          items: [
+            { text: 'HTTP', link: '/docs/api/http' },
+            {
+              text: 'Clients',
+              items: [
+                { text: 'TypeScript', link: '/docs/api/clients/typescript' },
+                { text: 'Elixir', link: '/docs/api/clients/elixir' },
+              ],
+              collapsed: false
+            },
+            {
+              text: 'Integrations',
+              items: [
+                // { text: 'MobX', link: '/docs/api/integrations/mobx' },
+                { text: 'React', link: '/docs/api/integrations/react' },
+                // { text: 'Redis', link: '/docs/api/integrations/redis' },
+                // { text: 'TanStack', link: '/docs/api/integrations/tanstack' },
+              ],
+              collapsed: false
+            }
+          ]
+        },
+        {
+          text: 'Reference',
+          collapsed: true,
+          items: [
+            { text: 'Alternatives', link: '/docs/reference/alternatives' },
+            { text: 'Literature', link: '/docs/reference/literature' },
+            { text: 'Telemetry', link: '/docs/reference/telemetry' },
+          ]
+        },
+      ],
+      '/about': [
+        {
+          text: 'About',
+          items: [
+            { text: 'Community', link: '/about/community' },
+            { text: 'Team', link: '/about/team' },
+            { text: 'Jobs', link: '/about/jobs' },
+            {
+              text: 'Legal',
+              items: [
+                { text: 'Terms', link: '/about/legal/terms' },
+                { text: 'Privacy', link: '/about/legal/privacy' },
+                { text: 'Cookies', link: '/about/legal/cookies' },
+              ],
+              collapsed: false
+            },
+            { text: 'Contact', link: '/about/contact' }
+          ]
+        },
+      ]
+    },
     siteTitle: false,
     socialLinks: [
       { icon: 'discord', link: 'https://discord.electric-sql.com' },

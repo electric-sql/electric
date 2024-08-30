@@ -36,7 +36,7 @@ What started as tinkering in private now looks certain to be the way forward for
 
 We created a new repo at [electric-sql/electric-next](https://github.com/electric-sql/electric-next) and started by porting the absolute minimum code necessary from the previous repo.
 
-It provides an [HTTP API](/api/http) for syncing [Shapes](/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/api/clients/typescript) and [integrations](/api/integrations/react).
+It provides an [HTTP API](/docs/api/http) for syncing [Shapes](/docs/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/docs/api/clients/typescript) and [integrations](/docs/api/integrations/react).
 
 It's also simple to write your own client in any language.
 
@@ -152,7 +152,7 @@ The diagramme above and table below summarise what we see as core and what we've
 | Aspect | Is it core? | Who should/can provide? |
 | --- | --- | --- |
 | Syncing data | yes | Electric |
-| Partial replication ([Shapes](/guides/shapes)) | yes | Electric |
+| Partial replication ([Shapes](/docs/guides/shapes)) | yes | Electric |
 | Schema management / propagation / matching | partial | Application specific. In some cases it may be useful or necessary to replicate and validate schema information. In others, it can be the responsibility of the client to connect with the correct schema. |
 | Type safety in the client | partial | Important in many cases for DX and can be assisted by the sync service (e.g.: by providing an endpoint to query types for a shape). But use of types is optional and in many cases types can be provided by ORMs and other client-libraries. |
 | Permissions / authorization | no | There are many valid patterns here. Auth middleware, proxies, rule systems. Authorize at connect, per shape, per row/operation. A sync engine may provide some hooks and options but should not prescribe a solution. |
@@ -169,7 +169,7 @@ One of the key aspects that has changed in the core sync engine is a switch from
 
 Switching to an HTTP protocol may at first seem like a regression or a strange fit. Web sockets are build on top of HTTP specifically to serve the kind of realtime data stream that Electric provides. However, they are also more stateful and harder to cache.
 
-By switching to the [new HTTP API](/api/http), the new system:
+By switching to the [new HTTP API](/docs/api/http), the new system:
 
 - minimises state, making the sync engine more reliable and easier to scale out
 - integrates with standard HTTP tooling, including proxies and CDNs
@@ -248,7 +248,7 @@ You can sync data into:
 
 - apps, replacing data fetching with data sync
 - development environments, for example syncing data into [an embedded PGlite](/product/pglite)
-- edge workers and services, for example maintaining a low-latency [edge data cache](/api/integrations/redis)
+- edge workers and services, for example maintaining a low-latency [edge data cache](/docs/api/integrations/redis)
 - local AI systems running RAG, as per the example below
 
 <figure>
@@ -281,8 +281,8 @@ At the time of writing this document, we are early in the development of `electr
 
 However, even just with the first release of `electric-next` you can already sync partial subsets of data from a Postgres database into a wide variety of clients and environments, for example:
 
-- syncing data into local apps using the [TypeScript](/api/clients/typescript) and [Elixir](/api/clients/elixir) clients
-- replacing hot-path data fetching and database queries in apps using [React](/api/integrations/react), [MobX](/api/integrations/react) and [TanStack](/api/integrations/tanstack)
+- syncing data into local apps using the [TypeScript](/docs/api/clients/typescript) and [Elixir](/docs/api/clients/elixir) clients
+- replacing hot-path data fetching and database queries in apps using [React](/docs/api/integrations/react), [MobX](/docs/api/integrations/react) and [TanStack](/docs/api/integrations/tanstack)
 - maintain live caches with automatic invalidation, as per [our Redis example](https://github.com/electric-sql/electric/blob/main/examples/redis-client/src/index.ts)
 
 ### Roadmap
@@ -299,15 +299,15 @@ You can track development on [Discord](https://discord.electric-sql.com) and via
 
 See the:
 
-- [Quickstart guide](/guides/quickstart)
-- [API docs](/api/http)
+- [Quickstart guide](/docs/quickstart)
+- [API docs](/docs/api/http)
 - [Examples](https://github.com/electric-sql/electric/tree/main/examples)
 
 If you have any questions or need support, ask on the `#help-and-support` channel in the [Electric Discord](https://discord.electric-sql.com).
 
 ### Get involved in development
 
-`electric` is open source (Apache 2.0) and developed on GitHub at [electric-sql/electric](https://github.com/electric-sql/electric).
+Electric is open source (Apache 2.0) and developed on GitHub at [electric-sql/electric](https://github.com/electric-sql/electric).
 
 See:
 

@@ -18,6 +18,17 @@
   --vp-code-font-size: 0.925em;
 }
 
+.vpi-electric-icon {
+  --icon: url(/img/brand/icon.svg);
+}
+
+
+a.no-visual,
+a.no-visual:hover {
+  text-decoration: none;
+  color: inherit;
+}
+
 @media (max-width: 959px) {
   :root, .dark {
     --vp-code-font-size: 0.875em;
@@ -229,6 +240,9 @@
 figure {
   margin: 40px 0;
 }
+figure.page-image {
+  margin: 0 0 36px 0;
+}
 figcaption {
   text-align: right;
   font-size: 90%;
@@ -279,10 +293,10 @@ iframe {
   font-size: 20px;
 }
 .VPFeature.link[href="/product/electric"]:hover {
-    border-color: var(--electric-color);
+  border-color: var(--electric-color);
 }
 .VPFeature.link[href="/product/pglite"]:hover {
-    border-color: var(--pglite-color);
+  border-color: var(--pglite-color);
 }
 
 .VPFeature .details {
@@ -301,12 +315,13 @@ iframe {
   margin-bottom: 20px;
 }
 
-.about-zap {
-  max-width: min(calc(150px + 25vw), 420px);
-  margin: -20px 0 30px;
+.intro-zap {
+  --width: min(calc(150px + 25vw), 360px);
+  max-width: var(--width);
+  margin: -10px 0 34px calc(0px - calc(var(--width) / 5.5));
 }
 @media (max-width: 767px) {
-  .about-zap-container {
+  .intro-zap-container {
     display: none;
   }
 }
@@ -328,4 +343,12 @@ iframe {
 .vp-block pre,
 .vp-doc [class*='language-'] pre {
   padding: 24px 0 !important;
+}
+
+ul.benefits {
+  color: var(--vp-c-text-1) !important;
+
+  list-style-type: "→ ";
+  list-style-position: inside;
+  padding: 0;
 }

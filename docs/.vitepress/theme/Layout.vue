@@ -1,12 +1,19 @@
 <script setup>
+import { useData } from 'vitepress'
+import { useSidebar } from 'vitepress/theme'
+
 import DefaultTheme from 'vitepress/theme-without-fonts'
 
 import HomeFeaturesAfter from './home-features-after.md'
 import HomeFeaturesBefore from './home-features-before.md'
 
 import Footer from './footer.md'
+import UseCaseHeader from './use-case-header.md'
 
 const { Layout } = DefaultTheme
+
+const { frontmatter } = useData()
+const { hasSidebar } = useSidebar()
 </script>
 
 <template>
@@ -29,8 +36,13 @@ const { Layout } = DefaultTheme
         </div>
       </div>
     </template>
+    <template #doc-before>
+      <div class="vp-doc">
+        <UseCaseHeader v-if="frontmatter.case" />
+      </div>
+    </template>
     <template #layout-bottom>
-      <Footer v-if="$frontmatter.layout == 'home'" />
+      <Footer v-if="!hasSidebar" />
     </template>
   </Layout>
 </template>
