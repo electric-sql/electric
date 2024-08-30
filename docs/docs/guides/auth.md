@@ -6,22 +6,39 @@ outline: deep
 
 How to authenticate users and authorize data access.
 
-## Authentication and Authorization
+## Standard HTTP authentication and authorization
 
-Most sync engines require you to use their APIs for authentication and authorization.
+Electric [syncs data over HTTP](/docs/api/http). This means that (unlike other sync engines where you have to use their specific APIs for auth) with Electric you can authenticate and authorize data access the same way you do for normal web resources like API endpoints.
 
-But as [Electric is built on the standard HTTP protocol](/docs/api/http), you can handle auth for Electric exactly the same as you do the rest of the (HTTP) API calls in your app.
+### Recommended pattern
 
-At a high level the pattern for auth is:
+The main pattern we recommend is to authorise at the [Shape](/docs/guides/shape) level.
 
-1. Add an `Authorization` header to authenticate the client when requesting [shape](/docs/guides/shapes) data.
-2. The API uses the header to check that the client exists and has access to the requested data.
-3. If not, it returns a 401 or 403 status to tell the client it doesn't have access.
-4. If the client does have access, the API then requests the shape data from Electric and streams that back to the client.
+So when you make a request to sync a shape, route it via your API, validate the user credentials and shape parameters, and then only proxy the data through if authorised.
 
-In the app, you pass a `fetchWrapper` to the Electric client which adds your `Authorization` header when Electric requests shape data.
+<figure>
+  <a href="/img/guides/auth/proxy-flow.jpg">
+    <img src="/img/guides/auth/proxy-flow.png" class="hidden-sm"
+        alt="Illustration of the proxied auth flow"
+    />
+    <img src="/img/guides/auth/proxy-flow.sm.png" class="block-sm"
+        alt="Illustration of the proxied auth flow"
+    />
+  </a>
+</figure>
 
-## Sample code
+For example, you could implement with the following steps:
+
+1. add an `Authorization` header to your [`GET /shape` request](/docs/api/http#syncing-shapes)
+2. uses the header to check that the client exists and has access to the requested data.
+3. if not, returns a `401` or `403` status to tell the client it doesn't have access
+4. if the client does have access, proxy the request to Electric and stream the response back to the client
+
+### Using the Typescript client
+
+When using the [Typescript client](/docs/api/clients/typescript), you can pass a `fetchWrapper` to the Electric client which adds your `Authorization` header when Electric requests shape data.
+
+#### Sample code
 
 In the client:
 
@@ -109,3 +126,18 @@ export async function GET(
   return resp
 }
 ```
+
+### Integrating external auth services
+
+Note that with this pattern, if you need it to, the auth endpoint that proxies the request to the Electric shape API can call out to a seperate auth service. So if you need to integrate an external auth system, you can.
+
+<figure>
+  <a href="/img/guides/auth/external-auth-service.jpg">
+    <img src="/img/guides/auth/external-auth-service.png" class="hidden-sm"
+        alt="Illustration of the proxied auth flow with an external auth service"
+    />
+    <img src="/img/guides/auth/external-auth-service.sm.png" class="block-sm"
+        alt="Illustration of the proxied auth flow with an external auth service"
+    />
+  </a>
+</figure>
