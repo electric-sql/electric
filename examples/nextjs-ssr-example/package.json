@@ -19,6 +19,7 @@
   "dependencies": {
     "@electric-sql/client": "workspace:*",
     "@electric-sql/react": "workspace:*",
+    "eslint-config-next": "^14.2.7",
     "next": "^14.2.5",
     "pg": "^8.12.0",
     "react": "^18.3.1",

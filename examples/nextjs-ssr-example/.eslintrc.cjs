@@ -8,6 +8,7 @@ module.exports = {
     `eslint:recommended`,
     `plugin:@typescript-eslint/recommended`,
     `plugin:prettier/recommended`,
+    `eslint-config-next`,
   ],
   parserOptions: {
     ecmaVersion: 2022,
