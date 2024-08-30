@@ -36,9 +36,9 @@
     "profile_uri": "https://www.linkedin.com/in/monicasarbu",
     "profile_display_uri": "in/monicasarbu",
     "profile_icon": "social-linkedin",
-    "location": "Seattle",
-    "country": "USA",
-    "flag": "us",
+    "location": "Berlin",
+    "country": "Germany",
+    "flag": "de",
     "published": true
   },
   {
@@ -154,6 +154,20 @@
     "published": true
   },
   {
+    "slug": "emma",
+    "name": "Emma Tracey",
+    "role": "Angel",
+    "short_bio": "Sceal, Honeypot",
+    "image": "/img/team/emma.jpg",
+    "profile_uri": "https://www.linkedin.com/in/emmalouisetracey",
+    "profile_display_uri": "in/emmalouisetracey",
+    "profile_icon": "social-linkedin",
+    "location": "Berlin",
+    "country": "Germany",
+    "flag": "de",
+    "published": true
+  },
+  {
     "slug": "niamh",
     "name": "Niamh Gavin",
     "role": "Angel",
@@ -180,21 +194,6 @@
     "location": "Victoria",
     "country": "Australia",
     "flag": "au",
-    "published": true,
-    "angel": true
-  },
-  {
-    "slug": "phil",
-    "name": "Phil Cowans",
-    "role": "Angel",
-    "short_bio": "TWYN, Nested",
-    "image": "/img/team/phil.jpg",
-    "profile_uri": "https://www.linkedin.com/in/philcowans",
-    "profile_display_uri": "in/philcowans",
-    "profile_icon": "linkedin",
-    "location": "London",
-    "country": "England",
-    "flag": "gb",
     "published": true,
     "angel": true
   },
@@ -245,6 +244,21 @@
     "fund": true
   },
   {
+    "slug": "stepfunction",
+    "name": "StepFunction",
+    "role": "VC",
+    "short_bio": "Specialist data infra investor.",
+    "image": "/img/team/stepfunction.jpg",
+    "profile_uri": "https://www.linkedin.com/company/step-function-ventures",
+    "profile_display_uri": "in/step-function-ventures",
+    "profile_icon": "social-linkedin",
+    "location": "Boston",
+    "country": "USA",
+    "flag": "us",
+    "published": true,
+    "fund": true
+  },
+  {
     "slug": "firestreak",
     "name": "Firestreak",
     "role": "VC",
@@ -269,21 +283,6 @@
     "profile_display_uri": "ninjacapital.com",
     "profile_icon": "electric-icon",
     "location": "Arlington",
-    "country": "USA",
-    "flag": "us",
-    "published": true,
-    "fund": true
-  },
-  {
-    "slug": "stepfunction",
-    "name": "StepFunction",
-    "role": "VC",
-    "short_bio": "Specialist data infra investor.",
-    "image": "/img/team/stepfunction.jpg",
-    "profile_uri": "https://www.linkedin.com/company/step-function-ventures",
-    "profile_display_uri": "in/step-function-ventures",
-    "profile_icon": "social-linkedin",
-    "location": "Boston",
     "country": "USA",
     "flag": "us",
     "published": true,
