@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://next.electric-sql.com" target="_blank">
+  <a href="https://electric-sql.com" target="_blank">
     <picture>
       <source media="(prefers-color-scheme: dark)"
           srcset="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-next.svg"
@@ -29,22 +29,23 @@ Your Postgres data, in sync, wherever you need it.
 
 ## Quick links
 
-- [About](https://next.electric-sql.com/about)
-- [Docs](https://next.electric-sql.com)
+- [Quickstart](https://electric-sql.com/docs/quickstart)
+- [About](https://electric-sql.com/about)
+- [Docs](https://electric-sql.com/docs)
 - [Examples](./examples)
 
 ## What is Electric?
 
-Electric provides an [HTTP API](https://next.electric-sql.com/api/http) for syncing [Shapes](https://next.electric-sql.com/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](https://next.electric-sql.com/api/clients/typescript) and [integrations](https://next.electric-sql.com/api/integrations/react).
+Electric provides an [HTTP API](https://electric-sql.com/docs/api/http) for syncing [Shapes](https://electric-sql.com/docs/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](https://electric-sql.com/docs/api/clients/typescript) and [integrations](https://electric-sql.com/docs/api/integrations/react).
 
 ### This looks a bit different than the last time I visited?
 
 We started a clean rebuild of the sync engine in July 2024. One that's informed by the lessons learned building the [previous system](https://github.com/electric-sql/electric-old). See
-James' blog post for background on the change: https://next.electric-sql.com/about
+James' blog post for background on the change: https://electric-sql.com/about
 
 ## Getting Started
 
-See the [Quickstart guide](https://next.electric-sql.com/guides/quickstart) to get up and running. In short, you need to:
+See the [Quickstart guide](https://electric-sql.com/docs/quickstart) to get up and running. In short, you need to:
 
 1. have a Postgres database with logical replication enabled; and then to
 2. run Electric in front of it, connected via `DATABASE_URL`
@@ -55,13 +56,13 @@ For example, using [Docker Compose](https://docs.docker.com/compose/) from the r
 docker compose -f .support/docker-compose.yml up
 ```
 
-You can then use the [HTTP API](https://next.electric-sql/api/http) to sync data from your Postgres. For example, to start syncing the whole `foo` table:
+You can then use the [HTTP API](https://next.electric-sql/docs/api/http) to sync data from your Postgres. For example, to start syncing the whole `foo` table:
 
 ```sh
 curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
 ```
 
-Or use one of the clients or integrations, such as the [`useShape`](https://next.electric-sql/api/integrations/react) React hook:
+Or use one of the clients or integrations, such as the [`useShape`](https://next.electric-sql/docs/api/integrations/react) React hook:
 
 ```jsx
 import { useShape } from '@electric-sql/react'
@@ -76,7 +77,7 @@ function Component() {
 }
 ```
 
-Again, see the [Quickstart](https://next.electric-sql.com/guides/quickstart) and the [Docs](https://next.electric-sql.com) for more details.
+Again, see the [Quickstart](https://electric-sql.com/docs/quickstart) and the [Docs](https://electric-sql.com) for more details.
 
 ## HTTP API Docs
 

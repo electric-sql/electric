@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://next.electric-sql.com" target="_blank">
+  <a href="https://electric-sql.com" target="_blank">
     <picture>
       <source media="(prefers-color-scheme: dark)"
           srcset="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-next.svg"
@@ -27,7 +27,7 @@
 
 Real-time Postgres sync for modern apps.
 
-Electric provides an [HTTP interface](https://next.electric-sql.com/api/http) to Postgres to enable a massive number of clients to query and get real-time updates to subsets of the database, called [Shapes](https://next.electric-sql.com//guides/shapes). In this way, Electric turns Postgres into a real-time database.
+Electric provides an [HTTP interface](https://electric-sql.com/docs/api/http) to Postgres to enable a massive number of clients to query and get real-time updates to subsets of the database, called [Shapes](https://electric-sql.com//docs/guides/shapes). In this way, Electric turns Postgres into a real-time database.
 
 The TypeScript client helps ease reading Shapes from the HTTP API in the browser and other JavaScript environments, such as edge functions and server-side Node/Bun/Deno applications. It supports both fine-grained and coarse-grained reactivity patterns &mdash; you can subscribe to see every row that changes, or you can just subscribe to get the whole shape whenever it changes.
 
@@ -77,4 +77,4 @@ shape.subscribe(shapeData => {
 }
 ```
 
-See the [Docs](https://next.electric-sql.com) and [Examples](https://next.electric-sql.com/examples/basic) for more information.
+See the [Docs](https://electric-sql.com) and [Examples](https://electric-sql.com/examples/basic) for more information.
