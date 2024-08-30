@@ -12,7 +12,7 @@ Electric [syncs data over HTTP](/docs/api/http). This means that (unlike other s
 
 ### Recommended pattern
 
-The main pattern we recommend is to authorise at the [Shape](/docs/guides/shape) level.
+The main pattern we recommend is to authorise at the [Shape](/docs/guides/shapes) level.
 
 So when you make a request to sync a shape, route it via your API, validate the user credentials and shape parameters, and then only proxy the data through if authorised.
 
