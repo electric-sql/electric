@@ -66,6 +66,7 @@ interface UseShapeResult {
    * @type(Shape)
    */
   shape: Shape
+  shapeHash: string
   error: Shape[`error`]
   isError: boolean
   /**
@@ -81,12 +82,13 @@ function shapeSubscribe(shape: Shape, callback: () => void) {
   }
 }
 
-function parseShapeData(shape: Shape): UseShapeResult {
+function parseShapeData(shape: Shape, shapeHash: string): UseShapeResult {
   return {
     data: [...shape.valueSync.values()],
     isUpToDate: shape.isUpToDate,
     isError: shape.error !== false,
     shape,
+    shapeHash,
     error: shape.error,
   }
 }
@@ -101,19 +103,23 @@ export function useShape<Selection = UseShapeResult>({
   selector = identity as never,
   ...options
 }: UseShapeOptions<Selection>): Selection {
+  const shapeHash = sortedOptionsHash(options)
   const shapeStream = getShapeStream(options as ShapeStreamOptions)
   const shape = getShape(shapeStream)
 
-  const latestShapeData = useRef(parseShapeData(shape))
+  const latestShapeData = useRef(parseShapeData(shape, shapeHash))
+  if (shapeHash !== latestShapeData.current.shapeHash) {
+    latestShapeData.current = parseShapeData(shape, shapeHash)
+  }
   const getSnapshot = React.useCallback(() => latestShapeData.current, [])
   const shapeData = useSyncExternalStoreWithSelector(
     useCallback(
       (onStoreChange) =>
         shapeSubscribe(shape, () => {
-          latestShapeData.current = parseShapeData(shape)
+          latestShapeData.current = parseShapeData(shape, shapeHash)
           onStoreChange()
         }),
-      [shape]
+      [shape, shapeHash]
     ),
     getSnapshot,
     getSnapshot,
