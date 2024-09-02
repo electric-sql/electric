@@ -158,7 +158,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
       max_key: chunk_checkpoint_end(shape_id),
       min_key_inclusive: false
     )
-    |> Stream.map(fn {{key}, _} -> offset(key) end)
+    |> Stream.map(fn {key, _} -> offset(key) end)
     |> Enum.take(1)
     |> Enum.at(0)
   end

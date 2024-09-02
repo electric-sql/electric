@@ -141,8 +141,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
                  "value" => "foo",
                  "headers" => %{},
                  "offset" => "#{next_offset}"
-               },
-               %{"headers" => %{"control" => "up-to-date"}}
+               }
              ]
 
       assert Plug.Conn.get_resp_header(conn, "etag") == [
@@ -265,8 +264,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
                  "value" => "bar",
                  "headers" => %{},
                  "offset" => "#{next_next_offset}"
-               },
-               %{"headers" => %{"control" => "up-to-date"}}
+               }
              ]
 
       assert Plug.Conn.get_resp_header(conn, "etag") == [
