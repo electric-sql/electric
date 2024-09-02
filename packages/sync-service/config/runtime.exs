@@ -66,6 +66,11 @@ else
   config :electric, connection_opts: connection_opts
 end
 
+config :electric,
+  log_chunking_opts: [
+    chunk_bytes_threshold: env!("LOG_CHUNK_BYTES_THREHSOLD", :integer, 10_000)
+  ]
+
 enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)
 cache_max_age = env!("CACHE_MAX_AGE", :integer, 60)
 cache_stale_age = env!("CACHE_STALE_AGE", :integer, 60 * 5)

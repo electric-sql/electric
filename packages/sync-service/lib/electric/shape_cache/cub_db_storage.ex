@@ -1,4 +1,5 @@
 defmodule Electric.ShapeCache.CubDbStorage do
+  alias Electric.ShapeCache.LogChunker
   alias Electric.ConcurrentStream
   alias Electric.Replication.LogOffset
   alias Electric.Telemetry.OpenTelemetry
@@ -29,6 +30,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
 
   def start_link(%{shape_id: shape_id, db: db} = opts) when is_binary(shape_id) do
     with {:ok, path} <- initialise_filesystem(shape_id, opts) do
+      LogChunker.start_link(opts)
       CubDB.start_link(data_dir: path, name: db)
     end
   end
@@ -139,6 +141,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
       min_key_inclusive: false
     )
     |> Stream.map(fn {_, item} -> item end)
+    |> LogChunker.materialise_chunk_boundaries()
   end
 
   def has_shape?(shape_id, opts) do
@@ -163,7 +166,18 @@ defmodule Electric.ShapeCache.CubDbStorage do
 
   def append_to_log!(shape_id, log_items, opts) do
     log_items
-    |> Enum.map(fn log_item -> {log_key(shape_id, log_item.offset), Jason.encode!(log_item)} end)
+    |> Enum.map(fn log_item ->
+      json_log_item = Jason.encode!(log_item)
+      log_key = log_key(shape_id, log_item.offset)
+
+      case LogChunker.add_to_chunk(shape_id, json_log_item, opts) do
+        {:ok, json_log_item} ->
+          {log_key, json_log_item}
+
+        {:threshold_exceeded, json_log_item_with_boundary} ->
+          {log_key, json_log_item_with_boundary}
+      end
+    end)
     |> then(&CubDB.put_multi(opts.db, &1))
 
     :ok

@@ -1,4 +1,5 @@
 defmodule Electric.Shapes do
+  alias Electric.ShapeCache.LogChunker
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache
@@ -28,10 +29,18 @@ defmodule Electric.Shapes do
     {shape_cache, shape_cache_opts} = Access.get(config, :shape_cache, {ShapeCache, []})
     offset = Access.get(opts, :since, LogOffset.before_all())
     max_offset = Access.get(opts, :up_to, LogOffset.last())
+    take_chunk = Access.get(opts, :take_chunk, false)
     storage = shape_storage(config, shape_id)
 
-    with true <- shape_cache.has_shape?(shape_id, shape_cache_opts) do
-      Storage.get_log_stream(shape_id, offset, max_offset, storage)
+    chunked_log_stream =
+      with true <- shape_cache.has_shape?(shape_id, shape_cache_opts) do
+        Storage.get_log_stream(shape_id, offset, max_offset, storage)
+      end
+
+    if take_chunk do
+      chunked_log_stream |> LogChunker.take_chunk()
+    else
+      chunked_log_stream |> LogChunker.dissolve_chunks()
     end
   end
 

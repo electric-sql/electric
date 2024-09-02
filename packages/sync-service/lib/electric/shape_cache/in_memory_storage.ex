@@ -1,6 +1,7 @@
 defmodule Electric.ShapeCache.InMemoryStorage do
   use Agent
 
+  alias Electric.ShapeCache.LogChunker
   alias Electric.ConcurrentStream
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Querying
@@ -30,6 +31,8 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   def start_link(compiled_opts) do
     if is_nil(compiled_opts.shape_id), do: raise("cannot start an un-attached storage instance")
+
+    LogChunker.start_link(compiled_opts)
 
     Agent.start_link(
       fn ->
@@ -126,6 +129,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
           {item, position}
       end
     end)
+    |> LogChunker.materialise_chunk_boundaries()
   end
 
   def has_shape?(shape_id, opts) do
@@ -168,8 +172,16 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
     log_items
     |> Enum.map(fn log_item ->
-      offset = storage_offset(log_item.offset)
-      {{shape_id, offset}, Jason.encode!(log_item)}
+      log_key = {shape_id, storage_offset(log_item.offset)}
+      json_log_item = Jason.encode!(log_item)
+
+      case LogChunker.add_to_chunk(shape_id, json_log_item, opts) do
+        {:ok, json_log_item} ->
+          {log_key, json_log_item}
+
+        {:threshold_exceeded, json_log_item_with_boundary} ->
+          {log_key, json_log_item_with_boundary}
+      end
     end)
     |> then(&:ets.insert(ets_table, &1))
 

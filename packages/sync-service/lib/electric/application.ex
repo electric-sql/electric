@@ -1,4 +1,5 @@
 defmodule Electric.Application do
+  alias Electric.ShapeCache.LogChunker
   use Application
 
   @process_registry_name Electric.Registry.Processes
@@ -14,14 +15,16 @@ defmodule Electric.Application do
 
     {storage_module, storage_opts} = Application.fetch_env!(:electric, :storage)
     {kv_module, kv_fun, kv_params} = Application.fetch_env!(:electric, :persistent_kv)
+    chunking_opts = Application.fetch_env!(:electric, :log_chunking_opts)
 
     persistent_kv = apply(kv_module, kv_fun, [kv_params])
 
     publication_name = "electric_publication"
     slot_name = "electric_slot"
 
-    with {:ok, storage_opts} <- storage_module.shared_opts(storage_opts) do
-      storage = {storage_module, storage_opts}
+    with {:ok, storage_opts} <- storage_module.shared_opts(storage_opts),
+         {:ok, chunking_opts} <- LogChunker.shared_opts(chunking_opts) do
+      storage = {storage_module, Map.merge(chunking_opts, storage_opts)}
 
       prepare_tables_fn =
         {Electric.Postgres.Configuration, :configure_tables_for_replication!, [publication_name]}

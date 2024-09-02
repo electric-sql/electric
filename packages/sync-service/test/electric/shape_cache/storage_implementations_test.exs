@@ -2,6 +2,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   use ExUnit.Case, async: true
   import Support.TestUtils
 
+  alias Electric.ShapeCache.LogChunker
   alias Electric.LogItems
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
@@ -684,7 +685,14 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   defp start_storage(%{module: module} = context) do
     {:ok, opts} = module |> opts(context) |> module.shared_opts()
-    shape_opts = module.for_shape(@shape_id, opts)
+    {:ok, chunking_opts} = LogChunker.shared_opts()
+
+    shape_opts =
+      Map.merge(
+        module.for_shape(@shape_id, opts),
+        LogChunker.for_shape(@shape_id, chunking_opts)
+      )
+
     {:ok, _} = module.start_link(shape_opts)
 
     {:ok, %{module: module, opts: shape_opts}}

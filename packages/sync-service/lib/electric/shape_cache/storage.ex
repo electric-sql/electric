@@ -1,4 +1,5 @@
 defmodule Electric.ShapeCache.Storage do
+  alias Electric.ShapeCache.LogChunker
   alias Electric.Shapes.Querying
   alias Electric.LogItems
   alias Electric.Shapes.Shape
@@ -18,14 +19,14 @@ defmodule Electric.ShapeCache.Storage do
           headers: log_header(),
           offset: LogOffset.t()
         }
-  @type log :: Enumerable.t(log_entry())
-
   @type serialised_log_entry :: %{
           key: String.t(),
           value: map(),
           headers: log_header(),
           offset: String.t()
         }
+
+  @type log :: Enumerable.t(Querying.json_iodata() | LogChunker.chunk_boundary())
 
   @type row :: list()
 
@@ -71,7 +72,7 @@ defmodule Electric.ShapeCache.Storage do
             ) :: :ok
   @doc "Get stream of the log for a shape since a given offset"
   @callback get_log_stream(shape_id(), LogOffset.t(), LogOffset.t(), compiled_opts()) ::
-              Enumerable.t()
+              Enumerable.t(String.t() | LogChunker.chunk_boundary())
 
   @doc "Clean up snapshots/logs for a shape id"
   @callback cleanup!(shape_id(), compiled_opts()) :: :ok
@@ -86,7 +87,11 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   def for_shape(shape_id, {mod, opts}) do
-    {mod, apply(mod, :for_shape, [shape_id, opts])}
+    {mod,
+     Map.merge(
+       LogChunker.for_shape(shape_id, opts),
+       apply(mod, :for_shape, [shape_id, opts])
+     )}
   end
 
   def start_link({mod, opts}) do
@@ -160,8 +165,7 @@ defmodule Electric.ShapeCache.Storage do
 
   import LogOffset, only: :macros
   @doc "Get stream of the log for a shape since a given offset"
-  @spec get_log_stream(shape_id(), LogOffset.t(), LogOffset.t(), storage()) ::
-          Enumerable.t()
+  @spec get_log_stream(shape_id(), LogOffset.t(), LogOffset.t(), storage()) :: log()
   def get_log_stream(shape_id, offset, max_offset \\ LogOffset.last(), {mod, opts})
       when max_offset == :infinity or not is_log_offset_lt(max_offset, offset) do
     shape_opts = mod.for_shape(shape_id, opts)
