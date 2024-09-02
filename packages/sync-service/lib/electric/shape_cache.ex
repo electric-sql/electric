@@ -233,7 +233,7 @@ defmodule Electric.ShapeCache do
 
         # Fetch all shapes that are affected by the relation change and clean them up
         persistent_state
-        |> ShapeStatus.list_shapes()
+        |> shape_status.list_shapes()
         |> Enum.filter(&Shape.is_affected_by_relation_change?(&1, change))
         |> Enum.map(&elem(&1, 0))
         |> Enum.each(fn shape_id -> clean_up_shape(state, shape_id) end)

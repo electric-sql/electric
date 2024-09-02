@@ -9,9 +9,6 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
 
   @callback initialise(ShapeStatus.options()) :: {:ok, ShapeStatus.t()} | {:error, term()}
   @callback list_shapes(ShapeStatus.t()) :: [{ShapeStatus.shape_id(), Shape.t()}]
-  @callback list_active_shapes(opts :: keyword()) :: [
-              {ShapeStatus.shape_id(), ShapeStatus.shape_def(), ShapeStatus.xmin()}
-            ]
   @callback get_relation(ShapeStatus.t(), Messages.relation_id()) :: Relation.t() | nil
   @callback store_relation(ShapeStatus.t(), Relation.t()) :: :ok
   @callback remove_shape(ShapeStatus.t(), ShapeStatus.shape_id()) ::

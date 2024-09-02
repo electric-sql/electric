@@ -38,7 +38,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                )
 
   describe "store_transaction/2" do
-    setup do
+    setup ctx do
       # Start a test Registry
       registry_name = Module.concat(__MODULE__, Registry)
       start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
@@ -61,18 +61,21 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         end)
 
       MockShapeStatus
-      |> expect(:initialise, 1, fn opts -> {:ok, opts} end)
+      |> expect(:initialise, 1, fn opts -> Electric.ShapeCache.ShapeStatus.initialise(opts) end)
       |> expect(:list_shapes, 1, fn _ -> [] end)
       # allow the ShapeCache to call this mock
       |> allow(self(), fn -> GenServer.whereis(Electric.ShapeCache) end)
 
       # We need a ShapeCache process because it is a GenStage consumer
       # that handles the Relation events produced by ShapeLogCollector
+      shape_meta_table = :"shape_meta_#{Support.ComponentSetup.full_test_name(ctx)}"
+
       shape_cache_opts =
         [
           storage: {MockStorage, []},
           inspector: {MockInspector, []},
           shape_status: MockShapeStatus,
+          shape_meta_table: shape_meta_table,
           persistent_kv: Electric.PersistentKV.Memory.new!(),
           prepare_tables_fn: fn _, _ -> {:ok, [:ok]} end,
           log_producer: __MODULE__.ShapeLogCollector,
@@ -197,9 +200,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       shape_id3 = "shape3"
       shape3 = @other_shape
 
-      # doesn't matter, isn't used for this test
-      xmin = 100
-
       old_rel = %Relation{
         id: relation_id,
         schema: "public",
@@ -219,8 +219,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       MockShapeStatus
       |> expect(:get_relation, 1, fn _, ^relation_id -> old_rel end)
       |> expect(:store_relation, 1, fn _, ^new_rel -> :ok end)
-      |> expect(:list_active_shapes, 1, fn _ ->
-        [{shape_id1, shape1, xmin}, {shape_id2, shape2, xmin}, {shape_id3, shape3, xmin}]
+      |> expect(:list_shapes, 1, fn _ ->
+        [{shape_id1, shape1}, {shape_id2, shape2}, {shape_id3, shape3}]
       end)
       |> expect(:remove_shape, 1, fn state, ^shape_id1 -> {:ok, state} end)
       |> expect(:remove_shape, 1, fn state, ^shape_id2 -> {:ok, state} end)
@@ -257,9 +257,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       shape_id3 = "shape3"
       shape3 = @other_shape
 
-      # doesn't matter, isn't used for this test
-      xmin = 100
-
       old_rel = %Relation{
         id: relation_id,
         schema: "public",
@@ -279,8 +276,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       MockShapeStatus
       |> expect(:get_relation, 1, fn _, ^relation_id -> old_rel end)
       |> expect(:store_relation, 1, fn _, ^new_rel -> :ok end)
-      |> expect(:list_active_shapes, fn _ ->
-        [{shape_id1, shape1, xmin}, {shape_id2, shape2, xmin}, {shape_id3, shape3, xmin}]
+      |> expect(:list_shapes, 1, fn _ ->
+        [{shape_id1, shape1}, {shape_id2, shape2}, {shape_id3, shape3}]
       end)
       |> expect(:remove_shape, 1, fn state, ^shape_id1 -> {:ok, state} end)
       |> expect(:remove_shape, 1, fn state, ^shape_id2 -> {:ok, state} end)

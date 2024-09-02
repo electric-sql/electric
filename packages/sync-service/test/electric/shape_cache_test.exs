@@ -398,7 +398,9 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
-      assert [{^shape_id, @shape, 10}] = ShapeCache.list_active_shapes(opts)
+      meta_table = Keyword.fetch!(opts, :shape_meta_table)
+      assert [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
+      assert {:ok, 10} = ShapeStatus.snapshot_xmin(meta_table, shape_id)
     end
 
     test "lists the shape even if we don't know xmin", ctx do
