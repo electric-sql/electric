@@ -87,14 +87,19 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   def for_shape(shape_id, {mod, opts}) do
+    {chunking_module, chunking_opts} = Access.fetch!(opts, :log_chunking)
+
     {mod,
-     Map.merge(
-       LogChunker.for_shape(shape_id, opts),
+     %{
        apply(mod, :for_shape, [shape_id, opts])
-     )}
+       | log_chunking:
+           {chunking_module, apply(chunking_module, :for_shape, [shape_id, chunking_opts])}
+     }}
   end
 
   def start_link({mod, opts}) do
+    {chunking_module, chunking_opts} = Access.fetch!(opts, :log_chunking)
+    apply(chunking_module, :start_link, [chunking_opts])
     apply(mod, :start_link, [opts])
   end
 
@@ -169,7 +174,10 @@ defmodule Electric.ShapeCache.Storage do
   def get_log_stream(shape_id, offset, max_offset \\ LogOffset.last(), {mod, opts})
       when max_offset == :infinity or not is_log_offset_lt(max_offset, offset) do
     shape_opts = mod.for_shape(shape_id, opts)
+    {chunking_module, _} = Access.fetch!(opts, :log_chunking)
+
     mod.get_log_stream(shape_id, offset, max_offset, shape_opts)
+    |> chunking_module.materialise_chunk_boundaries()
   end
 
   @doc "Check if log entry for given shape ID and offset exists"

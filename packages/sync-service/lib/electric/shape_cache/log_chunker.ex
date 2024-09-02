@@ -16,13 +16,12 @@ defmodule Electric.ShapeCache.LogChunker do
     chunk_size_ets_table_name = Access.get(opts, :chunk_size_ets_table, :chunk_size_ets_table)
     chunk_bytes_threshold = Access.get(opts, :chunk_bytes_threshold, @default_threshold)
 
-    {:ok,
-     %{
-       chunk_size_ets_table_base: chunk_size_ets_table_name,
-       chunk_size_ets_table: nil,
-       chunk_bytes_threshold: chunk_bytes_threshold,
-       shape_id: nil
-     }}
+    %{
+      chunk_size_ets_table_base: chunk_size_ets_table_name,
+      chunk_size_ets_table: nil,
+      chunk_bytes_threshold: chunk_bytes_threshold,
+      shape_id: nil
+    }
   end
 
   def for_shape(shape_id, %{shape_id: shape_id} = compiled_opts) do

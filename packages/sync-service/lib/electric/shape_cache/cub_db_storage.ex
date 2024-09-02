@@ -1,5 +1,4 @@
 defmodule Electric.ShapeCache.CubDbStorage do
-  alias Electric.ShapeCache.LogChunker
   alias Electric.ConcurrentStream
   alias Electric.Replication.LogOffset
   alias Electric.Telemetry.OpenTelemetry
@@ -17,7 +16,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
   def shared_opts(opts) do
     base_path = Access.get(opts, :file_path, "./shapes")
 
-    {:ok, %{base_path: base_path, shape_id: nil, db: nil, version: @version}}
+    {:ok, %{base_path: base_path, shape_id: nil, db: nil, version: @version, log_chunking: nil}}
   end
 
   def for_shape(shape_id, %{shape_id: shape_id} = opts) do
@@ -30,7 +29,6 @@ defmodule Electric.ShapeCache.CubDbStorage do
 
   def start_link(%{shape_id: shape_id, db: db} = opts) when is_binary(shape_id) do
     with {:ok, path} <- initialise_filesystem(shape_id, opts) do
-      LogChunker.start_link(opts)
       CubDB.start_link(data_dir: path, name: db)
     end
   end
@@ -141,7 +139,6 @@ defmodule Electric.ShapeCache.CubDbStorage do
       min_key_inclusive: false
     )
     |> Stream.map(fn {_, item} -> item end)
-    |> LogChunker.materialise_chunk_boundaries()
   end
 
   def has_shape?(shape_id, opts) do
@@ -165,12 +162,14 @@ defmodule Electric.ShapeCache.CubDbStorage do
   end
 
   def append_to_log!(shape_id, log_items, opts) do
+    {chunking_module, chunking_opts} = Access.fetch!(opts, :log_chunking)
+
     log_items
     |> Enum.map(fn log_item ->
       json_log_item = Jason.encode!(log_item)
       log_key = log_key(shape_id, log_item.offset)
 
-      case LogChunker.add_to_chunk(shape_id, json_log_item, opts) do
+      case chunking_module.add_to_chunk(shape_id, json_log_item, chunking_opts) do
         {:ok, json_log_item} ->
           {log_key, json_log_item}
 

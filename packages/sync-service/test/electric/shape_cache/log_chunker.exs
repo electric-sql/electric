@@ -7,7 +7,7 @@ defmodule Electric.ShapeCache.LogChunkerTest do
 
   describe "add_chunk/3" do
     setup %{} do
-      {:ok, shared_opts} = LogChunker.shared_opts()
+      shared_opts = LogChunker.shared_opts()
       opts = LogChunker.for_shape(@test_shape_id, shared_opts)
       LogChunker.start_link(opts)
       opts
