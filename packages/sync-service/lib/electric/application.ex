@@ -28,7 +28,7 @@ defmodule Electric.Application do
 
       inspector =
         {Electric.Postgres.Inspector.EtsInspector,
-          server: Electric.Postgres.Inspector.EtsInspector}
+         server: Electric.Postgres.Inspector.EtsInspector}
 
       shape_cache =
         {Electric.ShapeCache,

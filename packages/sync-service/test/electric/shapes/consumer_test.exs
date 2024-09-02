@@ -370,7 +370,10 @@ defmodule Electric.Shapes.ConsumerTest do
 
       %{shape_cache_opts: shape_cache_opts} =
         Support.ComponentSetup.with_shape_cache(
-          Map.merge(ctx, %{pool: nil}),
+          Map.merge(ctx, %{
+            pool: nil,
+            inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+          }),
           log_producer: producer,
           prepare_tables_fn: fn _, _ -> :ok end,
           create_snapshot_fn: fn parent, shape_id, _shape, _, storage ->
