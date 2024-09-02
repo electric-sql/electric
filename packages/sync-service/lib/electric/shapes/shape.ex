@@ -87,7 +87,7 @@ defmodule Electric.Shapes.Shape do
 
       {:ok, column_info} ->
         # %{["column_name"] => :type}
-        Logger.debug("Table #{inspect(table)} found with #{length(column_info)} columnss")
+        Logger.debug("Table #{inspect(table)} found with #{length(column_info)} columns")
 
         pk_cols = Inspector.get_pk_cols(column_info)
 
