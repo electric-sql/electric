@@ -418,6 +418,7 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
+  # This is suboptimal since it has to recalculate the subtree for the two comparisons
   defp between_sym(expr, left_bound, right_bound, refs, env) do
     with {:ok, comparison1} <- between(expr, left_bound, right_bound, refs, env),
          {:ok, comparison2} <- between(expr, right_bound, left_bound, refs, env) do
