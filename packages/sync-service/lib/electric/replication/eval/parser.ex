@@ -225,6 +225,10 @@ defmodule Electric.Replication.Eval.Parser do
       {:AEXPR_DISTINCT, _} -> handle_distinct(expr, refs, env)
       {:AEXPR_NOT_DISTINCT, _} -> handle_distinct(expr, refs, env)
       {:AEXPR_IN, _} -> handle_in(expr, refs, env)
+      {:AEXPR_BETWEEN, _} -> handle_between(expr, refs, env)
+      {:AEXPR_BETWEEN_SYM, _} -> handle_between(expr, refs, env)
+      {:AEXPR_NOT_BETWEEN, _} -> handle_between(expr, refs, env)
+      {:AEXPR_NOT_BETWEEN_SYM, _} -> handle_between(expr, refs, env)
       _ -> {:error, {loc, "expression #{identifier(expr.name)} is not currently supported"}}
     end
   end
@@ -269,6 +273,8 @@ defmodule Electric.Replication.Eval.Parser do
             :IS_NOT_TRUE -> &(&1 != true)
             :IS_FALSE -> &(&1 == false)
             :IS_NOT_FALSE -> &(&1 != false)
+            :IS_UNKNOWN -> &(&1 == nil)
+            :IS_NOT_UNKNOWN -> &(&1 != nil)
           end
 
         maybe_reduce(%Func{
@@ -356,7 +362,8 @@ defmodule Electric.Replication.Eval.Parser do
     # This is "=" if it's `IN`, and "<>" if it's `NOT IN`.
     name = unwrap_node_string(name)
 
-    # It can only be a list here because that's how PG parses SQL. It it's a subquery, then it wouldn't be `A_Expr`.
+    # It can only be a list here because that's how PG parses SQL. It it's a subquery, then it
+    # wouldn't be `A_Expr`.
     {:list, %PgQuery.List{items: items}} = expr.rexpr.node
 
     with {:ok, comparisons} <-
@@ -365,26 +372,69 @@ defmodule Electric.Replication.Eval.Parser do
              &find_operator_func(["="], [expr.lexpr, &1], expr.location, refs, env)
            ),
          {:ok, comparisons} <- Utils.map_while_ok(comparisons, &maybe_reduce/1),
-         {:ok, reduced} <- build_or_chain(comparisons, expr.location) do
+         {:ok, reduced} <-
+           build_bool_chain(%{name: "or", impl: &Kernel.or/2}, comparisons, expr.location) do
       # x NOT IN y is exactly equivalent to NOT (x IN y)
       if name == "=",
         do: {:ok, reduced},
-        else:
-          maybe_reduce(%Func{
-            implementation: &Kernel.not/1,
-            name: "not",
-            type: :bool,
-            args: [reduced],
-            location: expr.location
-          })
+        else: negate(reduced)
     end
   end
 
-  defp build_or_chain([head | tail], location) do
+  defp handle_between(%PgQuery.A_Expr{} = expr, refs, env) do
+    # It can only be a list here because that's how PG parses SQL. It it's a subquery, then it
+    # wouldn't be `A_Expr`.
+    {:list, %PgQuery.List{items: [left_bound, right_bound]}} = expr.rexpr.node
+
+    case expr.kind do
+      :AEXPR_BETWEEN ->
+        between(expr, left_bound, right_bound, refs, env)
+
+      :AEXPR_NOT_BETWEEN ->
+        with {:ok, comparison} <- between(expr, left_bound, right_bound, refs, env) do
+          negate(comparison)
+        end
+
+      :AEXPR_BETWEEN_SYM ->
+        between_sym(expr, left_bound, right_bound, refs, env)
+
+      :AEXPR_NOT_BETWEEN_SYM ->
+        with {:ok, comparison} <- between_sym(expr, left_bound, right_bound, refs, env) do
+          negate(comparison)
+        end
+    end
+  end
+
+  defp between(expr, left_bound, right_bound, refs, env) do
+    with {:ok, left_comparison} <-
+           find_operator_func(["<="], [left_bound, expr.lexpr], expr.location, refs, env),
+         {:ok, right_comparison} <-
+           find_operator_func(["<="], [expr.lexpr, right_bound], expr.location, refs, env),
+         comparisons = [left_comparison, right_comparison],
+         {:ok, comparisons} <- Utils.map_while_ok(comparisons, &maybe_reduce/1),
+         {:ok, reduced} <-
+           build_bool_chain(%{name: "and", impl: &Kernel.and/2}, comparisons, expr.location) do
+      {:ok, reduced}
+    end
+  end
+
+  # This is suboptimal since it has to recalculate the subtree for the two comparisons
+  defp between_sym(expr, left_bound, right_bound, refs, env) do
+    with {:ok, comparison1} <- between(expr, left_bound, right_bound, refs, env),
+         {:ok, comparison2} <- between(expr, right_bound, left_bound, refs, env) do
+      build_bool_chain(
+        %{name: "or", impl: &Kernel.or/2},
+        [comparison1, comparison2],
+        expr.location
+      )
+    end
+  end
+
+  defp build_bool_chain(op, [head | tail], location) do
     Enum.reduce_while(tail, {:ok, head}, fn comparison, {:ok, acc} ->
       %Func{
-        implementation: &Kernel.or/2,
-        name: "or",
+        implementation: op.impl,
+        name: op.name,
         type: :bool,
         args: [acc, comparison],
         location: location
@@ -464,12 +514,16 @@ defmodule Electric.Replication.Eval.Parser do
 
       :error ->
         case {from_type, to_type} do
+          {:unknown, _} -> {:ok, {__MODULE__, :cast_null}}
+          {_, :unknown} -> {:ok, {__MODULE__, :cast_null}}
           {:text, to_type} -> find_cast_in_function(env, to_type)
           {from_type, :text} -> find_cast_out_function(env, from_type)
           {from_type, to_type} -> find_explicit_cast(env, from_type, to_type)
         end
     end
   end
+
+  def cast_null(nil), do: nil
 
   defp find_cast_in_function(env, to_type) do
     case Map.fetch(env.funcs, {"#{to_type}", 1}) do
@@ -684,4 +738,14 @@ defmodule Electric.Replication.Eval.Parser do
 
   def unwrap_node_string(%PgQuery.Node{node: {:a_const, %PgQuery.A_Const{val: {:sval, sval}}}}),
     do: unwrap_node_string(sval)
+
+  defp negate(tree_part) do
+    maybe_reduce(%Func{
+      implementation: &Kernel.not/1,
+      name: "not",
+      type: :bool,
+      args: [tree_part],
+      location: tree_part.location
+    })
+  end
 end

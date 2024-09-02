@@ -51,7 +51,7 @@ defmodule Electric.Replication.Eval.Env.ExplicitCasts do
   def int4_to_bool(x) when is_integer(x) and x > 0, do: true
 
   # Convert the table from moduledoc into a map
-  @implicit_casts @moduledoc
+  @explicit_casts @moduledoc
                   |> Electric.Utils.parse_md_table(after: "## List of explicit casts")
                   |> Enum.flat_map(fn
                     [_, _, ""] ->
@@ -65,5 +65,5 @@ defmodule Electric.Replication.Eval.Env.ExplicitCasts do
                   end)
                   |> Map.new()
 
-  def known, do: @implicit_casts
+  def known, do: @explicit_casts
 end

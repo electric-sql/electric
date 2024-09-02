@@ -262,9 +262,26 @@ defmodule Electric.Replication.Eval.ParserTest do
       end
     end
 
+    test "should work with IS [NOT] UNKNOWN" do
+      env = Env.new()
+
+      for {expr, expected} <- [
+            {~S|true IS UNKNOWN|, false},
+            {~S|true IS NOT UNKNOWN|, true},
+            {~S|NULL::boolean IS UNKNOWN|, true},
+            {~S|NULL::boolean IS NOT UNKNOWN|, false},
+            {~S|NULL IS UNKNOWN|, true},
+            {~S|NULL IS NOT UNKNOWN|, false}
+          ] do
+        assert {{:ok, %Expr{eval: result}}, ^expr} =
+                 {Parser.parse_and_validate_expression(expr, %{}, env), expr}
+
+        assert {%Const{value: ^expected, type: :bool}, ^expr} = {result, expr}
+      end
+    end
+
     test "should work with LIKE clauses" do
-      env =
-        Env.new()
+      env = Env.new()
 
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
@@ -274,6 +291,36 @@ defmodule Electric.Replication.Eval.ParserTest do
                )
 
       assert %Const{value: true, type: :bool} = result
+    end
+
+    test "should work with BETWEEN clauses" do
+      env = Env.new()
+
+      for {expr, expected} <- [
+            {~S|0 BETWEEN 1 AND 3|, false},
+            {~S|1 BETWEEN 1 AND 3|, true},
+            {~S|2 BETWEEN 1 AND 3|, true},
+            {~S|3 BETWEEN 1 AND 3|, true},
+            {~S|4 BETWEEN 1 AND 3|, false},
+            {~S|2 NOT BETWEEN 1 AND 3|, false},
+            {~S|1 BETWEEN 3 AND 1|, false},
+            {~S|1 NOT BETWEEN 3 AND 1|, true},
+            {~S|2 BETWEEN SYMMETRIC 3 AND 1|, true},
+            {~S|2 NOT BETWEEN SYMMETRIC 3 AND 1|, false},
+            {~S|'2024-07-31'::date BETWEEN '2024-07-01'::date AND '2024-07-31'::date|, true},
+            {~S|'2024-07-31'::date NOT BETWEEN '2024-07-01'::date AND '2024-07-31'::date|, false},
+            {~S|'2024-06-30'::date BETWEEN '2024-07-01'::date AND '2024-07-31'::date|, false},
+            {~S|'2024-06-30'::date NOT BETWEEN '2024-07-01'::date AND '2024-07-31'::date|, true},
+            {~S|'2024-07-15'::date BETWEEN SYMMETRIC '2024-07-31'::date AND '2024-07-01'::date|,
+             true},
+            {~S|'2024-07-15'::date NOT BETWEEN SYMMETRIC '2024-07-31'::date AND '2024-07-01'::date|,
+             false}
+          ] do
+        assert {:ok, %Expr{eval: result}} =
+                 Parser.parse_and_validate_expression(expr, %{}, env)
+
+        assert %Const{value: ^expected, type: :bool} = result
+      end
     end
 
     test "should work with explicit casts" do
