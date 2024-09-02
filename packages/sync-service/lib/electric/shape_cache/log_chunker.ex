@@ -1,12 +1,9 @@
 defmodule Electric.ShapeCache.LogChunker do
   use Agent
   alias Electric.ShapeCache.ShapeStatus
-  @size_key :chunk_size
-  @chunk_boundary_bytes <<0, 255, 0, 123>>
-  @chunk_boundary :chunk_boundary
-  @default_threshold 10_000
 
-  @type chunk_boundary :: :chunk_boundary
+  @size_key :chunk_size
+  @default_threshold 10_000
 
   defp name(shape_id) when is_binary(shape_id) do
     Electric.Application.process_name(__MODULE__, shape_id)
@@ -28,7 +25,7 @@ defmodule Electric.ShapeCache.LogChunker do
     compiled_opts
   end
 
-  def for_shape(shape_id, compiled_opts) do
+  def for_shape(shape_id, compiled_opts) when is_binary(shape_id) do
     chunk_size_ets_table_name = Map.fetch!(compiled_opts, :chunk_size_ets_table_base)
 
     %{
@@ -52,11 +49,16 @@ defmodule Electric.ShapeCache.LogChunker do
     )
   end
 
+  @doc """
+  Add bytes to the current chunk of a given shape - if the chunk exceeds the specified
+  byte size threshold, a new chunk is reset and `:threshold_exceeded` is returned.
+  """
   @spec add_to_chunk(ShapeStatus.shape_id(), bitstring(), non_neg_integer()) ::
-          {:ok | :threshold_exceeded, bitstring()}
+          :ok | :threshold_exceeded
   def add_to_chunk(shape_id, chunk_bytes, opts)
 
-  def add_to_chunk(_shape_id, chunk_bytes = <<>>, _opts), do: {:ok, chunk_bytes}
+  # Ignore zero-length bytestrings - they can always be "added" to an existing chunk
+  def add_to_chunk(_shape_id, _chunk_bytes = <<>>, _opts), do: :ok
 
   def add_to_chunk(shape_id, chunk_bytes, %{
         chunk_size_ets_table: table_name,
@@ -69,42 +71,12 @@ defmodule Electric.ShapeCache.LogChunker do
       :ets.update_counter(
         table_name,
         shape_chunk_size_key,
-        {2, chunk_bytes_size, byte_threshold, chunk_bytes_size},
-        {shape_chunk_size_key, -1}
+        {2, chunk_bytes_size, byte_threshold, 0},
+        {shape_chunk_size_key, 0}
       )
 
-    if(new_size === chunk_bytes_size) do
-      {:threshold_exceeded, prefix_with_chunk_boundary(chunk_bytes)}
-    else
-      {:ok, chunk_bytes}
-    end
-  end
-
-  defp prefix_with_chunk_boundary(item) when is_binary(item) do
-    <<@chunk_boundary_bytes::binary, item::binary>>
-  end
-
-  @spec materialise_chunk_boundaries(Enumerable.t(iodata())) ::
-          Enumerable.t(iodata() | chunk_boundary())
-  def materialise_chunk_boundaries(stream) do
-    stream
-    |> Stream.flat_map(fn item ->
-      case item do
-        <<@chunk_boundary_bytes::binary, rest::binary>> -> [@chunk_boundary, rest]
-        _ -> [item]
-      end
-    end)
-  end
-
-  @spec dissolve_chunks(Enumerable.t(any() | chunk_boundary())) :: Enumerable.t(any())
-  def dissolve_chunks(stream) do
-    stream
-    |> Stream.filter(fn item -> item !== @chunk_boundary end)
-  end
-
-  @spec take_chunk(Enumerable.t(any() | chunk_boundary())) :: Enumerable.t(any())
-  def take_chunk(stream) do
-    stream
-    |> Stream.take_while(fn item -> item !== @chunk_boundary end)
+    # if size is reset to 0 it can only mean that the chunk has
+    # filled up - since 0-length bytestrings do not get counted
+    if new_size === 0, do: :threshold_exceeded, else: :ok
   end
 end

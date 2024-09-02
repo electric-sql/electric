@@ -709,7 +709,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   defp opts(InMemoryStorage, _context) do
     [
       snapshot_ets_table: String.to_atom("snapshot_ets_table_#{Utils.uuid4()}"),
-      log_ets_table: String.to_atom("log_ets_table_#{Utils.uuid4()}")
+      log_ets_table: String.to_atom("log_ets_table_#{Utils.uuid4()}"),
+      chunk_checkpoint_ets_table: String.to_atom("chunk_checkpoint_ets_table_#{Utils.uuid4()}")
     ]
   end
 

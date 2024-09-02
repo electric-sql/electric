@@ -11,6 +11,7 @@ defmodule Electric.ShapeCache.CubDbStorage do
   @version_key :version
   @snapshot_key_type 0
   @log_key_type 1
+  @chunk_checkpoint_key_type 2
   @snapshot_offset LogOffset.first()
 
   def shared_opts(opts) do
@@ -141,6 +142,17 @@ defmodule Electric.ShapeCache.CubDbStorage do
     |> Stream.map(fn {_, item} -> item end)
   end
 
+  def get_chunk_end_log_offset(shape_id, offset, opts) do
+    CubDB.select(opts.db,
+      min_key: chunk_checkpoint_key(shape_id, offset),
+      max_key: chunk_checkpoint_end(shape_id),
+      min_key_inclusive: false
+    )
+    |> Stream.map(fn {{key}, _} -> offset(key) end)
+    |> Enum.take(1)
+    |> Enum.at(0)
+  end
+
   def has_shape?(shape_id, opts) do
     entry_stream = keys_from_range(log_start(shape_id), log_end(shape_id), opts)
     !Enum.empty?(entry_stream) or snapshot_started?(shape_id, opts)
@@ -165,16 +177,19 @@ defmodule Electric.ShapeCache.CubDbStorage do
     {chunking_module, chunking_opts} = Access.fetch!(opts, :log_chunking)
 
     log_items
-    |> Enum.map(fn log_item ->
+    |> Enum.flat_map(fn log_item ->
       json_log_item = Jason.encode!(log_item)
       log_key = log_key(shape_id, log_item.offset)
 
       case chunking_module.add_to_chunk(shape_id, json_log_item, chunking_opts) do
-        {:ok, json_log_item} ->
-          {log_key, json_log_item}
+        :ok ->
+          [{log_key, json_log_item}]
 
-        {:threshold_exceeded, json_log_item_with_boundary} ->
-          {log_key, json_log_item_with_boundary}
+        :threshold_exceeded ->
+          [
+            {log_key, json_log_item},
+            {chunk_checkpoint_key(shape_id, log_item.offset), nil}
+          ]
       end
     end)
     |> then(&CubDB.put_multi(opts.db, &1))
@@ -189,6 +204,9 @@ defmodule Electric.ShapeCache.CubDbStorage do
     ]
     |> Stream.concat(keys_from_range(snapshot_start(shape_id), snapshot_end(shape_id), opts))
     |> Stream.concat(keys_from_range(log_start(shape_id), log_end(shape_id), opts))
+    |> Stream.concat(
+      keys_from_range(chunk_checkpoint_start(shape_id), chunk_checkpoint_end(shape_id), opts)
+    )
     |> then(&CubDB.delete_multi(opts.db, &1))
   end
 
@@ -203,6 +221,10 @@ defmodule Electric.ShapeCache.CubDbStorage do
 
   defp log_key(shape_id, offset) do
     {shape_id, @log_key_type, LogOffset.to_tuple(offset)}
+  end
+
+  defp chunk_checkpoint_key(shape_id, checkpoint_offset) do
+    {shape_id, @chunk_checkpoint_key_type, LogOffset.to_tuple(checkpoint_offset)}
   end
 
   defp shape_key(shape_id) do
@@ -225,8 +247,14 @@ defmodule Electric.ShapeCache.CubDbStorage do
   defp offset({_shape_id, @log_key_type, tuple_offset}),
     do: LogOffset.new(tuple_offset)
 
+  defp offset({_shape_id, @chunk_checkpoint_key_type, tuple_offset}),
+    do: LogOffset.new(tuple_offset)
+
   defp log_start(shape_id), do: log_key(shape_id, LogOffset.first())
   defp log_end(shape_id), do: log_key(shape_id, LogOffset.last())
+
+  defp chunk_checkpoint_start(shape_id), do: chunk_checkpoint_key(shape_id, LogOffset.first())
+  defp chunk_checkpoint_end(shape_id), do: chunk_checkpoint_key(shape_id, LogOffset.last())
 
   defp snapshot_start(shape_id), do: snapshot_key(shape_id, -1)
   defp snapshot_end(shape_id), do: snapshot_key(shape_id, :end)

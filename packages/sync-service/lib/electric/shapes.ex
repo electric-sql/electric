@@ -1,5 +1,4 @@
 defmodule Electric.Shapes do
-  alias Electric.ShapeCache.LogChunker
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache
@@ -27,33 +26,32 @@ defmodule Electric.Shapes do
   """
   def get_log_stream(config, shape_id, opts) do
     {shape_cache, shape_cache_opts} = Access.get(config, :shape_cache, {ShapeCache, []})
-    {log_chunker, _} = Access.get(config, :log_chunker, {LogChunker, []})
     offset = Access.get(opts, :since, LogOffset.before_all())
     max_offset = Access.get(opts, :up_to, LogOffset.last())
-    take_chunk = Access.get(opts, :take_chunk, false)
     storage = shape_storage(config, shape_id)
 
-    chunked_log_stream =
-      with true <- shape_cache.has_shape?(shape_id, shape_cache_opts) do
-        Storage.get_log_stream(shape_id, offset, max_offset, storage)
-      end
-
-    if take_chunk do
-      chunked_log_stream |> log_chunker.take_chunk()
-    else
-      chunked_log_stream |> log_chunker.dissolve_chunks()
+    with true <- shape_cache.has_shape?(shape_id, shape_cache_opts) do
+      Storage.get_log_stream(shape_id, offset, max_offset, storage)
     end
   end
 
   @doc """
-  Get or create a shape ID and return it along with the latest
-  offset available
+  Get or create a shape ID and return it along with the end offset of the first chunk
   """
   @spec get_or_create_shape_id(Shape.t(), keyword()) :: {Storage.shape_id(), LogOffset.t()}
   def get_or_create_shape_id(shape_def, opts \\ []) do
     {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
 
-    shape_cache.get_or_create_shape_id(shape_def, opts)
+    {shape_id, latest_shape_offset} = shape_cache.get_or_create_shape_id(shape_def, opts)
+
+    chunk_end_offset =
+      Storage.get_chunk_end_log_offset(
+        shape_id,
+        LogOffset.before_all(),
+        shape_storage(opts, shape_id)
+      )
+
+    {shape_id, chunk_end_offset || latest_shape_offset}
   end
 
   @doc """

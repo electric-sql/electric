@@ -1,5 +1,4 @@
 defmodule Electric.ShapeCache.Storage do
-  alias Electric.ShapeCache.LogChunker
   alias Electric.Shapes.Querying
   alias Electric.LogItems
   alias Electric.Shapes.Shape
@@ -26,7 +25,7 @@ defmodule Electric.ShapeCache.Storage do
           offset: String.t()
         }
 
-  @type log :: Enumerable.t(Querying.json_iodata() | LogChunker.chunk_boundary())
+  @type log :: Enumerable.t(Querying.json_iodata())
 
   @type row :: list()
 
@@ -72,7 +71,17 @@ defmodule Electric.ShapeCache.Storage do
             ) :: :ok
   @doc "Get stream of the log for a shape since a given offset"
   @callback get_log_stream(shape_id(), LogOffset.t(), LogOffset.t(), compiled_opts()) ::
-              Enumerable.t(String.t() | LogChunker.chunk_boundary())
+              log()
+
+  @doc """
+  Get the last exclusive offset of the chunk starting from the given offset.
+
+  If chunk has not finished accumulating, `nil` is returned.
+
+  If chunk has finished accumulating, the last offset of the chunk is returned.
+  """
+  @callback get_chunk_end_log_offset(shape_id(), LogOffset.t(), compiled_opts()) ::
+              LogOffset.t() | nil
 
   @doc "Clean up snapshots/logs for a shape id"
   @callback cleanup!(shape_id(), compiled_opts()) :: :ok
@@ -174,10 +183,21 @@ defmodule Electric.ShapeCache.Storage do
   def get_log_stream(shape_id, offset, max_offset \\ LogOffset.last(), {mod, opts})
       when max_offset == :infinity or not is_log_offset_lt(max_offset, offset) do
     shape_opts = mod.for_shape(shape_id, opts)
-    {chunking_module, _} = Access.fetch!(opts, :log_chunking)
 
     mod.get_log_stream(shape_id, offset, max_offset, shape_opts)
-    |> chunking_module.materialise_chunk_boundaries()
+  end
+
+  @doc """
+  Get the last exclusive offset of the chunk starting from the given offset.
+
+  If chunk has not finished accumulating, `nil` is returned.
+
+  If chunk has finished accumulating, the last offset of the chunk is returned.
+  """
+  @spec get_chunk_end_log_offset(shape_id(), LogOffset.t(), storage()) :: LogOffset.t() | nil
+  def get_chunk_end_log_offset(shape_id, offset, {mod, opts}) do
+    shape_opts = mod.for_shape(shape_id, opts)
+    mod.get_chunk_end_log_offset(shape_id, offset, shape_opts)
   end
 
   @doc "Check if log entry for given shape ID and offset exists"
