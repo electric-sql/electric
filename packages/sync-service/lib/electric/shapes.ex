@@ -27,6 +27,7 @@ defmodule Electric.Shapes do
   """
   def get_log_stream(config, shape_id, opts) do
     {shape_cache, shape_cache_opts} = Access.get(config, :shape_cache, {ShapeCache, []})
+    {log_chunker, _} = Access.get(config, :log_chunker, {LogChunker, []})
     offset = Access.get(opts, :since, LogOffset.before_all())
     max_offset = Access.get(opts, :up_to, LogOffset.last())
     take_chunk = Access.get(opts, :take_chunk, false)
@@ -38,9 +39,9 @@ defmodule Electric.Shapes do
       end
 
     if take_chunk do
-      chunked_log_stream |> LogChunker.take_chunk()
+      chunked_log_stream |> log_chunker.take_chunk()
     else
-      chunked_log_stream |> LogChunker.dissolve_chunks()
+      chunked_log_stream |> log_chunker.dissolve_chunks()
     end
   end
 
