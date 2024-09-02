@@ -51,6 +51,7 @@ defmodule Support.ComponentSetup do
       [
         name: server,
         shape_meta_table: shape_meta_table,
+        inspector: ctx.inspector,
         storage: ctx.storage,
         db_pool: ctx.pool,
         persistent_kv: ctx.persistent_kv,

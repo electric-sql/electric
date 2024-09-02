@@ -1,9 +1,29 @@
+defmodule Electric.ShapeCache.ShapeStatusBehaviour do
+  @moduledoc """
+  Behaviour defining the ShapeStatus functions to be used in mocks
+  """
+  alias Electric.Shapes.Shape
+  alias Electric.ShapeCache.ShapeStatus
+  alias Electric.Postgres.LogicalReplication.Messages
+  alias Electric.Replication.Changes.Relation
+
+  @callback initialise(ShapeStatus.options()) :: {:ok, ShapeStatus.t()} | {:error, term()}
+  @callback list_shapes(ShapeStatus.t()) :: [{ShapeStatus.shape_id(), Shape.t()}]
+  @callback list_active_shapes(opts :: keyword()) :: [
+              {ShapeStatus.shape_id(), ShapeStatus.shape_def(), ShapeStatus.xmin()}
+            ]
+  @callback get_relation(ShapeStatus.t(), Messages.relation_id()) :: Relation.t() | nil
+  @callback store_relation(ShapeStatus.t(), Relation.t()) :: :ok
+  @callback remove_shape(ShapeStatus.t(), ShapeStatus.shape_id()) ::
+              {:ok, ShapeStatus.t()} | {:error, term()}
+end
+
 defmodule Electric.ShapeCache.ShapeStatus do
   @moduledoc """
   Keeps track of shape state.
 
   Serializes just enough to some persistent storage to bootstrap the
-  ShapeCache by writing the mapping of `shape_id => %Shape{}` to 
+  ShapeCache by writing the mapping of `shape_id => %Shape{}` to
   storage.
 
   The shape cache then loads this and starts processes (storage and consumer)
