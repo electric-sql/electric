@@ -168,10 +168,29 @@ defmodule Electric.ConnectionManager do
     {:stop, {tag, reason}, state}
   end
 
+  def handle_info({:DOWN, _ref, :process, pid, reason}, %{replication_client_pid: pid} = state) do
+    halt_if_fatal_error!(reason)
+
+    # The replication client will be restarted automatically by the
+    # Electric.Shapes.Supervisor so we can just carry on here.
+    {:noreply, %{state | replication_client_pid: nil}}
+  end
+
   @impl true
   def handle_cast({:connection_opts, pid, connection_opts}, state) do
+    Process.monitor(pid)
     state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
-    {:noreply, state, {:continue, :start_connection_pool}}
+
+    case state do
+      %{pool_pid: nil} ->
+        {:noreply, state, {:continue, :start_connection_pool}}
+
+      %{pool_pid: pool_pid} when is_pid(pool_pid) ->
+        # The replication client has crashed and been restarted. Since we have
+        # a db pool already start the replication stream.
+        Electric.Postgres.ReplicationClient.start_streaming(pid)
+        {:noreply, state}
+    end
   end
 
   defp start_replication_client(state) do
@@ -197,6 +216,14 @@ defmodule Electric.ConnectionManager do
     Postgrex.start_link(
       [backoff_type: :exp, max_restarts: 3, max_seconds: 5] ++ pool_opts ++ connection_opts
     )
+  end
+
+  defp handle_connection_error(
+         {:shutdown, {:failed_to_start_child, Electric.Postgres.ReplicationClient, error}},
+         state,
+         mode
+       ) do
+    handle_connection_error(error, state)
   end
 
   defp handle_connection_error(error, state, mode) do
