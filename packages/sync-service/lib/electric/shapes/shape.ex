@@ -183,7 +183,7 @@ defmodule Electric.Shapes.Shape do
     shape_matches?(shape, schema, table)
   end
 
-  defp shape_matches?({_, %__MODULE__{root_table: {schema, table}}, _}, schema, table), do: true
+  defp shape_matches?({_, %__MODULE__{root_table: {schema, table}}}, schema, table), do: true
   defp shape_matches?(_, _, _), do: false
 
   @spec from_json_safe!(t()) :: json_safe()

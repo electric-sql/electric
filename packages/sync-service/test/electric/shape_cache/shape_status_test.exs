@@ -30,7 +30,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   defp new_state(ctx, opts \\ []) do
     table = Keyword.get(opts, :table, table_name())
 
-    {:ok, state} = ShapeStatus.initialise(persistent_kv: ctx.kv, meta_table: table)
+    {:ok, state} = ShapeStatus.initialise(persistent_kv: ctx.kv, shape_meta_table: table)
 
     shapes = Keyword.get(opts, :shapes, [])
 
@@ -182,11 +182,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     refute ShapeStatus.set_snapshot_xmin(state, "sdfsodf", 1234)
 
     refute ShapeStatus.snapshot_xmin?(state, "sdfsodf")
-    refute ShapeStatus.snapshot_xmin?(state.meta_table, "sdfsodf")
+    refute ShapeStatus.snapshot_xmin?(state.shape_meta_table, "sdfsodf")
     refute ShapeStatus.snapshot_xmin?(state, shape_id)
     assert ShapeStatus.set_snapshot_xmin(state, shape_id, 1234)
     assert ShapeStatus.snapshot_xmin?(state, shape_id)
-    assert ShapeStatus.snapshot_xmin?(state.meta_table, shape_id)
+    assert ShapeStatus.snapshot_xmin?(state.shape_meta_table, shape_id)
   end
 
   test "relation data", ctx do

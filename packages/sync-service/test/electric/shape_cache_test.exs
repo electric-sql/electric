@@ -11,7 +11,7 @@ defmodule Electric.ShapeCacheTest do
   alias Electric.Replication.Changes.{Relation, Column}
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache
-  alias Electric.ShapeCache.Storage
+  alias Electric.ShapeCache.{Storage, ShapeStatus}
   alias Electric.Shapes
   alias Electric.Shapes.Shape
 
@@ -366,7 +366,7 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
-  describe "list_active_shapes/1" do
+  describe "list_shapes/1" do
     setup [
       :with_in_memory_storage,
       :with_persistent_kv,
@@ -380,7 +380,9 @@ defmodule Electric.ShapeCacheTest do
           prepare_tables_fn: @prepare_tables_noop
         )
 
-      assert ShapeCache.list_active_shapes(opts) == []
+      meta_table = Keyword.fetch!(opts, :shape_meta_table)
+
+      assert ShapeCache.list_shapes(%{shape_meta_table: meta_table}) == []
     end
 
     test "lists the shape as active once there is a snapshot", ctx do
@@ -396,10 +398,12 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
-      assert [{^shape_id, @shape, 10}] = ShapeCache.list_active_shapes(opts)
+      meta_table = Keyword.fetch!(opts, :shape_meta_table)
+      assert [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
+      assert {:ok, 10} = ShapeStatus.snapshot_xmin(meta_table, shape_id)
     end
 
-    test "doesn't list the shape as active until we know xmin", ctx do
+    test "lists the shape even if we don't know xmin", ctx do
       test_pid = self()
 
       %{shape_cache_opts: opts} =
@@ -420,12 +424,13 @@ defmodule Electric.ShapeCacheTest do
       # Wait until we get to the waiting point in the snapshot
       assert_receive {:waiting_point, ref, pid}
 
-      assert ShapeCache.list_active_shapes(opts) == []
+      meta_table = Keyword.fetch!(opts, :shape_meta_table)
+      assert [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
 
       send(pid, {:continue, ref})
 
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
-      assert [{^shape_id, @shape, 10}] = ShapeCache.list_active_shapes(opts)
+      assert [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
     end
   end
 
@@ -784,12 +789,15 @@ defmodule Electric.ShapeCacheTest do
     test "restores snapshot xmins", %{shape_cache_opts: opts} = context do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       :started = ShapeCache.await_snapshot_start(shape_id, opts)
-      [{^shape_id, @shape, @snapshot_xmin}] = ShapeCache.list_active_shapes(opts)
+      meta_table = Keyword.fetch!(opts, :shape_meta_table)
+      [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
+      {:ok, @snapshot_xmin} = ShapeStatus.snapshot_xmin(meta_table, shape_id)
 
       restart_shape_cache(context)
       :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
-      assert [{^shape_id, @shape, @snapshot_xmin}] = ShapeCache.list_active_shapes(opts)
+      assert [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
+      {:ok, @snapshot_xmin} = ShapeStatus.snapshot_xmin(meta_table, shape_id)
     end
 
     test "restores latest offset", %{shape_cache_opts: opts} = context do

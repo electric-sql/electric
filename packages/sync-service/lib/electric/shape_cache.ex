@@ -16,8 +16,8 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback get_or_create_shape_id(shape_def(), opts :: keyword()) ::
               {shape_id(), current_snapshot_offset :: LogOffset.t()}
 
-  @callback list_active_shapes(opts :: keyword()) :: [{shape_id(), shape_def(), xmin()}]
   @callback get_relation(Messages.relation_id(), opts :: keyword()) :: Changes.Relation.t() | nil
+  @callback list_shapes(Electric.ShapeCache.ShapeStatus.t()) :: [{shape_id(), Shape.t()}]
   @callback await_snapshot_start(shape_id(), opts :: keyword()) :: :started | {:error, term()}
   @callback handle_truncate(shape_id(), keyword()) :: :ok
   @callback clean_shape(shape_id(), keyword()) :: :ok
@@ -111,11 +111,10 @@ defmodule Electric.ShapeCache do
   end
 
   @impl Electric.ShapeCacheBehaviour
-  def list_active_shapes(opts \\ []) do
-    table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
+  @spec list_shapes(Electric.ShapeCache.ShapeStatus.t()) :: [{shape_id(), Shape.t()}]
+  def list_shapes(opts) do
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
-
-    shape_status.list_active_shapes(table)
+    shape_status.list_shapes(opts)
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -172,7 +171,7 @@ defmodule Electric.ShapeCache do
     {:ok, persistent_state} =
       opts.shape_status.initialise(
         persistent_kv: opts.persistent_kv,
-        meta_table: opts.shape_meta_table
+        shape_meta_table: opts.shape_meta_table
       )
 
     state = %{
@@ -234,7 +233,7 @@ defmodule Electric.ShapeCache do
 
         # Fetch all shapes that are affected by the relation change and clean them up
         persistent_state
-        |> shape_status.list_active_shapes()
+        |> shape_status.list_shapes()
         |> Enum.filter(&Shape.is_affected_by_relation_change?(&1, change))
         |> Enum.map(&elem(&1, 0))
         |> Enum.each(fn shape_id -> clean_up_shape(state, shape_id) end)
