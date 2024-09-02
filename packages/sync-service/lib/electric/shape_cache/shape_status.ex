@@ -9,9 +9,6 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
 
   @callback initialise(ShapeStatus.options()) :: {:ok, ShapeStatus.t()} | {:error, term()}
   @callback list_shapes(ShapeStatus.t()) :: [{ShapeStatus.shape_id(), Shape.t()}]
-  @callback list_active_shapes(opts :: keyword()) :: [
-              {ShapeStatus.shape_id(), ShapeStatus.shape_def(), ShapeStatus.xmin()}
-            ]
   @callback get_relation(ShapeStatus.t(), Messages.relation_id()) :: Relation.t() | nil
   @callback store_relation(ShapeStatus.t(), Relation.t()) :: :ok
   @callback remove_shape(ShapeStatus.t(), ShapeStatus.shape_id()) ::
@@ -42,18 +39,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @schema NimbleOptions.new!(
             persistent_kv: [type: :any, required: true],
-            meta_table: [type: {:or, [:atom, :reference]}, required: true],
+            shape_meta_table: [type: {:or, [:atom, :reference]}, required: true],
             root: [type: :string, default: "./shape_cache"]
           )
 
-  defstruct [:persistent_kv, :root, :meta_table]
+  defstruct [:persistent_kv, :root, :shape_meta_table]
 
   @type shape_id() :: Electric.ShapeCache.shape_id()
   @type table() :: atom() | reference()
   @type t() :: %__MODULE__{
           persistent_kv: PersistentKV.t(),
           root: String.t(),
-          meta_table: table()
+          shape_meta_table: table()
         }
   @type option() :: unquote(NimbleOptions.option_typespec(@schema))
   @type options() :: [option()]
@@ -69,7 +66,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def initialise(opts) do
     with {:ok, config} <- NimbleOptions.validate(opts, @schema),
          {:ok, kv_backend} <- Access.fetch(config, :persistent_kv),
-         {:ok, table_name} = Access.fetch(config, :meta_table) do
+         {:ok, table_name} = Access.fetch(config, :shape_meta_table) do
       persistent_kv =
         PersistentKV.Serialized.new!(
           backend: kv_backend,
@@ -81,7 +78,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
       state =
         struct(
           __MODULE__,
-          Keyword.merge(config, persistent_kv: persistent_kv, meta_table: meta_table)
+          Keyword.merge(config, persistent_kv: persistent_kv, shape_meta_table: meta_table)
         )
 
       load(state)
@@ -97,7 +94,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
     true =
       :ets.insert_new(
-        state.meta_table,
+        state.shape_meta_table,
         [
           {{@shape_hash_lookup, hash}, shape_id},
           {{@shape_meta_data, shape_id}, shape, nil, offset}
@@ -111,7 +108,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @spec list_shapes(t()) :: [{shape_id(), Shape.t()}]
   def list_shapes(state) do
-    :ets.select(state.meta_table, [
+    :ets.select(state.shape_meta_table, [
       {
         {{@shape_meta_data, :"$1"}, :"$2", :_, :_},
         [true],
@@ -120,28 +117,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
     ])
   end
 
-  def list_active_shapes(%__MODULE__{meta_table: table}) do
-    list_active_shapes(table)
-  end
-
-  def list_active_shapes(table) when is_atom(table) or is_reference(table) do
-    :ets.select(table, [
-      {
-        {{@shape_meta_data, :"$1"}, :"$2", :"$3", :_},
-        [{:"=/=", :"$3", nil}],
-        [{{:"$1", :"$2", :"$3"}}]
-      }
-    ])
-  end
-
   @spec remove_shape(t(), shape_id()) :: {:ok, t()} | {:error, term()}
   def remove_shape(state, shape_id) do
     try do
       shape =
-        :ets.lookup_element(state.meta_table, {@shape_meta_data, shape_id}, @shape_meta_shape_pos)
+        :ets.lookup_element(
+          state.shape_meta_table,
+          {@shape_meta_data, shape_id},
+          @shape_meta_shape_pos
+        )
 
       :ets.select_delete(
-        state.meta_table,
+        state.shape_meta_table,
         [
           {{{@shape_meta_data, shape_id}, :_, :_, :_}, [], [true]},
           {{{@shape_hash_lookup, :_}, shape_id}, [], [true]}
@@ -162,7 +149,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @spec existing_shape(t(), shape_id() | Shape.t()) :: nil | {shape_id(), LogOffset.t()}
-  def existing_shape(%__MODULE__{meta_table: table}, shape_or_id) do
+  def existing_shape(%__MODULE__{shape_meta_table: table}, shape_or_id) do
     existing_shape(table, shape_or_id)
   end
 
@@ -188,7 +175,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   def initialise_shape(state, shape_id, snapshot_xmin, latest_offset) do
-    :ets.update_element(state.meta_table, {@shape_meta_data, shape_id}, [
+    :ets.update_element(state.shape_meta_table, {@shape_meta_data, shape_id}, [
       {@shape_meta_xmin_pos, snapshot_xmin},
       {@shape_meta_latest_offset_pos, latest_offset}
     ])
@@ -197,12 +184,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   def set_snapshot_xmin(state, shape_id, snapshot_xmin) do
-    :ets.update_element(state.meta_table, {@shape_meta_data, shape_id}, [
+    :ets.update_element(state.shape_meta_table, {@shape_meta_data, shape_id}, [
       {@shape_meta_xmin_pos, snapshot_xmin}
     ])
   end
 
-  def set_latest_offset(%__MODULE__{meta_table: table} = _state, shape_id, latest_offset) do
+  def set_latest_offset(%__MODULE__{shape_meta_table: table} = _state, shape_id, latest_offset) do
     set_latest_offset(table, shape_id, latest_offset)
   end
 
@@ -212,7 +199,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     ])
   end
 
-  def latest_offset!(%__MODULE__{meta_table: table} = _state, shape_id) do
+  def latest_offset!(%__MODULE__{shape_meta_table: table} = _state, shape_id) do
     latest_offset(table, shape_id)
   end
 
@@ -224,7 +211,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     )
   end
 
-  def latest_offset(%__MODULE__{meta_table: table} = _state, shape_id) do
+  def latest_offset(%__MODULE__{shape_meta_table: table} = _state, shape_id) do
     latest_offset(table, shape_id)
   end
 
@@ -238,7 +225,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
-  def snapshot_xmin(%__MODULE__{meta_table: table} = _state, shape_id) do
+  def snapshot_xmin(%__MODULE__{shape_meta_table: table} = _state, shape_id) do
     snapshot_xmin(table, shape_id)
   end
 
@@ -252,7 +239,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
-  def snapshot_xmin?(%__MODULE__{meta_table: table} = _state, shape_id) do
+  def snapshot_xmin?(%__MODULE__{shape_meta_table: table} = _state, shape_id) do
     snapshot_xmin?(table, shape_id)
   end
 
@@ -263,7 +250,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  def get_relation(%__MODULE__{meta_table: table} = _state, relation_id) do
+  def get_relation(%__MODULE__{shape_meta_table: table} = _state, relation_id) do
     get_relation(table, relation_id)
   end
 
@@ -274,7 +261,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  def store_relation(%__MODULE__{meta_table: meta_table} = state, %Relation{} = relation) do
+  def store_relation(%__MODULE__{shape_meta_table: meta_table} = state, %Relation{} = relation) do
     with :ok <- store_relation(meta_table, relation) do
       save(state)
     end
@@ -332,7 +319,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   defp load(state) do
     with {:ok, %{shapes: shapes, relations: relations}} <- load_shapes(state) do
       :ets.insert(
-        state.meta_table,
+        state.shape_meta_table,
         Enum.concat([
           Enum.flat_map(shapes, fn {shape_id, shape} ->
             hash = Shape.hash(shape)
@@ -367,7 +354,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  defp list_relations(%__MODULE__{meta_table: meta_table}) do
+  defp list_relations(%__MODULE__{shape_meta_table: meta_table}) do
     :ets.select(meta_table, [
       {
         {{@relation_data, :"$1"}, :"$2"},

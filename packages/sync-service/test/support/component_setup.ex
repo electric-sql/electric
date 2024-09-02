@@ -152,7 +152,7 @@ defmodule Support.ComponentSetup do
     |> Keyword.merge(overrides)
   end
 
-  defp full_test_name(ctx) do
+  def full_test_name(ctx) do
     "#{ctx.module} #{ctx.test}"
   end
 end
