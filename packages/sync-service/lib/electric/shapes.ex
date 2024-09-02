@@ -36,22 +36,25 @@ defmodule Electric.Shapes do
   end
 
   @doc """
-  Get or create a shape ID and return it along with the end offset of the first chunk
+  Get or create a shape ID and return it along with the latest offset of the shape
   """
-  @spec get_or_create_shape_id(Shape.t(), keyword()) :: {Storage.shape_id(), LogOffset.t()}
-  def get_or_create_shape_id(shape_def, opts \\ []) do
-    {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
+  @spec get_or_create_shape_id(keyword(), Shape.t()) :: {Storage.shape_id(), LogOffset.t()}
+  def get_or_create_shape_id(config, shape_def) do
+    {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
 
-    {shape_id, latest_shape_offset} = shape_cache.get_or_create_shape_id(shape_def, opts)
+    shape_cache.get_or_create_shape_id(shape_def, opts)
+  end
 
-    chunk_end_offset =
-      Storage.get_chunk_end_log_offset(
-        shape_id,
-        LogOffset.before_all(),
-        shape_storage(opts, shape_id)
-      )
+  @doc """
+  Get the last exclusive offset of the chunk starting from the given offset
 
-    {shape_id, chunk_end_offset || latest_shape_offset}
+  If `nil` is returned, chunk is not complete and the shape's latest offset should be used
+  """
+  @spec get_chunk_end_log_offset(keyword(), Storage.shape_id(), LogOffset.t()) ::
+          LogOffset.t() | nil
+  def get_chunk_end_log_offset(config, shape_id, offset) do
+    storage = shape_storage(config, shape_id)
+    Storage.get_chunk_end_log_offset(shape_id, offset, storage)
   end
 
   @doc """

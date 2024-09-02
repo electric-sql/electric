@@ -684,22 +684,22 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   end
 
   defp start_storage(%{module: module} = context) do
-    {:ok, opts} = module |> opts(context) |> module.shared_opts()
+    {:ok, opts} =
+      module
+      |> opts(context)
+      |> module.shared_opts()
 
-    # TODO: perhaps provide mock for this?
-    chunking_shape_opts =
-      LogChunker.for_shape(
-        @shape_id,
-        LogChunker.shared_opts(%{
-          chunk_size_ets_table: String.to_atom("chunk_size_ets_table_#{Utils.uuid4()}")
-        })
+    opts =
+      opts
+      |> Map.put(
+        :log_chunking,
+        {LogChunker,
+         LogChunker.shared_opts(%{
+           chunk_size_ets_table: String.to_atom("chunk_size_ets_table_#{Utils.uuid4()}")
+         })}
       )
 
-    LogChunker.start_link(chunking_shape_opts)
-
-    shape_opts =
-      module.for_shape(@shape_id, opts)
-      |> Map.put(:log_chunking, {LogChunker, chunking_shape_opts})
+    shape_opts = module.for_shape(@shape_id, opts)
 
     {:ok, _} = module.start_link(shape_opts)
 

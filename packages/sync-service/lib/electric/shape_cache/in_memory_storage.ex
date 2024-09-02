@@ -37,6 +37,9 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def start_link(compiled_opts) do
     if is_nil(compiled_opts.shape_id), do: raise("cannot start an un-attached storage instance")
 
+    {chunking_module, chunking_opts} = Access.fetch!(compiled_opts, :log_chunking)
+    apply(chunking_module, :start_link, [chunking_opts])
+
     Agent.start_link(
       fn ->
         %{
@@ -64,13 +67,15 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     snapshot_ets_table_name = Map.fetch!(compiled_opts, :snapshot_ets_table_base)
     log_ets_table_name = Map.fetch!(compiled_opts, :log_ets_table_base)
     chunk_checkpoint_ets_table_name = Map.fetch!(compiled_opts, :chunk_checkpoint_ets_table_base)
+    {chunking_module, chunking_opts} = Access.fetch!(compiled_opts, :log_chunking)
 
     %{
       compiled_opts
       | shape_id: shape_id,
         snapshot_ets_table: :"#{snapshot_ets_table_name}-#{shape_id}",
         log_ets_table: :"#{log_ets_table_name}-#{shape_id}",
-        chunk_checkpoint_ets_table: :"#{chunk_checkpoint_ets_table_name}-#{shape_id}"
+        chunk_checkpoint_ets_table: :"#{chunk_checkpoint_ets_table_name}-#{shape_id}",
+        log_chunking: {chunking_module, chunking_module.for_shape(shape_id, chunking_opts)}
     }
   end
 

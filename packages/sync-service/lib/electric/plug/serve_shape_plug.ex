@@ -121,6 +121,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # We're starting listening as soon as possible to not miss stuff that was added since we've asked for last offset
   plug :listen_for_new_changes
   plug :validate_shape_offset
+  plug :maybe_use_log_chunk
   plug :generate_etag
   plug :validate_and_put_etag
   plug :put_resp_cache_headers
@@ -148,13 +149,12 @@ defmodule Electric.Plug.ServeShapePlug do
     shape = conn.assigns.shape_definition
 
     {shape_id, last_offset} =
-      Shapes.get_or_create_shape_id(shape, conn.assigns.config)
+      Shapes.get_or_create_shape_id(conn.assigns.config, shape)
 
     conn
     |> assign(:active_shape_id, shape_id)
     |> assign(:last_offset, last_offset)
     |> put_resp_header("x-electric-shape-id", shape_id)
-    |> put_resp_header("x-electric-chunk-last-offset", "#{last_offset}")
   end
 
   defp schema(shape) do
@@ -199,6 +199,20 @@ defmodule Electric.Plug.ServeShapePlug do
     else
       conn
     end
+  end
+
+  # If chunk offsets are available, use those instead of the latest available offset
+  # to optimize for cache hits and response sizes
+  defp maybe_use_log_chunk(%Conn{assigns: %{offset: offset, active_shape_id: shape_id}} = conn, _) do
+    chunk_end_offset =
+      Shapes.get_chunk_end_log_offset(conn.assigns.config, shape_id, offset)
+
+    chunk_end_offset =
+      if !is_nil(chunk_end_offset), do: chunk_end_offset, else: conn.assigns.last_offset
+
+    conn
+    |> assign(:last_offset, chunk_end_offset)
+    |> put_resp_header("x-electric-chunk-last-offset", "#{chunk_end_offset}")
   end
 
   defp generate_etag(%Conn{} = conn, _) do

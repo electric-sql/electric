@@ -25,10 +25,20 @@ defmodule Electric.ShapeCache.CubDbStorage do
   end
 
   def for_shape(shape_id, %{} = opts) do
-    %{opts | shape_id: shape_id, db: name(shape_id)}
+    {chunking_module, chunking_opts} = Access.fetch!(opts, :log_chunking)
+
+    %{
+      opts
+      | shape_id: shape_id,
+        db: name(shape_id),
+        log_chunking: {chunking_module, chunking_module.for_shape(shape_id, chunking_opts)}
+    }
   end
 
   def start_link(%{shape_id: shape_id, db: db} = opts) when is_binary(shape_id) do
+    {chunking_module, chunking_opts} = Access.fetch!(opts, :log_chunking)
+    chunking_module.start_link(chunking_opts)
+
     with {:ok, path} <- initialise_filesystem(shape_id, opts) do
       CubDB.start_link(data_dir: path, name: db)
     end

@@ -30,7 +30,7 @@ defmodule Electric.ShapeCache.Storage do
   @type row :: list()
 
   @doc "Initialise shape-specific opts from the shared, global, configuration"
-  @callback for_shape(shape_id(), term()) :: storage()
+  @callback for_shape(shape_id(), compiled_opts()) :: compiled_opts()
 
   @doc "Start any processes required to run the storage backend"
   @callback start_link(storage()) :: GenServer.on_start()
@@ -96,19 +96,10 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   def for_shape(shape_id, {mod, opts}) do
-    {chunking_module, chunking_opts} = Access.fetch!(opts, :log_chunking)
-
-    {mod,
-     %{
-       apply(mod, :for_shape, [shape_id, opts])
-       | log_chunking:
-           {chunking_module, apply(chunking_module, :for_shape, [shape_id, chunking_opts])}
-     }}
+    {mod, apply(mod, :for_shape, [shape_id, opts])}
   end
 
   def start_link({mod, opts}) do
-    {chunking_module, chunking_opts} = Access.fetch!(opts, :log_chunking)
-    apply(chunking_module, :start_link, [chunking_opts])
     apply(mod, :start_link, [opts])
   end
 
