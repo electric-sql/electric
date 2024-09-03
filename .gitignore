@@ -1,6 +1,6 @@
-docs/.vitepress/dist
-docs/.vitepress/cache
-docs/public/openapi.html
+website/.vitepress/dist
+website/.vitepress/cache
+website/public/openapi.html
 integration-tests/lux/
 integration-tests/lux_logs/
 json_files
