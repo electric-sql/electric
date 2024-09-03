@@ -1,15 +1,16 @@
 import { ColumnInfo, Message, Schema, Value } from './types'
 
 export type ParseFunction = (
-  value: string,
+  value: string | null,
   additionalInfo?: Omit<ColumnInfo, `type` | `dims`>
 ) => Value
 export type Parser = { [key: string]: ParseFunction }
 
-const parseNumber = (value: string) => Number(value)
-const parseBool = (value: string) => value === `true` || value === `t`
-const parseBigInt = (value: string) => BigInt(value)
-const parseJson = (value: string) => JSON.parse(value)
+const parseNumber = (value: string | null) => Number(value)
+const parseBool = (value: string | null) => value === `true` || value === `t`
+const parseBigInt = (value: string | null) => BigInt(value ?? 0)
+const parseJson = (value: string | null) =>
+  value !== null ? JSON.parse(value) : null
 
 export const defaultParser: Parser = {
   int2: parseNumber,
@@ -24,7 +25,7 @@ export const defaultParser: Parser = {
 
 // Taken from: https://github.com/electric-sql/pglite/blob/main/packages/pglite/src/types.ts#L233-L279
 export function pgArrayParser(
-  value: string,
+  value: string | null,
   parser?: (s: string) => Value
 ): Value {
   let i = 0
@@ -33,6 +34,8 @@ export function pgArrayParser(
   let quoted = false
   let last = 0
   let p: string | undefined = undefined
+
+  if (value === null) return null
 
   function loop(x: string): Value[] {
     const xs = []
@@ -92,7 +95,7 @@ export class MessageParser {
         // Parse the row values
         const row = value as Record<string, Value>
         Object.keys(row).forEach((key) => {
-          row[key] = this.parseRow(key, row[key] as string, schema)
+          row[key] = this.parseRow(key, row[key] as string | null, schema)
         })
       }
       return value
@@ -100,7 +103,7 @@ export class MessageParser {
   }
 
   // Parses the message values using the provided parser based on the schema information
-  private parseRow(key: string, value: string, schema: Schema): Value {
+  private parseRow(key: string, value: string | null, schema: Schema): Value {
     const columnInfo = schema[key]
     if (!columnInfo) {
       // We don't have information about the value
@@ -114,7 +117,7 @@ export class MessageParser {
     // Pick the right parser for the type
     // and support parsing null values if needed
     // if no parser is provided for the given type, just return the value as is
-    const identityParser = (v: string) => v
+    const identityParser = (v: Value) => v
     const typParser = this.parser[typ] ?? identityParser
     const parser = makeNullableParser(typParser, columnInfo.not_null)
 
@@ -136,7 +139,7 @@ function makeNullableParser(
     // The sync service contains `null` value for a column whose value is NULL
     // but if the column value is an array that contains a NULL value
     // then it will be included in the array string as `NULL`, e.g.: `"{1,NULL,3}"`
-    return (value: string) =>
+    return (value: string | null) =>
       value === null || value === `NULL` ? null : parser(value)
   }
   return parser

@@ -177,8 +177,8 @@ describe(`HTTP Sync`, () => {
       VALUES (
         'test',
         1,
-        2,
-        3,
+        2147483647,
+        9223372036854775807,
         4.5,
         TRUE,
         '{"foo": "bar"}',
@@ -230,8 +230,8 @@ describe(`HTTP Sync`, () => {
         {
           txt: `test`,
           i2: 1,
-          i4: 2,
-          i8: BigInt(3),
+          i4: 2147483647,
+          i8: BigInt(`9223372036854775807`),
           f8: 4.5,
           b: true,
           json: { foo: `bar` },
