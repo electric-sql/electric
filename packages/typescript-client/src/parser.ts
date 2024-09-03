@@ -1,7 +1,14 @@
 import { ColumnInfo, Message, Schema, Value } from './types'
 
+type NullToken = null | `NULL`
+type Token = Exclude<string, NullToken>
+type NullableToken = Token | NullToken
 export type ParseFunction = (
-  value: string,
+  value: Token,
+  additionalInfo?: Omit<ColumnInfo, `type` | `dims`>
+) => Value
+type NullableParseFunction = (
+  value: NullableToken,
   additionalInfo?: Omit<ColumnInfo, `type` | `dims`>
 ) => Value
 export type Parser = { [key: string]: ParseFunction }
@@ -10,6 +17,7 @@ const parseNumber = (value: string) => Number(value)
 const parseBool = (value: string) => value === `true` || value === `t`
 const parseBigInt = (value: string) => BigInt(value)
 const parseJson = (value: string) => JSON.parse(value)
+const identityParser: ParseFunction = (v: string) => v
 
 export const defaultParser: Parser = {
   int2: parseNumber,
@@ -23,10 +31,7 @@ export const defaultParser: Parser = {
 }
 
 // Taken from: https://github.com/electric-sql/pglite/blob/main/packages/pglite/src/types.ts#L233-L279
-export function pgArrayParser(
-  value: string,
-  parser?: (s: string) => Value
-): Value {
+export function pgArrayParser(value: Token, parser?: ParseFunction): Value {
   let i = 0
   let char = null
   let str = ``
@@ -92,7 +97,7 @@ export class MessageParser {
         // Parse the row values
         const row = value as Record<string, Value>
         Object.keys(row).forEach((key) => {
-          row[key] = this.parseRow(key, row[key] as string, schema)
+          row[key] = this.parseRow(key, row[key] as NullableToken, schema)
         })
       }
       return value
@@ -100,7 +105,7 @@ export class MessageParser {
   }
 
   // Parses the message values using the provided parser based on the schema information
-  private parseRow(key: string, value: string, schema: Schema): Value {
+  private parseRow(key: string, value: NullableToken, schema: Schema): Value {
     const columnInfo = schema[key]
     if (!columnInfo) {
       // We don't have information about the value
@@ -114,13 +119,17 @@ export class MessageParser {
     // Pick the right parser for the type
     // and support parsing null values if needed
     // if no parser is provided for the given type, just return the value as is
-    const identityParser = (v: string) => v
-    const typParser = this.parser[typ] ?? identityParser
-    const parser = makeNullableParser(typParser, columnInfo.not_null)
+    const typeParser = this.parser[typ] ?? identityParser
+    const parser = makeNullableParser(typeParser, columnInfo, key)
 
     if (dimensions && dimensions > 0) {
       // It's an array
-      return pgArrayParser(value, parser)
+      const nullablePgArrayParser = makeNullableParser(
+        (value, _) => pgArrayParser(value, parser),
+        columnInfo,
+        key
+      )
+      return nullablePgArrayParser(value)
     }
 
     return parser(value, additionalInfo)
@@ -129,15 +138,24 @@ export class MessageParser {
 
 function makeNullableParser(
   parser: ParseFunction,
-  notNullable?: boolean
-): ParseFunction {
-  const isNullable = !(notNullable ?? false)
-  if (isNullable) {
-    // The sync service contains `null` value for a column whose value is NULL
-    // but if the column value is an array that contains a NULL value
-    // then it will be included in the array string as `NULL`, e.g.: `"{1,NULL,3}"`
-    return (value: string) =>
-      value === null || value === `NULL` ? null : parser(value)
+  columnInfo: ColumnInfo,
+  columnName?: string
+): NullableParseFunction {
+  const isNullable = !(columnInfo.not_null ?? false)
+  // The sync service contains `null` value for a column whose value is NULL
+  // but if the column value is an array that contains a NULL value
+  // then it will be included in the array string as `NULL`, e.g.: `"{1,NULL,3}"`
+  return (value: NullableToken) => {
+    if (isPgNull(value)) {
+      if (!isNullable) {
+        throw new Error(`Column ${columnName ?? `unknown`} is not nullable`)
+      }
+      return null
+    }
+    return parser(value, columnInfo)
   }
-  return parser
+}
+
+function isPgNull(value: NullableToken): value is NullToken {
+  return value === null || value === `NULL`
 }
