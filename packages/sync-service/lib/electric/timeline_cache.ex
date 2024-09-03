@@ -44,9 +44,10 @@ defmodule Electric.TimelineCache do
   @impl true
   def init(opts) do
     with {:ok, tid} <- Access.fetch(opts, :timeline_id),
-         {:ok, kv} <- Access.fetch(opts, :persistent_kv) do
-      timeline_id = load_timeline_id(tid, kv)
-      {:ok, %{id: timeline_id, persistent_kv: kv}}
+         {:ok, kv_backend} <- Access.fetch(opts, :persistent_kv) do
+      persistent_kv = PersistentKV.Serialized.new!(backend: kv_backend)
+      timeline_id = load_timeline_id(tid, persistent_kv)
+      {:ok, %{id: timeline_id, persistent_kv: persistent_kv}}
     end
   end
 
