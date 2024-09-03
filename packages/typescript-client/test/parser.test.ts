@@ -165,12 +165,12 @@ describe(`Message parser`, () => {
 
     const sampleDims = [undefined, 1, 2]
 
-    // If it's not nullable it should parse as a number
-    expect(
-      parser.parse(messages, { a: { type: `int2`, not_null: true } })
-    ).toEqual([{ value: { a: 0 } }])
-
     for (const dims of sampleDims) {
+      // If it's not nullable it should throw
+      expect(() =>
+        parser.parse(messages, { a: { type: `int2`, dims, not_null: true } })
+      ).toThrowError(`Column a is not nullable`)
+
       // Otherwise, it should parse as null
       expect(parser.parse(messages, { a: { type: `int2`, dims } })).toEqual(
         expectedParsedMessages
