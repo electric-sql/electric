@@ -28,6 +28,7 @@ defmodule Electric.ShapeCacheTest do
       }
     }
   }
+  @initial_log_state %{current_chunk_byte_size: 0}
   @lsn Electric.Postgres.Lsn.from_integer(13)
   @change_offset LogOffset.new(@lsn, 2)
   @xid 99
@@ -664,6 +665,7 @@ defmodule Electric.ShapeCacheTest do
             log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
           }
         ]),
+        @initial_log_state,
         storage
       )
 
@@ -716,6 +718,7 @@ defmodule Electric.ShapeCacheTest do
             log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
           }
         ]),
+        @initial_log_state,
         storage
       )
 

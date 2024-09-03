@@ -8,29 +8,15 @@ defmodule Electric.ShapeCache.Storage do
   @type compiled_opts :: term()
   @type storage :: {module(), compiled_opts()}
 
-  @typedoc """
-  Prepared change that will be passed to the storage layer from the replication log.
-  """
-  @type log_header :: map()
-  @type log_entry :: %{
-          key: String.t(),
-          value: map(),
-          headers: log_header(),
-          offset: LogOffset.t()
+  @type log_state :: %{
+          current_chunk_byte_size: non_neg_integer()
         }
-  @type log :: Enumerable.t(log_entry())
-
-  @type serialised_log_entry :: %{
-          key: String.t(),
-          value: map(),
-          headers: log_header(),
-          offset: String.t()
-        }
+  @type log :: Enumerable.t(Querying.json_iodata())
 
   @type row :: list()
 
   @doc "Initialise shape-specific opts from the shared, global, configuration"
-  @callback for_shape(shape_id(), term()) :: storage()
+  @callback for_shape(shape_id(), compiled_opts()) :: compiled_opts()
 
   @doc "Start any processes required to run the storage backend"
   @callback start_link(storage()) :: GenServer.on_start()
@@ -67,11 +53,22 @@ defmodule Electric.ShapeCache.Storage do
   @callback append_to_log!(
               shape_id(),
               [LogItems.log_item()],
+              log_state(),
               compiled_opts()
-            ) :: :ok
+            ) :: log_state()
   @doc "Get stream of the log for a shape since a given offset"
   @callback get_log_stream(shape_id(), LogOffset.t(), LogOffset.t(), compiled_opts()) ::
-              Enumerable.t()
+              log()
+
+  @doc """
+  Get the last exclusive offset of the chunk starting from the given offset.
+
+  If chunk has not finished accumulating, `nil` is returned.
+
+  If chunk has finished accumulating, the last offset of the chunk is returned.
+  """
+  @callback get_chunk_end_log_offset(shape_id(), LogOffset.t(), compiled_opts()) ::
+              LogOffset.t() | nil
 
   @doc "Clean up snapshots/logs for a shape id"
   @callback cleanup!(shape_id(), compiled_opts()) :: :ok
@@ -152,20 +149,33 @@ defmodule Electric.ShapeCache.Storage do
   @doc """
   Append log items from one transaction to the log
   """
-  @spec append_to_log!(shape_id(), [LogItems.log_item()], storage()) :: :ok
-  def append_to_log!(shape_id, log_items, {mod, opts}) do
+  @spec append_to_log!(shape_id(), [LogItems.log_item()], log_state(), storage()) :: log_state()
+  def append_to_log!(shape_id, log_items, log_state, {mod, opts}) do
     shape_opts = mod.for_shape(shape_id, opts)
-    mod.append_to_log!(shape_id, log_items, shape_opts)
+    mod.append_to_log!(shape_id, log_items, log_state, shape_opts)
   end
 
   import LogOffset, only: :macros
   @doc "Get stream of the log for a shape since a given offset"
-  @spec get_log_stream(shape_id(), LogOffset.t(), LogOffset.t(), storage()) ::
-          Enumerable.t()
+  @spec get_log_stream(shape_id(), LogOffset.t(), LogOffset.t(), storage()) :: log()
   def get_log_stream(shape_id, offset, max_offset \\ LogOffset.last(), {mod, opts})
       when max_offset == :infinity or not is_log_offset_lt(max_offset, offset) do
     shape_opts = mod.for_shape(shape_id, opts)
+
     mod.get_log_stream(shape_id, offset, max_offset, shape_opts)
+  end
+
+  @doc """
+  Get the last exclusive offset of the chunk starting from the given offset.
+
+  If chunk has not finished accumulating, `nil` is returned.
+
+  If chunk has finished accumulating, the last offset of the chunk is returned.
+  """
+  @spec get_chunk_end_log_offset(shape_id(), LogOffset.t(), storage()) :: LogOffset.t() | nil
+  def get_chunk_end_log_offset(shape_id, offset, {mod, opts}) do
+    shape_opts = mod.for_shape(shape_id, opts)
+    mod.get_chunk_end_log_offset(shape_id, offset, shape_opts)
   end
 
   @doc "Check if log entry for given shape ID and offset exists"

@@ -27,6 +27,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
     }
   }
   @test_shape_id "test-shape-id"
+  @test_opts %{foo: "bar"}
+  @before_all_offset LogOffset.before_all()
   @first_offset LogOffset.first()
   @test_offset LogOffset.new(Lsn.from_integer(100), 0)
   @start_offset_50 LogOffset.new(Lsn.from_integer(50), 0)
@@ -108,11 +110,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset = LogOffset.increment(@first_offset)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, opts -> {@test_shape_id, opts} end)
-      |> expect(:get_snapshot, fn @test_shape_id, {@test_shape_id, _opts} ->
+      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @test_shape_id, @before_all_offset, _ ->
+        next_offset
+      end)
+      |> expect(:get_snapshot, fn @test_shape_id, @test_opts ->
         {@first_offset, [Jason.encode!(%{key: "snapshot"})]}
       end)
-      |> expect(:get_log_stream, fn @test_shape_id, @first_offset, _, {@test_shape_id, _opts} ->
+      |> expect(:get_log_stream, fn @test_shape_id, @first_offset, _, @test_opts ->
         [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
       end)
 
@@ -129,12 +134,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
                  "value" => "foo",
                  "headers" => %{},
                  "offset" => "#{next_offset}"
-               },
-               %{"headers" => %{"control" => "up-to-date"}}
+               }
              ]
 
       assert Plug.Conn.get_resp_header(conn, "etag") == [
-               "#{@test_shape_id}:-1:#{@test_offset}"
+               "#{@test_shape_id}:-1:#{next_offset}"
              ]
 
       assert Plug.Conn.get_resp_header(conn, "x-electric-shape-id") == [@test_shape_id]
@@ -151,11 +155,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset = LogOffset.increment(@first_offset)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, opts -> {@test_shape_id, opts} end)
-      |> expect(:get_snapshot, fn @test_shape_id, {@test_shape_id, _opts} ->
+      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @test_shape_id, @before_all_offset, _ ->
+        next_offset
+      end)
+      |> expect(:get_snapshot, fn @test_shape_id, @test_opts ->
         {@first_offset, [Jason.encode!(%{key: "snapshot"})]}
       end)
-      |> expect(:get_log_stream, fn @test_shape_id, @first_offset, _, {@test_shape_id, _opts} ->
+      |> expect(:get_log_stream, fn @test_shape_id, @first_offset, _, @test_opts ->
         [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
       end)
 
@@ -186,11 +193,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset = LogOffset.increment(@first_offset)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, opts -> {@test_shape_id, opts} end)
-      |> expect(:get_snapshot, fn @test_shape_id, {@test_shape_id, _opts} ->
+      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @test_shape_id, @before_all_offset, _ ->
+        next_offset
+      end)
+      |> expect(:get_snapshot, fn @test_shape_id, @test_opts ->
         {@first_offset, [Jason.encode!(%{key: "snapshot"})]}
       end)
-      |> expect(:get_log_stream, fn @test_shape_id, @first_offset, _, {@test_shape_id, _opts} ->
+      |> expect(:get_log_stream, fn @test_shape_id, @first_offset, _, @test_opts ->
         [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
       end)
 
@@ -214,11 +224,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_next_offset = LogOffset.increment(next_offset)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, opts -> {@test_shape_id, opts} end)
-      |> expect(:get_log_stream, fn @test_shape_id,
-                                    @start_offset_50,
-                                    _,
-                                    {@test_shape_id, _opts} ->
+      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @test_shape_id, @start_offset_50, _ ->
+        next_next_offset
+      end)
+      |> expect(:get_log_stream, fn @test_shape_id, @start_offset_50, _, @test_opts ->
         [
           Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
           Jason.encode!(%{key: "log2", value: "bar", headers: %{}, offset: next_next_offset})
@@ -247,15 +257,18 @@ defmodule Electric.Plug.ServeShapePlugTest do
                  "value" => "bar",
                  "headers" => %{},
                  "offset" => "#{next_next_offset}"
-               },
-               %{"headers" => %{"control" => "up-to-date"}}
+               }
              ]
 
       assert Plug.Conn.get_resp_header(conn, "etag") == [
-               "#{@test_shape_id}:#{@start_offset_50}:#{@test_offset}"
+               "#{@test_shape_id}:#{@start_offset_50}:#{next_next_offset}"
              ]
 
       assert Plug.Conn.get_resp_header(conn, "x-electric-shape-id") == [@test_shape_id]
+
+      assert Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset") == [
+               "#{next_next_offset}"
+             ]
     end
 
     test "returns 304 Not Modified when If-None-Match matches ETag" do
@@ -264,6 +277,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
         {@test_shape_id, @test_offset}
       end)
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @test_shape_id, @start_offset_50, _ ->
+        @test_offset
+      end)
 
       conn =
         conn(
@@ -293,18 +312,15 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset_str = "#{next_offset}"
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, opts -> {@test_shape_id, opts} end)
-      |> expect(:get_log_stream, fn @test_shape_id,
-                                    @test_offset,
-                                    @test_offset,
-                                    {@test_shape_id, _opts} ->
+      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @test_shape_id, @test_offset, _ ->
+        nil
+      end)
+      |> expect(:get_log_stream, fn @test_shape_id, @test_offset, @test_offset, @test_opts ->
         send(test_pid, :got_log_stream)
         []
       end)
-      |> expect(:get_log_stream, fn @test_shape_id,
-                                    @test_offset,
-                                    ^next_offset,
-                                    {@test_shape_id, _opts} ->
+      |> expect(:get_log_stream, fn @test_shape_id, @test_offset, ^next_offset, @test_opts ->
         [Jason.encode!("test result")]
       end)
 
@@ -357,8 +373,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
       test_pid = self()
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, opts -> {@test_shape_id, opts} end)
-      |> expect(:get_log_stream, fn @test_shape_id, @test_offset, _, {@test_shape_id, _opts} ->
+      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @test_shape_id, @test_offset, _ ->
+        nil
+      end)
+      |> expect(:get_log_stream, fn @test_shape_id, @test_offset, _, @test_opts ->
         send(test_pid, :got_log_stream)
         []
       end)
@@ -399,8 +418,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, opts -> {@test_shape_id, opts} end)
-      |> expect(:get_log_stream, fn @test_shape_id, @test_offset, _, {@test_shape_id, _opts} ->
+      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @test_shape_id, @test_offset, _ ->
+        nil
+      end)
+      |> expect(:get_log_stream, fn @test_shape_id, @test_offset, _, @test_opts ->
         []
       end)
 
