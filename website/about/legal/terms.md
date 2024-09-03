@@ -2,6 +2,7 @@
 title: Terms
 description: >-
   Using our software is entirely at your own risk.
+outline: deep
 ---
 
 # Terms

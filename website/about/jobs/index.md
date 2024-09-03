@@ -4,6 +4,7 @@ description: >-
   Join a small, technical, multi-disciplinary team that's passionate
   about product, developer experience and database engineering.
 image: /img/about/villa-discussion.jpg
+outline: deep
 ---
 
 <figure class="page-image">

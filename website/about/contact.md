@@ -2,6 +2,7 @@
 title: Contact
 description: >-
   Get in touch with us by email or say hello on our community Discord.
+outline: deep
 ---
 
 <figure class="page-image">

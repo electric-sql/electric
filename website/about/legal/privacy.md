@@ -3,6 +3,7 @@ title: Privacy
 description: >-
   We privately store a limited set of personal information
   to identify and communicate with you.
+outline: deep
 ---
 
 # Privacy

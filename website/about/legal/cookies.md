@@ -2,6 +2,7 @@
 title: Cookies
 description: >-
   Websites don't save cookies, browsers do.
+outline: deep
 ---
 
 # Cookie policy

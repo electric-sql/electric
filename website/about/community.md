@@ -3,6 +3,7 @@ title: About
 description: >-
   ElectricSQL is an open source project. We welcome new users,
   contributors, supporters and community members.
+outline: deep
 ---
 
 # Community
