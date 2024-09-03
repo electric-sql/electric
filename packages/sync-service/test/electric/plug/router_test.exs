@@ -612,6 +612,83 @@ defmodule Electric.Plug.RouterTest do
       # into two operations when the PK changes. Hence the distance of 2 between op1 and op2.
       assert op2_log_offset == LogOffset.increment(op1_log_offset, 2)
     end
+
+    @tag with_sql: [
+           "CREATE TABLE large_rows_table (id BIGINT PRIMARY KEY, value TEXT NOT NULL)"
+         ]
+    test "GET receives chunked results based on size", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      {_, %{chunk_bytes_threshold: threshold}} = Access.fetch!(opts, :storage)
+
+      first_val = String.duplicate("a", round(threshold * 0.6))
+      second_val = String.duplicate("b", round(threshold * 0.7))
+      third_val = String.duplicate("c", round(threshold * 0.4))
+
+      conn = conn("GET", "/v1/shape/large_rows_table?offset=-1") |> Router.call(opts)
+      assert %{status: 200} = conn
+      [shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+      [next_offset] = Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset")
+
+      assert [_] = Jason.decode!(conn.resp_body)
+
+      # Use a live request to ensure data has been ingested
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape/large_rows_table?offset=#{next_offset}&shape_id=#{shape_id}&live"
+          )
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "INSERT INTO large_rows_table VALUES (1, $1), (2, $2), (3, $3)", [
+        first_val,
+        second_val,
+        third_val
+      ])
+
+      assert %{status: 200} = Task.await(task)
+
+      conn =
+        conn("GET", "/v1/shape/large_rows_table?offset=#{next_offset}&shape_id=#{shape_id}")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"id" => "1", "value" => ^first_val},
+                 "key" => _
+               },
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"id" => "2", "value" => ^second_val},
+                 "key" => _
+               }
+             ] = Jason.decode!(conn.resp_body)
+
+      [next_offset] = Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset")
+
+      conn =
+        conn("GET", "/v1/shape/large_rows_table?offset=#{next_offset}&shape_id=#{shape_id}")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"id" => "3", "value" => ^third_val},
+                 "key" => _
+               },
+               %{
+                 "headers" => %{"control" => "up-to-date"}
+               }
+             ] = Jason.decode!(conn.resp_body)
+    end
   end
 
   defp get_resp_shape_id(conn), do: get_resp_header(conn, "x-electric-shape-id")

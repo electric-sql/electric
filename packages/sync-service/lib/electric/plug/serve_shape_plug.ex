@@ -121,6 +121,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # We're starting listening as soon as possible to not miss stuff that was added since we've asked for last offset
   plug :listen_for_new_changes
   plug :validate_shape_offset
+  plug :determine_log_chunk_offset
   plug :generate_etag
   plug :validate_and_put_etag
   plug :put_resp_cache_headers
@@ -148,13 +149,12 @@ defmodule Electric.Plug.ServeShapePlug do
     shape = conn.assigns.shape_definition
 
     {shape_id, last_offset} =
-      Shapes.get_or_create_shape_id(shape, conn.assigns.config)
+      Shapes.get_or_create_shape_id(conn.assigns.config, shape)
 
     conn
     |> assign(:active_shape_id, shape_id)
     |> assign(:last_offset, last_offset)
     |> put_resp_header("x-electric-shape-id", shape_id)
-    |> put_resp_header("x-electric-chunk-last-offset", "#{last_offset}")
   end
 
   defp schema(shape) do
@@ -201,17 +201,34 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
+  # If chunk offsets are available, use those instead of the latest available offset
+  # to optimize for cache hits and response sizes
+  defp determine_log_chunk_offset(
+         %Conn{assigns: %{offset: offset, active_shape_id: shape_id}} = conn,
+         _
+       ) do
+    chunk_end_offset =
+      Shapes.get_chunk_end_log_offset(conn.assigns.config, shape_id, offset)
+
+    chunk_end_offset =
+      if !is_nil(chunk_end_offset), do: chunk_end_offset, else: conn.assigns.last_offset
+
+    conn
+    |> assign(:chunk_end_offset, chunk_end_offset)
+    |> put_resp_header("x-electric-chunk-last-offset", "#{chunk_end_offset}")
+  end
+
   defp generate_etag(%Conn{} = conn, _) do
     %{
       offset: offset,
       active_shape_id: active_shape_id,
-      last_offset: last_offset
+      chunk_end_offset: chunk_end_offset
     } = conn.assigns
 
     conn
     |> assign(
       :etag,
-      "#{active_shape_id}:#{offset}:#{last_offset}"
+      "#{active_shape_id}:#{offset}:#{chunk_end_offset}"
     )
   end
 
@@ -263,7 +280,7 @@ defmodule Electric.Plug.ServeShapePlug do
          %Conn{
            assigns: %{
              offset: @before_all_offset,
-             last_offset: last_offset,
+             chunk_end_offset: chunk_end_offset,
              active_shape_id: shape_id
            }
          } = conn,
@@ -272,9 +289,12 @@ defmodule Electric.Plug.ServeShapePlug do
     case Shapes.get_snapshot(conn.assigns.config, shape_id) do
       {:ok, {offset, snapshot}} ->
         log =
-          Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset, up_to: last_offset)
+          Shapes.get_log_stream(conn.assigns.config, shape_id,
+            since: offset,
+            up_to: chunk_end_offset
+          )
 
-        [snapshot, log, @up_to_date]
+        [snapshot, log, maybe_up_to_date(conn)]
         |> Stream.concat()
         |> to_json_stream()
         |> Stream.chunk_every(500)
@@ -294,16 +314,21 @@ defmodule Electric.Plug.ServeShapePlug do
   # Otherwise, serve log since that offset
   defp serve_log_or_snapshot(
          %Conn{
-           assigns: %{offset: offset, last_offset: last_offset, active_shape_id: shape_id}
+           assigns: %{
+             offset: offset,
+             chunk_end_offset: chunk_end_offset,
+             active_shape_id: shape_id
+           }
          } = conn,
          _
        ) do
-    log = Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset, up_to: last_offset)
+    log =
+      Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset, up_to: chunk_end_offset)
 
     if Enum.take(log, 1) == [] and conn.assigns.live do
       hold_until_change(conn, shape_id)
     else
-      [log, @up_to_date]
+      [log, maybe_up_to_date(conn)]
       |> Stream.concat()
       |> to_json_stream()
       |> Stream.chunk_every(500)
@@ -340,6 +365,16 @@ defmodule Electric.Plug.ServeShapePlug do
     end)
   end
 
+  defp maybe_up_to_date(%Conn{
+         assigns: %{chunk_end_offset: chunk_end_offset, last_offset: last_offset}
+       }) do
+    if LogOffset.compare(chunk_end_offset, last_offset) == :lt do
+      []
+    else
+      [@up_to_date]
+    end
+  end
+
   defp listen_for_new_changes(%Conn{} = conn, _) when not conn.assigns.live, do: conn
 
   defp listen_for_new_changes(%Conn{assigns: assigns} = conn, _) do
@@ -368,6 +403,7 @@ defmodule Electric.Plug.ServeShapePlug do
         # Stream new log since currently "held" offset
         conn
         |> assign(:last_offset, latest_log_offset)
+        |> assign(:chunk_end_offset, latest_log_offset)
         # update last offset header
         |> put_resp_header("x-electric-chunk-last-offset", "#{latest_log_offset}")
         |> serve_log_or_snapshot([])
