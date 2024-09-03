@@ -34,7 +34,7 @@ requests to Electric which listens on port 3000. If you're loading shapes
 through your API or framework dev server, replaces 3000 with the port your API
 or dev server is listening on.
 
-```cli
+```shell
 npx @radically-straightforward/caddy run --config - --adapter caddyfile <<EOF
 :3001 {
   reverse_proxy localhost:3000
