@@ -1,5 +1,5 @@
-const FALLBACK_ELECTRIC_COUNT = 5_000
-const FALLBACK_PGLITE_COUNT = 7_000
+const FALLBACK_ELECTRIC_COUNT = 6_000
+const FALLBACK_PGLITE_COUNT = 7_500
 
 export async function localStorageCache(key: string, ttl: number, valueCb: () => unknown) {
   const now = new Date().getTime()

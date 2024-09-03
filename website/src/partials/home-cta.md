@@ -33,7 +33,7 @@ const Component = () => {
 }
 ```
 
-<div class="actions">
+<div class="actions cta-actions">
   <div class="action">
     <VPButton
         href="/docs/quickstart"
@@ -112,7 +112,7 @@ const Component = () => {
 }
 ```
 
-<div class="actions">
+<div class="actions cta-actions">
   <div class="action">
     <VPButton
         href="/docs/intro"

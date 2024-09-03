@@ -1,5 +1,5 @@
 <script setup>
-  const props = defineProps(['items'])
+  const { items } = defineProps(['items'])
 </script>
 
 <style scoped>

@@ -4,11 +4,11 @@ import { useSidebar } from 'vitepress/theme'
 
 import DefaultTheme from 'vitepress/theme-without-fonts'
 
-import HomeFeaturesAfter from './home-features-after.md'
-import HomeFeaturesBefore from './home-features-before.md'
+import SiteFooter from '../../src/components/SiteFooter.vue'
+import UseCaseHeader from '../../src/components/UseCaseHeader.vue'
 
-import Footer from './footer.md'
-import UseCaseHeader from './use-case-header.md'
+import HomeFeaturesAfter from '../../src/partials/home-features-after.md'
+import HomeFeaturesBefore from '../../src/partials/home-features-before.md'
 
 const { Layout } = DefaultTheme
 
@@ -37,12 +37,12 @@ const { hasSidebar } = useSidebar()
       </div>
     </template>
     <template #doc-before>
-      <div class="vp-doc">
-        <UseCaseHeader v-if="frontmatter.case" />
+      <div class="vp-doc" v-if="frontmatter.case">
+        <UseCaseHeader />
       </div>
     </template>
     <template #layout-bottom>
-      <Footer v-if="!hasSidebar" />
+      <SiteFooter v-if="!hasSidebar" />
     </template>
   </Layout>
 </template>

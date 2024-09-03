@@ -5,7 +5,7 @@ description: >-
 ---
 
 <script setup>
-import TeamMembers from '../.vitepress/theme/TeamMembers.vue'
+import TeamMembers from '../components/TeamMembers.vue'
 import { data } from '../data/team.data.ts'
 
 const { advisors, investors, team } = data

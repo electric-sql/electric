@@ -76,17 +76,19 @@ features:
 
 <script setup>
 import { onMounted } from 'vue'
-import Tweet from 'vue-tweet'
 
 import VPFeatures from 'vitepress/dist/client/theme-default/components/VPFeatures.vue'
 
 import { data as initialStarCounts } from './data/count.data.ts'
 import { data as useCases } from './data/use-cases.data.ts'
 
-import { getStarCount } from './components/starCount.ts'
+import MasonryTweets from './src/components/MasonryTweets.vue'
+import UseCases from './src/components/UseCases.vue'
 
-import HomeYourStackSimplified from '.vitepress/theme/home-your-stack-simplified.md'
-import HomeCTA from '.vitepress/theme/home-cta.md'
+import { getStarCount } from './src/lib/star-count.ts'
+
+import HomeYourStackSimplified from './src/partials/home-your-stack-simplified.md'
+import HomeCTA from './src/partials/home-cta.md'
 
 const tweets = [
   {name: 'kyle', id: '1825531359949173019'},
@@ -128,38 +130,6 @@ const renderStarCount = async (repoName, initialStarCount) => {
   countEl.innerHTML = formatStarCount(count)
 }
 
-const forceResize = () => {
-  const wrapper = document.querySelector('.masonry-wall-wrapper')
-  const wall = document.querySelector('.masonry-wall')
-
-  wrapper.style.height = `${wall.offsetHeight * 0.75}px`
-}
-
-const finishResize = () => {
-  forceResize()
-
-  window.setTimeout(forceResize, 6_000)
-  window.setTimeout(forceResize, 12_000)
-  window.setTimeout(forceResize, 20_000)
-}
-
-let resizeTimer
-const handleResize = () => {
-  forceResize()
-
-  clearTimeout(loadTimer)
-  loadTimer = setTimeout(finishResize, 2_000)
-}
-
-let loadTimer
-const handleTweetLoad = () => {
-  clearTimeout(loadTimer)
-  loadTimer = setTimeout(handleResize, 600)
-
-  const wrapper = document.querySelector('.masonry-wall-wrapper')
-  wrapper.classList.add('visible')
-}
-
 onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {
     const githubLinks = document.querySelectorAll(
@@ -178,13 +148,6 @@ onMounted(async () => {
 
     renderStarCount('electric', initialStarCounts.electric)
     renderStarCount('pglite', initialStarCounts.pglite)
-
-    let resizeTimer
-    window.addEventListener('resize', (event) => {
-      clearTimeout(resizeTimer)
-
-      resizeTimer = setTimeout(handleResize, 300)
-    })
   }
 })
 </script>
@@ -243,163 +206,6 @@ onMounted(async () => {
     min-width: 55px;
   }
 
-  .masonry-wall-wrapper {
-    position: absolute;
-    display: block;
-    margin-left: 20000;
-
-    text-align: center;
-
-    overflow-y: hidden;
-    overflow-x: show;
-
-    margin-top: 64px;
-  }
-  .masonry-wall-wrapper.visible {
-    position: relative;
-    margin-left: auto;
-  }
-
-  .masonry-wall {
-    columns: 4 300px;
-    column-gap: 1.5rem;
-
-    transform: scale(0.75);
-    transform-origin: top center;
-
-    margin: 0 -16.66% -0.33% -16.66%;
-  }
-  .masonry-item {
-    width: 100%;
-    max-width: 462px;
-    margin: 0;
-    display: inline-block;
-  }
-  .masonry-item .twitter-tweet iframe {
-    transform: scale(1);
-  }
-  @media (max-width: 1082px) {
-    .masonry-item.tweet-hide-md {
-      display: none;
-    }
-  }
-  @media (max-width: 807px) {
-    .masonry-item.tweet-hide-sm {
-      display: none;
-    }
-  }
-  .masonry-tweet {
-    position: relative;
-    display: block;
-    filter: saturate(0.75);
-  }
-
-  .home-propositions {
-    text-align: center;
-    margin: 32px 0 -64px;
-  }
-  .home-propositions .proposition {
-    display: inline-flex;
-    flex-direction: row;
-    justify-content: center;
-    align-items: center;
-    margin: 15px 0;
-    gap: 24px;
-
-    border: 1px solid var(--vp-c-bg-soft);
-    border-radius: 12px;
-    background-color: var(--vp-c-bg-soft);
-    transition: border-color 0.25s, background-color 0.25s;
-    padding: 12px;
-  }
-  .home-propositions .proposition:hover {
-    border-color: var(--ddn-color);
-  }
-  @media (min-width: 560px) {
-    .home-propositions .proposition {
-      padding: 14px 24px;
-    }
-  }
-  @media (min-width: 760px) {
-    .home-propositions .proposition {
-      padding: 18px 36px;
-    }
-  }
-  @media (min-width: 1024px) {
-    .home-propositions .proposition {
-      padding: 24px 48px;
-    }
-  }
-
-  .home-propositions .proposition-image {
-    width: 30vw;
-    max-width: 320px;
-    min-width: 180px;
-  }
-  .home-propositions .proposition-image img {
-    width: 100%;
-    filter: drop-shadow(1px 2px calc(2px + 0.5vw) var(--vp-c-indigo-1));
-  }
-  .home-propositions .proposition-content {
-    width: 40vw;
-    max-width: 460px;
-    min-width: 180px;
-    text-align: left;
-  }
-  .home-propositions .proposition-content h3 {
-    border: none;
-    margin-top: 12px;
-    padding-top: 0;
-    font-size: 24px;
-  }
-  .home-propositions .proposition-content p,
-  .home-propositions .proposition-content ul {
-    font-weight: 550;
-    font-size: 15px;
-    color: var(--vp-c-text-2);
-    line-height: 26px;
-  }
-  .home-propositions .proposition-content ul.benefits {
-    margin-bottom: 14px;
-  }
-  .home-propositions .proposition-content .benefits li + li {
-    margin-top: 4px;
-  }
-  @media (max-width: 759px) {
-    .home-propositions .proposition {
-      flex-direction: column;
-    }
-    .home-propositions .proposition-image {
-      width: 50vw;
-      max-width: none;
-      min-width: none;
-    }
-    .home-propositions .proposition-content {
-      width: 100%;
-      max-width: 400px;
-      min-width: none;
-      text-align: center;
-    }
-    .home-propositions .proposition-content h3 {
-      margin-top: -12px;
-    }
-    .home-propositions .proposition-content p,
-    .home-propositions .proposition-content ul {
-      font-size: 14.5px;
-      line-height: 24px;
-    }
-    .home-propositions .proposition-content ul.benefits {
-      margin-bottom: 28px;
-    }
-  }
-  @media (max-width: 559px) {
-    .home-propositions .proposition-content p,
-    .home-propositions .proposition-content ul {
-      font-size: 14px;
-    }
-  }
-
-
   .home-cta {
     display: flex;
     justify-content: center;
@@ -417,67 +223,15 @@ onMounted(async () => {
       padding-right: 36px !important;
     }
   }
-
-  .home-cta .actions {
-    display: flex;
-    gap: 12px;
-    margin: 12px 0 36px;
-    justify-content: center;
-  }
 </style>
 
-<div class="masonry-wall-wrapper">
-  <div class="masonry-wall">
-    <div v-for="(item, index) in tweets" :key="item.id"
-        :class="{
-            'masonry-item': true,
-            'tweet-hide-md': item.hideMedium,
-            'tweet-hide-sm': item.hideSmall
-          }">
-      <div class="masonry-tweet">
-        <Tweet :tweet-id="item.id"
-            align="center"
-            conversation="none"
-            theme="dark"
-            dnt
-            @tweet-load-error="handleTweetLoad"
-            @tweet-load-success="handleTweetLoad">
-          <template v-slot:loading>
-            <div class="loading-tweet"></div>
-          </template>
-        </Tweet>
-      </div>
-    </div>
-  </div>
-</div>
+<MasonryTweets :tweets="tweets" />
 
 <div class="features-content your-stack-simplified">
   <HomeYourStackSimplified />
 </div>
 
-<div class="home-propositions">
-  <a v-for="(item, index) in useCases"
-      :key="item.id"
-      class="proposition no-visual"
-      :href="item.link">
-    <div class="proposition-image">
-      <img :src="item.image" />
-    </div>
-    <div class="proposition-content">
-      <h3>
-        Solves {{ item.solves }}
-      </h3>
-      <p>
-        {{ item.description }}
-      </p>
-      <ul class="benefits">
-        <li v-for="(benefit, index) in item.benefits" :key="index">
-          {{ benefit }}
-        </li>
-      </ul>
-    </div>
-  </a>
-</div>
+<UseCases :cases="useCases" />
 
 <div class="features-content">
   <div class="home-cta">

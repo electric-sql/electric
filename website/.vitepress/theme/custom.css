@@ -249,16 +249,8 @@ figcaption {
   max-width: 460px;
   margin-left: auto;
 }
-
 iframe {
   color-scheme: auto;
-}
-.twitter-tweet {
-  margin: 1rem auto -95px !important;
-}
-.twitter-tweet iframe {
-  transform: scale(0.8);
-  transform-origin: top left;
 }
 
 .VPHomeHero .VPImage.image-src {
@@ -351,4 +343,14 @@ ul.benefits {
   list-style-type: "→ ";
   list-style-position: inside;
   padding: 0;
+}
+
+.cta-actions {
+  display: flex;
+  gap: 12px;
+  margin: 12px 0 36px;
+  justify-content: center;
+}
+.cta-actions.left {
+  justify-content: left;
 }
