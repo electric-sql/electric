@@ -2,7 +2,7 @@ defmodule Electric.TimelineTest do
   use ExUnit.Case, async: true
   alias Electric.Timeline
   alias Electric.TimelineCache
-  alias Electric.ShapeCacheMock
+  alias Support.Mock.ShapeCache
 
   import Mox
 
@@ -13,7 +13,7 @@ defmodule Electric.TimelineTest do
 
       {:ok, pid} = TimelineCache.start_link(timeline_id: timeline, persistent_kv: kv)
 
-      opts = [timeline_cache: pid, shape_cache: {ShapeCacheMock, []}]
+      opts = [timeline_cache: pid, shape_cache: {ShapeCache, []}]
       {:ok, [timeline: timeline, opts: opts]}
     end
 
@@ -37,7 +37,7 @@ defmodule Electric.TimelineTest do
     test "cleans all shapes if Postgres' timeline does not match Electric's timeline", %{
       opts: opts
     } do
-      ShapeCacheMock
+      ShapeCache
       |> expect(:clean_all_shapes, fn _ -> :ok end)
 
       pg_timeline = 2
@@ -47,7 +47,7 @@ defmodule Electric.TimelineTest do
 
     @tag electric_timeline: 3
     test "cleans all shapes if Postgres' timeline is unknown", %{opts: opts} do
-      ShapeCacheMock
+      ShapeCache
       |> expect(:clean_all_shapes, fn _ -> :ok end)
 
       assert :ok = Timeline.check(nil, opts)
