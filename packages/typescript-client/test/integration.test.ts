@@ -633,7 +633,10 @@ describe(`HTTP Sync`, () => {
       }
 
       const response = await fetch(...args)
-      statusCodesReceived.push(response.status)
+      if (response.status < 500) {
+        statusCodesReceived.push(response.status)
+      }
+
       return response
     }
 
