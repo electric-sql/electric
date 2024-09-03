@@ -45,14 +45,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     # Pass mock dependencies to the plug
     config = %{
       shape_cache: {Mock.ShapeCache, []},
-      storage:
-        {Mock.Storage,
-         %{
-           log_chunking: {
-             Electric.ShapeCache.LogChunker,
-             Electric.ShapeCache.LogChunker.shared_opts()
-           }
-         }},
+      storage: {Mock.Storage, []},
       inspector: {__MODULE__, []},
       registry: @registry,
       long_poll_timeout: 20_000,

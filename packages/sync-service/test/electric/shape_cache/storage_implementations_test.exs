@@ -2,7 +2,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   use ExUnit.Case, async: true
   import Support.TestUtils
 
-  alias Electric.ShapeCache.LogChunker
   alias Electric.LogItems
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
@@ -22,6 +21,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       }
     }
   }
+  @initial_log_state %{current_chunk_byte_size: 0}
   @snapshot_offset LogOffset.first()
   @snapshot_offset_encoded to_string(@snapshot_offset)
   @zero_offset LogOffset.first()
@@ -148,7 +148,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         storage.mark_snapshot_as_started(@shape_id, opts)
         storage.make_new_snapshot!(@shape_id, @data_stream, opts)
-        :ok = storage.append_to_log!(@shape_id, log_items, opts)
+        storage.append_to_log!(@shape_id, log_items, @initial_log_state, opts)
 
         {@snapshot_offset, stream} = storage.get_snapshot(@shape_id, opts)
         assert Enum.count(stream) == Enum.count(@data_stream)
@@ -196,7 +196,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
-    describe "#{module_name}.append_to_log!/3" do
+    describe "#{module_name}.append_to_log!/4" do
       setup do
         {:ok, %{module: unquote(module)}}
       end
@@ -217,7 +217,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, log_items, opts)
+        storage.append_to_log!(@shape_id, log_items, @initial_log_state, opts)
 
         stream = storage.get_log_stream(@shape_id, LogOffset.first(), LogOffset.last(), opts)
 
@@ -249,19 +249,20 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, log_items, opts)
+        log_state1 = storage.append_to_log!(@shape_id, log_items, @initial_log_state, opts)
 
         log1 =
           storage.get_log_stream(@shape_id, LogOffset.first(), LogOffset.last(), opts)
           |> Enum.map(&:json.decode/1)
 
-        :ok = storage.append_to_log!(@shape_id, log_items, opts)
+        log_state2 = storage.append_to_log!(@shape_id, log_items, log_state1, opts)
 
         log2 =
           storage.get_log_stream(@shape_id, LogOffset.first(), LogOffset.last(), opts)
           |> Enum.map(&:json.decode/1)
 
         assert log1 == log2
+        assert log_state1 != log_state2
       end
     end
 
@@ -303,8 +304,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(shape_id, log_items1, opts)
-        :ok = storage.append_to_log!(shape_id, log_items2, opts)
+        log_state1 = storage.append_to_log!(shape_id, log_items1, @initial_log_state, opts)
+        _ = storage.append_to_log!(shape_id, log_items2, log_state1, opts)
 
         stream = storage.get_log_stream(shape_id, LogOffset.first(), LogOffset.last(), opts)
         entries = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
@@ -346,8 +347,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, log_items1, opts)
-        :ok = storage.append_to_log!(@shape_id, log_items2, opts)
+        log_state1 = storage.append_to_log!(@shape_id, log_items1, @initial_log_state, opts)
+        _ = storage.append_to_log!(@shape_id, log_items2, log_state1, opts)
 
         stream =
           storage.get_log_stream(@shape_id, LogOffset.new(lsn1, 0), LogOffset.last(), opts)
@@ -393,8 +394,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, log_items1, opts)
-        :ok = storage.append_to_log!(@shape_id, log_items2, opts)
+        log_state1 = storage.append_to_log!(@shape_id, log_items1, @initial_log_state, opts)
+        _ = storage.append_to_log!(@shape_id, log_items2, log_state1, opts)
 
         stream =
           storage.get_log_stream(
@@ -435,8 +436,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(shape_id1, log_items1, opts)
-        :ok = storage.append_to_log!(shape_id2, log_items2, opts)
+        log_state1 = storage.append_to_log!(shape_id1, log_items1, @initial_log_state, opts)
+        _ = storage.append_to_log!(shape_id2, log_items2, log_state1, opts)
 
         assert [%{value: %{name: "Test A"}}] =
                  storage.get_log_stream(shape_id1, LogOffset.first(), LogOffset.last(), opts)
@@ -484,7 +485,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, log_items, opts)
+        storage.append_to_log!(@shape_id, log_items, @initial_log_state, opts)
 
         storage.cleanup!(@shape_id, opts)
 
@@ -516,7 +517,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, log_items, opts)
+        storage.append_to_log!(@shape_id, log_items, @initial_log_state, opts)
 
         assert storage.has_shape?(@shape_id, opts)
         refute storage.has_shape?("another_shape_id", opts)
@@ -574,7 +575,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.add_shape("shape-3", @shape, opts)
 
         storage.make_new_snapshot!("shape-1", @data_stream, opts)
-        storage.append_to_log!("shape-1", @log_items, opts)
+        storage.append_to_log!("shape-1", @log_items, @initial_log_state, opts)
 
         storage.make_new_snapshot!("shape-2", @data_stream, opts)
 
@@ -684,20 +685,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   end
 
   defp start_storage(%{module: module} = context) do
-    {:ok, opts} =
-      module
-      |> opts(context)
-      |> module.shared_opts()
-
-    opts =
-      opts
-      |> Map.put(
-        :log_chunking,
-        {LogChunker,
-         LogChunker.shared_opts(%{
-           chunk_size_ets_table: String.to_atom("chunk_size_ets_table_#{Utils.uuid4()}")
-         })}
-      )
+    {:ok, opts} = module |> opts(context) |> module.shared_opts()
 
     shape_opts = module.for_shape(@shape_id, opts)
 

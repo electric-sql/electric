@@ -1,6 +1,5 @@
 defmodule Support.ComponentSetup do
   import ExUnit.Callbacks
-  alias Electric.ShapeCache.LogChunker
   alias Electric.Postgres.ReplicationClient
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
@@ -15,16 +14,6 @@ defmodule Support.ComponentSetup do
     %{registry: registry_name}
   end
 
-  def with_log_chunker(ctx) do
-    opts =
-      LogChunker.shared_opts(%{
-        chunk_bytes_threshold: 10_000,
-        chunk_size_ets_table: :"chunk_size_ets_#{full_test_name(ctx)}"
-      })
-
-    %{log_chunking: {LogChunker, opts}}
-  end
-
   def with_in_memory_storage(ctx) do
     {:ok, storage_opts} =
       InMemoryStorage.shared_opts(
@@ -33,7 +22,7 @@ defmodule Support.ComponentSetup do
         chunk_checkpoint_ets_table: :"chunk_checkpoint_ets_#{full_test_name(ctx)}"
       )
 
-    %{storage: {InMemoryStorage, Map.merge(storage_opts, with_log_chunker(ctx))}}
+    %{storage: {InMemoryStorage, storage_opts}}
   end
 
   def with_no_pool(_ctx) do
@@ -47,7 +36,7 @@ defmodule Support.ComponentSetup do
         file_path: ctx.tmp_dir
       )
 
-    %{storage: {CubDbStorage, Map.merge(storage_opts, with_log_chunker(ctx))}}
+    %{storage: {CubDbStorage, storage_opts}}
   end
 
   def with_persistent_kv(_ctx) do

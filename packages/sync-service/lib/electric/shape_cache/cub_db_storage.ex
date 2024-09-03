@@ -1,4 +1,6 @@
 defmodule Electric.ShapeCache.CubDbStorage do
+  require Electric.ShapeCache.LogChunker
+  alias Electric.ShapeCache.LogChunker
   alias Electric.ConcurrentStream
   alias Electric.Replication.LogOffset
   alias Electric.Telemetry.OpenTelemetry
@@ -17,7 +19,17 @@ defmodule Electric.ShapeCache.CubDbStorage do
   def shared_opts(opts) do
     base_path = Access.get(opts, :file_path, "./shapes")
 
-    {:ok, %{base_path: base_path, shape_id: nil, db: nil, version: @version, log_chunking: nil}}
+    chunk_bytes_threshold =
+      Access.get(opts, :chunk_bytes_threshold, LogChunker.default_chunk_size_threshold())
+
+    {:ok,
+     %{
+       base_path: base_path,
+       shape_id: nil,
+       db: nil,
+       version: @version,
+       chunk_bytes_threshold: chunk_bytes_threshold
+     }}
   end
 
   def for_shape(shape_id, %{shape_id: shape_id} = opts) do
@@ -25,20 +37,14 @@ defmodule Electric.ShapeCache.CubDbStorage do
   end
 
   def for_shape(shape_id, %{} = opts) do
-    {chunking_module, chunking_opts} = Access.fetch!(opts, :log_chunking)
-
     %{
       opts
       | shape_id: shape_id,
-        db: name(shape_id),
-        log_chunking: {chunking_module, chunking_module.for_shape(shape_id, chunking_opts)}
+        db: name(shape_id)
     }
   end
 
   def start_link(%{shape_id: shape_id, db: db} = opts) when is_binary(shape_id) do
-    {chunking_module, chunking_opts} = Access.fetch!(opts, :log_chunking)
-    chunking_module.start_link(chunking_opts)
-
     with {:ok, path} <- initialise_filesystem(shape_id, opts) do
       CubDB.start_link(data_dir: path, name: db)
     end
@@ -183,28 +189,36 @@ defmodule Electric.ShapeCache.CubDbStorage do
     end)
   end
 
-  def append_to_log!(shape_id, log_items, opts) do
-    {chunking_module, chunking_opts} = Access.fetch!(opts, :log_chunking)
+  def append_to_log!(shape_id, log_items, log_state, opts) do
+    chunk_bytes_threshold = Access.fetch!(opts, :chunk_bytes_threshold)
 
     log_items
-    |> Enum.flat_map(fn log_item ->
+    |> Enum.flat_map_reduce(log_state, fn log_item, log_state ->
       json_log_item = Jason.encode!(log_item)
       log_key = log_key(shape_id, log_item.offset)
+      current_chunk_size = log_state.current_chunk_byte_size
 
-      case chunking_module.add_to_chunk(shape_id, json_log_item, chunking_opts) do
-        :ok ->
-          [{log_key, json_log_item}]
+      case LogChunker.add_to_chunk(json_log_item, current_chunk_size, chunk_bytes_threshold) do
+        {:ok, new_chunk_size} ->
+          {
+            [{log_key, json_log_item}],
+            %{log_state | current_chunk_byte_size: new_chunk_size}
+          }
 
-        :threshold_exceeded ->
-          [
-            {log_key, json_log_item},
-            {chunk_checkpoint_key(shape_id, log_item.offset), nil}
-          ]
+        {:threshold_exceeded, new_chunk_size} ->
+          {
+            [
+              {log_key, json_log_item},
+              {chunk_checkpoint_key(shape_id, log_item.offset), nil}
+            ],
+            %{log_state | current_chunk_byte_size: new_chunk_size}
+          }
       end
     end)
-    |> then(&CubDB.put_multi(opts.db, &1))
-
-    :ok
+    |> then(fn {items, log_state} ->
+      CubDB.put_multi(opts.db, items)
+      log_state
+    end)
   end
 
   def cleanup!(shape_id, opts) do

@@ -8,23 +8,9 @@ defmodule Electric.ShapeCache.Storage do
   @type compiled_opts :: term()
   @type storage :: {module(), compiled_opts()}
 
-  @typedoc """
-  Prepared change that will be passed to the storage layer from the replication log.
-  """
-  @type log_header :: map()
-  @type log_entry :: %{
-          key: String.t(),
-          value: map(),
-          headers: log_header(),
-          offset: LogOffset.t()
+  @type log_state :: %{
+          current_chunk_byte_size: non_neg_integer()
         }
-  @type serialised_log_entry :: %{
-          key: String.t(),
-          value: map(),
-          headers: log_header(),
-          offset: String.t()
-        }
-
   @type log :: Enumerable.t(Querying.json_iodata())
 
   @type row :: list()
@@ -67,8 +53,9 @@ defmodule Electric.ShapeCache.Storage do
   @callback append_to_log!(
               shape_id(),
               [LogItems.log_item()],
+              log_state(),
               compiled_opts()
-            ) :: :ok
+            ) :: log_state()
   @doc "Get stream of the log for a shape since a given offset"
   @callback get_log_stream(shape_id(), LogOffset.t(), LogOffset.t(), compiled_opts()) ::
               log()
@@ -162,10 +149,10 @@ defmodule Electric.ShapeCache.Storage do
   @doc """
   Append log items from one transaction to the log
   """
-  @spec append_to_log!(shape_id(), [LogItems.log_item()], storage()) :: :ok
-  def append_to_log!(shape_id, log_items, {mod, opts}) do
+  @spec append_to_log!(shape_id(), [LogItems.log_item()], log_state(), storage()) :: log_state()
+  def append_to_log!(shape_id, log_items, log_state, {mod, opts}) do
     shape_opts = mod.for_shape(shape_id, opts)
-    mod.append_to_log!(shape_id, log_items, shape_opts)
+    mod.append_to_log!(shape_id, log_items, log_state, shape_opts)
   end
 
   import LogOffset, only: :macros
