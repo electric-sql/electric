@@ -63,7 +63,6 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:noreply, [], %{state | producer: nil}}
   end
 
-  # GenStage.cancel/3
   def handle_cancel({:cancel, _}, from, state) do
     {:noreply, [], remove_subscription(from, state)}
   end
