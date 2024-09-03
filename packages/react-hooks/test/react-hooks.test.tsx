@@ -89,6 +89,39 @@ describe(`useShape`, () => {
     )
   })
 
+  it(`should let you change the shape definition (and clear the internal cache between)`, async ({
+    aborter,
+    issuesTableUrl,
+    insertIssues,
+  }) => {
+    const [id] = await insertIssues({ title: `test row` })
+    const [id2] = await insertIssues({ title: `test row2` })
+
+    const { result, rerender } = renderHook((options) => useShape(options), {
+      initialProps: {
+        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        where: `id = '${id}'`,
+        signal: aborter.signal,
+        subscribe: true,
+      },
+    })
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+    )
+
+    rerender({
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      where: `id = '${id2}'`,
+      signal: aborter.signal,
+      subscribe: true,
+    })
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual([{ id: id2, title: `test row2` }])
+    )
+  })
+
   it(`should allow use of the "selector" api from useSyncExternalStoreWithSelector`, async ({
     aborter,
     issuesTableUrl,
