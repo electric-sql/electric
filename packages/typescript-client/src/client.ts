@@ -2,8 +2,10 @@ import { Message, Offset, Schema, Row } from './types'
 import { MessageParser, Parser } from './parser'
 import { isChangeMessage, isControlMessage } from './helpers'
 
-export type ShapeData<T extends Row> = Map<string, T>
-export type ShapeChangedCallback<T extends Row> = (value: ShapeData<T>) => void
+export type ShapeData<T extends Row = Row> = Map<string, T>
+export type ShapeChangedCallback<T extends Row = Row> = (
+  value: ShapeData<T>
+) => void
 
 export interface BackoffOptions {
   initialDelay: number
@@ -62,7 +64,7 @@ export interface ShapeStreamOptions {
  * @constructor
  * @param {(messages: Message[]) => void} callback function
  */
-class MessageProcessor<T extends Row> {
+class MessageProcessor<T extends Row = Row> {
   private messageQueue: Message<T>[][] = []
   private isProcessing = false
   private callback: (messages: Message<T>[]) => void | Promise<void>
@@ -165,7 +167,7 @@ export class FetchError extends Error {
  *   // Later...
  *   aborter.abort()
  */
-export class ShapeStream<T extends Row> {
+export class ShapeStream<T extends Row = Row> {
   private options: ShapeStreamOptions
   private backoffOptions: BackoffOptions
   private fetchClient: typeof fetch
@@ -443,7 +445,7 @@ export class ShapeStream<T extends Row> {
  *       console.log(shapeData)
  *     })
  */
-export class Shape<T extends Row> {
+export class Shape<T extends Row = Row> {
   private stream: ShapeStream<T>
 
   private data: ShapeData<T> = new Map()
