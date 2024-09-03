@@ -4,7 +4,7 @@ import {
   ShapeStream,
   ShapeStreamOptions,
 } from '@electric-sql/client'
-import React, { useCallback, useRef } from 'react'
+import React, { useCallback, useEffect, useRef } from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
 
 const streamCache = new Map<string, ShapeStream>()
@@ -107,6 +107,12 @@ export function useShape<Selection = UseShapeResult>({
   const shape = getShape(shapeStream)
 
   const latestShapeData = useRef(parseShapeData(shape))
+
+  // make sure to reset the data when selector is updated
+  useEffect(() => {
+    latestShapeData.current = parseShapeData(shape)
+  }, [selector])
+
   const getSnapshot = React.useCallback(() => latestShapeData.current, [])
   const shapeData = useSyncExternalStoreWithSelector(
     useCallback(

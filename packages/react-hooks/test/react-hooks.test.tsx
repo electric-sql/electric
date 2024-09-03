@@ -124,7 +124,7 @@ describe(`useShape`, () => {
     )
   })
 
-  it(`should correctly reaply the selector if it changes`, async ({
+  it(`should correctly reapply the selector to the data if it changes`, async ({
     aborter,
     issuesTableUrl,
     insertIssues,
