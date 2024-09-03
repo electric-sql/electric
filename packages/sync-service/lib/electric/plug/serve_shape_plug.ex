@@ -121,7 +121,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # We're starting listening as soon as possible to not miss stuff that was added since we've asked for last offset
   plug :listen_for_new_changes
   plug :validate_shape_offset
-  plug :maybe_use_log_chunk
+  plug :determine_log_chunk_offset
   plug :generate_etag
   plug :validate_and_put_etag
   plug :put_resp_cache_headers
@@ -203,7 +203,10 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # If chunk offsets are available, use those instead of the latest available offset
   # to optimize for cache hits and response sizes
-  defp maybe_use_log_chunk(%Conn{assigns: %{offset: offset, active_shape_id: shape_id}} = conn, _) do
+  defp determine_log_chunk_offset(
+         %Conn{assigns: %{offset: offset, active_shape_id: shape_id}} = conn,
+         _
+       ) do
     chunk_end_offset =
       Shapes.get_chunk_end_log_offset(conn.assigns.config, shape_id, offset)
 
