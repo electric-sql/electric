@@ -631,13 +631,23 @@ defmodule Electric.Plug.RouterTest do
 
       assert [_] = Jason.decode!(conn.resp_body)
 
+      # Use a live request to ensure data has been ingested
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape/large_rows_table?offset=#{next_offset}&shape_id=#{shape_id}&live"
+          )
+          |> Router.call(opts)
+        end)
+
       Postgrex.query!(db_conn, "INSERT INTO large_rows_table VALUES (1, $1), (2, $2), (3, $3)", [
         first_val,
         second_val,
         third_val
       ])
 
-      Process.sleep(1000)
+      assert %{status: 200} = Task.await(task)
 
       conn =
         conn("GET", "/v1/shape/large_rows_table?offset=#{next_offset}&shape_id=#{shape_id}")
