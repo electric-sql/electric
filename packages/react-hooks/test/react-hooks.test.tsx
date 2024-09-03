@@ -1,11 +1,8 @@
-import 'global-jsdom/register'
-// https://react-hooks-testing-library.com/usage/advanced-hooks#context
-
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, inject, it as bareIt } from 'vitest'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
-import { useShape, sortedOptionsHash } from '../src/react-hooks'
+import { useShape, sortedOptionsHash, UseShapeResult } from '../src/react-hooks'
 import { Shape, Message } from '@electric-sql/client'
 
 const BASE_URL = inject(`baseUrl`)
@@ -124,6 +121,46 @@ describe(`useShape`, () => {
         { id: id, title: `test row` },
         { id: id2, title: `other row` },
       ])
+    )
+  })
+
+  it(`should correctly reapply the selector to the data if it changes`, async ({
+    aborter,
+    issuesTableUrl,
+    insertIssues,
+  }) => {
+    const firstRow = `test row 1`
+    const secondRow = `test row 2`
+    const [id1] = await insertIssues({ title: firstRow })
+    const [id2] = await insertIssues({ title: secondRow })
+
+    const createSelector = (filterVal: string) => (result: UseShapeResult) => {
+      result.data = result.data.filter((row) => row?.title !== filterVal)
+      return result
+    }
+
+    const selectorA = createSelector(firstRow)
+    const selectorB = createSelector(secondRow)
+
+    const { result, rerender } = renderHook(
+      ({ selector }) =>
+        useShape({
+          url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+          signal: aborter.signal,
+          subscribe: true,
+          selector: selector,
+        }),
+      { initialProps: { selector: selectorA } }
+    )
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual([{ id: id2, title: secondRow }])
+    )
+
+    rerender({ selector: selectorB })
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual([{ id: id1, title: firstRow }])
     )
   })
 

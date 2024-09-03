@@ -695,9 +695,9 @@ importers:
       glob:
         specifier: ^10.3.10
         version: 10.4.5
-      global-jsdom:
-        specifier: 24.0.0
-        version: 24.0.0(jsdom@24.1.0)
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.0
       pg:
         specifier: ^8.12.0
         version: 8.12.0
@@ -721,7 +721,7 @@ importers:
         version: 10.0.0
       vitest:
         specifier: ^2.0.2
-        version: 2.0.3(@types/node@20.14.11)(jsdom@24.1.0)
+        version: 2.0.3(@types/node@20.14.11)(jsdom@25.0.0)
 
   packages/sync-service: {}
 
@@ -781,7 +781,7 @@ importers:
         version: 10.0.0
       vitest:
         specifier: ^2.0.2
-        version: 2.0.3(@types/node@20.14.11)(jsdom@24.1.0)
+        version: 2.0.3(@types/node@20.14.11)(jsdom@25.0.0)
 
 packages:
 
@@ -5122,12 +5122,6 @@ packages:
     resolution: {integrity: sha512-nFR0zLpU2YCaRxwoCJvL6UvCH2JFyFVIvwTLsIf21AuHlMskA1hhTdk+LlYJtOlYt9v6dvszD2BGRqBL+iQK9Q==}
     deprecated: Glob versions prior to v9 are no longer supported
 
-  global-jsdom@24.0.0:
-    resolution: {integrity: sha512-CARBUWkqZ3O9VOc2PIVE5kQpdQeJh9eF9kQ7zSeNtmqx5vAFDKMr9XnDt1epVMMrz1s9uK/yFCa4HLwpa6TcPA==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      jsdom: '>=24 <25'
-
   globals@11.12.0:
     resolution: {integrity: sha512-WOBp/EEGUiIsJSp7wcv/y6MO+lV9UoncWqxuFfm8eBwzWNgyfBd6Gz+IeKQ9jCmyhoH99g15M3T+QaVHFjizVA==}
     engines: {node: '>=4'}
@@ -5642,8 +5636,8 @@ packages:
     resolution: {integrity: sha512-wpxZs9NoxZaJESJGIZTyDEaYpl0FKSA+FB9aJiyemKhMwkxQg63h4T1KJgUGHpTqPDNRcmmYLugrRjJlBtWvRA==}
     hasBin: true
 
-  jsdom@24.1.0:
-    resolution: {integrity: sha512-6gpM7pRXCwIOKxX47cgOyvyQDN/Eh0f1MeKySBV2xGdKtqJBLj8P25eY3EVCWo2mglDDzozR2r2MW4T+JiNUZA==}
+  jsdom@25.0.0:
+    resolution: {integrity: sha512-OhoFVT59T7aEq75TVw9xxEfkXgacpqAhQaYgP9y/fDqWQCMB/b1H66RfmPm/MaeaAIU9nDwMOVTlPN51+ao6CQ==}
     engines: {node: '>=18'}
     peerDependencies:
       canvas: ^2.11.2
@@ -13514,10 +13508,6 @@ snapshots:
       once: 1.4.0
       path-is-absolute: 1.0.1
 
-  global-jsdom@24.0.0(jsdom@24.1.0):
-    dependencies:
-      jsdom: 24.1.0
-
   globals@11.12.0: {}
 
   globals@13.24.0:
@@ -14026,7 +14016,7 @@ snapshots:
     dependencies:
       argparse: 2.0.1
 
-  jsdom@24.1.0:
+  jsdom@25.0.0:
     dependencies:
       cssstyle: 4.0.1
       data-urls: 5.0.0
@@ -17100,7 +17090,7 @@ snapshots:
       - typescript
       - universal-cookie
 
-  vitest@2.0.3(@types/node@20.14.11)(jsdom@24.1.0):
+  vitest@2.0.3(@types/node@20.14.11)(jsdom@25.0.0):
     dependencies:
       '@ampproject/remapping': 2.3.0
       '@vitest/expect': 2.0.3
@@ -17123,7 +17113,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 20.14.11
-      jsdom: 24.1.0
+      jsdom: 25.0.0
     transitivePeerDependencies:
       - less
       - lightningcss
