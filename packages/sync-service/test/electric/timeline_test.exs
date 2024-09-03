@@ -9,17 +9,9 @@ defmodule Electric.TimelineTest do
   describe "check/2" do
     setup context do
       timeline = context[:electric_timeline]
+      kv = Electric.PersistentKV.Memory.new!()
 
-      pid =
-        case timeline do
-          nil ->
-            {:ok, pid} = TimelineCache.start_link()
-            pid
-
-          _ ->
-            {:ok, pid} = TimelineCache.start_link(timeline)
-            pid
-        end
+      {:ok, pid} = TimelineCache.start_link(timeline_id: timeline, persistent_kv: kv)
 
       opts = [timeline_cache: pid, shape_cache: {ShapeCacheMock, []}]
       {:ok, [timeline: timeline, opts: opts]}
@@ -48,7 +40,7 @@ defmodule Electric.TimelineTest do
       ShapeCacheMock
       |> expect(:clean_all_shapes, fn _ -> :ok end)
 
-      pg_timeline = 4
+      pg_timeline = 2
       assert :ok = Timeline.check(pg_timeline, opts)
       assert ^pg_timeline = TimelineCache.get_timeline(opts[:timeline_cache])
     end
