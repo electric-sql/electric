@@ -23,9 +23,6 @@ defmodule Electric.ShapeCache.LogChunkerTest do
     test "should ignore zero length bytestrings", _ do
       threshold = 10
       just_below_threshold = threshold - 1
-      # large_string = String.duplicate("a", threshold)
-
-      # assert :ok = LogChunker.add_to_chunk(large_string, threshold)
 
       # despite next chunk already being full from the large string, if not
       # bytes are added we should not exceed the threshold
