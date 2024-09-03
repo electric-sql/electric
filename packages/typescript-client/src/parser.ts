@@ -3,8 +3,12 @@ import { ColumnInfo, Message, Schema, Value } from './types'
 type NullToken = null | `NULL`
 type Token = Exclude<string, NullToken>
 type NullableToken = Token | NullToken
-export type ParseFunction<T extends Token | NullableToken = Token> = (
-  value: T,
+export type ParseFunction = (
+  value: Token,
+  additionalInfo?: Omit<ColumnInfo, `type` | `dims`>
+) => Value
+type NullableParseFunction = (
+  value: NullableToken,
   additionalInfo?: Omit<ColumnInfo, `type` | `dims`>
 ) => Value
 export type Parser = { [key: string]: ParseFunction }
@@ -136,7 +140,7 @@ function makeNullableParser(
   parser: ParseFunction,
   columnInfo: ColumnInfo,
   columnName?: string
-): ParseFunction<NullableToken> {
+): NullableParseFunction {
   const isNullable = !(columnInfo.not_null ?? false)
   // The sync service contains `null` value for a column whose value is NULL
   // but if the column value is an array that contains a NULL value
