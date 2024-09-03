@@ -91,14 +91,16 @@ function parseShapeData(shape: Shape): UseShapeResult {
   }
 }
 
-const identity = (arg: unknown) => arg
+function identity<T>(arg: T): T {
+  return arg
+}
 
 interface UseShapeOptions<Selection> extends ShapeStreamOptions {
   selector?: (value: UseShapeResult) => Selection
 }
 
 export function useShape<Selection = UseShapeResult>({
-  selector = identity as never,
+  selector = identity as (arg: UseShapeResult) => Selection,
   ...options
 }: UseShapeOptions<Selection>): Selection {
   const shapeStream = getShapeStream(options as ShapeStreamOptions)
