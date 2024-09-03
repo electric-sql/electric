@@ -5,7 +5,7 @@ description: >-
 ---
 
 <script setup>
-import TeamMembers from '../components/TeamMembers.vue'
+import TeamMembers from '../src/components/TeamMembers.vue'
 import { data } from '../data/team.data.ts'
 
 const { advisors, investors, team } = data
