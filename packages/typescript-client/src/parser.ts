@@ -117,9 +117,9 @@ export class MessageParser {
     // Pick the right parser for the type
     // and support parsing null values if needed
     // if no parser is provided for the given type, just return the value as is
-    const identityParser = (v: Value) => v
-    const typParser = this.parser[typ] ?? identityParser
-    const parser = makeNullableParser(typParser, columnInfo.not_null)
+    const identityParser: ParseFunction = (v: string | null) => v
+    const typeParser: ParseFunction = this.parser[typ] ?? identityParser
+    const parser = makeNullableParser(typeParser, columnInfo.not_null)
 
     if (dimensions && dimensions > 0) {
       // It's an array
