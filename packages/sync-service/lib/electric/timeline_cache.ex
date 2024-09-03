@@ -46,14 +46,21 @@ defmodule Electric.TimelineCache do
     with {:ok, tid} <- Access.fetch(opts, :timeline_id),
          {:ok, kv_backend} <- Access.fetch(opts, :persistent_kv) do
       persistent_kv = PersistentKV.Serialized.new!(backend: kv_backend)
-      timeline_id = load_timeline_id(tid, persistent_kv)
+
+      timeline_id =
+        if tid == nil do
+          load_timeline_id(persistent_kv)
+        else
+          store_timeline_id(persistent_kv, tid)
+        end
+
       {:ok, %{id: timeline_id, persistent_kv: persistent_kv}}
     end
   end
 
   @impl true
   def handle_call({:store, timeline_id}, _from, %{persistent_kv: kv} = state) do
-    PersistentKV.set(kv, @timeline_key, timeline_id)
+    store_timeline_id(kv, timeline_id)
     {:reply, :ok, %{state | id: timeline_id}}
   end
 
@@ -62,9 +69,7 @@ defmodule Electric.TimelineCache do
   end
 
   # Loads the timeline ID from persistent storage
-  # if the provided timeline_id is nil.
-  # If it is not nil, it stores the provided timeline ID in persistent storage.
-  defp load_timeline_id(nil, kv) do
+  defp load_timeline_id(kv) do
     case PersistentKV.get(kv, @timeline_key) do
       {:ok, timeline_id} ->
         timeline_id
@@ -78,7 +83,7 @@ defmodule Electric.TimelineCache do
     end
   end
 
-  defp load_timeline_id(timeline_id, kv) do
+  defp store_timeline_id(kv, timeline_id) do
     PersistentKV.set(kv, @timeline_key, timeline_id)
     timeline_id
   end
