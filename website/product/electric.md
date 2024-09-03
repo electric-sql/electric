@@ -1,4 +1,8 @@
 ---
+title: Electric Sync
+description: >-
+  Sync little subsets of your Postgres data into
+  local apps, services and environments.
 outline: deep
 ---
 
@@ -6,12 +10,12 @@ outline: deep
 
 # Electric Sync
 
-Sync partial replicas of your data into local
-apps and services.
+Sync little subsets of your Postgres data into
+local apps, services and environments.
 
 ## Use cases
 
-The Electric Sync engine syncs subsets of data out of Postgres into local apps, services and environments &mdash; wherever you need the data.
+The Electric Sync engine syncs [little subsets](/docs/guides/shapes) of data out of Postgres into local apps, services and environments &mdash; wherever you need the data.
 
 <img srcset="/img/about/use-cases.sm.png 1098w, /img/about/use-cases.png 1484w"
     sizes="(max-width: 767px) 600px, 1484px"

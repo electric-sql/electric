@@ -1,4 +1,8 @@
 ---
+title: Data Delivery Network
+description: >-
+  Sync data faster than you can query Postgres.
+  Scale out to millions of users.
 outline: deep
 ---
 

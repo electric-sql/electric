@@ -1,4 +1,8 @@
 ---
+title: PGlite
+description: >-
+  Embed a lightweight WASM Postgres with
+  real-time, reactive bindings.
 outline: deep
 ---
 
@@ -10,7 +14,7 @@ import { VPButton } from 'vitepress/theme-without-fonts'
 
 # PGlite
 
-Embed a lightweight client Postgres with
+Embed a lightweight WASM Postgres with
 real-time, reactive bindings.
 
 <VPButton
