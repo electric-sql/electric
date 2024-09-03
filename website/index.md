@@ -7,7 +7,8 @@ hero:
   name: "Why fetch when"
   text: "you can sync?"
   tagline: >-
-    Swap out your queries, data fetching and caching for bulletproof sync<span class="hidden-xs"> that just works</span>.
+    Swap out your queries, data fetching and caching for
+    bulletproof sync<span class="hidden-xs"> that just works</span>.
   image:
     src: /img/home/zap-with-halo.svg
   actions:
