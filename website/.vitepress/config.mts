@@ -8,7 +8,6 @@ export default defineConfig({
   appearance: 'force-dark',
   base: '/',
   cleanUrls: true,
-  ignoreDeadLinks: 'localhostLinks',
   head: [
     ['link', {
       rel: 'icon',
@@ -16,6 +15,7 @@ export default defineConfig({
       href: '/img/brand/favicon.svg'
     }]
   ],
+  ignoreDeadLinks: 'localhostLinks',
   markdown: {
     theme: 'github-dark',
     languages: [
