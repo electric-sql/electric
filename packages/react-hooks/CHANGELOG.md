@@ -1,5 +1,13 @@
 # @electric-sql/react
 
+## 0.3.2
+
+### Patch Changes
+
+- 0836ebb: Improve type of selector argument in useShape hook.
+- Updated dependencies [d3b4711]
+  - @electric-sql/client@0.3.3
+
 ## 0.3.1
 
 ### Patch Changes

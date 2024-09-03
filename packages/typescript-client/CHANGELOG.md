@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 0.3.3
+
+### Patch Changes
+
+- d3b4711: Fix nullable array fields not being parsed as `null`.
+
 ## 0.3.2
 
 ### Patch Changes
