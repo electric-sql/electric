@@ -6,13 +6,24 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Replication.Changes.Relation
+  alias Electric.Replication.LogOffset
+
+  @type shape_id() :: Electric.ShapeCache.shape_id()
+  @type xmin() :: Electric.ShapeCache.xmin()
 
   @callback initialise(ShapeStatus.options()) :: {:ok, ShapeStatus.t()} | {:error, term()}
-  @callback list_shapes(ShapeStatus.t()) :: [{ShapeStatus.shape_id(), Shape.t()}]
+  @callback list_shapes(ShapeStatus.t()) :: [{shape_id(), Shape.t()}]
+  @callback existing_shape(ShapeStatus.t(), Shape.t() | shape_id()) ::
+              {shape_id(), LogOffset.t()} | nil
+  @callback add_shape(ShapeStatus.t(), Shape.t()) ::
+              {:ok, shape_id()} | {:error, term()}
+  @callback initialise_shape(ShapeStatus.t(), shape_id(), xmin(), LogOffset.t()) ::
+              :ok
+  @callback snapshot_xmin?(ShapeStatus.t(), shape_id()) :: boolean()
+  @callback remove_shape(ShapeStatus.t(), shape_id()) ::
+              {:ok, Shape.t()} | {:error, term()}
   @callback get_relation(ShapeStatus.t(), Messages.relation_id()) :: Relation.t() | nil
   @callback store_relation(ShapeStatus.t(), Relation.t()) :: :ok
-  @callback remove_shape(ShapeStatus.t(), ShapeStatus.shape_id()) ::
-              {:ok, ShapeStatus.t()} | {:error, term()}
 end
 
 defmodule Electric.ShapeCache.ShapeStatus do
@@ -46,6 +57,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   defstruct [:persistent_kv, :root, :shape_meta_table]
 
   @type shape_id() :: Electric.ShapeCache.shape_id()
+  @type xmin() :: Electric.ShapeCache.xmin()
   @type table() :: atom() | reference()
   @type t() :: %__MODULE__{
           persistent_kv: PersistentKV.t(),
@@ -144,7 +156,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
       # keys, so we're doing our best to just delete everything without
       # crashing
       ArgumentError ->
-        :error
+        {:error, "No shape matching #{inspect(shape_id)}"}
     end
   end
 
@@ -174,6 +186,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
+  @spec initialise_shape(t(), shape_id(), xmin(), LogOffset.t()) :: :ok
   def initialise_shape(state, shape_id, snapshot_xmin, latest_offset) do
     :ets.update_element(state.shape_meta_table, {@shape_meta_data, shape_id}, [
       {@shape_meta_xmin_pos, snapshot_xmin},

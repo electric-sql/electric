@@ -660,6 +660,7 @@ defmodule Electric.Shapes.ConsumerTest do
           db_pool: ctx.pool,
           persistent_kv: ctx.persistent_kv,
           registry: ctx.registry,
+          inspector: ctx.inspector,
           log_producer: __MODULE__.LogCollector,
           consumer_supervisor: __MODULE__.ConsumerSupervisor,
           prepare_tables_fn: {

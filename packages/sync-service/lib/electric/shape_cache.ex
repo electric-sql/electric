@@ -280,7 +280,7 @@ defmodule Electric.ShapeCache do
         {:reply, {:error, :unknown}, state}
 
       shape_status.snapshot_xmin?(state.persistent_state, shape_id) ->
-        {:reply, :started, [], state}
+        {:reply, :started, state}
 
       true ->
         Logger.debug("Starting a wait on the snapshot #{shape_id} for #{inspect(from)}}")
