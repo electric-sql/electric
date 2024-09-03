@@ -207,6 +207,10 @@ a.no-visual:hover {
   }
 }
 
+.VPNavBarSearch {
+  flex-grow: 0.25 !important;
+}
+
 .container {
   max-width: 1152px;
   margin: 0 auto;

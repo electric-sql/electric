@@ -40,6 +40,9 @@ export default defineConfig({
       { text: 'Blog', link: '/blog', activeMatch: '/blog/'},
       { text: 'About', link: '/about/community', activeMatch: '/about/'}
     ],
+    search: {
+      provider: 'local'
+    },
     sidebar: {
       '/product': [
         {
