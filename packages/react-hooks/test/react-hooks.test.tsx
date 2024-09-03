@@ -89,7 +89,7 @@ describe(`useShape`, () => {
     )
   })
 
-  it.only(`should let you change the shape definition (and clear the internal cache between)`, async ({
+  it(`should let you change the shape definition (and clear the internal cache between)`, async ({
     aborter,
     issuesTableUrl,
     insertIssues,

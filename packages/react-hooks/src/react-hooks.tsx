@@ -66,7 +66,6 @@ export interface UseShapeResult {
    * @type(Shape)
    */
   shape: Shape
-  shapeHash: string
   error: Shape[`error`]
   isError: boolean
   /**
@@ -82,13 +81,12 @@ function shapeSubscribe(shape: Shape, callback: () => void) {
   }
 }
 
-function parseShapeData(shape: Shape, shapeHash: string): UseShapeResult {
+function parseShapeData(shape: Shape): UseShapeResult {
   return {
     data: [...shape.valueSync.values()],
     isUpToDate: shape.isUpToDate,
     isError: shape.error !== false,
     shape,
-    shapeHash,
     error: shape.error,
   }
 }
@@ -105,7 +103,6 @@ export function useShape<Selection = UseShapeResult>({
   selector = identity as (arg: UseShapeResult) => Selection,
   ...options
 }: UseShapeOptions<Selection>): Selection {
-  const shapeHash = sortedOptionsHash(options)
   const shapeStream = getShapeStream(options as ShapeStreamOptions)
   const shape = getShape(shapeStream)
 
