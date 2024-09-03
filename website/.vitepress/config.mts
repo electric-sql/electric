@@ -32,6 +32,10 @@ export default defineConfig({
   },
   // https://vitepress.dev/reference/default-theme-config
   themeConfig: {
+    editLink: {
+      pattern:
+        'https://github.com/electric-sql/electric/edit/main/website/:path',
+    },
     logo: '/img/brand/logo.svg',
     nav: [
       { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
@@ -178,5 +182,8 @@ export default defineConfig({
       { icon: 'discord', link: 'https://discord.electric-sql.com' },
       { icon: 'github', link: 'https://github.com/electric-sql' }
     ]
+  },
+  transformPageData(pageData) {
+    pageData.frontmatter.editLink = pageData.relativePath.startsWith('docs')
   }
 })
