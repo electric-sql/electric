@@ -1,12 +1,15 @@
 defmodule Electric.Timeline do
   @moduledoc """
-  Module containing helper functions for handling Postgres timelines.
+  Genserver that tracks the Postgres timeline ID.
+  Module exporting functions for handling Postgres timelines.
   """
   require Logger
   alias Electric.Shapes
-  alias Electric.TimelineCache
+  alias Electric.PersistentKV
 
   @type timeline :: integer() | nil
+
+  @timeline_key "timeline_id"
 
   @doc """
   Checks the provided `pg_timeline` against Electric's timeline.
@@ -16,8 +19,7 @@ defmodule Electric.Timeline do
   """
   @spec check(timeline(), keyword()) :: :ok
   def check(pg_timeline, opts) do
-    cache = Keyword.fetch!(opts, :timeline_cache)
-    electric_timeline = TimelineCache.get_timeline(cache)
+    electric_timeline = load_timeline(opts)
     handle(pg_timeline, electric_timeline, opts)
   end
 
@@ -26,8 +28,7 @@ defmodule Electric.Timeline do
   defp handle(nil, _, opts) do
     Logger.warning("Unknown Postgres timeline; rotating shapes.")
     Shapes.clean_all_shapes(opts)
-    cache = Keyword.fetch!(opts, :timeline_cache)
-    TimelineCache.store_timeline(cache, nil)
+    store_timeline(nil, opts)
   end
 
   defp handle(pg_timeline_id, electric_timeline_id, _opts)
@@ -40,15 +41,41 @@ defmodule Electric.Timeline do
     Logger.info("No previous timeline detected.")
     Logger.info("Connected to Postgres timeline #{pg_timeline_id}")
     # Store new timeline
-    cache = Keyword.fetch!(opts, :timeline_cache)
-    TimelineCache.store_timeline(cache, pg_timeline_id)
+    store_timeline(pg_timeline_id, opts)
   end
 
-  defp handle(pg_timeline_id, _electric_timeline_id, opts) do
+  defp handle(pg_timeline_id, _, opts) do
     Logger.info("Detected PITR to timeline #{pg_timeline_id}; rotating shapes.")
     Electric.Shapes.clean_all_shapes(opts)
     # Store new timeline only after all shapes have been cleaned
-    cache = Keyword.fetch!(opts, :timeline_cache)
-    TimelineCache.store_timeline(cache, pg_timeline_id)
+    store_timeline(pg_timeline_id, opts)
+  end
+
+  # Loads the timeline ID from persistent storage
+  @spec load_timeline(keyword()) :: timeline()
+  def load_timeline(opts) do
+    kv_backend = Keyword.fetch!(opts, :persistent_kv)
+    # default to Jason decoder
+    kv = PersistentKV.Serialized.new!(backend: kv_backend)
+
+    case PersistentKV.get(kv, @timeline_key) do
+      {:ok, timeline_id} ->
+        timeline_id
+
+      {:error, :not_found} ->
+        nil
+
+      error ->
+        Logger.warning("Failed to load timeline ID from persistent storage: #{error}")
+        nil
+    end
+  end
+
+  defp store_timeline(timeline_id, opts) do
+    kv_backend = Keyword.fetch!(opts, :persistent_kv)
+    # defaults to Jason encoder
+    kv = PersistentKV.Serialized.new!(backend: kv_backend)
+    PersistentKV.set(kv, @timeline_key, timeline_id)
+    :ok
   end
 end

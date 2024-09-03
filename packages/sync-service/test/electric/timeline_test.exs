@@ -1,19 +1,25 @@
 defmodule Electric.TimelineTest do
   use ExUnit.Case, async: true
   alias Electric.Timeline
-  alias Electric.TimelineCache
   alias Support.Mock.ShapeCache
 
   import Mox
+
+  describe "load_timeline/1" do
+    setup do
+      %{kv: Electric.PersistentKV.Memory.new!()}
+    end
+
+    test "returns nil when no timeline ID is available", %{kv: kv} do
+      assert Timeline.load_timeline(persistent_kv: kv) == nil
+    end
+  end
 
   describe "check/2" do
     setup context do
       timeline = context[:electric_timeline]
       kv = Electric.PersistentKV.Memory.new!()
-
-      {:ok, pid} = TimelineCache.start_link(timeline_id: timeline, persistent_kv: kv)
-
-      opts = [timeline_cache: pid, shape_cache: {ShapeCache, []}]
+      opts = [persistent_kv: kv, shape_cache: {ShapeCache, []}]
       {:ok, [timeline: timeline, opts: opts]}
     end
 
@@ -21,7 +27,7 @@ defmodule Electric.TimelineTest do
     test "stores the Postgres timeline if Electric has no timeline yet", %{opts: opts} do
       timeline = 5
       assert :ok = Timeline.check(timeline, opts)
-      assert ^timeline = TimelineCache.get_timeline(opts[:timeline_cache])
+      assert ^timeline = Timeline.load_timeline(opts)
     end
 
     @tag electric_timeline: 3
@@ -30,7 +36,7 @@ defmodule Electric.TimelineTest do
       opts: opts
     } do
       assert :ok = Timeline.check(timeline, opts)
-      assert ^timeline = TimelineCache.get_timeline(opts[:timeline_cache])
+      assert ^timeline = Timeline.load_timeline(opts)
     end
 
     @tag electric_timeline: 3
@@ -42,7 +48,7 @@ defmodule Electric.TimelineTest do
 
       pg_timeline = 2
       assert :ok = Timeline.check(pg_timeline, opts)
-      assert ^pg_timeline = TimelineCache.get_timeline(opts[:timeline_cache])
+      assert ^pg_timeline = Timeline.load_timeline(opts)
     end
 
     @tag electric_timeline: 3
@@ -51,7 +57,7 @@ defmodule Electric.TimelineTest do
       |> expect(:clean_all_shapes, fn _ -> :ok end)
 
       assert :ok = Timeline.check(nil, opts)
-      assert TimelineCache.get_timeline(opts[:timeline_cache]) == nil
+      assert Timeline.load_timeline(opts) == nil
     end
   end
 end
