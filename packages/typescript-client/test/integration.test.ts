@@ -3,7 +3,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
 import { assert, describe, expect, inject, vi } from 'vitest'
 import { Shape, ShapeStream } from '../src/client'
-import { Message, Offset, Value } from '../src/types'
+import { Message, Offset, Row } from '../src/types'
 import { isChangeMessage, isControlMessage } from '../src'
 import {
   IssueRow,
@@ -14,7 +14,7 @@ import * as h from './support/test-helpers'
 
 const BASE_URL = inject(`baseUrl`)
 
-const isUpToDateMessage = <T extends Value>(msg: Message<T>) =>
+const isUpToDateMessage = <T extends Row>(msg: Message<T>) =>
   isControlMessage(msg) && msg.headers.control === `up-to-date`
 
 it(`sanity check`, async ({ dbClient, issuesTableSql }) => {
@@ -640,7 +640,7 @@ describe(`HTTP Sync`, () => {
       return response
     }
 
-    const issueStream = new ShapeStream({
+    const issueStream = new ShapeStream<IssueRow>({
       url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       subscribe: true,
       signal: aborter.signal,

@@ -1,9 +1,9 @@
-import { Message, Value, Offset, Schema } from './types'
+import { Message, Offset, Schema, Row } from './types'
 import { MessageParser, Parser } from './parser'
 import { isChangeMessage, isControlMessage } from './helpers'
 
-export type ShapeData = Map<string, { [key: string]: Value }>
-export type ShapeChangedCallback = (value: ShapeData) => void
+export type ShapeData<T extends Row> = Map<string, T>
+export type ShapeChangedCallback<T extends Row> = (value: ShapeData<T>) => void
 
 export interface BackoffOptions {
   initialDelay: number
@@ -62,16 +62,16 @@ export interface ShapeStreamOptions {
  * @constructor
  * @param {(messages: Message[]) => void} callback function
  */
-class MessageProcessor {
-  private messageQueue: Message[][] = []
+class MessageProcessor<T extends Row> {
+  private messageQueue: Message<T>[][] = []
   private isProcessing = false
-  private callback: (messages: Message[]) => void | Promise<void>
+  private callback: (messages: Message<T>[]) => void | Promise<void>
 
-  constructor(callback: (messages: Message[]) => void | Promise<void>) {
+  constructor(callback: (messages: Message<T>[]) => void | Promise<void>) {
     this.callback = callback
   }
 
-  process(messages: Message[]) {
+  process(messages: Message<T>[]) {
     this.messageQueue.push(messages)
 
     if (!this.isProcessing) {
@@ -165,7 +165,7 @@ export class FetchError extends Error {
  *   // Later...
  *   aborter.abort()
  */
-export class ShapeStream {
+export class ShapeStream<T extends Row> {
   private options: ShapeStreamOptions
   private backoffOptions: BackoffOptions
   private fetchClient: typeof fetch
@@ -173,7 +173,7 @@ export class ShapeStream {
 
   private subscribers = new Map<
     number,
-    [MessageProcessor, ((error: Error) => void) | undefined]
+    [MessageProcessor<T>, ((error: Error) => void) | undefined]
   >()
   private upToDateSubscribers = new Map<
     number,
@@ -181,7 +181,7 @@ export class ShapeStream {
   >()
 
   private lastOffset: Offset
-  private messageParser: MessageParser
+  private messageParser: MessageParser<T>
   public isUpToDate: boolean = false
 
   shapeId?: string
@@ -191,7 +191,7 @@ export class ShapeStream {
     this.options = { subscribe: true, ...options }
     this.lastOffset = this.options.offset ?? `-1`
     this.shapeId = this.options.shapeId
-    this.messageParser = new MessageParser(options.parser)
+    this.messageParser = new MessageParser<T>(options.parser)
 
     this.backoffOptions = options.backoffOptions ?? BackoffDefaults
     this.fetchClient =
@@ -233,7 +233,7 @@ export class ShapeStream {
           // with the newly provided shape ID
           const newShapeId = e.headers[`x-electric-shape-id`]
           this.reset(newShapeId)
-          this.publish(e.json as Message[])
+          this.publish(e.json as Message<T>[])
           continue
         } else if (e.status >= 400 && e.status < 500) {
           // Notify subscribers
@@ -284,7 +284,7 @@ export class ShapeStream {
   }
 
   subscribe(
-    callback: (messages: Message[]) => void | Promise<void>,
+    callback: (messages: Message<T>[]) => void | Promise<void>,
     onError?: (error: FetchError | Error) => void
   ) {
     const subscriptionId = Math.random()
@@ -301,7 +301,7 @@ export class ShapeStream {
     this.subscribers.clear()
   }
 
-  private publish(messages: Message[]) {
+  private publish(messages: Message<T>[]) {
     this.subscribers.forEach(([subscriber, _]) => {
       subscriber.process(messages)
     })
@@ -443,15 +443,15 @@ export class ShapeStream {
  *       console.log(shapeData)
  *     })
  */
-export class Shape {
-  private stream: ShapeStream
+export class Shape<T extends Row> {
+  private stream: ShapeStream<T>
 
-  private data: ShapeData = new Map()
-  private subscribers = new Map<number, ShapeChangedCallback>()
+  private data: ShapeData<T> = new Map()
+  private subscribers = new Map<number, ShapeChangedCallback<T>>()
   public error: FetchError | false = false
   private hasNotifiedSubscribersUpToDate: boolean = false
 
-  constructor(stream: ShapeStream) {
+  constructor(stream: ShapeStream<T>) {
     this.stream = stream
     this.stream.subscribe(this.process.bind(this), this.handleError.bind(this))
     const unsubscribe = this.stream.subscribeOnceToUpToDate(
@@ -469,7 +469,7 @@ export class Shape {
     return this.stream.isUpToDate
   }
 
-  get value(): Promise<ShapeData> {
+  get value(): Promise<ShapeData<T>> {
     return new Promise((resolve) => {
       if (this.stream.isUpToDate) {
         resolve(this.valueSync)
@@ -491,7 +491,7 @@ export class Shape {
     return this.data
   }
 
-  subscribe(callback: ShapeChangedCallback): () => void {
+  subscribe(callback: ShapeChangedCallback<T>): () => void {
     const subscriptionId = Math.random()
 
     this.subscribers.set(subscriptionId, callback)
@@ -509,7 +509,7 @@ export class Shape {
     return this.subscribers.size
   }
 
-  private process(messages: Message[]): void {
+  private process(messages: Message<T>[]): void {
     let dataMayHaveChanged = false
     let isUpToDate = false
     let newlyUpToDate = false

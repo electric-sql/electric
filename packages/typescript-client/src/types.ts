@@ -7,6 +7,8 @@ export type Value =
   | Value[]
   | { [key: string]: Value }
 
+export type Row = { [key: string]: Value }
+
 export type Offset = `-1` | `${number}_${number}`
 
 interface Header {
@@ -25,7 +27,7 @@ export type ChangeMessage<T> = {
 }
 
 // Define the type for a record
-export type Message<T extends Value = { [key: string]: Value }> =
+export type Message<T extends Row = { [key: string]: Value }> =
   | ControlMessage
   | ChangeMessage<T>
 
@@ -104,7 +106,7 @@ export type ColumnInfo =
 
 export type Schema = { [key: string]: ColumnInfo }
 
-export type TypedMessages<T extends Value = { [key: string]: Value }> = {
+export type TypedMessages<T extends Row = { [key: string]: Value }> = {
   messages: Array<Message<T>>
   schema: ColumnInfo
 }
