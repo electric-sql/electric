@@ -4,9 +4,9 @@
   "scripts": {
     "api:generate": "redocly build-docs ./electric-api.yaml --output=./public/openapi.html",
     "api:watch": "nodemon -w ./ -x \"npm run api:generate\" -e \"*.yaml\"",
-    "docs:build": "npm run api:generate && vitepress build .",
-    "docs:dev": "vitepress dev .",
-    "docs:preview": "vitepress preview ."
+    "build": "npm run api:generate && vitepress build .",
+    "dev": "vitepress dev .",
+    "preview": "vitepress preview ."
   },
   "devDependencies": {
     "@redocly/cli": "^1.18.0",
