@@ -620,9 +620,11 @@ defmodule Electric.Plug.RouterTest do
       opts: opts,
       db_conn: db_conn
     } do
-      first_val = String.duplicate("a", 5_000)
-      second_val = String.duplicate("a", 7_000)
-      third_val = String.duplicate("a", 3_000)
+      {_, %{chunk_bytes_threshold: threshold}} = Access.fetch!(opts, :storage)
+
+      first_val = String.duplicate("a", round(threshold * 0.6))
+      second_val = String.duplicate("b", round(threshold * 0.7))
+      third_val = String.duplicate("c", round(threshold * 0.4))
 
       conn = conn("GET", "/v1/shape/large_rows_table?offset=-1") |> Router.call(opts)
       assert %{status: 200} = conn
