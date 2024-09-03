@@ -92,22 +92,30 @@ persistent_kv =
     {Electric.PersistentKV.Filesystem, :new!, root: persistent_state_path}
   )
 
+storage_opts = %{
+  chunk_bytes_threshold: env!("LOG_CHUNK_BYTES_THREHSOLD", :integer, 10_000)
+}
+
+cub_db_opts = %{
+  file_path: cubdb_file_path
+}
+
 storage =
   env!(
     "STORAGE",
     fn storage ->
       case String.downcase(storage) do
         "memory" ->
-          {Electric.ShapeCache.InMemoryStorage, []}
+          {Electric.ShapeCache.InMemoryStorage, storage_opts}
 
         "cubdb" ->
-          {Electric.ShapeCache.CubDbStorage, file_path: cubdb_file_path}
+          {Electric.ShapeCache.CubDbStorage, Map.merge(cub_db_opts, storage_opts)}
 
         _ ->
           raise Dotenvy.Error, message: "storage must be one of: MEMORY, CUBDB"
       end
     end,
-    {Electric.ShapeCache.CubDbStorage, file_path: cubdb_file_path}
+    {Electric.ShapeCache.CubDbStorage, Map.merge(cub_db_opts, storage_opts)}
   )
 
 config :electric,

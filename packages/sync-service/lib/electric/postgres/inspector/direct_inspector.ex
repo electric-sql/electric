@@ -36,4 +36,6 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
       {:ok, rows}
     end
   end
+
+  def clean_column_info(_, _), do: true
 end

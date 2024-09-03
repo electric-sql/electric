@@ -12,6 +12,8 @@ defmodule Electric.Shapes.Consumer do
 
   require Logger
 
+  @initial_log_state %{current_chunk_byte_size: 0}
+
   def name(%{shape_id: shape_id} = _config) do
     name(shape_id)
   end
@@ -61,6 +63,7 @@ defmodule Electric.Shapes.Consumer do
       Map.merge(config, %{
         latest_offset: latest_offset,
         snapshot_xmin: snapshot_xmin,
+        log_state: @initial_log_state,
         buffer: [],
         monitors: []
       })
@@ -131,6 +134,7 @@ defmodule Electric.Shapes.Consumer do
     %{
       shape: shape,
       shape_id: shape_id,
+      log_state: log_state,
       shape_cache: {shape_cache, shape_cache_opts},
       registry: registry,
       storage: storage
@@ -155,20 +159,21 @@ defmodule Electric.Shapes.Consumer do
 
         ShapeCache.Storage.cleanup!(shape_id, storage)
 
-        {:halt, {:truncate, notify(txn, state)}}
+        {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
 
       relevant_changes != [] ->
-        relevant_changes
-        |> Enum.flat_map(&LogItems.from_change(&1, xid, Shape.pk(shape, &1.relation)))
-        # TODO: what's a graceful way to handle failure to append to log?
-        #       Right now we'll just fail everything
-        |> then(&ShapeCache.Storage.append_to_log!(shape_id, &1, storage))
+        new_log_state =
+          relevant_changes
+          |> Enum.flat_map(&LogItems.from_change(&1, xid, Shape.pk(shape, &1.relation)))
+          # TODO: what's a graceful way to handle failure to append to log?
+          #       Right now we'll just fail everything
+          |> then(&ShapeCache.Storage.append_to_log!(shape_id, &1, log_state, storage))
 
         shape_cache.update_shape_latest_offset(shape_id, last_log_offset, shape_cache_opts)
 
         notify_listeners(registry, :new_changes, shape_id, last_log_offset)
 
-        {:cont, notify(txn, state)}
+        {:cont, notify(txn, %{state | log_state: new_log_state})}
 
       true ->
         Logger.debug(fn ->

@@ -17,6 +17,8 @@ defmodule Electric.Postgres.Inspector do
   @callback load_column_info(relation(), opts :: term()) ::
               {:ok, [column_info()]} | :table_not_found
 
+  @callback clean_column_info(relation(), opts :: term()) :: true
+
   @type inspector :: {module(), opts :: term()}
 
   @doc """
@@ -24,6 +26,12 @@ defmodule Electric.Postgres.Inspector do
   """
   @spec load_column_info(relation(), inspector()) :: {:ok, [column_info()]} | :table_not_found
   def load_column_info(relation, {module, opts}), do: module.load_column_info(relation, opts)
+
+  @doc """
+  Clean up column information about a given table using a provided inspector.
+  """
+  @spec clean_column_info(relation(), inspector()) :: true
+  def clean_column_info(relation, {module, opts}), do: module.clean_column_info(relation, opts)
 
   @doc """
   Get columns that should be considered a PK for table. If the table

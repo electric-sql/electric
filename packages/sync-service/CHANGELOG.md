@@ -1,5 +1,15 @@
 # @core/sync-service
 
+## 0.3.7
+
+### Patch Changes
+
+- 67b0a5e: Remove timeout when quering to create the initial log to support tables over 150MB in size
+- 2b2c2fe: Support BETWEEN, BETWEEN SYMMETRIC and IS UNKNOWN comparison predicates
+- 77d7bff: Implement log chunking, which tries to keep chunks within the specified `LOG_CHUNK_BYTES_THREHSOLD` - see [relevant PR](https://github.com/electric-sql/electric/pull/1606)
+- 538d99f: Remove list_active_shapes and replace it by list_shapes.
+- 1d00501: Clean cached column info on relation changes.
+
 ## 0.3.6
 
 ### Patch Changes

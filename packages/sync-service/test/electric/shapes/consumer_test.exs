@@ -140,11 +140,11 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Consumer.name(@shape_id1))
 
       Mock.Storage
-      |> expect(:append_to_log!, 2, fn @shape_id1, _changes, _ -> :ok end)
+      |> expect(:append_to_log!, 2, fn @shape_id1, _changes, _, _ -> :ok end)
       |> allow(self(), Consumer.name(@shape_id1))
 
       Mock.Storage
-      |> expect(:append_to_log!, 0, fn @shape_id2, _changes, _ -> :ok end)
+      |> expect(:append_to_log!, 0, fn @shape_id2, _changes, _, _ -> :ok end)
       |> allow(self(), Consumer.name(@shape_id2))
 
       ref = make_ref()
@@ -183,11 +183,11 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.Storage
       |> expect(:append_to_log!, 2, fn
-        @shape_id1, [%{value: record}], {@shape_id1, _} ->
+        @shape_id1, [%{value: record}], _, {@shape_id1, _} ->
           assert record["id"] == "1"
           :ok
 
-        @shape_id2, [%{value: record}], {@shape_id2, _} ->
+        @shape_id2, [%{value: record}], _, {@shape_id2, _} ->
           assert record["id"] == "2"
           :ok
       end)
@@ -240,7 +240,7 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Shapes.Consumer.name(@shape_id2))
 
       Mock.Storage
-      |> expect(:append_to_log!, fn @shape_id2, _, _ -> :ok end)
+      |> expect(:append_to_log!, fn @shape_id2, _, _, _ -> :ok end)
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -339,7 +339,7 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Consumer.name(@shape_id1))
 
       Mock.Storage
-      |> expect(:append_to_log!, fn @shape_id1, _, _ -> :ok end)
+      |> expect(:append_to_log!, fn @shape_id1, _, _, _ -> :ok end)
 
       ref = make_ref()
       Registry.register(ctx.registry, @shape_id1, ref)
@@ -370,7 +370,10 @@ defmodule Electric.Shapes.ConsumerTest do
 
       %{shape_cache_opts: shape_cache_opts} =
         Support.ComponentSetup.with_shape_cache(
-          Map.merge(ctx, %{pool: nil}),
+          Map.merge(ctx, %{
+            pool: nil,
+            inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+          }),
           log_producer: producer,
           prepare_tables_fn: fn _, _ -> :ok end,
           create_snapshot_fn: fn parent, shape_id, _shape, _, storage ->

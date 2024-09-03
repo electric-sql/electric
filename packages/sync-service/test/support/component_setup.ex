@@ -18,7 +18,8 @@ defmodule Support.ComponentSetup do
     {:ok, storage_opts} =
       InMemoryStorage.shared_opts(
         snapshot_ets_table: :"snapshot_ets_#{full_test_name(ctx)}",
-        log_ets_table: :"log_ets_#{full_test_name(ctx)}"
+        log_ets_table: :"log_ets_#{full_test_name(ctx)}",
+        chunk_checkpoint_ets_table: :"chunk_checkpoint_ets_#{full_test_name(ctx)}"
       )
 
     %{storage: {InMemoryStorage, storage_opts}}
@@ -51,6 +52,7 @@ defmodule Support.ComponentSetup do
       [
         name: server,
         shape_meta_table: shape_meta_table,
+        inspector: ctx.inspector,
         storage: ctx.storage,
         db_pool: ctx.pool,
         persistent_kv: ctx.persistent_kv,
@@ -151,7 +153,7 @@ defmodule Support.ComponentSetup do
     |> Keyword.merge(overrides)
   end
 
-  defp full_test_name(ctx) do
+  def full_test_name(ctx) do
     "#{ctx.module} #{ctx.test}"
   end
 end
