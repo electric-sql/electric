@@ -11,7 +11,7 @@ Example usage in a component.
 import { useShape } from "@electric-sql/react"
 
 export default function MyComponent() {
-  const { isUpToDate, data: fooData } = useShape({
+  const { isUpToDate, data } = useShape({
     url: `http://localhost:3000/v1/shape/foo`,
   })
 
