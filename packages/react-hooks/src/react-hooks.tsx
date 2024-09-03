@@ -55,7 +55,7 @@ export function getShape(shapeStream: ShapeStream): Shape {
   }
 }
 
-interface UseShapeResult {
+export interface UseShapeResult {
   /**
    * The array of rows that make up the Shape.
    * @type {{ [key: string]: Value }[]}
