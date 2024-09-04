@@ -45,6 +45,9 @@ export default defineConfig({
   rewrites: {
     'blog/posts/:year-:month-:day-:slug.md': 'blog/:year/:month/:day/:slug.md'
   },
+  sitemap: {
+    hostname: 'https://electric-sql.com'
+  },
   // https://vitepress.dev/reference/default-theme-config
   themeConfig: {
     editLink: {
