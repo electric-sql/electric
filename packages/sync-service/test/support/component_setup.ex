@@ -3,7 +3,7 @@ defmodule Support.ComponentSetup do
   alias Electric.Postgres.ReplicationClient
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
-  alias Electric.ShapeCache.CubDbStorage
+  alias Electric.ShapeCache.FileStorage
   alias Electric.ShapeCache.InMemoryStorage
   alias Electric.Postgres.Inspector.EtsInspector
 
@@ -31,12 +31,9 @@ defmodule Support.ComponentSetup do
 
   def with_cub_db_storage(ctx) do
     {:ok, storage_opts} =
-      CubDbStorage.shared_opts(
-        db: :"shape_cubdb_#{full_test_name(ctx)}",
-        file_path: ctx.tmp_dir
-      )
+      FileStorage.shared_opts(storage_dir: ctx.tmp_dir)
 
-    %{storage: {CubDbStorage, storage_opts}}
+    %{storage: {FileStorage, storage_opts}}
   end
 
   def with_persistent_kv(_ctx) do
