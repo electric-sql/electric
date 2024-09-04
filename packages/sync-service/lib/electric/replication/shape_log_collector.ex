@@ -30,6 +30,13 @@ defmodule Electric.Replication.ShapeLogCollector do
     end
   end
 
+  # use `GenStage.call/2` here to make the event processing synchronous.
+  #
+  # Because `Electric.Shapes.Dispatcher` only sends demand to this producer
+  # when all consumers have processed the last event, we can save the `from`
+  # clause in the matching `handle_call/3` function and then use
+  # `GenServer.reply/2` in the `demand/2` callback to inform the replication
+  # client that the replication message has been processed.
   def store_transaction(%Transaction{} = txn, server \\ __MODULE__) do
     GenStage.call(server, {:new_txn, txn})
   end

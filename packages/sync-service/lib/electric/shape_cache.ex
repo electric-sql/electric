@@ -199,7 +199,9 @@ defmodule Electric.ShapeCache do
 
     recover_shapes(state)
 
-    send(self(), :start_log_producer)
+    # do this after finishing this function so that we're subscribed to the
+    # producer before it starts forwarding its demand
+    send(self(), :consumers_ready)
 
     {:consumer, state,
      subscribe_to: [
@@ -208,7 +210,7 @@ defmodule Electric.ShapeCache do
   end
 
   @impl GenStage
-  def handle_info(:start_log_producer, state) do
+  def handle_info(:consumers_ready, state) do
     :ok = GenStage.demand(state.log_producer, :forward)
     {:noreply, [], state}
   end

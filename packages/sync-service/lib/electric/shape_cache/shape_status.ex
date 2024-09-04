@@ -8,8 +8,8 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   alias Electric.Replication.Changes.Relation
   alias Electric.Replication.LogOffset
 
-  @type shape_id() :: Electric.ShapeCache.shape_id()
-  @type xmin() :: Electric.ShapeCache.xmin()
+  @type shape_id() :: Electric.ShapeCacheBehaviour.shape_id()
+  @type xmin() :: Electric.ShapeCacheBehaviour.xmin()
 
   @callback initialise(ShapeStatus.options()) :: {:ok, ShapeStatus.t()} | {:error, term()}
   @callback list_shapes(ShapeStatus.t()) :: [{shape_id(), Shape.t()}]
@@ -56,8 +56,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   defstruct [:persistent_kv, :root, :shape_meta_table]
 
-  @type shape_id() :: Electric.ShapeCache.shape_id()
-  @type xmin() :: Electric.ShapeCache.xmin()
+  @type shape_id() :: Electric.ShapeCacheBehaviour.shape_id()
+  @type xmin() :: Electric.ShapeCacheBehaviour.xmin()
   @type table() :: atom() | reference()
   @type t() :: %__MODULE__{
           persistent_kv: PersistentKV.t(),

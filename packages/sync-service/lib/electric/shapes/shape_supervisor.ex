@@ -43,12 +43,11 @@ defmodule Electric.Shapes.ShapeSupervisor do
 
     shape_config = %{config | storage: shape_storage}
 
-    children =
-      [
-        {Electric.ShapeCache.Storage, shape_storage},
-        {Electric.Shapes.Consumer, shape_config},
-        {Electric.Shapes.Snapshotter, shape_config}
-      ]
+    children = [
+      {Electric.ShapeCache.Storage, shape_storage},
+      {Electric.Shapes.Consumer, shape_config},
+      {Electric.Shapes.Snapshotter, shape_config}
+    ]
 
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
   end

@@ -113,18 +113,22 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, [], state}
   end
 
+  # `Shapes.Dispatcher` only works with single-events, so we can safely assert
+  # that here
   def handle_events([%Changes.Relation{}], _from, state) do
     {:noreply, [], state}
   end
 
   # Buffer incoming transactions until we know our xmin
-  def handle_events(txns, _from, %{snapshot_xmin: nil, buffer: buffer} = state) do
-    Logger.debug(fn -> "Consumer for #{state.shape_id} buffering #{length(txns)} transactions" end)
+  def handle_events([%Transaction{xid: xid}] = txns, _from, %{snapshot_xmin: nil} = state) do
+    Logger.debug(fn ->
+      "Consumer for #{state.shape_id} buffering 1 transaction with xid #{xid}"
+    end)
 
-    {:noreply, [], %{state | buffer: buffer ++ txns}}
+    {:noreply, [], %{state | buffer: state.buffer ++ txns}}
   end
 
-  def handle_events([_] = txns, _from, state) do
+  def handle_events([%Transaction{}] = txns, _from, state) do
     handle_txns(txns, state)
   end
 
