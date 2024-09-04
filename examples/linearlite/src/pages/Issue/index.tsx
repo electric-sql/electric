@@ -22,7 +22,7 @@ const debounceTime = 500
 function IssuePage() {
   const navigate = useNavigate()
 
-  const issues = useShape(issueShape) as Issue[]
+  const issues = useShape<Issue>(issueShape)
 
   const params = useParams()
 

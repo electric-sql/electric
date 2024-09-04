@@ -18,10 +18,10 @@ const itemShape = () => ({
 })
 
 async function createItem(newId: string) {
-  const itemsStream = getShapeStream(itemShape())
+  const itemsStream = getShapeStream<Item>(itemShape())
 
   // Match the insert
-  const findUpdatePromise = matchStream<{ id: string }>({
+  const findUpdatePromise = matchStream({
     stream: itemsStream,
     operations: [`insert`],
     matchFn: ({ message }) => message.value.id === newId,
@@ -58,8 +58,7 @@ async function clearItems(numItems: number) {
 
 export const Example = () => {
   const queryClient = useQueryClient()
-
-  const { data: items } = useShape(itemShape()) as unknown as { data: Item[] }
+  const { data: items } = useShape<Item>(itemShape())
   const submissions: Item[] = useMutationState({
     filters: { status: `pending` },
     select: (mutation) => mutation.state.context as Item | undefined,

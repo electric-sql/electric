@@ -9,9 +9,7 @@ import { issueShape } from '../../shapes'
 
 function Board() {
   const [_filterState] = useFilterState()
-  const { data: issues } = useShape(issueShape)! as unknown as {
-    data: Issue[]
-  }
+  const { data: issues } = useShape<Issue>(issueShape)!
 
   // TODO: apply filter state
 

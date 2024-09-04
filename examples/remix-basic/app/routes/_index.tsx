@@ -11,6 +11,8 @@ const itemShape = () => {
   }
 }
 
+type Item = { id: string }
+
 export const clientLoader = async () => {
   return await preloadShape(itemShape())
 }
@@ -18,11 +20,11 @@ export const clientLoader = async () => {
 export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
   const body = await request.formData()
 
-  const itemsStream = getShapeStream(itemShape())
+  const itemsStream = getShapeStream<Item>(itemShape())
 
   if (body.get(`intent`) === `add`) {
     // Match the insert
-    const findUpdatePromise = matchStream<{ id: string }>({
+    const findUpdatePromise = matchStream({
       stream: itemsStream,
       operations: [`insert`],
       matchFn: ({ message }) => message.value.id === body.get(`new-id`),
@@ -52,10 +54,8 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
   }
 }
 
-type Item = { id: string }
-
 export default function Example() {
-  const { data: items } = useShape(itemShape()) as unknown as { data: Item[] }
+  const { data: items } = useShape<Item>(itemShape())
 
   const submissions = useFetchers()
     .filter((fetcher) => fetcher.formData?.get(`intent`) === `add`)
