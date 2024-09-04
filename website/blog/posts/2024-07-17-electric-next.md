@@ -1,44 +1,36 @@
 ---
-outline: [2, 3]
-title: About
+title: A new approach to building Electric
 description: >-
   Electric Next is an experimental new approach to
   building the ElectricSQL sync engine.
+excerpt: >-
+  Electric Next is an experimental new approach to building ElectricSQL.
+  One that's informed by the lessons learned building the previous system
+  and inspired by new insight from Kyle&nbsp;Mathews.
+authors: [thruflo]
+image: /img/blog/electric-next/header.jpg
+tags: [release]
+outline: [2, 3]
+post: true
 ---
 
 <script setup>
 import Tweet from 'vue-tweet'
 </script>
 
-<p class="about-zap-container">
-  <img src="/img/home/zap-with-halo.svg"
-      alt="Electric zap with halo"
-      class="about-zap"
-  />
-</p>
+[Electric Next](https://github.com/electric-sql/archived-electric-next) is an experimental new approach to building the ElectricSQL sync engine.
 
-# A new approach to building Electric
+One that's informed by the lessons learned building the [previous system](https://legacy.electric-sql.com) and inspired by new insight from [Kyle&nbsp;Mathews](https://electric-sql.com/about/team#kyle).
 
-| Authored by | Published on |
-| ----------- | ------------ |
-| [James Arthur](https://electric-sql.com/about/team#james) | 17th July 2024 |
+What started as tinkering is now the way forward for Electric. So, what's changed and what does it mean for you?
 
-<br /> [`electric-next`](https://github.com/electric-sql/electric-next) is an experimental new approach to building ElectricSQL.
+## What is Electric Next?
 
-One that's informed by the lessons learned building the [previous system](https://electric-sql.com) and inspired by new insight from [Kyle&nbsp;Mathews](https://electric-sql.com/about/team#kyle).
+Electric Next is a clean rebuild of the Electric sync engine.
 
-What started as tinkering in private now looks certain to be the way forward for Electric. So, what it is, what's changed and what does it mean for you?
+We created a new repo and started by porting the absolute minimum code necessary from the ]previous repo](https://github.com/electric-sql/electric-old). Once we we confident that Electric next was the way forward, we froze the old system and moved Electric Next into our main repo at [https://github.com/electric-sql/electric](https://github.com/electric-sql/electric). So Electric Next is now the main Electric system and will be moving forward.
 
-
-## What is `electric-next`?
-
-[`electric-next`](https://github.com/electric-sql/electric-next) is a clean rebuild of the Electric sync engine.
-
-We created a new repo at [electric-sql/electric-next](https://github.com/electric-sql/electric-next) and started by porting the absolute minimum code necessary from the previous repo.
-
-It provides an [HTTP API](/docs/api/http) for syncing [Shapes](/docs/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/docs/api/clients/typescript) and [integrations](/docs/api/integrations/react).
-
-It's also simple to write your own client in any language.
+It provides an [HTTP API](/docs/api/http) for syncing [Shapes](/docs/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/docs/api/clients/typescript) and [integrations](/docs/api/integrations/react). It's also simple to write your own client in any language.
 
 ## Why build a new system?
 
@@ -46,11 +38,11 @@ Electric has its [heritage](https://electric-sql.com/about/team#advisors) in [di
 
 This allowed us to do active-active replication between multiple Postgres instances, in the cloud or at the edge. However, rather than stopping at the edge, we kept seeing that it was more optimal to take the database-grade replication guarantees all the way into the client.
 
-So we built a system to sync data into embedded databases in the client. Where our core technology could solve the concurrency challenges with local-first software architecture. Thus, ElectricSQL was born, as an [open source platform for building local-first software](https://electric-sql.com).
+So we built a system to sync data into embedded databases in the client. Where our core technology could solve the concurrency challenges with local-first software architecture. Thus, ElectricSQL was born, as an [open source platform for building local-first software](/blog/2023/09/20/introducing-electricsql-v0.6).
 
 ### Optimality and complexity
 
-To go from core database replication technology to a viable solution for building local-first software, we had to build a lot of stuff. Tooling for [migrations](https://electric-sql.com/docs/usage/data-modelling/migrations), [permissions](https://electric-sql.com/docs/usage/data-modelling/permissions), [client generation](https://electric-sql.com/docs/api/cli#generate), [type-safe data access](https://electric-sql.com/docs/usage/data-access/client), [live queries](https://electric-sql.com/docs/integrations/frontend/react#uselivequery), [reactivity](https://electric-sql.com/docs/reference/architecture#reactivity), [drivers](https://electric-sql.com/docs/integrations/drivers), etc.
+To go from core database replication technology to a viable solution for building local-first software, we had to build a lot of stuff. Tooling for [migrations](https://legacy.electric-sql.com/docs/usage/data-modelling/migrations), [permissions](https://legacy.electric-sql.com/docs/usage/data-modelling/permissions), [client generation](https://legacy.electric-sql.com/docs/api/cli#generate), [type-safe data access](https://legacy.electric-sql.com/docs/usage/data-access/client), [live queries](https://legacy.electric-sql.com/docs/integrations/frontend/react#uselivequery), [reactivity](https://legacy.electric-sql.com/docs/reference/architecture#reactivity), [drivers](https://legacy.electric-sql.com/docs/integrations/drivers), etc.
 
 <figure>
   <div class="img-row">
@@ -64,14 +56,14 @@ To go from core database replication technology to a viable solution for buildin
   </div>
   <figcaption className="figure-caption text-end">
     Schema evolution diagramme from the previous
-    <a href="https://electric-sql.com/docs/reference/architecture" target="_blank">
+    <a href="https://legacy.electric-sql.com/docs/reference/architecture" target="_blank">
       architecture&nbsp;page</a>.
   </figcaption>
 </figure>
 
 Coming from a research background, we wanted the system to be optimal. As a result, we often picked the more complex solution from the design space and, as a vertically integrated system, that solution became the only one available to use with Electric.
 
-For example, we designed the [DDLX rule system](https://electric-sql.com/docs/api/ddlx) in a certain way, because we wanted authorization that supported finality of local writes. However, rules (and our rules) are only one way to do authorization in a local-first system. Many applications would be happy with a simpler solution, such as Postgres RLS or a server authoritative middleware.
+For example, we designed the [DDLX rule system](https://legacy.electric-sql.com/docs/api/ddlx) in a certain way, because we wanted authorization that supported finality of local writes. However, rules (and our rules) are only one way to do authorization in a local-first system. Many applications would be happy with a simpler solution, such as Postgres RLS or a server authoritative middleware.
 
 These decisions not only made Electric more complex to use but also more complex to develop. Despite our best efforts, this has slowed us down and tested the patience of even the most forgiving of our early adopters.
 
@@ -111,20 +103,20 @@ This aligns with the principle of [Worse is Better](https://en.wikipedia.org/wik
 
 Gabriel contrasts "Worse is Better" with a make the "Right Thing" approach that aims to create the optimal solution. Which sounds painfully like our ambitions to make an optimal local-first platform. Whereas moving functionality out of scope, will actually allow us to make the core better and deliver on the opportunity.
 
-#### The motivation for `electric-next`
+#### The motivation for Electric Next
 
 So, hopefully now our motivation is clear. We needed to find a way to simplify Electric and make it more loosely coupled. To pare it back to it's core and iterate on solid foundations.
 
 
 ## What's changed?
 
-`electric-next` is a sync engine, not a local-first software platform.
+Electric Next is a [sync engine](/product/electric), not a local-first software platform.
 
-It can be used for a wide range of use cases, syncing data into apps, workers, services, agents and environments. These include but are not limited to local-first software development.
+It can be used for a wide range of [use cases](/use-cases/state-transfer), syncing data into apps, workers, services, agents and environments. These include but are not limited to local-first software development.
 
 ### Sync engine
 
-When we look at our stack, the part that we see as most core is the sync engine.
+When we look at our stack, the part that we see as most core is the [sync engine](/product/electric).
 
 This is the component of Electric that syncs data between Postgres and local clients. Consuming Postgres logical replication, managing partial replication using Shapes and syncing data to and from clients over a replication protocol. It’s where there’s the most complexity. Where we can add the most value and is hardest to develop yourself.
 
@@ -165,7 +157,7 @@ The diagramme above and table below summarise what we see as core and what we've
 
 ### HTTP Protocol
 
-One of the key aspects that has changed in the core sync engine is a switch from the [Satellite web socket replication prototol](https://electric-sql.com/docs/api/satellite) to an HTTP replication protocol.
+One of the key aspects that has changed in the core sync engine is a switch from the [Satellite web socket replication prototol](https://legacy.electric-sql.com/docs/api/satellite) to an HTTP replication protocol.
 
 Switching to an HTTP protocol may at first seem like a regression or a strange fit. Web sockets are build on top of HTTP specifically to serve the kind of realtime data stream that Electric provides. However, they are also more stateful and harder to cache.
 
@@ -180,7 +172,7 @@ This allows us to optimise initial data sync by making sync requests cacheable. 
 
 Electric has always been envisaged as an active-active replication system that supports bi-directional sync between clients and the server. This means it syncs data out to clients (the "read path") and syncs data back from clients (the "write path").
 
-The previous Electric supported a single primary write-path pattern &mdash; [writing through the local database](https://electric-sql.com/docs/usage/data-access/writes):
+The previous Electric supported a single primary write-path pattern &mdash; [writing through the local database](https://legacy.electric-sql.com/docs/usage/data-access/writes):
 
 <figure>
   <div class="img-row">
@@ -194,18 +186,18 @@ The previous Electric supported a single primary write-path pattern &mdash; [wri
   </div>
   <figcaption className="figure-caption text-end">
     Data flow diagramme from the previous
-    <a href="https://electric-sql.com/docs/reference/architecture" target="_blank">
+    <a href="https://legacy.electric-sql.com/docs/reference/architecture" target="_blank">
       architecture&nbsp;page</a>.
   </figcaption>
 </figure>
 
-This is very powerful (and [abstracts state transfer](https://electric-sql.com/blog/2022/12/16/evolution-state-transfer) out of the application domain). However, it is only one of many valid write patterns.
+This is very powerful (and [abstracts state transfer](/blog/2022/12/16/evolution-state-transfer) out of the application domain). However, it is only one of many valid write patterns.
 
 Many applications don't write data at all; for example, syncing data into an application for visualisation or analysis. Some fire-and-forget writes to an ingest API. Other applications write data via API calls, or mutation queues. Some of these are online writes. Some use local optimistic state.
 
-For example, when applying a mutation with [Relay](https://relay.dev) you can [define an `optimisticResponse`](https://relay.dev/docs/guided-tour/updating-data/imperatively-modifying-store-data/#optimistic-updaters-vs-updaters) to update the client store with temporary optimistic state whilst the write is sent to the server. Or to give another example, when [making secure transactions](https://electric-sql.com/blog/2023/12/15/secure-transactions-with-local-first) a local-first app will explicitly want to send writes to the server, in order to validate and apply them in a secure and strongly consistent environment.
+For example, when applying a mutation with [Relay](https://relay.dev) you can [define an `optimisticResponse`](https://relay.dev/docs/guided-tour/updating-data/imperatively-modifying-store-data/#optimistic-updaters-vs-updaters) to update the client store with temporary optimistic state whilst the write is sent to the server. Or to give another example, when [making secure transactions](/blog/2023/12/15/secure-transactions-with-local-first) a local-first app will explicitly want to send writes to the server, in order to validate and apply them in a secure and strongly consistent environment.
 
-So, following the strategy of paring down to the core and then progressively layering on more complex functionality, `electric-next` has taken the following approach:
+So, following the strategy of paring down to the core and then progressively layering on more complex functionality, Electric Next has taken the following approach:
 
 1. start with read-path only
 2. then add support for optimistic write patterns with tentativity
@@ -217,9 +209,9 @@ We will only focus on the more complex strategies ourselves once the simpler one
 
 #### A note on finality of local writes
 
-One of the key differentiators of the previous ElectricSQL system was the ability to write to the local database without conflicts or rollbacks. The principle is [finality of local-writes](https://electric-sql.com/docs/reference/architecture#local-writes), which means that writes are final, not tentative. I.e.: once a write is accepted locally, it won't be rejected as invalid later on.
+One of the key differentiators of the previous ElectricSQL system was the ability to write to the local database without conflicts or rollbacks. The principle is [finality of local-writes](https://legacy.electric-sql.com/docs/reference/architecture#local-writes), which means that writes are final, not tentative. I.e.: once a write is accepted locally, it won't be rejected as invalid later on.
 
-In contrast, `electric-next` embraces tentativity. With the new system, you can choose your write pattern(s) and the guarantees you want them to provide.
+In contrast, Electric Next embraces tentativity. With the new system, you can choose your write pattern(s) and the guarantees you want them to provide.
 
 We still believe that a local-first stack that provides finality of local writes can provide a better DX and UX than one that doesn't. Because of the absence of rollbacks. So we are committed in the longer term to building support for finality of local writes. However, it is no longer a key tenet of the system design.
 
@@ -257,7 +249,7 @@ You can sync data into:
   </video>
   <figcaption className="figure-caption text-end">
     Video demonstrating
-    <a href="https://electric-sql.com/blog/2024/02/05/local-first-ai-with-tauri-postgres-pgvector-llama" target="_blank">
+    <a href="/blog/2024/02/05/local-first-ai-with-tauri-postgres-pgvector-llama" target="_blank">
       hybrid vector-relational sync for local RAG applications</a>.
   </figcaption>
 </figure>
@@ -267,19 +259,21 @@ You can sync data into:
 
 ### Previous system
 
-`electric-next` will supercede the current/previous Electric:
+Electric Next has superceded the previous Electric.
 
-- some parts of the old system will be cherry-picked and ported over into the new system
-- some parts will be cut out into optional libraries, for example the [DDLX implementation](https://github.com/electric-sql/electric/pull/1393)
-- some parts will not be needed
+- some parts of the old system were cherry-picked and ported over
+- some parts may be cut out into optional libraries, for example the [DDLX implementation](https://github.com/electric-sql/electric/pull/1393)
+- most parts were not and will not be needed
 
-You're welcome to continue to use it and perhaps to choose your moment to migrate. However caveat emptor &mdash; the direction of travel should be pretty clear.
+You're welcome to continue to use the old system and choose your moment to migrate. The code is preserved at [electric-sql/electric-old](https://github.com/electric-sql/electric-old) and the website and docs remain published at [legacy.electric-sql.com](https://legacy.electric-sql.com).
+
+However caveat emptor &mdash; we are not supporting the old system.
 
 ### New system
 
-At the time of writing this document, we are early in the development of `electric-next`. The repo was created on the 1st July 2024. As a clean re-write, there are many things not-yet supported.
+At the time of writing this document, we are early in the development of Electric Next. The repo was created on the 1st July 2024. As a clean re-write, there are many things not-yet supported.
 
-However, even just with the first release of `electric-next` you can already sync partial subsets of data from a Postgres database into a wide variety of clients and environments, for example:
+However, even just with the first release of Electric Next you can already sync partial subsets of data from a Postgres database into a wide variety of clients and environments, for example:
 
 - syncing data into local apps using the [TypeScript](/docs/api/clients/typescript) and [Elixir](/docs/api/clients/elixir) clients
 - replacing hot-path data fetching and database queries in apps using [React](/docs/api/integrations/react), [MobX](/docs/api/integrations/react) and [TanStack](/docs/api/integrations/tanstack)
@@ -287,15 +281,15 @@ However, even just with the first release of `electric-next` you can already syn
 
 ### Roadmap
 
-You can track development on [Discord](https://discord.electric-sql.com) and via the [GitHub Issues milestones](https://github.com/electric-sql/electric-next/milestones).
+You can track development on [Discord](https://discord.electric-sql.com) and via the [GitHub Issues milestones](https://github.com/electric-sql/archived-electric-next/milestones).
 
 ***
 
 ## Next steps
 
-`electric-next` is available to use today. We welcome community contributions.
+Electric Next is available to use today. We welcome community contributions.
 
-### Using `electric-next`
+### Using Electric Next
 
 See the:
 
@@ -312,5 +306,4 @@ Electric is open source (Apache 2.0) and developed on GitHub at [electric-sql/el
 See:
 
 - the [open issues](https://github.com/electric-sql/electric/issues) on the repo
-- the public RFCs at [electric-sql/rfcs](https://github.com/electric-sql/rfcs)
 - the [contributing guide](https://github.com/electric-sql/electric/blob/main/CONTRIBUTING.md) here
