@@ -37,6 +37,13 @@ defmodule Electric.Shapes.Consumer do
     GenStage.call(name(shape_id), {:monitor, pid})
   end
 
+  @spec whereis(ShapeCache.shape_id()) :: pid() | nil
+  def whereis(shape_id) do
+    shape_id
+    |> name()
+    |> GenServer.whereis()
+  end
+
   def start_link(config) when is_map(config) do
     GenStage.start_link(__MODULE__, config, name: name(config))
   end
@@ -69,7 +76,7 @@ defmodule Electric.Shapes.Consumer do
         monitors: []
       })
 
-    {:consumer, state, subscribe_to: [{producer, selector: &is_struct(&1, Changes.Transaction)}]}
+    {:consumer, state, subscribe_to: [{producer, [max_demand: 1, selector: nil]}]}
   end
 
   def handle_call(:initial_state, _from, %{snapshot_xmin: xmin, latest_offset: offset} = state) do
@@ -106,14 +113,22 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, [], state}
   end
 
-  # Buffer incoming transactions until we know our xmin
-  def handle_events(txns, _from, %{snapshot_xmin: nil, buffer: buffer} = state) do
-    Logger.debug(fn -> "Consumer for #{state.shape_id} buffering #{length(txns)} transactions" end)
-
-    {:noreply, [], %{state | buffer: buffer ++ txns}}
+  # `Shapes.Dispatcher` only works with single-events, so we can safely assert
+  # that here
+  def handle_events([%Changes.Relation{}], _from, state) do
+    {:noreply, [], state}
   end
 
-  def handle_events(txns, _from, state) do
+  # Buffer incoming transactions until we know our xmin
+  def handle_events([%Transaction{xid: xid}] = txns, _from, %{snapshot_xmin: nil} = state) do
+    Logger.debug(fn ->
+      "Consumer for #{state.shape_id} buffering 1 transaction with xid #{xid}"
+    end)
+
+    {:noreply, [], %{state | buffer: state.buffer ++ txns}}
+  end
+
+  def handle_events([%Transaction{}] = txns, _from, state) do
     handle_txns(txns, state)
   end
 

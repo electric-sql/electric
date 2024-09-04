@@ -263,7 +263,7 @@ describe(`HTTP Sync`, () => {
         `
       UPDATE ${tableSql}
       SET
-        txt = 'changed',        
+        txt = 'changed',
         i4 = 20,
         i8 = 30,
         f8 = 40.5,

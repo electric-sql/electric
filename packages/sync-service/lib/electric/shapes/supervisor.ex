@@ -1,55 +1,31 @@
 defmodule Electric.Shapes.Supervisor do
-  use Supervisor, restart: :transient
+  use Supervisor
 
   require Logger
 
-  # TODO: unify these with ShapeCache
-  @schema NimbleOptions.new!(
-            shape_id: [type: :string, required: true],
-            shape: [type: {:struct, Electric.Shapes.Shape}, required: true],
-            log_producer: [type: {:or, [:pid, :atom]}, required: true],
-            shape_cache: [type: :mod_arg, required: true],
-            registry: [type: :atom, required: true],
-            storage: [type: :mod_arg, required: true],
-            chunk_bytes_threshold: [type: :non_neg_integer, required: true],
-            db_pool: [type: {:or, [:atom, :pid]}, default: Electric.DbPool],
-            prepare_tables_fn: [type: {:or, [:mfa, {:fun, 2}]}, required: true],
-            create_snapshot_fn: [
-              type: {:fun, 5},
-              default: &Electric.Shapes.Snapshotter.query_in_readonly_txn/5
-            ]
-          )
-
-  def name(shape_id) when is_binary(shape_id) do
-    Electric.Application.process_name(__MODULE__, shape_id)
-  end
-
-  def name(%{shape_id: shape_id}) do
-    name(shape_id)
-  end
-
   def start_link(opts) do
-    with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
-      config = Map.new(opts)
-      Supervisor.start_link(__MODULE__, config, name: name(config))
-    end
+    name = Access.get(opts, :name, __MODULE__)
+
+    Supervisor.start_link(__MODULE__, opts, name: name)
   end
 
-  def init(config) when is_map(config) do
-    %{shape_id: shape_id, storage: {_, _} = storage} =
-      config
+  @impl Supervisor
+  def init(opts) do
+    Logger.info("Starting shape replication pipeline")
 
-    shape_storage = Electric.ShapeCache.Storage.for_shape(shape_id, storage)
+    replication_client = Keyword.fetch!(opts, :replication_client)
+    shape_cache = Keyword.fetch!(opts, :shape_cache)
+    log_collector = Keyword.fetch!(opts, :log_collector)
 
-    shape_config = %{config | storage: shape_storage}
+    consumer_supervisor =
+      Keyword.get(opts, :consumer_supervisor, {Electric.Shapes.ConsumerSupervisor, []})
 
     children =
-      [
-        {Electric.ShapeCache.Storage, shape_storage},
-        {Electric.Shapes.Consumer, shape_config},
-        {Electric.Shapes.Snapshotter, shape_config}
-      ]
+      Enum.reject(
+        [consumer_supervisor, log_collector, shape_cache, replication_client],
+        &is_nil/1
+      )
 
-    Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
+    Supervisor.init(children, strategy: :one_for_all)
   end
 end

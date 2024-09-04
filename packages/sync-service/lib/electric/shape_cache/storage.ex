@@ -5,7 +5,7 @@ defmodule Electric.ShapeCache.Storage do
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
 
-  @type shape_id :: String.t()
+  @type shape_id :: Electric.ShapeCacheBehaviour.shape_id()
   @type compiled_opts :: term()
   @type storage :: {module(), compiled_opts()}
 
