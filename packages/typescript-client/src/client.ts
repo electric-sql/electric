@@ -185,7 +185,12 @@ export class ShapeStream<T extends Row = Row> {
   >()
 
   private lastOffset: Offset
+<<<<<<< HEAD
   private messageParser: MessageParser<T>
+=======
+  private messageParser: MessageParser
+  private lastSyncedAt?: number // unix time
+>>>>>>> 7ee4bafa (Add a lastSynced getter.)
   public isUpToDate: boolean = false
 
   shapeId?: string
@@ -268,6 +273,11 @@ export class ShapeStream<T extends Row = Row> {
 
       const messages = status === 204 ? `[]` : await response.text()
 
+      if (status === 204) {
+        // There's no content so we are live and up to date
+        this.lastSyncedAt = Date.now()
+      }
+
       const batch = this.messageParser.parse(messages, this.schema)
 
       // Update isUpToDate
@@ -275,11 +285,13 @@ export class ShapeStream<T extends Row = Row> {
         const lastMessage = batch[batch.length - 1]
         if (
           isControlMessage(lastMessage) &&
-          lastMessage.headers.control === `up-to-date` &&
-          !this.isUpToDate
+          lastMessage.headers.control === `up-to-date`
         ) {
-          this.isUpToDate = true
-          this.notifyUpToDateSubscribers()
+          this.lastSyncedAt = Date.now()
+          if (!this.isUpToDate) {
+            this.isUpToDate = true
+            this.notifyUpToDateSubscribers()
+          }
         }
 
         this.publish(batch)
@@ -332,6 +344,13 @@ export class ShapeStream<T extends Row = Row> {
 
   unsubscribeAllUpToDateSubscribers(): void {
     this.upToDateSubscribers.clear()
+  }
+
+  /** Time elapsed since last sync (in ms). Infinity if we did not yet sync. */
+  get lastSynced(): number {
+    if (this.lastSyncedAt === undefined) return Infinity
+
+    return Date.now() - this.lastSyncedAt
   }
 
   private notifyUpToDateSubscribers() {
@@ -473,6 +492,10 @@ export class Shape<T extends Row = Row> {
 
   get isUpToDate(): boolean {
     return this.stream.isUpToDate
+  }
+
+  get lastSynced(): number {
+    return this.stream.lastSynced
   }
 
   get value(): Promise<ShapeData<T>> {

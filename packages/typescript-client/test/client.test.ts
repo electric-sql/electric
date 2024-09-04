@@ -8,6 +8,7 @@ const BASE_URL = inject(`baseUrl`)
 
 describe(`Shape`, () => {
   it(`should sync an empty shape`, async ({ issuesTableUrl }) => {
+    const start = Date.now()
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
     })
@@ -15,6 +16,7 @@ describe(`Shape`, () => {
     const map = await shape.value
 
     expect(map).toEqual(new Map())
+    expect(shape.lastSynced).toBeLessThanOrEqual(Date.now() - start)
   })
 
   it(`should notify with the initial value`, async ({
@@ -25,6 +27,7 @@ describe(`Shape`, () => {
   }) => {
     const [id] = await insertIssues({ title: `test title` })
 
+    const start = Date.now()
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter.signal,
@@ -43,6 +46,7 @@ describe(`Shape`, () => {
     })
 
     expect(map).toEqual(expectedValue)
+    expect(shape.lastSynced).toBeLessThanOrEqual(Date.now() - start)
   })
 
   it(`should continually sync a shape/table`, async ({
@@ -55,6 +59,7 @@ describe(`Shape`, () => {
   }) => {
     const [id] = await insertIssues({ title: `test title` })
 
+    const start = Date.now()
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter.signal,
@@ -69,8 +74,13 @@ describe(`Shape`, () => {
       priority: 10,
     })
     expect(map).toEqual(expectedValue)
+    expect(shape.lastSynced).toBeLessThanOrEqual(Date.now() - start)
+
+    await sleep(100)
+    expect(shape.lastSynced).toBeGreaterThanOrEqual(100)
 
     // FIXME: might get notified before all changes are submitted
+    const intermediate = Date.now()
     const hasNotified = new Promise((resolve) => {
       shape.subscribe(resolve)
     })
@@ -88,6 +98,7 @@ describe(`Shape`, () => {
       priority: 10,
     })
     expect(shape.valueSync).toEqual(expectedValue)
+    expect(shape.lastSynced).toBeLessThanOrEqual(Date.now() - intermediate)
 
     shape.unsubscribeAll()
   })
@@ -119,6 +130,8 @@ describe(`Shape`, () => {
     })
 
     let requestsMade = 0
+    const start = Date.now()
+    let rotationTime: number = Infinity
     const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
       // clear the shape and modify the data after the initial request
       if (requestsMade === 1) {
@@ -126,6 +139,7 @@ describe(`Shape`, () => {
         // new shape data should have just second issue and not first
         await deleteIssue({ id: id1, title: `foo1` })
         await insertIssues({ id: id2, title: `foo2` })
+        rotationTime = Date.now()
       }
 
       const response = await fetch(...args)
@@ -147,9 +161,13 @@ describe(`Shape`, () => {
         dataUpdateCount++
         if (dataUpdateCount === 1) {
           expect(shapeData).toEqual(expectedValue1)
+          expect(shape.lastSynced).toBeLessThanOrEqual(Date.now() - start)
           return
         } else if (dataUpdateCount === 2) {
           expect(shapeData).toEqual(expectedValue2)
+          expect(shape.lastSynced).toBeLessThanOrEqual(
+            Date.now() - rotationTime
+          )
           return resolve()
         }
         throw new Error(`Received more data updates than expected`)
@@ -165,6 +183,7 @@ describe(`Shape`, () => {
   }) => {
     const [id] = await insertIssues({ title: `test title` })
 
+    const start = Date.now()
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter.signal,
@@ -190,6 +209,7 @@ describe(`Shape`, () => {
       priority: 10,
     })
     expect(value).toEqual(expectedValue)
+    expect(shape.lastSynced).toBeLessThanOrEqual(Date.now() - start)
 
     shape.unsubscribeAll()
   })
