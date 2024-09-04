@@ -1,5 +1,18 @@
 # @core/sync-service
 
+## 0.4.0
+
+### Minor Changes
+
+- b3f5d7c: Introduce and enable by default a new iteration of the storage engine, which is more optimal when creating new shapes. If you need to continue using the old shapes without interruption, set `STORAGE=cubdb` environment variable.
+- 1461432: Replace individual persistence location configuration with a single `STORAGE_DIR` environment variable, that should be bound to a volume to survive Electric restarts. If you were using `CUBDB_FILE_PATH`, you should move that folder into a subdirectory named `shapes` and configure `STORAGE_DIR` to the previous directory.
+
+### Patch Changes
+
+- 61cd2a1: Raise the Erlang open port limit to allow for more simoultaneus connecitons
+- 6e268cb: Move row-to-JSON serialization for initial shape data from Electric to PG
+- b322b95: Added a note to reconnection logging whether the replication mode or regular mode connection is failing
+
 ## 0.3.7
 
 ### Patch Changes
