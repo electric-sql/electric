@@ -5,7 +5,7 @@ import {
   ShapeStreamOptions,
 } from './client'
 import { isChangeMessage, isControlMessage } from './helpers'
-import { ChangeMessage, Offset, Value, type Message } from './types'
+import { ChangeMessage, Offset, type Row, type Message } from './types'
 
 type PromiseOr<T> = T | Promise<T>
 function isPromise<T>(promise: PromiseOr<T>): promise is Promise<T> {
@@ -17,7 +17,7 @@ function isPromise<T>(promise: PromiseOr<T>): promise is Promise<T> {
   )
 }
 
-type StreamStorageItem<T extends Value = Value> = {
+type StreamStorageItem<T extends Row = Row> = {
   key: string
   value: T
   offset: Offset
@@ -28,14 +28,14 @@ type StreamStorageItem<T extends Value = Value> = {
   insertedAt: number
 }
 
-export type PersistedShapeStreamOptions = Exclude<
+export type PersistedShapeStreamOptions<T extends Row> = Exclude<
   ShapeStreamOptions,
   `offset` | `shapeId`
 > & {
-  storage: ShapeStreamStorage
+  storage: ShapeStreamStorage<T>
 }
 
-export interface ShapeStreamStorage<T extends Value = Value> {
+export interface ShapeStreamStorage<T extends Row = Row> {
   get: (key: string) => PromiseOr<StreamStorageItem<T>>
   put: (key: string, entry: StreamStorageItem<T>) => PromiseOr<void>
   delete: (key: string) => PromiseOr<void>
@@ -43,17 +43,17 @@ export interface ShapeStreamStorage<T extends Value = Value> {
   clear: () => PromiseOr<void>
 }
 
-export class PersistedShapeStream<T extends Value = Value>
+export class PersistedShapeStream<T extends Row = Row>
   implements ShapeStreamInterface
 {
-  readonly #storage: ShapeStreamStorage
+  readonly #storage: ShapeStreamStorage<T>
   readonly #hydrationPromise: Promise<ShapeStreamOptions>
 
-  #shapeStream: ShapeStream
+  #shapeStream: ShapeStream<T>
   #operationChain: Promise<unknown> = Promise.resolve()
   #hasShapeId: boolean = false
 
-  constructor(options: PersistedShapeStreamOptions) {
+  constructor(options: PersistedShapeStreamOptions<T>) {
     const shapeStreamOptions = {
       ...options,
       offset: undefined,
@@ -164,7 +164,7 @@ export class PersistedShapeStream<T extends Value = Value>
     return this.#operationChain as Promise<T>
   }
 
-  #persistStream(messages: Message[]): PromiseOr<void> {
+  #persistStream(messages: Message<T>[]): PromiseOr<void> {
     let chain: PromiseOr<void> = undefined
     for (const message of messages) {
       chain = this.#chainOperation(this.#processMessage(message))
@@ -172,7 +172,7 @@ export class PersistedShapeStream<T extends Value = Value>
     return chain
   }
 
-  #processMessage(message: Message): PromiseOr<void> {
+  #processMessage(message: Message<T>): PromiseOr<void> {
     if (isChangeMessage(message)) {
       switch (message.headers.operation) {
         case `insert`:
@@ -212,7 +212,7 @@ export class PersistedShapeStream<T extends Value = Value>
   }
 }
 
-function shapeStreamStorageItemToMessage<T extends Value>(
+function shapeStreamStorageItemToMessage<T extends Row>(
   item: StreamStorageItem<T>
 ): ChangeMessage<T> {
   return {
