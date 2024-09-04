@@ -139,6 +139,16 @@ export class FetchError extends Error {
   }
 }
 
+export interface ShapeStreamInterface<T extends Row = Row> {
+  subscribe(callback: (messages: Message<T>[]) => void): void
+  unsubscribeAllUpToDateSubscribers(): void
+  unsubscribeAll(): void
+  subscribeOnceToUpToDate(
+    callback: () => void,
+    error: (err: FetchError | Error) => void
+  ): () => void
+}
+
 /**
  * Reads updates to a shape from Electric using HTTP requests and long polling. Notifies subscribers
  * when new messages come in. Doesn't maintain any history of the
@@ -169,7 +179,10 @@ export class FetchError extends Error {
  * aborter.abort()
  * ```
  */
-export class ShapeStream<T extends Row = Row> {
+
+export class ShapeStream<T extends Row = Row>
+  implements ShapeStreamInterface<T>
+{
   private options: ShapeStreamOptions
   private backoffOptions: BackoffOptions
   private fetchClient: typeof fetch
