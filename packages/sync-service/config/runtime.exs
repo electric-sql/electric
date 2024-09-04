@@ -71,9 +71,11 @@ cache_max_age = env!("CACHE_MAX_AGE", :integer, 60)
 cache_stale_age = env!("CACHE_STALE_AGE", :integer, 60 * 5)
 statsd_host = env!("STATSD_HOST", :string?, nil)
 
-cubdb_file_path = env!("CUBDB_FILE_PATH", :string, "./shapes")
-mixed_file_path = env!("MIXED_STORAGE_DIR", :string, "./shapes_mixed")
-persistent_state_path = env!("PERSISTENT_STATE_FILE_PATH", :string, "./state")
+storage_dir = env!("STORAGE_DIR", :string, "./persistent")
+
+cubdb_file_path = Path.join(storage_dir, "./shapes")
+mixed_file_path = Path.join(storage_dir, "./shapes_mixed")
+persistent_state_path = Path.join(storage_dir, "./state")
 
 persistent_kv =
   env!(
