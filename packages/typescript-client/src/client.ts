@@ -140,13 +140,19 @@ export class FetchError extends Error {
 }
 
 export interface ShapeStreamInterface<T extends Row = Row> {
-  subscribe(callback: (messages: Message<T>[]) => void): void
+  subscribe(
+    callback: (messages: Message<T>[]) => void,
+    onError?: (error: FetchError | Error) => void
+  ): void
   unsubscribeAllUpToDateSubscribers(): void
   unsubscribeAll(): void
   subscribeOnceToUpToDate(
     callback: () => void,
     error: (err: FetchError | Error) => void
   ): () => void
+
+  isUpToDate: boolean
+  shapeId?: string
 }
 
 /**
@@ -463,14 +469,14 @@ export class ShapeStream<T extends Row = Row>
  *     })
  */
 export class Shape<T extends Row = Row> {
-  private stream: ShapeStream<T>
+  private stream: ShapeStreamInterface<T>
 
   private data: ShapeData<T> = new Map()
   private subscribers = new Map<number, ShapeChangedCallback<T>>()
   public error: FetchError | false = false
   private hasNotifiedSubscribersUpToDate: boolean = false
 
-  constructor(stream: ShapeStream<T>) {
+  constructor(stream: ShapeStreamInterface<T>) {
     this.stream = stream
     this.stream.subscribe(this.process.bind(this), this.handleError.bind(this))
     const unsubscribe = this.stream.subscribeOnceToUpToDate(
