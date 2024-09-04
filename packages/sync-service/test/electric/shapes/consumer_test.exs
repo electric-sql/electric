@@ -115,6 +115,7 @@ defmodule Electric.Shapes.ConsumerTest do
                registry: registry_name,
                shape_cache: {Mock.ShapeCache, []},
                storage: {Mock.Storage, []},
+               chunk_bytes_threshold: 10_000,
                prepare_tables_fn: &prepare_tables_fn/2},
               id: {Shapes.Supervisor, shape_id}
             )
@@ -140,11 +141,11 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Consumer.name(@shape_id1))
 
       Mock.Storage
-      |> expect(:append_to_log!, 2, fn @shape_id1, _changes, _, _ -> :ok end)
+      |> expect(:append_to_log!, 2, fn @shape_id1, _changes, _ -> :ok end)
       |> allow(self(), Consumer.name(@shape_id1))
 
       Mock.Storage
-      |> expect(:append_to_log!, 0, fn @shape_id2, _changes, _, _ -> :ok end)
+      |> expect(:append_to_log!, 0, fn @shape_id2, _changes, _ -> :ok end)
       |> allow(self(), Consumer.name(@shape_id2))
 
       ref = make_ref()
@@ -155,7 +156,8 @@ defmodule Electric.Shapes.ConsumerTest do
         %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "1"}
+          record: %{"id" => "1"},
+          log_offset: LogOffset.first()
         })
 
       assert :ok = Support.TransactionProducer.emit(ctx.producer, [txn])
@@ -183,12 +185,14 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.Storage
       |> expect(:append_to_log!, 2, fn
-        @shape_id1, [%{value: record}], _, {@shape_id1, _} ->
-          assert record["id"] == "1"
+        @shape_id1, [{_offset, serialized_record}], {@shape_id1, _} ->
+          record = Jason.decode!(serialized_record)
+          assert record["value"]["id"] == "1"
           :ok
 
-        @shape_id2, [%{value: record}], _, {@shape_id2, _} ->
-          assert record["id"] == "2"
+        @shape_id2, [{_offset, serialized_record}], {@shape_id2, _} ->
+          record = Jason.decode!(serialized_record)
+          assert record["value"]["id"] == "2"
           :ok
       end)
       |> allow(self(), Consumer.name(@shape_id1))
@@ -204,15 +208,18 @@ defmodule Electric.Shapes.ConsumerTest do
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "1"}
+          record: %{"id" => "1"},
+          log_offset: LogOffset.first()
         })
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "other_table"},
-          record: %{"id" => "2"}
+          record: %{"id" => "2"},
+          log_offset: LogOffset.increment(LogOffset.first(), 1)
         })
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "something else"},
-          record: %{"id" => "3"}
+          record: %{"id" => "3"},
+          log_offset: LogOffset.increment(LogOffset.first(), 2)
         })
 
       assert :ok = Support.TransactionProducer.emit(ctx.producer, [txn])
@@ -240,13 +247,14 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Shapes.Consumer.name(@shape_id2))
 
       Mock.Storage
-      |> expect(:append_to_log!, fn @shape_id2, _, _, _ -> :ok end)
+      |> expect(:append_to_log!, fn @shape_id2, _, _ -> :ok end)
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "1"}
+          record: %{"id" => "1"},
+          log_offset: LogOffset.first()
         })
 
       assert :ok = Support.TransactionProducer.emit(ctx.producer, [txn])
@@ -339,7 +347,7 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Consumer.name(@shape_id1))
 
       Mock.Storage
-      |> expect(:append_to_log!, fn @shape_id1, _, _, _ -> :ok end)
+      |> expect(:append_to_log!, fn @shape_id1, _, _ -> :ok end)
 
       ref = make_ref()
       Registry.register(ctx.registry, @shape_id1, ref)
@@ -348,7 +356,8 @@ defmodule Electric.Shapes.ConsumerTest do
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "1"}
+          record: %{"id" => "1"},
+          log_offset: LogOffset.first()
         })
 
       assert :ok = Support.TransactionProducer.emit(ctx.producer, [txn])
@@ -361,6 +370,7 @@ defmodule Electric.Shapes.ConsumerTest do
       {Support.ComponentSetup, :with_registry},
       {Support.ComponentSetup, :with_in_memory_storage},
       {Support.ComponentSetup, :with_persistent_kv},
+      {Support.ComponentSetup, :with_log_chunking},
       {Support.ComponentSetup, :with_transaction_producer}
     ]
 

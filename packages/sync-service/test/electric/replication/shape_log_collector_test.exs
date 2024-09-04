@@ -73,6 +73,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       shape_cache_opts =
         [
           storage: {MockStorage, []},
+          chunk_bytes_threshold: 10_000,
           inspector: {MockInspector, []},
           shape_status: MockShapeStatus,
           shape_meta_table: shape_meta_table,
