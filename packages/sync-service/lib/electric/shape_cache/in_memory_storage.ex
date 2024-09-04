@@ -1,6 +1,5 @@
 defmodule Electric.ShapeCache.InMemoryStorage do
   use Agent
-  alias Electric.ShapeCache.LogChunker
   alias Electric.ConcurrentStream
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Querying
@@ -17,9 +16,6 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     chunk_checkpoint_ets_table_name =
       Access.get(opts, :chunk_checkpoint_ets_table, :chunk_checkpoint_ets_table)
 
-    chunk_bytes_threshold =
-      Access.get(opts, :chunk_bytes_threshold, LogChunker.default_chunk_size_threshold())
-
     {:ok,
      %{
        snapshot_ets_table_base: snapshot_ets_table_name,
@@ -28,7 +24,6 @@ defmodule Electric.ShapeCache.InMemoryStorage do
        snapshot_ets_table: nil,
        log_ets_table: nil,
        chunk_checkpoint_ets_table: nil,
-       chunk_bytes_threshold: chunk_bytes_threshold,
        shape_id: nil
      }}
   end
@@ -191,44 +186,22 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     end)
   end
 
-  def append_to_log!(shape_id, log_items, log_state, opts) do
+  def append_to_log!(shape_id, log_items, opts) do
     log_ets_table = opts.log_ets_table
     chunk_checkpoint_ets_table = opts.chunk_checkpoint_ets_table
-    chunk_bytes_threshold = opts.chunk_bytes_threshold
 
     log_items
-    |> Enum.flat_map_reduce(log_state, fn log_item, log_state ->
-      log_key = {shape_id, storage_offset(log_item.offset)}
-      json_log_item = Jason.encode!(log_item)
-      current_chunk_size = log_state.current_chunk_byte_size
-
-      case LogChunker.add_to_chunk(json_log_item, current_chunk_size, chunk_bytes_threshold) do
-        {:ok, new_chunk_size} ->
-          {
-            [{log_key, json_log_item}],
-            %{log_state | current_chunk_byte_size: new_chunk_size}
-          }
-
-        {:threshold_exceeded, new_chunk_size} ->
-          {
-            [
-              {log_key, json_log_item},
-              {{shape_id, storage_offset(log_item.offset)}, :checkpoint}
-            ],
-            %{log_state | current_chunk_byte_size: new_chunk_size}
-          }
-      end
+    |> Enum.map(fn
+      {:chunk_boundary, offset} -> {storage_offset(offset), :checkpoint}
+      {offset, json_log_item} -> {{shape_id, storage_offset(offset)}, json_log_item}
     end)
-    |> then(fn {items, log_state} ->
-      items
-      |> Enum.split_with(fn item -> match?({_, :checkpoint}, item) end)
-      |> then(fn {checkpoints, log_items} ->
-        :ets.insert(chunk_checkpoint_ets_table, checkpoints)
-        :ets.insert(log_ets_table, log_items)
-      end)
-
-      log_state
+    |> Enum.split_with(fn item -> match?({_, :checkpoint}, item) end)
+    |> then(fn {checkpoints, log_items} ->
+      :ets.insert(chunk_checkpoint_ets_table, checkpoints)
+      :ets.insert(log_ets_table, log_items)
     end)
+
+    :ok
   end
 
   def cleanup!(shape_id, opts) do

@@ -93,9 +93,7 @@ persistent_kv =
     {Electric.PersistentKV.Filesystem, :new!, root: persistent_state_path}
   )
 
-common_storage_opts = [
-  chunk_bytes_threshold: env!("LOG_CHUNK_BYTES_THRESHOLD", :integer, 10_000)
-]
+chunk_bytes_threshold = env!("LOG_CHUNK_BYTES_THRESHOLD", :integer, 10_000)
 
 {storage_mod, storage_opts} =
   env!(
@@ -118,12 +116,13 @@ common_storage_opts = [
     {Electric.ShapeCache.MixedDiskStorage, storage_dir: mixed_file_path}
   )
 
-storage = {storage_mod, storage_opts ++ common_storage_opts}
+storage = {storage_mod, storage_opts}
 
 config :electric,
   allow_shape_deletion: enable_integration_testing,
   cache_max_age: cache_max_age,
   cache_stale_age: cache_stale_age,
+  chunk_bytes_threshold: chunk_bytes_threshold,
   # Used in telemetry
   environment: config_env(),
   instance_id: instance_id,

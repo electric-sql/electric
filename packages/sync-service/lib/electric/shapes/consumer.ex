@@ -3,6 +3,7 @@ defmodule Electric.Shapes.Consumer do
     restart: :transient,
     significant: true
 
+  alias Electric.ShapeCache.LogChunker
   alias Electric.LogItems
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
@@ -135,6 +136,7 @@ defmodule Electric.Shapes.Consumer do
       shape: shape,
       shape_id: shape_id,
       log_state: log_state,
+      chunk_bytes_threshold: chunk_bytes_threshold,
       shape_cache: {shape_cache, shape_cache_opts},
       registry: registry,
       storage: storage
@@ -162,12 +164,12 @@ defmodule Electric.Shapes.Consumer do
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
 
       relevant_changes != [] ->
-        new_log_state =
-          relevant_changes
-          |> Enum.flat_map(&LogItems.from_change(&1, xid, Shape.pk(shape, &1.relation)))
-          # TODO: what's a graceful way to handle failure to append to log?
-          #       Right now we'll just fail everything
-          |> then(&ShapeCache.Storage.append_to_log!(shape_id, &1, log_state, storage))
+        {log_entries, new_log_state} =
+          prepare_log_entries(relevant_changes, xid, shape, log_state, chunk_bytes_threshold)
+
+        # TODO: what's a graceful way to handle failure to append to log?
+        #       Right now we'll just fail everything
+        :ok = ShapeCache.Storage.append_to_log!(shape_id, log_entries, storage)
 
         shape_cache.update_shape_latest_offset(shape_id, last_log_offset, shape_cache_opts)
 
@@ -206,5 +208,42 @@ defmodule Electric.Shapes.Consumer do
     for {pid, ref} <- monitors, do: send(pid, {__MODULE__, ref, xid})
 
     state
+  end
+
+  @spec prepare_log_entries(
+          Enumerable.t(Electric.Replication.Changes.data_change()),
+          non_neg_integer() | nil,
+          Shape.t(),
+          ShapeCache.Storage.log_state(),
+          non_neg_integer()
+        ) :: {Enumerable.t(ShapeCache.Storage.log_item()), ShapeCache.Storage.log_state()}
+  defp prepare_log_entries(
+         changes,
+         xid,
+         shape,
+         log_state,
+         chunk_bytes_threshold
+       ) do
+    {log_items, new_log_state} =
+      changes
+      |> Stream.flat_map(&LogItems.from_change(&1, xid, Shape.pk(shape, &1.relation)))
+      |> Enum.flat_map_reduce(log_state, fn log_item,
+                                            %{current_chunk_byte_size: chunk_size} = state ->
+        json_log_item = Jason.encode!(log_item)
+
+        case LogChunker.add_to_chunk(json_log_item, chunk_size, chunk_bytes_threshold) do
+          {:ok, new_chunk_size} ->
+            {[{log_item.offset, json_log_item}],
+             %{state | current_chunk_byte_size: new_chunk_size}}
+
+          {:threshold_exceeded, new_chunk_size} ->
+            {
+              [{log_item.offset, json_log_item}, {:chunk_boundary, log_item.offset}],
+              %{state | current_chunk_byte_size: new_chunk_size}
+            }
+        end
+      end)
+
+    {log_items, new_log_state}
   end
 end

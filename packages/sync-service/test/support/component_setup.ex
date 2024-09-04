@@ -44,6 +44,10 @@ defmodule Support.ComponentSetup do
     %{persistent_kv: kv}
   end
 
+  def with_log_chunking(_ctx) do
+    %{chunk_bytes_threshold: 10_000}
+  end
+
   def with_shape_cache(ctx, additional_opts \\ []) do
     shape_meta_table = :"shape_meta_#{full_test_name(ctx)}"
     server = :"shape_cache_#{full_test_name(ctx)}"
@@ -54,6 +58,7 @@ defmodule Support.ComponentSetup do
         shape_meta_table: shape_meta_table,
         inspector: ctx.inspector,
         storage: ctx.storage,
+        chunk_bytes_threshold: ctx.chunk_bytes_threshold,
         db_pool: ctx.pool,
         persistent_kv: ctx.persistent_kv,
         registry: ctx.registry,
@@ -131,6 +136,7 @@ defmodule Support.ComponentSetup do
       &with_registry/1,
       &with_inspector/1,
       &with_persistent_kv/1,
+      &with_log_chunking/1,
       &with_cub_db_storage/1,
       &with_shape_log_collector/1,
       &with_shape_cache/1,
@@ -148,6 +154,8 @@ defmodule Support.ComponentSetup do
       long_poll_timeout: Access.get(overrides, :long_poll_timeout, 5_000),
       max_age: Access.get(overrides, :max_age, 60),
       stale_age: Access.get(overrides, :stale_age, 300),
+      chunk_bytes_threshold:
+        Access.get(overrides, :chunk_bytes_threshold, ctx.chunk_bytes_threshold),
       allow_shape_deletion: Access.get(overrides, :allow_shape_deletion, true)
     ]
     |> Keyword.merge(overrides)

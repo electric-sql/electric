@@ -2,8 +2,6 @@ defmodule Electric.ShapeCache.LogChunkerTest do
   use ExUnit.Case, async: true
   alias Electric.ShapeCache.LogChunker
 
-  @test_shape_id "test_shape_id"
-
   describe "add_chunk/3" do
     test "should reset counter upon exceeding threshold", _ do
       chunk_bytes = "test"

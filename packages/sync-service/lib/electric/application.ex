@@ -35,6 +35,7 @@ defmodule Electric.Application do
          storage: storage,
          inspector: inspector,
          prepare_tables_fn: prepare_tables_fn,
+         chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
          log_producer: Electric.Replication.ShapeLogCollector,
          persistent_kv: persistent_kv,
          registry: Registry.ShapeChanges}

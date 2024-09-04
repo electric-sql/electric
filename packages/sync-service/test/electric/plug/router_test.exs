@@ -620,7 +620,7 @@ defmodule Electric.Plug.RouterTest do
       opts: opts,
       db_conn: db_conn
     } do
-      {_, %{chunk_bytes_threshold: threshold}} = Access.fetch!(opts, :storage)
+      threshold = Access.fetch!(opts, :chunk_bytes_threshold)
 
       first_val = String.duplicate("a", round(threshold * 0.6))
       second_val = String.duplicate("b", round(threshold * 0.7))
