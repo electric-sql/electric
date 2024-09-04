@@ -11,4 +11,4 @@
 # See also:
 # - https://elixirforum.com/t/elixir-erlang-docker-containers-ram-usage-on-different-oss-kernels
 # - https://elixirforum.com/t/beam-vm-consumes-big-amounts-of-memory-virt-vs-erlang-memory-total
-+Q 1024
++Q 512000
