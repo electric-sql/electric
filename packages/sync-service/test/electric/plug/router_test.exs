@@ -19,6 +19,7 @@ defmodule Electric.Plug.RouterTest do
   @moduletag :capture_log
 
   @first_offset to_string(LogOffset.first())
+  @up_to_date %{"headers" => %{"control" => "up-to-date"}}
 
   describe "/" do
     test "returns 200" do
@@ -63,7 +64,7 @@ defmodule Electric.Plug.RouterTest do
                    "value" => "test value 1"
                  }
                },
-               %{"headers" => %{"control" => "up-to-date"}}
+               @up_to_date
              ] = Jason.decode!(conn.resp_body)
     end
 
@@ -92,7 +93,7 @@ defmodule Electric.Plug.RouterTest do
         []
       )
 
-      [shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+      shape_id = get_resp_shape_id(conn)
 
       conn =
         conn("GET", "/v1/shape/items?shape_id=#{shape_id}&offset=0_0&live") |> Router.call(opts)
@@ -110,13 +111,13 @@ defmodule Electric.Plug.RouterTest do
         |> Router.call(opts)
 
       assert %{status: 200} = conn
-      assert [shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+      shape1_id = get_resp_shape_id(conn)
 
       assert [%{"value" => %{"value" => "test value 1"}}, %{"headers" => _}] =
                Jason.decode!(conn.resp_body)
 
       assert %{status: 202} =
-               conn("DELETE", "/v1/shape/items?shape_id=#{shape_id}")
+               conn("DELETE", "/v1/shape/items?shape_id=#{shape1_id}")
                |> Router.call(opts)
 
       Postgrex.query!(db_conn, "DELETE FROM items", [])
@@ -127,8 +128,8 @@ defmodule Electric.Plug.RouterTest do
         |> Router.call(opts)
 
       assert %{status: 200} = conn
-      assert [shape_id2] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
-      assert shape_id != shape_id2
+      shape2_id = get_resp_shape_id(conn)
+      assert shape1_id != shape2_id
 
       assert [%{"value" => %{"value" => "test value 2"}}, %{"headers" => _}] =
                Jason.decode!(conn.resp_body)
@@ -148,7 +149,7 @@ defmodule Electric.Plug.RouterTest do
         |> Router.call(opts)
 
       assert %{status: 200} = conn
-      assert [shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+      shape_id = get_resp_shape_id(conn)
 
       key =
         Changes.build_key({"public", "foo"}, %{"first" => "a", "second" => "b", "third" => "c"}, [
@@ -169,7 +170,7 @@ defmodule Electric.Plug.RouterTest do
                    "fourth" => "d"
                  }
                },
-               %{"headers" => %{"control" => "up-to-date"}}
+               @up_to_date
              ] = Jason.decode!(conn.resp_body)
 
       task =
@@ -208,7 +209,7 @@ defmodule Electric.Plug.RouterTest do
                    "fourth" => "h"
                  }
                },
-               %{"headers" => %{"control" => "up-to-date"}}
+               @up_to_date
              ] = Jason.decode!(conn.resp_body)
     end
 
@@ -219,16 +220,15 @@ defmodule Electric.Plug.RouterTest do
     test "GET received only a diff when receiving updates", %{opts: opts, db_conn: db_conn} do
       conn = conn("GET", "/v1/shape/wide_table?offset=-1") |> Router.call(opts)
       assert %{status: 200} = conn
-      [shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+      shape_id = get_resp_shape_id(conn)
 
       assert [
                %{
                  "value" => %{"id" => _, "value1" => _, "value2" => _, "value3" => _},
                  "key" => key
                },
-               _
-             ] =
-               Jason.decode!(conn.resp_body)
+               @up_to_date
+             ] = Jason.decode!(conn.resp_body)
 
       task =
         Task.async(fn ->
@@ -255,16 +255,15 @@ defmodule Electric.Plug.RouterTest do
     } do
       conn = conn("GET", "/v1/shape/wide_table?offset=-1") |> Router.call(opts)
       assert %{status: 200} = conn
-      [shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+      shape_id = get_resp_shape_id(conn)
 
       assert [
                %{
                  "value" => %{"id" => _, "value1" => _, "value2" => _, "value3" => _},
                  "key" => key
                },
-               _
-             ] =
-               Jason.decode!(conn.resp_body)
+               @up_to_date
+             ] = Jason.decode!(conn.resp_body)
 
       task =
         Task.async(fn ->
@@ -304,7 +303,7 @@ defmodule Electric.Plug.RouterTest do
                  "value" => %{"id" => "3", "value1" => _, "value2" => _, "value3" => _},
                  "key" => key3
                },
-               _
+               @up_to_date
              ] = Jason.decode!(conn.resp_body)
 
       assert key2 != key
@@ -320,7 +319,7 @@ defmodule Electric.Plug.RouterTest do
          %{opts: opts, db_conn: db_conn} do
       conn = conn("GET", "/v1/shape/test_table?offset=-1") |> Router.call(opts)
       assert %{status: 200} = conn
-      [shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+      shape_id = get_resp_shape_id(conn)
 
       assert [%{"value" => %{"col1" => "test1", "col2" => "test2"}, "key" => key}, _] =
                Jason.decode!(conn.resp_body)
@@ -355,7 +354,7 @@ defmodule Electric.Plug.RouterTest do
                  "value" => %{"col1" => "test4", "col2" => "test5"},
                  "key" => key3
                },
-               _
+               @up_to_date
              ] = Jason.decode!(conn.resp_body)
 
       assert key2 != key
@@ -374,7 +373,7 @@ defmodule Electric.Plug.RouterTest do
         |> Router.call(opts)
 
       assert %{status: 200} = conn
-      [shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+      shape_id = get_resp_shape_id(conn)
 
       assert [_] = Jason.decode!(conn.resp_body)
 
@@ -398,7 +397,7 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 200} = conn = Task.await(task)
 
       assert [%{"value" => %{"value" => "yes!"}}, _] = Jason.decode!(conn.resp_body)
-      assert [new_offset] = Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset")
+      new_offset = get_resp_last_offset(conn)
 
       assert %{status: 200} =
                conn =
@@ -427,8 +426,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 200} = conn
       shape_id = get_resp_shape_id(conn)
-
-      assert [op, %{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
+      assert [op, @up_to_date] = Jason.decode!(conn.resp_body)
 
       assert op == %{
                "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
@@ -453,9 +451,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 200} = conn = Task.await(task)
       new_offset = get_resp_last_offset(conn)
-
-      assert [op1, op2, %{"headers" => %{"control" => "up-to-date"}}] =
-               Jason.decode!(conn.resp_body)
+      assert [op1, op2, @up_to_date] = Jason.decode!(conn.resp_body)
 
       assert [
                %{
@@ -489,9 +485,7 @@ defmodule Electric.Plug.RouterTest do
       end)
 
       assert %{status: 200} = conn = Task.await(task)
-
-      assert [op1, op2, %{"headers" => %{"control" => "up-to-date"}}] =
-               Jason.decode!(conn.resp_body)
+      assert [op1, op2, @up_to_date] = Jason.decode!(conn.resp_body)
 
       assert [
                %{
@@ -540,9 +534,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 200} = conn
       shape_id = get_resp_shape_id(conn)
-
-      assert [op1, op2, %{"headers" => %{"control" => "up-to-date"}}] =
-               Jason.decode!(conn.resp_body)
+      assert [op1, op2, @up_to_date] = Jason.decode!(conn.resp_body)
 
       assert [op1, op2] == [
                %{
@@ -577,9 +569,7 @@ defmodule Electric.Plug.RouterTest do
       end)
 
       assert %{status: 200} = conn = Task.await(task)
-
-      assert [op1, op2, %{"headers" => %{"control" => "up-to-date"}}] =
-               Jason.decode!(conn.resp_body)
+      assert [op1, op2, @up_to_date] = Jason.decode!(conn.resp_body)
 
       assert [
                %{
