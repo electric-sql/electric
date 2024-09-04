@@ -201,7 +201,10 @@ defmodule Electric.ShapeCache do
 
     send(self(), :start_log_producer)
 
-    {:consumer, state, subscribe_to: [{opts.log_producer, max_demand: 1, partition: :relation}]}
+    {:consumer, state,
+     subscribe_to: [
+       {opts.log_producer, max_demand: 1, selector: &is_struct(&1, Changes.Relation)}
+     ]}
   end
 
   @impl GenStage

@@ -32,6 +32,9 @@ defmodule Electric.Shapes.DispatcherTest do
     {pid, ref}
   end
 
+  defp is_even(n), do: rem(n, 2) == 0
+  defp is_odd(n), do: rem(n, 2) == 1
+
   test "demand is only sent to producer once all subscribers have processed the message" do
     dispatcher = dispatcher()
 
@@ -40,13 +43,13 @@ defmodule Electric.Shapes.DispatcherTest do
     c3 = {_pid3, ref3} = consumer(3)
 
     # we only want to send a single event for any number of consumers
-    {:ok, 1, dispatcher} = D.subscribe([partition: :transaction], c1, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([partition: :transaction], c2, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([partition: :transaction], c3, dispatcher)
+    {:ok, 1, dispatcher} = D.subscribe([selector: &is_even/1], c1, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c2, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c3, dispatcher)
 
-    event = make_ref()
+    event = 2
 
-    {:ok, [], dispatcher} = D.dispatch([{:transaction, event}], 1, dispatcher)
+    {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
     assert_receive {C, ^ref1, [^event]}
     assert {:ok, 0, dispatcher} = D.ask(1, c1, dispatcher)
@@ -58,47 +61,23 @@ defmodule Electric.Shapes.DispatcherTest do
     assert {:ok, 1, _dispatcher} = D.ask(1, c3, dispatcher)
   end
 
-  test "relation subscribers only receive relations" do
+  test "subscribers only receive messages that pass their selector" do
     dispatcher = dispatcher()
 
     c1 = {_pid1, ref1} = consumer(1)
     c2 = {_pid2, ref2} = consumer(2)
     c3 = {_pid3, ref3} = consumer(3)
 
-    {:ok, 1, dispatcher} = D.subscribe([partition: :relation], c1, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([partition: :transaction], c2, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([partition: :transaction], c3, dispatcher)
+    {:ok, 1, dispatcher} = D.subscribe([selector: &is_odd/1], c1, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c2, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c3, dispatcher)
 
-    event = make_ref()
+    event = 2
 
-    {:ok, [], dispatcher} = D.dispatch([{:transaction, event}], 1, dispatcher)
+    {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
     refute_receive {C, ^ref1, [^event]}
 
-    assert_receive {C, ^ref2, [^event]}
-    assert {:ok, 0, dispatcher} = D.ask(1, c2, dispatcher)
-    assert_receive {C, ^ref3, [^event]}
-    assert {:ok, 1, _dispatcher} = D.ask(1, c3, dispatcher)
-  end
-
-  test "transaction subscribers receive relations and transactions" do
-    dispatcher = dispatcher()
-
-    c1 = {_pid1, ref1} = consumer(1)
-    c2 = {_pid2, ref2} = consumer(2)
-    c3 = {_pid3, ref3} = consumer(3)
-
-    # we only want to send a single event for any number of consumers
-    {:ok, 1, dispatcher} = D.subscribe([partition: :relation], c1, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([partition: :transaction], c2, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([partition: :transaction], c3, dispatcher)
-
-    event = make_ref()
-
-    {:ok, [], dispatcher} = D.dispatch([{:relation, event}], 1, dispatcher)
-
-    assert_receive {C, ^ref1, [^event]}
-    assert {:ok, 0, dispatcher} = D.ask(1, c1, dispatcher)
     assert_receive {C, ^ref2, [^event]}
     assert {:ok, 0, dispatcher} = D.ask(1, c2, dispatcher)
     assert_receive {C, ^ref3, [^event]}
@@ -112,14 +91,13 @@ defmodule Electric.Shapes.DispatcherTest do
     c2 = {_pid2, ref2} = consumer(2)
     c3 = {_pid3, ref3} = consumer(3)
 
-    # we only want to send a single event for any number of consumers
-    {:ok, 1, dispatcher} = D.subscribe([partition: :relation], c1, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([partition: :transaction], c2, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([partition: :transaction], c3, dispatcher)
+    {:ok, 1, dispatcher} = D.subscribe([selector: &is_even/1], c1, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c2, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c3, dispatcher)
 
-    event = make_ref()
+    event = 2
 
-    {:ok, [], dispatcher} = D.dispatch([{:relation, event}], 1, dispatcher)
+    {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
     assert_receive {C, ^ref1, [^event]}
     assert {:ok, 0, dispatcher} = D.ask(1, c1, dispatcher)
@@ -139,14 +117,13 @@ defmodule Electric.Shapes.DispatcherTest do
     c2 = {_pid2, ref2} = consumer(2)
     c3 = {_pid3, ref3} = consumer(3)
 
-    # we only want to send a single event for any number of consumers
-    {:ok, 1, dispatcher} = D.subscribe([partition: :relation], c1, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([partition: :transaction], c2, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([partition: :transaction], c3, dispatcher)
+    {:ok, 1, dispatcher} = D.subscribe([], c1, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c2, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c3, dispatcher)
 
-    event = make_ref()
+    event = 2
 
-    {:ok, [], dispatcher} = D.dispatch([{:relation, event}], 1, dispatcher)
+    {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
     {:ok, 0, dispatcher} = D.cancel(c2, dispatcher)
 
@@ -169,13 +146,13 @@ defmodule Electric.Shapes.DispatcherTest do
     c3 = {_pid3, _ref3} = consumer(3)
 
     # we only want to send a single event for any number of consumers
-    {:ok, 1, dispatcher} = D.subscribe([partition: :relation], c1, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([partition: :transaction], c2, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([partition: :transaction], c3, dispatcher)
+    {:ok, 1, dispatcher} = D.subscribe([], c1, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c2, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c3, dispatcher)
 
-    event = make_ref()
+    event = 2
 
-    {:ok, [], dispatcher} = D.dispatch([{:relation, event}], 1, dispatcher)
+    {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
     assert_receive {C, ^ref1, [^event]}
     assert {:ok, 0, dispatcher} = D.ask(1, c1, dispatcher)

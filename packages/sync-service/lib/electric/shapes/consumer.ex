@@ -76,7 +76,7 @@ defmodule Electric.Shapes.Consumer do
         monitors: []
       })
 
-    {:consumer, state, subscribe_to: [{producer, [max_demand: 1, partition: :transaction]}]}
+    {:consumer, state, subscribe_to: [{producer, [max_demand: 1, selector: nil]}]}
   end
 
   def handle_call(:initial_state, _from, %{snapshot_xmin: xmin, latest_offset: offset} = state) do

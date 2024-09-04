@@ -1,21 +1,33 @@
 defmodule Electric.Shapes.Dispatcher do
   @moduledoc """
-  Dispatches transactions and relations to consumers
+  Dispatches transactions and relations to consumers filtered according to the
+  subscriber's `selector` function.
 
-  Has two kinds of subscribers:
+  To receive all messages, don't pass a selector function or use `nil`, e.g.
 
-  - shape consumers which receive both transaction and relation/metadata
-    messages
-  - shape cache consumers which only receive metadata messages
+  ```
+  def init(producer) do
+    {:consumer, :nostate, subscribe_to: [{producer, [max_demand: 1, selector: nil]}]}
+  end
 
+  ```
 
   The essential behaviour is that the dispatcher only asks the producer for
   more demand once all relevant subscribers have processed the last message and
   asked for the next.
 
-  Demand is always `1` -- consumers should only ever ask for a single message
-  from the producer, the dispatcher should only ever send 1 message from the
-  producer.
+  This behaviour is subtly different from `GenStage.BroadcastDispatcher` in
+  that events that don't match the consumer's selector do not generate demand.
+  We only wait for the consumers who received the event to ack successful
+  processing before forwarding demand onto the producer.
+
+  This is not a generalised dispatcher, its behaviour is specialised to our
+  requirements. Demand is always 1 -- consumers MUST only ever ask for a single
+  message from the producer and the dispatcher MUST only ever receive
+  1 message from the producer to dispatch.
+
+  This can be done by subscribing with `max_demand: 1` or using manual demand
+  and calling `GenStage.ask(producer, 1)`.
   """
 
   require Logger
@@ -24,12 +36,12 @@ defmodule Electric.Shapes.Dispatcher do
 
   @impl GenStage.Dispatcher
   def init(_opts) do
-    {:ok, {0, 0, nil, %{}, %{}}}
+    {:ok, {0, 0, nil, [], MapSet.new()}}
   end
 
   @impl GenStage.Dispatcher
-  def subscribe(opts, {pid, _ref} = from, {n, count, pending, subs, pids}) do
-    if Map.has_key?(pids, pid) do
+  def subscribe(opts, {pid, _ref} = from, {n, waiting, pending, subs, pids}) do
+    if MapSet.member?(pids, pid) do
       Logger.error(fn ->
         "#{inspect(pid)} is already registered with #{inspect(self())}. " <>
           "This subscription has been discarded."
@@ -37,58 +49,48 @@ defmodule Electric.Shapes.Dispatcher do
 
       {:error, :already_subscribed}
     else
-      case Keyword.fetch(opts, :partition) do
-        {:ok, partition} when partition in [:transaction, :relation] ->
-          partitions =
-            case partition do
-              :transaction -> [:transaction, :relation]
-              :relation -> [:relation]
-            end
+      selector =
+        case Keyword.get(opts, :selector) do
+          nil ->
+            nil
 
-          subs =
-            Enum.reduce(partitions, subs, fn partition, subs ->
-              Map.update(subs, partition, [from], &[from | &1])
-            end)
+          selector when is_function(selector, 1) ->
+            selector
 
-          demand = if n == 0, do: 1, else: 0
+          other ->
+            raise ArgumentError,
+                  ":selector option must be passed a unary function, got: #{inspect(other)}"
+        end
 
-          {:ok, demand, {n + 1, count, pending, subs, Map.put(pids, pid, partitions)}}
+      subs = [{from, selector} | subs]
 
-        {:ok, unknown_partition} ->
-          Logger.error(fn ->
-            ":partition should be one of [:relation, :all], got: #{inspect(unknown_partition)}"
-          end)
+      demand = if n == 0, do: 1, else: 0
 
-          {:error, :invalid_partition}
-
-        :error ->
-          {:error, :missing_partition}
-      end
+      {:ok, demand, {n + 1, waiting, pending, subs, MapSet.put(pids, pid)}}
     end
   end
 
   @impl GenStage.Dispatcher
-  def cancel({pid, _ref} = from, {n, count, pending, subs, pids}) do
-    if partitions = Map.get(pids, pid, nil) do
-      subs =
-        Enum.reduce(partitions, subs, fn partition, subs ->
-          Map.update!(subs, partition, &List.delete(&1, from))
-        end)
+  def cancel({pid, _ref} = from, {n, waiting, pending, subs, pids}) do
+    if MapSet.member?(pids, pid) do
+      subs = List.keydelete(subs, from, 0)
 
       if pending && MapSet.member?(pending, from) do
-        case count - 1 do
+        case waiting - 1 do
           0 ->
-            {:ok, 1, {n - 1, 0, nil, subs, Map.delete(pids, pid)}}
+            # the only remaining unacked subscriber has cancelled, so we
+            # return some demand
+            {:ok, 1, {n - 1, 0, nil, subs, MapSet.delete(pids, pid)}}
 
-          new_count ->
+          new_waiting ->
             {:ok, 0,
-             {n - 1, new_count, MapSet.delete(pending, from), subs, Map.delete(pids, pid)}}
+             {n - 1, new_waiting, MapSet.delete(pending, from), subs, MapSet.delete(pids, pid)}}
         end
       else
-        {:ok, 0, {n - 1, count, pending, subs, Map.delete(pids, pid)}}
+        {:ok, 0, {n - 1, waiting, pending, subs, MapSet.delete(pids, pid)}}
       end
     else
-      {:ok, 0, {n, count, pending, subs, pids}}
+      {:ok, 0, {n, waiting, pending, subs, pids}}
     end
   end
 
@@ -104,30 +106,31 @@ defmodule Electric.Shapes.Dispatcher do
     {:ok, 1, {n, 0, nil, subs, pids}}
   end
 
-  def ask(1, from, {n, count, pending, subs, pids}) when count > 1 do
-    {:ok, 0, {n, count - 1, MapSet.delete(pending, from), subs, pids}}
+  def ask(1, from, {n, waiting, pending, subs, pids}) when waiting > 1 do
+    {:ok, 0, {n, waiting - 1, MapSet.delete(pending, from), subs, pids}}
   end
 
   @impl GenStage.Dispatcher
-  def dispatch([{partition, event}], _length, {n, 0, _pending, subs, pids})
-      when partition in [:transaction, :relation] do
-    subscriptions = Map.get(subs, partition, [])
-
-    {count, pending} =
-      subscriptions
-      |> Enum.reduce({0, MapSet.new()}, fn {pid, ref} = sub, {count, pending} ->
-        Process.send(pid, {:"$gen_consumer", {self(), ref}, [event]}, [:noconnect])
-        {count + 1, MapSet.put(pending, sub)}
+  def dispatch([event], _length, {n, 0, _pending, subs, pids}) do
+    {waiting, pending} =
+      subs
+      |> Enum.reduce({0, MapSet.new()}, fn {{pid, ref} = sub, selector}, {waiting, pending} ->
+        if subscriber_wants_message?(event, selector) do
+          Process.send(pid, {:"$gen_consumer", {self(), ref}, [event]}, [:noconnect])
+          {waiting + 1, MapSet.put(pending, sub)}
+        else
+          {waiting, pending}
+        end
       end)
       |> case do
         {0, _pending} ->
           {0, nil}
 
-        {count, pending} ->
-          {count, pending}
+        {waiting, pending} ->
+          {waiting, pending}
       end
 
-    {:ok, [], {n, count, pending, subs, pids}}
+    {:ok, [], {n, waiting, pending, subs, pids}}
   end
 
   @impl GenStage.Dispatcher
@@ -135,4 +138,7 @@ defmodule Electric.Shapes.Dispatcher do
     send(self(), msg)
     {:ok, state}
   end
+
+  defp subscriber_wants_message?(_event, nil), do: true
+  defp subscriber_wants_message?(event, selector), do: selector.(event)
 end

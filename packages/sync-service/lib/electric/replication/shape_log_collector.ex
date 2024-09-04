@@ -109,7 +109,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     Logger.info("Received Relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
     Logger.debug(fn -> "Relation received: #{inspect(rel)}" end)
 
-    {:noreply, [{:relation, rel}], %{state | producer: from}}
+    {:noreply, [rel], %{state | producer: from}}
   end
 
   # If no-one is listening to the replication stream, then just return without
@@ -138,7 +138,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     # we don't reply to this call. we only reply when we receive demand from
     # the consumers, signifying that every one has processed this txn
-    {:noreply, [{:transaction, txn}], %{state | producer: from}}
+    {:noreply, [txn], %{state | producer: from}}
   end
 
   defp remove_subscription(from, %{subscriptions: {count, set}} = state) do
