@@ -10,5 +10,6 @@ defmodule Support.TestUtils do
     changes
     |> Enum.map(&Changes.fill_key(&1, pk))
     |> Enum.flat_map(&LogItems.from_change(&1, xid, pk))
+    |> Enum.map(fn item -> {item.offset, Jason.encode!(item)} end)
   end
 end
