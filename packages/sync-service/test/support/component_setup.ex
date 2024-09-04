@@ -89,36 +89,28 @@ defmodule Support.ComponentSetup do
     }
   end
 
-  def with_transaction_producer(ctx) do
-    name = :"transaction_producer_#{full_test_name(ctx)}"
-    {:ok, _pid} = Support.TransactionProducer.start_link(name: name)
-
-    %{
-      shape_log_collector: name,
-      transaction_producer: name
-    }
-  end
-
   def with_shape_log_collector(ctx) do
     name = :"shape_log_collector_#{full_test_name(ctx)}"
 
     {:ok, _} =
       ShapeLogCollector.start_link(
         name: name,
-        inspector: ctx.inspector
+        inspector: ctx.inspector,
+        link_consumers: Map.get(ctx, :link_log_collector, true)
       )
 
     %{shape_log_collector: name}
   end
 
-  def with_replication_client(%{shape_cache: {shape_cache, shape_cache_opts}} = ctx) do
+  def with_replication_client(ctx) do
     replication_opts = [
       publication_name: ctx.publication_name,
       try_creating_publication?: true,
       slot_name: ctx.slot_name,
       transaction_received:
         {Electric.Replication.ShapeLogCollector, :store_transaction, [ctx.shape_log_collector]},
-      relation_received: {shape_cache, :handle_relation_msg, [shape_cache_opts]}
+      relation_received:
+        {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [ctx.shape_log_collector]}
     ]
 
     {:ok, pid} = ReplicationClient.start_link(ctx.db_config, replication_opts)

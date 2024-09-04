@@ -29,8 +29,9 @@ defmodule Support.TransactionConsumer do
     {:ok, producer} = Keyword.fetch(opts, :producer)
     {:ok, parent} = Keyword.fetch(opts, :parent)
     {:ok, id} = Keyword.fetch(opts, :id)
+    partition = Keyword.get(opts, :partition, :transaction)
 
-    {:consumer, {id, nil, parent}, subscribe_to: [{producer, []}]}
+    {:consumer, {id, nil, parent}, subscribe_to: [{producer, [partition: partition]}]}
   end
 
   def handle_subscribe(:producer, _options, from, {id, _, parent}) do

@@ -4,6 +4,7 @@ defmodule Electric.ShapeCacheTest do
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.{Relation, Column}
   alias Electric.Replication.LogOffset
+  alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
   alias Electric.ShapeCache.{Storage, ShapeStatus}
   alias Electric.Shapes
@@ -55,6 +56,10 @@ defmodule Electric.ShapeCacheTest do
 
   setup :verify_on_exit!
 
+  setup do
+    %{inspector: @stub_inspector}
+  end
+
   describe "get_or_create_shape_id/2" do
     setup [
       :with_in_memory_storage,
@@ -62,7 +67,7 @@ defmodule Electric.ShapeCacheTest do
       :with_log_chunking,
       :with_no_pool,
       :with_registry,
-      :with_transaction_producer
+      :with_shape_log_collector
     ]
 
     setup ctx do
@@ -91,7 +96,7 @@ defmodule Electric.ShapeCacheTest do
       :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
-      :with_transaction_producer
+      :with_shape_log_collector
     ]
 
     test "creates initial snapshot if one doesn't exist", %{storage: storage} = ctx do
@@ -379,7 +384,7 @@ defmodule Electric.ShapeCacheTest do
       :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
-      :with_transaction_producer
+      :with_shape_log_collector
     ]
 
     test "returns empty list initially", ctx do
@@ -448,7 +453,7 @@ defmodule Electric.ShapeCacheTest do
       :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
-      :with_transaction_producer
+      :with_shape_log_collector
     ]
 
     test "returns true for known shape id", ctx do
@@ -488,7 +493,7 @@ defmodule Electric.ShapeCacheTest do
       :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
-      :with_transaction_producer
+      :with_shape_log_collector
     ]
 
     test "returns :started for snapshots that have started", ctx do
@@ -646,7 +651,7 @@ defmodule Electric.ShapeCacheTest do
       :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
-      :with_transaction_producer
+      :with_shape_log_collector
     ]
 
     test "cleans up shape data and rotates the shape id", ctx do
@@ -699,7 +704,7 @@ defmodule Electric.ShapeCacheTest do
       :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
-      :with_transaction_producer
+      :with_shape_log_collector
     ]
 
     test "cleans up shape data and rotates the shape id", ctx do
@@ -770,12 +775,20 @@ defmodule Electric.ShapeCacheTest do
     @describetag :tmp_dir
     @snapshot_xmin 10
 
+    setup do
+      %{
+        # don't crash the log collector when the shape consumers get killed by our tests
+        link_log_collector: false,
+        inspector: Support.StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+      }
+    end
+
     setup [
       :with_cub_db_storage,
       :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
-      :with_transaction_producer,
+      :with_shape_log_collector,
       :with_no_pool
     ]
 
@@ -820,14 +833,16 @@ defmodule Electric.ShapeCacheTest do
 
       ref = Shapes.Consumer.monitor(shape_id)
 
-      Support.TransactionProducer.emit(context.transaction_producer, [
+      ShapeLogCollector.store_transaction(
         %Changes.Transaction{
           changes: @changes,
           xid: @xid,
           last_log_offset: @change_offset,
-          lsn: @lsn
-        }
-      ])
+          lsn: @lsn,
+          affected_relations: MapSet.new([{"public", "items"}])
+        },
+        context.shape_log_collector
+      )
 
       assert_receive {Shapes.Consumer, ^ref, @xid}
 
@@ -845,8 +860,8 @@ defmodule Electric.ShapeCacheTest do
       assert {^shape_id, ^offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
     end
 
-    test "restores relations", context do
-      %{shape_cache: {shape_cache, opts}} = context
+    test "restores relations", ctx do
+      %{shape_cache: {_shape_cache, opts}} = ctx
 
       rel = %Relation{
         id: 42,
@@ -858,12 +873,14 @@ defmodule Electric.ShapeCacheTest do
         ]
       }
 
-      assert :ok = shape_cache.handle_relation_msg(rel, opts)
+      assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.shape_log_collector)
+      assert {:ok, ^rel} = wait_for_relation(ctx, rel.id)
 
       assert_receive {Electric.PersistentKV.Memory, {:set, _, _}}
-      restart_shape_cache(context)
 
-      assert {:ok, ^rel} = wait_for_relation(context, rel.id, 2_000)
+      restart_shape_cache(ctx)
+
+      assert {:ok, ^rel} = wait_for_relation(ctx, rel.id, 2_000)
       assert ^rel = ShapeCache.get_relation(rel.id, opts)
     end
 
@@ -920,7 +937,7 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
-  describe "handle_relation_msg/2" do
+  describe "relation handling" do
     @describetag capture_log: true
 
     @describetag :tmp_dir
@@ -931,7 +948,7 @@ defmodule Electric.ShapeCacheTest do
       :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
-      :with_transaction_producer,
+      :with_shape_log_collector,
       :with_no_pool
     ]
 
@@ -1000,7 +1017,7 @@ defmodule Electric.ShapeCacheTest do
     end
 
     test "stores relation if it is not known", ctx do
-      %{shape_cache: {shape_cache, opts}} = ctx
+      %{shape_cache: {_shape_cache, opts}} = ctx
 
       relation_id = "rel1"
 
@@ -1015,7 +1032,7 @@ defmodule Electric.ShapeCacheTest do
       |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
       |> allow(self(), opts[:server])
 
-      assert :ok = shape_cache.handle_relation_msg(rel, opts)
+      assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.shape_log_collector)
 
       assert {:ok, ^rel} = wait_for_relation(ctx, relation_id)
     end
@@ -1045,19 +1062,19 @@ defmodule Electric.ShapeCacheTest do
       |> expect(:clean_column_info, 1, fn _, _ -> true end)
       |> allow(self(), opts[:server])
 
-      assert :ok = shape_cache.handle_relation_msg(rel, opts)
+      assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.shape_log_collector)
 
       Mock.Inspector
       |> expect(:clean_column_info, 0, fn _, _ -> true end)
       |> allow(self(), opts[:server])
 
-      assert :ok = shape_cache.handle_relation_msg(rel, opts)
+      assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.shape_log_collector)
 
       refute_receive {:DOWN, ^ref, :process, _, _}
     end
 
     test "cleans inspector cache for new relations", ctx do
-      %{shape_cache: {shape_cache, opts}} = ctx
+      %{shape_cache: {_shape_cache, opts}} = ctx
 
       relation_id = "rel1"
 
@@ -1078,11 +1095,11 @@ defmodule Electric.ShapeCacheTest do
       |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
       |> allow(self(), opts[:server])
 
-      assert :ok = shape_cache.handle_relation_msg(rel, opts)
+      assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.shape_log_collector)
     end
 
     test "cleans shapes affected by table renaming and logs a warning", ctx do
-      %{shape_cache: {shape_cache, opts}} = ctx
+      %{shape_cache: {_shape_cache, opts}} = ctx
 
       relation_id = "rel1"
 
@@ -1110,7 +1127,7 @@ defmodule Electric.ShapeCacheTest do
       |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
       |> allow(self(), opts[:server])
 
-      assert :ok = shape_cache.handle_relation_msg(old_rel, opts)
+      assert :ok = ShapeLogCollector.handle_relation_msg(old_rel, ctx.shape_log_collector)
 
       Mock.Inspector
       |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
@@ -1118,7 +1135,7 @@ defmodule Electric.ShapeCacheTest do
 
       log =
         capture_log(fn ->
-          assert :ok = shape_cache.handle_relation_msg(new_rel, opts)
+          assert :ok = ShapeLogCollector.handle_relation_msg(new_rel, ctx.shape_log_collector)
           assert_receive {:DOWN, ^ref1, :process, _, _}
           assert_receive {:DOWN, ^ref2, :process, _, _}
           refute_receive {:DOWN, ^ref3, :process, _, _}
@@ -1128,7 +1145,7 @@ defmodule Electric.ShapeCacheTest do
     end
 
     test "cleans shapes affected by a relation change", ctx do
-      %{shape_cache: {shape_cache, opts}} = ctx
+      %{shape_cache: {_shape_cache, opts}} = ctx
 
       relation_id = "rel1"
 
@@ -1156,7 +1173,7 @@ defmodule Electric.ShapeCacheTest do
       |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
       |> allow(self(), opts[:server])
 
-      assert :ok = shape_cache.handle_relation_msg(old_rel, opts)
+      assert :ok = ShapeLogCollector.handle_relation_msg(old_rel, ctx.shape_log_collector)
 
       Mock.Inspector
       |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
@@ -1164,7 +1181,7 @@ defmodule Electric.ShapeCacheTest do
 
       log =
         capture_log(fn ->
-          assert :ok = shape_cache.handle_relation_msg(new_rel, opts)
+          assert :ok = ShapeLogCollector.handle_relation_msg(new_rel, ctx.shape_log_collector)
           assert_receive {:DOWN, ^ref1, :process, _, _}
           assert_receive {:DOWN, ^ref2, :process, _, _}
           refute_receive {:DOWN, ^ref3, :process, _, _}

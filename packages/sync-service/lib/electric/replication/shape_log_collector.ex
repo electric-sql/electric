@@ -7,7 +7,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
-  alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.{Relation, Transaction}
 
   require Logger
 
@@ -19,7 +19,9 @@ defmodule Electric.Replication.ShapeLogCollector do
             ],
             inspector: [type: :mod_arg, required: true],
             # see https://hexdocs.pm/gen_stage/GenStage.html#c:init/1-options
-            demand: [type: {:in, [:forward, :accumulate]}, default: :accumulate]
+            demand: [type: {:in, [:forward, :accumulate]}, default: :accumulate],
+            # should this log collector process shutdown when one of its consumers crashes?
+            link_consumers: [type: :boolean, default: true]
           )
 
   def start_link(opts) do
@@ -32,11 +34,15 @@ defmodule Electric.Replication.ShapeLogCollector do
     GenStage.call(server, {:new_txn, txn})
   end
 
+  def handle_relation_msg(%Changes.Relation{} = rel, server \\ __MODULE__) do
+    GenServer.call(server, {:relation_msg, rel})
+  end
+
   def init(opts) do
     state = Map.merge(opts, %{producer: nil, subscriptions: {0, MapSet.new()}})
     # start in demand: :accumulate mode so that the ShapeCache is able to start
     # all active consumers before we start sending transactions
-    {:producer, state, dispatcher: GenStage.BroadcastDispatcher, demand: opts.demand}
+    {:producer, state, dispatcher: Electric.Shapes.Dispatcher, demand: opts.demand}
   end
 
   def handle_subscribe(:consumer, _opts, from, state) do
@@ -67,7 +73,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:noreply, [], remove_subscription(from, state)}
   end
 
-  def handle_cancel({:down, reason}, from, state) do
+  def handle_cancel({:down, reason}, from, %{link_consumers: true} = state) do
     # See: https://hexdocs.pm/elixir/Supervisor.html#module-exit-reasons-and-restarts
     # If the consumer's shutdown is unexpected, due to some error, then exit with
     # this error and let the supervisor bring us back up.
@@ -89,10 +95,21 @@ defmodule Electric.Replication.ShapeLogCollector do
     end
   end
 
+  def handle_cancel({:down, _reason}, from, %{link_consumers: false} = state) do
+    {:noreply, [], remove_subscription(from, state)}
+  end
+
   def handle_call({:new_txn, %Transaction{xid: xid, lsn: lsn} = txn}, from, state) do
     Logger.info("Received transaction #{xid} from Postgres at #{lsn}")
     Logger.debug(fn -> "Txn received: #{inspect(txn)}" end)
     handle_transaction(txn, from, state)
+  end
+
+  def handle_call({:relation_msg, %Relation{} = rel}, from, %{producer: nil} = state) do
+    Logger.info("Received Relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
+    Logger.debug(fn -> "Relation received: #{inspect(rel)}" end)
+
+    {:noreply, [{:relation, rel}], %{state | producer: from}}
   end
 
   # If no-one is listening to the replication stream, then just return without
@@ -121,7 +138,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     # we don't reply to this call. we only reply when we receive demand from
     # the consumers, signifying that every one has processed this txn
-    {:noreply, [txn], %{state | producer: from}}
+    {:noreply, [{:transaction, txn}], %{state | producer: from}}
   end
 
   defp remove_subscription(from, %{subscriptions: {count, set}} = state) do
