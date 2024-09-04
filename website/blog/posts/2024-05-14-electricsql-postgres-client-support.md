@@ -12,6 +12,9 @@ outline: deep
 post: true
 ---
 
+> [!WARNING]
+> This post describes a release of an old version of Electric that's no longer active. See the [Electric Next](/blog/2024/07/17/electric-next) post for context.
+
 Postgres is the world's most popular open source relational database. Traditionally it runs on the server and scales out using read replicas.
 
 Thanks to [PGlite](https://github.com/electric-sql/pglite), our new lightweight WASM build of Postgres, Postgres now runs efficiently, with persistence, in the web browser and other client environments like Node, Bun and Deno. As of v0.11 just released today, ElectricSQL now supports syncing data between Postgres in the cloud and PGlite in the client.
@@ -55,7 +58,7 @@ Going forward, we'll be maintaining a sharp focus on reliability and performance
 
 ## Other updates in this release
 
-Version 0.11 includes many other changes and bug fixes along with the support for Postgres as the local database, for a full list see the [release notes](/docs/reference/release_notes).
+Version 0.11 includes many other changes and bug fixes along with the support for Postgres as the local database, for a full list see the [release notes](https://legacy.electric-sql.com/docs/reference/release_notes).
 
 ## Using Electric with Postgres and PGlite
 
@@ -98,7 +101,7 @@ const electric = await electrify(conn, schema, {
 })
 ```
 
-Full details of the [PGlite adapter are available in the documentation](/docs/integrations/drivers/web/wa-sqlite).
+Full details of the [PGlite adapter are available in the documentation](https://legacy.electric-sql.com/docs/integrations/drivers/web/wa-sqlite).
 
 Electric is also able to support any Postgres database when run in a Node environment via the [node-postgres project](https://node-postgres.com).
 
@@ -133,4 +136,4 @@ const electric = await electrify(conn, schema, , {
 })
 ```
 
-Full details of the [node-postgres adapter are available in the documentation](http://localhost:3000/docs/integrations/drivers/server/postgres).
+Full details of the [node-postgres adapter are available in the documentation](https://legacy.electric-sql.com/docs/integrations/drivers/server/postgres).

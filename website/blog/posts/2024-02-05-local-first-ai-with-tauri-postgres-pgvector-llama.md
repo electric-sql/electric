@@ -103,9 +103,9 @@ As above, our objective was to assemble a fully open source stack for running lo
 1. integrate the vector search and embeddings into the main local datastore
 1. be able to sync data and embeddings in realtime, between the cloud and local apps and between multiple users and devices
 
-We're a [Postgres based system](/docs/reference/architecture#primary-components), so when we looked at the options for vector search that integrated into the main datastore, the obvious starting point was [pgvector](https://github.com/pgvector/pgvector), an open source vector search extension integrated directly into Postgres.
+We're a [Postgres based system](https://legacy.electric-sql.com/docs/reference/architecture#primary-components), so when we looked at the options for vector search that integrated into the main datastore, the obvious starting point was [pgvector](https://github.com/pgvector/pgvector), an open source vector search extension integrated directly into Postgres.
 
-However, the [primary ElectricSQL architecture](/docs/reference/architecture) is to sync between Postgres in the cloud and SQLite on the local device. So one approach we could see is to sync embeddings between pgvector in Postgres and [sqlite-vss](https://github.com/asg017/sqlite-vss) in SQLite. This is another experiment we're keen to do but we were intrigued by another possibility.
+However, the [primary ElectricSQL architecture](https://legacy.electric-sql.com/docs/reference/architecture) is to sync between Postgres in the cloud and SQLite on the local device. So one approach we could see is to sync embeddings between pgvector in Postgres and [sqlite-vss](https://github.com/asg017/sqlite-vss) in SQLite. This is another experiment we're keen to do but we were intrigued by another possibility.
 
 What if we could run Postgres with pgvector inside the local app?
 
@@ -126,7 +126,7 @@ Having updated the Electric client to work with Postgres, we then created a new 
 
 These components communicated via Tauri's [`invoke` and `listen` APIs](https://tauri.app/v1/guides/features/command).
 
-To facilitate development, we embedded a `psql` console in the app using [xterm.js](https://xtermjs.org), a JavaScript terminal emulator within the Tauri webview. Finally, we made a few minor adjustments to our [Linearlite example](/docs/examples/linear-lite) to get it running on this new stack.
+To facilitate development, we embedded a `psql` console in the app using [xterm.js](https://xtermjs.org), a JavaScript terminal emulator within the Tauri webview. Finally, we made a few minor adjustments to our [Linearlite example](https://legacy.electric-sql.com/docs/examples/linear-lite) to get it running on this new stack.
 
 <video className="w-full" controls poster="/videos/blog/local-first-ai-with-tauri-postgres-pgvector-llama/sync.jpg">
   <source src="/videos/blog/local-first-ai-with-tauri-postgres-pgvector-llama/sync.mp4" />

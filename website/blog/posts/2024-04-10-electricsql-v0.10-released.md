@@ -13,13 +13,16 @@ outline: deep
 post: true
 ---
 
-We've just published version 0.10 of Electric. This is the first release that properly supports where-clause and include-tree filtering with [Shape-based sync](/docs/usage/data-access/shapes).
+> [!WARNING]
+> This post describes a release of an old version of Electric that's no longer active. See the [Electric Next](/blog/2024/07/17/electric-next) post for context.
+
+We've just published version 0.10 of Electric. This is the first release that properly supports where-clause and include-tree filtering with [Shape-based sync](https://legacy.electric-sql.com/docs/usage/data-access/shapes).
 
 It also adds data type support for byte arrays and blobs.
 
 ## Shape filtering
 
-[Shapes](/docs/usage/data-access/shapes) are the key primitive in the Electric system for controlling what data syncs between the cloud and the local device.
+[Shapes](https://legacy.electric-sql.com/docs/usage/data-access/shapes) are the key primitive in the Electric system for controlling what data syncs between the cloud and the local device.
 
 Shape subscriptions are created using the [`sync()` API](/docs/api/clients/typescript#sync), which targets a resource and association graph using where-clauses and an include-tree. However, prior to this release, the implementation of `sync()` was a placeholder that over-synced data and forced you to include all related tables.
 
@@ -54,13 +57,13 @@ const { synced } = await electric.db.issues.sync({
 
 This exposes the implementation of shape sync from the underlying wire protocol, and in future will enable support for additional Postgres operators.
 
-Full details of the SQL syntax permitted in a where clause can be found in the [Shapes documentation](https://electric-sql.com/docs/usage/data-access/shapes).
+Full details of the SQL syntax permitted in a where clause can be found in the [Shapes documentation](https://legacy.electric-sql.com/docs/usage/data-access/shapes).
 
 ### Status — experimental
 
 Shapes as released in v0.10 are still experimental. You **can** now use them to filter the content synced onto the local device. However, key aspects, including controlling sync *off* the device and unsubscribing are still not yet implemented.
 
-You should also be aware that there *is* still some oversync (of many-to-one relations, in order to maintain referential integrity). See the [limitations](/docs/usage/data-access/shapes#limitations-and-issues) listed in the Shapes docs for more information.
+You should also be aware that there *is* still some oversync (of many-to-one relations, in order to maintain referential integrity). See the [limitations](https://legacy.electric-sql.com/docs/usage/data-access/shapes#limitations-and-issues) listed in the Shapes docs for more information.
 
 :::caution Breaking changes
 
@@ -69,7 +72,7 @@ If you were previously relying on the temporary behaviour of Shape over-syncing,
 
 ## Blob support
 
-We've added data type support for `BYTEA` columns, aka blobs. See the [type documentation](/docs/usage/data-modelling/types#supported-data-types) for more info. This unlocks support for apps that store large strings and/or files in the database.
+We've added data type support for `BYTEA` columns, aka blobs. See the [type documentation](https://legacy.electric-sql.com/docs/usage/data-modelling/types#supported-data-types) for more info. This unlocks support for apps that store large strings and/or files in the database.
 
 It also unlocks support for databases like [CozoDB](https://www.cozodb.org) that persist data using SQLite blobs. With this release, you can now use Electric to sync Cozo between users and devices, turning it into a multi-user, realtime relational-graph-vector database:
 
@@ -85,4 +88,4 @@ ALTER TABLE cozo
 
 ## Bug fixes and more
 
-Every new release of Electric includes bug fixes and small improvements. For a full list of updated components see [Release notes](/docs/reference/release_notes#2024-04-10---v010).
+Every new release of Electric includes bug fixes and small improvements. For a full list of updated components see [Release notes](https://legacy.electric-sql.com/docs/reference/release_notes#2024-04-10---v010).

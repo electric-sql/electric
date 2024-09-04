@@ -7,7 +7,7 @@ info:
     partial replicas of your Postgres data into local apps
     and services.
 
-    See the [Electric documentation](https://electric-sql.com/docs)
+    See the [Electric documentation](https://electric-sql.com/docs/intro)
     for more information.
   # FIXME: set version dynamically
   # version: 0.0.1

@@ -12,7 +12,10 @@ outline: deep
 post: true
 ---
 
-Included in the [newly released version 0.7](/blog/2023-11-02-electricsql-v0.7-released.md) of ElectricSQL is support for the Ionic Framework and Capacitor, enabling a developer to build natively installable apps using the Electric sync layer. We have built a demo app to show off this capability. This app also demonstrates the extended type support in this new release, using `timestamptz` and `boolean` types.
+> [!WARNING]
+> This post describes a release of an old version of Electric that's no longer active. See the [Electric Next](/blog/2024/07/17/electric-next) post for context.
+
+Included in the [newly released version 0.7](/blog/2023/11/02/electricsql-v0.7-released) of ElectricSQL is support for the Ionic Framework and Capacitor, enabling a developer to build natively installable apps using the Electric sync layer. We have built a demo app to show off this capability. This app also demonstrates the extended type support in this new release, using `timestamptz` and `boolean` types.
 
 The [Ionic Framework](https://ionicframework.com) is an open source mobile UI toolkit for building modern, high quality cross-platform mobile apps from a single code base. It uses web components at its core, and has bindings for React, Angular, and Vue. For this demo we are using React. With Ionic it is possible to build native looking, and feeling, apps using only web technologies.
 

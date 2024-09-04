@@ -64,7 +64,7 @@ Say you want to place an order for a product. You have the product data synced i
 
 In addition, when the backend service sends results of the operation back, you may want to merge the result back into the local database. If you do this, you're writing data based on one read snapshot (that the server process saw) that is not the same read snapshot that the client has.
 
-This can cause a range of [integrity violations and anomalies](/docs/reference/integrity). Because going out-of-band abandons the consistency guarantees of the sync system.
+This can cause a range of [integrity violations and anomalies](https://legacy.electric-sql.com/docs/reference/integrity). Because going out-of-band abandons the consistency guarantees of the sync system.
 
 ## Solution &mdash; use a state machine
 
@@ -100,7 +100,7 @@ As you can see, it's a simple pattern to emulate request - response over the loc
 
 ### Checkout with ElectricSQL
 
-The [Checkout example with Supabase](/docs/examples/checkout) is a great example of this pattern. The app emulates the request response pattern for placing an order, using a database trigger to run a Supabase edge function for the backend processing.
+The [Checkout example with Supabase](https://legacy.electric-sql.com/docs/examples/checkout) is a great example of this pattern. The app emulates the request response pattern for placing an order, using a database trigger to run a Supabase edge function for the backend processing.
 
 You can see it running at [checkout-demo.electric-sql.com](http://checkout-demo.electric-sql.com/) and in the demo screencast below:
 
@@ -135,4 +135,4 @@ You can see the source code at [KyleAMathews/trpc-crdt](https://github.com/KyleA
 
 ## Conclusion
 
-You don't need to expose an API or leak any secrets to perform secure transactions with local-first. Just emulate request - response over the in-paradigm sync and use your preferred [event sourcing](/docs/integrations/event-sourcing) system.
+You don't need to expose an API or leak any secrets to perform secure transactions with local-first. Just emulate request - response over the in-paradigm sync and use your preferred [event sourcing](https://legacy.electric-sql.com/docs/integrations/event-sourcing) system.

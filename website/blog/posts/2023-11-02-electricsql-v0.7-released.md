@@ -12,6 +12,9 @@ outline: deep
 post: true
 ---
 
+> [!WARNING]
+> This post describes a release of an old version of Electric that's no longer active. See the [Electric Next](/blog/2024/07/17/electric-next) post for context.
+
 Here at Electric, we are thrilled to have published version 0.7 of ElectricSQL, which includes the new migration proxy and extended type support. This release lays the groundwork for many of the new features we are currently working on, and which will be available in future versions. Version 0.6, released in September, was the largest release of Electric since we began, and the culmination of six months of hard work;  you can read about the [previous release here](/blog/2023/09/20/introducing-electricsql-v0.6).
 
 This new version builds on 0.6 by adding a number of key new features:
@@ -31,7 +34,7 @@ The proxy is also the starting point for addressing deployment to hosted Postgre
 
 When you apply any migrations to your Postgres you must remember to set the database url to the correct port (default 65432) on the Electric sync service.
 
-You can read [more about the proxy in our documentation here](/docs/usage/data-modelling/migrations#migration-proxy).
+You can read [more about the proxy in our documentation here](https://legacy.electric-sql.com/docs/usage/data-modelling/migrations#migration-proxy).
 
 ## Type Support
 
@@ -48,7 +51,7 @@ A large part of preparing for this version was improving our support for the var
 - `float8`<br />
   These are now correctly stored as `REAL` in SQLite, with support for `+inf/-inf`. The only caveat is that `NaN` is stored in string form due to a limitation in a number of SQLite drivers that convert `NaN` to `null`, breaking the distinction between the two.
 
-You can read [more about type support in our documentation here](/docs/usage/data-modelling/types).
+You can read [more about type support in our documentation here](https://legacy.electric-sql.com/docs/usage/data-modelling/types).
 
 ## "Starter" improvements
 
@@ -60,4 +63,4 @@ Community member [Gregorio Zanon](https://twitter.com/realgregzo) created a Capa
 
 You can read [more about our Capacitor support in this post here](/blog/2023/11/02/using-electricsql-with-the-ionic-framework-and-capacitor).
 
-For a full list of updated components see [Release notes](/docs/reference/release_notes#2023-11-02---v07).
+For a full list of updated components see [Release notes](https://legacy.electric-sql.com/docs/reference/release_notes#2023-11-02---v07).

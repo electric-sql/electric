@@ -169,7 +169,7 @@ In the absence of conflicts, these additional effects are not observable.
 :::
 
 :::note
-You can play with an interactive demo of this example on the [Introduction -> Active-active replication](/docs/intro/active-active) page.
+You can play with an interactive demo of this example on the [Introduction -> Active-active replication](https://legacy.electric-sql.com/docs/intro/active-active) page.
 :::
 
 ## Reservations
@@ -233,4 +233,4 @@ To do this, developers might make use of a lock CRDT. When a particular node hol
 
 ## Next steps
 
-Hopefully that was a useful intro to rich-CRDTs and how they can help simplify working with invariants and complex data objects. ElectricSQL uses rich-CRDT techniques to provide support for referential integrity and constraints in a local-first setting. See the [reference docs](/docs/reference) for more information.
+Hopefully that was a useful intro to rich-CRDTs and how they can help simplify working with invariants and complex data objects. ElectricSQL uses rich-CRDT techniques to provide support for referential integrity and constraints in a local-first setting. See the [reference docs](/docs/reference/literature) for more information.

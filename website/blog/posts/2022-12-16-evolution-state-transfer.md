@@ -2,6 +2,8 @@
 title: "The evolution of state transfer"
 description: >-
   Web development has been progressing through an evolution of state transfer. Hybrid local-first architecture is the natural endgame for this progression.
+excerpt: >-
+  Web development has been progressing through an evolution of state transfer. Local-first is the natural endgame and the vision we're working towards with Electric.
 featured: true
 authors: [thruflo]
 image: /img/blog/evolution-state-transfer/listing.png
@@ -10,9 +12,11 @@ outline: deep
 post: true
 ---
 
-Web development has been progressing through an evolution of state transfer. Local-first is the natural endgame and the vision we're working towards with Electric.
+<script setup>
+import Tweet from 'vue-tweet'
+</script>
 
-<!--truncate-->
+Web development has been progressing through an evolution of state transfer. Local-first is the natural endgame and the vision we're working towards with Electric.
 
 State transfer is fundamental to online applications. Web apps are architected around the network, with the separation of front-end from back-end and protocols like AJAX and REST. However, newer protocols like GraphQL and frameworks like Remix are increasingly abstracting state transfer away from application code.
 
@@ -50,7 +54,11 @@ This led to the web becoming a first-class platform for interactive applications
 The combination of [JSON](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON) and [REST](https://restfulapi.net) brought a common pattern for API design and asynchronous state transfer. If Twitter is to be believed, REST is still the most popular method of state transfer today:
 
 <div className="mt-4 pb-4">
-  <blockquote className="twitter-tweet" data-lang="en" data-dnt="true" data-theme="dark"><p lang="en" dir="ltr">Which type of http API do you prefer to work with?</p>&mdash; Matteo Collina (@matteocollina) <a href="https://twitter.com/matteocollina/status/1599690320865681409?ref_src=twsrc%5Etfw">December 5, 2022</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+  <Tweet tweet-id="1599690320865681409"
+      align="center"
+      conversation="none"
+      theme="dark"
+  />
 </div>
 
 REST helps with scalability and simplifies backend development. By standardising the protocol, REST also introduced the potential for automatic API generation. For example, [Swagger](https://swagger.io) allows documentation and client libraries to be generated from a REST API specification. Frameworks like [Remix](https://remix.run) automatically create APIs based on client code.
@@ -155,7 +163,7 @@ const ExampleComponent = () => {
 
 Importantly, the results that the system keep in sync come from the local database. The system doesn't aggregate and fetch data for you when your components render. It simply talks to the embedded local database. So you can be sure the application functions even if the network is down or the backend is down and you can rely on consistent, super fast (often sub-millisecond) query times.
 
-When local-first is done right, developers can create reactive, realtime, multi-user apps without having to worry about the network and its various failure modes. It's entirely up-to the database replication system how and when to transfer data. As a result, local-first brings state transfer fully into the domain of the database. With all of the associated rigour around [consistency and integrity](/docs/reference/consistency) that you easily lose when working with the data in your application code.
+When local-first is done right, developers can create reactive, realtime, multi-user apps without having to worry about the network and its various failure modes. It's entirely up-to the database replication system how and when to transfer data. As a result, local-first brings state transfer fully into the domain of the database. With all of the associated rigour around [consistency and integrity](https://legacy.electric-sql.com/docs/reference/consistency) that you easily lose when working with the data in your application code.
 
 With the [right system and concurrency semantics](/blog/2022/05/03/introducing-rich-crdts), you can also write locally with *finality* as opposed to *tentativity*. I.e.: with the certainty that your writes will not be rejected once they've been accepted locally <sup>[1]</sup>. Instead of having to implement both the `updater` and `optimisticUpdater` callbacks of the GraphQL `commitMutation` API we saw above, you simply write to the local database and if your write succeeds locally, you're done.
 

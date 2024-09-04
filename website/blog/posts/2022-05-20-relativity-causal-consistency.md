@@ -91,6 +91,6 @@ As we increasingly move our computer systems into space, it enables us to build 
 
 ### Embracing causal consistency
 
-Here on earth right now, causal consistency -- and specifically the [transactional causal consistency that ElectricSQL is based on](/docs/reference/consistency) -- is the strongest possible consistency mode for a coordination-free, local-first system.
+Here on earth right now, causal consistency -- and specifically the [transactional causal consistency that ElectricSQL is based on](https://legacy.electric-sql.com/docs/reference/consistency) -- is the strongest possible consistency mode for a coordination-free, local-first system.
 
 Embracing it allows you to develop local-first systems that fit the world more naturally than consensus based systems and, as a result, eliminate complexity and dissonance from mapping a total order onto a fundamentally concurrent and relativistic world.

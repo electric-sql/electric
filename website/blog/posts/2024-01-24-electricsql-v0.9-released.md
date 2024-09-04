@@ -13,11 +13,14 @@ To set the tone for 2024, we're kicking January off with a fresh release of Elec
 
 <!--truncate-->
 
+> [!WARNING]
+> This post describes a release of an old version of Electric that's no longer active. See the [Electric Next](/blog/2024/07/17/electric-next) post for context.
+
 This new version addresses an array of issues that have been reported by our [community](/about/community#discord) and early adopters. Thanks to everyone who has provided feedback and bug reports!
 
 ## New CLI commands
 
-The Electric client library now boasts a powerful [Command-Line Interface](/docs/api/cli) (CLI), enhancing the development experience for Electric apps. This replaces all of the scripts that were previously included in our `create-electric-app` starter. Adding Electric to an existing project, or to a new project from a framework starter, is now just:
+The Electric client library now boasts a powerful [Command-Line Interface](https://legacy.electric-sql.com/docs/api/cli) (CLI), enhancing the development experience for Electric apps. This replaces all of the scripts that were previously included in our `create-electric-app` starter. Adding Electric to an existing project, or to a new project from a framework starter, is now just:
 
 ```sh
 npm install electric-sql
@@ -30,7 +33,7 @@ ELECTRIC_SERVICE=http://localhost:5133
 ELECTRIC_PG_PROXY_PORT=65432
 ```
 
-The CLI's key features include commands like [`start`](/docs/api/cli#start), [`stop`](/docs/api/cli#stop), and [`status`](/docs/api/cli#status) for managing development environments. For example, to start Electric with a Postgres database, you would use:
+The CLI's key features include commands like [`start`](https://legacy.electric-sql.com/docs/api/cli#start), [`stop`](https://legacy.electric-sql.com/docs/api/cli#stop), and [`status`](https://legacy.electric-sql.com/docs/api/cli#status) for managing development environments. For example, to start Electric with a Postgres database, you would use:
 
 ```sh
 npx electric-sql start --with-postgres
@@ -38,9 +41,9 @@ npx electric-sql start --with-postgres
 
 For custom Postgres configurations, you can set `ELECTRIC_DATABASE_URL` in your `.env` file.
 
-The CLI also includes a new [`with-config`](/docs/api/cli#with-config) command which simplifies database migrations by integrating third-party migration tools with Electric's environment settings.
+The CLI also includes a new [`with-config`](https://legacy.electric-sql.com/docs/api/cli#with-config) command which simplifies database migrations by integrating third-party migration tools with Electric's environment settings.
 
-Finally, the [Local-first-only workflow](/docs/api/cli#local-only-first-mode), with the `npx electric-sql generate --with-migrations` command, allows for backend-free initial development by automatically setting up and tearing down a temporary Postgres and Electric environment, applying migrations, and generating a client.
+Finally, the [Local-first-only workflow](https://legacy.electric-sql.com/docs/api/cli#local-only-first-mode), with the `npx electric-sql generate --with-migrations` command, allows for backend-free initial development by automatically setting up and tearing down a temporary Postgres and Electric environment, applying migrations, and generating a client.
 
 ## Other client tooling improvements
 
@@ -83,17 +86,17 @@ Fear not, though, as we recently published a new guide that provides an in-depth
 
 ![Components and connections](/img/blog/electricsql-v0.9-released/components-and-connections.png)
 
-Go read our new [Deployment Concepts](/docs/deployment/concepts) guide to learn all about it.
+Go read our new [Deployment Concepts](https://legacy.electric-sql.com/docs/deployment/concepts) guide to learn all about it.
 
 ## Configuration improvements for easier deployments
 
 ### Transparent support for IPv6 and IPv4
 
-As a user of Electric, you no longer need to think about whether your hosting provider uses IPv4 or IPv6 and which protocol your hosted Postgres is available on. Electric now makes all of its open ports available on both protocols and it can connect to a database that is accessible only via IPv6 or only via IPv4 with no additional configuration. There are, nevertheless, configuration options that allow for [overriding of these defaults](/docs/api/service#database_use_ipv6).
+As a user of Electric, you no longer need to think about whether your hosting provider uses IPv4 or IPv6 and which protocol your hosted Postgres is available on. Electric now makes all of its open ports available on both protocols and it can connect to a database that is accessible only via IPv6 or only via IPv4 with no additional configuration. There are, nevertheless, configuration options that allow for [overriding of these defaults](https://legacy.electric-sql.com/docs/api/service#database_use_ipv6).
 
 ### SSL-encrypted database connections by default
 
-In this new release, we're changing the default behaviour of Electric to use SSL for all connections to the database with no automatic fallback to disabling encryption. We've made this change to better align with a "secure by default" model while still providing a way to [change this default behaviour](/docs/api/service#database_require_ssl) if your use case calls for that.
+In this new release, we're changing the default behaviour of Electric to use SSL for all connections to the database with no automatic fallback to disabling encryption. We've made this change to better align with a "secure by default" model while still providing a way to [change this default behaviour](https://legacy.electric-sql.com/docs/api/service#database_require_ssl) if your use case calls for that.
 
 Now, when you run Electric with a local Postgres database in development or if you know that your Electric + Postgres deployment is secured by your infrastructure (e.g. by making sure Electric connects to Postgres over a VPN), set `DATABASE_REQUIRE_SSL=false` and Electric will fallback to using unencrypted connections.
 
@@ -127,7 +130,7 @@ $ docker run --rm \
 ▓   * PG_PROXY_PASSWORD not set
 ▓
 ▓ Please review the official configuration reference at
-▓ https://electric-sql.com/docs/api/service
+▓ https://legacy.electric-sql.com/docs/api/service
 ▓ and double-check your values.
 
 ••• Shutting down •••
@@ -146,7 +149,7 @@ Below are a couple of examples:
 ▓
 ▓ Your Postgres database is not configured with wal_level=logical.
 ▓
-▓ Visit https://electric-sql.com/docs/usage/installation/postgres
+▓ Visit https://legacy.electric-sql.com/docs/usage/installation/postgres
 ▓ to learn more about Electric's requirements for Postgres.
 
 ••• Shutting down •••
@@ -166,4 +169,4 @@ Below are a couple of examples:
 
 ## Bug fixes and more
 
-Every new release of Electric includes bug fixes and small improvements. For a full list of updated components see [Release notes](/docs/reference/release_notes#2024-01-24---v09).
+Every new release of Electric includes bug fixes and small improvements. For a full list of updated components see [Release notes](https://legacy.electric-sql.com/docs/reference/release_notes#2024-01-24---v09).

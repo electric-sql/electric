@@ -12,6 +12,9 @@ outline: deep
 post: true
 ---
 
+> [!WARNING]
+> This post describes a release of an old version of Electric that's no longer active. See the [Electric Next](/blog/2024/07/17/electric-next) post for context.
+
 Recently at Electric we’ve been building some demo apps; this is both to demonstrate the capability and use of Electric as platform, and to help inform our design process. The first of these demos is what we’re calling “Linearlite” - a simplified, lightweight clone of the Linear project management and issue tracking tool. <!--truncate--> It uses the standard ElectricSQL architecture of Postgres on the server, SQLite in the browser, and Electric’s sync layer in the middle.
 
 ![](/img/blog/linerlite-local-first-with-react/app.png)
@@ -40,7 +43,7 @@ Finally, you’ll find a brief breakdown of [how we built Linearlite](#how-we-bu
 
 ElectricSQL is an open source local-first software platform. Use it to build super fast, collaborative, offline-capable apps directly on Postgres by syncing to a local SQLite database.
 
-Electric comprises a [sync layer](/docs/api/service) (built with Elixir) placed in front of your Postgres database, and a [type-safe client](/docs/api/clients/typescript) allowing you to bidirectionally sync data from your Postgres to local SQLite databases. This sync is [CRDT-based](/docs/reference/consistency), resilient to conflicting edits from multiple nodes at the same time, and works after being offline for extended periods.
+Electric comprises a [sync layer](https://legacy.electric-sql.com/docs/api/service) (built with Elixir) placed in front of your Postgres database, and a [type-safe client](/docs/api/clients/typescript) allowing you to bidirectionally sync data from your Postgres to local SQLite databases. This sync is [CRDT-based](https://legacy.electric-sql.com/docs/reference/consistency), resilient to conflicting edits from multiple nodes at the same time, and works after being offline for extended periods.
 
 In some ways Electric is similar to Hasura or PostgREST in that it can provide a plug-and-play API to your Postgres database. However, there are three key differences:
 
@@ -303,7 +306,7 @@ db.issue.create({
 
 Here we use the `.create()` method to insert a new issue record into the database.
 
-See the [documentation for ".create()"](/docs/usage/data-access/queries) for more details on how this method works.
+See the [documentation for ".create()"](https://legacy.electric-sql.com/docs/usage/data-access/queries) for more details on how this method works.
 
 **Example 2:** Updating an issue title:
 
@@ -323,7 +326,7 @@ await db.issue.update({
 
 This uses the `.update()` method with a `where` clause to specify which issue to update.
 
-See the [documentation for ".update()"](/docs/usage/data-access/queries) for more details on how this method works.
+See the [documentation for ".update()"](https://legacy.electric-sql.com/docs/usage/data-access/queries) for more details on how this method works.
 
 **Example 3:** Fetching a live query of issues for the issue list:
 
@@ -345,11 +348,11 @@ Here we are using our `useLiveQuery` React hook, passing it a liveMany query. Th
 
 If you want to dig further into how Linearlite works do take a look at the code, or pop into our Discord to ask any question that you may have.
 
-See the [documentation for live queries](/docs/usage/data-access/queries#live-queries) for more details on the available options.
+See the [documentation for live queries](https://legacy.electric-sql.com/docs/usage/data-access/queries#live-queries) for more details on the available options.
 
 ## Future plans
 
-As we add further functionality to ElectricSQL - [see our roadmap](/docs/reference/roadmap) - we are going to continue to evolve Linearlite, adding additional features in order to demonstrate the evolving capabilities of Electric. Exciting planned features for future versions include:
+As we add further functionality to ElectricSQL - [see our roadmap](https://legacy.electric-sql.com/docs/reference/roadmap) - we are going to continue to evolve Linearlite, adding additional features in order to demonstrate the evolving capabilities of Electric. Exciting planned features for future versions include:
 
 - User support, demonstrating permissions
 - Partial sync, demonstrating our “shapes” system

@@ -34,7 +34,7 @@ It was a privilege to be in the room.
 
 [![](/img/blog/intel-ignite/batch6.jpg)](https://intelignite.com/intel-ignite-selects-10-startups-for-fall-2023-european-cohort/)
 
-We look forward to continuing the collaboration through the [Intel Liftoff](https://www.intel.com/content/www/us/en/developer/tools/oneapi/liftoff.html) programme, where we plan to integrate our [local-first sync engine](/docs/intro/local-first) with the [Intel oneAPI stack](https://www.intel.com/content/www/us/en/developer/tools/oneapi/overview.html) to power the next generation of [local RAG applications](/blog/2024/02/05/local-first-ai-with-tauri-postgres-pgvector-llama) running on [Intel's vision of the AI PC](https://www.intel.com/content/www/us/en/products/docs/processors/core-ultra/ai-pc.html).
+We look forward to continuing the collaboration through the [Intel Liftoff](https://www.intel.com/content/www/us/en/developer/tools/oneapi/liftoff.html) programme, where we plan to integrate our [local-first sync engine](https://legacy.electric-sql.com/docs/intro/local-first) with the [Intel oneAPI stack](https://www.intel.com/content/www/us/en/developer/tools/oneapi/overview.html) to power the next generation of [local RAG applications](/blog/2024/02/05/local-first-ai-with-tauri-postgres-pgvector-llama) running on [Intel's vision of the AI PC](https://www.intel.com/content/www/us/en/products/docs/processors/core-ultra/ai-pc.html).
 
 [![](/img/blog/intel-ignite/ai-pc.jpg)](https://www.intel.com/content/www/us/en/products/docs/processors/core-ultra/ai-pc.html)
 

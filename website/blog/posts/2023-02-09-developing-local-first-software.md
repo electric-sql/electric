@@ -106,7 +106,7 @@ service cloud.firestore {
 
 One of the key requirements of these rules systems is the ability to bootstrap new permission scopes without having to use external privileged business logic or APIs. For example, you may want the creator of a new resource to be assigned particular access permissions. In the Supabase policy example above, the `items` table has a `owner_id` field. By writing the id of the user that creates the item into the field, you can bootstrap special permissions for them.
 
-We support this in the [ElectricSQL DDLX rules](/docs/api/ddlx) using `GRANT` and `ASSIGN`, for example:
+We support this in the [ElectricSQL DDLX rules](https://legacy.electric-sql.com/docs/api/ddlx) using `GRANT` and `ASSIGN`, for example:
 
 ```sql
 ELECTRIC GRANT ALL
@@ -117,7 +117,7 @@ ELECTRIC ASSIGN 'projects:owner'
   TO projects.owner_id;
 ```
 
-See [Usage -> Data Modelling -> Permissions](/docs/usage/data-modelling/permissions) and the [API -> DDLX](/docs/api/ddlx) spec for more information.
+See [Usage -> Data Modelling -> Permissions](https://legacy.electric-sql.com/docs/usage/data-modelling/permissions) and the [API -> DDLX](https://legacy.electric-sql.com/docs/api/ddlx) spec for more information.
 
 ### Business logic
 
@@ -174,7 +174,7 @@ CREATE SINK avro_sink
   ENVELOPE UPSERT;
 ```
 
-See [Integrations -> Event sourcing](/docs/integrations/event-sourcing) for more information.
+See [Integrations -> Event sourcing](https://legacy.electric-sql.com/docs/integrations/event-sourcing) for more information.
 
 ## Coding against a local database
 
@@ -225,7 +225,7 @@ Other systems, like [Mongo Atlas Flexible Sync](https://www.mongodb.com/docs/atl
 
 How your system does this is crucial to the development model. How you partition and segment your data model to work with the way the replication system does this is critical to your application design and your user experience. Ideally, the system should also be able to optimise data transfer and placement for you.
 
-ElectricSQL has an expressive [Shape-based system](/docs/usage/data-access/shapes) for dynamic partial replication. This allows you to sync subsets of data that sync on and off the local device. In this example, the `where` clause filters which projects you want to sync and then the `include` tree is like an association graph that pulls in the related data that belongs to the project:
+ElectricSQL has an expressive [Shape-based system](https://legacy.electric-sql.com/docs/usage/data-access/shapes) for dynamic partial replication. This allows you to sync subsets of data that sync on and off the local device. In this example, the `where` clause filters which projects you want to sync and then the `include` tree is like an association graph that pulls in the related data that belongs to the project:
 
 ```tsx
 const shape = await db.projects.sync({
@@ -246,7 +246,7 @@ const shape = await db.projects.sync({
 })
 ```
 
-Shapes can adapt runtime to authentication state, routing parameters, etc. Which allows you to optimise the way data loads onto the local device and is available for offline interactivity. See [Usage -> Data access -> Shapes](/docs/usage/data-access/shapes) for more information.
+Shapes can adapt runtime to authentication state, routing parameters, etc. Which allows you to optimise the way data loads onto the local device and is available for offline interactivity. See [Usage -> Data access -> Shapes](https://legacy.electric-sql.com/docs/usage/data-access/shapes) for more information.
 
 ### Live changes
 
@@ -276,7 +276,7 @@ const ExampleComponent = () => {
 );
 ```
 
-ElectricSQL provides a similar [live query abstraction](/docs/usage/data-access/queries). For example:
+ElectricSQL provides a similar [live query abstraction](https://legacy.electric-sql.com/docs/usage/data-access/queries). For example:
 
 ```tsx
 const ExampleComponent = () => {
@@ -308,7 +308,7 @@ The good news is that [recent advances in the research base](/docs/reference/lit
 
 However, application developers still need to accept that writes can be made concurrently and that data may therefore "move around" underneath you. There are different approaches to this. You can reject conflicting writes, leading to rollbacks. Or you can always merge writes in. This allows you to write with *finality* and avoid rollbacks but updates may still be "built on" by concurrent writes made elsewhere.
 
-This can result in data states that are unexpected if you're used to thinking about strongly consistent systems with a total order. So it's important to adopt the mindset of [causal consistency](/docs/reference/consistency) in what is essentially a [relativistic universe](/blog/2022/05/20/relativity-causal-consistency).
+This can result in data states that are unexpected if you're used to thinking about strongly consistent systems with a total order. So it's important to adopt the mindset of [causal consistency](https://legacy.electric-sql.com/docs/reference/consistency) in what is essentially a [relativistic universe](/blog/2022/05/20/relativity-causal-consistency).
 
 
 ## Putting it all together
