@@ -32,7 +32,7 @@ The client exports a `ShapeStream` class for getting updates to shapes on a row-
 import { ShapeStream } from '@electric-sql/client'
 
 // Passes subscribers rows as they're inserted, updated, or deleted
-const stream = new ShapeStream<RowType>({
+const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape/foo`,
 })
 
@@ -67,7 +67,7 @@ const stream = new ShapeStream({
 ```tsx
 import { ShapeStream, Shape } from '@electric-sql/client'
 
-const stream = new ShapeStream<RowType>({
+const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape/foo`,
 })
 const shape = new Shape(stream)
