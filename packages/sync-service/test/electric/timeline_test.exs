@@ -6,8 +6,10 @@ defmodule Electric.TimelineTest do
   import Mox
 
   describe "load_timeline/1" do
-    setup do
-      %{kv: Electric.PersistentKV.Memory.new!()}
+    @moduletag :tmp_dir
+
+    setup context do
+      %{kv: Electric.PersistentKV.Filesystem.new!(root: context.tmp_dir)}
     end
 
     test "returns nil when no timeline ID is available", %{kv: kv} do
@@ -16,9 +18,11 @@ defmodule Electric.TimelineTest do
   end
 
   describe "check/2" do
+    @moduletag :tmp_dir
+
     setup context do
       timeline = context[:electric_timeline]
-      kv = Electric.PersistentKV.Memory.new!()
+      kv = Electric.PersistentKV.Filesystem.new!(root: context.tmp_dir)
       opts = [persistent_kv: kv, shape_cache: {ShapeCache, []}]
       {:ok, [timeline: timeline, opts: opts]}
     end

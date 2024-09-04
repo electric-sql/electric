@@ -20,31 +20,30 @@ defmodule Electric.Timeline do
   @spec check(timeline(), keyword()) :: :ok
   def check(pg_timeline, opts) do
     electric_timeline = load_timeline(opts)
-    handle(pg_timeline, electric_timeline, opts)
+    verify_timeline(pg_timeline, electric_timeline, opts)
   end
 
   # Handles the different cases of timeline comparison
-  @spec handle(timeline(), timeline(), keyword()) :: :ok
-  defp handle(nil, _, opts) do
+  @spec verify_timeline(timeline(), timeline(), keyword()) :: :ok
+  defp verify_timeline(nil, _, opts) do
     Logger.warning("Unknown Postgres timeline; rotating shapes.")
     Shapes.clean_all_shapes(opts)
     store_timeline(nil, opts)
   end
 
-  defp handle(pg_timeline_id, electric_timeline_id, _opts)
-       when pg_timeline_id == electric_timeline_id do
-    Logger.info("Connected to Postgres timeline #{pg_timeline_id}")
+  defp verify_timeline(timeline_id, timeline_id, _opts) do
+    Logger.info("Connected to Postgres timeline #{timeline_id}")
     :ok
   end
 
-  defp handle(pg_timeline_id, nil, opts) do
+  defp verify_timeline(pg_timeline_id, nil, opts) do
     Logger.info("No previous timeline detected.")
     Logger.info("Connected to Postgres timeline #{pg_timeline_id}")
     # Store new timeline
     store_timeline(pg_timeline_id, opts)
   end
 
-  defp handle(pg_timeline_id, _, opts) do
+  defp verify_timeline(pg_timeline_id, _, opts) do
     Logger.info("Detected PITR to timeline #{pg_timeline_id}; rotating shapes.")
     Electric.Shapes.clean_all_shapes(opts)
     # Store new timeline only after all shapes have been cleaned
@@ -54,9 +53,7 @@ defmodule Electric.Timeline do
   # Loads the timeline ID from persistent storage
   @spec load_timeline(keyword()) :: timeline()
   def load_timeline(opts) do
-    kv_backend = Keyword.fetch!(opts, :persistent_kv)
-    # default to Jason decoder
-    kv = PersistentKV.Serialized.new!(backend: kv_backend)
+    kv = make_serialized_kv(opts)
 
     case PersistentKV.get(kv, @timeline_key) do
       {:ok, timeline_id} ->
@@ -72,10 +69,13 @@ defmodule Electric.Timeline do
   end
 
   defp store_timeline(timeline_id, opts) do
+    kv = make_serialized_kv(opts)
+    :ok = PersistentKV.set(kv, @timeline_key, timeline_id)
+  end
+
+  defp make_serialized_kv(opts) do
     kv_backend = Keyword.fetch!(opts, :persistent_kv)
-    # defaults to Jason encoder
-    kv = PersistentKV.Serialized.new!(backend: kv_backend)
-    PersistentKV.set(kv, @timeline_key, timeline_id)
-    :ok
+    # defaults to using Jason encoder and decoder
+    PersistentKV.Serialized.new!(backend: kv_backend)
   end
 end

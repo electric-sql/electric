@@ -96,8 +96,7 @@ defmodule Electric.Shapes do
   @spec clean_all_shapes(keyword()) :: :ok
   def clean_all_shapes(opts \\ []) do
     {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
-    server = Access.get(opts, :server, shape_cache)
-    shape_cache.clean_all_shapes(server)
+    shape_cache.clean_all_shapes(opts)
     :ok
   end
 
