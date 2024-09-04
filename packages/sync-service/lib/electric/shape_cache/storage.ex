@@ -1,4 +1,6 @@
 defmodule Electric.ShapeCache.Storage do
+  import Electric.Replication.LogOffset, only: [is_log_offset_lt: 2]
+
   alias Electric.Shapes.Querying
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
@@ -86,6 +88,8 @@ defmodule Electric.ShapeCache.Storage do
     apply(mod, :start_link, [opts])
   end
 
+  @last_log_offset LogOffset.last()
+
   @spec initialise(storage()) :: :ok
   def initialise({mod, opts}),
     do: apply(mod, :initialise, [opts])
@@ -151,11 +155,10 @@ defmodule Electric.ShapeCache.Storage do
     mod.append_to_log!(shape_id, log_items, shape_opts)
   end
 
-  import LogOffset, only: :macros
   @doc "Get stream of the log for a shape since a given offset"
   @spec get_log_stream(shape_id(), LogOffset.t(), LogOffset.t(), storage()) :: log()
-  def get_log_stream(shape_id, offset, max_offset \\ LogOffset.last(), {mod, opts})
-      when max_offset == :infinity or not is_log_offset_lt(max_offset, offset) do
+  def get_log_stream(shape_id, offset, max_offset \\ @last_log_offset, {mod, opts})
+      when max_offset == @last_log_offset or not is_log_offset_lt(max_offset, offset) do
     shape_opts = mod.for_shape(shape_id, opts)
 
     mod.get_log_stream(shape_id, offset, max_offset, shape_opts)
