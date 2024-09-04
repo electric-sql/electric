@@ -100,7 +100,7 @@ defmodule Electric.ConnectionManager do
         {:noreply, state, {:continue, :start_connection_pool}}
 
       {:error, reason} ->
-        handle_connection_error(reason, state)
+        handle_connection_error(reason, state, "replication")
     end
   end
 
@@ -115,7 +115,7 @@ defmodule Electric.ConnectionManager do
         {:noreply, state}
 
       {:error, reason} ->
-        handle_connection_error(reason, state)
+        handle_connection_error(reason, state, "regular")
     end
   end
 
@@ -179,7 +179,7 @@ defmodule Electric.ConnectionManager do
     )
   end
 
-  defp handle_connection_error(error, state) do
+  defp handle_connection_error(error, state, mode) do
     halt_if_fatal_error!(error)
 
     message =
@@ -194,7 +194,7 @@ defmodule Electric.ConnectionManager do
           message <> pg_error_extra_info(pg_error)
       end
 
-    Logger.warning("Database connection failed: #{message}")
+    Logger.warning("Database connection in #{mode} mode failed: #{message}")
 
     step =
       cond do
