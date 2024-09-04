@@ -97,18 +97,18 @@ function identity<T>(arg: T): T {
   return arg
 }
 
-interface UseShapeOptions<Selection, SourceData extends Row>
+interface UseShapeOptions<SourceData extends Row, Selection>
   extends ShapeStreamOptions {
   selector?: (value: UseShapeResult<SourceData>) => Selection
 }
 
 export function useShape<
-  Selection = UseShapeResult<Row>,
   SourceData extends Row = Row,
+  Selection = UseShapeResult<SourceData>,
 >({
   selector = identity as (arg: UseShapeResult<SourceData>) => Selection,
   ...options
-}: UseShapeOptions<Selection, SourceData>): Selection {
+}: UseShapeOptions<SourceData, Selection>): Selection {
   const shapeStream = getShapeStream<SourceData>(options as ShapeStreamOptions)
   const shape = getShape<SourceData>(shapeStream)
 

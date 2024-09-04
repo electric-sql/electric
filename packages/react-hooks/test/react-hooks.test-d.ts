@@ -1,5 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest'
 import { useShape, UseShapeResult } from '../src/react-hooks'
+import { Row } from 'packages/typescript-client/dist'
 
 describe(`useShape`, () => {
   it(`should infer correct return type when no selector is provided`, () => {
@@ -32,7 +33,7 @@ describe(`useShape`, () => {
   })
 
   it(`should raise a type error if type argument does not equal inferred return type`, () => {
-    const shape = useShape<number>({
+    const shape = useShape<Row, number>({
       url: ``,
       // @ts-expect-error - should have type mismatch, because doesn't match the declared `Number` type
       selector: (_value: UseShapeResult) => {
