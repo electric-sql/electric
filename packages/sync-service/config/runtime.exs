@@ -73,7 +73,7 @@ statsd_host = env!("STATSD_HOST", :string?, nil)
 
 storage_dir = env!("STORAGE_DIR", :string, "./persistent")
 
-cubdb_file_path = Path.join(storage_dir, "./shapes")
+shape_path = Path.join(storage_dir, "./shapes")
 persistent_state_path = Path.join(storage_dir, "./state")
 
 persistent_kv =
@@ -104,14 +104,14 @@ chunk_bytes_threshold = env!("LOG_CHUNK_BYTES_THRESHOLD", :integer, 10_000)
         "memory" ->
           {Electric.ShapeCache.InMemoryStorage, []}
 
-        "cubdb" ->
-          {Electric.ShapeCache.MixedDiskStorage, storage_dir: cubdb_file_path}
+        "file" ->
+          {Electric.ShapeCache.MixedDiskStorage, storage_dir: shape_path}
 
         _ ->
-          raise Dotenvy.Error, message: "storage must be one of: MEMORY, CUBDB"
+          raise Dotenvy.Error, message: "storage must be one of: MEMORY, FILE"
       end
     end,
-    {Electric.ShapeCache.MixedDiskStorage, storage_dir: cubdb_file_path}
+    {Electric.ShapeCache.MixedDiskStorage, storage_dir: shape_path}
   )
 
 storage = {storage_mod, storage_opts}
