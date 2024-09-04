@@ -146,26 +146,28 @@ export class FetchError extends Error {
  * to consume the HTTP `GET /v1/shape` api.
  *
  * @constructor
- * @param {ShapeStreamOptions} options
- *
+ * @param {ShapeStreamOptions} options - configure the shape stream
+ * @example
  * Register a callback function to subscribe to the messages.
- *
- *     const stream = new ShapeStream(options)
- *     stream.subscribe(messages => {
- *       // messages is 1 or more row updates
- *     })
+ * ```
+ * const stream = new ShapeStream(options)
+ * stream.subscribe(messages => {
+ *   // messages is 1 or more row updates
+ * })
+ * ```
  *
  * To abort the stream, abort the `signal`
  * passed in via the `ShapeStreamOptions`.
- *
- *   const aborter = new AbortController()
- *   const issueStream = new ShapeStream({
- *     url: `${BASE_URL}/${table}`
- *     subscribe: true,
- *     signal: aborter.signal,
- *   })
- *   // Later...
- *   aborter.abort()
+ * ```
+ * const aborter = new AbortController()
+ * const issueStream = new ShapeStream({
+ *   url: `${BASE_URL}/${table}`
+ *   subscribe: true,
+ *   signal: aborter.signal,
+ * })
+ * // Later...
+ * aborter.abort()
+ * ```
  */
 export class ShapeStream<T extends Row = Row> {
   private options: ShapeStreamOptions
@@ -425,10 +427,12 @@ export class ShapeStream<T extends Row = Row> {
  * to simplify developing framework hooks.
  *
  * @constructor
- * @param {Shape}
- *
- *     const shapeStream = new ShapeStream(url: 'http://localhost:3000/v1/shape/foo'})
- *     const shape = new Shape(shapeStream)
+ * @param {ShapeStream<T extends Row>} - the underlying shape stream
+ * @example
+ * ```
+ * const shapeStream = new ShapeStream<{ foo: number }>(url: 'http://localhost:3000/v1/shape/foo'})
+ * const shape = new Shape(shapeStream)
+ * ```
  *
  * `value` returns a promise that resolves the Shape data once the Shape has been
  * fully loaded (and when resuming from being offline):
