@@ -1,4 +1,4 @@
-import { ShapeStream, Value, Message } from '@electric-sql/client'
+import { ShapeStream, Message, Row } from '@electric-sql/client'
 import { Client, ClientConfig } from 'pg'
 
 export function makePgClient(overrides: ClientConfig = {}) {
@@ -13,7 +13,7 @@ export function makePgClient(overrides: ClientConfig = {}) {
   })
 }
 
-export function forEachMessage<T extends Value>(
+export function forEachMessage<T extends Row>(
   stream: ShapeStream,
   controller: AbortController,
   handler: (

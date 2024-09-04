@@ -1,8 +1,8 @@
 import {
-  Value,
   Shape,
   ShapeStream,
   ShapeStreamOptions,
+  Row,
 } from '@electric-sql/client'
 import React from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
@@ -10,11 +10,11 @@ import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-s
 const streamCache = new Map<string, ShapeStream>()
 const shapeCache = new Map<ShapeStream, Shape>()
 
-export async function preloadShape(
+export async function preloadShape<T extends Row = Row>(
   options: ShapeStreamOptions
-): Promise<Shape> {
-  const shapeStream = getShapeStream(options)
-  const shape = getShape(shapeStream)
+): Promise<Shape<T>> {
+  const shapeStream = getShapeStream<T>(options)
+  const shape = getShape<T>(shapeStream)
   await shape.value
   return shape
 }
@@ -23,15 +23,17 @@ export function sortedOptionsHash(options: ShapeStreamOptions): string {
   return JSON.stringify(options, Object.keys(options).sort())
 }
 
-export function getShapeStream(options: ShapeStreamOptions): ShapeStream {
+export function getShapeStream<T extends Row = Row>(
+  options: ShapeStreamOptions
+): ShapeStream<T> {
   const shapeHash = sortedOptionsHash(options)
 
   // If the stream is already cached, return
   if (streamCache.has(shapeHash)) {
     // Return the ShapeStream
-    return streamCache.get(shapeHash)!
+    return streamCache.get(shapeHash)! as ShapeStream<T>
   } else {
-    const newShapeStream = new ShapeStream(options)
+    const newShapeStream = new ShapeStream<T>(options)
 
     streamCache.set(shapeHash, newShapeStream)
 
@@ -40,13 +42,13 @@ export function getShapeStream(options: ShapeStreamOptions): ShapeStream {
   }
 }
 
-export function getShape(shapeStream: ShapeStream): Shape {
+export function getShape<T extends Row>(shapeStream: ShapeStream<T>): Shape<T> {
   // If the stream is already cached, return
   if (shapeCache.has(shapeStream)) {
     // Return the ShapeStream
-    return shapeCache.get(shapeStream)!
+    return shapeCache.get(shapeStream)! as Shape<T>
   } else {
-    const newShape = new Shape(shapeStream)
+    const newShape = new Shape<T>(shapeStream)
 
     shapeCache.set(shapeStream, newShape)
 
@@ -55,18 +57,18 @@ export function getShape(shapeStream: ShapeStream): Shape {
   }
 }
 
-export interface UseShapeResult {
+export interface UseShapeResult<T extends Row = Row> {
   /**
    * The array of rows that make up the Shape.
-   * @type {{ [key: string]: Value }[]}
+   * @type {T[]}
    */
-  data: { [key: string]: Value }[]
+  data: T[]
   /**
    * The Shape instance used by this useShape
-   * @type(Shape)
+   * @type {Shape<T>}
    */
-  shape: Shape
-  error: Shape[`error`]
+  shape: Shape<T>
+  error: Shape<T>[`error`]
   isError: boolean
   /**
    * Has the ShapeStream caught up with the replication log from Postgres.
@@ -74,14 +76,14 @@ export interface UseShapeResult {
   isUpToDate: boolean
 }
 
-function shapeSubscribe(shape: Shape, callback: () => void) {
+function shapeSubscribe<T extends Row>(shape: Shape<T>, callback: () => void) {
   const unsubscribe = shape.subscribe(callback)
   return () => {
     unsubscribe()
   }
 }
 
-function parseShapeData(shape: Shape): UseShapeResult {
+function parseShapeData<T extends Row>(shape: Shape<T>): UseShapeResult<T> {
   return {
     data: [...shape.valueSync.values()],
     isUpToDate: shape.isUpToDate,
@@ -95,16 +97,20 @@ function identity<T>(arg: T): T {
   return arg
 }
 
-interface UseShapeOptions<Selection> extends ShapeStreamOptions {
-  selector?: (value: UseShapeResult) => Selection
+interface UseShapeOptions<SourceData extends Row, Selection>
+  extends ShapeStreamOptions {
+  selector?: (value: UseShapeResult<SourceData>) => Selection
 }
 
-export function useShape<Selection = UseShapeResult>({
-  selector = identity as (arg: UseShapeResult) => Selection,
+export function useShape<
+  SourceData extends Row = Row,
+  Selection = UseShapeResult<SourceData>,
+>({
+  selector = identity as (arg: UseShapeResult<SourceData>) => Selection,
   ...options
-}: UseShapeOptions<Selection>): Selection {
-  const shapeStream = getShapeStream(options as ShapeStreamOptions)
-  const shape = getShape(shapeStream)
+}: UseShapeOptions<SourceData, Selection>): Selection {
+  const shapeStream = getShapeStream<SourceData>(options as ShapeStreamOptions)
+  const shape = getShape<SourceData>(shapeStream)
 
   const useShapeData = React.useMemo(() => {
     let latestShapeData = parseShapeData(shape)

@@ -1,4 +1,4 @@
-import { ColumnInfo, Message, Schema, Value } from './types'
+import { ColumnInfo, Message, Row, Schema, Value } from './types'
 
 type NullToken = null | `NULL`
 type Token = Exclude<string, NullToken>
@@ -79,7 +79,7 @@ export function pgArrayParser(value: Token, parser?: ParseFunction): Value {
   return loop(value)[0]
 }
 
-export class MessageParser {
+export class MessageParser<T extends Row> {
   private parser: Parser
   constructor(parser?: Parser) {
     // Merge the provided parser with the default parser
@@ -88,7 +88,7 @@ export class MessageParser {
     this.parser = { ...defaultParser, ...parser }
   }
 
-  parse(messages: string, schema: Schema): Message[] {
+  parse(messages: string, schema: Schema): Message<T>[] {
     return JSON.parse(messages, (key, value) => {
       // typeof value === `object` is needed because
       // there could be a column named `value`
@@ -101,7 +101,7 @@ export class MessageParser {
         })
       }
       return value
-    }) as Message[]
+    }) as Message<T>[]
   }
 
   // Parses the message values using the provided parser based on the schema information

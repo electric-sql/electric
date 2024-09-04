@@ -1,6 +1,6 @@
 import { ShapeStream } from '../../src/client'
 import { Client, ClientConfig } from 'pg'
-import { Value, Message } from '../../src/types'
+import { Message, Row } from '../../src/types'
 
 export function makePgClient(overrides: ClientConfig = {}) {
   return new Client({
@@ -14,8 +14,8 @@ export function makePgClient(overrides: ClientConfig = {}) {
   })
 }
 
-export function forEachMessage<T extends Value>(
-  stream: ShapeStream,
+export function forEachMessage<T extends Row>(
+  stream: ShapeStream<T>,
   controller: AbortController,
   handler: (
     resolve: () => void,
