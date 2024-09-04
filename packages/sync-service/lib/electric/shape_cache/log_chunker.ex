@@ -24,5 +24,5 @@ defmodule Electric.ShapeCache.LogChunker do
   end
 
   @spec default_chunk_size_threshold() :: non_neg_integer()
-  defmacro default_chunk_size_threshold(), do: @default_threshold
+  def default_chunk_size_threshold(), do: @default_threshold
 end

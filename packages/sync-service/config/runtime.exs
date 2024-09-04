@@ -72,6 +72,7 @@ cache_stale_age = env!("CACHE_STALE_AGE", :integer, 60 * 5)
 statsd_host = env!("STATSD_HOST", :string?, nil)
 
 cubdb_file_path = env!("CUBDB_FILE_PATH", :string, "./shapes")
+mixed_file_path = env!("MIXED_STORAGE_DIR", :string, "./shapes_mixed")
 persistent_state_path = env!("PERSISTENT_STATE_FILE_PATH", :string, "./state")
 
 persistent_kv =
@@ -92,31 +93,32 @@ persistent_kv =
     {Electric.PersistentKV.Filesystem, :new!, root: persistent_state_path}
   )
 
-storage_opts = %{
-  chunk_bytes_threshold: env!("LOG_CHUNK_BYTES_THREHSOLD", :integer, 10_000)
-}
+common_storage_opts = [
+  chunk_bytes_threshold: env!("LOG_CHUNK_BYTES_THRESHOLD", :integer, 10_000)
+]
 
-cub_db_opts = %{
-  file_path: cubdb_file_path
-}
-
-storage =
+{storage_mod, storage_opts} =
   env!(
     "STORAGE",
     fn storage ->
       case String.downcase(storage) do
         "memory" ->
-          {Electric.ShapeCache.InMemoryStorage, storage_opts}
+          {Electric.ShapeCache.InMemoryStorage, []}
 
         "cubdb" ->
-          {Electric.ShapeCache.CubDbStorage, Map.merge(cub_db_opts, storage_opts)}
+          {Electric.ShapeCache.CubDbStorage, file_path: cubdb_file_path}
+
+        "mixed" ->
+          {Electric.ShapeCache.MixedDiskStorage, storage_dir: mixed_file_path}
 
         _ ->
           raise Dotenvy.Error, message: "storage must be one of: MEMORY, CUBDB"
       end
     end,
-    {Electric.ShapeCache.CubDbStorage, Map.merge(cub_db_opts, storage_opts)}
+    {Electric.ShapeCache.MixedDiskStorage, storage_dir: mixed_file_path}
   )
+
+storage = {storage_mod, storage_opts ++ common_storage_opts}
 
 config :electric,
   allow_shape_deletion: enable_integration_testing,
