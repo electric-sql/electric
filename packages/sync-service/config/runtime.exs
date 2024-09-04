@@ -105,13 +105,13 @@ chunk_bytes_threshold = env!("LOG_CHUNK_BYTES_THRESHOLD", :integer, 10_000)
           {Electric.ShapeCache.InMemoryStorage, []}
 
         "file" ->
-          {Electric.ShapeCache.MixedDiskStorage, storage_dir: shape_path}
+          {Electric.ShapeCache.FileStorage, storage_dir: shape_path}
 
         _ ->
           raise Dotenvy.Error, message: "storage must be one of: MEMORY, FILE"
       end
     end,
-    {Electric.ShapeCache.MixedDiskStorage, storage_dir: shape_path}
+    {Electric.ShapeCache.FileStorage, storage_dir: shape_path}
   )
 
 storage = {storage_mod, storage_opts}

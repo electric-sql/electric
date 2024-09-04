@@ -2,7 +2,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   use ExUnit.Case, async: true
   import Support.TestUtils
 
-  alias Electric.ShapeCache.MixedDiskStorage
+  alias Electric.ShapeCache.FileStorage
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes
@@ -40,7 +40,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                ]
                |> Enum.map(&Jason.encode_to_iodata!/1)
 
-  for module <- [InMemoryStorage, MixedDiskStorage] do
+  for module <- [InMemoryStorage, FileStorage] do
     module_name = module |> Module.split() |> List.last()
 
     doctest module, import: true
@@ -524,7 +524,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   end
 
   # Tests for storage implementations that are recoverable
-  for module <- [MixedDiskStorage] do
+  for module <- [FileStorage] do
     module_name = module |> Module.split() |> List.last()
 
     describe "#{module_name}.list_shapes/1" do
@@ -699,7 +699,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     ]
   end
 
-  defp opts(MixedDiskStorage, %{tmp_dir: tmp_dir}) do
+  defp opts(FileStorage, %{tmp_dir: tmp_dir}) do
     [
       db: String.to_atom("shape_mixed_disk_#{Utils.uuid4()}"),
       storage_dir: tmp_dir

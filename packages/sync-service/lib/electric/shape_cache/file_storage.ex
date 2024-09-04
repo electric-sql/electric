@@ -1,4 +1,4 @@
-defmodule Electric.ShapeCache.MixedDiskStorage do
+defmodule Electric.ShapeCache.FileStorage do
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Replication.LogOffset
   @behaviour Electric.ShapeCache.Storage
