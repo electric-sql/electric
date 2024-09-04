@@ -3,7 +3,9 @@ defmodule Electric.ShapeCache.MixedDiskStorage do
   alias Electric.Replication.LogOffset
   @behaviour Electric.ShapeCache.Storage
 
-  @version 1
+  # If the storage format changes, increase `@version` to prevent
+  # the incompatable older versions being read
+  @version 2
   @version_key :version
 
   def shared_opts(opts) do
@@ -123,7 +125,7 @@ defmodule Electric.ShapeCache.MixedDiskStorage do
     CubDB.put(opts.db, snapshot_started_key(shape_id), true)
   end
 
-  defp offset({_shape_id, :log, tuple_offset}), do: LogOffset.new(tuple_offset)
+  defp offset({_shape_id, _, tuple_offset}), do: LogOffset.new(tuple_offset)
 
   def make_new_snapshot!(shape_id, data_stream, opts) do
     OpenTelemetry.with_span("storage.make_new_snapshot", [storage_impl: "mixed_disk"], fn ->

@@ -6,7 +6,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes
-  alias Electric.ShapeCache.CubDbStorage
   alias Electric.ShapeCache.InMemoryStorage
   alias Electric.Shapes.Shape
   alias Electric.Utils
@@ -41,7 +40,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                ]
                |> Enum.map(&Jason.encode_to_iodata!/1)
 
-  for module <- [InMemoryStorage, CubDbStorage, MixedDiskStorage] do
+  for module <- [InMemoryStorage, MixedDiskStorage] do
     module_name = module |> Module.split() |> List.last()
 
     doctest module, import: true
@@ -525,7 +524,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   end
 
   # Tests for storage implementations that are recoverable
-  for module <- [CubDbStorage, MixedDiskStorage] do
+  for module <- [MixedDiskStorage] do
     module_name = module |> Module.split() |> List.last()
 
     describe "#{module_name}.list_shapes/1" do
@@ -697,13 +696,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       snapshot_ets_table: String.to_atom("snapshot_ets_table_#{Utils.uuid4()}"),
       log_ets_table: String.to_atom("log_ets_table_#{Utils.uuid4()}"),
       chunk_checkpoint_ets_table: String.to_atom("chunk_checkpoint_ets_table_#{Utils.uuid4()}")
-    ]
-  end
-
-  defp opts(CubDbStorage, %{tmp_dir: tmp_dir}) do
-    [
-      db: String.to_atom("shape_cubdb_#{Utils.uuid4()}"),
-      file_path: tmp_dir
     ]
   end
 
