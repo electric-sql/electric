@@ -11,6 +11,7 @@ defmodule Electric.Shapes.Supervisor do
             shape_cache: [type: :mod_arg, required: true],
             registry: [type: :atom, required: true],
             storage: [type: :mod_arg, required: true],
+            chunk_bytes_threshold: [type: :non_neg_integer, required: true],
             db_pool: [type: {:or, [:atom, :pid]}, default: Electric.DbPool],
             prepare_tables_fn: [type: {:or, [:mfa, {:fun, 2}]}, required: true],
             create_snapshot_fn: [
@@ -35,7 +36,8 @@ defmodule Electric.Shapes.Supervisor do
   end
 
   def init(config) when is_map(config) do
-    %{shape_id: shape_id, storage: {_, _} = storage} = config
+    %{shape_id: shape_id, storage: {_, _} = storage} =
+      config
 
     shape_storage = Electric.ShapeCache.Storage.for_shape(shape_id, storage)
 

@@ -56,6 +56,7 @@ defmodule Electric.ShapeCache do
               default: Electric.Replication.ShapeLogCollector
             ],
             storage: [type: :mod_arg, required: true],
+            chunk_bytes_threshold: [type: :non_neg_integer, required: true],
             inspector: [type: :mod_arg, required: true],
             shape_status: [type: :atom, default: Electric.ShapeCache.ShapeStatus],
             registry: [type: {:or, [:atom, :pid]}, required: true],
@@ -177,6 +178,7 @@ defmodule Electric.ShapeCache do
     state = %{
       name: opts.name,
       storage: opts.storage,
+      chunk_bytes_threshold: opts.chunk_bytes_threshold,
       inspector: opts.inspector,
       shape_meta_table: opts.shape_meta_table,
       shape_status: opts.shape_status,
@@ -378,6 +380,7 @@ defmodule Electric.ShapeCache do
              shape_id: shape_id,
              shape: shape,
              storage: state.storage,
+             chunk_bytes_threshold: state.chunk_bytes_threshold,
              log_producer: state.log_producer,
              shape_cache:
                {__MODULE__, %{server: state.name, shape_meta_table: state.shape_meta_table}},

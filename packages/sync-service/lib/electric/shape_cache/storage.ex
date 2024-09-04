@@ -1,6 +1,5 @@
 defmodule Electric.ShapeCache.Storage do
   alias Electric.Shapes.Querying
-  alias Electric.LogItems
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
 
@@ -8,6 +7,7 @@ defmodule Electric.ShapeCache.Storage do
   @type compiled_opts :: term()
   @type storage :: {module(), compiled_opts()}
 
+  @type log_item :: {LogOffset.t(), Querying.json_iodata()} | {:chunk_boundary | LogOffset.t()}
   @type log_state :: %{
           current_chunk_byte_size: non_neg_integer()
         }
@@ -50,12 +50,8 @@ defmodule Electric.ShapeCache.Storage do
   @callback mark_snapshot_as_started(shape_id, compiled_opts()) :: :ok
 
   @doc "Append log items from one transaction to the log"
-  @callback append_to_log!(
-              shape_id(),
-              [LogItems.log_item()],
-              log_state(),
-              compiled_opts()
-            ) :: log_state()
+  @callback append_to_log!(shape_id(), Enumerable.t(log_item()), storage()) :: :ok
+
   @doc "Get stream of the log for a shape since a given offset"
   @callback get_log_stream(shape_id(), LogOffset.t(), LogOffset.t(), compiled_opts()) ::
               log()
@@ -149,10 +145,10 @@ defmodule Electric.ShapeCache.Storage do
   @doc """
   Append log items from one transaction to the log
   """
-  @spec append_to_log!(shape_id(), [LogItems.log_item()], log_state(), storage()) :: log_state()
-  def append_to_log!(shape_id, log_items, log_state, {mod, opts}) do
+  @spec append_to_log!(shape_id(), Enumerable.t(log_item()), storage()) :: :ok
+  def append_to_log!(shape_id, log_items, {mod, opts}) do
     shape_opts = mod.for_shape(shape_id, opts)
-    mod.append_to_log!(shape_id, log_items, log_state, shape_opts)
+    mod.append_to_log!(shape_id, log_items, shape_opts)
   end
 
   import LogOffset, only: :macros

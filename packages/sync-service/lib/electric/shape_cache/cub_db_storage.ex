@@ -1,5 +1,4 @@
 defmodule Electric.ShapeCache.CubDbStorage do
-  alias Electric.ShapeCache.LogChunker
   alias Electric.ConcurrentStream
   alias Electric.Replication.LogOffset
   alias Electric.Telemetry.OpenTelemetry
@@ -18,16 +17,12 @@ defmodule Electric.ShapeCache.CubDbStorage do
   def shared_opts(opts) do
     base_path = Access.get(opts, :file_path, "./shapes")
 
-    chunk_bytes_threshold =
-      Access.get(opts, :chunk_bytes_threshold, LogChunker.default_chunk_size_threshold())
-
     {:ok,
      %{
        base_path: base_path,
        shape_id: nil,
        db: nil,
-       version: @version,
-       chunk_bytes_threshold: chunk_bytes_threshold
+       version: @version
      }}
   end
 
@@ -188,36 +183,15 @@ defmodule Electric.ShapeCache.CubDbStorage do
     end)
   end
 
-  def append_to_log!(shape_id, log_items, log_state, opts) do
-    chunk_bytes_threshold = Access.fetch!(opts, :chunk_bytes_threshold)
-
+  def append_to_log!(shape_id, log_items, opts) do
     log_items
-    |> Enum.flat_map_reduce(log_state, fn log_item, log_state ->
-      json_log_item = Jason.encode!(log_item)
-      log_key = log_key(shape_id, log_item.offset)
-      current_chunk_size = log_state.current_chunk_byte_size
-
-      case LogChunker.add_to_chunk(json_log_item, current_chunk_size, chunk_bytes_threshold) do
-        {:ok, new_chunk_size} ->
-          {
-            [{log_key, json_log_item}],
-            %{log_state | current_chunk_byte_size: new_chunk_size}
-          }
-
-        {:threshold_exceeded, new_chunk_size} ->
-          {
-            [
-              {log_key, json_log_item},
-              {chunk_checkpoint_key(shape_id, log_item.offset), nil}
-            ],
-            %{log_state | current_chunk_byte_size: new_chunk_size}
-          }
-      end
+    |> Enum.map(fn
+      {:chunk_boundary, offset} -> {chunk_checkpoint_key(shape_id, offset), nil}
+      {offset, json_log_item} -> {log_key(shape_id, offset), json_log_item}
     end)
-    |> then(fn {items, log_state} ->
-      CubDB.put_multi(opts.db, items)
-      log_state
-    end)
+    |> then(&CubDB.put_multi(opts.db, &1))
+
+    :ok
   end
 
   def cleanup!(shape_id, opts) do
