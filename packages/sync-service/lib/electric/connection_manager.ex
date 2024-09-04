@@ -223,7 +223,7 @@ defmodule Electric.ConnectionManager do
          state,
          mode
        ) do
-    handle_connection_error(error, state)
+    handle_connection_error(error, state, mode)
   end
 
   defp handle_connection_error(error, state, mode) do

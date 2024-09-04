@@ -615,8 +615,8 @@ defmodule Electric.Shapes.ConsumerTest do
         send(opts.parent, {CrashingStorage, :crash, shape_id})
         raise "crash from #{shape_id}"
       else
-        for %{headers: %{txid: txid}} <- log_items do
-          send(opts.parent, {CrashingStorage, :append_to_log, shape_id, txid})
+        for {offset, _data} <- log_items do
+          send(opts.parent, {CrashingStorage, :append_to_log, shape_id, offset})
         end
       end
 
@@ -683,6 +683,7 @@ defmodule Electric.Shapes.ConsumerTest do
           persistent_kv: ctx.persistent_kv,
           registry: ctx.registry,
           inspector: ctx.inspector,
+          chunk_bytes_threshold: 10_000,
           log_producer: __MODULE__.LogCollector,
           consumer_supervisor: __MODULE__.ConsumerSupervisor,
           prepare_tables_fn: {
@@ -729,19 +730,19 @@ defmodule Electric.Shapes.ConsumerTest do
 
       insert_item(conn, "value 1")
 
-      assert_receive {CrashingStorage, :append_to_log, ^shape_id1, xid1}
-      assert_receive {CrashingStorage, :append_to_log, ^shape_id2, ^xid1}
+      assert_receive {CrashingStorage, :append_to_log, ^shape_id1, offset1}
+      assert_receive {CrashingStorage, :append_to_log, ^shape_id2, ^offset1}
 
       :ok = CrashingStorageBackend.crash_once(pid, shape_id2)
 
       insert_item(conn, "value 2")
 
-      assert_receive {CrashingStorage, :append_to_log, ^shape_id1, xid2}
+      assert_receive {CrashingStorage, :append_to_log, ^shape_id1, offset2}
       assert_receive {CrashingStorage, :crash, ^shape_id2}
 
       # the whole stack has restarted, but we still get this message
-      assert_receive {CrashingStorage, :append_to_log, ^shape_id1, ^xid2}, 5000
-      assert_receive {CrashingStorage, :append_to_log, ^shape_id2, ^xid2}
+      assert_receive {CrashingStorage, :append_to_log, ^shape_id1, ^offset2}, 5000
+      assert_receive {CrashingStorage, :append_to_log, ^shape_id2, ^offset2}
     end
 
     defp insert_item(conn, val) do
