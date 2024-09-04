@@ -4,6 +4,7 @@ import { useSidebar } from 'vitepress/theme'
 
 import DefaultTheme from 'vitepress/theme-without-fonts'
 
+import BlogPostHeader from '../../src/components/BlogPostHeader.vue'
 import SiteFooter from '../../src/components/SiteFooter.vue'
 import UseCaseHeader from '../../src/components/UseCaseHeader.vue'
 
@@ -39,6 +40,9 @@ const { hasSidebar } = useSidebar()
     <template #doc-before>
       <div class="vp-doc" v-if="frontmatter.case">
         <UseCaseHeader />
+      </div>
+      <div class="vp-doc" v-if="frontmatter.post">
+        <BlogPostHeader />
       </div>
     </template>
     <template #layout-bottom>

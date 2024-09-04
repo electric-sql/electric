@@ -1,4 +1,17 @@
+import fs from 'node:fs'
 import { defineConfig } from 'vitepress'
+
+import postsData from '../data/posts.data.ts'
+
+const postPaths = fs.readdirSync('blog/posts').filter(x => x.endsWith('.md')).map(x => `blog/posts/${x}`)
+console.log(postPaths)
+
+const posts = await postsData.load(postPaths)
+
+const blogSidebarItems = await posts.map(post => ({
+  text: post.title,
+  link: post.path
+}))
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
@@ -29,6 +42,9 @@ export default defineConfig({
       'tsx',
       'typescript'
     ]
+  },
+  rewrites: {
+    'blog/posts/:year-:month-:day-:slug.md': 'blog/:year/:month/:day/:slug.md'
   },
   // https://vitepress.dev/reference/default-theme-config
   themeConfig: {
@@ -154,6 +170,12 @@ export default defineConfig({
             { text: 'Literature', link: '/docs/reference/literature' },
             { text: 'Telemetry', link: '/docs/reference/telemetry' },
           ]
+        },
+      ],
+      '/blog': [
+        {
+          text: 'Blog',
+          items: blogSidebarItems
         },
       ],
       '/about': [
