@@ -14,9 +14,6 @@ export default {
       const day = parts[2]
       const slug = parts.slice(3, 99).join('-')
 
-      console.log(parts)
-      console.log(slug)
-
       const contents = fs.readFileSync(file, 'utf-8')
       const frontmatter = contents.split('---\n')[1]
 

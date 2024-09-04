@@ -4,7 +4,6 @@ import { defineConfig } from 'vitepress'
 import postsData from '../data/posts.data.ts'
 
 const postPaths = fs.readdirSync('blog/posts').filter(x => x.endsWith('.md')).map(x => `blog/posts/${x}`)
-console.log(postPaths)
 
 const posts = await postsData.load(postPaths)
 
