@@ -22,7 +22,7 @@ const itemShape = () => {
 type Item = { id: string }
 
 async function createItem(newId: string) {
-  const itemsStream = getShapeStream(itemShape())
+  const itemsStream = getShapeStream<Item>(itemShape())
 
   // Match the insert
   const findUpdatePromise = matchStream({
@@ -41,7 +41,7 @@ async function createItem(newId: string) {
 }
 
 async function clearItems() {
-  const itemsStream = getShapeStream(itemShape())
+  const itemsStream = getShapeStream<Item>(itemShape())
   // Match the delete
   const findUpdatePromise = matchStream({
     stream: itemsStream,
@@ -58,7 +58,7 @@ async function clearItems() {
 }
 
 export default function Home() {
-  const { data: items } = useShape(itemShape()) as unknown as { data: Item[] }
+  const { data: items } = useShape<Item>(itemShape())
   const [optimisticItems, updateOptimisticItems] = useOptimistic<
     Item[],
     { newId?: string; isClear?: boolean }

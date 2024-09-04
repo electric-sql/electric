@@ -18,9 +18,9 @@ type ToDo = {
 }
 
 export default function Index() {
-  const { data: todos } = useShape({
+  const { data: todos } = useShape<ToDo>({
     url: `http://localhost:3000/v1/shape/todos`,
-  }) as unknown as { data: ToDo[] }
+  })
   todos.sort((a, b) => a.created_at - b.created_at)
   console.log({ todos })
   return (

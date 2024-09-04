@@ -5,7 +5,7 @@ import { useShape } from "@electric-sql/react"
 import { ShapeStreamOptions } from "@electric-sql/client"
 import "./Example.css"
 
-interface User {
+type User = {
   id: number
   name: string
   org_id: number
@@ -49,7 +49,7 @@ const usersShape = (): ShapeStreamOptions => {
 
 export default function Home() {
   const searchParams = useSearchParams()
-  const { data: users, isError, error } = useShape(usersShape())
+  const { data: users, isError, error } = useShape<User>(usersShape())
 
   const classFor = (org_id: string | null) => {
     const orgSearchParam = searchParams.get(`org_id`)
