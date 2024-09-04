@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.4.1
+
+### Patch Changes
+
+- 18b7054: Improve consistency of shape consumers after storage error
+
 ## 0.4.0
 
 ### Minor Changes
