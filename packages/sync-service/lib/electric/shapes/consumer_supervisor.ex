@@ -4,6 +4,8 @@ defmodule Electric.Shapes.ConsumerSupervisor do
   """
   use DynamicSupervisor
 
+  alias Electric.Shapes.Consumer
+
   require Logger
 
   @name Electric.Application.process_name(__MODULE__)
@@ -23,14 +25,11 @@ defmodule Electric.Shapes.ConsumerSupervisor do
   def start_shape_consumer(name \\ @name, config) do
     Logger.debug(fn -> "Starting consumer for #{Access.fetch!(config, :shape_id)}" end)
 
-    DynamicSupervisor.start_child(
-      name,
-      {Electric.Shapes.ShapeSupervisor, config}
-    )
+    DynamicSupervisor.start_child(name, {Consumer.Supervisor, config})
   end
 
   def stop_shape_consumer(name \\ @name, shape_id) do
-    case GenServer.whereis(Electric.Shapes.ShapeSupervisor.name(shape_id)) do
+    case GenServer.whereis(Consumer.Supervisor.name(shape_id)) do
       nil ->
         {:error, "no consumer for shape id #{inspect(shape_id)}"}
 

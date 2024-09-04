@@ -107,7 +107,7 @@ defmodule Electric.Shapes.ConsumerTest do
       consumers =
         for {shape_id, shape} <- ctx.shapes do
           allow(Mock.Storage, self(), fn ->
-            Shapes.ShapeSupervisor.name(shape_id) |> GenServer.whereis()
+            Shapes.Consumer.Supervisor.name(shape_id) |> GenServer.whereis()
           end)
 
           allow(Mock.Storage, self(), fn ->
@@ -115,12 +115,12 @@ defmodule Electric.Shapes.ConsumerTest do
           end)
 
           allow(Mock.Storage, self(), fn ->
-            Shapes.Snapshotter.name(shape_id) |> GenServer.whereis()
+            Shapes.Consumer.Snapshotter.name(shape_id) |> GenServer.whereis()
           end)
 
           {:ok, consumer} =
             start_supervised(
-              {Shapes.ShapeSupervisor,
+              {Shapes.Consumer.Supervisor,
                shape_id: shape_id,
                shape: shape,
                log_producer: producer,
@@ -129,7 +129,7 @@ defmodule Electric.Shapes.ConsumerTest do
                storage: {Mock.Storage, []},
                chunk_bytes_threshold: 10_000,
                prepare_tables_fn: &prepare_tables_fn/2},
-              id: {Shapes.ShapeSupervisor, shape_id}
+              id: {Shapes.Consumer.Supervisor, shape_id}
             )
 
           consumer
@@ -301,9 +301,9 @@ defmodule Electric.Shapes.ConsumerTest do
     defp assert_consumer_shutdown(shape_id, fun) do
       monitors =
         for name <- [
-              Shapes.ShapeSupervisor.name(shape_id),
+              Shapes.Consumer.Supervisor.name(shape_id),
               Shapes.Consumer.name(shape_id),
-              Shapes.Snapshotter.name(shape_id)
+              Shapes.Consumer.Snapshotter.name(shape_id)
             ],
             pid = GenServer.whereis(name) do
           ref = Process.monitor(pid)

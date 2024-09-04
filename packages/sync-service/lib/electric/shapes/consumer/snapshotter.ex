@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.Snapshotter do
+defmodule Electric.Shapes.Consumer.Snapshotter do
   use GenServer, restart: :temporary
 
   alias Electric.ShapeCache.Storage

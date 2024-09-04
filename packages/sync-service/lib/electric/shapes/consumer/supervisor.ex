@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.ShapeSupervisor do
+defmodule Electric.Shapes.Consumer.Supervisor do
   use Supervisor, restart: :transient
 
   require Logger
@@ -16,7 +16,7 @@ defmodule Electric.Shapes.ShapeSupervisor do
             prepare_tables_fn: [type: {:or, [:mfa, {:fun, 2}]}, required: true],
             create_snapshot_fn: [
               type: {:fun, 5},
-              default: &Electric.Shapes.Snapshotter.query_in_readonly_txn/5
+              default: &Electric.Shapes.Consumer.Snapshotter.query_in_readonly_txn/5
             ]
           )
 
@@ -46,7 +46,7 @@ defmodule Electric.Shapes.ShapeSupervisor do
     children = [
       {Electric.ShapeCache.Storage, shape_storage},
       {Electric.Shapes.Consumer, shape_config},
-      {Electric.Shapes.Snapshotter, shape_config}
+      {Electric.Shapes.Consumer.Snapshotter, shape_config}
     ]
 
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
