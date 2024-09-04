@@ -18,19 +18,17 @@ post: true
 import Tweet from 'vue-tweet'
 </script>
 
-[Electric Next](https://github.com/electric-sql/archived-electric-next) is an experimental new approach to building the ElectricSQL sync engine.
-
-One that's informed by the lessons learned building the [previous system](https://legacy.electric-sql.com) and inspired by new insight from [Kyle&nbsp;Mathews](https://electric-sql.com/about/team#kyle).
+Electric Next is a new approach that we've adopted to building ElectricSQL. It's informed by the lessons learned building the [previous system](https://legacy.electric-sql.com) and inspired by new insight from [Kyle&nbsp;Mathews](https://electric-sql.com/about/team#kyle) joining the team.
 
 What started as tinkering is now the way forward for Electric. So, what's changed and what does it mean for you?
 
 ## What is Electric Next?
 
-Electric Next is a clean rebuild of the Electric sync engine.
+Electric Next was a clean rebuild of the Electric sync engine that now forms the basis of ElectricSQL moving forwards.
 
-We created a new repo and started by porting the absolute minimum code necessary from the ]previous repo](https://github.com/electric-sql/electric-old). Once we we confident that Electric next was the way forward, we froze the old system and moved Electric Next into our main repo at [https://github.com/electric-sql/electric](https://github.com/electric-sql/electric). So Electric Next is now the main Electric system and will be moving forward.
+We created a new repo and started by porting the absolute minimum code necessary from the [previous repo](https://github.com/electric-sql/electric-old). Once we were confident that Electric Next was the way forward, we froze the old system and moved the new code into our main repo at [https://github.com/electric-sql/electric](https://github.com/electric-sql/electric).
 
-It provides an [HTTP API](/docs/api/http) for syncing [Shapes](/docs/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/docs/api/clients/typescript) and [integrations](/docs/api/integrations/react). It's also simple to write your own client in any language.
+The new approach provides an [HTTP API](/docs/api/http) for syncing [Shapes](/docs/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/docs/api/clients/typescript) and [integrations](/docs/api/integrations/react). It's also simple to write your own client in any language.
 
 ## Why build a new system?
 
@@ -293,17 +291,12 @@ Electric Next is available to use today. We welcome community contributions.
 
 See the:
 
-- [Quickstart guide](/docs/quickstart)
-- [API docs](/docs/api/http)
+- [Quickstart](/docs/quickstart)
+- [HTTP API](/docs/api/http)
 - [Examples](https://github.com/electric-sql/electric/tree/main/examples)
 
 If you have any questions or need support, ask on the `#help-and-support` channel in the [Electric Discord](https://discord.electric-sql.com).
 
 ### Get involved in development
 
-Electric is open source (Apache 2.0) and developed on GitHub at [electric-sql/electric](https://github.com/electric-sql/electric).
-
-See:
-
-- the [open issues](https://github.com/electric-sql/electric/issues) on the repo
-- the [contributing guide](https://github.com/electric-sql/electric/blob/main/CONTRIBUTING.md) here
+Electric is open source (Apache 2.0) and developed on GitHub at [electric-sql/electric](https://github.com/electric-sql/electric). See the [open issues](https://github.com/electric-sql/electric/issues) on the repo and the [contributing guide](https://github.com/electric-sql/electric/blob/main/CONTRIBUTING.md).

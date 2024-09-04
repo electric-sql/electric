@@ -23,16 +23,24 @@ const postDate = `${parts[0]}-${parts[1]}-${parts[2]}`
 
   .post-author {
     display: flex;
-    flex-direction: row;
     align-items: center;
-    justify-content: flex-start;
-    color: var(--vp-c-text-1);
+    color: var(--vp-c-text-2);
+    font-size: 15px;
+    min-width: 360px;
+    overflow: hidden;
+  }
+  .date {
+    color: var(--vp-c-text-2);
     font-size: 15px;
   }
   .post-author img {
     width: 42px;
     border-radius: 21px;
     margin-right: 0.7rem;
+  }
+  .post-author a,
+  .post-author > span {
+    display: inline-block;
   }
 </style>
 
@@ -44,18 +52,27 @@ const postDate = `${parts[0]}-${parts[1]}-${parts[2]}`
     <h1>
       {{ frontmatter.title }}
     </h1>
-    <p class="post-author" v-for="slug in frontmatter.authors">
-      <a :href="('/about/team#' + slug)" class="no-visual">
+    <p class="post-author">
+      <a v-for="(slug, index) in frontmatter.authors"
+          :href="('/about/team#' + slug)"
+          class="no-visual"
+          :style="{marginLeft: index > 0 ? '-20px' : '0'}">
         <img :src="authors[slug].image" />
       </a>
-      <a :href="('/about/team#' + slug)" class="no-visual">
-        <span>
-          by {{ authors[slug].name }}
-        </span>
+      <span>By&nbsp;</span>
+      <a v-for="(slug, index) in frontmatter.authors"
+          :href="('/about/team#' + slug)"
+          class="no-visual">
+        <span>{{ authors[slug].name }}<span v-if="index === frontmatter.authors.length - 1">&nbsp;</span><span v-if="index < frontmatter.authors.length - 1"><span v-if="index < frontmatter.authors.length - 2">,&nbsp;</span><span v-else>&nbsp;and&nbsp;</span></span></span>
       </a>
-      <span>
-        &nbsp;on {{ new Date(postDate).toLocaleDateString() }}.
+      <span class="date hidden-sm"
+          :style="{display: frontmatter.authors.length === 1 ? 'inline-block !important' : ''}">
+        on {{ new Date(postDate).toLocaleDateString() }}.
       </span>
     </p>
+    <div class="date block-sm" :style="{display: frontmatter.authors.length === 1 ? 'none !important' : ''}">
+      Published on {{ new Date(postDate).toLocaleDateString() }}
+    </div>
+    <hr />
   </div>
 </template>
