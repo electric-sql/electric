@@ -11,7 +11,7 @@ Example usage in a component.
 import { useShape } from "@electric-sql/react"
 
 export default function MyComponent() {
-  const { isUpToDate, data } = useShape({
+  const { isUpToDate, data } = useShape<{ title: string}>({
     url: `http://localhost:3000/v1/shape/foo`,
   })
 
@@ -28,8 +28,7 @@ export default function MyComponent() {
 ```
 Other helpful functions:
 
-- `useShapeContext` — access the Shape Context
 - `preloadShape` — useful to call in route loading functions or elsewhere when you want to ensure Shape data is loaded before rendering a route or component.
-- `getShapeStream` — get (or create) a ShapeStream off the global cache
-- `getShape` — get (or create) a Shape off the global cache
+- `getShapeStream<T>` — get (or create) a ShapeStream off the global cache
+- `getShape<T>` — get (or create) a Shape off the global cache
 
