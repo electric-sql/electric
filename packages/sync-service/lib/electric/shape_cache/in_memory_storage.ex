@@ -1,7 +1,5 @@
 defmodule Electric.ShapeCache.InMemoryStorage do
   use Agent
-
-  require Electric.ShapeCache.LogChunker
   alias Electric.ShapeCache.LogChunker
   alias Electric.ConcurrentStream
   alias Electric.Replication.LogOffset

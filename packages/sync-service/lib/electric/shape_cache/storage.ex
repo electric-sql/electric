@@ -19,16 +19,16 @@ defmodule Electric.ShapeCache.Storage do
   @callback for_shape(shape_id(), compiled_opts()) :: compiled_opts()
 
   @doc "Start any processes required to run the storage backend"
-  @callback start_link(storage()) :: GenServer.on_start()
-  @callback initialise(storage()) :: :ok
-  @callback list_shapes(storage()) :: [
+  @callback start_link(compiled_opts()) :: GenServer.on_start()
+  @callback initialise(compiled_opts()) :: :ok
+  @callback list_shapes(compiled_opts()) :: [
               shape_id: shape_id(),
               shape: Shape.t(),
               latest_offset: LogOffset.t(),
               snapshot_xmin: non_neg_integer()
             ]
-  @callback add_shape(shape_id(), Shape.t(), storage()) :: :ok
-  @callback set_snapshot_xmin(shape_id(), non_neg_integer(), storage()) :: :ok
+  @callback add_shape(shape_id(), Shape.t(), compiled_opts()) :: :ok
+  @callback set_snapshot_xmin(shape_id(), non_neg_integer(), compiled_opts()) :: :ok
 
   @doc "Check if snapshot for a given shape id already exists"
   @callback snapshot_started?(shape_id(), compiled_opts()) :: boolean()

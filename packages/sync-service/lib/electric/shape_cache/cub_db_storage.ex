@@ -1,5 +1,4 @@
 defmodule Electric.ShapeCache.CubDbStorage do
-  require Electric.ShapeCache.LogChunker
   alias Electric.ShapeCache.LogChunker
   alias Electric.ConcurrentStream
   alias Electric.Replication.LogOffset
