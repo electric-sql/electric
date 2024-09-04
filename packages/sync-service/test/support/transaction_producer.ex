@@ -12,13 +12,13 @@ defmodule Support.TransactionProducer do
     GenStage.start_link(__MODULE__, args, opts)
   end
 
-  def emit(pid, changes) do
-    GenStage.call(pid, {:emit, changes})
+  def emit(pid, [change], partition \\ :transaction) do
+    GenStage.call(pid, {:emit, [{partition, change}]})
   end
 
   @impl true
   def init(_args) do
-    {:producer, [], dispatcher: GenStage.BroadcastDispatcher}
+    {:producer, [], dispatcher: Electric.Shapes.Dispatcher}
   end
 
   @impl true

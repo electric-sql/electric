@@ -1,6 +1,5 @@
 defmodule Electric.ShapeCache.StorageImplimentationsTest do
   use ExUnit.Case, async: true
-  import Support.TestUtils
 
   alias Electric.ShapeCache.FileStorage
   alias Electric.Postgres.Lsn
@@ -9,6 +8,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   alias Electric.ShapeCache.InMemoryStorage
   alias Electric.Shapes.Shape
   alias Electric.Utils
+
+  import Support.TestUtils
+
   @moduletag :tmp_dir
 
   @shape_id "the-shape-id"

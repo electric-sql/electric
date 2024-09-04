@@ -16,3 +16,4 @@ caching/nginx_cache
 build
 tsconfig.tsbuildinfo
 **/*.vitest-temp.json
+/packages/sync-service/state/

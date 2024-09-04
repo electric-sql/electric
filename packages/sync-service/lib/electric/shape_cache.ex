@@ -55,6 +55,10 @@ defmodule Electric.ShapeCache do
               type: {:or, [:atom, :pid]},
               default: Electric.Replication.ShapeLogCollector
             ],
+            consumer_supervisor: [
+              type: @genserver_name_schema,
+              default: Electric.Shapes.ConsumerSupervisor.name()
+            ],
             storage: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],
             inspector: [type: :mod_arg, required: true],
@@ -66,7 +70,7 @@ defmodule Electric.ShapeCache do
             prepare_tables_fn: [type: {:or, [:mfa, {:fun, 2}]}, required: true],
             create_snapshot_fn: [
               type: {:fun, 5},
-              default: &Shapes.Snapshotter.query_in_readonly_txn/5
+              default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/5
             ]
           )
 
@@ -88,7 +92,7 @@ defmodule Electric.ShapeCache do
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
     # Get or create the shape ID and fire a snapshot if necessary
-    if shape_state = shape_status.existing_shape(table, shape) do
+    if shape_state = shape_status.get_existing_shape(table, shape) do
       shape_state
     else
       server = Access.get(opts, :server, __MODULE__)
@@ -159,7 +163,7 @@ defmodule Electric.ShapeCache do
     table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
-    if shape_status.existing_shape(table, shape_id) do
+    if shape_status.get_existing_shape(table, shape_id) do
       true
     else
       server = Access.get(opts, :server, __MODULE__)
@@ -188,71 +192,67 @@ defmodule Electric.ShapeCache do
       create_snapshot_fn: opts.create_snapshot_fn,
       prepare_tables_fn: opts.prepare_tables_fn,
       log_producer: opts.log_producer,
-      registry: opts.registry
+      registry: opts.registry,
+      consumer_supervisor: opts.consumer_supervisor,
+      subscription: nil
     }
 
     recover_shapes(state)
 
+    # do this after finishing this function so that we're subscribed to the
+    # producer before it starts forwarding its demand
+    send(self(), :consumers_ready)
+
     {:consumer, state,
-     subscribe_to: [{opts.log_producer, selector: &is_struct(&1, Changes.Relation)}]}
+     subscribe_to: [
+       {opts.log_producer, max_demand: 1, selector: &is_struct(&1, Changes.Relation)}
+     ]}
   end
 
   @impl GenStage
-  def handle_events(relations, _from, state) do
+  def handle_info(:consumers_ready, state) do
+    :ok = GenStage.demand(state.log_producer, :forward)
+    {:noreply, [], state}
+  end
+
+  @impl GenStage
+  def handle_events([relation], _from, state) do
     %{persistent_state: persistent_state, shape_status: shape_status} = state
     # NOTE: [@magnetised] this manages cleaning up shapes after a relation
     # change. it's not doing it in a consistent way, as the shape consumers
     # could still be receiving txns after a relation message that requires them
     # to terminate.
-    #
-    # if we decide this is a problem, then a potential solution is to pass the
-    # relation messages to the shape consumers (who currently filter them out)
-    # and have a relation message act as a block on the shape.
-    #
-    # 1. the shape consumer receives a relation message, stores it as some
-    #    block value then starts buffering data.
-    # 2. this process receives the same relation message, kills any shapes that
-    #    are affected then sends some `{:resume, %Relation{}}` message to all
-    #    living shape consumers.
-    # 3. shape consumers blocked on the relation then continue.
-    #
-    # If the shape consumer receives the `resume` message before the relation
-    # message then it adds the `%Relation{}` to some set of allowable
-    # relations, then when it receives the relation message through the
-    # replication stream, it knows that it can just continue.
 
-    Enum.each(relations, fn relation ->
-      old_rel = shape_status.get_relation(persistent_state, relation.id)
+    old_rel = shape_status.get_relation(persistent_state, relation.id)
 
-      if is_nil(old_rel) || old_rel != relation do
-        :ok = shape_status.store_relation(persistent_state, relation)
-      end
+    if is_nil(old_rel) || old_rel != relation do
+      :ok = shape_status.store_relation(persistent_state, relation)
+    end
 
-      if !is_nil(old_rel) && old_rel != relation do
-        Logger.info("Schema for the table #{old_rel.schema}.#{old_rel.table} changed")
+    if !is_nil(old_rel) && old_rel != relation do
+      Logger.info("Schema for the table #{old_rel.schema}.#{old_rel.table} changed")
 
-        change = %Changes.RelationChange{old_relation: old_rel, new_relation: relation}
+      change = %Changes.RelationChange{old_relation: old_rel, new_relation: relation}
 
-        # Fetch all shapes that are affected by the relation change and clean them up
-        persistent_state
-        |> shape_status.list_shapes()
-        |> Enum.filter(&Shape.is_affected_by_relation_change?(&1, change))
-        |> Enum.map(&elem(&1, 0))
-        |> Enum.each(fn shape_id -> clean_up_shape(state, shape_id) end)
-      end
+      # Fetch all shapes that are affected by the relation change and clean them up
+      persistent_state
+      |> shape_status.list_shapes()
+      |> Enum.filter(&Shape.is_affected_by_relation_change?(&1, change))
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.each(fn shape_id -> clean_up_shape(state, shape_id) end)
+    end
 
-      if old_rel != relation do
-        # Clean column information from ETS
-        # also when old_rel is nil because column info
-        # may already be loaded into ETS by the initial shape request
-        {inspector, inspector_opts} = state.inspector
-        # if the old relation exists we use that one
-        # because the table name may have changed in the new relation
-        # if there is no old relation, we use the new one
-        rel = old_rel || relation
-        inspector.clean_column_info({rel.schema, rel.table}, inspector_opts)
-      end
-    end)
+    if old_rel != relation do
+      # Clean column information from ETS
+      # also when old_rel is nil because column info
+      # may already be loaded into ETS by the initial shape request
+      {inspector, inspector_opts} = state.inspector
+      # if the old relation exists we use that one
+      # because the table name may have changed in the new relation
+      # if there is no old relation, we use the new one
+      rel = old_rel || relation
+      inspector.clean_column_info({rel.schema, rel.table}, inspector_opts)
+    end
 
     {:noreply, [], state}
   end
@@ -260,12 +260,12 @@ defmodule Electric.ShapeCache do
   @impl GenStage
   def handle_call({:create_or_wait_shape_id, shape}, _from, %{shape_status: shape_status} = state) do
     {{shape_id, latest_offset}, state} =
-      if shape_state = shape_status.existing_shape(state.persistent_state, shape) do
+      if shape_state = shape_status.get_existing_shape(state.persistent_state, shape) do
         {shape_state, state}
       else
         {:ok, shape_id} = shape_status.add_shape(state.persistent_state, shape)
 
-        {:ok, _snapshot_xmin, latest_offset} = start_shape(shape_id, shape, state)
+        {:ok, _pid, _snapshot_xmin, latest_offset} = start_shape(shape_id, shape, state)
         {{shape_id, latest_offset}, state}
       end
 
@@ -290,7 +290,8 @@ defmodule Electric.ShapeCache do
   end
 
   def handle_call({:wait_shape_id, shape_id}, _from, %{shape_status: shape_status} = state) do
-    {:reply, !is_nil(shape_status.existing_shape(state.persistent_state, shape_id)), [], state}
+    {:reply, !is_nil(shape_status.get_existing_shape(state.persistent_state, shape_id)), [],
+     state}
   end
 
   def handle_call({:truncate, shape_id}, _from, state) do
@@ -347,13 +348,13 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_shape(state, shape_id) do
-    Electric.ShapeCache.ShapeSupervisor.stop_shape_consumer(shape_id)
+    Electric.Shapes.ConsumerSupervisor.stop_shape_consumer(state.consumer_supervisor, shape_id)
 
     state.shape_status.remove_shape(state.persistent_state, shape_id)
   end
 
   defp is_known_shape_id?(state, shape_id) do
-    if state.shape_status.existing_shape(state.persistent_state, shape_id) do
+    if state.shape_status.get_existing_shape(state.persistent_state, shape_id) do
       true
     else
       false
@@ -370,13 +371,14 @@ defmodule Electric.ShapeCache do
     state.persistent_state
     |> state.shape_status.list_shapes()
     |> Enum.each(fn {shape_id, shape} ->
-      {:ok, _snapshot_xmin, _latest_offset} = start_shape(shape_id, shape, state)
+      {:ok, _pid, _snapshot_xmin, _latest_offset} = start_shape(shape_id, shape, state)
     end)
   end
 
   defp start_shape(shape_id, shape, state) do
-    with {:ok, _pid} <-
-           Electric.ShapeCache.ShapeSupervisor.start_shape_consumer(
+    with {:ok, pid} <-
+           Electric.Shapes.ConsumerSupervisor.start_shape_consumer(
+             state.consumer_supervisor,
              shape_id: shape_id,
              shape: shape,
              storage: state.storage,
@@ -401,7 +403,7 @@ defmodule Electric.ShapeCache do
           latest_offset
         )
 
-      {:ok, snapshot_xmin, latest_offset}
+      {:ok, pid, snapshot_xmin, latest_offset}
     end
   end
 end

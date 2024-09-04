@@ -4,6 +4,11 @@ import Dotenvy
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 config :logger, level: :debug
 
+# uncomment if you need to track process creation and destruction
+# config :logger,
+#   handle_otp_reports: true,
+#   handle_sasl_reports: true
+
 if config_env() == :test, do: config(:logger, level: :info)
 
 if config_env() in [:dev, :test] do
