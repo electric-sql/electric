@@ -2,7 +2,7 @@ import { describe, expect, inject, vi } from 'vitest'
 import { v4 as uuidv4 } from 'uuid'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
-import { ShapeStream, Shape } from '../src/client'
+import { ShapeStream, Shape, FetchError } from '../src/client'
 
 const BASE_URL = inject(`baseUrl`)
 
@@ -16,7 +16,7 @@ describe(`Shape`, () => {
     const map = await shape.value
 
     expect(map).toEqual(new Map())
-    expect(shape.lastSynced).toBeLessThanOrEqual(Date.now() - start)
+    expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
   })
 
   it(`should notify with the initial value`, async ({
@@ -46,7 +46,7 @@ describe(`Shape`, () => {
     })
 
     expect(map).toEqual(expectedValue)
-    expect(shape.lastSynced).toBeLessThanOrEqual(Date.now() - start)
+    expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
   })
 
   it(`should continually sync a shape/table`, async ({
@@ -74,10 +74,10 @@ describe(`Shape`, () => {
       priority: 10,
     })
     expect(map).toEqual(expectedValue)
-    expect(shape.lastSynced).toBeLessThanOrEqual(Date.now() - start)
+    expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
 
     await sleep(100)
-    expect(shape.lastSynced).toBeGreaterThanOrEqual(100)
+    expect(shape.lastSynced()).toBeGreaterThanOrEqual(100)
 
     // FIXME: might get notified before all changes are submitted
     const intermediate = Date.now()
@@ -98,7 +98,7 @@ describe(`Shape`, () => {
       priority: 10,
     })
     expect(shape.valueSync).toEqual(expectedValue)
-    expect(shape.lastSynced).toBeLessThanOrEqual(Date.now() - intermediate)
+    expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - intermediate)
 
     shape.unsubscribeAll()
   })
@@ -161,11 +161,11 @@ describe(`Shape`, () => {
         dataUpdateCount++
         if (dataUpdateCount === 1) {
           expect(shapeData).toEqual(expectedValue1)
-          expect(shape.lastSynced).toBeLessThanOrEqual(Date.now() - start)
+          expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
           return
         } else if (dataUpdateCount === 2) {
           expect(shapeData).toEqual(expectedValue2)
-          expect(shape.lastSynced).toBeLessThanOrEqual(
+          expect(shape.lastSynced()).toBeLessThanOrEqual(
             Date.now() - rotationTime
           )
           return resolve()
@@ -209,7 +209,7 @@ describe(`Shape`, () => {
       priority: 10,
     })
     expect(value).toEqual(expectedValue)
-    expect(shape.lastSynced).toBeLessThanOrEqual(Date.now() - start)
+    expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
 
     shape.unsubscribeAll()
   })
@@ -227,5 +227,63 @@ describe(`Shape`, () => {
 
     expect(shape.numSubscribers).toBe(0)
     expect(subFn).not.toHaveBeenCalled()
+  })
+
+  it(`should expose connection status`, async ({ issuesTableUrl }) => {
+    const aborter = new AbortController()
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      signal: aborter.signal,
+    })
+
+    await sleep(100) // give some time for the initial fetch to complete
+    expect(shapeStream.isConnected()).true
+
+    const shape = new Shape(shapeStream)
+    await shape.value
+
+    expect(shapeStream.isConnected()).true
+
+    // Abort the shape stream and check connectivity status
+    aborter.abort()
+    await sleep(100) // give some time for the shape stream to abort
+
+    expect(shapeStream.isConnected()).false
+  })
+
+  it(`should set isConnected to false on fetch error and back on true when fetch succeeds again`, async ({
+    issuesTableUrl,
+  }) => {
+    let fetchShouldFail = false
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      fetchClient: async (_input, _init) => {
+        if (fetchShouldFail)
+          throw new FetchError(
+            500,
+            `Artifical fetch error.`,
+            undefined,
+            {},
+            ``,
+            undefined
+          )
+        await sleep(50)
+        return new Response(undefined, { status: 204 })
+      },
+    })
+
+    await sleep(100) // give some time for the initial fetch to complete
+    expect(shapeStream.isConnected()).true
+
+    // Now make fetch fail and check the status
+    fetchShouldFail = true
+    await sleep(20) // give some time for the request to be aborted
+
+    expect(shapeStream.isConnected()).false
+
+    fetchShouldFail = false
+    await sleep(200)
+
+    expect(shapeStream.isConnected()).true
   })
 })
