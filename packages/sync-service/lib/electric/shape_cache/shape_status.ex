@@ -13,7 +13,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
 
   @callback initialise(ShapeStatus.options()) :: {:ok, ShapeStatus.t()} | {:error, term()}
   @callback list_shapes(ShapeStatus.t()) :: [{shape_id(), Shape.t()}]
-  @callback existing_shape(ShapeStatus.t(), Shape.t() | shape_id()) ::
+  @callback get_existing_shape(ShapeStatus.t(), Shape.t() | shape_id()) ::
               {shape_id(), LogOffset.t()} | nil
   @callback add_shape(ShapeStatus.t(), Shape.t()) ::
               {:ok, shape_id()} | {:error, term()}
@@ -160,13 +160,13 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @spec existing_shape(t(), shape_id() | Shape.t()) :: nil | {shape_id(), LogOffset.t()}
-  def existing_shape(%__MODULE__{shape_meta_table: table}, shape_or_id) do
-    existing_shape(table, shape_or_id)
+  @spec get_existing_shape(t(), shape_id() | Shape.t()) :: nil | {shape_id(), LogOffset.t()}
+  def get_existing_shape(%__MODULE__{shape_meta_table: table}, shape_or_id) do
+    get_existing_shape(table, shape_or_id)
   end
 
-  @spec existing_shape(table(), Shape.t()) :: nil | {shape_id(), LogOffset.t()}
-  def existing_shape(meta_table, %Shape{} = shape) do
+  @spec get_existing_shape(table(), Shape.t()) :: nil | {shape_id(), LogOffset.t()}
+  def get_existing_shape(meta_table, %Shape{} = shape) do
     hash = Shape.hash(shape)
 
     case :ets.select(meta_table, [{{{@shape_hash_lookup, hash}, :"$1"}, [true], [:"$1"]}]) do
@@ -178,8 +178,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @spec existing_shape(table(), shape_id()) :: nil | {shape_id(), LogOffset.t()}
-  def existing_shape(meta_table, shape_id) when is_binary(shape_id) do
+  @spec get_existing_shape(table(), shape_id()) :: nil | {shape_id(), LogOffset.t()}
+  def get_existing_shape(meta_table, shape_id) when is_binary(shape_id) do
     case :ets.lookup(meta_table, {@shape_meta_data, shape_id}) do
       [] -> nil
       [{_, _shape, _xmin, offset}] -> {shape_id, offset}

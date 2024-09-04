@@ -77,61 +77,61 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert [{^shape_id_2, ^shape_2}] = ShapeStatus.list_shapes(state)
   end
 
-  test "existing_shape/2 with %Shape{}", ctx do
+  test "get_existing_shape/2 with %Shape{}", ctx do
     {:ok, state, []} = new_state(ctx)
     shape = shape!()
 
-    refute ShapeStatus.existing_shape(state, shape)
+    refute ShapeStatus.get_existing_shape(state, shape)
 
     assert {:ok, shape_id} = ShapeStatus.add_shape(state, shape)
-    assert {^shape_id, _} = ShapeStatus.existing_shape(state, shape)
+    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
 
     {:ok, state, []} = new_state(ctx)
-    assert {^shape_id, _} = ShapeStatus.existing_shape(state, shape)
+    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
 
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_id)
-    refute ShapeStatus.existing_shape(state, shape)
+    refute ShapeStatus.get_existing_shape(state, shape)
   end
 
-  test "existing_shape/2 with shape_id", ctx do
+  test "get_existing_shape/2 with shape_id", ctx do
     shape = shape!()
     {:ok, state, [shape_id]} = new_state(ctx, shapes: [shape])
 
-    refute ShapeStatus.existing_shape(state, "1234")
+    refute ShapeStatus.get_existing_shape(state, "1234")
 
-    assert {^shape_id, _} = ShapeStatus.existing_shape(state, shape)
-    assert {^shape_id, _} = ShapeStatus.existing_shape(state, shape_id)
+    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
+    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape_id)
 
     {:ok, state, []} = new_state(ctx)
-    assert {^shape_id, _} = ShapeStatus.existing_shape(state, shape)
-    assert {^shape_id, _} = ShapeStatus.existing_shape(state, shape_id)
+    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
+    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape_id)
 
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_id)
-    refute ShapeStatus.existing_shape(state, shape)
-    refute ShapeStatus.existing_shape(state, shape_id)
+    refute ShapeStatus.get_existing_shape(state, shape)
+    refute ShapeStatus.get_existing_shape(state, shape_id)
   end
 
-  test "existing_shape/2 public api", ctx do
+  test "get_existing_shape/2 public api", ctx do
     shape = shape!()
     table = table_name()
 
     {:ok, _state, [shape_id]} = new_state(ctx, table: table, shapes: [shape])
 
-    refute ShapeStatus.existing_shape(table, "1234")
+    refute ShapeStatus.get_existing_shape(table, "1234")
 
-    assert {^shape_id, _} = ShapeStatus.existing_shape(table, shape)
-    assert {^shape_id, _} = ShapeStatus.existing_shape(table, shape_id)
+    assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape)
+    assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape_id)
 
     table = table_name()
 
     {:ok, state, []} = new_state(ctx, table: table)
 
-    assert {^shape_id, _} = ShapeStatus.existing_shape(table, shape)
-    assert {^shape_id, _} = ShapeStatus.existing_shape(table, shape_id)
+    assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape)
+    assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape_id)
 
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_id)
-    refute ShapeStatus.existing_shape(table, shape)
-    refute ShapeStatus.existing_shape(table, shape_id)
+    refute ShapeStatus.get_existing_shape(table, shape)
+    refute ShapeStatus.get_existing_shape(table, shape_id)
   end
 
   test "latest_offset", ctx do

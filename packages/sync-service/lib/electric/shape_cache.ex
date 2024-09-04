@@ -92,7 +92,7 @@ defmodule Electric.ShapeCache do
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
     # Get or create the shape ID and fire a snapshot if necessary
-    if shape_state = shape_status.existing_shape(table, shape) do
+    if shape_state = shape_status.get_existing_shape(table, shape) do
       shape_state
     else
       server = Access.get(opts, :server, __MODULE__)
@@ -163,7 +163,7 @@ defmodule Electric.ShapeCache do
     table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
-    if shape_status.existing_shape(table, shape_id) do
+    if shape_status.get_existing_shape(table, shape_id) do
       true
     else
       server = Access.get(opts, :server, __MODULE__)
@@ -260,7 +260,7 @@ defmodule Electric.ShapeCache do
   @impl GenStage
   def handle_call({:create_or_wait_shape_id, shape}, _from, %{shape_status: shape_status} = state) do
     {{shape_id, latest_offset}, state} =
-      if shape_state = shape_status.existing_shape(state.persistent_state, shape) do
+      if shape_state = shape_status.get_existing_shape(state.persistent_state, shape) do
         {shape_state, state}
       else
         {:ok, shape_id} = shape_status.add_shape(state.persistent_state, shape)
@@ -290,7 +290,8 @@ defmodule Electric.ShapeCache do
   end
 
   def handle_call({:wait_shape_id, shape_id}, _from, %{shape_status: shape_status} = state) do
-    {:reply, !is_nil(shape_status.existing_shape(state.persistent_state, shape_id)), [], state}
+    {:reply, !is_nil(shape_status.get_existing_shape(state.persistent_state, shape_id)), [],
+     state}
   end
 
   def handle_call({:truncate, shape_id}, _from, state) do
@@ -353,7 +354,7 @@ defmodule Electric.ShapeCache do
   end
 
   defp is_known_shape_id?(state, shape_id) do
-    if state.shape_status.existing_shape(state.persistent_state, shape_id) do
+    if state.shape_status.get_existing_shape(state.persistent_state, shape_id) do
       true
     else
       false
