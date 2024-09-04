@@ -445,7 +445,7 @@ export class ShapeStream<T extends Row = Row> {
  *       console.log(shapeData)
  *     })
  */
-export class Shape<T extends Row = Row> {
+export class Shape<T extends Row> {
   private stream: ShapeStream<T>
 
   private data: ShapeData<T> = new Map()

@@ -42,9 +42,7 @@ export function getShapeStream<T extends Row = Row>(
   }
 }
 
-export function getShape<T extends Row = Row>(
-  shapeStream: ShapeStream<T>
-): Shape<T> {
+export function getShape<T extends Row>(shapeStream: ShapeStream<T>): Shape<T> {
   // If the stream is already cached, return
   if (shapeCache.has(shapeStream)) {
     // Return the ShapeStream
@@ -78,19 +76,14 @@ export interface UseShapeResult<T extends Row = Row> {
   isUpToDate: boolean
 }
 
-function shapeSubscribe<T extends Row = Row>(
-  shape: Shape<T>,
-  callback: () => void
-) {
+function shapeSubscribe<T extends Row>(shape: Shape<T>, callback: () => void) {
   const unsubscribe = shape.subscribe(callback)
   return () => {
     unsubscribe()
   }
 }
 
-function parseShapeData<T extends Row = Row>(
-  shape: Shape<T>
-): UseShapeResult<T> {
+function parseShapeData<T extends Row>(shape: Shape<T>): UseShapeResult<T> {
   return {
     data: [...shape.valueSync.values()],
     isUpToDate: shape.isUpToDate,
@@ -104,7 +97,7 @@ function identity<T>(arg: T): T {
   return arg
 }
 
-interface UseShapeOptions<Selection, SourceData extends Row = Row>
+interface UseShapeOptions<Selection, SourceData extends Row>
   extends ShapeStreamOptions {
   selector?: (value: UseShapeResult<SourceData>) => Selection
 }
@@ -113,7 +106,7 @@ export function useShape<
   Selection = UseShapeResult<Row>,
   SourceData extends Row = Row,
 >({
-  selector = identity as (arg: UseShapeResult) => Selection,
+  selector = identity as (arg: UseShapeResult<SourceData>) => Selection,
   ...options
 }: UseShapeOptions<Selection, SourceData>): Selection {
   const shapeStream = getShapeStream<SourceData>(options as ShapeStreamOptions)

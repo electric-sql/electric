@@ -1,4 +1,4 @@
-import { ChangeMessage, ControlMessage, Message, Row, Value } from './types'
+import { ChangeMessage, ControlMessage, Message, Row } from './types'
 
 /**
  * Type guard for checking {@link Message} is {@link ChangeMessage}.
@@ -17,7 +17,7 @@ import { ChangeMessage, ControlMessage, Message, Row, Value } from './types'
  * }
  * ```
  */
-export function isChangeMessage<T extends Row = { [key: string]: Value }>(
+export function isChangeMessage<T extends Row = Row>(
   message: Message<T>
 ): message is ChangeMessage<T> {
   return `key` in message
@@ -40,7 +40,7 @@ export function isChangeMessage<T extends Row = { [key: string]: Value }>(
  * }
  * ```
  */
-export function isControlMessage<T extends Row = { [key: string]: Value }>(
+export function isControlMessage<T extends Row = Row>(
   message: Message<T>
 ): message is ControlMessage {
   return !isChangeMessage(message)

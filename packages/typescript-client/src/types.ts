@@ -19,7 +19,7 @@ export type ControlMessage = {
   headers: Header & { control: `up-to-date` | `must-refetch` }
 }
 
-export type ChangeMessage<T> = {
+export type ChangeMessage<T extends Row = Row> = {
   key: string
   value: T
   headers: Header & { operation: `insert` | `update` | `delete` }
@@ -27,9 +27,7 @@ export type ChangeMessage<T> = {
 }
 
 // Define the type for a record
-export type Message<T extends Row = { [key: string]: Value }> =
-  | ControlMessage
-  | ChangeMessage<T>
+export type Message<T extends Row = Row> = ControlMessage | ChangeMessage<T>
 
 /**
  * Common properties for all columns.
@@ -106,7 +104,7 @@ export type ColumnInfo =
 
 export type Schema = { [key: string]: ColumnInfo }
 
-export type TypedMessages<T extends Row = { [key: string]: Value }> = {
+export type TypedMessages<T extends Row = Row> = {
   messages: Array<Message<T>>
   schema: ColumnInfo
 }
