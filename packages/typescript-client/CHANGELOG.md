@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 0.3.4
+
+### Patch Changes
+
+- 42a51c3: Allow specifying data type through type templating in `ShapeStream` and `Shape` APIs.
+
 ## 0.3.3
 
 ### Patch Changes
