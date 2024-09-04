@@ -1,5 +1,13 @@
 # @electric-sql/react
 
+## 0.3.4
+
+### Patch Changes
+
+- 42a51c3: Allow specifying data type through type templating in all APIs.
+- Updated dependencies [42a51c3]
+  - @electric-sql/client@0.3.4
+
 ## 0.3.3
 
 ### Patch Changes
