@@ -1,4 +1,4 @@
-import { Message, Offset, Schema, Row } from './types'
+import { Message, Offset, Schema, Row, PromiseOr } from './types'
 import { MessageParser, Parser } from './parser'
 import { isChangeMessage, isControlMessage } from './helpers'
 
@@ -67,9 +67,9 @@ export interface ShapeStreamOptions {
 class MessageProcessor<T extends Row = Row> {
   private messageQueue: Message<T>[][] = []
   private isProcessing = false
-  private callback: (messages: Message<T>[]) => void | Promise<void>
+  private callback: (messages: Message<T>[]) => PromiseOr<void>
 
-  constructor(callback: (messages: Message<T>[]) => void | Promise<void>) {
+  constructor(callback: (messages: Message<T>[]) => PromiseOr<void>) {
     this.callback = callback
   }
 
@@ -141,13 +141,13 @@ export class FetchError extends Error {
 
 export interface ShapeStreamInterface<T extends Row = Row> {
   subscribe(
-    callback: (messages: Message<T>[]) => void,
+    callback: (messages: Message<T>[]) => PromiseOr<void>,
     onError?: (error: FetchError | Error) => void
   ): void
   unsubscribeAllUpToDateSubscribers(): void
   unsubscribeAll(): void
   subscribeOnceToUpToDate(
-    callback: () => void,
+    callback: () => PromiseOr<void>,
     error: (err: FetchError | Error) => void
   ): () => void
 
@@ -307,7 +307,7 @@ export class ShapeStream<T extends Row = Row>
   }
 
   subscribe(
-    callback: (messages: Message<T>[]) => void | Promise<void>,
+    callback: (messages: Message<T>[]) => PromiseOr<void>,
     onError?: (error: FetchError | Error) => void
   ) {
     const subscriptionId = Math.random()
@@ -337,7 +337,7 @@ export class ShapeStream<T extends Row = Row>
   }
 
   subscribeOnceToUpToDate(
-    callback: () => void | Promise<void>,
+    callback: () => PromiseOr<void>,
     error: (err: FetchError | Error) => void
   ) {
     const subscriptionId = Math.random()

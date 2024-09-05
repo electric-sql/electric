@@ -6,9 +6,15 @@ import {
 } from './client'
 import { isChangeMessage, isControlMessage } from './helpers'
 import { compareOffset } from './offset'
-import { ChangeMessage, Offset, type Row, type Message, Value } from './types'
+import {
+  ChangeMessage,
+  Offset,
+  type Row,
+  type Message,
+  type Value,
+  type PromiseOr,
+} from './types'
 
-type PromiseOr<T> = T | Promise<T>
 function isPromise<T>(promise: PromiseOr<T>): promise is Promise<T> {
   return (
     !!promise &&
@@ -93,7 +99,7 @@ export class PersistedShapeStream<T extends Row = Row>
   }
 
   subscribe(
-    callback: (messages: Message<T>[]) => void | Promise<void>,
+    callback: (messages: Message<T>[]) => PromiseOr<void>,
     onError?: (error: FetchError | Error) => void
   ): () => void {
     const streamHydrationPromise = this.#chainOperation(
@@ -111,7 +117,7 @@ export class PersistedShapeStream<T extends Row = Row>
     this.#streamReadyPromise.then((stream) => stream.unsubscribeAll())
   }
   subscribeOnceToUpToDate(
-    callback: () => void | Promise<void>,
+    callback: () => PromiseOr<void>,
     error: (err: FetchError | Error) => void
   ): () => void {
     const unsubPromise = this.#streamReadyPromise.then((stream) =>
@@ -135,7 +141,7 @@ export class PersistedShapeStream<T extends Row = Row>
   }
 
   #hydrateStream(
-    callback: (messages: Message<T>[]) => void | Promise<void>,
+    callback: (messages: Message<T>[]) => PromiseOr<void>,
     onError?: (error: FetchError | Error) => void
   ): PromiseOr<void> {
     return asyncOrCall(

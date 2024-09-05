@@ -108,3 +108,5 @@ export type TypedMessages<T extends Row = Row> = {
   messages: Array<Message<T>>
   schema: ColumnInfo
 }
+
+export type PromiseOr<T> = T | Promise<T>
