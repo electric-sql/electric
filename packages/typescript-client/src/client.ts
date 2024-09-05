@@ -8,6 +8,11 @@ import {
   createFetchWithBackoff,
   FetchBackoffAborted,
 } from './fetch'
+import {
+  CHUNK_LAST_OFFSET_HEADER,
+  SHAPE_ID_HEADER,
+  SHAPE_SCHEMA_HEADER,
+} from './constants'
 
 /**
  * Options for constructing a ShapeStream.
@@ -168,7 +173,7 @@ export class ShapeStream<T extends Row = Row>
         if (e.status == 409) {
           // Upon receiving a 409, we should start from scratch
           // with the newly provided shape ID
-          const newShapeId = e.headers[`x-electric-shape-id`]
+          const newShapeId = e.headers[SHAPE_ID_HEADER]
           this.#reset(newShapeId)
           this.#publish(e.json as Message<T>[])
           continue
@@ -183,18 +188,18 @@ export class ShapeStream<T extends Row = Row>
       }
 
       const { headers, status } = response
-      const shapeId = headers.get(`X-Electric-Shape-Id`)
+      const shapeId = headers.get(SHAPE_ID_HEADER)
       if (shapeId) {
         this.#shapeId = shapeId
       }
 
-      const lastOffset = headers.get(`X-Electric-Chunk-Last-Offset`)
+      const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
       if (lastOffset) {
         this.#lastOffset = lastOffset as Offset
       }
 
       const getSchema = (): Schema => {
-        const schemaHeader = headers.get(`X-Electric-Schema`)
+        const schemaHeader = headers.get(SHAPE_SCHEMA_HEADER)
         return schemaHeader ? JSON.parse(schemaHeader) : {}
       }
       this.#schema = this.#schema ?? getSchema()
