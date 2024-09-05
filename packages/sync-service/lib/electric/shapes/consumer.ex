@@ -7,7 +7,6 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.LogItems
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
-  alias Electric.Replication.LogOffset
   alias Electric.ShapeCache
   alias Electric.Shapes.Shape
 
@@ -55,17 +54,7 @@ defmodule Electric.Shapes.Consumer do
 
     :ok = ShapeCache.Storage.initialise(storage)
 
-    # TODO: replace with a more specific call to get the current position
-    :ok = ShapeCache.Storage.add_shape(config.shape_id, config.shape, storage)
-
-    {latest_offset, snapshot_xmin} =
-      case ShapeCache.Storage.list_shapes(storage) do
-        [%{latest_offset: latest_offset, snapshot_xmin: snapshot_xmin}] ->
-          {latest_offset, snapshot_xmin}
-
-        [] ->
-          {LogOffset.first(), nil}
-      end
+    {:ok, latest_offset, snapshot_xmin} = ShapeCache.Storage.get_current_position(storage)
 
     state =
       Map.merge(config, %{
@@ -89,7 +78,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_cast({:snapshot_xmin_known, shape_id, xmin}, %{shape_id: shape_id} = state) do
-    ShapeCache.Storage.set_snapshot_xmin(shape_id, xmin, state.storage)
+    ShapeCache.Storage.set_snapshot_xmin(xmin, state.storage)
 
     cast_shape_cache({:snapshot_xmin_known, shape_id, xmin}, state)
 
@@ -97,7 +86,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_cast({:snapshot_started, shape_id}, %{shape_id: shape_id} = state) do
-    ShapeCache.Storage.mark_snapshot_as_started(shape_id, state.storage)
+    ShapeCache.Storage.mark_snapshot_as_started(state.storage)
     cast_shape_cache({:snapshot_started, shape_id}, state)
 
     {:noreply, [], state}
@@ -174,7 +163,7 @@ defmodule Electric.Shapes.Consumer do
 
         :ok = shape_cache.handle_truncate(shape_id, shape_cache_opts)
 
-        ShapeCache.Storage.cleanup!(shape_id, storage)
+        :ok = ShapeCache.Storage.cleanup!(storage)
 
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
 
@@ -184,7 +173,7 @@ defmodule Electric.Shapes.Consumer do
 
         # TODO: what's a graceful way to handle failure to append to log?
         #       Right now we'll just fail everything
-        :ok = ShapeCache.Storage.append_to_log!(shape_id, log_entries, storage)
+        :ok = ShapeCache.Storage.append_to_log!(log_entries, storage)
 
         shape_cache.update_shape_latest_offset(shape_id, last_log_offset, shape_cache_opts)
 

@@ -31,7 +31,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
     case Shapes.Consumer.whereis(shape_id) do
       parent when is_pid(parent) ->
-        if not Storage.snapshot_started?(state.shape_id, state.storage) do
+        if not Storage.snapshot_started?(state.storage) do
           %{
             db_pool: pool,
             storage: storage,
@@ -90,7 +90,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
           # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
           # that way it has the relation, but it is still missing the pk_cols
-          Storage.make_new_snapshot!(shape_id, stream, storage)
+          Storage.make_new_snapshot!(stream, storage)
         end)
       end,
       timeout: :infinity

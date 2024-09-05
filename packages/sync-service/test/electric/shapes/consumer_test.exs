@@ -99,10 +99,12 @@ defmodule Electric.Shapes.ConsumerTest do
       |> expect(:start_link, count, fn {_shape_id, _opts} -> :ignore end)
 
       Mock.Storage
-      |> expect(:add_shape, count, fn shape_id, _shape, {shape_id, _opts} -> :ok end)
       |> expect(:initialise, count, fn {_shape_id, _opts} -> :ok end)
-      |> expect(:list_shapes, count, fn {shape_id, _opts} -> [shape_status(shape_id, ctx)] end)
-      |> stub(:snapshot_started?, fn _, _ -> true end)
+      |> expect(:get_current_position, count, fn {shape_id, _opts} ->
+        %{latest_offset: offset, snapshot_xmin: xmin} = shape_status(shape_id, ctx)
+        {:ok, offset, xmin}
+      end)
+      |> stub(:snapshot_started?, fn _ -> true end)
 
       consumers =
         for {shape_id, shape} <- ctx.shapes do
@@ -153,11 +155,11 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Consumer.name(@shape_id1))
 
       Mock.Storage
-      |> expect(:append_to_log!, 2, fn @shape_id1, _changes, _ -> :ok end)
+      |> expect(:append_to_log!, 2, fn _changes, _ -> :ok end)
       |> allow(self(), Consumer.name(@shape_id1))
 
       Mock.Storage
-      |> expect(:append_to_log!, 0, fn @shape_id2, _changes, _ -> :ok end)
+      |> expect(:append_to_log!, 0, fn _changes, _ -> :ok end)
       |> allow(self(), Consumer.name(@shape_id2))
 
       ref = make_ref()
@@ -197,12 +199,12 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.Storage
       |> expect(:append_to_log!, 2, fn
-        @shape_id1, [{_offset, serialized_record}], {@shape_id1, _} ->
+        [{_offset, serialized_record}], {@shape_id1, _} ->
           record = Jason.decode!(serialized_record)
           assert record["value"]["id"] == "1"
           :ok
 
-        @shape_id2, [{_offset, serialized_record}], {@shape_id2, _} ->
+        [{_offset, serialized_record}], {@shape_id2, _} ->
           record = Jason.decode!(serialized_record)
           assert record["value"]["id"] == "2"
           :ok
@@ -259,7 +261,7 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Shapes.Consumer.name(@shape_id2))
 
       Mock.Storage
-      |> expect(:append_to_log!, fn @shape_id2, _, _ -> :ok end)
+      |> expect(:append_to_log!, fn _, _ -> :ok end)
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -285,7 +287,7 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Shapes.Consumer.name(@shape_id1))
 
       Mock.Storage
-      |> expect(:cleanup!, fn @shape_id1, _ -> :ok end)
+      |> expect(:cleanup!, fn _ -> :ok end)
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -336,7 +338,7 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Shapes.Consumer.name(@shape_id1))
 
       Mock.Storage
-      |> expect(:cleanup!, fn @shape_id1, _ -> :ok end)
+      |> expect(:cleanup!, fn _ -> :ok end)
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -359,7 +361,7 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Consumer.name(@shape_id1))
 
       Mock.Storage
-      |> expect(:append_to_log!, fn @shape_id1, _, _ -> :ok end)
+      |> expect(:append_to_log!, fn _, _ -> :ok end)
 
       ref = make_ref()
       Registry.register(ctx.registry, @shape_id1, ref)
@@ -410,7 +412,7 @@ defmodule Electric.Shapes.ConsumerTest do
           create_snapshot_fn: fn parent, shape_id, _shape, _, storage ->
             if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 10})
-            Storage.make_new_snapshot!(shape_id, [["test"]], storage)
+            Storage.make_new_snapshot!([["test"]], storage)
             GenServer.cast(parent, {:snapshot_started, shape_id})
           end
         )
@@ -459,7 +461,7 @@ defmodule Electric.Shapes.ConsumerTest do
       shape_storage = Storage.for_shape(shape_id, storage)
 
       assert [op1, op2] =
-               Storage.get_log_stream(shape_id, LogOffset.before_all(), shape_storage)
+               Storage.get_log_stream(LogOffset.before_all(), shape_storage)
                |> Enum.map(&:json.decode/1)
 
       # If we encounter & store the same transaction, log stream should be stable
@@ -468,7 +470,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {Shapes.Consumer, ^ref, 11}
 
       assert [^op1, ^op2] =
-               Storage.get_log_stream(shape_id, LogOffset.before_all(), shape_storage)
+               Storage.get_log_stream(LogOffset.before_all(), shape_storage)
                |> Enum.map(&:json.decode/1)
     end
 
@@ -522,7 +524,7 @@ defmodule Electric.Shapes.ConsumerTest do
       shape_storage = Storage.for_shape(shape_id, storage)
 
       assert [_op1, _op2] =
-               Storage.get_log_stream(shape_id, LogOffset.before_all(), shape_storage)
+               Storage.get_log_stream(LogOffset.before_all(), shape_storage)
                |> Enum.map(&:json.decode/1)
     end
   end
@@ -558,8 +560,11 @@ defmodule Electric.Shapes.ConsumerTest do
       {:reply, crash?, %{state | crashing: crashing}}
     end
 
-    def handle_call({:list_shapes, shape_id}, _from, state) do
-      {:reply, Map.get(state.shapes, shape_id, nil) |> List.wrap(), state}
+    def handle_call({:get_current_position, shape_id}, _from, state) do
+      %{latest_offset: offset, snapshot_xmin: xmin} =
+        Map.get(state.shapes, shape_id, %{latest_offset: LogOffset.first(), snapshot_xmin: nil})
+
+      {:reply, {:ok, offset, xmin}, state}
     end
 
     def handle_call({:snapshot_started?, shape_id}, _from, state) do
@@ -598,19 +603,15 @@ defmodule Electric.Shapes.ConsumerTest do
       :ok
     end
 
-    def add_shape(_shape_id, _shape, _opts) do
-      :ok
+    def snapshot_started?(opts) do
+      GenServer.call(opts.backend, {:snapshot_started?, opts.shape_id})
     end
 
-    def list_shapes(opts) do
-      GenServer.call(opts.backend, {:list_shapes, opts.shape_id})
+    def get_current_position(opts) do
+      GenServer.call(opts.backend, {:get_current_position, opts.shape_id})
     end
 
-    def snapshot_started?(shape_id, opts) do
-      GenServer.call(opts.backend, {:snapshot_started?, shape_id})
-    end
-
-    def append_to_log!(shape_id, log_items, %{shape_id: shape_id} = opts) do
+    def append_to_log!(log_items, %{shape_id: shape_id} = opts) do
       if CrashingStorageBackend.crash?(opts.backend, shape_id) do
         send(opts.parent, {CrashingStorage, :crash, shape_id})
         raise "crash from #{shape_id}"
@@ -623,15 +624,15 @@ defmodule Electric.Shapes.ConsumerTest do
       :ok
     end
 
-    def set_snapshot_xmin(shape_id, xmin, opts) do
-      GenServer.call(opts.backend, {:set_snapshot_xmin, shape_id, xmin})
+    def set_snapshot_xmin(xmin, opts) do
+      GenServer.call(opts.backend, {:set_snapshot_xmin, opts.shape_id, xmin})
     end
 
-    def mark_snapshot_as_started(_shape_id, _opts) do
+    def mark_snapshot_as_started(_opts) do
       :ok
     end
 
-    def make_new_snapshot!(_shape_id, _data_stream, _opts) do
+    def make_new_snapshot!(_data_stream, _opts) do
       :ok
     end
   end

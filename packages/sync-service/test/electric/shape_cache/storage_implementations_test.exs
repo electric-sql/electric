@@ -6,7 +6,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes
   alias Electric.ShapeCache.InMemoryStorage
-  alias Electric.Shapes.Shape
   alias Electric.Utils
 
   import Support.TestUtils
@@ -14,14 +13,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   @moduletag :tmp_dir
 
   @shape_id "the-shape-id"
-  @shape %Shape{
-    root_table: {"public", "the-table"},
-    table_info: %{
-      {"public", "the-table"} => %{
-        pk: ["id"]
-      }
-    }
-  }
 
   @snapshot_offset LogOffset.first()
   @snapshot_offset_encoded to_string(@snapshot_offset)
@@ -55,13 +46,13 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       setup :start_storage
 
       test "returns false when shape does not exist", %{module: storage, opts: opts} do
-        assert storage.snapshot_started?(@shape_id, opts) == false
+        assert storage.snapshot_started?(opts) == false
       end
 
       test "returns true when snapshot has started", %{module: storage, opts: opts} do
-        storage.mark_snapshot_as_started(@shape_id, opts)
+        storage.mark_snapshot_as_started(opts)
 
-        assert storage.snapshot_started?(@shape_id, opts) == true
+        assert storage.snapshot_started?(opts) == true
       end
     end
 
@@ -73,45 +64,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       setup :start_storage
 
       test "returns snapshot when shape does exist", %{module: storage, opts: opts} do
-        storage.mark_snapshot_as_started(@shape_id, opts)
-        storage.make_new_snapshot!(@shape_id, @data_stream, opts)
+        storage.mark_snapshot_as_started(opts)
+        storage.make_new_snapshot!(@data_stream, opts)
 
-        {@snapshot_offset, stream} = storage.get_snapshot(@shape_id, opts)
-
-        assert [
-                 %{
-                   offset: @snapshot_offset_encoded,
-                   value: %{id: "00000000-0000-0000-0000-000000000001", title: "row1"},
-                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
-                   headers: %{operation: "insert"}
-                 },
-                 %{
-                   offset: @snapshot_offset_encoded,
-                   value: %{id: "00000000-0000-0000-0000-000000000002", title: "row2"},
-                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
-                   headers: %{operation: "insert"}
-                 }
-               ] = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
-      end
-
-      test "does not leak results from other snapshots", %{module: storage, opts: opts} do
-        another_data_stream = [
-          [<<3::128>>, "row3"],
-          [<<4::128>>, "row4"]
-        ]
-
-        storage.mark_snapshot_as_started(@shape_id, opts)
-        storage.make_new_snapshot!(@shape_id, @data_stream, opts)
-
-        storage.mark_snapshot_as_started("another-shape-id", opts)
-
-        storage.make_new_snapshot!(
-          "another-shape-id",
-          another_data_stream,
-          opts
-        )
-
-        {@snapshot_offset, stream} = storage.get_snapshot(@shape_id, opts)
+        {@snapshot_offset, stream} = storage.get_snapshot(opts)
 
         assert [
                  %{
@@ -130,10 +86,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
 
       test "returns snapshot offset when shape does exist", %{module: storage, opts: opts} do
-        storage.mark_snapshot_as_started(@shape_id, opts)
-        storage.make_new_snapshot!(@shape_id, @data_stream, opts)
+        storage.mark_snapshot_as_started(opts)
+        storage.make_new_snapshot!(@data_stream, opts)
 
-        {@snapshot_offset, _} = storage.get_snapshot(@shape_id, opts)
+        {@snapshot_offset, _} = storage.get_snapshot(opts)
       end
 
       test "does not return items not in the snapshot", %{module: storage, opts: opts} do
@@ -147,11 +103,11 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        storage.mark_snapshot_as_started(@shape_id, opts)
-        storage.make_new_snapshot!(@shape_id, @data_stream, opts)
-        storage.append_to_log!(@shape_id, log_items, opts)
+        storage.mark_snapshot_as_started(opts)
+        storage.make_new_snapshot!(@data_stream, opts)
+        storage.append_to_log!(log_items, opts)
 
-        {@snapshot_offset, stream} = storage.get_snapshot(@shape_id, opts)
+        {@snapshot_offset, stream} = storage.get_snapshot(opts)
         assert Enum.count(stream) == Enum.count(@data_stream)
       end
 
@@ -177,8 +133,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             ]
           end)
 
-        storage.mark_snapshot_as_started(@shape_id, opts)
-        {@snapshot_offset, stream} = storage.get_snapshot(@shape_id, opts)
+        storage.mark_snapshot_as_started(opts)
+        {@snapshot_offset, stream} = storage.get_snapshot(opts)
 
         read_task =
           Task.async(fn ->
@@ -191,7 +147,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             end
           end)
 
-        storage.make_new_snapshot!(@shape_id, data_stream, opts)
+        storage.make_new_snapshot!(data_stream, opts)
 
         Task.await(read_task)
       end
@@ -218,9 +174,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        storage.append_to_log!(@shape_id, log_items, opts)
+        storage.append_to_log!(log_items, opts)
 
-        stream = storage.get_log_stream(@shape_id, LogOffset.first(), LogOffset.last(), opts)
+        stream = storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
 
         assert [
                  %{
@@ -250,16 +206,16 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, log_items, opts)
+        :ok = storage.append_to_log!(log_items, opts)
 
         log1 =
-          storage.get_log_stream(@shape_id, LogOffset.first(), LogOffset.last(), opts)
+          storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
           |> Enum.map(&:json.decode/1)
 
-        :ok = storage.append_to_log!(@shape_id, log_items, opts)
+        :ok = storage.append_to_log!(log_items, opts)
 
         log2 =
-          storage.get_log_stream(@shape_id, LogOffset.first(), LogOffset.last(), opts)
+          storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
           |> Enum.map(&:json.decode/1)
 
         assert log1 == log2
@@ -274,7 +230,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       setup :start_storage
 
       test "returns correct stream of log items", %{module: storage, opts: opts} do
-        shape_id = "test_shape"
         lsn1 = Lsn.from_integer(1000)
         lsn2 = Lsn.from_integer(2000)
 
@@ -304,10 +259,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(shape_id, log_items1, opts)
-        :ok = storage.append_to_log!(shape_id, log_items2, opts)
+        :ok = storage.append_to_log!(log_items1, opts)
+        :ok = storage.append_to_log!(log_items2, opts)
 
-        stream = storage.get_log_stream(shape_id, LogOffset.first(), LogOffset.last(), opts)
+        stream = storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
         entries = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
         assert [
@@ -347,11 +302,11 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, log_items1, opts)
-        :ok = storage.append_to_log!(@shape_id, log_items2, opts)
+        :ok = storage.append_to_log!(log_items1, opts)
+        :ok = storage.append_to_log!(log_items2, opts)
 
         stream =
-          storage.get_log_stream(@shape_id, LogOffset.new(lsn1, 0), LogOffset.last(), opts)
+          storage.get_log_stream(LogOffset.new(lsn1, 0), LogOffset.last(), opts)
 
         entries = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
@@ -394,12 +349,11 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(@shape_id, log_items1, opts)
-        :ok = storage.append_to_log!(@shape_id, log_items2, opts)
+        :ok = storage.append_to_log!(log_items1, opts)
+        :ok = storage.append_to_log!(log_items2, opts)
 
         stream =
           storage.get_log_stream(
-            @shape_id,
             LogOffset.new(lsn1, 0),
             LogOffset.new(lsn2, 0),
             opts
@@ -408,40 +362,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         entries = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
         assert [%{headers: %{operation: "update"}}] = entries
-      end
-
-      test "returns only logs for the requested shape_id", %{module: storage, opts: opts} do
-        shape_id1 = "shape_a"
-        shape_id2 = "shape_b"
-        lsn1 = Lsn.from_integer(1000)
-        lsn2 = Lsn.from_integer(2000)
-
-        log_items1 =
-          [
-            %Changes.NewRecord{
-              relation: {"public", "test_table"},
-              record: %{"id" => "123", "name" => "Test A"},
-              log_offset: LogOffset.new(lsn1, 0)
-            }
-          ]
-          |> changes_to_log_items()
-
-        log_items2 =
-          [
-            %Changes.NewRecord{
-              relation: {"public", "test_table"},
-              record: %{"id" => "456", "name" => "Test B"},
-              log_offset: LogOffset.new(lsn2, 0)
-            }
-          ]
-          |> changes_to_log_items()
-
-        :ok = storage.append_to_log!(shape_id1, log_items1, opts)
-        :ok = storage.append_to_log!(shape_id2, log_items2, opts)
-
-        assert [%{value: %{name: "Test A"}}] =
-                 storage.get_log_stream(shape_id1, LogOffset.first(), LogOffset.last(), opts)
-                 |> Enum.map(&Jason.decode!(&1, keys: :atoms))
       end
     end
 
@@ -453,21 +373,21 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       setup :start_storage
 
       test "causes snapshot_started?/2 to return false", %{module: storage, opts: opts} do
-        storage.make_new_snapshot!(@shape_id, @data_stream, opts)
+        storage.make_new_snapshot!(@data_stream, opts)
 
-        storage.cleanup!(@shape_id, opts)
+        storage.cleanup!(opts)
 
-        assert storage.snapshot_started?(@shape_id, opts) == false
+        assert storage.snapshot_started?(opts) == false
       end
 
       test "causes get_snapshot/2 to raise an error", %{module: storage, opts: opts} do
-        storage.mark_snapshot_as_started(@shape_id, opts)
-        storage.make_new_snapshot!(@shape_id, @data_stream, opts)
+        storage.mark_snapshot_as_started(opts)
+        storage.make_new_snapshot!(@data_stream, opts)
 
-        storage.cleanup!(@shape_id, opts)
+        storage.cleanup!(opts)
 
         assert_raise RuntimeError, fn ->
-          {@zero_offset, stream} = storage.get_snapshot(@shape_id, opts)
+          {@zero_offset, stream} = storage.get_snapshot(opts)
           Stream.run(stream)
         end
       end
@@ -485,42 +405,12 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        storage.append_to_log!(@shape_id, log_items, opts)
+        storage.append_to_log!(log_items, opts)
 
-        storage.cleanup!(@shape_id, opts)
+        storage.cleanup!(opts)
 
-        assert storage.get_log_stream(@shape_id, LogOffset.first(), LogOffset.last(), opts)
+        assert storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
                |> Enum.to_list() == []
-      end
-    end
-
-    describe "#{module_name}.has_shape?/2" do
-      setup do
-        {:ok, %{module: unquote(module)}}
-      end
-
-      setup :start_storage
-
-      test "returns a boolean indicating whether the shape ID is known", %{
-        module: storage,
-        opts: opts
-      } do
-        lsn = Lsn.from_integer(1000)
-
-        log_items =
-          [
-            %Changes.NewRecord{
-              relation: {"public", "test_table"},
-              record: %{"id" => "123", "name" => "Test"},
-              log_offset: LogOffset.new(lsn, 0)
-            }
-          ]
-          |> changes_to_log_items()
-
-        storage.append_to_log!(@shape_id, log_items, opts)
-
-        assert storage.has_shape?(@shape_id, opts)
-        refute storage.has_shape?("another_shape_id", opts)
       end
     end
   end
@@ -528,75 +418,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   # Tests for storage implementations that are recoverable
   for module <- [FileStorage] do
     module_name = module |> Module.split() |> List.last()
-
-    describe "#{module_name}.list_shapes/1" do
-      @shape %Shape{
-        root_table: {"public", "items"},
-        table_info: %{
-          {"public", "items"} => %{
-            pk: ["id"]
-          }
-        }
-      }
-      @first_offset LogOffset.first()
-      @change_offset LogOffset.new(Lsn.from_integer(123), 0)
-      @log_items [
-                   %Changes.NewRecord{
-                     relation: {"public", "test_table"},
-                     record: %{"id" => "123", "name" => "Test"},
-                     log_offset: @change_offset
-                   }
-                 ]
-                 |> changes_to_log_items()
-
-      setup do
-        {:ok, %{module: unquote(module)}}
-      end
-
-      setup :start_storage
-
-      test "returns shapes with it's snapshot xmins", %{module: storage, opts: opts} do
-        storage.add_shape("shape-1", @shape, opts)
-        storage.add_shape("shape-2", @shape, opts)
-        storage.set_snapshot_xmin("shape-1", 11, opts)
-        storage.set_snapshot_xmin("shape-2", 22, opts)
-
-        assert [
-                 %{shape_id: "shape-1", snapshot_xmin: 11},
-                 %{shape_id: "shape-2", snapshot_xmin: 22}
-               ] =
-                 storage.list_shapes(opts)
-      end
-
-      test "returns shapes with it's latest offset", %{module: storage, opts: opts} do
-        storage.add_shape("shape-1", @shape, opts)
-        storage.add_shape("shape-2", @shape, opts)
-        storage.add_shape("shape-3", @shape, opts)
-
-        storage.make_new_snapshot!("shape-1", @data_stream, opts)
-        storage.append_to_log!("shape-1", @log_items, opts)
-
-        storage.make_new_snapshot!("shape-2", @data_stream, opts)
-
-        assert [
-                 %{shape_id: "shape-1", latest_offset: @change_offset},
-                 %{shape_id: "shape-2", latest_offset: @first_offset},
-                 %{shape_id: "shape-3", latest_offset: @first_offset}
-               ] =
-                 storage.list_shapes(opts)
-      end
-
-      test "does not return cleaned up shape", %{module: storage, opts: opts} do
-        storage.add_shape("shape-1", @shape, opts)
-        storage.add_shape("shape-2", @shape, opts)
-        storage.add_shape("shape-3", @shape, opts)
-
-        storage.cleanup!("shape-2", opts)
-
-        assert [%{shape_id: "shape-1"}, %{shape_id: "shape-3"}] =
-                 storage.list_shapes(opts)
-      end
-    end
 
     describe "#{module_name}.initialise/1" do
       setup do
@@ -611,23 +432,14 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       } do
         storage.initialise(opts)
 
-        storage.add_shape("shape-1", @shape, opts)
-        storage.add_shape("shape-2", @shape, opts)
-        storage.add_shape("shape-3", @shape, opts)
-        storage.mark_snapshot_as_started("shape-1", opts)
-        storage.mark_snapshot_as_started("shape-2", opts)
-        storage.mark_snapshot_as_started("shape-3", opts)
-        storage.make_new_snapshot!("shape-1", @data_stream, opts)
-        storage.make_new_snapshot!("shape-2", @data_stream, opts)
-        storage.make_new_snapshot!("shape-3", @data_stream, opts)
-        storage.set_snapshot_xmin("shape-1", 11, opts)
-        storage.set_snapshot_xmin("shape-3", 33, opts)
+        storage.mark_snapshot_as_started(opts)
+        storage.make_new_snapshot!(@data_stream, opts)
+        # storage.set_snapshot_xmin(11, opts)
+        assert storage.snapshot_started?(opts)
 
         storage.initialise(opts)
 
-        assert storage.snapshot_started?("shape-1", opts) == true
-        assert storage.snapshot_started?("shape-2", opts) == false
-        assert storage.snapshot_started?("shape-3", opts) == true
+        refute storage.snapshot_started?(opts)
       end
 
       test "removes the shape if the snapshot has not finished", %{
@@ -636,23 +448,12 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       } do
         storage.initialise(opts)
 
-        storage.add_shape("shape-1", @shape, opts)
-        storage.add_shape("shape-2", @shape, opts)
-        storage.add_shape("shape-3", @shape, opts)
-        storage.mark_snapshot_as_started("shape-1", opts)
-        storage.mark_snapshot_as_started("shape-2", opts)
-        storage.mark_snapshot_as_started("shape-3", opts)
-        storage.make_new_snapshot!("shape-1", @data_stream, opts)
-        storage.make_new_snapshot!("shape-3", @data_stream, opts)
-        storage.set_snapshot_xmin("shape-1", 11, opts)
-        storage.set_snapshot_xmin("shape-2", 22, opts)
-        storage.set_snapshot_xmin("shape-3", 33, opts)
+        storage.mark_snapshot_as_started(opts)
+        storage.set_snapshot_xmin(22, opts)
 
         storage.initialise(opts)
 
-        assert storage.snapshot_started?("shape-1", opts) == true
-        assert storage.snapshot_started?("shape-2", opts) == false
-        assert storage.snapshot_started?("shape-3", opts) == true
+        refute storage.snapshot_started?(opts)
       end
 
       test "removes all shapes if the storage version has changed", %{
@@ -661,24 +462,13 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       } do
         storage.initialise(opts)
 
-        storage.add_shape("shape-1", @shape, opts)
-        storage.add_shape("shape-2", @shape, opts)
-        storage.add_shape("shape-3", @shape, opts)
-        storage.mark_snapshot_as_started("shape-1", opts)
-        storage.mark_snapshot_as_started("shape-2", opts)
-        storage.mark_snapshot_as_started("shape-3", opts)
-        storage.make_new_snapshot!("shape-1", @data_stream, opts)
-        storage.make_new_snapshot!("shape-2", @data_stream, opts)
-        storage.make_new_snapshot!("shape-3", @data_stream, opts)
-        storage.set_snapshot_xmin("shape-1", 11, opts)
-        storage.set_snapshot_xmin("shape-2", 22, opts)
-        storage.set_snapshot_xmin("shape-3", 33, opts)
+        storage.mark_snapshot_as_started(opts)
+        storage.make_new_snapshot!(@data_stream, opts)
+        storage.set_snapshot_xmin(11, opts)
 
         storage.initialise(%{opts | version: "new-version"})
 
-        assert storage.snapshot_started?("shape-1", opts) == false
-        assert storage.snapshot_started?("shape-2", opts) == false
-        assert storage.snapshot_started?("shape-3", opts) == false
+        refute storage.snapshot_started?(opts)
       end
     end
   end
