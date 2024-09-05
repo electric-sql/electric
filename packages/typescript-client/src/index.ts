@@ -1,4 +1,5 @@
 export * from './client'
+export * from './shape'
 export * from './types'
 export * from './helpers'
 export * from './error'

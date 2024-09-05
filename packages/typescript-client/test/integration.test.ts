@@ -7,7 +7,7 @@ import {
   ShapeStream,
   ShapeStreamInterface,
   ShapeStreamOptions,
-} from '../src/client'
+} from '../src'
 import { Message, Offset, Row } from '../src/types'
 import { isChangeMessage, isControlMessage } from '../src'
 import {
