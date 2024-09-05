@@ -5,6 +5,7 @@ import {
   ShapeStreamOptions,
 } from './client'
 import { isChangeMessage, isControlMessage } from './helpers'
+import { compareOffset } from './offset'
 import { ChangeMessage, Offset, type Row, type Message, Value } from './types'
 
 type PromiseOr<T> = T | Promise<T>
@@ -63,7 +64,6 @@ export class PersistedShapeStream<T extends Row = Row>
   async #hydrate(options: ShapeStreamOptions): Promise<ShapeStreamOptions> {
     let shapeId: string | undefined
     let latestOffset: Offset = `-1`
-    let latestComparableOffset: [number, number] = [-1, -1]
 
     // NOTE: this hydration goes through the whole store to retrieve
     // the shapeId and latestOffset - this is an expensive operation
@@ -71,19 +71,9 @@ export class PersistedShapeStream<T extends Row = Row>
     // storage interface required to persist the stream
     for await (const item of await this.#storage.getAll()) {
       shapeId ??= item.shapeId
-      const comparableOffset = item.offset.split(`_`).map(Number) as [
-        number,
-        number,
-      ]
 
-      // TODO: implement offset comparison helper
-      if (
-        comparableOffset[0] > latestComparableOffset[0] ||
-        (comparableOffset[0] === latestComparableOffset[0] &&
-          comparableOffset[1] > latestComparableOffset[1])
-      ) {
+      if (compareOffset(item.offset, latestOffset) > 0) {
         latestOffset = item.offset
-        latestComparableOffset = comparableOffset
       }
     }
 
