@@ -47,10 +47,7 @@ defmodule Support.ComponentSetup do
 
   def with_shape_cache(ctx, additional_opts \\ []) do
     shape_meta_table = :"shape_meta_#{full_test_name(ctx)}"
-
-    server =
-      Keyword.get(additional_opts, :name, :"shape_cache_#{full_test_name(ctx)}")
-
+    server = :"shape_cache_#{full_test_name(ctx)}"
     consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
 
     start_opts =
