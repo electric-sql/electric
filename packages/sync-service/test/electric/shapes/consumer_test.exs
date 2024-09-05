@@ -109,7 +109,7 @@ defmodule Electric.Shapes.ConsumerTest do
       consumers =
         for {shape_id, shape} <- ctx.shapes do
           allow(Mock.Storage, self(), fn ->
-            Shapes.Consumer.Supervisor.name(shape_id) |> GenServer.whereis()
+            Shapes.IndividualConsumerSupervisor.name(shape_id) |> GenServer.whereis()
           end)
 
           allow(Mock.Storage, self(), fn ->
@@ -122,7 +122,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
           {:ok, consumer} =
             start_supervised(
-              {Shapes.Consumer.Supervisor,
+              {Shapes.IndividualConsumerSupervisor,
                shape_id: shape_id,
                shape: shape,
                log_producer: producer,
@@ -131,7 +131,7 @@ defmodule Electric.Shapes.ConsumerTest do
                storage: {Mock.Storage, []},
                chunk_bytes_threshold: 10_000,
                prepare_tables_fn: &prepare_tables_fn/2},
-              id: {Shapes.Consumer.Supervisor, shape_id}
+              id: {Shapes.IndividualConsumerSupervisor, shape_id}
             )
 
           consumer
@@ -303,7 +303,7 @@ defmodule Electric.Shapes.ConsumerTest do
     defp assert_consumer_shutdown(shape_id, fun) do
       monitors =
         for name <- [
-              Shapes.Consumer.Supervisor.name(shape_id),
+              Shapes.IndividualConsumerSupervisor.name(shape_id),
               Shapes.Consumer.name(shape_id),
               Shapes.Consumer.Snapshotter.name(shape_id)
             ],

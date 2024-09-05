@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.Consumer.Supervisor do
+defmodule Electric.Shapes.IndividualConsumerSupervisor do
   use Supervisor, restart: :transient
 
   require Logger
