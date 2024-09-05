@@ -1,10 +1,6 @@
 import { describe, beforeEach, it, expect, vi, type Mock } from 'vitest'
-import { FetchError } from '../src'
-import {
-  createFetchWithBackoff,
-  BackoffDefaults,
-  FetchBackoffAborted,
-} from '../src/fetch'
+import { FetchError, FetchBackoffAbortError } from '../src/error'
+import { createFetchWithBackoff, BackoffDefaults } from '../src/fetch'
 
 describe(`createFetchWithBackoff`, () => {
   const initialDelay = 10
@@ -107,7 +103,7 @@ describe(`createFetchWithBackoff`, () => {
 
     await expect(
       fetchWithBackoff(`https://example.com`, { signal })
-    ).rejects.toThrow(FetchBackoffAborted)
+    ).rejects.toThrow(FetchBackoffAbortError)
 
     expect(mockFetchClient).toHaveBeenCalledTimes(1)
   })

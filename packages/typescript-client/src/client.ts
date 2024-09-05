@@ -2,12 +2,8 @@ import { Message, Offset, Schema, Row, PromiseOr } from './types'
 import { MessageParser, Parser } from './parser'
 import { isUpToDateMessage } from './helpers'
 import { MessageProcessor } from './queue'
-import { FetchError } from './error'
-import {
-  BackoffOptions,
-  createFetchWithBackoff,
-  FetchBackoffAborted,
-} from './fetch'
+import { FetchError, FetchBackoffAbortError } from './error'
+import { BackoffOptions, createFetchWithBackoff } from './fetch'
 import {
   CHUNK_LAST_OFFSET_HEADER,
   SHAPE_ID_HEADER,
@@ -168,7 +164,7 @@ export class ShapeStream<T extends Row = Row>
       try {
         response = await this.#fetchClient(fetchUrl.toString(), { signal })
       } catch (e) {
-        if (e instanceof FetchBackoffAborted) break // interrupted
+        if (e instanceof FetchBackoffAbortError) break // interrupted
         if (!(e instanceof FetchError)) throw e // should never happen
         if (e.status == 409) {
           // Upon receiving a 409, we should start from scratch

@@ -1,4 +1,4 @@
-import { FetchError } from './error'
+import { FetchError, FetchBackoffAbortError } from './error'
 
 export interface BackoffOptions {
   initialDelay: number
@@ -13,12 +13,6 @@ export const BackoffDefaults = {
   multiplier: 1.3,
 }
 
-export class FetchBackoffAborted extends Error {
-  constructor() {
-    super(`Fetch with backoff aborted`)
-  }
-}
-
 export function createFetchWithBackoff(
   fetchClient: typeof fetch,
   backoffOptions: BackoffOptions = BackoffDefaults
@@ -31,15 +25,20 @@ export function createFetchWithBackoff(
     let delay = initialDelay
     let attempt = 0
 
-    // eslint-disable-next-line no-constant-condition — we re-fetch the shape log continuously until we get a non-ok response. For recoverable errors, we retry the fetch with exponential backoff. Users can pass in an AbortController to abort the fetching an any point.
+    /* eslint-disable no-constant-condition -- we re-fetch the shape log
+     * continuously until we get a non-ok response. For recoverable errors,
+     * we retry the fetch with exponential backoff. Users can pass in an
+     * AbortController to abort the fetching an any point.
+     * */
     while (true) {
+      /* eslint-enable no-constant-condition */
       try {
         const result = await fetchClient(...args)
         if (result.ok) return result
         else throw await FetchError.fromResponse(result, url.toString())
       } catch (e) {
         if (options?.signal?.aborted) {
-          throw new FetchBackoffAborted()
+          throw new FetchBackoffAbortError()
         } else if (
           e instanceof FetchError &&
           e.status >= 400 &&
