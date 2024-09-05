@@ -911,13 +911,13 @@ defmodule Electric.ShapeCacheTest do
           {pid, Process.monitor(pid)}
         end
 
-      Shapes.ConsumerGroupSupervisor.stop_all_consumers(ctx.consumer_supervisor)
+      Shapes.ConsumerGroupSupervisor.stop_all_consumers(ctx.consumer_group_supervisor)
 
       for {pid, ref} <- consumers do
         assert_receive {:DOWN, ^ref, :process, ^pid, _}
       end
 
-      stop_processes([shape_cache_opts[:server], ctx.consumer_supervisor])
+      stop_processes([shape_cache_opts[:server], ctx.consumer_group_supervisor])
     end
 
     defp stop_processes(process_names) do
