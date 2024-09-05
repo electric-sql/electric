@@ -16,11 +16,7 @@ defmodule Support.ComponentSetup do
 
   def with_in_memory_storage(ctx) do
     {:ok, storage_opts} =
-      InMemoryStorage.shared_opts(
-        snapshot_ets_table: :"snapshot_ets_#{full_test_name(ctx)}",
-        log_ets_table: :"log_ets_#{full_test_name(ctx)}",
-        chunk_checkpoint_ets_table: :"chunk_checkpoint_ets_#{full_test_name(ctx)}"
-      )
+      InMemoryStorage.shared_opts(table_base_name: :"in_memory_storage_#{full_test_name(ctx)}")
 
     %{storage: {InMemoryStorage, storage_opts}}
   end
