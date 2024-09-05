@@ -1,5 +1,6 @@
 export * from './client'
 export * from './shape'
 export * from './types'
-export * from './helpers'
-export * from './error'
+export { isChangeMessage, isControlMessage } from './helpers'
+export { FetchError } from './error'
+export { type BackoffOptions, BackoffDefaults } from './fetch'

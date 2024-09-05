@@ -3,18 +3,11 @@ import { MessageParser, Parser } from './parser'
 import { isControlMessage } from './helpers'
 import { MessageProcessor } from './queue'
 import { FetchError } from './error'
-
-export interface BackoffOptions {
-  initialDelay: number
-  maxDelay: number
-  multiplier: number
-}
-
-export const BackoffDefaults = {
-  initialDelay: 100,
-  maxDelay: 10_000,
-  multiplier: 1.3,
-}
+import {
+  BackoffOptions,
+  createFetchWithBackoff,
+  FetchBackoffAborted,
+} from './fetch'
 
 /**
  * Options for constructing a ShapeStream.
@@ -105,7 +98,7 @@ export class ShapeStream<T extends Row = Row>
   implements ShapeStreamInterface<T>
 {
   private options: ShapeStreamOptions
-  private backoffOptions: BackoffOptions
+
   private fetchClient: typeof fetch
   private schema?: Schema
 
@@ -131,10 +124,11 @@ export class ShapeStream<T extends Row = Row>
     this.shapeId = this.options.shapeId
     this.messageParser = new MessageParser<T>(options.parser)
 
-    this.backoffOptions = options.backoffOptions ?? BackoffDefaults
-    this.fetchClient =
+    this.fetchClient = createFetchWithBackoff(
       options.fetchClient ??
-      ((...args: Parameters<typeof fetch>) => fetch(...args))
+        ((...args: Parameters<typeof fetch>) => fetch(...args)),
+      options.backoffOptions
+    )
 
     this.start()
   }
@@ -159,12 +153,10 @@ export class ShapeStream<T extends Row = Row>
       }
 
       let response!: Response
-
       try {
-        const maybeResponse = await this.fetchWithBackoff(fetchUrl)
-        if (maybeResponse) response = maybeResponse
-        else break
+        response = await this.fetchClient(fetchUrl.toString(), { signal })
       } catch (e) {
+        if (e instanceof FetchBackoffAborted) break // interrupted
         if (!(e instanceof FetchError)) throw e // should never happen
         if (e.status == 409) {
           // Upon receiving a 409, we should start from scratch
@@ -310,44 +302,6 @@ export class ShapeStream<T extends Row = Row>
       throw new Error(
         `shapeId is required if this isn't an initial fetch (i.e. offset > -1)`
       )
-    }
-  }
-
-  private async fetchWithBackoff(url: URL) {
-    const { initialDelay, maxDelay, multiplier } = this.backoffOptions
-    const signal = this.options.signal
-
-    let delay = initialDelay
-    let attempt = 0
-
-    // eslint-disable-next-line no-constant-condition -- we're retrying with a lag until we get a non-500 response or the abort signal is triggered
-    while (true) {
-      try {
-        const result = await this.fetchClient(url.toString(), { signal })
-        if (result.ok) return result
-        else throw await FetchError.fromResponse(result, url.toString())
-      } catch (e) {
-        if (signal?.aborted) {
-          return undefined
-        } else if (
-          e instanceof FetchError &&
-          e.status >= 400 &&
-          e.status < 500
-        ) {
-          // Any client errors cannot be backed off on, leave it to the caller to handle.
-          throw e
-        } else {
-          // Exponentially backoff on errors.
-          // Wait for the current delay duration
-          await new Promise((resolve) => setTimeout(resolve, delay))
-
-          // Increase the delay for the next attempt
-          delay = Math.min(delay * multiplier, maxDelay)
-
-          attempt++
-          console.log(`Retry attempt #${attempt} after ${delay}ms`)
-        }
-      }
     }
   }
 }
