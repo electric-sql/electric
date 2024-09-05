@@ -57,7 +57,7 @@ defmodule Electric.ShapeCache do
             ],
             consumer_supervisor: [
               type: @genserver_name_schema,
-              default: Electric.Shapes.ConsumerSupervisor.name()
+              default: Electric.Shapes.ConsumerGroupSupervisor.name()
             ],
             storage: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],
@@ -348,7 +348,7 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_shape(state, shape_id) do
-    Electric.Shapes.ConsumerSupervisor.stop_shape_consumer(state.consumer_supervisor, shape_id)
+    Electric.Shapes.ConsumerGroupSupervisor.stop_shape_consumer(state.consumer_supervisor, shape_id)
 
     state.shape_status.remove_shape(state.persistent_state, shape_id)
   end
@@ -377,7 +377,7 @@ defmodule Electric.ShapeCache do
 
   defp start_shape(shape_id, shape, state) do
     with {:ok, pid} <-
-           Electric.Shapes.ConsumerSupervisor.start_shape_consumer(
+           Electric.Shapes.ConsumerGroupSupervisor.start_shape_consumer(
              state.consumer_supervisor,
              shape_id: shape_id,
              shape: shape,

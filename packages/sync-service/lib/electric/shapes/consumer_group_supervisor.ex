@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.ConsumerSupervisor do
+defmodule Electric.Shapes.ConsumerGroupSupervisor do
   @moduledoc """
   Responsible for managing shape consumer processes
   """

@@ -911,7 +911,7 @@ defmodule Electric.ShapeCacheTest do
           {pid, Process.monitor(pid)}
         end
 
-      Shapes.ConsumerSupervisor.stop_all_consumers(ctx.consumer_supervisor)
+      Shapes.ConsumerGroupSupervisor.stop_all_consumers(ctx.consumer_supervisor)
 
       for {pid, ref} <- consumers do
         assert_receive {:DOWN, ^ref, :process, ^pid, _}

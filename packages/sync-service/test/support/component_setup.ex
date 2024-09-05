@@ -65,7 +65,7 @@ defmodule Support.ComponentSetup do
          [ctx.publication_name]}
       end)
 
-    {:ok, _pid} = Electric.Shapes.ConsumerSupervisor.start_link(name: consumer_supervisor)
+    {:ok, _pid} = Electric.Shapes.ConsumerGroupSupervisor.start_link(name: consumer_supervisor)
     {:ok, _pid} = ShapeCache.start_link(start_opts)
 
     shape_cache_opts = [

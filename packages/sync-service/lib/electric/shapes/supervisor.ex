@@ -18,7 +18,7 @@ defmodule Electric.Shapes.Supervisor do
     log_collector = Keyword.fetch!(opts, :log_collector)
 
     consumer_supervisor =
-      Keyword.get(opts, :consumer_supervisor, {Electric.Shapes.ConsumerSupervisor, []})
+      Keyword.get(opts, :consumer_supervisor, {Electric.Shapes.ConsumerGroupSupervisor, []})
 
     children =
       Enum.reject(
