@@ -31,7 +31,7 @@ export function createFetchWithBackoff(
     let delay = initialDelay
     let attempt = 0
 
-    // eslint-disable-next-line no-constant-condition -- we're retrying with a lag until we get a non-500 response or the abort signal is triggered
+    // eslint-disable-next-line no-constant-condition — we re-fetch the shape log continuously until we get a non-ok response. For recoverable errors, we retry the fetch with exponential backoff. Users can pass in an AbortController to abort the fetching an any point.
     while (true) {
       try {
         const result = await fetchClient(...args)
