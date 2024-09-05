@@ -1,3 +1,4 @@
+import { asyncOrCall, asyncOrIterable, isPromise } from './async-or'
 import {
   type FetchError,
   type ShapeStreamInterface,
@@ -15,16 +16,7 @@ import {
   type PromiseOr,
 } from './types'
 
-function isPromise<T>(promise: PromiseOr<T>): promise is Promise<T> {
-  return (
-    !!promise &&
-    typeof promise === `object` &&
-    `then` in promise &&
-    typeof promise.then === `function`
-  )
-}
-
-export type StreamStorageItem<T extends Row = Row> = {
+type StreamStorageItem<T extends Row = Row> = {
   key: string
   value: T
   offset: Offset
@@ -33,6 +25,7 @@ export type StreamStorageItem<T extends Row = Row> = {
 
 export interface PersistedShapeStreamOptions
   extends Omit<ShapeStreamOptions, `offset` | `shapeId`> {
+  // TODO: fix this type
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   storage: ShapeStreamStorage<any>
 }
@@ -219,41 +212,5 @@ function shapeStreamStorageItemToMessage<T extends Row>(
     key: item.key,
     value: item.value,
     offset: item.offset,
-  }
-}
-
-function asyncOrCall<T>(
-  item: PromiseOr<T>,
-  callback: (item: T) => void,
-  onError?: (error: unknown) => void
-): PromiseOr<void> {
-  if (!isPromise(item)) {
-    try {
-      return callback(item)
-    } catch (err: unknown) {
-      if (onError) return onError(err)
-      throw err
-    }
-  }
-
-  return item.then((item) => callback(item)).catch(onError)
-}
-
-function asyncOrIterable<T>(
-  iterable: Iterable<T> | AsyncIterable<T>,
-  callback: (item: T) => void
-): PromiseOr<void> {
-  if (Symbol.asyncIterator in iterable) {
-    // eslint-disable-next-line no-async-promise-executor
-    return new Promise<void>(async (res) => {
-      for await (const item of iterable) {
-        callback(item)
-      }
-      res()
-    })
-  }
-
-  for (const item of iterable) {
-    callback(item)
   }
 }
