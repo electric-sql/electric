@@ -5,6 +5,8 @@ defmodule Electric.Shapes do
   alias Electric.Shapes.Shape
   require Logger
 
+  @type shape_id :: Electric.ShapeCacheBehaviour.shape_id()
+
   @doc """
   Get snapshot for the shape ID
   """
@@ -14,7 +16,7 @@ defmodule Electric.Shapes do
 
     if shape_cache.has_shape?(shape_id, opts) do
       with :started <- shape_cache.await_snapshot_start(shape_id, opts) do
-        {:ok, Storage.get_snapshot(shape_id, storage)}
+        {:ok, Storage.get_snapshot(storage)}
       end
     else
       {:error, "invalid shape_id #{inspect(shape_id)}"}
@@ -31,7 +33,7 @@ defmodule Electric.Shapes do
     storage = shape_storage(config, shape_id)
 
     if shape_cache.has_shape?(shape_id, shape_cache_opts) do
-      Storage.get_log_stream(shape_id, offset, max_offset, storage)
+      Storage.get_log_stream(offset, max_offset, storage)
     else
       raise "Unknown shape: #{shape_id}"
     end
@@ -40,7 +42,7 @@ defmodule Electric.Shapes do
   @doc """
   Get or create a shape ID and return it along with the latest offset of the shape
   """
-  @spec get_or_create_shape_id(keyword(), Shape.t()) :: {Storage.shape_id(), LogOffset.t()}
+  @spec get_or_create_shape_id(keyword(), Shape.t()) :: {shape_id(), LogOffset.t()}
   def get_or_create_shape_id(config, shape_def) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
 
@@ -52,17 +54,17 @@ defmodule Electric.Shapes do
 
   If `nil` is returned, chunk is not complete and the shape's latest offset should be used
   """
-  @spec get_chunk_end_log_offset(keyword(), Storage.shape_id(), LogOffset.t()) ::
+  @spec get_chunk_end_log_offset(keyword(), shape_id(), LogOffset.t()) ::
           LogOffset.t() | nil
   def get_chunk_end_log_offset(config, shape_id, offset) do
     storage = shape_storage(config, shape_id)
-    Storage.get_chunk_end_log_offset(shape_id, offset, storage)
+    Storage.get_chunk_end_log_offset(offset, storage)
   end
 
   @doc """
   Check whether the log has an entry for a given shape ID
   """
-  @spec has_shape?(keyword(), Storage.shape_id()) :: boolean()
+  @spec has_shape?(keyword(), shape_id()) :: boolean()
   def has_shape?(config, shape_id) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
 
@@ -72,14 +74,14 @@ defmodule Electric.Shapes do
   @doc """
   Clean up all data (meta data and shape log + snapshot) associated with the given shape ID
   """
-  @spec clean_shape(Storage.shape_id(), keyword()) :: :ok
+  @spec clean_shape(shape_id(), keyword()) :: :ok
   def clean_shape(shape_id, opts \\ []) do
     {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
     shape_cache.clean_shape(shape_id, opts)
     :ok
   end
 
-  @spec clean_shapes([Storage.shape_id()], keyword()) :: :ok
+  @spec clean_shapes([shape_id()], keyword()) :: :ok
   def clean_shapes(shape_ids, opts \\ []) do
     {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
 

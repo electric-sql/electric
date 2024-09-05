@@ -2,111 +2,132 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   use Agent
   alias Electric.ConcurrentStream
   alias Electric.Replication.LogOffset
-  alias Electric.Shapes.Querying
   alias Electric.Telemetry.OpenTelemetry
+
+  alias __MODULE__, as: MS
 
   @behaviour Electric.ShapeCache.Storage
 
   @snapshot_offset LogOffset.first()
+  @snapshot_start_index 0
+  @snapshot_end_index :end
+  @xmin_key :xmin
 
+  defstruct [
+    :table_base_name,
+    :snapshot_table,
+    :log_table,
+    :chunk_checkpoint_table,
+    :shape_id
+  ]
+
+  @impl Electric.ShapeCache.Storage
   def shared_opts(opts) do
-    snapshot_ets_table_name = Access.get(opts, :snapshot_ets_table, :snapshot_ets_table)
-    log_ets_table_name = Access.get(opts, :log_ets_table, :log_ets_table)
+    table_base_name = Access.get(opts, :table_base_name, __MODULE__)
 
-    chunk_checkpoint_ets_table_name =
-      Access.get(opts, :chunk_checkpoint_ets_table, :chunk_checkpoint_ets_table)
-
-    {:ok,
-     %{
-       snapshot_ets_table_base: snapshot_ets_table_name,
-       log_ets_table_base: log_ets_table_name,
-       chunk_checkpoint_ets_table_base: chunk_checkpoint_ets_table_name,
-       snapshot_ets_table: nil,
-       log_ets_table: nil,
-       chunk_checkpoint_ets_table: nil,
-       shape_id: nil
-     }}
+    {:ok, %{table_base_name: table_base_name}}
   end
 
   def name(shape_id) when is_binary(shape_id) do
     Electric.Application.process_name(__MODULE__, shape_id)
   end
 
-  def start_link(compiled_opts) do
-    if is_nil(compiled_opts.shape_id), do: raise("cannot start an un-attached storage instance")
+  @impl Electric.ShapeCache.Storage
+  def for_shape(shape_id, %{shape_id: shape_id} = opts) do
+    opts
+  end
+
+  def for_shape(shape_id, %{table_base_name: table_base_name}) do
+    snapshot_table_name = :"#{table_base_name}.Snapshot_#{shape_id}"
+    log_table_name = :"#{table_base_name}.Log_#{shape_id}"
+    chunk_checkpoint_table_name = :"#{table_base_name}.ChunkCheckpoint_#{shape_id}"
+
+    %__MODULE__{
+      table_base_name: table_base_name,
+      shape_id: shape_id,
+      snapshot_table: snapshot_table_name,
+      log_table: log_table_name,
+      chunk_checkpoint_table: chunk_checkpoint_table_name
+    }
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def start_link(%MS{} = opts) do
+    if is_nil(opts.shape_id), do: raise("cannot start an un-attached storage instance")
 
     Agent.start_link(
       fn ->
         %{
-          snapshot_ets_table:
-            :ets.new(compiled_opts.snapshot_ets_table, [:public, :named_table, :ordered_set]),
-          log_ets_table:
-            :ets.new(compiled_opts.log_ets_table, [:public, :named_table, :ordered_set]),
-          chunk_checkpoint_ets_table:
-            :ets.new(compiled_opts.chunk_checkpoint_ets_table, [
-              :public,
-              :named_table,
-              :ordered_set
-            ])
+          snapshot_table: storage_table(opts.snapshot_table),
+          log_table: storage_table(opts.log_table),
+          chunk_checkpoint_table: storage_table(opts.chunk_checkpoint_table)
         }
       end,
-      name: name(compiled_opts.shape_id)
+      name: name(opts.shape_id)
     )
   end
 
-  def for_shape(shape_id, %{shape_id: shape_id} = compiled_opts) do
-    compiled_opts
+  defp storage_table(name) do
+    :ets.new(name, [:public, :named_table, :ordered_set])
   end
 
-  def for_shape(shape_id, compiled_opts) do
-    snapshot_ets_table_name = Map.fetch!(compiled_opts, :snapshot_ets_table_base)
-    log_ets_table_name = Map.fetch!(compiled_opts, :log_ets_table_base)
-    chunk_checkpoint_ets_table_name = Map.fetch!(compiled_opts, :chunk_checkpoint_ets_table_base)
-
-    %{
-      compiled_opts
-      | shape_id: shape_id,
-        snapshot_ets_table: :"#{snapshot_ets_table_name}-#{shape_id}",
-        log_ets_table: :"#{log_ets_table_name}-#{shape_id}",
-        chunk_checkpoint_ets_table: :"#{chunk_checkpoint_ets_table_name}-#{shape_id}"
-    }
+  @impl Electric.ShapeCache.Storage
+  def get_current_position(%MS{} = opts) do
+    {:ok, current_offset(opts), current_xmin(opts)}
   end
 
-  # Service restart recovery functions that are pointless implimenting for in memory storage
-  def list_shapes(_opts), do: []
-  def add_shape(_shape_id, _shape, _opts), do: :ok
-  def set_snapshot_xmin(_shape_id, _xmin, _opts), do: :ok
-  def initialise(_opts), do: :ok
+  defp current_xmin(opts) do
+    case :ets.lookup(opts.snapshot_table, @xmin_key) do
+      [] ->
+        nil
 
-  def snapshot_started?(shape_id, opts) do
+      [{@xmin_key, xmin}] ->
+        xmin
+    end
+  end
+
+  defp current_offset(_opts) do
+    LogOffset.first()
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def set_snapshot_xmin(xmin, %MS{} = opts) do
+    :ets.insert(opts.snapshot_table, {@xmin_key, xmin})
+    :ok
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def initialise(%MS{} = _opts), do: :ok
+
+  @impl Electric.ShapeCache.Storage
+  def snapshot_started?(%MS{} = opts) do
     try do
-      :ets.member(opts.snapshot_ets_table, snapshot_start(shape_id))
+      :ets.member(opts.snapshot_table, snapshot_start())
     rescue
       ArgumentError ->
         false
     end
   end
 
-  defp snapshot_key(shape_id, index) do
-    {:data, shape_id, index}
+  defp snapshot_key(index) do
+    {:data, index}
   end
 
-  @snapshot_start_index 0
-  @snapshot_end_index :end
-  defp snapshot_start(shape_id), do: snapshot_key(shape_id, @snapshot_start_index)
-  defp snapshot_end(shape_id), do: snapshot_key(shape_id, @snapshot_end_index)
+  defp snapshot_start, do: snapshot_key(@snapshot_start_index)
+  defp snapshot_end, do: snapshot_key(@snapshot_end_index)
 
-  def get_snapshot(shape_id, opts) do
+  @impl Electric.ShapeCache.Storage
+  def get_snapshot(%MS{} = opts) do
     stream =
       ConcurrentStream.stream_to_end(
         excluded_start_key: @snapshot_start_index,
         end_marker_key: @snapshot_end_index,
         poll_time_in_ms: 10,
         stream_fun: fn excluded_start_key, included_end_key ->
-          if !snapshot_started?(shape_id, opts), do: raise("Snapshot no longer available")
+          if !snapshot_started?(opts), do: raise("Snapshot no longer available")
 
-          :ets.select(opts.snapshot_ets_table, [
-            {{snapshot_key(shape_id, :"$1"), :"$2"},
+          :ets.select(opts.snapshot_table, [
+            {{snapshot_key(:"$1"), :"$2"},
              [{:andalso, {:>, :"$1", excluded_start_key}, {:"=<", :"$1", included_end_key}}],
              [{{:"$1", :"$2"}}]}
           ])
@@ -117,96 +138,85 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     {@snapshot_offset, stream}
   end
 
-  defp get_offset_indexed_stream(shape_id, offset, max_offset, offset_indexed_ets_table) do
+  defp get_offset_indexed_stream(offset, max_offset, offset_indexed_table) do
     offset = storage_offset(offset)
     max_offset = storage_offset(max_offset)
 
-    :ets.tab2list(offset_indexed_ets_table)
-
     Stream.unfold(offset, fn offset ->
-      case :ets.next_lookup(offset_indexed_ets_table, {shape_id, offset}) do
+      case :ets.next_lookup(offset_indexed_table, {:offset, offset}) do
         :"$end_of_table" ->
           nil
 
-        {{other_shape_id, _}, _} when other_shape_id != shape_id ->
+        {{:offset, position}, _} when position > max_offset ->
           nil
 
-        {{^shape_id, position}, _} when position > max_offset ->
-          nil
-
-        {{^shape_id, position}, [{_, item}]} ->
+        {{:offset, position}, [{_, item}]} ->
           {item, position}
       end
     end)
   end
 
-  def get_log_stream(shape_id, offset, max_offset, opts) do
-    get_offset_indexed_stream(shape_id, offset, max_offset, opts.log_ets_table)
+  @impl Electric.ShapeCache.Storage
+  def get_log_stream(offset, max_offset, %MS{} = opts) do
+    get_offset_indexed_stream(offset, max_offset, opts.log_table)
   end
 
-  def get_chunk_end_log_offset(shape_id, offset, opts) do
-    get_offset_indexed_stream(shape_id, offset, offset, opts.chunk_checkpoint_ets_table)
+  @impl Electric.ShapeCache.Storage
+  def get_chunk_end_log_offset(offset, %MS{} = opts) do
+    get_offset_indexed_stream(offset, offset, opts.chunk_checkpoint_table)
     |> Stream.map(fn {_, pos} -> LogOffset.new(pos) end)
     |> Enum.take(1)
     |> Enum.at(0)
   end
 
-  def has_shape?(shape_id, opts) do
-    case :ets.select(opts.log_ets_table, [
-           {{{shape_id, :_}, :_}, [], [true]}
-         ]) do
-      [true] -> true
-      [] -> snapshot_started?(shape_id, opts)
-    end
-  end
-
-  def mark_snapshot_as_started(shape_id, opts) do
-    :ets.insert(opts.snapshot_ets_table, {snapshot_start(shape_id), 0})
-    :ok
-  end
-
-  @spec make_new_snapshot!(
-          String.t(),
-          Querying.json_result_stream(),
-          map()
-        ) :: :ok
-  def make_new_snapshot!(shape_id, data_stream, opts) do
+  @impl Electric.ShapeCache.Storage
+  def make_new_snapshot!(data_stream, %MS{} = opts) do
     OpenTelemetry.with_span("storage.make_new_snapshot", [storage_impl: "in_memory"], fn ->
-      ets_table = opts.snapshot_ets_table
+      table = opts.snapshot_table
 
       data_stream
       |> Stream.with_index(1)
-      |> Stream.map(fn {log_item, index} -> {snapshot_key(shape_id, index), log_item} end)
+      |> Stream.map(fn {log_item, index} -> {snapshot_key(index), log_item} end)
       |> Stream.chunk_every(500)
-      |> Stream.each(fn chunk -> :ets.insert(ets_table, chunk) end)
+      |> Stream.each(fn chunk -> :ets.insert(table, chunk) end)
       |> Stream.run()
 
-      :ets.insert(ets_table, {snapshot_end(shape_id), 0})
+      :ets.insert(table, {snapshot_end(), 0})
       :ok
     end)
   end
 
-  def append_to_log!(shape_id, log_items, opts) do
-    log_ets_table = opts.log_ets_table
-    chunk_checkpoint_ets_table = opts.chunk_checkpoint_ets_table
+  @impl Electric.ShapeCache.Storage
+  def mark_snapshot_as_started(%MS{} = opts) do
+    :ets.insert(opts.snapshot_table, {snapshot_start(), 0})
+    :ok
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def append_to_log!(log_items, %MS{} = opts) do
+    log_table = opts.log_table
+    chunk_checkpoint_table = opts.chunk_checkpoint_table
 
     log_items
     |> Enum.map(fn
       {:chunk_boundary, offset} -> {storage_offset(offset), :checkpoint}
-      {offset, json_log_item} -> {{shape_id, storage_offset(offset)}, json_log_item}
+      {offset, json_log_item} -> {{:offset, storage_offset(offset)}, json_log_item}
     end)
     |> Enum.split_with(fn item -> match?({_, :checkpoint}, item) end)
     |> then(fn {checkpoints, log_items} ->
-      :ets.insert(chunk_checkpoint_ets_table, checkpoints)
-      :ets.insert(log_ets_table, log_items)
+      :ets.insert(chunk_checkpoint_table, checkpoints)
+      :ets.insert(log_table, log_items)
+      log_items
     end)
 
     :ok
   end
 
-  def cleanup!(shape_id, opts) do
-    :ets.match_delete(opts.snapshot_ets_table, {snapshot_key(shape_id, :_), :_})
-    :ets.match_delete(opts.log_ets_table, {{shape_id, :_}, :_})
+  @impl Electric.ShapeCache.Storage
+  def cleanup!(%MS{} = opts) do
+    :ets.delete_all_objects(opts.snapshot_table)
+    :ets.delete_all_objects(opts.log_table)
+    :ets.delete_all_objects(opts.chunk_checkpoint_table)
     :ok
   end
 

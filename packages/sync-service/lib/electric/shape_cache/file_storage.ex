@@ -1,36 +1,40 @@
 defmodule Electric.ShapeCache.FileStorage do
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Replication.LogOffset
-  @behaviour Electric.ShapeCache.Storage
+  alias __MODULE__, as: FS
 
   # If the storage format changes, increase `@version` to prevent
   # the incompatable older versions being read
   @version 2
   @version_key :version
 
+  @xmin_key :snapshot_xmin
+  @snapshot_meta_key :snapshot_meta
+  @snapshot_started_key :snapshot_started
+
+  @behaviour Electric.ShapeCache.Storage
+
+  defstruct [:base_path, :shape_id, :db, :cubdb_dir, :snapshot_dir, version: @version]
+
+  @impl Electric.ShapeCache.Storage
   def shared_opts(opts) do
     storage_dir = Access.get(opts, :storage_dir, "./shapes")
 
-    {:ok,
-     %{
-       base_path: storage_dir,
-       shape_id: nil,
-       db: nil,
-       version: @version,
-       cubdb_dir: nil,
-       snapshot_dir: nil
-     }}
+    {:ok, %{base_path: storage_dir}}
   end
 
-  def for_shape(shape_id, %{shape_id: shape_id} = opts), do: opts
+  @impl Electric.ShapeCache.Storage
+  def for_shape(shape_id, %FS{shape_id: shape_id} = opts) do
+    opts
+  end
 
-  def for_shape(shape_id, %{base_path: base_path} = opts) do
-    %{
-      opts
-      | shape_id: shape_id,
-        db: name(shape_id),
-        cubdb_dir: Path.join([base_path, shape_id, "cubdb"]),
-        snapshot_dir: Path.join([base_path, shape_id, "snapshots"])
+  def for_shape(shape_id, %{base_path: base_path}) do
+    %FS{
+      base_path: base_path,
+      shape_id: shape_id,
+      db: name(shape_id),
+      cubdb_dir: Path.join([base_path, shape_id, "cubdb"]),
+      snapshot_dir: Path.join([base_path, shape_id, "snapshots"])
     }
   end
 
@@ -38,7 +42,7 @@ defmodule Electric.ShapeCache.FileStorage do
     Electric.Application.process_name(__MODULE__, shape_id)
   end
 
-  def child_spec(opts) do
+  def child_spec(%FS{} = opts) do
     %{
       id: __MODULE__,
       start: {__MODULE__, :start_link, [opts]},
@@ -47,9 +51,10 @@ defmodule Electric.ShapeCache.FileStorage do
     }
   end
 
-  def start_link(opts) do
+  @impl Electric.ShapeCache.Storage
+  def start_link(%FS{cubdb_dir: dir, db: db} = opts) do
     with :ok <- initialise_filesystem(opts) do
-      CubDB.start_link(data_dir: opts.cubdb_dir, name: opts.db)
+      CubDB.start_link(data_dir: dir, name: db)
     end
   end
 
@@ -60,51 +65,27 @@ defmodule Electric.ShapeCache.FileStorage do
     end
   end
 
-  def initialise(opts) do
+  @impl Electric.ShapeCache.Storage
+  def initialise(%FS{} = opts) do
     stored_version = stored_version(opts)
 
-    opts.db
-    |> CubDB.select(min_key: shapes_start(), max_key: shapes_end())
-    |> Stream.map(fn {{:shapes, shape_id}, _} -> shape_id end)
-    |> Stream.filter(fn shape_id ->
-      stored_version != opts.version ||
-        snapshot_xmin(shape_id, opts) == nil ||
-        not CubDB.has_key?(opts.db, snapshot_meta_key(shape_id))
-    end)
-    |> Enum.each(&cleanup!(&1, opts))
+    if stored_version != opts.version || snapshot_xmin(opts) == nil ||
+         not CubDB.has_key?(opts.db, @snapshot_meta_key) do
+      cleanup!(opts)
+    end
 
     CubDB.put(opts.db, @version_key, @version)
   end
 
-  def list_shapes(opts) do
-    opts.db
-    |> CubDB.select(min_key: shapes_start(), max_key: shapes_end())
-    |> Enum.map(fn {{:shapes, shape_id}, shape} ->
-      %{
-        shape_id: shape_id,
-        shape: shape,
-        latest_offset: latest_offset(shape_id, opts),
-        snapshot_xmin: snapshot_xmin(shape_id, opts)
-      }
-    end)
+  @impl Electric.ShapeCache.Storage
+  def get_current_position(%FS{} = opts) do
+    {:ok, latest_offset(opts), snapshot_xmin(opts)}
   end
 
-  def add_shape(shape_id, shape, opts) do
-    CubDB.put(opts.db, shape_key(shape_id), shape)
-  end
-
-  def set_snapshot_xmin(shape_id, xmin, opts) do
-    CubDB.put(opts.db, xmin_key(shape_id), xmin)
-  end
-
-  defp snapshot_xmin(shape_id, opts) do
-    CubDB.get(opts.db, xmin_key(shape_id))
-  end
-
-  defp latest_offset(shape_id, opts) do
+  defp latest_offset(opts) do
     case CubDB.select(opts.db,
-           min_key: log_start(shape_id),
-           max_key: log_end(shape_id),
+           min_key: log_start(),
+           max_key: log_end(),
            min_key_inclusive: true,
            reverse: true
          )
@@ -117,39 +98,48 @@ defmodule Electric.ShapeCache.FileStorage do
     end
   end
 
-  def snapshot_started?(shape_id, opts) do
-    CubDB.has_key?(opts.db, snapshot_started_key(shape_id))
+  defp snapshot_xmin(opts) do
+    CubDB.get(opts.db, @xmin_key)
   end
 
-  def mark_snapshot_as_started(shape_id, opts) do
-    CubDB.put(opts.db, snapshot_started_key(shape_id), true)
+  @impl Electric.ShapeCache.Storage
+  def set_snapshot_xmin(xmin, %FS{} = opts) do
+    CubDB.put(opts.db, @xmin_key, xmin)
   end
 
-  defp offset({_shape_id, _, tuple_offset}), do: LogOffset.new(tuple_offset)
+  @impl Electric.ShapeCache.Storage
+  def snapshot_started?(%FS{} = opts) do
+    CubDB.has_key?(opts.db, @snapshot_started_key)
+  end
 
-  def make_new_snapshot!(shape_id, data_stream, opts) do
+  @impl Electric.ShapeCache.Storage
+  def mark_snapshot_as_started(%FS{} = opts) do
+    CubDB.put(opts.db, @snapshot_started_key, true)
+  end
+
+  defp offset({_, tuple_offset}), do: LogOffset.new(tuple_offset)
+
+  @impl Electric.ShapeCache.Storage
+  def make_new_snapshot!(data_stream, %FS{} = opts) do
     OpenTelemetry.with_span("storage.make_new_snapshot", [storage_impl: "mixed_disk"], fn ->
       data_stream
       |> Stream.map(&[&1, ?\n])
       # Use the 4 byte marker (ASCII "end of transmission") to indicate the end of the snapshot,
       # so that concurrent readers can detect that the snapshot has been completed.
       |> Stream.concat([<<4::utf8>>])
-      |> Stream.into(File.stream!(shape_snapshot_path(shape_id, opts), [:append, :delayed_write]))
+      |> Stream.into(File.stream!(shape_snapshot_path(opts), [:append, :delayed_write]))
       |> Stream.run()
 
-      CubDB.put(opts.db, snapshot_meta_key(shape_id), LogOffset.first())
+      CubDB.put(opts.db, @snapshot_meta_key, LogOffset.first())
     end)
   end
 
-  def snapshot_exists?(shape_id, opts) do
-    CubDB.has_key?(opts.db, snapshot_meta_key(shape_id))
-  end
-
-  def get_snapshot(shape_id, opts) do
-    if snapshot_started?(shape_id, opts) do
+  @impl Electric.ShapeCache.Storage
+  def get_snapshot(%FS{} = opts) do
+    if snapshot_started?(opts) do
       {LogOffset.first(),
        Stream.resource(
-         fn -> {open_snapshot_file(shape_id, opts), nil} end,
+         fn -> {open_snapshot_file(opts), nil} end,
          fn {file, eof_seen} ->
            case IO.binread(file, :line) do
              {:error, reason} ->
@@ -187,48 +177,51 @@ defmodule Electric.ShapeCache.FileStorage do
     end
   end
 
-  defp open_snapshot_file(shape_id, opts, attempts_left \\ 100)
-  defp open_snapshot_file(_, _, 0), do: raise(IO.StreamError, reason: :enoent)
+  defp open_snapshot_file(opts, attempts_left \\ 100)
+  defp open_snapshot_file(_, 0), do: raise(IO.StreamError, reason: :enoent)
 
-  defp open_snapshot_file(shape_id, opts, attempts_left) do
-    case File.open(shape_snapshot_path(shape_id, opts), [:read, :raw, read_ahead: 1024]) do
+  defp open_snapshot_file(opts, attempts_left) do
+    case File.open(shape_snapshot_path(opts), [:read, :raw, read_ahead: 1024]) do
       {:ok, file} ->
         file
 
       {:error, :enoent} ->
         Process.sleep(10)
-        open_snapshot_file(shape_id, opts, attempts_left - 1)
+        open_snapshot_file(opts, attempts_left - 1)
 
       {:error, reason} ->
         raise IO.StreamError, reason: reason
     end
   end
 
-  def append_to_log!(shape_id, log_items, opts) do
+  @impl Electric.ShapeCache.Storage
+  def append_to_log!(log_items, %FS{} = opts) do
     log_items
     |> Enum.map(fn
-      {:chunk_boundary, offset} -> {chunk_checkpoint_key(shape_id, offset), nil}
-      {offset, json_log_item} -> {log_key(shape_id, offset), json_log_item}
+      {:chunk_boundary, offset} -> {chunk_checkpoint_key(offset), nil}
+      {offset, json_log_item} -> {log_key(offset), json_log_item}
     end)
     |> then(&CubDB.put_multi(opts.db, &1))
 
     :ok
   end
 
-  def get_log_stream(shape_id, offset, max_offset, opts) do
+  @impl Electric.ShapeCache.Storage
+  def get_log_stream(offset, max_offset, %FS{} = opts) do
     opts.db
     |> CubDB.select(
-      min_key: log_key(shape_id, offset),
-      max_key: log_key(shape_id, max_offset),
+      min_key: log_key(offset),
+      max_key: log_key(max_offset),
       min_key_inclusive: false
     )
     |> Stream.map(fn {_, item} -> item end)
   end
 
-  def get_chunk_end_log_offset(shape_id, offset, opts) do
+  @impl Electric.ShapeCache.Storage
+  def get_chunk_end_log_offset(offset, %FS{} = opts) do
     CubDB.select(opts.db,
-      min_key: chunk_checkpoint_key(shape_id, offset),
-      max_key: chunk_checkpoint_end(shape_id),
+      min_key: chunk_checkpoint_key(offset),
+      max_key: chunk_checkpoint_end(),
       min_key_inclusive: false
     )
     |> Stream.map(fn {key, _} -> offset(key) end)
@@ -236,31 +229,18 @@ defmodule Electric.ShapeCache.FileStorage do
     |> Enum.at(0)
   end
 
-  def has_log_entry?(shape_id, offset, opts) do
-    # FIXME: this is naive while we don't have snapshot metadata to get real offsets
-    CubDB.has_key?(opts.db, log_key(shape_id, offset)) or
-      (snapshot_started?(shape_id, opts) and offset == LogOffset.first())
-  end
-
-  def has_shape?(shape_id, opts) do
-    entry_stream = keys_from_range(log_start(shape_id), log_end(shape_id), opts)
-    !Enum.empty?(entry_stream) or snapshot_started?(shape_id, opts)
-  end
-
-  def cleanup!(shape_id, opts) do
+  @impl Electric.ShapeCache.Storage
+  def cleanup!(%FS{} = opts) do
     [
-      snapshot_meta_key(shape_id),
-      shape_key(shape_id),
-      xmin_key(shape_id),
-      snapshot_started_key(shape_id)
+      @snapshot_meta_key,
+      @xmin_key,
+      @snapshot_started_key
     ]
-    |> Enum.concat(keys_from_range(log_start(shape_id), log_end(shape_id), opts))
-    |> Enum.concat(
-      keys_from_range(chunk_checkpoint_start(shape_id), chunk_checkpoint_end(shape_id), opts)
-    )
+    |> Enum.concat(keys_from_range(log_start(), log_end(), opts))
+    |> Enum.concat(keys_from_range(chunk_checkpoint_start(), chunk_checkpoint_end(), opts))
     |> then(&CubDB.delete_multi(opts.db, &1))
 
-    File.rm_rf(shape_snapshot_path(shape_id, opts))
+    {:ok, _} = File.rm_rf(shape_snapshot_path(opts))
 
     :ok
   end
@@ -270,8 +250,8 @@ defmodule Electric.ShapeCache.FileStorage do
     |> Stream.map(&elem(&1, 0))
   end
 
-  defp shape_snapshot_path(shape_id, opts) do
-    Path.join([opts.snapshot_dir, "#{shape_id}_snapshot.jsonl"])
+  defp shape_snapshot_path(opts) do
+    Path.join([opts.snapshot_dir, "snapshot.jsonl"])
   end
 
   defp stored_version(opts) do
@@ -279,16 +259,11 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   # Key helpers
-  defp shape_key(shape_id), do: {:shapes, shape_id}
-  defp xmin_key(shape_id), do: {:snapshot_xmin, shape_id}
-  defp snapshot_meta_key(shape_id), do: {:snapshot_meta, shape_id}
-  defp log_key(shape_id, offset), do: {shape_id, :log, LogOffset.to_tuple(offset)}
-  defp log_start(shape_id), do: log_key(shape_id, LogOffset.first())
-  defp log_end(shape_id), do: log_key(shape_id, LogOffset.last())
-  defp shapes_start, do: shape_key(0)
-  defp shapes_end, do: shape_key(<<255>>)
-  defp snapshot_started_key(shape_id), do: {:snapshot_started, shape_id}
-  defp chunk_checkpoint_key(shape_id, offset), do: {shape_id, :chunk, LogOffset.to_tuple(offset)}
-  defp chunk_checkpoint_start(shape_id), do: chunk_checkpoint_key(shape_id, LogOffset.first())
-  defp chunk_checkpoint_end(shape_id), do: chunk_checkpoint_key(shape_id, LogOffset.last())
+  defp log_key(offset), do: {:log, LogOffset.to_tuple(offset)}
+  defp log_start, do: log_key(LogOffset.first())
+  defp log_end, do: log_key(LogOffset.last())
+
+  defp chunk_checkpoint_key(offset), do: {:chunk, LogOffset.to_tuple(offset)}
+  defp chunk_checkpoint_start(), do: chunk_checkpoint_key(LogOffset.first())
+  defp chunk_checkpoint_end(), do: chunk_checkpoint_key(LogOffset.last())
 end
