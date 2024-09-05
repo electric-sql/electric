@@ -953,12 +953,9 @@ defmodule Electric.ShapeCacheTest do
     ]
 
     setup(ctx) do
-      shape_cache_server = __MODULE__.ShapeCache
-
       ctx =
         with_shape_cache(
           Map.merge(ctx, %{inspector: {Mock.Inspector, []}}),
-          name: shape_cache_server,
           prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_id, _shape, _, storage ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, @snapshot_xmin})
