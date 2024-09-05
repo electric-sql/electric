@@ -40,37 +40,41 @@ export type ShapeChangedCallback<T extends Row = Row> = (
  *     })
  */
 export class Shape<T extends Row = Row> {
-  private stream: ShapeStreamInterface<T>
+  readonly #stream: ShapeStreamInterface<T>
 
-  private data: ShapeData<T> = new Map()
-  private subscribers = new Map<number, ShapeChangedCallback<T>>()
-  public error: FetchError | false = false
-  private hasNotifiedSubscribersUpToDate: boolean = false
+  readonly #data: ShapeData<T> = new Map()
+  readonly #subscribers = new Map<number, ShapeChangedCallback<T>>()
+
+  #hasNotifiedSubscribersUpToDate: boolean = false
+  #error: FetchError | false = false
 
   constructor(stream: ShapeStreamInterface<T>) {
-    this.stream = stream
-    this.stream.subscribe(this.process.bind(this), this.handleError.bind(this))
-    const unsubscribe = this.stream.subscribeOnceToUpToDate(
+    this.#stream = stream
+    this.#stream.subscribe(
+      this.#process.bind(this),
+      this.#handleError.bind(this)
+    )
+    const unsubscribe = this.#stream.subscribeOnceToUpToDate(
       () => {
         unsubscribe()
       },
       (e) => {
-        this.handleError(e)
+        this.#handleError(e)
         throw e
       }
     )
   }
 
   get isUpToDate(): boolean {
-    return this.stream.isUpToDate
+    return this.#stream.isUpToDate
   }
 
   get value(): Promise<ShapeData<T>> {
     return new Promise((resolve) => {
-      if (this.stream.isUpToDate) {
+      if (this.#stream.isUpToDate) {
         resolve(this.valueSync)
       } else {
-        const unsubscribe = this.stream.subscribeOnceToUpToDate(
+        const unsubscribe = this.#stream.subscribeOnceToUpToDate(
           () => {
             unsubscribe()
             resolve(this.valueSync)
@@ -84,28 +88,32 @@ export class Shape<T extends Row = Row> {
   }
 
   get valueSync() {
-    return this.data
+    return this.#data
+  }
+
+  get error() {
+    return this.#error
   }
 
   subscribe(callback: ShapeChangedCallback<T>): () => void {
     const subscriptionId = Math.random()
 
-    this.subscribers.set(subscriptionId, callback)
+    this.#subscribers.set(subscriptionId, callback)
 
     return () => {
-      this.subscribers.delete(subscriptionId)
+      this.#subscribers.delete(subscriptionId)
     }
   }
 
   unsubscribeAll(): void {
-    this.subscribers.clear()
+    this.#subscribers.clear()
   }
 
   get numSubscribers() {
-    return this.subscribers.size
+    return this.#subscribers.size
   }
 
-  private process(messages: Message<T>[]): void {
+  #process(messages: Message<T>[]): void {
     let dataMayHaveChanged = false
     let isUpToDate = false
     let newlyUpToDate = false
@@ -118,16 +126,16 @@ export class Shape<T extends Row = Row> {
 
         switch (message.headers.operation) {
           case `insert`:
-            this.data.set(message.key, message.value)
+            this.#data.set(message.key, message.value)
             break
           case `update`:
-            this.data.set(message.key, {
-              ...this.data.get(message.key)!,
+            this.#data.set(message.key, {
+              ...this.#data.get(message.key)!,
               ...message.value,
             })
             break
           case `delete`:
-            this.data.delete(message.key)
+            this.#data.delete(message.key)
             break
         }
       }
@@ -136,13 +144,13 @@ export class Shape<T extends Row = Row> {
         switch (message.headers.control) {
           case `up-to-date`:
             isUpToDate = true
-            if (!this.hasNotifiedSubscribersUpToDate) {
+            if (!this.#hasNotifiedSubscribersUpToDate) {
               newlyUpToDate = true
             }
             break
           case `must-refetch`:
-            this.data.clear()
-            this.error = false
+            this.#data.clear()
+            this.#error = false
             isUpToDate = false
             newlyUpToDate = false
             break
@@ -153,20 +161,20 @@ export class Shape<T extends Row = Row> {
     // Always notify subscribers when the Shape first is up to date.
     // FIXME this would be cleaner with a simple state machine.
     if (newlyUpToDate || (isUpToDate && dataMayHaveChanged)) {
-      this.hasNotifiedSubscribersUpToDate = true
-      this.notify()
+      this.#hasNotifiedSubscribersUpToDate = true
+      this.#notify()
     }
   }
 
-  private handleError(e: Error): void {
+  #handleError(e: Error): void {
     if (e instanceof FetchError) {
-      this.error = e
-      this.notify()
+      this.#error = e
+      this.#notify()
     }
   }
 
-  private notify(): void {
-    this.subscribers.forEach((callback) => {
+  #notify(): void {
+    this.#subscribers.forEach((callback) => {
       callback(this.valueSync)
     })
   }
