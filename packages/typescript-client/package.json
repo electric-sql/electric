@@ -12,6 +12,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "default": "./dist/cjs/index.cjs"
+    },
+    "./persist": {
+      "types": "./dist/persist.d.ts",
+      "import": "./dist/persist.mjs",
+      "default": "./dist/cjs/persist.cjs"
     }
   },
   "files": [
