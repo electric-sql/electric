@@ -9,7 +9,7 @@ export class InMemoryAsyncStorage<T extends Record<string, Value>>
   readonly #maxDelayMs: number
   #operations: Promise<unknown> = Promise.resolve()
 
-  constructor(maxDelayMs: number = 50) {
+  constructor(maxDelayMs: number = 5) {
     this.#maxDelayMs = maxDelayMs
   }
 
