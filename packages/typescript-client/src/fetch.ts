@@ -46,9 +46,6 @@ export function createFetchWithBackoff(
         ) {
           // Any client errors cannot be backed off on, leave it to the caller to handle.
           throw e
-        } else if (delay >= maxDelay) {
-          // If max delay is passed, throw the error
-          throw e
         } else {
           // Exponentially backoff on errors.
           // Wait for the current delay duration
