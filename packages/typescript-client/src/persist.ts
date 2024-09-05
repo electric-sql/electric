@@ -1,4 +1,4 @@
-import { asyncOrCall, asyncOrIterable, isPromise } from './async-or'
+import { asyncOrCall, asyncOrIterable } from './async-or'
 import {
   type FetchError,
   type ShapeStreamInterface,
@@ -30,7 +30,9 @@ export interface PersistedShapeStreamOptions
   storage: ShapeStreamStorage<any>
 }
 
-export interface ShapeStreamStorage<T extends Record<string, Value>> {
+export interface ShapeStreamStorage<
+  T extends Record<string, Value> = Record<string, Value>,
+> {
   get: (key: string) => PromiseOr<T | void>
   put: (key: string, entry: T) => PromiseOr<void>
   delete: (key: string) => PromiseOr<void>
@@ -46,7 +48,7 @@ export class PersistedShapeStream<T extends Row = Row>
   readonly #streamReadyPromise: Promise<ShapeStream<T>>
 
   #shapeStream: ShapeStream<T> | undefined
-  #operationChain: Promise<unknown> = Promise.resolve()
+  #operationChain: PromiseOr<void> = undefined
   #hasShapeId: boolean = false
 
   constructor(options: PersistedShapeStreamOptions) {
@@ -95,7 +97,7 @@ export class PersistedShapeStream<T extends Row = Row>
     callback: (messages: Message<T>[]) => PromiseOr<void>,
     onError?: (error: FetchError | Error) => void
   ): () => void {
-    const streamHydrationPromise = this.#chainOperation(
+    const streamHydrationPromise = this.#chainOperation(() =>
       this.#hydrateStream(callback)
     )
     const hydratedCallback = async (messages: Message<T>[]) =>
@@ -133,6 +135,10 @@ export class PersistedShapeStream<T extends Row = Row>
     return this.#shapeStream?.shapeId
   }
 
+  flush(): PromiseOr<void> {
+    return this.#operationChain
+  }
+
   #hydrateStream(
     callback: (messages: Message<T>[]) => PromiseOr<void>,
     onError?: (error: FetchError | Error) => void
@@ -147,20 +153,17 @@ export class PersistedShapeStream<T extends Row = Row>
     )
   }
 
-  #chainOperation<T>(operation: PromiseOr<T>): PromiseOr<T> {
-    // no need to chain synchronous operations
-    if (!isPromise(operation)) return operation
-
-    // keep a promise chain to ensure storage operations occur
-    // in the right order
-    this.#operationChain = this.#operationChain.finally(() => operation)
-    return this.#operationChain as Promise<T>
+  #chainOperation<T>(operation: () => PromiseOr<T>): PromiseOr<T> {
+    const result = asyncOrCall(this.#operationChain, operation)
+    this.#operationChain = result
+    return result as PromiseOr<T>
   }
 
   #persistStream(messages: Message<T>[]): PromiseOr<void> {
     let chain: PromiseOr<void> = undefined
+    // TODO: use MessageProcessor when extracted in other PR
     for (const message of messages) {
-      chain = this.#chainOperation(this.#processMessage(message))
+      chain = this.#chainOperation(() => this.#processMessage(message))
     }
     return chain
   }
