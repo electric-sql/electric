@@ -2,20 +2,11 @@ import { beforeEach, describe, expect, inject, vi } from 'vitest'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
 import { testWithIssuesTable as it } from './support/test-context'
-import {
-  isChangeMessage,
-  isControlMessage,
-  Message,
-  Offset,
-  PromiseOr,
-  Row,
-} from '../src'
+import { Offset, PromiseOr } from '../src/types'
+import { isChangeMessage, isUpToDateMessage } from '../src/helpers'
 import { PersistedShapeStream, ShapeStreamStorage } from '../src/persist'
 import { InMemoryStorage } from './persisters/in-memory'
 import { InMemoryAsyncStorage } from './persisters/in-memory-async'
-
-const isUpToDateMessage = <T extends Row>(msg: Message<T>) =>
-  isControlMessage(msg) && msg.headers.control === `up-to-date`
 
 const BASE_URL = inject(`baseUrl`)
 

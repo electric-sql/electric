@@ -2,7 +2,7 @@ import { describe, expect, inject, vi } from 'vitest'
 import { v4 as uuidv4 } from 'uuid'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
-import { ShapeStream, Shape } from '../src/client'
+import { ShapeStream, Shape } from '../src'
 
 const BASE_URL = inject(`baseUrl`)
 

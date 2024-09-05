@@ -7,9 +7,9 @@ import {
   ShapeStream,
   ShapeStreamInterface,
   ShapeStreamOptions,
-} from '../src/client'
+} from '../src'
 import { Message, Offset, Row } from '../src/types'
-import { isChangeMessage, isControlMessage } from '../src'
+import { isChangeMessage, isUpToDateMessage } from '../src/helpers'
 import {
   IssueRow,
   testWithIssuesTable as it,
@@ -24,9 +24,6 @@ import {
 import { InMemoryStorage } from './persisters/in-memory'
 
 const BASE_URL = inject(`baseUrl`)
-
-const isUpToDateMessage = <T extends Row>(msg: Message<T>) =>
-  isControlMessage(msg) && msg.headers.control === `up-to-date`
 
 testShapeStream(
   `PersistedShapeStream`,
