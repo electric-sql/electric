@@ -275,7 +275,6 @@ export class ShapeStream<T extends Row = Row>
   }
 
   #sendErrorToUpToDateSubscribers(error: FetchError | Error) {
-    // eslint-disable-next-line
     this.#upToDateSubscribers.forEach(([_, errorCallback]) =>
       errorCallback(error)
     )
