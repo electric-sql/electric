@@ -109,7 +109,7 @@ export class ShapeStream<T extends Row = Row>
 
   readonly #subscribers = new Map<
     number,
-    [MessageProcessor<Message<T>>, ((error: Error) => void) | undefined]
+    [MessageProcessor<Message<T>[]>, ((error: Error) => void) | undefined]
   >()
   readonly #upToDateSubscribers = new Map<
     number,

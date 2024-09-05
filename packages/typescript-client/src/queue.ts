@@ -2,30 +2,23 @@ import { asyncOrCall, isPromise } from './async-or'
 import { PromiseOr } from './types'
 
 /**
- * Receives batches of messages, puts them on a queue and processes
- * them synchronously or asynchronously by passing to a
- * registered callback function.
- *
- * @constructor
- * @param {(messages: T[]) => PromiseOr<void>} callback function
+ * Processes messages synchronously or asynchronously in
+ * order.
  */
-export class MessageProcessor<T> {
+export class AsyncOrProcessingQueue {
   #processingChain: PromiseOr<void> = undefined
-  readonly #callback: (messages: T[]) => PromiseOr<void>
 
-  constructor(callback: (messages: T[]) => PromiseOr<void>) {
-    this.#callback = callback
-  }
-
-  public process(messages: T[]): void {
+  public process(callback: () => PromiseOr<void>): PromiseOr<void> {
     this.#processingChain = asyncOrCall(
       this.#processingChain,
-      () => this.#callback(messages),
+      callback,
       // TODO: bubble errors up to subscriber or let
       // client handle it in the provided callback?
       // swallow errors
       () => {}
     )
+
+    return this.#processingChain
   }
 
   public async waitForProcessing(): Promise<void> {
@@ -35,5 +28,31 @@ export class MessageProcessor<T> {
       if (!isPromise(currentChain)) break
       await currentChain
     } while (this.#processingChain !== currentChain)
+  }
+}
+
+/**
+ * Receives messages, puts them on a queue and processes
+ * them synchronously or asynchronously by passing to a
+ * registered callback function.
+ *
+ * @constructor
+ * @param {(message: T) => PromiseOr<void>} callback function
+ */
+export class MessageProcessor<T> {
+  readonly #queue: AsyncOrProcessingQueue
+  readonly #callback: (messages: T) => PromiseOr<void>
+
+  constructor(callback: (messages: T) => PromiseOr<void>) {
+    this.#queue = new AsyncOrProcessingQueue()
+    this.#callback = callback
+  }
+
+  public process(messages: T): void {
+    this.#queue.process(() => this.#callback(messages))
+  }
+
+  public async waitForProcessing(): Promise<void> {
+    await this.#queue.waitForProcessing()
   }
 }
