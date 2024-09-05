@@ -1,10 +1,10 @@
 import { asyncOrCall, asyncOrIterable } from './async-or'
 import {
-  type FetchError,
   type ShapeStreamInterface,
   ShapeStream,
   ShapeStreamOptions,
 } from './client'
+import { type FetchError } from './error'
 import { isChangeMessage, isControlMessage } from './helpers'
 import { compareOffset } from './offset'
 import {
