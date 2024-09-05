@@ -1,6 +1,6 @@
 import { Message, Offset, Schema, Row, PromiseOr } from './types'
 import { MessageParser, Parser } from './parser'
-import { isControlMessage } from './helpers'
+import { isUpToDateMessage } from './helpers'
 import { MessageProcessor } from './queue'
 import { FetchError } from './error'
 import {
@@ -211,11 +211,7 @@ export class ShapeStream<T extends Row = Row>
       // Update isUpToDate
       if (batch.length > 0) {
         const lastMessage = batch[batch.length - 1]
-        if (
-          isControlMessage(lastMessage) &&
-          lastMessage.headers.control === `up-to-date` &&
-          !this.#isUpToDate
-        ) {
+        if (isUpToDateMessage(lastMessage) && !this.#isUpToDate) {
           this.#isUpToDate = true
           this.#notifyUpToDateSubscribers()
         }
