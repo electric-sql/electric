@@ -1,6 +1,7 @@
 import { Message, Offset, Schema, Row, PromiseOr } from './types'
 import { MessageParser, Parser } from './parser'
 import { isChangeMessage, isControlMessage } from './helpers'
+import { MessageProcessor } from './queue'
 
 export type ShapeData<T extends Row = Row> = Map<string, T>
 export type ShapeChangedCallback<T extends Row = Row> = (
@@ -55,43 +56,6 @@ export interface ShapeStreamOptions {
   signal?: AbortSignal
   fetchClient?: typeof fetch
   parser?: Parser
-}
-
-/**
- * Receives batches of `messages`, puts them on a queue and processes
- * them asynchronously by passing to a registered callback function.
- *
- * @constructor
- * @param {(messages: Message[]) => void} callback function
- */
-class MessageProcessor<T extends Row = Row> {
-  private messageQueue: Message<T>[][] = []
-  private isProcessing = false
-  private callback: (messages: Message<T>[]) => PromiseOr<void>
-
-  constructor(callback: (messages: Message<T>[]) => PromiseOr<void>) {
-    this.callback = callback
-  }
-
-  process(messages: Message<T>[]) {
-    this.messageQueue.push(messages)
-
-    if (!this.isProcessing) {
-      this.processQueue()
-    }
-  }
-
-  private async processQueue() {
-    this.isProcessing = true
-
-    while (this.messageQueue.length > 0) {
-      const messages = this.messageQueue.shift()!
-
-      await this.callback(messages)
-    }
-
-    this.isProcessing = false
-  }
 }
 
 export class FetchError extends Error {
@@ -196,7 +160,7 @@ export class ShapeStream<T extends Row = Row>
 
   private subscribers = new Map<
     number,
-    [MessageProcessor<T>, ((error: Error) => void) | undefined]
+    [MessageProcessor<Message<T>>, ((error: Error) => void) | undefined]
   >()
   private upToDateSubscribers = new Map<
     number,
