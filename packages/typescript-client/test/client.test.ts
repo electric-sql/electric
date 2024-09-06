@@ -286,4 +286,19 @@ describe(`Shape`, () => {
 
     expect(shapeStream.isConnected()).true
   })
+
+  it(`should set isConnected to false after fetch if not subscribed`, async ({
+    issuesTableUrl,
+  }) => {
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      subscribe: false,
+    })
+
+    await sleep(100) // give some time for the fetch to complete
+
+    // We should no longer be connected because
+    // the initial fetch finished and we've not subscribed to changes
+    expect(shapeStream.isConnected()).false
+  })
 })
