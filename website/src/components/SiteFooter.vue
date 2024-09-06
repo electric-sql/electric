@@ -121,9 +121,9 @@
           Apache 2.0</a>
         License.
         <span class="no-wrap">
-          Copyright © 2024
+          © {{ new Date().getFullYear() }}
           <a href="https://find-and-update.company-information.service.gov.uk/company/13573370" target="_blank">
-            ElectricSQL</a>.
+            Electric DB Limited</a>.
         </span>
       </p>
     </div>
