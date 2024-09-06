@@ -101,25 +101,7 @@ const Component = () => {
 
 With data fetching, you're always coding across the network, which means you always need to be aware of potential network latency and failure modes like network errors.
 
-<figure>
-  <div style="width: 100%;">
-    <img src="/img/use-cases/cloud-first-drawbacks.png"
-        alt="Data fetching drawbacks diagramme"
-        style="margin: 10px auto; width: 100%; max-width: 550px;"
-    />
-  </div>
-</figure>
-
 With data sync, you don't need to think about the network, it's abstracted away and your app code can just work against local data.
-
-<figure>
-  <div style="width: 100%;">
-    <img src="/img/use-cases/local-first-benefits.png"
-        alt="Data sync benefits diagramme"
-        style="margin: 10px auto; width: 100%; max-width: 550px;"
-    />
-  </div>
-</figure>
 
 ### Stays live
 

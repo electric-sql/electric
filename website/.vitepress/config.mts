@@ -88,10 +88,10 @@ export default defineConfig({
               text: 'Build resilient software that works offline',
               link: '/use-cases/local-first-software'
             },
-            {
-              text: 'Provision data into dev and test environments',
-              link: '/use-cases/dev-and-test'
-            },
+            // {
+            //   text: 'Provision data into dev and test environments',
+            //   link: '/use-cases/dev-and-test'
+            // },
             //{
             //  text: 'Add multi-user collaboration to your apps',
             //  link: '/use-cases/multi-user'
