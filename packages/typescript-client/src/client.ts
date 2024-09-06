@@ -498,6 +498,10 @@ export class Shape<T extends Row = Row> {
     )
   }
 
+  get isUpToDate(): boolean {
+    return this.stream.isUpToDate
+  }
+
   lastSynced(): number {
     return this.stream.lastSynced()
   }
