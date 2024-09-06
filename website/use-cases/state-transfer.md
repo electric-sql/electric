@@ -75,7 +75,7 @@ With data sync, you declare what data you need and that's it &mdash; the data is
   </a>
 </figure>
 
-## Why is it better?
+## Why is sync better?
 
 Data sync simplifies your code, makes your app work better and allows the system to take care of things for you.
 
@@ -141,11 +141,11 @@ With data sync, the system takes care of this for you. Which means that the syst
   <MasonryTweets :tweets="tweets" columns="2 300px" />
 </div>
 
-## Next steps
+## How does Electric help?
 
-Switch from data fetching to data sync one route at a time with Electric:
+Electric is a sync engine. Using Electric allows you to replace data fetching with data sync.
 
-<div class="actions cta-actions left">
+<div class="actions cta-actions page-footer-actions left">
   <div class="action">
     <VPButton
         href="/docs/quickstart"

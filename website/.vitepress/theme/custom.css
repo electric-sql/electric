@@ -500,6 +500,9 @@ ul.benefits {
   margin: 12px 0 36px;
   justify-content: center;
 }
+.cta-actions.page-footer-actions {
+  margin-top: 18px;
+}
 .cta-actions.left {
   justify-content: left;
 }
