@@ -4,7 +4,6 @@ defmodule Electric.Timeline do
   Module exporting functions for handling Postgres timelines.
   """
   require Logger
-  alias Electric.Shapes
   alias Electric.PersistentKV
 
   @type timeline :: integer() | nil
@@ -27,7 +26,7 @@ defmodule Electric.Timeline do
   @spec verify_timeline(timeline(), timeline(), keyword()) :: :ok
   defp verify_timeline(nil, _, opts) do
     Logger.warning("Unknown Postgres timeline; rotating shapes.")
-    Shapes.clean_all_shapes(opts)
+    clean_all_shapes(opts)
     store_timeline(nil, opts)
   end
 
@@ -45,7 +44,7 @@ defmodule Electric.Timeline do
 
   defp verify_timeline(pg_timeline_id, _, opts) do
     Logger.info("Detected PITR to timeline #{pg_timeline_id}; rotating shapes.")
-    Electric.Shapes.clean_all_shapes(opts)
+    clean_all_shapes(opts)
     # Store new timeline only after all shapes have been cleaned
     store_timeline(pg_timeline_id, opts)
   end
@@ -77,5 +76,13 @@ defmodule Electric.Timeline do
     kv_backend = Keyword.fetch!(opts, :persistent_kv)
     # defaults to using Jason encoder and decoder
     PersistentKV.Serialized.new!(backend: kv_backend)
+  end
+
+  # Clean up all data (meta data and shape log + snapshot) associated with all shapes
+  @spec clean_all_shapes(keyword()) :: :ok
+  defp clean_all_shapes(opts) do
+    {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
+    shape_cache.clean_all_shapes(opts)
+    :ok
   end
 end

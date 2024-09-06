@@ -90,16 +90,6 @@ defmodule Electric.Shapes do
     end
   end
 
-  @doc """
-  Clean up all data (meta data and shape log + snapshot) associated with all shapes
-  """
-  @spec clean_all_shapes(keyword()) :: :ok
-  def clean_all_shapes(opts \\ []) do
-    {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
-    shape_cache.clean_all_shapes(opts)
-    :ok
-  end
-
   defp shape_storage(config, shape_id) do
     Storage.for_shape(shape_id, Access.fetch!(config, :storage))
   end
