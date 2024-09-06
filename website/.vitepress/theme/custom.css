@@ -278,8 +278,62 @@ a.no-visual:hover {
   }
 }
 
-.VPNavBarSearch {
-  flex-grow: 0.25 !important;
+.VPNavScreenMenuLink {
+  text-align: center;
+}
+@media (min-width: 768px) {
+  .VPNavBarSearch {
+    position: absolute;
+  }
+  .VPNavBarSocialLinks {
+    margin-right: 96px !important;
+    justify-content: center;
+  }
+  .VPNavBarSocialLinks::after {
+    margin-right: 8px;
+    margin-left: 8px;
+    width: 1px;
+    height: 24px;
+    background-color: var(--vp-c-divider);
+    content: "";
+  }
+}
+.DocSearch-Button-Keys {
+  margin-right: 2px;
+}
+.DocSearch-Button .DocSearch-Button-Placeholder {
+  padding-right: 14px;
+}
+@media (max-width: 767px) {
+  .DocSearch-Button {
+    width: 38px;
+    margin-right: -8px;
+  }
+  .VPNavBarHamburger {
+    width: 38px !important;
+    margin-right: 4px;
+  }
+}
+@media (max-width: 959px) {
+  .DocSearch-Button .DocSearch-Button-Placeholder {
+    visibility: hidden;
+    width: 4px;
+    padding: 0 2px;
+  }
+}
+@media (min-width: 960px) {
+  .VPNavBarSocialLinks {
+    margin-right: 150px !important;
+  }
+}
+@media (min-width: 768px) {
+  .VPNavBarExtra {
+    display: none !important;
+  }
+  .VPNavBarSocialLinks {
+    display: flex !important;
+    align-items: center;
+  }
 }
 
 .container {
