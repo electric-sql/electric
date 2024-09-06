@@ -186,7 +186,9 @@ export class ShapeStream<T extends Row = Row> {
 
   private lastOffset: Offset
   private messageParser: MessageParser<T>
+  private lastSyncedAt?: number // unix time
   public isUpToDate: boolean = false
+  private connected: boolean = false
 
   shapeId?: string
 
@@ -210,80 +212,91 @@ export class ShapeStream<T extends Row = Row> {
 
     const { url, where, signal } = this.options
 
-    while ((!signal?.aborted && !this.isUpToDate) || this.options.subscribe) {
-      const fetchUrl = new URL(url)
-      if (where) fetchUrl.searchParams.set(`where`, where)
-      fetchUrl.searchParams.set(`offset`, this.lastOffset)
+    try {
+      while ((!signal?.aborted && !this.isUpToDate) || this.options.subscribe) {
+        const fetchUrl = new URL(url)
+        if (where) fetchUrl.searchParams.set(`where`, where)
+        fetchUrl.searchParams.set(`offset`, this.lastOffset)
 
-      if (this.isUpToDate) {
-        fetchUrl.searchParams.set(`live`, `true`)
-      }
-
-      if (this.shapeId) {
-        // This should probably be a header for better cache breaking?
-        fetchUrl.searchParams.set(`shape_id`, this.shapeId!)
-      }
-
-      let response!: Response
-
-      try {
-        const maybeResponse = await this.fetchWithBackoff(fetchUrl)
-        if (maybeResponse) response = maybeResponse
-        else break
-      } catch (e) {
-        if (!(e instanceof FetchError)) throw e // should never happen
-        if (e.status == 409) {
-          // Upon receiving a 409, we should start from scratch
-          // with the newly provided shape ID
-          const newShapeId = e.headers[`x-electric-shape-id`]
-          this.reset(newShapeId)
-          this.publish(e.json as Message<T>[])
-          continue
-        } else if (e.status >= 400 && e.status < 500) {
-          // Notify subscribers
-          this.sendErrorToUpToDateSubscribers(e)
-          this.sendErrorToSubscribers(e)
-
-          // 400 errors are not actionable without additional user input, so we're throwing them.
-          throw e
-        }
-      }
-
-      const { headers, status } = response
-      const shapeId = headers.get(`X-Electric-Shape-Id`)
-      if (shapeId) {
-        this.shapeId = shapeId
-      }
-
-      const lastOffset = headers.get(`X-Electric-Chunk-Last-Offset`)
-      if (lastOffset) {
-        this.lastOffset = lastOffset as Offset
-      }
-
-      const getSchema = (): Schema => {
-        const schemaHeader = headers.get(`X-Electric-Schema`)
-        return schemaHeader ? JSON.parse(schemaHeader) : {}
-      }
-      this.schema = this.schema ?? getSchema()
-
-      const messages = status === 204 ? `[]` : await response.text()
-
-      const batch = this.messageParser.parse(messages, this.schema)
-
-      // Update isUpToDate
-      if (batch.length > 0) {
-        const lastMessage = batch[batch.length - 1]
-        if (
-          isControlMessage(lastMessage) &&
-          lastMessage.headers.control === `up-to-date` &&
-          !this.isUpToDate
-        ) {
-          this.isUpToDate = true
-          this.notifyUpToDateSubscribers()
+        if (this.isUpToDate) {
+          fetchUrl.searchParams.set(`live`, `true`)
         }
 
-        this.publish(batch)
+        if (this.shapeId) {
+          // This should probably be a header for better cache breaking?
+          fetchUrl.searchParams.set(`shape_id`, this.shapeId!)
+        }
+
+        let response!: Response
+
+        try {
+          const maybeResponse = await this.fetchWithBackoff(fetchUrl)
+          if (maybeResponse) response = maybeResponse
+          else break
+        } catch (e) {
+          if (!(e instanceof FetchError)) throw e // should never happen
+          if (e.status == 409) {
+            // Upon receiving a 409, we should start from scratch
+            // with the newly provided shape ID
+            const newShapeId = e.headers[`x-electric-shape-id`]
+            this.reset(newShapeId)
+            this.publish(e.json as Message<T>[])
+            continue
+          } else if (e.status >= 400 && e.status < 500) {
+            // Notify subscribers
+            this.sendErrorToUpToDateSubscribers(e)
+            this.sendErrorToSubscribers(e)
+
+            // 400 errors are not actionable without additional user input, so we're throwing them.
+            throw e
+          }
+        }
+
+        const { headers, status } = response
+        const shapeId = headers.get(`X-Electric-Shape-Id`)
+        if (shapeId) {
+          this.shapeId = shapeId
+        }
+
+        const lastOffset = headers.get(`X-Electric-Chunk-Last-Offset`)
+        if (lastOffset) {
+          this.lastOffset = lastOffset as Offset
+        }
+
+        const getSchema = (): Schema => {
+          const schemaHeader = headers.get(`X-Electric-Schema`)
+          return schemaHeader ? JSON.parse(schemaHeader) : {}
+        }
+        this.schema = this.schema ?? getSchema()
+
+        const messages = status === 204 ? `[]` : await response.text()
+
+        if (status === 204) {
+          // There's no content so we are live and up to date
+          this.lastSyncedAt = Date.now()
+        }
+
+        const batch = this.messageParser.parse(messages, this.schema)
+
+        // Update isUpToDate
+        if (batch.length > 0) {
+          const lastMessage = batch[batch.length - 1]
+          if (
+            isControlMessage(lastMessage) &&
+            lastMessage.headers.control === `up-to-date`
+          ) {
+            this.lastSyncedAt = Date.now()
+            if (!this.isUpToDate) {
+              this.isUpToDate = true
+              this.notifyUpToDateSubscribers()
+            }
+          }
+
+          this.publish(batch)
+        }
       }
+    } finally {
+      this.connected = false
     }
   }
 
@@ -334,6 +347,16 @@ export class ShapeStream<T extends Row = Row> {
     this.upToDateSubscribers.clear()
   }
 
+  /** Time elapsed since last sync (in ms). Infinity if we did not yet sync. */
+  lastSynced(): number {
+    if (this.lastSyncedAt === undefined) return Infinity
+    return Date.now() - this.lastSyncedAt
+  }
+
+  isConnected(): boolean {
+    return this.connected
+  }
+
   private notifyUpToDateSubscribers() {
     this.upToDateSubscribers.forEach(([callback]) => {
       callback()
@@ -355,6 +378,7 @@ export class ShapeStream<T extends Row = Row> {
     this.lastOffset = `-1`
     this.shapeId = shapeId
     this.isUpToDate = false
+    this.connected = false
     this.schema = undefined
   }
 
@@ -390,9 +414,14 @@ export class ShapeStream<T extends Row = Row> {
     while (true) {
       try {
         const result = await this.fetchClient(url.toString(), { signal })
-        if (result.ok) return result
-        else throw await FetchError.fromResponse(result, url.toString())
+        if (result.ok) {
+          if (this.options.subscribe) {
+            this.connected = true
+          }
+          return result
+        } else throw await FetchError.fromResponse(result, url.toString())
       } catch (e) {
+        this.connected = false
         if (signal?.aborted) {
           return undefined
         } else if (
@@ -471,8 +500,12 @@ export class Shape<T extends Row = Row> {
     )
   }
 
-  get isUpToDate(): boolean {
-    return this.stream.isUpToDate
+  lastSynced(): number {
+    return this.stream.lastSynced()
+  }
+
+  isConnected(): boolean {
+    return this.stream.isConnected()
   }
 
   get value(): Promise<ShapeData<T>> {
