@@ -211,7 +211,7 @@ export default defineConfig({
     const fm = pageData.frontmatter
     const head = []
 
-    const title = fm.title || siteData.title
+    const title = `${fm.title || siteData.title} | ${fm.titleTemplate || 'ElectricSQL'}`
     const description = fm.description || siteData.description
     const image = `https://electric-sql.com${fm.image || '/img/postgres-sync.jpg'}`
 
