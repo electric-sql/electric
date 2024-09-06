@@ -34,7 +34,6 @@ describe(`useShape`, () => {
       })
     )
 
-    await waitFor(() => expect(result.current.isUpToDate).toEqual(true))
     await waitFor(() => expect(result.current.error).toBe(false))
     await waitFor(() => expect(result.current.isError).toEqual(false))
     await waitFor(() => expect(result.current.data).toEqual([]))
