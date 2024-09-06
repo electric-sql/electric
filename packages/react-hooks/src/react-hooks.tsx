@@ -70,10 +70,6 @@ export interface UseShapeResult<T extends Row = Row> {
   shape: Shape<T>
   error: Shape<T>[`error`]
   isError: boolean
-  /**
-   * Has the ShapeStream caught up with the replication log from Postgres.
-   */
-  isUpToDate: boolean
 }
 
 function shapeSubscribe<T extends Row>(shape: Shape<T>, callback: () => void) {
@@ -86,7 +82,6 @@ function shapeSubscribe<T extends Row>(shape: Shape<T>, callback: () => void) {
 function parseShapeData<T extends Row>(shape: Shape<T>): UseShapeResult<T> {
   return {
     data: [...shape.valueSync.values()],
-    isUpToDate: shape.isUpToDate,
     isError: shape.error !== false,
     shape,
     error: shape.error,
