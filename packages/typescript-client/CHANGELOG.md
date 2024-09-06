@@ -1,5 +1,15 @@
 # @electric-sql/client
 
+## 0.4.0
+
+### Minor Changes
+
+- fe251c8: Expose a `lastSyncedAt` field on the `ShapeStream` and `Shape` classes which is the time elapsed since the last sync with Electric (in milliseconds). Remove the `isUpToDate` field on the `Shape` class.
+
+### Patch Changes
+
+- fe251c8: Expose an `isConnected` method on `ShapeStream` and `Shape` classes.
+
 ## 0.3.4
 
 ### Patch Changes
