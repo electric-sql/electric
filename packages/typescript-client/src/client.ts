@@ -415,7 +415,9 @@ export class ShapeStream<T extends Row = Row> {
       try {
         const result = await this.fetchClient(url.toString(), { signal })
         if (result.ok) {
-          this.connected = true
+          if (this.options.subscribe) {
+            this.connected = true
+          }
           return result
         } else throw await FetchError.fromResponse(result, url.toString())
       } catch (e) {
