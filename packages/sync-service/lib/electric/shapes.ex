@@ -88,7 +88,16 @@ defmodule Electric.Shapes do
     for shape_id <- shape_ids do
       shape_cache.clean_shape(shape_id, opts)
     end
+  end
 
+  @doc """
+  Clean up all data (meta data and shape log + snapshot) associated with all shapes
+  """
+  @spec clean_all_shapes(keyword()) :: :ok
+  def clean_all_shapes(opts \\ []) do
+    {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
+    server = Access.get(opts, :server, shape_cache)
+    shape_cache.clean_all_shapes(server)
     :ok
   end
 

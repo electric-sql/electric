@@ -35,6 +35,8 @@ defmodule Electric.ConnectionManager do
       :replication_opts,
       # Database connection pool options.
       :pool_opts,
+      # Options specific to `Electric.Timeline`.
+      :timeline_opts,
       # Configuration for the log collector
       :log_collector,
       # Configuration for the shape cache that implements `Electric.ShapeCacheBehaviour`
@@ -56,6 +58,7 @@ defmodule Electric.ConnectionManager do
           {:connection_opts, Keyword.t()}
           | {:replication_opts, Keyword.t()}
           | {:pool_opts, Keyword.t()}
+          | {:timeline_opts, Keyword.t()}
           | {:log_collector, {module(), Keyword.t()}}
           | {:shape_cache, {module(), Keyword.t()}}
 
@@ -88,11 +91,14 @@ defmodule Electric.ConnectionManager do
 
     pool_opts = Keyword.fetch!(opts, :pool_opts)
 
+    timeline_opts = Keyword.fetch!(opts, :timeline_opts)
+
     state =
       %State{
         connection_opts: connection_opts,
         replication_opts: replication_opts,
         pool_opts: pool_opts,
+        timeline_opts: timeline_opts,
         log_collector: Keyword.fetch!(opts, :log_collector),
         shape_cache: Keyword.fetch!(opts, :shape_cache),
         backoff: {:backoff.init(1000, 10_000), nil}
@@ -134,6 +140,8 @@ defmodule Electric.ConnectionManager do
   def handle_continue(:start_connection_pool, state) do
     case start_connection_pool(state.connection_opts, state.pool_opts) do
       {:ok, pid} ->
+        Electric.Timeline.check(get_pg_timeline(pid), state.timeline_opts)
+
         # Now we have everything ready to start accepting and processing logical messages from
         # Postgres.
         Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
@@ -360,5 +368,12 @@ defmodule Electric.ConnectionManager do
       end
 
     Keyword.put(connection_opts, :socket_options, tcp_opts)
+  end
+
+  defp get_pg_timeline(conn) do
+    case Postgrex.query(conn, "SELECT timeline_id FROM pg_control_checkpoint()", []) do
+      {:ok, %Postgrex.Result{rows: [[timeline_id]]}} -> timeline_id
+      {:error, _reason} -> nil
+    end
   end
 end
