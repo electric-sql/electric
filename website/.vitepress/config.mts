@@ -207,6 +207,22 @@ export default defineConfig({
       { icon: 'github', link: 'https://github.com/electric-sql' }
     ]
   },
+  transformHead: ({ pageData, siteData }) => {
+    const fm = pageData.frontmatter
+    const head = []
+
+    const title = fm.title || siteData.title
+    const description = fm.description || siteData.description
+    const image = `https://electric-sql.com${fm.image || '/img/postgres-sync.jpg'}`
+
+    head.push(['meta', { name: 'twitter:card', content: 'summary_large_image' }])
+    head.push(['meta', { name: 'twitter:image', content: image }])
+    head.push(['meta', { property: 'og:title', content: title }])
+    head.push(['meta', { property: 'og:description', content: description }])
+    head.push(['meta', { property: 'og:image', content: image }])
+
+    return head
+  },
   transformPageData(pageData) {
     pageData.frontmatter.editLink = pageData.relativePath.startsWith('docs')
   }
