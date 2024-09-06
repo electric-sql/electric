@@ -2,7 +2,7 @@
 layout: home
 title: 'ElectricSQL'
 titleTemplate: 'Postgres Sync'
-description: 'Electric syncs little subsets of your Postgres data into local apps and services.'
+description: 'Sync little subsets of your Postgres data into local apps and services.'
 hero:
   name: "Why fetch when"
   text: "you can sync?"
