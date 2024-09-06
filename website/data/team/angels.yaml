@@ -14,6 +14,20 @@
     "published": true
   },
   {
+    "slug": "spencer",
+    "name": "Spencer Kimball",
+    "role": "Angel",
+    "short_bio": "CEO, Cockroach",
+    "image": "/img/team/spencer.jpg",
+    "profile_uri": "https://www.linkedin.com/in/spencerwkimball",
+    "profile_display_uri": "in/spencerwkimball",
+    "profile_icon": "social-linkedin",
+    "location": "New York",
+    "country": "USA",
+    "flag": "us",
+    "published": true
+  },
+  {
     "slug": "jordan",
     "name": "Jordan Tigani",
     "role": "Angel",
@@ -39,20 +53,6 @@
     "location": "Berlin",
     "country": "Germany",
     "flag": "de",
-    "published": true
-  },
-  {
-    "slug": "spencer",
-    "name": "Spencer Kimball",
-    "role": "Angel",
-    "short_bio": "CEO, Cockroach",
-    "image": "/img/team/spencer.jpg",
-    "profile_uri": "https://www.linkedin.com/in/spencerwkimball",
-    "profile_display_uri": "in/spencerwkimball",
-    "profile_icon": "social-linkedin",
-    "location": "New York",
-    "country": "USA",
-    "flag": "us",
     "published": true
   },
   {
@@ -98,17 +98,17 @@
     "published": true
   },
   {
-    "slug": "liam",
-    "name": "Liam Randall",
+    "slug": "jose",
+    "name": "José Valim",
     "role": "Angel",
-    "short_bio": "CEO, Cosmonic",
-    "image": "/img/team/liam.jpg",
-    "profile_uri": "https://www.linkedin.com/in/hectaman",
-    "profile_display_uri": "in/hectaman",
+    "short_bio": "Elixir, Dashbit",
+    "image": "/img/team/jose.jpg",
+    "profile_uri": "https://www.linkedin.com/in/josevalim",
+    "profile_display_uri": "in/josevalim",
     "profile_icon": "social-linkedin",
-    "location": "San Francisco",
-    "country": "USA",
-    "flag": "us",
+    "location": "Kraków",
+    "country": "Poland",
+    "flag": "pl",
     "published": true
   },
   {
@@ -126,27 +126,13 @@
     "published": true
   },
   {
-    "slug": "emma",
-    "name": "Emma Tracey",
+    "slug": "liam",
+    "name": "Liam Randall",
     "role": "Angel",
-    "short_bio": "Sceal, Honeypot",
-    "image": "/img/team/emma.jpg",
-    "profile_uri": "https://www.linkedin.com/in/emmalouisetracey",
-    "profile_display_uri": "in/emmalouisetracey",
-    "profile_icon": "social-linkedin",
-    "location": "Berlin",
-    "country": "Germany",
-    "flag": "de",
-    "published": true
-  },
-  {
-    "slug": "jack",
-    "name": "Jack McCloy",
-    "role": "Angel",
-    "short_bio": "Snowflake",
-    "image": "/img/team/jack.jpg",
-    "profile_uri": "https://www.linkedin.com/in/jack-mccloy",
-    "profile_display_uri": "in/jack-mccloy",
+    "short_bio": "CEO, Cosmonic",
+    "image": "/img/team/liam.jpg",
+    "profile_uri": "https://www.linkedin.com/in/hectaman",
+    "profile_display_uri": "in/hectaman",
     "profile_icon": "social-linkedin",
     "location": "San Francisco",
     "country": "USA",
@@ -165,6 +151,34 @@
     "location": "San Francisco",
     "country": "USA",
     "flag": "us",
+    "published": true
+  },
+  {
+    "slug": "jack",
+    "name": "Jack McCloy",
+    "role": "Angel",
+    "short_bio": "Snowflake",
+    "image": "/img/team/jack.jpg",
+    "profile_uri": "https://www.linkedin.com/in/jack-mccloy",
+    "profile_display_uri": "in/jack-mccloy",
+    "profile_icon": "social-linkedin",
+    "location": "San Francisco",
+    "country": "USA",
+    "flag": "us",
+    "published": true
+  },
+  {
+    "slug": "emma",
+    "name": "Emma Tracey",
+    "role": "Angel",
+    "short_bio": "Sceal, Honeypot",
+    "image": "/img/team/emma.jpg",
+    "profile_uri": "https://www.linkedin.com/in/emmalouisetracey",
+    "profile_display_uri": "in/emmalouisetracey",
+    "profile_icon": "social-linkedin",
+    "location": "Berlin",
+    "country": "Germany",
+    "flag": "de",
     "published": true
   },
   {

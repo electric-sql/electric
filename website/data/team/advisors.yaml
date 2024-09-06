@@ -56,20 +56,6 @@
     "published": true
   },
   {
-    "slug": "jose",
-    "name": "José Valim",
-    "job_title": "Technical Advisor",
-    "short_bio": "Creator of Elixir. Chief Adoption Officer at Dashbit. Core dev Plug, Phoenix, Ecto, Nx.",
-    "image": "/img/team/jose.jpg",
-    "profile_uri": "https://www.linkedin.com/in/josevalim",
-    "profile_display_uri": "in/josevalim",
-    "profile_icon": "social-linkedin",
-    "location": "Kraków",
-    "country": "Poland",
-    "flag": "pl",
-    "published": true
-  },
-  {
     "slug": "purva",
     "name": "Purva Gujar",
     "job_title": "Growth Advisor",
