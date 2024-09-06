@@ -99,7 +99,7 @@ Let's look at a real world example, syncing data into a Redis cache. You can see
 
 ### Maintaining a Redis cache
 
-Many applications use [Redis](https://redis.io/docs/latest/develop/use/client-side-caching/) as a local cache. With Electric, you can define a [Shape](/docs/guide/shape) and sync it into a [Redis hash](https://redis.io/docs/latest/develop/data-types/hashes/). The shape comes through as a [log](/docs/api/http#shape-log) of insert, update and delete messages. Apply these to the Redis hash and the cache automatically stays up-to-date:
+Many applications use [Redis](https://redis.io/docs/latest/develop/use/client-side-caching/) as a local cache. With Electric, you can define a [Shape](/docs/guides/shapes) and sync it into a [Redis hash](https://redis.io/docs/latest/develop/data-types/hashes/). The shape comes through as a [log](/docs/api/http#shape-log) of insert, update and delete messages. Apply these to the Redis hash and the cache automatically stays up-to-date:
 
 <<< @../../examples/redis-client/src/index.ts
 
