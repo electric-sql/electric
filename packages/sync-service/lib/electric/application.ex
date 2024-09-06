@@ -66,7 +66,7 @@ defmodule Electric.Application do
         ],
         timeline_opts: [
           shape_cache: {Electric.ShapeCache, []},
-          timeline_cache: Electric.TimelineCache
+          persistent_kv: persistent_kv
         ],
         log_collector: {Electric.Replication.ShapeLogCollector, inspector: inspector},
         shape_cache: shape_cache
