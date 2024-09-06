@@ -1,0 +1,29 @@
+balegas:
+  name: Valter Balegas
+  title: CTO
+  image: /img/team/valter.jpg
+  url: /about/team#valter
+
+oleksii:
+  name: Oleksii Sholik
+  title: Founding Engineer
+  image: /img/team/oleksii.jpg
+  url: /about/team#oleksii
+
+purva:
+  name: Purva Gujar
+  title: Growth & Community
+  image: /img/team/purva.jpg
+  url: /about/team#purva
+
+samwillis:
+  name: Sam Willis
+  title: Founding Engineer
+  image: /img/team/sam.jpg
+  url: /about/team#sam
+
+thruflo:
+  name: James Arthur
+  title: CEO
+  image: /img/team/james2.jpg
+  url: /about/team#thruflo

@@ -28,7 +28,7 @@
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"
   },
-  "homepage": "https://next.electric-sql.com",
+  "homepage": "https://electric-sql.com",
   "dependencies": {
     "@electric-sql/client": "workspace:*",
     "use-sync-external-store": "^1.2.2"

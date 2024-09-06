@@ -1,0 +1,351 @@
+openapi: 3.1.0
+
+info:
+  title: Electric HTTP API
+  description: |-
+    [HTTP API](https://electric-sql.com/docs/api/http) to sync
+    partial replicas of your Postgres data into local apps
+    and services.
+
+    See the [Electric documentation](https://electric-sql.com/docs/intro)
+    for more information.
+  # FIXME: set version dynamically
+  # version: 0.0.1
+
+servers:
+  - url: http://localhost:3000
+    description: Local server
+
+paths:
+  /v1/shape/{root_table}:
+    get:
+      summary: Get Shape
+      description: |-
+        Load the initial data for a shape and poll for real-time updates.
+
+        Define your shape using the `root_table` and `where` parameters.
+        Use `offset` to fetch data from a specific position in the shape
+        log and the `live` parameter to consume real-time updates.
+      parameters:
+        # Path parameters
+        - name: root_table
+          in: path
+          schema:
+            type: string
+          examples:
+            simple:
+              value: issues
+              summary: the issues table in the public schema
+            qualified:
+              value: foo.issues
+              summary: the issues table in the foo schema
+          required: true
+          description: |-
+            Root table of the shape. Must match a table in your Postgres database.
+
+            Can be just a tablename, or can be prefixed by the database schema
+            using a `.` delimiter, such as `foo.issues`. If you don't provide
+            a schema prefix, then the table is assumed to be in the `public.` schema.
+
+            Note that tablenames with special characters may not be parsed correctly
+            pending https://github.com/electric-sql/electric/issues/185
+        # Query parameters
+        - name: offset
+          in: query
+          schema:
+            type: string
+          examples:
+            initial_sync:
+              value: "-1"
+              summary: sync the shape from the start
+            ongoing_sync:
+              value: "26800584_4"
+              summary: continue syncing from offset `26800584_4`
+          required: true
+          description: |-
+            The offset in the shape stream. This is like a cursor that specifies
+            the position in the shape log to request data from.
+
+            When making an initial request to sync a shape from scratch, you
+            **must** set the `offset` to `-1`. Then, when continuing to
+            sync data, you should set the `offset` to the last offset you have
+            already recieved, to continue syncing new data from that position
+            in the stream.
+
+            Note that when `offset` is not `-1` then you must also provide
+            a `shape_id`.
+        - name: live
+          in: query
+          schema:
+            type: boolean
+          description: |-
+            Whether to wait for live updates or not.
+
+            When the `live` parameter is omitted or set to `false`, the server
+            will always return immediately, with any data it has, followed by an
+            up-to-date message.
+
+            Once you're up-to-date, you should set the `live` parameter to `true`.
+            This puts the server into live mode, where it will hold open the
+            connection, waiting for new data arrive.
+
+            This allows you to implement a long-polling strategy to consume
+            real-time updates.
+        - name: shape_id
+          in: query
+          schema:
+            type: string
+          example: "3833821-1721812114261"
+          description: |-
+            The shape ID returned by the initial shape request.
+
+            This is a required parameter when this is not an initial sync request.
+            I.e. when offset is not `-1`.
+        - name: where
+          in: query
+          schema:
+            type: string
+          description: |-
+            Optional where clause to filter rows in the `root_table`.
+
+            This should be a valid PostgreSQL WHERE clause using SQL syntax.
+          examples:
+            title_filter:
+              value: "\"title='Electric'\""
+              summary: Only include rows where the title is 'Electric'.
+            status_filter:
+              value: "\"status IN ('backlog', 'todo')\""
+              summary: Only include rows whose status is either 'backlog' or 'todo'.
+        # Headers
+        - name: If-None-Match
+          in: header
+          schema:
+            type: string
+          # TODO: is this description below correct?
+          description: Re-validate the shape if the etag doesn't match.
+      responses:
+        '200':
+          description: The shape request was successful.
+          headers:
+            cache-control:
+              schema:
+                type: string
+              example: "max-age=60, stale-while-revalidate=300"
+              description: |-
+                Cache control header as a string of comma separated directives.
+
+                Supported directives are: `max-age`, `stale-while-revalidate`, `no-store`, `no-cache`, `must-revalidate`.
+            etag:
+              schema:
+                type: string
+              example: "3833821-1721812114261:26800584_4:26800584_4"
+              description: |-
+                Etag header specifying the shape ID and offset for efficient caching.
+
+                In the format `{shape_id}:{start_offset}:{end_offset}`.
+            pragma:
+              schema:
+                type: string
+                enum:
+                  - no-cache
+              description: Pragma header for backwards compatibility with HTTP/1.0 caches (that don't have a Cache-Control HTTP/1.1 header).
+            x-electric-chunk-last-offset:
+              schema:
+                type: string
+              example: "26800584_4"
+              description: |-
+                The latest offset in the batch of data you have recieved.
+
+                If no data is returned, this will be equal to the `offset` parameter
+                you have provided. This header simplifies client development by
+                avoiding the need to parse the last offset out of the stream of
+                log entries.
+            x-electric-shape-id:
+              schema:
+                type: string
+              example: "3833821-1721812114261"
+              description: |-
+                The shape ID.
+
+                Must be provided as the `shape_id` parameter when making
+                subsequent requests where `offset` is not `-1`.
+            x-electric-schema:
+              schema:
+                type: string
+                example: "{\"id\":{\"type\":\"int4\",\"dimensions\":0},\"title\":{\"type\":\"text\",\"dimensions\":0},\"status\":{\"type\":\"text\",\"dimensions\":0,\"max_length\":8}}"
+                description: |-
+                  A JSON string of an object that maps column names to the corresponding schema object.
+                  The schema object contains the type of the column, the number of dimensions, and possibly additional properties.
+                  Non-array types have a dimension of `0`, while array types have a dimension of 1 or more.
+                  For instance, an array of booleans would have a type of `bool` and a dimension of `1`.
+                  Some types provide additional properties,
+                  e.g.: `VARCHAR(8)` has an additional `“max_length": 8` property,
+                        `BPCHAR(9)` has an additional `"length": 9` property,
+                        `TIME(3)` has an additional `"precision": 3` property,
+                        `NUMERIC(8,5)` has additional `"precision": 8` and `"scale": 5` properties,
+                        `INTERVAL(4)` has an additional `"precision": 4` property,
+                        `INTERVAL MINUTE TO SECOND` has an additional `"fields": "MINUTE TO SECOND"` property,
+                        `BIT(5)` has an additional `"length": 5` property.
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of message objects
+                items:
+                  type: object
+                  description: Message object
+                  properties:
+                    headers:
+                      type: object
+                      description: |-
+                        Metadata about the message.
+
+                        Messages can be `control` messages, providing information or
+                        instructions to the client. Or they can be operations that
+                        performed a certain `operation` on a row of data in the shape.
+                      properties:
+                        control:
+                          type: string
+                          enum:
+                            - up-to-date
+                            - must-refetch
+                        operation:
+                          type: string
+                          enum:
+                            - insert
+                            - update
+                            - delete
+                          description:
+                            The type of operation that is performed on the row of the shape that is identified by the `key`.
+                    offset:
+                      type: string
+                      description: |-
+                        The offset of the row in the shape stream.
+                        This is an opaque identifier.
+
+                        Note that operations with the same offset were commited in the
+                        same transaction. So you can group operations into transactions
+                        using the `offset` property.
+
+                        (Note also that when you recieve an `up-to-date` control message
+                        this indicates that you have recieved all of the operations in
+                        a transaction.)
+                    key:
+                      type: string
+                      description: Row ID
+                    value:
+                      type: object
+                      description: |-
+                        The row data.
+
+                        Note that this does not necessarily contain the whole row:
+
+                        - for inserts it will contain the whole row
+                        - for updates it will contain the primary key and the changed values
+                        - for deletes it will contain just the primary key
+                        
+                        The values are strings that are formatted according to Postgres' display settings.
+                        Some Postgres types support several display settings, we format values consistently according to the following display settings:
+                        
+                        - `bytea_output = 'hex'`
+                        - `DateStyle = 'ISO, DMY'`
+                        - `TimeZone = 'UTC'`
+                        - `IntervalStyle = 'iso_8601'`
+                        - `extra_float_digits = 1`
+                example:
+                  - headers:
+                      operation: insert
+                    offset: 0_0
+                    key: issue-1
+                    value:
+                      id: issue-1
+                      title: Electric
+                      status: backlog
+                  - headers:
+                      operation: insert
+                      control: up-to-date
+                    offset: 1934_0
+                    key: issue-2
+                    value:
+                      id: issue-2
+                      title: Hello
+                      status: backlog
+        '204':
+          description: >-
+            No content. The `live=true` polling request timed out without
+            any new content to process.
+        '400':
+          description: Bad request.
+        '409':
+          description:
+            The requested offset for the given shape no longer exists.
+            Client should sync the shape using the relative path from the location header.
+          headers:
+            location:
+              schema:
+                type: string
+              description: Relative path for syncing the latest version of the requested shape.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Error message
+                  shape_id:
+                    type: string
+                    description: The latest shape ID the client should sync.
+                  offset:
+                    type: string
+                    description: The offset from where to sync the given shape_id.
+                example:
+                  message: "The shape associated with this shape_id and offset was not found. Resync to fetch the latest shape"
+                  shape_id: "2494_84241"
+                  offset: "-1"
+    delete:
+      summary: Delete Shape
+      description: |-
+        Deletes the shape from the Electric sync engine.
+
+        This clears the shape log and forces any clients requesting the shape
+        to create a new shape and resync from scratch.
+
+        **WARNING** Delete shape should only be used in development and only works
+        if Electric is configured to `allow_shape_deletion`.
+      parameters:
+        # Path parameters
+        - name: root_table
+          in: path
+          schema:
+            type: string
+          examples:
+            simple:
+              value: issues
+              summary: the issues table in the public schema
+            qualified:
+              value: foo.issues
+              summary: the issues table in the foo schema
+          required: true
+          description: |-
+            The name of the table for which to delete the shape.
+
+            Can be qualified by the schema name.
+        # Query parameters
+        - name: shape_id
+          in: query
+          schema:
+            type: string
+          example: "3833821-1721812114261"
+          description:
+            Optional, deletes the current shape if it matches the shape_id.
+            If not provided, deletes the current shape.
+      responses:
+        '202':
+          description: |-
+            Accepted. The shape has been deleted (or to be more precise: the shape ID
+            has been invalidated and the storage will be cleaned up eventually).
+        '400':
+          description: Bad request.
+        '404':
+          description: Not found (or shape deletion is not enabled).

@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" xmlns:xl="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg" xmlns:dc="http://purl.org/dc/elements/1.1/" viewBox="-327.93375 937 929.8733 554" width="929.8733" height="554">
+  <defs>
+    <marker orient="auto" overflow="visible" markerUnits="strokeWidth" id="Arrow_Marker" stroke-linejoin="miter" stroke-miterlimit="10" viewBox="-1 -3 7 6" markerWidth="7" markerHeight="6" color="#f5f5f5">
+      <g>
+        <path d="M 4.8 0 L 0 -1.8 L 0 1.8 Z" fill="none" stroke="currentColor" stroke-width="1"/>
+      </g>
+    </marker>
+  </defs>
+  <g id="Canvas_2" stroke="none" fill="none" stroke-opacity="1" stroke-dasharray="none" fill-opacity="1">
+    <title>Canvas 2</title>
+    <g id="Canvas_2_Layer_1">
+      <title>Layer 1</title>
+      <g id="Line_1322">
+        <line x1="17.816372" y1="970" x2="17.816372" y2="1393" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Line_1323">
+        <line x1="256.18943" y1="970" x2="256.18943" y2="1393" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Line_1324">
+        <line x1="494.5625" y1="1065.344" x2="494.5625" y2="1112.1491" marker-end="url(#Arrow_Marker)" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Graphic_1325">
+        <rect x="-56.56069" y="1394" width="148.75412" height="64" fill="#1c1d21"/>
+        <rect x="-56.56069" y="1394" width="148.75412" height="64" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <text transform="translate(-51.56069 1416.5)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="15" fill="#f5f5f5" x="37.05206" y="15">Local DB</tspan>
+        </text>
+      </g>
+      <g id="Graphic_1327">
+        <rect x="420.18543" y="1394" width="148.75412" height="64" fill="#1c1d21"/>
+        <rect x="420.18543" y="1394" width="148.75412" height="64" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <text transform="translate(425.18543 1416.5)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="15" fill="#f5f5f5" x="42.81206" y="15">Worker</tspan>
+        </text>
+      </g>
+      <g id="Graphic_1330">
+        <path d="M 460.74135 1185.4191 C 445.9531 1179.383 451.8503 1128.569 475.4408 1137.2394 C 477.6295 1120.3381 505.0621 1123.0814 504.8828 1137.2394 C 522.08386 1119.1311 544.0658 1155.2386 529.3215 1173.3469 C 547.01395 1182.1263 529.09825 1229.4283 514.5781 1221.5266 C 513.41607 1234.6968 487.45843 1239.3056 485.1801 1221.5266 C 470.4815 1240.5137 439.8327 1211.32 460.74135 1185.4191 Z" fill="#1c1d21"/>
+        <path d="M 460.74135 1185.4191 C 445.9531 1179.383 451.8503 1128.569 475.4408 1137.2394 C 477.6295 1120.3381 505.0621 1123.0814 504.8828 1137.2394 C 522.08386 1119.1311 544.0658 1155.2386 529.3215 1173.3469 C 547.01395 1182.1263 529.09825 1229.4283 514.5781 1221.5266 C 513.41607 1234.6968 487.45843 1239.3056 485.1801 1221.5266 C 470.4815 1240.5137 439.8327 1211.32 460.74135 1185.4191 Z" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <text transform="translate(467.5375 1171.383)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="13" fill="#f5f5f5" x="1.2459996" y="13">Process</tspan>
+        </text>
+      </g>
+      <g id="Line_1333">
+        <line x1="257.43955" y1="1065.344" x2="481.3729" y2="1065.344" marker-end="url(#Arrow_Marker)" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Graphic_1334">
+        <rect x="351.466" y="1051.9168" width="46.933" height="26" fill="#1b1d20"/>
+        <text transform="translate(356.466 1056.9168)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="13" fill="#f5f5f5" x="45119464e-20" y="13">Notify</tspan>
+        </text>
+      </g>
+      <g id="Line_1341">
+        <line x1="-220.5567" y1="970" x2="-220.2655" y2="1133.483" marker-end="url(#Arrow_Marker)" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Graphic_1342">
+        <rect x="-294.93375" y="1394" width="148.75412" height="64" fill="#1c1d21"/>
+        <rect x="-294.93375" y="1394" width="148.75412" height="64" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <text transform="translate(-289.93375 1416.5)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="15" fill="#f5f5f5" x="33.88706" y="15">Local app</tspan>
+        </text>
+      </g>
+      <g id="Line_1344">
+        <line x1="-173.4344" y1="1065.5229" x2="5.766971" y2="1064.292" marker-end="url(#Arrow_Marker)" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Graphic_1345">
+        <path d="M -252.20875 1033.844 L -188.15875 1033.844 C -180.58255 1033.844 -174.43375 1048.18 -174.43375 1065.844 C -174.43375 1083.508 -180.58255 1097.844 -188.15875 1097.844 L -252.20875 1097.844 C -259.78495 1097.844 -265.93375 1083.508 -265.93375 1065.844 C -265.93375 1048.18 -259.78495 1033.844 -252.20875 1033.844 Z" fill="#1c1d21"/>
+        <path d="M -252.20875 1033.844 L -188.15875 1033.844 C -180.58255 1033.844 -174.43375 1048.18 -174.43375 1065.844 C -174.43375 1083.508 -180.58255 1097.844 -188.15875 1097.844 L -252.20875 1097.844 C -259.78495 1097.844 -265.93375 1083.508 -265.93375 1065.844 C -265.93375 1048.18 -259.78495 1033.844 -252.20875 1033.844 Z" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <text transform="translate(-251.78375 1049.844)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="13" fill="#f5f5f5" x="16.91" y="13">User </tspan>
+          <tspan font-family="Open Sauce Sans" font-size="13" fill="#f5f5f5" x="12.2235" y="29">action</tspan>
+        </text>
+      </g>
+      <g id="Line_1347">
+        <line x1="17.816372" y1="1292.6667" x2="-160.53377" y2="1292.858" marker-end="url(#Arrow_Marker)" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Graphic_1348">
+        <path d="M -252.20875 1147.383 L -188.15875 1147.383 C -180.58255 1147.383 -174.43375 1161.719 -174.43375 1179.383 C -174.43375 1197.047 -180.58255 1211.383 -188.15875 1211.383 L -252.20875 1211.383 C -259.78495 1211.383 -265.93375 1197.047 -265.93375 1179.383 C -265.93375 1161.719 -259.78495 1147.383 -252.20875 1147.383 Z" fill="#1c1d21"/>
+        <path d="M -252.20875 1147.383 L -188.15875 1147.383 C -180.58255 1147.383 -174.43375 1161.719 -174.43375 1179.383 C -174.43375 1197.047 -180.58255 1211.383 -188.15875 1211.383 L -252.20875 1211.383 C -259.78495 1211.383 -265.93375 1197.047 -265.93375 1179.383 C -265.93375 1161.719 -259.78495 1147.383 -252.20875 1147.383 Z" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <text transform="translate(-251.78375 1163.383)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="13" fill="#f5f5f5" x="8.512" y="13">Display </tspan>
+          <tspan font-family="Open Sauce Sans" font-size="13" fill="#f5f5f5" x="6.1785004" y="29">pending</tspan>
+        </text>
+      </g>
+      <g id="Graphic_1349">
+        <path d="M -252.20875 1260.922 L -188.15875 1260.922 C -180.58255 1260.922 -174.43375 1275.258 -174.43375 1292.922 C -174.43375 1310.586 -180.58255 1324.922 -188.15875 1324.922 L -252.20875 1324.922 C -259.78495 1324.922 -265.93375 1310.586 -265.93375 1292.922 C -265.93375 1275.258 -259.78495 1260.922 -252.20875 1260.922 Z" fill="#1c1d21"/>
+        <path d="M -252.20875 1260.922 L -188.15875 1260.922 C -180.58255 1260.922 -174.43375 1275.258 -174.43375 1292.922 C -174.43375 1310.586 -180.58255 1324.922 -188.15875 1324.922 L -252.20875 1324.922 C -259.78495 1324.922 -265.93375 1310.586 -265.93375 1292.922 C -265.93375 1275.258 -259.78495 1260.922 -252.20875 1260.922 Z" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <text transform="translate(-251.78375 1276.922)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="13" fill="#f5f5f5" x="8.512" y="13">Display </tspan>
+          <tspan font-family="Open Sauce Sans" font-size="13" fill="#f5f5f5" x="13.9005" y="29">result</tspan>
+        </text>
+      </g>
+      <g id="Graphic_1350">
+        <rect x="181.81237" y="1394" width="148.75412" height="64" fill="#1c1d21"/>
+        <rect x="181.81237" y="1394" width="148.75412" height="64" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <text transform="translate(186.81237 1416.5)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="15" fill="#f5f5f5" x="32.86706" y="15">Server DB</tspan>
+        </text>
+      </g>
+      <g id="Line_1352">
+        <line x1="-220.18375" y1="1212.383" x2="-220.18375" y2="1247.022" marker-end="url(#Arrow_Marker)" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Line_1353">
+        <line x1="-220.27623" y1="1325.922" x2="-220.4642" y2="1393" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Line_1355">
+        <line x1="494.8125" y1="970.25" x2="494.8125" y2="1065.344" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Line_1356">
+        <line x1="494.5625" y1="1292.422" x2="494.5625" y2="1393" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Line_1357">
+        <line x1="18.666667" y1="1064.6667" x2="243.28943" y2="1064.6667" marker-end="url(#Arrow_Marker)" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Line_1360">
+        <line x1="256.18943" y1="1294" x2="30.71617" y2="1292.7388" marker-end="url(#Arrow_Marker)" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Graphic_1370">
+        <rect x="-109" y="1279.922" width="46.933" height="26" fill="#1b1d20"/>
+        <text transform="translate(-104 1284.922)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="13" fill="#f5f5f5" x="45119464e-20" y="13">Notify</tspan>
+        </text>
+      </g>
+      <g id="Graphic_1371">
+        <rect x="-107.466" y="1051.9168" width="43.865" height="26" fill="#1b1d20"/>
+        <text transform="translate(-102.466 1056.9168)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="13" fill="#f5f5f5" x="8029133e-19" y="13">Write</tspan>
+        </text>
+      </g>
+      <g id="Graphic_1372">
+        <rect x="116" y="1051.9168" width="41.2" height="26" fill="#1b1d20"/>
+        <text transform="translate(121 1056.9168)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="13" fill="#f5f5f5" x="36415315e-20" y="13">Sync</tspan>
+        </text>
+      </g>
+      <g id="Graphic_1373">
+        <rect x="116" y="1279.922" width="41.2" height="26" fill="#1b1d20"/>
+        <text transform="translate(121 1284.922)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="13" fill="#f5f5f5" x="36415315e-20" y="13">Sync</tspan>
+        </text>
+      </g>
+      <g id="Line_1375">
+        <line x1="494.5229" y1="1295.0053" x2="269.04962" y2="1293.7442" marker-end="url(#Arrow_Marker)" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+      <g id="Graphic_1376">
+        <rect x="353" y="1279.922" width="43.865" height="26" fill="#1b1d20"/>
+        <text transform="translate(358 1284.922)" fill="#f5f5f5">
+          <tspan font-family="Open Sauce Sans" font-size="13" fill="#f5f5f5" x="8029133e-19" y="13">Write</tspan>
+        </text>
+      </g>
+      <g id="Line_1377">
+        <line x1="494.4237" y1="1233.6809" x2="494.30586" y2="1279.7667" marker-end="url(#Arrow_Marker)" stroke="#f5f5f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+    </g>
+  </g>
+</svg>
