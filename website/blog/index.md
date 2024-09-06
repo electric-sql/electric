@@ -120,17 +120,31 @@ onMounted(async () => {
           The latest news and updates from the ElectricSQL&nbsp;project.
         </p>
         <p class="actions cta-actions">
-          <div class="action">
+          <div class="action hidden-sm">
             <VPButton
                 href="https://discord.electric-sql.com"
                 text="Join the Community"
                 theme="brand"
             />
           </div>
-          <div class="action">
+          <div class="action inline-sm">
+            <VPButton
+                href="https://discord.electric-sql.com"
+                text="Community"
+                theme="brand"
+            />
+          </div>
+          <div class="action hidden-sm">
             <VPButton href="https://github.com/electric-sql"
                 target="_blank"
                 text="Star on GitHub"
+                theme="alt"
+            />
+          </div>
+          <div class="action inline-sm">
+            <VPButton href="https://github.com/electric-sql"
+                target="_blank"
+                text="GitHub"
                 theme="alt"
             />
           </div>
