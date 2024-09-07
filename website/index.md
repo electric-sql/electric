@@ -45,6 +45,7 @@ features:
         millions
         <span class="no-wrap">of users</span>.
       </span>
+      <!--
       <span class="feature-cta">
         <a class="ddn VPButton medium alt"
             href="/docs/benchmarks">
@@ -52,6 +53,7 @@ features:
           View benchmarks
         </a>
       </span>
+      -->
     icon:
       src: '/img/icons/ddn.svg'
     link: '/product/ddn'
