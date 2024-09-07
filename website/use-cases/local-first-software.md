@@ -17,7 +17,7 @@ benefits:
 
 ## Building resilient software that works offline
 
-Cloud-first software that that needs to be online is broken by design. If the network connection fails or the backed is down, the software breaks.
+Cloud-first software, that needs to be online in order to work, is broken by design. If the network connection fails or the backed is down, the software breaks.
 
 Local-first software defaults to working. It's resilient by design. If the network connection fails, it still works. If the backed is down, it still works.
 
