@@ -27,13 +27,7 @@ Guidelines on contributing are in the repo, including:
 
 We have an [open community Discord](https://discord.electric-sql.com). If you're interested in the project, please come and say hello.
 
-<iframe src="https://discordapp.com/widget?id=933657521581858818&theme=dark"
-    height="500"
-    allowtransparency="true"
-    frameborder="0"
-    sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts"
-    style="width: 100%">
-</iframe>
+...
 
 Let us know if you have any questions or need any help getting things running.
 
