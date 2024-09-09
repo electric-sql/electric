@@ -63,6 +63,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           prepare_tables_fn: fn _, _ -> {:ok, [:ok]} end,
           log_producer: __MODULE__.ShapeLogCollector,
           electric_instance_id: ctx.electric_instance_id,
+          consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(ctx.electric_instance_id),
           registry: registry_name
         ]
 

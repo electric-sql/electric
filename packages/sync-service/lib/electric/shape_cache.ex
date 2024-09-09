@@ -57,10 +57,7 @@ defmodule Electric.ShapeCache do
               type: {:or, [:atom, :pid]},
               default: Electric.Replication.ShapeLogCollector
             ],
-            consumer_supervisor: [
-              type: @genserver_name_schema,
-              default: Electric.Shapes.ConsumerSupervisor.name()
-            ],
+            consumer_supervisor: [type: @genserver_name_schema, required: true],
             storage: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],
             inspector: [type: :mod_arg, required: true],

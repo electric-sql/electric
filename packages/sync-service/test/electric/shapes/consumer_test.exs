@@ -708,6 +708,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       {:ok, _super} =
         Electric.Shapes.Supervisor.start_link(
+          electric_instance_id: ctx.electric_instance_id,
           log_collector:
             {Electric.Replication.ShapeLogCollector,
              name: __MODULE__.LogCollector, inspector: ctx.inspector},
@@ -718,7 +719,8 @@ defmodule Electric.Shapes.ConsumerTest do
              connection_manager: nil},
           shape_cache: {Electric.ShapeCache, shape_cache_config},
           consumer_supervisor:
-            {Electric.Shapes.ConsumerSupervisor, name: __MODULE__.ConsumerSupervisor}
+            {Electric.Shapes.ConsumerSupervisor,
+             name: __MODULE__.ConsumerSupervisor, electric_instance_id: ctx.electric_instance_id}
         )
 
       %{db_conn: conn} = ctx

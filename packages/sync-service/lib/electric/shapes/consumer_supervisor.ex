@@ -8,14 +8,17 @@ defmodule Electric.Shapes.ConsumerSupervisor do
 
   require Logger
 
-  @name Electric.Application.legacy_process_name(__MODULE__)
-
-  def name do
-    @name
+  def name(electric_instance_id) do
+    Electric.Application.process_name(electric_instance_id, __MODULE__)
   end
 
   def start_link(opts) do
-    DynamicSupervisor.start_link(__MODULE__, [], name: Keyword.get(opts, :name, @name))
+    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+
+    DynamicSupervisor.start_link(__MODULE__, [],
+      name: Keyword.get(opts, :name, name(electric_instance_id)),
+      electric_instance_id: electric_instance_id
+    )
   end
 
   def start_shape_consumer(name, config) do

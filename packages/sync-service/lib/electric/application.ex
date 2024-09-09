@@ -54,6 +54,7 @@ defmodule Electric.Application do
          prepare_tables_fn: prepare_tables_fn,
          chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
          log_producer: Electric.Replication.ShapeLogCollector,
+         consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(@electric_instance_id),
          persistent_kv: persistent_kv,
          registry: Registry.ShapeChanges}
 
@@ -63,6 +64,7 @@ defmodule Electric.Application do
       ]
 
       connection_manager_opts = [
+        electric_instance_id: @electric_instance_id,
         connection_opts: Application.fetch_env!(:electric, :connection_opts),
         replication_opts: [
           publication_name: publication_name,

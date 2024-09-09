@@ -16,9 +16,14 @@ defmodule Electric.Shapes.Supervisor do
     replication_client = Keyword.fetch!(opts, :replication_client)
     shape_cache = Keyword.fetch!(opts, :shape_cache)
     log_collector = Keyword.fetch!(opts, :log_collector)
+    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
 
     consumer_supervisor =
-      Keyword.get(opts, :consumer_supervisor, {Electric.Shapes.ConsumerSupervisor, []})
+      Keyword.get(
+        opts,
+        :consumer_supervisor,
+        {Electric.Shapes.ConsumerSupervisor, [electric_instance_id: electric_instance_id]}
+      )
 
     children =
       Enum.reject(
