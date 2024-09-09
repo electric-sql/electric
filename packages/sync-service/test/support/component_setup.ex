@@ -12,11 +12,10 @@ defmodule Support.ComponentSetup do
   end
 
   def with_registry(ctx) do
-    electric_instance_id = String.to_atom(full_test_name(ctx))
-    registry_name = Module.concat(Registry, electric_instance_id)
+    registry_name = Module.concat(Registry, ctx.electric_instance_id)
     start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
 
-    %{registry: registry_name, electric_instance_id: electric_instance_id}
+    %{registry: registry_name}
   end
 
   def with_in_memory_storage(ctx) do
@@ -139,6 +138,7 @@ defmodule Support.ComponentSetup do
 
   def with_complete_stack(ctx, opts \\ []) do
     [
+      Keyword.get(opts, :electric_instance_id, &with_electric_instance_id/1),
       Keyword.get(opts, :registry, &with_registry/1),
       Keyword.get(opts, :inspector, &with_inspector/1),
       Keyword.get(opts, :persistent_kv, &with_persistent_kv/1),
