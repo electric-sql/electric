@@ -29,7 +29,24 @@
     border-top-left-radius: 12px;
     border-top-right-radius: 12px;
   }
-
+  .post-image img {
+    width: 448px;
+    height: 254px;
+    object-fit: cover;
+    min-width: 100%;
+  }
+  @media (min-width: 750px) and (max-width: 949px) {
+    .post-image img {
+      width: 336px;
+      height: 191px;
+    }
+  }
+  @media (max-width: 549px) {
+    .post-image img {
+      width: 336px;
+      height: 191px;
+    }
+  }
   .post-body {
     padding: 0px 24px 0px;
     flex-grow: 1;
@@ -77,7 +94,6 @@
         <img :src="post.image"
             width="1530"
             height="874"
-            style="width: 336px; height: 191px; object-fit: cover;"
         />
       </div>
       <div class="post-body">

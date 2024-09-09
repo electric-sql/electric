@@ -1,12 +1,11 @@
 ---
 title: A new approach to building Electric
 description: >-
-  Electric Next is an experimental new approach to
-  building the ElectricSQL sync engine.
+  Electric Next is a new approach to building the ElectricSQL sync engine.
 excerpt: >-
-  Electric Next is an experimental new approach to building ElectricSQL.
+  Electric Next is a new approach that we've adopted to building Electric.
   One that's informed by the lessons learned building the previous system
-  and inspired by new insight from Kyle&nbsp;Mathews.
+  and inspired by new insight from Kyle Mathews.
 authors: [thruflo]
 image: /img/blog/electric-next/header.jpg
 tags: [release]
