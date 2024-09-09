@@ -21,6 +21,7 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback await_snapshot_start(shape_id(), opts :: keyword()) :: :started | {:error, term()}
   @callback handle_truncate(shape_id(), keyword()) :: :ok
   @callback clean_shape(shape_id(), keyword()) :: :ok
+  @callback clean_all_shapes(GenServer.name()) :: :ok
   @callback has_shape?(shape_id(), keyword()) :: boolean()
   @callback cast(term(), keyword()) :: :ok
 end
@@ -135,6 +136,13 @@ defmodule Electric.ShapeCache do
   def clean_shape(shape_id, opts) do
     server = Access.get(opts, :server, __MODULE__)
     GenStage.call(server, {:clean, shape_id})
+  end
+
+  @impl Electric.ShapeCacheBehaviour
+  @spec clean_all_shapes(keyword()) :: :ok
+  def clean_all_shapes(opts) do
+    server = Access.get(opts, :server, __MODULE__)
+    GenServer.call(server, {:clean_all})
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -313,6 +321,12 @@ defmodule Electric.ShapeCache do
     {:reply, :ok, [], state}
   end
 
+  def handle_call({:clean_all}, _from, state) do
+    Logger.info("Cleaning up all shapes")
+    clean_up_all_shapes(state)
+    {:reply, :ok, state}
+  end
+
   @impl GenStage
   def handle_cast({:snapshot_xmin_known, shape_id, xmin}, %{shape_status: shape_status} = state) do
     unless shape_status.set_snapshot_xmin(state.persistent_state, shape_id, xmin) do
@@ -353,12 +367,17 @@ defmodule Electric.ShapeCache do
     state.shape_status.remove_shape(state.persistent_state, shape_id)
   end
 
-  defp is_known_shape_id?(state, shape_id) do
-    if state.shape_status.get_existing_shape(state.persistent_state, shape_id) do
-      true
-    else
-      false
+  defp clean_up_all_shapes(state) do
+    shape_ids =
+      state.persistent_state |> state.shape_status.list_shapes() |> Enum.map(&elem(&1, 0))
+
+    for shape_id <- shape_ids do
+      clean_up_shape(state, shape_id)
     end
+  end
+
+  defp is_known_shape_id?(state, shape_id) do
+    !!state.shape_status.get_existing_shape(state.persistent_state, shape_id)
   end
 
   defp add_waiter(%{awaiting_snapshot_start: waiters} = state, shape_id, waiter),

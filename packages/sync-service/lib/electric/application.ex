@@ -64,6 +64,10 @@ defmodule Electric.Application do
           pool_size: Application.fetch_env!(:electric, :db_pool_size),
           types: PgInterop.Postgrex.Types
         ],
+        timeline_opts: [
+          shape_cache: {Electric.ShapeCache, []},
+          persistent_kv: persistent_kv
+        ],
         log_collector: {Electric.Replication.ShapeLogCollector, inspector: inspector},
         shape_cache: shape_cache
       ]
