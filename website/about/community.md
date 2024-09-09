@@ -30,9 +30,6 @@ We have an [open community Discord](https://discord.electric-sql.com). If you're
 <iframe src="https://discord.com/widget?id=933657521581858818&theme=dark"
     width="350"
     height="500"
-    allowtransparency="true"
-    frameborder="0"
-    sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
     style="width: 100%; max-width: 550px; margin: 48px 0">
 </iframe>
 
