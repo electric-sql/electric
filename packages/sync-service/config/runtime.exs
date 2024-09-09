@@ -69,7 +69,7 @@ else
 
   connection_opts = [ipv6: database_ipv6_config] ++ database_url_config
 
-  config :electric, connection_opts: connection_opts
+  config :electric, connection_opts: connection_opts, electric_instance_id: electric_instance_id
 end
 
 enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)
