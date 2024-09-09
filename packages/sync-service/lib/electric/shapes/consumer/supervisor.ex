@@ -21,7 +21,7 @@ defmodule Electric.Shapes.Consumer.Supervisor do
           )
 
   def name(shape_id) when is_binary(shape_id) do
-    Electric.Application.process_name(__MODULE__, shape_id)
+    Electric.Application.legacy_process_name(__MODULE__, shape_id)
   end
 
   def name(%{shape_id: shape_id}) do

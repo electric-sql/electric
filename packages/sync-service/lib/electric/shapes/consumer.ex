@@ -19,7 +19,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def name(shape_id) when is_binary(shape_id) do
-    Electric.Application.process_name(__MODULE__, shape_id)
+    Electric.Application.legacy_process_name(__MODULE__, shape_id)
   end
 
   def initial_state(consumer) do

@@ -8,14 +8,14 @@ defmodule Electric.Shapes.ConsumerSupervisor do
 
   require Logger
 
-  @name Electric.Application.process_name(__MODULE__)
+  @name Electric.Application.legacy_process_name(__MODULE__)
 
   def name do
     @name
   end
 
   def name(id) do
-    Electric.Application.process_name(__MODULE__, id)
+    Electric.Application.legacy_process_name(__MODULE__, id)
   end
 
   def start_link(opts) do

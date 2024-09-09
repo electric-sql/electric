@@ -39,7 +39,7 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   defp name(shape_id) do
-    Electric.Application.process_name(__MODULE__, shape_id)
+    Electric.Application.legacy_process_name(__MODULE__, shape_id)
   end
 
   def child_spec(%FS{} = opts) do

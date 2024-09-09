@@ -4,13 +4,13 @@ defmodule Electric.Application do
   @electric_instance_id :default
   @process_registry_name Electric.Registry.Processes
 
-  @spec process_name(atom()) :: {:via, atom(), atom()}
-  def process_name(module) when is_atom(module) do
+  @spec legacy_process_name(atom()) :: {:via, atom(), atom()}
+  def legacy_process_name(module) when is_atom(module) do
     {:via, Registry, {@process_registry_name, module}}
   end
 
-  @spec process_name(atom(), term()) :: {:via, atom(), {atom(), term()}}
-  def process_name(module, id) when is_atom(module) do
+  @spec legacy_process_name(atom(), term()) :: {:via, atom(), {atom(), term()}}
+  def legacy_process_name(module, id) when is_atom(module) do
     {:via, Registry, {@process_registry_name, {module, id}}}
   end
 
