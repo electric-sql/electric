@@ -88,6 +88,8 @@ defmodule Electric.Shapes do
     for shape_id <- shape_ids do
       shape_cache.clean_shape(shape_id, opts)
     end
+
+    :ok
   end
 
   defp shape_storage(config, shape_id) do
