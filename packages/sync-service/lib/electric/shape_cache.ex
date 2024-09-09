@@ -414,7 +414,7 @@ defmodule Electric.ShapeCache do
              prepare_tables_fn: state.prepare_tables_fn,
              create_snapshot_fn: state.create_snapshot_fn
            ) do
-      consumer = Shapes.Consumer.name(shape_id)
+      consumer = Shapes.Consumer.name(state.electric_instance_id, shape_id)
 
       {:ok, snapshot_xmin, latest_offset} = Shapes.Consumer.initial_state(consumer)
 

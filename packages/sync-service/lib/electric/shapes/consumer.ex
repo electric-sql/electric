@@ -14,12 +14,12 @@ defmodule Electric.Shapes.Consumer do
 
   @initial_log_state %{current_chunk_byte_size: 0}
 
-  def name(%{shape_id: shape_id} = _config) do
-    name(shape_id)
+  def name(%{electric_instance_id: electric_instance_id, shape_id: shape_id} = _config) do
+    name(electric_instance_id, shape_id)
   end
 
-  def name(shape_id) when is_binary(shape_id) do
-    Electric.Application.legacy_process_name(__MODULE__, shape_id)
+  def name(electric_instance_id, shape_id) when is_binary(shape_id) do
+    Electric.Application.process_name(electric_instance_id, __MODULE__, shape_id)
   end
 
   def initial_state(consumer) do
@@ -31,15 +31,15 @@ defmodule Electric.Shapes.Consumer do
   # when the `shape_id` consumer has processed every transaction.
   # Transactions that we skip because of xmin logic do not generate
   # a notification
-  @spec monitor(ShapeCache.shape_id(), pid()) :: reference()
-  def monitor(shape_id, pid \\ self()) do
-    GenStage.call(name(shape_id), {:monitor, pid})
+  @spec monitor(atom(), ShapeCache.shape_id(), pid()) :: reference()
+  def monitor(electric_instance_id, shape_id, pid \\ self()) do
+    GenStage.call(name(electric_instance_id, shape_id), {:monitor, pid})
   end
 
-  @spec whereis(ShapeCache.shape_id()) :: pid() | nil
-  def whereis(shape_id) do
-    shape_id
-    |> name()
+  @spec whereis(atom(), ShapeCache.shape_id()) :: pid() | nil
+  def whereis(electric_instance_id, shape_id) do
+    electric_instance_id
+    |> name(shape_id)
     |> GenServer.whereis()
   end
 

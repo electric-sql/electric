@@ -115,7 +115,7 @@ defmodule Electric.Shapes.ConsumerTest do
           end)
 
           allow(Mock.Storage, self(), fn ->
-            Shapes.Consumer.whereis(shape_id)
+            Shapes.Consumer.whereis(ctx.electric_instance_id, shape_id)
           end)
 
           allow(Mock.Storage, self(), fn ->
@@ -155,15 +155,15 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeCache
       |> expect(:update_shape_latest_offset, 2, fn @shape_id1, ^last_log_offset, _ -> :ok end)
-      |> allow(self(), Consumer.name(@shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
 
       Mock.Storage
       |> expect(:append_to_log!, 2, fn _changes, _ -> :ok end)
-      |> allow(self(), Consumer.name(@shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
 
       Mock.Storage
       |> expect(:append_to_log!, 0, fn _changes, _ -> :ok end)
-      |> allow(self(), Consumer.name(@shape_id2))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
 
       ref = make_ref()
 
@@ -197,8 +197,8 @@ defmodule Electric.Shapes.ConsumerTest do
         @shape_id1, ^last_log_offset, _ -> :ok
         @shape_id2, ^last_log_offset, _ -> :ok
       end)
-      |> allow(self(), Consumer.name(@shape_id1))
-      |> allow(self(), Consumer.name(@shape_id2))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
 
       Mock.Storage
       |> expect(:append_to_log!, 2, fn
@@ -212,8 +212,8 @@ defmodule Electric.Shapes.ConsumerTest do
           assert record["value"]["id"] == "2"
           :ok
       end)
-      |> allow(self(), Consumer.name(@shape_id1))
-      |> allow(self(), Consumer.name(@shape_id2))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
 
       ref1 = make_ref()
       ref2 = make_ref()
@@ -256,12 +256,12 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      ref1 = Shapes.Consumer.monitor(@shape_id1)
-      ref2 = Shapes.Consumer.monitor(@shape_id2)
+      ref1 = Shapes.Consumer.monitor(ctx.electric_instance_id, @shape_id1)
+      ref2 = Shapes.Consumer.monitor(ctx.electric_instance_id, @shape_id2)
 
       Mock.ShapeCache
       |> expect(:update_shape_latest_offset, fn @shape_id2, _offset, _ -> :ok end)
-      |> allow(self(), Shapes.Consumer.name(@shape_id2))
+      |> allow(self(), Shapes.Consumer.name(ctx.electric_instance_id, @shape_id2))
 
       Mock.Storage
       |> expect(:append_to_log!, fn _, _ -> :ok end)
@@ -287,7 +287,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeCache
       |> expect(:handle_truncate, fn @shape_id1, _ -> :ok end)
-      |> allow(self(), Shapes.Consumer.name(@shape_id1))
+      |> allow(self(), Shapes.Consumer.name(ctx.electric_instance_id, @shape_id1))
 
       Mock.Storage
       |> expect(:cleanup!, fn _ -> :ok end)
@@ -307,7 +307,7 @@ defmodule Electric.Shapes.ConsumerTest do
       monitors =
         for name <- [
               Shapes.Consumer.Supervisor.name(electric_instance_id, shape_id),
-              Shapes.Consumer.name(shape_id),
+              Shapes.Consumer.name(electric_instance_id, shape_id),
               Shapes.Consumer.Snapshotter.name(shape_id)
             ],
             pid = GenServer.whereis(name) do
@@ -338,7 +338,7 @@ defmodule Electric.Shapes.ConsumerTest do
       # The fact that we don't expect `append_to_log` is enough to prove that it wasn't called.
       Mock.ShapeCache
       |> expect(:handle_truncate, fn @shape_id1, _ -> :ok end)
-      |> allow(self(), Shapes.Consumer.name(@shape_id1))
+      |> allow(self(), Shapes.Consumer.name(ctx.electric_instance_id, @shape_id1))
 
       Mock.Storage
       |> expect(:cleanup!, fn _ -> :ok end)
@@ -361,7 +361,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeCache
       |> expect(:update_shape_latest_offset, fn @shape_id1, ^last_log_offset, _ -> :ok end)
-      |> allow(self(), Consumer.name(@shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
 
       Mock.Storage
       |> expect(:append_to_log!, fn _, _ -> :ok end)
@@ -442,7 +442,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       lsn = Lsn.from_integer(10)
 
-      ref = Shapes.Consumer.monitor(shape_id)
+      ref = Shapes.Consumer.monitor(ctx.electric_instance_id, shape_id)
 
       txn =
         %Transaction{xid: 11, lsn: lsn, last_log_offset: LogOffset.new(lsn, 2)}
@@ -489,7 +489,7 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn1 = Lsn.from_integer(9)
       lsn2 = Lsn.from_integer(10)
 
-      ref = Shapes.Consumer.monitor(shape_id)
+      ref = Shapes.Consumer.monitor(ctx.electric_instance_id, shape_id)
 
       txn1 =
         %Transaction{xid: 9, lsn: lsn1, last_log_offset: LogOffset.new(lsn1, 2)}
