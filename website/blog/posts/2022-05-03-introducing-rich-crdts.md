@@ -44,7 +44,7 @@ Rich-CRDTs provide additional invariant safety and database guarantees on top of
 2. [Compensations](#compensations)
 3. [Reservations](#reservations)
 
-The first two techniques -- composition and compensations -- are conflict-free. They work without introducing additional coordination mechanisms. The third technique -- reservations -- aims wherever possible to avoid runtime coordination but falls back on it as a last resort to guarantee invariants where necessary.
+The first two techniques &mdash; composition and compensations &mdash; are conflict-free. They work without introducing additional coordination mechanisms. The third technique &mdash; reservations &mdash; aims wherever possible to avoid runtime coordination but falls back on it as a last resort to guarantee invariants where necessary.
 
 Individual rich-CRDTs can use one or more of these techniques together. The high level approach when designing a rich-CRDT is to try to preserve the desired invariant(s) using the conflict free techniques and to use reservations sparingly where necessary.
 
