@@ -27,11 +27,7 @@ Here at Electric we're keen to help organise future meet-ups, both in London and
 Brief welcome and introduction to the event by organiser [Sam Willis](https://twitter.com/samwillis) of ElectricSQL.
 
 <div class="embed-container">
-  <iframe src="https://www.youtube-nocookie.com/embed/yy17Zn7UhOY"
-      frameborder="0"
-      allow="encrypted-media; picture-in-picture"
-      allowfullscreen>
-  </iframe>
+  <YoutubeEmbed video-id="yy17Zn7UhOY" />
 </div>
 
 ## Everything's better with Friends - PartyKit
@@ -39,11 +35,7 @@ Brief welcome and introduction to the event by organiser [Sam Willis](https://tw
 [Sunil Pai](https://twitter.com/threepointone) delivers a talk on [PartyKit](http://partykit.io) and how to use it to build real-time into your apps.
 
 <div class="embed-container">
-  <iframe src="https://www.youtube-nocookie.com/embed/xusQ4Rwyfos"
-      frameborder="0"
-      allow="encrypted-media; picture-in-picture"
-      allowfullscreen>
-  </iframe>
+  <YoutubeEmbed video-id="xusQ4Rwyfos" />
 </div>
 
 ## Secsync - End to end encryption for CRDTs
@@ -51,11 +43,7 @@ Brief welcome and introduction to the event by organiser [Sam Willis](https://tw
 An overview of [Secsync](https://github.com/serenity-kit/secsync) -  an end to end encryption system for CRDTs by [Nik Graf](https://twitter.com/nikgraf)
 
 <div class="embed-container">
-  <iframe src="https://www.youtube-nocookie.com/embed/dCGpD8F4isw"
-      frameborder="0"
-      allow="encrypted-media; picture-in-picture"
-      allowfullscreen>
-  </iframe>
+  <YoutubeEmbed video-id="dCGpD8F4isw" />
 </div>
 
 ## DDLX - Permissions for Local-first sync
@@ -63,11 +51,7 @@ An overview of [Secsync](https://github.com/serenity-kit/secsync) -  an end to e
 [Paul Harter](https://twitter.com/paulharter)  talks about the permission system built for ElectricSQL.
 
 <div class="embed-container">
-  <iframe src="https://www.youtube-nocookie.com/embed/UQMOnKdO1O0"
-      frameborder="0"
-      allow="encrypted-media; picture-in-picture"
-      allowfullscreen>
-  </iframe>
+  <YoutubeEmbed video-id="UQMOnKdO1O0" />
 </div>
 
 ## DXOS - Realtime collaborative application
@@ -75,11 +59,7 @@ An overview of [Secsync](https://github.com/serenity-kit/secsync) -  an end to e
 [Rich Burdon](https://twitter.com/richburdon) introduces [DXOS](https://dxos.org), a platform for building collaborative real-time application.
 
 <div class="embed-container">
-  <iframe src="https://www.youtube-nocookie.com/embed/cYWMUdS71OQ"
-      frameborder="0"
-      allow="encrypted-media; picture-in-picture"
-      allowfullscreen>
-  </iframe>
+  <YoutubeEmbed video-id="cYWMUdS71OQ" />
 </div>
 
 ## The Local-first Web Development online meet-ups
