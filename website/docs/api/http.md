@@ -23,7 +23,7 @@ The rest of this page will describe the features of the API.
 ## Syncing shapes
 
 The API allows you to sync [Shapes](/docs/guides/shapes) of data out of Postgres using the
-<a href="/openapi.html#/paths/~1v1~1shape~1{root_table}/get"
+<a href="/openapi.html#/paths/~1v1~1shape~1%7Broot_table%7D/get"
     target="_blank">
   <code>GET /v1/shape</code></a> endpoint. The pattern is as follows.
 
