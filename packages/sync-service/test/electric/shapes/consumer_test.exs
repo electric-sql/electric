@@ -119,7 +119,8 @@ defmodule Electric.Shapes.ConsumerTest do
           end)
 
           allow(Mock.Storage, self(), fn ->
-            Shapes.Consumer.Snapshotter.name(shape_id) |> GenServer.whereis()
+            Shapes.Consumer.Snapshotter.name(ctx.electric_instance_id, shape_id)
+            |> GenServer.whereis()
           end)
 
           {:ok, consumer} =
@@ -308,7 +309,7 @@ defmodule Electric.Shapes.ConsumerTest do
         for name <- [
               Shapes.Consumer.Supervisor.name(electric_instance_id, shape_id),
               Shapes.Consumer.name(electric_instance_id, shape_id),
-              Shapes.Consumer.Snapshotter.name(shape_id)
+              Shapes.Consumer.Snapshotter.name(electric_instance_id, shape_id)
             ],
             pid = GenServer.whereis(name) do
           ref = Process.monitor(pid)

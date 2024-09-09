@@ -10,12 +10,12 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
   require Logger
 
-  def name(%{shape_id: shape_id}) do
-    name(shape_id)
+  def name(%{electric_instance_id: electric_instance_id, shape_id: shape_id}) do
+    name(electric_instance_id, shape_id)
   end
 
-  def name(shape_id) when is_binary(shape_id) do
-    Electric.Application.legacy_process_name(__MODULE__, shape_id)
+  def name(electric_instance_id, shape_id) when is_binary(shape_id) do
+    Electric.Application.process_name(electric_instance_id, __MODULE__, shape_id)
   end
 
   def start_link(config) do
