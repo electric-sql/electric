@@ -15,6 +15,7 @@ if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
 
+electric_instance_id = :default
 service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
 instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
 version = Electric.version()
@@ -107,16 +108,18 @@ chunk_bytes_threshold = env!("LOG_CHUNK_BYTES_THRESHOLD", :integer, 10_000)
     fn storage ->
       case String.downcase(storage) do
         "memory" ->
-          {Electric.ShapeCache.InMemoryStorage, []}
+          {Electric.ShapeCache.InMemoryStorage, electric_instance_id: electric_instance_id}
 
         "file" ->
-          {Electric.ShapeCache.FileStorage, storage_dir: shape_path}
+          {Electric.ShapeCache.FileStorage,
+           storage_dir: shape_path, electric_instance_id: electric_instance_id}
 
         _ ->
           raise Dotenvy.Error, message: "storage must be one of: MEMORY, FILE"
       end
     end,
-    {Electric.ShapeCache.FileStorage, storage_dir: shape_path}
+    {Electric.ShapeCache.FileStorage,
+     storage_dir: shape_path, electric_instance_id: electric_instance_id}
   )
 
 storage = {storage_mod, storage_opts}

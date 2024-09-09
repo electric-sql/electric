@@ -786,6 +786,7 @@ defmodule Electric.ShapeCacheTest do
     end
 
     setup [
+      :with_electric_instance_id,
       :with_cub_db_storage,
       :with_persistent_kv,
       :with_log_chunking,

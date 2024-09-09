@@ -32,7 +32,10 @@ defmodule Support.ComponentSetup do
 
   def with_cub_db_storage(ctx) do
     {:ok, storage_opts} =
-      FileStorage.shared_opts(storage_dir: ctx.tmp_dir)
+      FileStorage.shared_opts(
+        storage_dir: ctx.tmp_dir,
+        electric_instance_id: ctx.electric_instance_id
+      )
 
     %{storage: {FileStorage, storage_opts}}
   end

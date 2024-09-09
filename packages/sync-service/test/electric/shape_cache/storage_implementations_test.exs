@@ -9,6 +9,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   alias Electric.Utils
 
   import Support.TestUtils
+  import Support.ComponentSetup, only: [with_electric_instance_id: 1]
 
   @moduletag :tmp_dir
 
@@ -32,6 +33,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                  }
                ]
                |> Enum.map(&Jason.encode_to_iodata!/1)
+
+  setup :with_electric_instance_id
 
   for module <- [InMemoryStorage, FileStorage] do
     module_name = module |> Module.split() |> List.last()
@@ -491,10 +494,11 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     ]
   end
 
-  defp opts(FileStorage, %{tmp_dir: tmp_dir}) do
+  defp opts(FileStorage, %{tmp_dir: tmp_dir, electric_instance_id: electric_instance_id}) do
     [
       db: String.to_atom("shape_mixed_disk_#{Utils.uuid4()}"),
-      storage_dir: tmp_dir
+      storage_dir: tmp_dir,
+      electric_instance_id: electric_instance_id
     ]
   end
 end
