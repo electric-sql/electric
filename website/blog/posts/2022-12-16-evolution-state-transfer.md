@@ -22,17 +22,17 @@ State transfer is fundamental to online applications. Web apps are architected a
 
 [Local-first software](https://www.inkandswitch.com/local-first/) is a new paradigm that fully abstracts state transfer out of the application domain. It's the endgame for the evolution of state transfer and the vision we're building towards with [ElectricSQL](/).
 
-<div className="my-6 mt-8">
-  <figure className="figure mx-0 my-3">
+<div class="my-6 mt-8">
+  <figure class="figure mx-0 my-3">
     <a href="/img/blog/evolution-state-transfer/electricsql-evolution-state-transfer.jpg"
-        className="relative block text-center w-full no-visual"
+        class="relative block text-center w-full no-visual"
         target="_blank">
       <img src="/img/blog/evolution-state-transfer/electricsql-evolution-state-transfer.jpg"
-          className="figure-img img-fluid mx-auto"
+          class="figure-img img-fluid mx-auto"
       />
     </a>
   </figure>
-  <figcaption className="figure-caption text-end text-small mb-3 mb-9 max-w-lg ml-auto">
+  <figcaption class="figure-caption text-end text-small mb-3 mb-9 max-w-lg ml-auto">
     Table summarising the evolution of state transfer from form-POST through AJAX, REST and GraphQL to local-first.
   </figcaption>
 </div>
@@ -53,7 +53,7 @@ This led to the web becoming a first-class platform for interactive applications
 
 The combination of [JSON](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON) and [REST](https://restfulapi.net) brought a common pattern for API design and asynchronous state transfer. If Twitter is to be believed, REST is still the most popular method of state transfer today:
 
-<div className="mt-4 pb-4">
+<div class="mt-4 pb-4">
   <Tweet tweet-id="1599690320865681409"
       align="center"
       conversation="none"
@@ -167,7 +167,7 @@ When local-first is done right, developers can create reactive, realtime, multi-
 
 With the [right system and concurrency semantics](/blog/2022/05/03/introducing-rich-crdts), you can also write locally with *finality* as opposed to *tentativity*. I.e.: with the certainty that your writes will not be rejected once they've been accepted locally <sup>[1]</sup>. Instead of having to implement both the `updater` and `optimisticUpdater` callbacks of the GraphQL `commitMutation` API we saw above, you simply write to the local database and if your write succeeds locally, you're done.
 
-> <span className="text-small">[1]</span> See the [Highly Available Transactions](https://doi.org/10.14778/2732232.2732237) and [Cure](https://doi.org/10.1109/ICDCS.2016.98) papers, both listed on our [literature&nbsp;page](/docs/reference/literature).
+> <span class="text-small">[1]</span> See the [Highly Available Transactions](https://doi.org/10.14778/2732232.2732237) and [Cure](https://doi.org/10.1109/ICDCS.2016.98) papers, both listed on our [literature&nbsp;page](/docs/reference/literature).
 
 ### Optimal placement and movement of data
 

@@ -8,7 +8,7 @@ outline: deep
 ---
 
 <figure class="page-image">
-  <a href="/img/about/villa-discussion.jpg" className="no-visual">
+  <a href="/img/about/villa-discussion.jpg" class="no-visual">
     <img src="/img/about/villa-discussion.jpg" />
   </a>
 </figure>

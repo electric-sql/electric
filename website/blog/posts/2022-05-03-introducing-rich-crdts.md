@@ -86,12 +86,12 @@ Composition refers to combining or nesting CRDTs to create richer, higher-order 
 
 A simple example of CRDT composition is a Positive Negative Counter, or PN Counter. A PN Counter combines two counters: one counts positive changes and one counts negative changes. The PN Counter then combines these two counters to give the net current value.
 
-<div className="my-6">
-  <figure className="figure mx-0 my-3">
-    <a href="/img/blog/introducing-rich-crdts/composition.png" className="no-visual"
+<div class="my-6">
+  <figure class="figure mx-0 my-3">
+    <a href="/img/blog/introducing-rich-crdts/composition.png" class="no-visual"
         target="_blank">
       <img src="/img/blog/introducing-rich-crdts/composition.png"
-          className="figure-img img-fluid max-w-md" />
+          class="figure-img img-fluid max-w-md" />
     </a>
   </figure>
 </div>
@@ -120,12 +120,12 @@ Each key in this JSON CRDT maps to a different primitive CRDT type, and differen
 
 Compensations refer to additional operations undertaken by a database (other than the operations specified by the user) that ensure it will maintain an invariant.
 
-<div className="my-6">
-  <figure className="figure mx-0 my-3">
-    <a href="/img/blog/introducing-rich-crdts/compensations.png" className="no-visual"
+<div class="my-6">
+  <figure class="figure mx-0 my-3">
+    <a href="/img/blog/introducing-rich-crdts/compensations.png" class="no-visual"
         target="_blank">
       <img src="/img/blog/introducing-rich-crdts/compensations.png"
-          className="figure-img img-fluid max-w-md" />
+          class="figure-img img-fluid max-w-md" />
     </a>
   </figure>
 </div>
@@ -134,32 +134,32 @@ In databases, you often have multiple tables linked together by keys – the for
 
 Referential integrity poses challenges when it comes to concurrent operations, because one operation might delete a row at the same time that another row is being added to an associated table that refers to it. A classic example is a player being enrolled in a tournament concurrently to the tournament being deleted.
 
-<div className="my-6">
-  <figure className="figure mx-0 my-3">
+<div class="my-6">
+  <figure class="figure mx-0 my-3">
     <a href="/img/blog/introducing-rich-crdts/invariant-violation.png"
-        className="no-visual"
+        class="no-visual"
         target="_blank">
       <img src="/img/blog/introducing-rich-crdts/invariant-violation.png"
-          className="figure-img img-fluid"
+          class="figure-img img-fluid"
       />
     </a>
   </figure>
-  <figcaption className="figure-caption text-end text-small mb-9 max-w-lg ml-auto">
+  <figcaption class="figure-caption text-end text-small mb-9 max-w-lg ml-auto">
     Illustration of the player tournament referential integrity violation.
   </figcaption>
 </div>
 
 Compensations can offer a solution. For example, by adding a touch operation to the enrol player operation. By adding the additional touch operation into the transaction where the player is being enrolled, it can ensure that the tournament still exists, even when merged with a concurrent transaction removing the tournament, if the set of tournaments follows add-win semantics.
 
-<div className="my-6">
-  <figure className="figure mx-0 my-3">
+<div class="my-6">
+  <figure class="figure mx-0 my-3">
     <a href="/img/blog/introducing-rich-crdts/invariant-preserved.png"
-        className="no-visual"
+        class="no-visual"
         target="_blank">
-      <img src="/img/blog/introducing-rich-crdts/invariant-preserved.png" className="figure-img img-fluid" />
+      <img src="/img/blog/introducing-rich-crdts/invariant-preserved.png" class="figure-img img-fluid" />
     </a>
   </figure>
-  <figcaption className="figure-caption text-end text-small mb-9 max-w-lg ml-auto">
+  <figcaption class="figure-caption text-end text-small mb-9 max-w-lg ml-auto">
     Illustration of the player tournament compensation, preserving referential integrity by ensuring the tournament exists.
   </figcaption>
 </div>
@@ -188,9 +188,9 @@ A bounded counter is an example of a Rich CRDT that uses the reservations techni
 
 You give each of 10 nodes an allocation of 100 ticket reservations. When any given node runs out of its allocation of tickets, it can coordinate with other peers to get more reservations. In this way, it’s possible to validate an operation without having to coordinate every time.
 
-<div className="pb-4">
-  <div className="card mt-4">
-    <div className="embed-container w-100 max-w-md">
+<div class="pb-4">
+  <div class="card mt-4">
+    <div class="embed-container w-100 max-w-md">
       <iframe src="https://www.youtube-nocookie.com/embed/oWUNCsFy-r0"
           frameborder="0"
           allow="encrypted-media; picture-in-picture"
@@ -202,13 +202,13 @@ You give each of 10 nodes an allocation of 100 ticket reservations. When any giv
 
 One of the key optimisations with escrow reservations is to proactively allocate and re-balance the reservations so they are held by the nodes/clusters that require them. If the Justin Bieber concert is in San Francisco and all the tickets are being bought through the US-West cluster, then the rich-CRDT system can notice (or predict) this and pro-actively give the US-West cluster more reservations.
 
-<div className="my-6">
-  <figure className="figure mx-0 my-3">
+<div class="my-6">
+  <figure class="figure mx-0 my-3">
     <a href="/img/blog/introducing-rich-crdts/reservations.png"
-        className="no-visual"
+        class="no-visual"
         target="_blank">
       <img src="/img/blog/introducing-rich-crdts/reservations.png"
-          className="figure-img img-fluid max-w-md" />
+          class="figure-img img-fluid max-w-md" />
     </a>
   </figure>
 </div>

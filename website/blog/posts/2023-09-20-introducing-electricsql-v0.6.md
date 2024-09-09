@@ -132,17 +132,17 @@ Which takes us to the heart of the system: [a type-safe, expressive API](https:/
 
 When you're building local-first or offline-capable apps, there are a range of sync strategies you may choose to employ. From pinned queries to live subscriptions to row-based or schema-based filtering.
 
-<div className="my-6 mt-8">
-  <figure className="figure mx-0 my-3">
+<div class="my-6 mt-8">
+  <figure class="figure mx-0 my-3">
     <a href="/img/blog/introducing-electric-sql/spectrum-sync-models.jpg"
-        className="relative block text-center w-full no-visual"
+        class="relative block text-center w-full no-visual"
         target="_blank">
       <img src="/img/blog/introducing-electric-sql/spectrum-sync-models.sm.jpg"
-          className="figure-img img-fluid mx-auto"
+          class="figure-img img-fluid mx-auto"
       />
     </a>
   </figure>
-  <figcaption className="figure-caption text-end text-small mb-3 mb-9 max-w-lg ml-auto">
+  <figcaption class="figure-caption text-end text-small mb-3 mb-9 max-w-lg ml-auto">
     Table summarising a range of sync strategies with increasing offline capabilities.
   </figcaption>
 </div>

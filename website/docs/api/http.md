@@ -51,7 +51,7 @@ The Shape Log is similar conceptually to the logical replication stream from Pos
         alt="Shape log flow diagramme"
     />
   </a>
-  <figcaption className="figure-caption text-end">
+  <figcaption class="figure-caption text-end">
     Shape log flow diagramme.
   </figcaption>
 </figure>

@@ -6,7 +6,7 @@ outline: deep
 ---
 
 <figure class="page-image">
-  <a href="/img/about/vizinada.lg.jpg" className="no-visual">
+  <a href="/img/about/vizinada.lg.jpg" class="no-visual">
     <img src="/img/about/vizinada.jpg" />
   </a>
 </figure>
