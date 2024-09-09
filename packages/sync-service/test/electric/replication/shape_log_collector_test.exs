@@ -8,12 +8,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Replication.LogOffset
 
   alias Support.Mock
+  import Support.ComponentSetup, only: [with_electric_instance_id: 1]
 
   import Mox
 
   @moduletag :capture_log
 
   setup :verify_on_exit!
+  setup :with_electric_instance_id
 
   describe "store_transaction/2" do
     setup ctx do
@@ -60,6 +62,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           persistent_kv: Electric.PersistentKV.Memory.new!(),
           prepare_tables_fn: fn _, _ -> {:ok, [:ok]} end,
           log_producer: __MODULE__.ShapeLogCollector,
+          electric_instance_id: ctx.electric_instance_id,
           registry: registry_name
         ]
 

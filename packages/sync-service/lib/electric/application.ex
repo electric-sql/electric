@@ -1,6 +1,7 @@
 defmodule Electric.Application do
   use Application
 
+  @electric_instance_id :default
   @process_registry_name Electric.Registry.Processes
 
   @spec process_name(atom()) :: {:via, atom(), atom()}
@@ -37,6 +38,7 @@ defmodule Electric.Application do
 
       shape_cache =
         {Electric.ShapeCache,
+         electric_instance_id: @electric_instance_id,
          storage: storage,
          inspector: inspector,
          prepare_tables_fn: prepare_tables_fn,

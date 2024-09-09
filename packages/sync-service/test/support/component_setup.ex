@@ -7,11 +7,16 @@ defmodule Support.ComponentSetup do
   alias Electric.ShapeCache.InMemoryStorage
   alias Electric.Postgres.Inspector.EtsInspector
 
+  def with_electric_instance_id(ctx) do
+    %{electric_instance_id: String.to_atom(full_test_name(ctx))}
+  end
+
   def with_registry(ctx) do
-    registry_name = Module.concat(Registry, String.to_atom(full_test_name(ctx)))
+    electric_instance_id = String.to_atom(full_test_name(ctx))
+    registry_name = Module.concat(Registry, electric_instance_id)
     start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
 
-    %{registry: registry_name}
+    %{registry: registry_name, electric_instance_id: electric_instance_id}
   end
 
   def with_in_memory_storage(ctx) do
@@ -49,6 +54,7 @@ defmodule Support.ComponentSetup do
     start_opts =
       [
         name: server,
+        electric_instance_id: ctx.electric_instance_id,
         shape_meta_table: shape_meta_table,
         inspector: ctx.inspector,
         storage: ctx.storage,

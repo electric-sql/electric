@@ -657,7 +657,11 @@ defmodule Electric.Shapes.ConsumerTest do
       storage = {CrashingStorage, %{backend: pid, parent: parent, shape_id: nil}}
 
       shape_cache_name = __MODULE__.ShapeCache
-      shape_cache_opts = [server: shape_cache_name, shape_meta_table: __MODULE__.ShapeMeta]
+
+      shape_cache_opts = [
+        server: shape_cache_name,
+        shape_meta_table: __MODULE__.ShapeMeta
+      ]
 
       replication_opts = [
         publication_name: ctx.publication_name,
@@ -678,6 +682,7 @@ defmodule Electric.Shapes.ConsumerTest do
       shape_cache_config =
         [
           name: shape_cache_name,
+          electric_instance_id: ctx.electric_instance_id,
           shape_meta_table: __MODULE__.ShapeMeta,
           storage: storage,
           db_pool: ctx.pool,

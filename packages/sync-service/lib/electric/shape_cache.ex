@@ -48,6 +48,7 @@ defmodule Electric.ShapeCache do
               type: @genserver_name_schema,
               default: __MODULE__
             ],
+            electric_instance_id: [type: :atom, required: true],
             shape_meta_table: [
               type: :atom,
               default: @default_shape_meta_table
