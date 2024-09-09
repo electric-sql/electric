@@ -47,6 +47,7 @@ defmodule Electric.Shapes.ConsumerTest do
     {"public", "test_table"}, _ -> {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
   end)
 
+  setup :with_electric_instance_id
   setup :set_mox_from_context
   setup :verify_on_exit!
 
@@ -109,7 +110,8 @@ defmodule Electric.Shapes.ConsumerTest do
       consumers =
         for {shape_id, shape} <- ctx.shapes do
           allow(Mock.Storage, self(), fn ->
-            Shapes.Consumer.Supervisor.name(shape_id) |> GenServer.whereis()
+            Shapes.Consumer.Supervisor.name(ctx.electric_instance_id, shape_id)
+            |> GenServer.whereis()
           end)
 
           allow(Mock.Storage, self(), fn ->
@@ -125,6 +127,7 @@ defmodule Electric.Shapes.ConsumerTest do
               {Shapes.Consumer.Supervisor,
                shape_id: shape_id,
                shape: shape,
+               electric_instance_id: ctx.electric_instance_id,
                log_producer: producer,
                registry: registry_name,
                shape_cache: {Mock.ShapeCache, []},
@@ -295,15 +298,15 @@ defmodule Electric.Shapes.ConsumerTest do
           relation: {"public", "test_table"}
         })
 
-      assert_consumer_shutdown(@shape_id1, fn ->
+      assert_consumer_shutdown(ctx.electric_instance_id, @shape_id1, fn ->
         assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
       end)
     end
 
-    defp assert_consumer_shutdown(shape_id, fun) do
+    defp assert_consumer_shutdown(electric_instance_id, shape_id, fun) do
       monitors =
         for name <- [
-              Shapes.Consumer.Supervisor.name(shape_id),
+              Shapes.Consumer.Supervisor.name(electric_instance_id, shape_id),
               Shapes.Consumer.name(shape_id),
               Shapes.Consumer.Snapshotter.name(shape_id)
             ],
@@ -346,7 +349,7 @@ defmodule Electric.Shapes.ConsumerTest do
           relation: {"public", "test_table"}
         })
 
-      assert_consumer_shutdown(@shape_id1, fn ->
+      assert_consumer_shutdown(ctx.electric_instance_id, @shape_id1, fn ->
         assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
       end)
     end

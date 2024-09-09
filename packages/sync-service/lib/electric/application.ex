@@ -14,6 +14,16 @@ defmodule Electric.Application do
     {:via, Registry, {@process_registry_name, {module, id}}}
   end
 
+  @spec process_name(atom(), atom()) :: {:via, atom(), atom()}
+  def process_name(electric_instance_id, module) when is_atom(module) do
+    {:via, Registry, {@process_registry_name, {module, electric_instance_id}}}
+  end
+
+  @spec process_name(atom(), atom(), term()) :: {:via, atom(), {atom(), term()}}
+  def process_name(electric_instance_id, module, id) when is_atom(module) do
+    {:via, Registry, {@process_registry_name, {module, electric_instance_id, id}}}
+  end
+
   @impl true
   def start(_type, _args) do
     :erlang.system_flag(:backtrace_depth, 50)

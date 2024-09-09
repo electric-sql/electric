@@ -190,6 +190,7 @@ defmodule Electric.ShapeCache do
 
     state = %{
       name: opts.name,
+      electric_instance_id: opts.electric_instance_id,
       storage: opts.storage,
       chunk_bytes_threshold: opts.chunk_bytes_threshold,
       inspector: opts.inspector,
@@ -363,7 +364,11 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_shape(state, shape_id) do
-    Electric.Shapes.ConsumerSupervisor.stop_shape_consumer(state.consumer_supervisor, shape_id)
+    Electric.Shapes.ConsumerSupervisor.stop_shape_consumer(
+      state.electric_instance_id,
+      state.consumer_supervisor,
+      shape_id
+    )
 
     state.shape_status.remove_shape(state.persistent_state, shape_id)
   end
@@ -399,6 +404,7 @@ defmodule Electric.ShapeCache do
     with {:ok, pid} <-
            Electric.Shapes.ConsumerSupervisor.start_shape_consumer(
              state.consumer_supervisor,
+             electric_instance_id: state.electric_instance_id,
              shape_id: shape_id,
              shape: shape,
              storage: state.storage,
