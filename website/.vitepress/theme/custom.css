@@ -567,6 +567,9 @@ ul.benefits {
   overflow: hidden;
   max-width: 100%;
 }
+.embed-container iframe {
+  border: none;
+}
 .embed-container iframe,
 .embed-container object,
 .embed-container embed {
