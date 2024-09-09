@@ -3,6 +3,7 @@ title: HTTP API
 description: >-
   The HTTP API is the primary, low level API for syncing data with Electric.
 outline: deep
+layout: false
 ---
 
 # HTTP API
