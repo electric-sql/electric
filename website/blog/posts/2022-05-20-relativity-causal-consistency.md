@@ -58,21 +58,14 @@ Enter causal consistency. A distributed system that implements causal consistenc
 
 For example, if Alice posts a comment on a collaborative document and Bob then responds to that comment, it doesn’t matter if Alice and Bob are standing light-years apart – Claire will never see Bob’s reply without Alice’s message. Causally consistent databases keep track of causal relationships (using vector clocks), but allow other events that aren’t causally related to be *indeterminately* ordered, so that there’s no need for a total order to be imposed.
 
-<div class="side-by-side-videos">
-  <div class="embed-container">
-    <iframe src="https://www.youtube-nocookie.com/embed/OKHIdpOAxto"
-        frameborder="0"
-        allow="encrypted-media; picture-in-picture"
-        allowfullscreen>
-    </iframe>
-  </div>
-  <div class="embed-container">
-    <iframe src="https://www.youtube-nocookie.com/embed/x-D8iFU1d-o"
-        frameborder="0"
-        allow="encrypted-media; picture-in-picture"
-        allowfullscreen>
-    </iframe>
-  </div>
+<div class="embed-container">
+  <iframe src="https://www.youtube-nocookie.com/embed/OKHIdpOAxto">
+  </iframe>
+</div>
+
+<div class="embed-container">
+  <iframe src="https://www.youtube-nocookie.com/embed/x-D8iFU1d-o">
+  </iframe>
 </div>
 
 ### Embracing relativity
