@@ -126,7 +126,7 @@ onMounted(async () => {
               align="center"
               conversation="none"
               theme="dark"
-              dnt
+              :dnt="(true)"
               @tweet-load-error="handleTweetLoad"
               @tweet-load-success="handleTweetLoad">
             <template v-slot:loading>
