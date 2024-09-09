@@ -60,13 +60,11 @@ For example, if Alice posts a comment on a collaborative document and Bob then r
 
 <div class="side-by-side-videos">
   <div class="embed-container">
-    <iframe src="https://www.youtube-nocookie.com/embed/OKHIdpOAxto"
-        allowfullscreen>
+    <iframe src="https://www.youtube-nocookie.com/embed/OKHIdpOAxto">
     </iframe>
   </div>
   <div class="embed-container">
-    <iframe src="https://www.youtube-nocookie.com/embed/x-D8iFU1d-o"
-        allowfullscreen>
+    <iframe src="https://www.youtube-nocookie.com/embed/x-D8iFU1d-o">
     </iframe>
   </div>
 </div>
