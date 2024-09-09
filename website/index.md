@@ -28,11 +28,6 @@ features:
         local&nbsp;apps and&nbsp;environments.
       </span>
       <span class="feature-cta electric-star-count">
-        <a href="https://github.com/electric-sql/electric"
-            target="_blank"
-            class="VPButton medium alt">
-          GitHub
-        </a>
       </span>
     icon:
       src: '/img/icons/electric.svg'
@@ -45,15 +40,8 @@ features:
         millions
         <span class="no-wrap">of users</span>.
       </span>
-      <!--
-      <span class="feature-cta">
-        <a class="ddn VPButton medium alt"
-            href="/docs/benchmarks">
-          <span class="vpi-electric-icon"></span>
-          View benchmarks
-        </a>
+      <span class="feature-cta sign-up-link">
       </span>
-      -->
     icon:
       src: '/img/icons/ddn.svg'
     link: '/product/ddn'
@@ -65,11 +53,6 @@ features:
         <span class="no-wrap">reactive bindings</span>.
       </span>
       <span class="feature-cta pglite-star-count">
-        <a href="https://github.com/electric-sql/pglite"
-            target="_blank"
-            class="VPButton medium alt">
-          GitHub
-        </a>
       </span>
     icon:
       src: '/img/icons/pglite.svg'
@@ -112,21 +95,24 @@ const formatStarCount = (count) => (
 )
 
 const renderStarCount = async (repoName, initialStarCount) => {
-  const linkEl = document.querySelector(`.feature-cta.${repoName}-star-count a`)
+  let container = document.querySelector(`span.feature-cta.${repoName}-star-count`)
 
-  let countEl = linkEl.querySelector('.count')
-
-  if (!countEl) {
-    countEl = document.createElement('span')
-    countEl.classList.add('count')
-    countEl.innerHTML = formatStarCount(initialStarCount)
-
-    const icon = document.createElement('span')
-    icon.classList.add('vpi-social-github')
-    linkEl.prepend(icon)
+  if (!container) {
+    return
   }
 
+  const linkEl = document.createElement('a')
+  linkEl.setAttribute('href', `https://github.com/electric-sql/${repoName}`)
+  linkEl.setAttribute('_target', `_blank`)
+  linkEl.classList.add('VPButton', 'medium', 'alt')
+  linkEl.innerHTML = '<span class="vpi-social-github"></span> GitHub'
+
+  const countEl = document.createElement('span')
+  countEl.classList.add('count')
+  countEl.innerHTML = formatStarCount(initialStarCount)
+
   linkEl.append(countEl)
+  container.append(linkEl)
 
   const count = await getStarCount(repoName, initialStarCount)
   countEl.innerHTML = formatStarCount(count)
