@@ -48,7 +48,7 @@
   font-family: OpenSauceOne;
   font-style: italic;
   font-weight: 400;
-  src: url('https://electric-sql.com/assets/fonts/OpenSauceOne-Italic-cc2c08f0979b8ebe8465993e6a1f8434.woff2') format('woff2');
+  src: url('/fonts/OpenSauceOne-Italic.woff2') format('woff2');
 }
 
 @font-face {
