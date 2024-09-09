@@ -695,7 +695,7 @@ defmodule Electric.Shapes.ConsumerTest do
           inspector: ctx.inspector,
           chunk_bytes_threshold: 10_000,
           log_producer: __MODULE__.LogCollector,
-          consumer_supervisor: __MODULE__.ConsumerSupervisor,
+          consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(ctx.electric_instance_id),
           prepare_tables_fn: {
             Electric.Postgres.Configuration,
             :configure_tables_for_replication!,
@@ -720,8 +720,7 @@ defmodule Electric.Shapes.ConsumerTest do
              connection_manager: nil},
           shape_cache: {Electric.ShapeCache, shape_cache_config},
           consumer_supervisor:
-            {Electric.Shapes.ConsumerSupervisor,
-             name: __MODULE__.ConsumerSupervisor, electric_instance_id: ctx.electric_instance_id}
+            {Electric.Shapes.ConsumerSupervisor, electric_instance_id: ctx.electric_instance_id}
         )
 
       %{db_conn: conn} = ctx
