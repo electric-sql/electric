@@ -576,3 +576,14 @@ ul.benefits {
   width: 100%;
   height: 100%;
 }
+
+.side-by-side-videos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px
+}
+@media (max-width: 559px) {
+  .side-by-side-videos {
+    grid-template-columns: 1fr;
+  }
+}

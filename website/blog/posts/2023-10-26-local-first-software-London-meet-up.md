@@ -26,80 +26,60 @@ Here at Electric we're keen to help organise future meet-ups, both in London and
 
 Brief welcome and introduction to the event by organiser [Sam Willis](https://twitter.com/samwillis) of ElectricSQL.
 
-<div class="pb-4">
-  <div class="card mt-4">
-    <div class="embed-container w-100 max-w-md">
-      <iframe src="https://www.youtube.com/embed/yy17Zn7UhOY?showinfo=0&list=PL_BU3cf65mE_mT3QJPUIaj2Msw0Itt6Od"
-          frameborder="0"
-          allow="encrypted-media; picture-in-picture"
-          allowfullscreen>
-      </iframe>
-    </div>
-  </div>
+<div class="embed-container">
+  <iframe src="https://www.youtube-nocookie.com/embed/yy17Zn7UhOY"
+      frameborder="0"
+      allow="encrypted-media; picture-in-picture"
+      allowfullscreen>
+  </iframe>
 </div>
 
 ## Everything's better with Friends - PartyKit
 
 [Sunil Pai](https://twitter.com/threepointone) delivers a talk on [PartyKit](http://partykit.io) and how to use it to build real-time into your apps.
 
-<div class="pb-4">
-  <div class="card mt-4">
-    <div class="embed-container w-100 max-w-md">
-      <iframe src="https://www.youtube.com/embed/xusQ4Rwyfos?showinfo=0&list=PL_BU3cf65mE_mT3QJPUIaj2Msw0Itt6Od"
-          frameborder="0"
-          allow="encrypted-media; picture-in-picture"
-          allowfullscreen>
-      </iframe>
-    </div>
-  </div>
+<div class="embed-container">
+  <iframe src="https://www.youtube-nocookie.com/embed/xusQ4Rwyfos"
+      frameborder="0"
+      allow="encrypted-media; picture-in-picture"
+      allowfullscreen>
+  </iframe>
 </div>
 
 ## Secsync - End to end encryption for CRDTs
 
 An overview of [Secsync](https://github.com/serenity-kit/secsync) -  an end to end encryption system for CRDTs by [Nik Graf](https://twitter.com/nikgraf)
 
-<div class="pb-4">
-  <div class="card mt-4">
-    <div class="embed-container w-100 max-w-md">
-      <iframe src="https://www.youtube.com/embed/dCGpD8F4isw?showinfo=0&list=PL_BU3cf65mE_mT3QJPUIaj2Msw0Itt6Od"
-          frameborder="0"
-          allow="encrypted-media; picture-in-picture"
-          allowfullscreen>
-      </iframe>
-    </div>
-  </div>
+<div class="embed-container">
+  <iframe src="https://www.youtube-nocookie.com/embed/dCGpD8F4isw"
+      frameborder="0"
+      allow="encrypted-media; picture-in-picture"
+      allowfullscreen>
+  </iframe>
 </div>
 
 ## DDLX - Permissions for Local-first sync
 
 [Paul Harter](https://twitter.com/paulharter)  talks about the permission system built for ElectricSQL.
 
-<div class="pb-4">
-  <div class="card mt-4">
-    <div class="embed-container w-100 max-w-md">
-      <iframe src="https://www.youtube.com/embed/UQMOnKdO1O0?showinfo=0&list=PL_BU3cf65mE_mT3QJPUIaj2Msw0Itt6Od"
-          frameborder="0"
-          allow="encrypted-media; picture-in-picture"
-          allowfullscreen>
-      </iframe>
-    </div>
-  </div>
+<div class="embed-container">
+  <iframe src="https://www.youtube-nocookie.com/embed/UQMOnKdO1O0"
+      frameborder="0"
+      allow="encrypted-media; picture-in-picture"
+      allowfullscreen>
+  </iframe>
 </div>
 
 ## DXOS - Realtime collaborative application
 
 [Rich Burdon](https://twitter.com/richburdon) introduces [DXOS](https://dxos.org), a platform for building collaborative real-time application.
 
-<div class="pb-4">
-  <div class="card mt-4">
-    <div class="embed-container w-100 max-w-md">
-      <iframe src="https://www.youtube.com/embed/cYWMUdS71OQ?showinfo=0&list=PL_BU3cf65mE_mT3QJPUIaj2Msw0Itt6Od"
-          frameborder="0"
-          allow="encrypted-media; picture-in-picture"
-          allowfullscreen>
-      </iframe>
-    </div>
-  </div>
+<div class="embed-container">
+  <iframe src="https://www.youtube-nocookie.com/embed/cYWMUdS71OQ"
+      frameborder="0"
+      allow="encrypted-media; picture-in-picture"
+      allowfullscreen>
+  </iframe>
 </div>
 
 ## The Local-first Web Development online meet-ups
