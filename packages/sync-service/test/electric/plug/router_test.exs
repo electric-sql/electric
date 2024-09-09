@@ -679,6 +679,35 @@ defmodule Electric.Plug.RouterTest do
                }
              ] = Jason.decode!(conn.resp_body)
     end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "HEAD receives all headers", %{opts: opts} do
+      conn_res =
+        conn("GET", "/v1/shape/items?offset=-1")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn_res
+      assert conn_res.resp_body != ""
+
+      get_response_headers =
+        conn_res.resp_headers
+        |> Enum.filter(&(Kernel.elem(&1, 0) != "x-request-id"))
+
+      conn =
+        conn("HEAD", "/v1/shape/items?offset=-1")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+
+      head_response_headers =
+        conn.resp_headers
+        |> Enum.filter(&(Kernel.elem(&1, 0) != "x-request-id"))
+
+      assert get_response_headers == head_response_headers
+      assert conn.resp_body == ""
+    end
   end
 
   defp get_resp_shape_id(conn), do: get_resp_header(conn, "x-electric-shape-id")
