@@ -61,13 +61,13 @@ Electric enables you to execute reactive live queries, which automatically updat
 
 In this video you can see that when an issue is created in Linearlite it is both added to the list within the app, but also reactively on other instances of the app too.
 
-<video className="w-full" controls poster="/videos/blog/linerlite-local-first-with-react/reactive_queries.jpg">
+<video class="w-full" controls poster="/videos/blog/linerlite-local-first-with-react/reactive_queries.jpg">
   <source src="/videos/blog/linerlite-local-first-with-react/reactive_queries.mp4" />
 </video>
 
 This example shows the UI of one visitor updating automatically when another user edits an issue in realtime.
 
-<video className="w-full" controls poster="/videos/blog/linerlite-local-first-with-react/live_editing.jpg">
+<video class="w-full" controls poster="/videos/blog/linerlite-local-first-with-react/live_editing.jpg">
   <source src="/videos/blog/linerlite-local-first-with-react/live_editing.mp4" />
 </video>
 
@@ -75,13 +75,13 @@ This example shows the UI of one visitor updating automatically when another use
 
 As Electric has synchronised the database to the user’s device, the result is near-instantaneous interactions whenever the user interacts with Linearlite, or any app built with Electric. This video shows a user searching for, and then opening, an issue. The lack of loading states, or spinners, combined with the speed of execution would feel to a user as though they were working on a local app. Which, in fact, they are.
 
-<video className="w-full" controls poster="/videos/blog/linerlite-local-first-with-react/quick.jpg">
+<video class="w-full" controls poster="/videos/blog/linerlite-local-first-with-react/quick.jpg">
   <source src="/videos/blog/linerlite-local-first-with-react/quick.mp4" />
 </video>
 
 In addition, as the database is synced to the device, the apps also work offline. In Linearlite we have added a toggle button in the user menu which lets you test the offline capability.
 
-<video className="w-full" controls poster="/videos/blog/linerlite-local-first-with-react/offline.jpg">
+<video class="w-full" controls poster="/videos/blog/linerlite-local-first-with-react/offline.jpg">
   <source src="/videos/blog/linerlite-local-first-with-react/offline.mp4" />
 </video>
 
@@ -95,7 +95,7 @@ Electric employs the concept  of “[Compensations](/blog/2022/05/03/introducing
 
 When issues are tracked in Linearlite, multiple comments can be associated with each individual issue. Therefore, if one user deletes an issue concurrently with another user posting a related comment, it is imperative that this data is preserved. In this case, Electric understands that a new comment has been added with a foreign key linking to a now-deleted issue; in order to maintain the comment and referential integrity the issue is thus ‘resurrected’. You can see this in action in the following video.
 
-<video className="w-full" controls poster="/videos/blog/linerlite-local-first-with-react/compensations.jpg">
+<video class="w-full" controls poster="/videos/blog/linerlite-local-first-with-react/compensations.jpg">
   <source src="/videos/blog/linerlite-local-first-with-react/compensations.mp4" />
 </video>
 
@@ -107,7 +107,7 @@ In Linearlite each issue has a status check which can be set to one of five diff
 
 This is achieved with an order value in the database, which needs to then work in a conflict free manner. For Linearlite we have utilised fractional indexing for this using [this brilliant implementation](https://www.npmjs.com/package/fractional-indexing) of [David Greenspan’s fractional indexing algorithm](https://observablehq.com/@dgreensp/implementing-fractional-indexing).
 
-<video className="w-full" controls poster="/videos/blog/linerlite-local-first-with-react/kanban.jpg">
+<video class="w-full" controls poster="/videos/blog/linerlite-local-first-with-react/kanban.jpg">
   <source src="/videos/blog/linerlite-local-first-with-react/kanban.mp4" />
 </video>
 

@@ -31,17 +31,17 @@ To see this, first, let’s consider the total ordering assumption. Imagine that
 
 The point is that there’s no right answer, because they’re all working in completely different frames of reference. According to the relativity of simultaneity, there’s no total ordering of events that are separated by space.
 
-<div className="my-6 mt-8">
-  <figure className="figure mx-0 my-3">
+<div class="my-6 mt-8">
+  <figure class="figure mx-0 my-3">
     <a href="/img/blog/relativity-causal-consistency/graph.png"
-        className="relative block text-center w-full no-visual"
+        class="relative block text-center w-full no-visual"
         target="_blank">
       <img src="/img/blog/relativity-causal-consistency/graph.png"
-          className="figure-img img-fluid max-w-lg mx-auto"
+          class="figure-img img-fluid max-w-lg mx-auto"
       />
     </a>
   </figure>
-  <figcaption className="figure-caption text-end text-small mb-3 mb-9 max-w-lg ml-auto">
+  <figcaption class="figure-caption text-end text-small mb-3 mb-9 max-w-lg ml-auto">
 
 In physics, the [relativity of simultaneity](https://en.wikipedia.org/wiki/Relativity_of_simultaneity) is the concept that distant simultaneity – whether two spatially separated events occur at the same time – is not absolute, but depends on the observer's reference frame.
 
@@ -62,9 +62,9 @@ Enter causal consistency. A distributed system that implements causal consistenc
 
 For example, if Alice posts a comment on a collaborative document and Bob then responds to that comment, it doesn’t matter if Alice and Bob are standing light-years apart – Claire will never see Bob’s reply without Alice’s message. Causally consistent databases keep track of causal relationships (using vector clocks), but allow other events that aren’t causally related to be *indeterminately* ordered, so that there’s no need for a total order to be imposed.
 
-<div className="row mt-4 pb-4">
-  <div className="col-lg-6">
-    <div className="embed-container">
+<div class="row mt-4 pb-4">
+  <div class="col-lg-6">
+    <div class="embed-container">
       <iframe src="https://www.youtube-nocookie.com/embed/OKHIdpOAxto"
           frameborder="0"
           allow="encrypted-media; picture-in-picture"
@@ -72,8 +72,8 @@ For example, if Alice posts a comment on a collaborative document and Bob then r
       </iframe>
     </div>
   </div>
-  <div className="col-lg-6">
-    <div className="embed-container">
+  <div class="col-lg-6">
+    <div class="embed-container">
       <iframe src="https://www.youtube-nocookie.com/embed/x-D8iFU1d-o"
           frameborder="0"
           allow="encrypted-media; picture-in-picture"
