@@ -2,74 +2,73 @@
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 800;
-  src: url('/fonts/OpenSauceOne-Black.woff2') format('woff2');
+  src: url('./fonts/OpenSauceOne-Black.woff2') format('woff2');
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 700;
-  src: url('/fonts/OpenSauceOne-ExtraBold.woff2') format('woff2');
+  src: url('./fonts/OpenSauceOne-ExtraBold.woff2') format('woff2');
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 600;
-  src: url('/fonts/OpenSauceOne-Bold.woff2') format('woff2');
+  src: url('./fonts/OpenSauceOne-Bold.woff2') format('woff2');
 }
 @font-face {
   font-family: OpenSauceOne;
   font-style: italic;
   font-weight: 600;
-  src: url('/fonts/OpenSauceOne-BoldItalic.woff2') format('woff2');
+  src: url('./fonts/OpenSauceOne-BoldItalic.woff2') format('woff2');
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 500;
-  src: url('/fonts/OpenSauceOne-Medium.woff2') format('woff2');
+  src: url('./fonts/OpenSauceOne-Medium.woff2') format('woff2');
 }
 @font-face {
   font-family: OpenSauceOne;
   font-style: italic;
   font-weight: 500;
-  src: url('/fonts/OpenSauceOne-MediumItalic.woff2') format('woff2');
+  src: url('./fonts/OpenSauceOne-MediumItalic.woff2') format('woff2');
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 400;
-  src: url('/fonts/OpenSauceOne-Regular.woff2') format('woff2');
+  src: url('./fonts/OpenSauceOne-Regular.woff2') format('woff2');
 }
 @font-face {
   font-family: OpenSauceOne;
   font-style: italic;
   font-weight: 400;
-  src: url('/fonts/OpenSauceOne-Italic.woff2') format('woff2');
+  src: url('./fonts/OpenSauceOne-Italic.woff2') format('woff2');
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 300;
-  src: url('/fonts/OpenSauceOne-Light.woff2') format('woff2');
+  src: url('./fonts/OpenSauceOne-Light.woff2') format('woff2');
 }
 @font-face {
   font-family: OpenSauceOne;
   font-style: italic;
   font-weight: 300;
-  src: url('/fonts/OpenSauceOne-LightItalic.woff2') format('woff2');
+  src: url('./fonts/OpenSauceOne-LightItalic.woff2') format('woff2');
 }
 
 @font-face {
   font-family: SourceCodePro;
   font-style: normal;
   font-weight: 400;
-  src: url('/fonts/SourceCodePro-Regular.woff2') format('woff2'),
-       url('/fonts/SourceCodePro-Regular.woff') format('woff');
+  src: url('./fonts/SourceCodePro-Regular.woff2') format('woff2');
 }
 
 
