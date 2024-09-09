@@ -62,6 +62,7 @@ defmodule Electric.ShapeCacheTest do
 
   describe "get_or_create_shape_id/2" do
     setup [
+      :with_electric_instance_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -92,6 +93,7 @@ defmodule Electric.ShapeCacheTest do
 
   describe "get_or_create_shape_id/2 shape initialization" do
     setup [
+      :with_electric_instance_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -219,6 +221,7 @@ defmodule Electric.ShapeCacheTest do
 
   describe "get_or_create_shape_id/2 against real db" do
     setup [
+      :with_electric_instance_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -384,6 +387,7 @@ defmodule Electric.ShapeCacheTest do
 
   describe "list_shapes/1" do
     setup [
+      :with_electric_instance_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -453,6 +457,7 @@ defmodule Electric.ShapeCacheTest do
 
   describe "has_shape?/2" do
     setup [
+      :with_electric_instance_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -493,6 +498,7 @@ defmodule Electric.ShapeCacheTest do
 
   describe "await_snapshot_start/4" do
     setup [
+      :with_electric_instance_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -651,6 +657,7 @@ defmodule Electric.ShapeCacheTest do
 
   describe "handle_truncate/2" do
     setup [
+      :with_electric_instance_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -703,6 +710,7 @@ defmodule Electric.ShapeCacheTest do
 
   describe "clean_shape/2" do
     setup [
+      :with_electric_instance_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -742,7 +750,9 @@ defmodule Electric.ShapeCacheTest do
       assert Enum.count(Storage.get_log_stream(@zero_offset, storage)) == 1
 
       {module, _} = storage
-      ref = Process.monitor(module.name(shape_id) |> GenServer.whereis())
+
+      ref =
+        Process.monitor(module.name(ctx.electric_instance_id, shape_id) |> GenServer.whereis())
 
       log = capture_log(fn -> :ok = ShapeCache.clean_shape(shape_id, opts) end)
       assert log =~ "Cleaning up shape"
@@ -947,6 +957,7 @@ defmodule Electric.ShapeCacheTest do
     @snapshot_xmin 10
 
     setup [
+      :with_electric_instance_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,

@@ -486,11 +486,12 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     {:ok, %{module: module, opts: shape_opts}}
   end
 
-  defp opts(InMemoryStorage, _context) do
+  defp opts(InMemoryStorage, %{electric_instance_id: electric_instance_id}) do
     [
       snapshot_ets_table: String.to_atom("snapshot_ets_table_#{Utils.uuid4()}"),
       log_ets_table: String.to_atom("log_ets_table_#{Utils.uuid4()}"),
-      chunk_checkpoint_ets_table: String.to_atom("chunk_checkpoint_ets_table_#{Utils.uuid4()}")
+      chunk_checkpoint_ets_table: String.to_atom("chunk_checkpoint_ets_table_#{Utils.uuid4()}"),
+      electric_instance_id: electric_instance_id
     ]
   end
 

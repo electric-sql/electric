@@ -18,18 +18,20 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     :snapshot_table,
     :log_table,
     :chunk_checkpoint_table,
-    :shape_id
+    :shape_id,
+    :electric_instance_id
   ]
 
   @impl Electric.ShapeCache.Storage
   def shared_opts(opts) do
     table_base_name = Access.get(opts, :table_base_name, __MODULE__)
+    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
 
-    {:ok, %{table_base_name: table_base_name}}
+    {:ok, %{table_base_name: table_base_name, electric_instance_id: electric_instance_id}}
   end
 
-  def name(shape_id) when is_binary(shape_id) do
-    Electric.Application.legacy_process_name(__MODULE__, shape_id)
+  def name(electric_instance_id, shape_id) when is_binary(shape_id) do
+    Electric.Application.process_name(electric_instance_id, __MODULE__, shape_id)
   end
 
   @impl Electric.ShapeCache.Storage
@@ -63,7 +65,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
           chunk_checkpoint_table: storage_table(opts.chunk_checkpoint_table)
         }
       end,
-      name: name(opts.shape_id)
+      name: name(opts.electric_instance_id, opts.shape_id)
     )
   end
 
