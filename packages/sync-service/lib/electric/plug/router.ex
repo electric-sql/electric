@@ -14,6 +14,7 @@ defmodule Electric.Plug.Router do
 
   get "/v1/shape/:root_table", to: Electric.Plug.ServeShapePlug
   delete "/v1/shape/:root_table", to: Electric.Plug.DeleteShapePlug
+  match "/v1/shape/:root_table", via: :options, to: Electric.Plug.OptionsShapePlug
 
   match _ do
     send_resp(conn, 404, "Not found")
