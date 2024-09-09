@@ -6,6 +6,11 @@ const { columns, tweets } = defineProps(['columns', 'tweets'])
 
 const forceResize = () => {
   const wrapper = document.querySelector('.masonry-wall-wrapper')
+
+  if (!wrapper) {
+    return
+  }
+
   const wall = document.querySelector('.masonry-wall')
 
   wrapper.style.height = `${wall.offsetHeight * 0.75}px`
