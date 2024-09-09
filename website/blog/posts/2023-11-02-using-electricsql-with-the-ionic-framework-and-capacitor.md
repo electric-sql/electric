@@ -38,7 +38,7 @@ We have used standard Ionic components throughout, and the app switches between 
 
 You can see a demo of the app in the video below:
 
-<video className="w-full" controls poster="/videos/blog/using-electricsql-with-the-ionic-framework-and-capacitor/main-demo.jpg">
+<video class="w-full" controls poster="/videos/blog/using-electricsql-with-the-ionic-framework-and-capacitor/main-demo.jpg">
   <source src="/videos/blog/using-electricsql-with-the-ionic-framework-and-capacitor/main-demo.mp4" />
 </video>
 

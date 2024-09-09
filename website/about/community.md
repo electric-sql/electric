@@ -8,7 +8,7 @@ outline: deep
 
 # Community
 
-ElectricSQL is an open source project. We welcome new users, developers, contributors, advocates and <span className="no-wrap">community members :)</span>
+ElectricSQL is an open source project. We welcome new users, developers, contributors, advocates and <span class="no-wrap">community members :)</span>
 
 ## Source code
 
@@ -26,12 +26,11 @@ Guidelines on contributing are in the repo, including:
 
 We have an [open community Discord](https://discord.electric-sql.com). If you're interested in the project, please come and say hello.
 
-<iframe src="https://discordapp.com/widget?id=933657521581858818&theme=dark"
-    width="100%"
+<iframe src="https://discord.com/widget?id=933657521581858818&theme=dark"
+    width="350"
     height="500"
-    allowtransparency="true"
-    frameborder="0"
-    sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts">
+    sandbox="allow-popups allow-same-origin allow-popups-to-escape-sandbox allow-scripts"
+    style="width: 100%; max-width: 550px; margin: 48px 0">
 </iframe>
 
 Let us know if you have any questions or need any help getting things running.

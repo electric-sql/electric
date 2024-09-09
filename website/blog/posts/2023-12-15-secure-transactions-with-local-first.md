@@ -15,17 +15,17 @@ The good news is that there's a simple pattern you can easily implement to do se
 
 ## What's the problem with secure transactions?
 
-<div className="my-6 mt-8">
-  <figure className="figure border-solid mx-0 my-3 py-3">
+<div class="my-6 mt-8">
+  <figure class="figure border-solid mx-0 my-3 py-3">
     <a href="/img/blog/secure-transactions-with-local-first/cloud-first-with-bg.jpg"
-        className="relative block text-center w-full no-visual"
+        class="relative block text-center w-full no-visual"
         target="_blank">
       <img src="/img/blog/secure-transactions-with-local-first/cloud-first.png"
-          className="figure-img img-fluid w-full mx-auto"
+          class="figure-img img-fluid w-full mx-auto"
       />
     </a>
   </figure>
-  <figcaption className="figure-caption text-end text-small mb-6 max-w-lg ml-auto">
+  <figcaption class="figure-caption text-end text-small mb-6 max-w-lg ml-auto">
     Simplified diagramme of cloud-first architecture.
   </figcaption>
 </div>
@@ -35,17 +35,17 @@ With a cloud-first architecture, the client typically makes a request to the ser
 1. the server is a relatively trusted execution environment; it's the kind of environment where it's fine to have private API keys and other secrets available
 1. the server can usually secure unique access to a task or database resource in order to prevent problems like double spending or placing orders twice
 
-<div className="my-6 mt-8">
-  <figure className="figure border-solid mx-0 my-3 py-3">
+<div class="my-6 mt-8">
+  <figure class="figure border-solid mx-0 my-3 py-3">
     <a href="/img/blog/secure-transactions-with-local-first/local-first-with-bg.jpg"
-        className="relative block text-center w-full no-visual"
+        class="relative block text-center w-full no-visual"
         target="_blank">
       <img src="/img/blog/secure-transactions-with-local-first/local-first.png"
-          className="figure-img img-fluid w-full mx-auto"
+          class="figure-img img-fluid w-full mx-auto"
       />
     </a>
   </figure>
-  <figcaption className="figure-caption text-end text-small mb-6 max-w-lg ml-auto">
+  <figcaption class="figure-caption text-end text-small mb-6 max-w-lg ml-auto">
     Simplified diagramme of local-first architecture.
   </figcaption>
 </div>
@@ -70,17 +70,17 @@ This can cause a range of [integrity violations and anomalies](https://legacy.el
 
 Luckily, there is a simple solution. Use a state machine to emulate a request - response workflow over the in-band replication protocol. This supports secure background processing without losing consistency.
 
-<div className="my-6 mt-8">
-  <figure className="figure border-solid mx-0 my-3 py-3">
+<div class="my-6 mt-8">
+  <figure class="figure border-solid mx-0 my-3 py-3">
     <a href="/img/blog/secure-transactions-with-local-first/state-machine.jpg"
-        className="relative block text-center w-full no-visual"
+        class="relative block text-center w-full no-visual"
         target="_blank">
       <img src="/img/blog/secure-transactions-with-local-first/state-machine.png"
-          className="figure-img img-fluid w-full mx-auto"
+          class="figure-img img-fluid w-full mx-auto"
       />
     </a>
   </figure>
-  <figcaption className="figure-caption text-end text-small mb-6 max-w-lg ml-auto">
+  <figcaption class="figure-caption text-end text-small mb-6 max-w-lg ml-auto">
     State machine diagramme showing emulated request-response workflow.
   </figcaption>
 </div>
@@ -104,9 +104,9 @@ The [Checkout example with Supabase](https://legacy.electric-sql.com/docs/exampl
 
 You can see it running at [checkout-demo.electric-sql.com](http://checkout-demo.electric-sql.com/) and in the demo screencast below:
 
-<div className="pb-4">
-  <div className="card mt-4">
-    <div className="embed-container w-100 max-w-md">
+<div class="pb-4">
+  <div class="card mt-4">
+    <div class="embed-container w-100 max-w-md">
       <iframe src="https://www.youtube.com/embed/WhRBvJ4cUWk"
           frameborder="0"
           allow="encrypted-media; picture-in-picture"
@@ -122,10 +122,10 @@ Kyle Mathews' [trpc-crdt](https://bricolage.io/announcing-trpc-crdt/) is another
 
 You can see the source code at [KyleAMathews/trpc-crdt](https://github.com/KyleAMathews/trpc-crdt) and an example of it running below, via the [vite-react-router-electric-sql-starter](https://github.com/KyleAMathews/vite-react-router-electric-sql-starter):
 
-<div className="pb-4">
-  <div className="card mt-4">
-    <div className="embed-container w-100 max-w-md">
-      <video className="w-full" controls>
+<div class="pb-4">
+  <div class="card mt-4">
+    <div class="embed-container w-100 max-w-md">
+      <video class="w-full" controls>
         <source src="https://github.com/KyleAMathews/vite-react-router-electric-sql-starter/assets/71047/f91196c1-a04c-4e36-8477-e9d1ae977d8c"
         />
       </video>

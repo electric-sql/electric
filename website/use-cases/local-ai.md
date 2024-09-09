@@ -93,7 +93,7 @@ Electric collaborated with Intel to build a ultra-low-latency local RAG stack, u
 <figure>
   <video controls
       poster="/videos/use-cases/low-latency-rag.jpg"
-      width="100%" style="max-width: 550px">
+      style="width: 100%; max-width: 550px">
     <source src="https://raw.githubusercontent.com/thruflo/blobs/main/videos/low-latency-rag-electric-intel.mp4" />
   </video>
 </figure>

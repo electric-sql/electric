@@ -119,7 +119,7 @@ onMounted(async () => {
         <p>
           The latest news and updates from the ElectricSQL&nbsp;project.
         </p>
-        <p class="actions cta-actions">
+        <div class="actions cta-actions">
           <div class="action hidden-sm">
             <VPButton
                 href="https://discord.electric-sql.com"
@@ -148,7 +148,7 @@ onMounted(async () => {
                 theme="alt"
             />
           </div>
-        </p>
+        </div>
         <hr />
       </div>
       <div class="listing">
