@@ -21,7 +21,7 @@ mkdir my-first-electric
 cd my-first-electric
 ```
 
-Run a fresh Postgres and Electric using this [docker-compose.yaml](https://github.com/electric-sql/electric/blob/main/docs/public/docker-compose.yaml) file:
+Run a fresh Postgres and Electric using this [docker-compose.yaml](https://github.com/electric-sql/electric/blob/main/website/public/docker-compose.yaml) file:
 
 ```sh
 curl -O https://electric-sql.com/docker-compose.yaml
