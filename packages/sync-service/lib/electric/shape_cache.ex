@@ -322,8 +322,8 @@ defmodule Electric.ShapeCache do
   end
 
   def handle_call({:clean_all}, _from, state) do
-    clean_up_all_shapes(state)
     Logger.info("Cleaning up all shapes")
+    clean_up_all_shapes(state)
     {:reply, :ok, state}
   end
 
