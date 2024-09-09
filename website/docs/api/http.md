@@ -43,16 +43,3 @@ When you sync a shape from Electric, you get the data in the form of a log of lo
 The `offset` that you see in the messages and provide as the `?offset=...` query parameter in your request identifies a position in the log. The messages you see in the response are shape log entries (the ones with `value`s and `action` headers) and control messages (the ones with `control` headers).
 
 The Shape Log is similar conceptually to the logical replication stream from Postgres. Except that instead of getting all the database operations, you're getting the ones that affect the data in your Shape. It's then the responsibility of the client to consume the log and materialize out the current value of the shape. The values included in the shape log are strings formatted according to Postgres' display settings. The [OpenAPI](https://www.openapis.org/what-is-openapi) specification defines the display settings the HTTP API adheres to.
-
-<figure>
-  <a href="/img/api/shape-log.jpg">
-    <img srcset="/img/api/shape-log.sm.png 1064w, /img/api/shape-log.png 1396w"
-        sizes="(max-width: 767px) 600px, 1396px"
-        src="/img/api/shape-log.png"
-        alt="Shape log flow diagramme"
-    />
-  </a>
-  <figcaption className="figure-caption text-end">
-    Shape log flow diagramme.
-  </figcaption>
-</figure>
