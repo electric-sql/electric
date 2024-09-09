@@ -578,6 +578,7 @@ ul.benefits {
 }
 
 .side-by-side-videos {
+  margin: 40px 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 24px
