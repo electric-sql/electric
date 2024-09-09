@@ -41,7 +41,7 @@ Electric provides an [HTTP API](https://electric-sql.com/docs/api/http) for sync
 ### This looks a bit different than the last time I visited?
 
 We started a clean rebuild of the sync engine in July 2024. One that's informed by the lessons learned building the [previous system](https://github.com/electric-sql/electric-old). See
-James' blog post for background on the change: https://electric-sql.com/about
+[James' blog post for background on the change](https://electric-sql.com/blog/2024/07/17/electric-next).
 
 ## Getting Started
 
@@ -56,13 +56,13 @@ For example, using [Docker Compose](https://docs.docker.com/compose/) from the r
 docker compose -f .support/docker-compose.yml up
 ```
 
-You can then use the [HTTP API](https://next.electric-sql/docs/api/http) to sync data from your Postgres. For example, to start syncing the whole `foo` table:
+You can then use the [HTTP API](https://electric-sql/docs/api/http) to sync data from your Postgres. For example, to start syncing the whole `foo` table:
 
 ```sh
 curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
 ```
 
-Or use one of the clients or integrations, such as the [`useShape`](https://next.electric-sql/docs/api/integrations/react) React hook:
+Or use one of the clients or integrations, such as the [`useShape`](https://electric-sql/docs/api/integrations/react) React hook:
 
 ```jsx
 import { useShape } from '@electric-sql/react'
