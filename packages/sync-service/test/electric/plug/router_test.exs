@@ -708,6 +708,24 @@ defmodule Electric.Plug.RouterTest do
       assert get_response_headers == head_response_headers
       assert conn.resp_body == ""
     end
+
+    test "OPTIONS receives supported methods", %{opts: opts} do
+      conn =
+        conn("OPTIONS", "/v1/shape/items")
+        |> Router.call(opts)
+
+      assert %{status: 204} = conn
+
+      allowed_methods =
+        conn
+        |> Plug.Conn.get_resp_header("access-control-allow-methods")
+        |> List.first("")
+        |> String.split(",")
+        |> Enum.map(&String.trim/1)
+        |> MapSet.new()
+
+      assert allowed_methods == MapSet.new(["GET", "OPTIONS", "DELETE"])
+    end
   end
 
   defp get_resp_shape_id(conn), do: get_resp_header(conn, "x-electric-shape-id")
