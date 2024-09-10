@@ -567,6 +567,9 @@ ul.benefits {
   overflow: hidden;
   max-width: 100%;
 }
+.embed-container iframe {
+  border: none;
+}
 .embed-container iframe,
 .embed-container object,
 .embed-container embed {
@@ -575,4 +578,16 @@ ul.benefits {
   left: 0;
   width: 100%;
   height: 100%;
+}
+
+.side-by-side-videos {
+  margin: 40px 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px
+}
+@media (max-width: 559px) {
+  .side-by-side-videos {
+    grid-template-columns: 1fr;
+  }
 }

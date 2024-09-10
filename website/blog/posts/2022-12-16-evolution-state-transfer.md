@@ -176,7 +176,7 @@ With the [right system and concurrency semantics](/blog/2022/05/03/introducing-r
 
 There are, of course, constraints with local-first. Concurrent writes are subject to merge semantics, so you have to become comfortable with the [reality of a relativistic universe](/blog/2022/05/20/relativity-causal-consistency).
 
-Device constraints also mean that you often can't have the whole database synced onto the device. As a result, you still need a "hybrid" architecture where the cloud underpins local-first applications. Not only to provide durability and sync but also to load data into the local app -- both on first run and as the shape of the data needed on the device changes.
+Device constraints also mean that you often can't have the whole database synced onto the device. As a result, you still need a "hybrid" architecture where the cloud underpins local-first applications. Not only to provide durability and sync but also to load data into the local app &mdash; both on first run and as the shape of the data needed on the device changes.
 
 This hybrid architecture has a number of layers, from central cloud to the end user device:
 
@@ -188,7 +188,7 @@ This hybrid architecture has a number of layers, from central cloud to the end u
 Managing the placement and movement of data across these layers, [from cloud to edge to local devices](https://dl.acm.org/doi/abs/10.1145/3464298.3493405), is complex. Too complex to be optimised by hand. It needs to be managed and optimised by the system. I.e.: rather than imperatively placing data onto locations in your cloud architecture, you need to declare your requirements and optimisation parameters and have the cloud handle the rest.
 
 > "As cloud programming matures, it seems inevitable that it will depart from traditional sequential programming. The cloud is a massive, globe-spanning distributed computer. Parallelism abounds at all scales. Creative programmers are held back by legacy programming models. [What's needed] is a separation of distributed programs into program semantics, availablity, consistency and targets of optimization.<br />
-> -- [New Directions in Cloud Programming, Joe Hellerstein, et al.](https://www.cidrdb.org/cidr2021/papers/cidr2021_paper16.pdf)
+> &mdash; [New Directions in Cloud Programming, Joe Hellerstein, et al.](https://www.cidrdb.org/cidr2021/papers/cidr2021_paper16.pdf)
 
 This is the endgame of state transfer: where the combination of static programme analysis and AI not only optimises the *transfer* of data from point to point, but also the *placement* of data and where the *points* and *layers* are in the first place.
 

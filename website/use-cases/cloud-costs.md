@@ -54,11 +54,7 @@ Electric is a sync engine. You can use Electric to move to a sync engine archite
 [Linear](https://linear.app), which is the world's most popular project management software, built their product on a sync-engine archicture. As a result, they've been able to run the whole of their European hosting on just two standard web servers. This has massively reduced their cloud bill.
 
 <div class="embed-container">
-  <iframe src="https://www.youtube-nocookie.com/embed/VLgmjzERT08"
-      frameborder="0"
-      allow="encrypted-media; picture-in-picture"
-      allowfullscreen>
-  </iframe>
+  <YoutubeEmbed video-id="VLgmjzERT08" />
 </div>
 
 ## Next steps
