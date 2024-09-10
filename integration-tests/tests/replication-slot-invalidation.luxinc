@@ -2,7 +2,8 @@
 [global fail_pattern=(?i)error|fatal|no such]
 
 [global pg_container_name=]
-[global database_url=]
+[global pg_host_port=54331]
+[global database_url=postgresql://postgres:password@localhost:$pg_host_port/postgres?sslmode=disable]
 
 [macro setup_pg initdb_args config_opts]
   [shell pg]
@@ -14,7 +15,7 @@
       -e POSTGRES_USER=postgres \
       -e POSTGRES_PASSWORD=password \
       -e POSTGRES_INITDB_ARGS=${initdb_args} \
-      -p 5432 \
+      -p $pg_host_port:5432 \
       postgres:14-alpine \
         -c wal_level=logical ${config_opts}
   
@@ -24,11 +25,6 @@
     # existing publication or replication slot.
     -
 
-  [shell get_container_port]
-    !docker inspect $pg_container_name --format '{{json .NetworkSettings.Ports}}'
-    ?"HostIp":"0.0.0.0","HostPort":"(\d+)"
-    [local port=$1]
-    [global database_url=postgresql://postgres:password@localhost:$port/postgres?sslmode=disable]
 [endmacro]
 
 [macro seed_pg]
