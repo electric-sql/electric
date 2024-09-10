@@ -9,7 +9,7 @@
   [shell pg]
     -$fail_pattern
   
-    !docker run --rm \
+    !docker run \
       --name $pg_container_name \
       -e POSTGRES_DB=electric \
       -e POSTGRES_USER=postgres \
@@ -24,7 +24,21 @@
     # Reset the failure pattern to avoid false failures when Electric tries to create an already
     # existing publication or replication slot.
     -
+[endmacro]
 
+[macro stop_pg]
+  [shell pg_lifecycle]
+    # This timeout is needed until https://github.com/electric-sql/electric/issues/1632 is fixed.
+    !docker stop -t 1 $pg_container_name
+[endmacro]
+
+[macro resume_pg]
+  [shell pg_lifecycle]
+    !docker start $pg_container_name
+
+  [shell pg]
+    !docker attach $pg_container_name
+    ??database system is ready to accept connections
 [endmacro]
 
 [macro seed_pg]
