@@ -84,11 +84,7 @@ The [Checkout example with Supabase](https://legacy.electric-sql.com/docs/exampl
 You can see it running at [checkout-demo.electric-sql.com](http://checkout-demo.electric-sql.com/) and in the demo screencast below:
 
 <div class="embed-container">
-  <iframe src="https://www.youtube.com/embed/WhRBvJ4cUWk"
-      frameborder="0"
-      allow="encrypted-media; picture-in-picture"
-      allowfullscreen>
-  </iframe>
+  <YoutubeEmbed video-id="WhRBvJ4cUWk" />
 </div>
 
 ### trcp-crdt
