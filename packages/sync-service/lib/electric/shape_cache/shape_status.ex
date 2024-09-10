@@ -19,7 +19,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
               {:ok, shape_id()} | {:error, term()}
   @callback initialise_shape(ShapeStatus.t(), shape_id(), xmin(), LogOffset.t()) ::
               :ok
-  @callback snapshot_xmin?(ShapeStatus.t(), shape_id()) :: boolean()
+  @callback snapshot_started?(ShapeStatus.t(), shape_id()) :: boolean()
   @callback remove_shape(ShapeStatus.t(), shape_id()) ::
               {:ok, Shape.t()} | {:error, term()}
   @callback get_relation(ShapeStatus.t(), Messages.relation_id()) :: Relation.t() | nil
@@ -73,6 +73,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @shape_meta_xmin_pos 3
   @shape_meta_latest_offset_pos 4
   @relation_data :relation_data
+  @snapshot_started :snapshot_started
 
   @spec initialise(options()) :: {:ok, t()} | {:error, term()}
   def initialise(opts) do
@@ -252,15 +253,20 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
-  def snapshot_xmin?(%__MODULE__{shape_meta_table: table} = _state, shape_id) do
-    snapshot_xmin?(table, shape_id)
+  def snapshot_started?(%__MODULE__{shape_meta_table: table} = _state, shape_id) do
+    snapshot_started?(table, shape_id)
   end
 
-  def snapshot_xmin?(meta_table, shape_id) when is_atom(meta_table) do
-    case snapshot_xmin(meta_table, shape_id) do
-      {:ok, xmin} -> !is_nil(xmin)
-      :error -> false
+  def snapshot_started?(meta_table, shape_id) do
+    case :ets.lookup(meta_table, {@snapshot_started, shape_id}) do
+      [] -> false
+      [{{@snapshot_started, ^shape_id}, true}] -> true
     end
+  end
+
+  def mark_snapshot_started(%__MODULE__{shape_meta_table: table} = _state, shape_id) do
+    :ets.insert(table, {{@snapshot_started, shape_id}, true})
+    :ok
   end
 
   def get_relation(%__MODULE__{shape_meta_table: table} = _state, relation_id) do

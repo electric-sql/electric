@@ -156,7 +156,7 @@ defmodule Electric.ShapeCache do
     table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
-    if shape_status.snapshot_xmin?(table, shape_id) do
+    if shape_status.snapshot_started?(table, shape_id) do
       :started
     else
       server = Access.get(opts, :server, __MODULE__)
@@ -286,7 +286,7 @@ defmodule Electric.ShapeCache do
       not is_known_shape_id?(state, shape_id) ->
         {:reply, {:error, :unknown}, [], state}
 
-      shape_status.snapshot_xmin?(state.persistent_state, shape_id) ->
+      shape_status.snapshot_started?(state.persistent_state, shape_id) ->
         {:reply, :started, [], state}
 
       true ->
@@ -337,16 +337,17 @@ defmodule Electric.ShapeCache do
     {:noreply, [], state}
   end
 
-  def handle_cast({:snapshot_started, shape_id}, state) do
+  def handle_cast({:snapshot_started, shape_id}, %{shape_status: shape_status} = state) do
     Logger.debug("Snapshot for #{shape_id} is ready")
+    :ok = shape_status.mark_snapshot_started(state.persistent_state, shape_id)
     {waiting, state} = pop_in(state, [:awaiting_snapshot_start, shape_id])
     for client <- List.wrap(waiting), not is_nil(client), do: GenStage.reply(client, :started)
     {:noreply, [], state}
   end
 
-  def handle_cast({:snapshot_failed, shape_id, error, stacktrace}, state) do
+  def handle_cast({:snapshot_failed, shape_id, error, _stacktrace}, state) do
     Logger.error(
-      "Snapshot creation failed for #{shape_id} because of:\n#{Exception.format(:error, error, stacktrace)}"
+      "Removing shape #{shape_id} due to #{Exception.format_banner(:error, error, [])}"
     )
 
     clean_up_shape(state, shape_id)

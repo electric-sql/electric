@@ -73,6 +73,8 @@ defmodule Electric.Shapes.ConsumerTest do
   defp prepare_tables_fn(_pool, _affected_tables), do: :ok
 
   describe "transaction handling" do
+    setup :with_in_memory_storage
+
     setup(ctx) do
       shapes = Map.get(ctx, :shapes, %{@shape_id1 => @shape1, @shape_id2 => @shape2})
       shape_position = Map.get(ctx, :shape_position, @shape_position)
@@ -82,6 +84,21 @@ defmodule Electric.Shapes.ConsumerTest do
     setup(ctx) do
       registry_name = Module.concat(__MODULE__, Registry)
       start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
+
+      %{latest_offset: _offset1, snapshot_xmin: xmin1} = shape_status(@shape_id1, ctx)
+      %{latest_offset: _offset2, snapshot_xmin: xmin2} = shape_status(@shape_id2, ctx)
+
+      storage =
+        Support.TestStorage.wrap(ctx.storage, %{
+          @shape_id1 => [
+            {:mark_snapshot_as_started, []},
+            {:set_snapshot_xmin, [xmin1]}
+          ],
+          @shape_id2 => [
+            {:mark_snapshot_as_started, []},
+            {:set_snapshot_xmin, [xmin2]}
+          ]
+        })
 
       {:ok, producer} =
         Electric.Replication.ShapeLogCollector.start_link(
@@ -93,34 +110,13 @@ defmodule Electric.Shapes.ConsumerTest do
             ])
         )
 
-      count = map_size(ctx.shapes)
-
-      Mock.Storage
-      |> stub(:for_shape, fn shape_id, opts -> {shape_id, opts} end)
-      |> expect(:start_link, count, fn {_shape_id, _opts} -> :ignore end)
-
-      Mock.Storage
-      |> expect(:initialise, count, fn {_shape_id, _opts} -> :ok end)
-      |> expect(:get_current_position, count, fn {shape_id, _opts} ->
-        %{latest_offset: offset, snapshot_xmin: xmin} = shape_status(shape_id, ctx)
-        {:ok, offset, xmin}
-      end)
-      |> stub(:snapshot_started?, fn _ -> true end)
+      Mock.ShapeCache
+      |> stub(:cast, fn _msg, _ -> :ok end)
 
       consumers =
         for {shape_id, shape} <- ctx.shapes do
-          allow(Mock.Storage, self(), fn ->
-            Shapes.Consumer.Supervisor.name(ctx.electric_instance_id, shape_id)
-            |> GenServer.whereis()
-          end)
-
-          allow(Mock.Storage, self(), fn ->
+          allow(Mock.ShapeCache, self(), fn ->
             Shapes.Consumer.whereis(ctx.electric_instance_id, shape_id)
-          end)
-
-          allow(Mock.Storage, self(), fn ->
-            Shapes.Consumer.Snapshotter.name(ctx.electric_instance_id, shape_id)
-            |> GenServer.whereis()
           end)
 
           {:ok, consumer} =
@@ -132,7 +128,7 @@ defmodule Electric.Shapes.ConsumerTest do
                log_producer: producer,
                registry: registry_name,
                shape_cache: {Mock.ShapeCache, []},
-               storage: {Mock.Storage, []},
+               storage: storage,
                chunk_bytes_threshold: 10_000,
                prepare_tables_fn: &prepare_tables_fn/2},
               id: {Shapes.Consumer.Supervisor, shape_id}
@@ -156,15 +152,6 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeCache
       |> expect(:update_shape_latest_offset, 2, fn @shape_id1, ^last_log_offset, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
-
-      Mock.Storage
-      |> expect(:append_to_log!, 2, fn _changes, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
-
-      Mock.Storage
-      |> expect(:append_to_log!, 0, fn _changes, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
 
       ref = make_ref()
 
@@ -180,11 +167,15 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
       assert_receive {^ref, :new_changes, ^last_log_offset}, 1000
+      assert_receive {Support.TestStorage, :append_to_log!, @shape_id1, _}
+      refute_receive {Support.TestStorage, :append_to_log!, @shape_id2, _}
 
       txn2 = %{txn | xid: xid}
 
       assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn2, ctx.producer)
       assert_receive {^ref, :new_changes, ^last_log_offset}, 1000
+      assert_receive {Support.TestStorage, :append_to_log!, @shape_id1, _}
+      refute_receive {Support.TestStorage, :append_to_log!, @shape_id2, _}
     end
 
     test "correctly writes only relevant changes to multiple shape logs", ctx do
@@ -197,21 +188,6 @@ defmodule Electric.Shapes.ConsumerTest do
       |> expect(:update_shape_latest_offset, 2, fn
         @shape_id1, ^last_log_offset, _ -> :ok
         @shape_id2, ^last_log_offset, _ -> :ok
-      end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
-
-      Mock.Storage
-      |> expect(:append_to_log!, 2, fn
-        [{_offset, serialized_record}], {@shape_id1, _} ->
-          record = Jason.decode!(serialized_record)
-          assert record["value"]["id"] == "1"
-          :ok
-
-        [{_offset, serialized_record}], {@shape_id2, _} ->
-          record = Jason.decode!(serialized_record)
-          assert record["value"]["id"] == "2"
-          :ok
       end)
       |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
       |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
@@ -244,6 +220,16 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {^ref1, :new_changes, ^last_log_offset}, 1000
       assert_receive {^ref2, :new_changes, ^last_log_offset}, 1000
+
+      assert_receive {Support.TestStorage, :append_to_log!, @shape_id1,
+                      [{_offset, serialized_record}]}
+
+      assert %{"value" => %{"id" => "1"}} = Jason.decode!(serialized_record)
+
+      assert_receive {Support.TestStorage, :append_to_log!, @shape_id2,
+                      [{_offset, serialized_record}]}
+
+      assert %{"value" => %{"id" => "2"}} = Jason.decode!(serialized_record)
     end
 
     @tag shapes: %{
@@ -264,9 +250,6 @@ defmodule Electric.Shapes.ConsumerTest do
       |> expect(:update_shape_latest_offset, fn @shape_id2, _offset, _ -> :ok end)
       |> allow(self(), Shapes.Consumer.name(ctx.electric_instance_id, @shape_id2))
 
-      Mock.Storage
-      |> expect(:append_to_log!, fn _, _ -> :ok end)
-
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
         |> Transaction.prepend_change(%Changes.NewRecord{
@@ -276,6 +259,9 @@ defmodule Electric.Shapes.ConsumerTest do
         })
 
       assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
+
+      assert_receive {Support.TestStorage, :append_to_log!, @shape_id2, _}
+      refute_receive {Support.TestStorage, :append_to_log!, @shape_id1, _}
 
       refute_receive {Shapes.Consumer, ^ref1, 150}
       assert_receive {Shapes.Consumer, ^ref2, 150}
@@ -290,9 +276,6 @@ defmodule Electric.Shapes.ConsumerTest do
       |> expect(:handle_truncate, fn @shape_id1, _ -> :ok end)
       |> allow(self(), Shapes.Consumer.name(ctx.electric_instance_id, @shape_id1))
 
-      Mock.Storage
-      |> expect(:cleanup!, fn _ -> :ok end)
-
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
         |> Transaction.prepend_change(%Changes.TruncatedRelation{
@@ -302,6 +285,9 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_consumer_shutdown(ctx.electric_instance_id, @shape_id1, fn ->
         assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
       end)
+
+      assert_receive {Support.TestStorage, :cleanup!, @shape_id1}
+      refute_receive {Support.TestStorage, :cleanup!, @shape_id2}
     end
 
     defp assert_consumer_shutdown(electric_instance_id, shape_id, fun) do
@@ -336,13 +322,9 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      # The fact that we don't expect `append_to_log` is enough to prove that it wasn't called.
       Mock.ShapeCache
       |> expect(:handle_truncate, fn @shape_id1, _ -> :ok end)
       |> allow(self(), Shapes.Consumer.name(ctx.electric_instance_id, @shape_id1))
-
-      Mock.Storage
-      |> expect(:cleanup!, fn _ -> :ok end)
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -353,6 +335,10 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_consumer_shutdown(ctx.electric_instance_id, @shape_id1, fn ->
         assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
       end)
+
+      refute_receive {Support.TestStorage, :append_to_log!, @shape_id1, _}
+      assert_receive {Support.TestStorage, :cleanup!, @shape_id1}
+      refute_receive {Support.TestStorage, :cleanup!, @shape_id2}
     end
 
     test "notifies listeners of new changes", ctx do
@@ -363,9 +349,6 @@ defmodule Electric.Shapes.ConsumerTest do
       Mock.ShapeCache
       |> expect(:update_shape_latest_offset, fn @shape_id1, ^last_log_offset, _ -> :ok end)
       |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
-
-      Mock.Storage
-      |> expect(:append_to_log!, fn _, _ -> :ok end)
 
       ref = make_ref()
       Registry.register(ctx.registry, @shape_id1, ref)
@@ -379,6 +362,7 @@ defmodule Electric.Shapes.ConsumerTest do
         })
 
       assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
+      assert_receive {Support.TestStorage, :append_to_log!, @shape_id1, _}
       assert_receive {^ref, :new_changes, ^last_log_offset}, 1000
     end
   end
