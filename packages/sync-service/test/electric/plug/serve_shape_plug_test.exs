@@ -354,11 +354,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
-               "no-store, no-cache, must-revalidate, max-age=0"
+               "max-age=5, stale-while-revalidate=5"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "pragma") == ["no-cache"]
-      assert Plug.Conn.get_resp_header(conn, "expires") == ["0"]
       assert Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset") == [next_offset_str]
       assert Plug.Conn.get_resp_header(conn, "x-electric-schema") == []
     end
@@ -440,11 +438,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "up-to-date"}}]
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
-               "no-store, no-cache, must-revalidate, max-age=0"
+               "max-age=5, stale-while-revalidate=5"
              ]
-
-      assert Plug.Conn.get_resp_header(conn, "pragma") == ["no-cache"]
-      assert Plug.Conn.get_resp_header(conn, "expires") == ["0"]
     end
 
     test "send 409 when shape ID requested does not exist" do

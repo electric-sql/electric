@@ -251,10 +251,11 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp put_resp_cache_headers(%Conn{} = conn, _) do
     if conn.assigns.live do
-      conn
-      |> put_resp_header("cache-control", "no-store, no-cache, must-revalidate, max-age=0")
-      |> put_resp_header("pragma", "no-cache")
-      |> put_resp_header("expires", "0")
+      put_resp_header(
+        conn,
+        "cache-control",
+        "max-age=5, stale-while-revalidate=5"
+      )
     else
       put_resp_header(
         conn,
