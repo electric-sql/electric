@@ -46,7 +46,8 @@ defmodule Electric.ConnectionManager do
       # PID of the database connection pool (a `Postgrex` process).
       :pool_pid,
       # Backoff term used for reconnection with exponential back-off.
-      :backoff
+      :backoff,
+      :electric_instance_id
     ]
   end
 
@@ -101,7 +102,8 @@ defmodule Electric.ConnectionManager do
         timeline_opts: timeline_opts,
         log_collector: Keyword.fetch!(opts, :log_collector),
         shape_cache: Keyword.fetch!(opts, :shape_cache),
-        backoff: {:backoff.init(1000, 10_000), nil}
+        backoff: {:backoff.init(1000, 10_000), nil},
+        electric_instance_id: Keyword.fetch!(opts, :electric_instance_id)
       }
 
     # We try to start the replication connection first because it requires additional
@@ -203,6 +205,7 @@ defmodule Electric.ConnectionManager do
 
   defp start_replication_client(state) do
     Electric.Shapes.Supervisor.start_link(
+      electric_instance_id: state.electric_instance_id,
       replication_client: {
         Electric.Postgres.ReplicationClient,
         connection_opts: state.connection_opts,

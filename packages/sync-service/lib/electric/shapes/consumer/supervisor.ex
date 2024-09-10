@@ -7,6 +7,7 @@ defmodule Electric.Shapes.Consumer.Supervisor do
   @schema NimbleOptions.new!(
             shape_id: [type: :string, required: true],
             shape: [type: {:struct, Electric.Shapes.Shape}, required: true],
+            electric_instance_id: [type: :atom, required: true],
             log_producer: [type: {:or, [:pid, :atom]}, required: true],
             shape_cache: [type: :mod_arg, required: true],
             registry: [type: :atom, required: true],
@@ -20,12 +21,12 @@ defmodule Electric.Shapes.Consumer.Supervisor do
             ]
           )
 
-  def name(shape_id) when is_binary(shape_id) do
-    Electric.Application.process_name(__MODULE__, shape_id)
+  def name(electric_instance_id, shape_id) when is_binary(shape_id) do
+    Electric.Application.process_name(electric_instance_id, __MODULE__, shape_id)
   end
 
-  def name(%{shape_id: shape_id}) do
-    name(shape_id)
+  def name(%{electric_instance_id: electric_instance_id, shape_id: shape_id}) do
+    name(electric_instance_id, shape_id)
   end
 
   def start_link(opts) do

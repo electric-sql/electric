@@ -7,8 +7,12 @@ defmodule Support.ComponentSetup do
   alias Electric.ShapeCache.InMemoryStorage
   alias Electric.Postgres.Inspector.EtsInspector
 
+  def with_electric_instance_id(ctx) do
+    %{electric_instance_id: String.to_atom(full_test_name(ctx))}
+  end
+
   def with_registry(ctx) do
-    registry_name = Module.concat(Registry, String.to_atom(full_test_name(ctx)))
+    registry_name = Module.concat(Registry, ctx.electric_instance_id)
     start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
 
     %{registry: registry_name}
@@ -16,7 +20,10 @@ defmodule Support.ComponentSetup do
 
   def with_in_memory_storage(ctx) do
     {:ok, storage_opts} =
-      InMemoryStorage.shared_opts(table_base_name: :"in_memory_storage_#{full_test_name(ctx)}")
+      InMemoryStorage.shared_opts(
+        table_base_name: :"in_memory_storage_#{full_test_name(ctx)}",
+        electric_instance_id: ctx.electric_instance_id
+      )
 
     %{storage: {InMemoryStorage, storage_opts}}
   end
@@ -27,7 +34,10 @@ defmodule Support.ComponentSetup do
 
   def with_cub_db_storage(ctx) do
     {:ok, storage_opts} =
-      FileStorage.shared_opts(storage_dir: ctx.tmp_dir)
+      FileStorage.shared_opts(
+        storage_dir: ctx.tmp_dir,
+        electric_instance_id: ctx.electric_instance_id
+      )
 
     %{storage: {FileStorage, storage_opts}}
   end
@@ -49,6 +59,7 @@ defmodule Support.ComponentSetup do
     start_opts =
       [
         name: server,
+        electric_instance_id: ctx.electric_instance_id,
         shape_meta_table: shape_meta_table,
         inspector: ctx.inspector,
         storage: ctx.storage,
@@ -65,7 +76,12 @@ defmodule Support.ComponentSetup do
          [ctx.publication_name]}
       end)
 
-    {:ok, _pid} = Electric.Shapes.ConsumerSupervisor.start_link(name: consumer_supervisor)
+    {:ok, _pid} =
+      Electric.Shapes.ConsumerSupervisor.start_link(
+        name: consumer_supervisor,
+        electric_instance_id: ctx.electric_instance_id
+      )
+
     {:ok, _pid} = ShapeCache.start_link(start_opts)
 
     shape_cache_opts = [
@@ -122,6 +138,7 @@ defmodule Support.ComponentSetup do
 
   def with_complete_stack(ctx, opts \\ []) do
     [
+      Keyword.get(opts, :electric_instance_id, &with_electric_instance_id/1),
       Keyword.get(opts, :registry, &with_registry/1),
       Keyword.get(opts, :inspector, &with_inspector/1),
       Keyword.get(opts, :persistent_kv, &with_persistent_kv/1),

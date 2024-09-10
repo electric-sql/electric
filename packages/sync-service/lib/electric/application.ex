@@ -3,14 +3,14 @@ defmodule Electric.Application do
 
   @process_registry_name Electric.Registry.Processes
 
-  @spec process_name(atom()) :: {:via, atom(), atom()}
-  def process_name(module) when is_atom(module) do
-    {:via, Registry, {@process_registry_name, module}}
+  @spec process_name(atom(), atom()) :: {:via, atom(), atom()}
+  def process_name(electric_instance_id, module) when is_atom(module) do
+    {:via, Registry, {@process_registry_name, {module, electric_instance_id}}}
   end
 
-  @spec process_name(atom(), term()) :: {:via, atom(), {atom(), term()}}
-  def process_name(module, id) when is_atom(module) do
-    {:via, Registry, {@process_registry_name, {module, id}}}
+  @spec process_name(atom(), atom(), term()) :: {:via, atom(), {atom(), term()}}
+  def process_name(electric_instance_id, module, id) when is_atom(module) do
+    {:via, Registry, {@process_registry_name, {module, electric_instance_id, id}}}
   end
 
   @impl true
@@ -35,45 +35,52 @@ defmodule Electric.Application do
         {Electric.Postgres.Inspector.EtsInspector,
          server: Electric.Postgres.Inspector.EtsInspector}
 
-      shape_cache =
-        {Electric.ShapeCache,
-         storage: storage,
-         inspector: inspector,
-         prepare_tables_fn: prepare_tables_fn,
-         chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
-         log_producer: Electric.Replication.ShapeLogCollector,
-         persistent_kv: persistent_kv,
-         registry: Registry.ShapeChanges}
-
       core_processes = [
         {Registry,
          name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()}
       ]
 
-      connection_manager_opts = [
-        connection_opts: Application.fetch_env!(:electric, :connection_opts),
-        replication_opts: [
-          publication_name: publication_name,
-          try_creating_publication?: true,
-          slot_name: slot_name,
-          transaction_received: {Electric.Replication.ShapeLogCollector, :store_transaction, []},
-          relation_received: {Electric.Replication.ShapeLogCollector, :handle_relation_msg, []}
-        ],
-        pool_opts: [
-          name: Electric.DbPool,
-          pool_size: Application.fetch_env!(:electric, :db_pool_size),
-          types: PgInterop.Postgrex.Types
-        ],
-        timeline_opts: [
-          shape_cache: {Electric.ShapeCache, []},
-          persistent_kv: persistent_kv
-        ],
-        log_collector: {Electric.Replication.ShapeLogCollector, inspector: inspector},
-        shape_cache: shape_cache
-      ]
-
       per_env_processes =
         if Application.fetch_env!(:electric, :environment) != :test do
+          electric_instance_id = Application.fetch_env!(:electric, :electric_instance_id)
+
+          shape_cache =
+            {Electric.ShapeCache,
+             electric_instance_id: electric_instance_id,
+             storage: storage,
+             inspector: inspector,
+             prepare_tables_fn: prepare_tables_fn,
+             chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
+             log_producer: Electric.Replication.ShapeLogCollector,
+             consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(electric_instance_id),
+             persistent_kv: persistent_kv,
+             registry: Registry.ShapeChanges}
+
+          connection_manager_opts = [
+            electric_instance_id: electric_instance_id,
+            connection_opts: Application.fetch_env!(:electric, :connection_opts),
+            replication_opts: [
+              publication_name: publication_name,
+              try_creating_publication?: true,
+              slot_name: slot_name,
+              transaction_received:
+                {Electric.Replication.ShapeLogCollector, :store_transaction, []},
+              relation_received:
+                {Electric.Replication.ShapeLogCollector, :handle_relation_msg, []}
+            ],
+            pool_opts: [
+              name: Electric.DbPool,
+              pool_size: Application.fetch_env!(:electric, :db_pool_size),
+              types: PgInterop.Postgrex.Types
+            ],
+            timeline_opts: [
+              shape_cache: {Electric.ShapeCache, []},
+              persistent_kv: persistent_kv
+            ],
+            log_collector: {Electric.Replication.ShapeLogCollector, inspector: inspector},
+            shape_cache: shape_cache
+          ]
+
           [
             Electric.Telemetry,
             {Registry,

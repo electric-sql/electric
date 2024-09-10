@@ -47,6 +47,7 @@ defmodule Electric.Shapes.ConsumerTest do
     {"public", "test_table"}, _ -> {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
   end)
 
+  setup :with_electric_instance_id
   setup :set_mox_from_context
   setup :verify_on_exit!
 
@@ -109,15 +110,17 @@ defmodule Electric.Shapes.ConsumerTest do
       consumers =
         for {shape_id, shape} <- ctx.shapes do
           allow(Mock.Storage, self(), fn ->
-            Shapes.Consumer.Supervisor.name(shape_id) |> GenServer.whereis()
+            Shapes.Consumer.Supervisor.name(ctx.electric_instance_id, shape_id)
+            |> GenServer.whereis()
           end)
 
           allow(Mock.Storage, self(), fn ->
-            Shapes.Consumer.whereis(shape_id)
+            Shapes.Consumer.whereis(ctx.electric_instance_id, shape_id)
           end)
 
           allow(Mock.Storage, self(), fn ->
-            Shapes.Consumer.Snapshotter.name(shape_id) |> GenServer.whereis()
+            Shapes.Consumer.Snapshotter.name(ctx.electric_instance_id, shape_id)
+            |> GenServer.whereis()
           end)
 
           {:ok, consumer} =
@@ -125,6 +128,7 @@ defmodule Electric.Shapes.ConsumerTest do
               {Shapes.Consumer.Supervisor,
                shape_id: shape_id,
                shape: shape,
+               electric_instance_id: ctx.electric_instance_id,
                log_producer: producer,
                registry: registry_name,
                shape_cache: {Mock.ShapeCache, []},
@@ -152,15 +156,15 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeCache
       |> expect(:update_shape_latest_offset, 2, fn @shape_id1, ^last_log_offset, _ -> :ok end)
-      |> allow(self(), Consumer.name(@shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
 
       Mock.Storage
       |> expect(:append_to_log!, 2, fn _changes, _ -> :ok end)
-      |> allow(self(), Consumer.name(@shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
 
       Mock.Storage
       |> expect(:append_to_log!, 0, fn _changes, _ -> :ok end)
-      |> allow(self(), Consumer.name(@shape_id2))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
 
       ref = make_ref()
 
@@ -194,8 +198,8 @@ defmodule Electric.Shapes.ConsumerTest do
         @shape_id1, ^last_log_offset, _ -> :ok
         @shape_id2, ^last_log_offset, _ -> :ok
       end)
-      |> allow(self(), Consumer.name(@shape_id1))
-      |> allow(self(), Consumer.name(@shape_id2))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
 
       Mock.Storage
       |> expect(:append_to_log!, 2, fn
@@ -209,8 +213,8 @@ defmodule Electric.Shapes.ConsumerTest do
           assert record["value"]["id"] == "2"
           :ok
       end)
-      |> allow(self(), Consumer.name(@shape_id1))
-      |> allow(self(), Consumer.name(@shape_id2))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
 
       ref1 = make_ref()
       ref2 = make_ref()
@@ -253,12 +257,12 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      ref1 = Shapes.Consumer.monitor(@shape_id1)
-      ref2 = Shapes.Consumer.monitor(@shape_id2)
+      ref1 = Shapes.Consumer.monitor(ctx.electric_instance_id, @shape_id1)
+      ref2 = Shapes.Consumer.monitor(ctx.electric_instance_id, @shape_id2)
 
       Mock.ShapeCache
       |> expect(:update_shape_latest_offset, fn @shape_id2, _offset, _ -> :ok end)
-      |> allow(self(), Shapes.Consumer.name(@shape_id2))
+      |> allow(self(), Shapes.Consumer.name(ctx.electric_instance_id, @shape_id2))
 
       Mock.Storage
       |> expect(:append_to_log!, fn _, _ -> :ok end)
@@ -284,7 +288,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeCache
       |> expect(:handle_truncate, fn @shape_id1, _ -> :ok end)
-      |> allow(self(), Shapes.Consumer.name(@shape_id1))
+      |> allow(self(), Shapes.Consumer.name(ctx.electric_instance_id, @shape_id1))
 
       Mock.Storage
       |> expect(:cleanup!, fn _ -> :ok end)
@@ -295,17 +299,17 @@ defmodule Electric.Shapes.ConsumerTest do
           relation: {"public", "test_table"}
         })
 
-      assert_consumer_shutdown(@shape_id1, fn ->
+      assert_consumer_shutdown(ctx.electric_instance_id, @shape_id1, fn ->
         assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
       end)
     end
 
-    defp assert_consumer_shutdown(shape_id, fun) do
+    defp assert_consumer_shutdown(electric_instance_id, shape_id, fun) do
       monitors =
         for name <- [
-              Shapes.Consumer.Supervisor.name(shape_id),
-              Shapes.Consumer.name(shape_id),
-              Shapes.Consumer.Snapshotter.name(shape_id)
+              Shapes.Consumer.Supervisor.name(electric_instance_id, shape_id),
+              Shapes.Consumer.name(electric_instance_id, shape_id),
+              Shapes.Consumer.Snapshotter.name(electric_instance_id, shape_id)
             ],
             pid = GenServer.whereis(name) do
           ref = Process.monitor(pid)
@@ -335,7 +339,7 @@ defmodule Electric.Shapes.ConsumerTest do
       # The fact that we don't expect `append_to_log` is enough to prove that it wasn't called.
       Mock.ShapeCache
       |> expect(:handle_truncate, fn @shape_id1, _ -> :ok end)
-      |> allow(self(), Shapes.Consumer.name(@shape_id1))
+      |> allow(self(), Shapes.Consumer.name(ctx.electric_instance_id, @shape_id1))
 
       Mock.Storage
       |> expect(:cleanup!, fn _ -> :ok end)
@@ -346,7 +350,7 @@ defmodule Electric.Shapes.ConsumerTest do
           relation: {"public", "test_table"}
         })
 
-      assert_consumer_shutdown(@shape_id1, fn ->
+      assert_consumer_shutdown(ctx.electric_instance_id, @shape_id1, fn ->
         assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
       end)
     end
@@ -358,7 +362,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeCache
       |> expect(:update_shape_latest_offset, fn @shape_id1, ^last_log_offset, _ -> :ok end)
-      |> allow(self(), Consumer.name(@shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
 
       Mock.Storage
       |> expect(:append_to_log!, fn _, _ -> :ok end)
@@ -439,7 +443,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       lsn = Lsn.from_integer(10)
 
-      ref = Shapes.Consumer.monitor(shape_id)
+      ref = Shapes.Consumer.monitor(ctx.electric_instance_id, shape_id)
 
       txn =
         %Transaction{xid: 11, lsn: lsn, last_log_offset: LogOffset.new(lsn, 2)}
@@ -486,7 +490,7 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn1 = Lsn.from_integer(9)
       lsn2 = Lsn.from_integer(10)
 
-      ref = Shapes.Consumer.monitor(shape_id)
+      ref = Shapes.Consumer.monitor(ctx.electric_instance_id, shape_id)
 
       txn1 =
         %Transaction{xid: 9, lsn: lsn1, last_log_offset: LogOffset.new(lsn1, 2)}
@@ -657,7 +661,11 @@ defmodule Electric.Shapes.ConsumerTest do
       storage = {CrashingStorage, %{backend: pid, parent: parent, shape_id: nil}}
 
       shape_cache_name = __MODULE__.ShapeCache
-      shape_cache_opts = [server: shape_cache_name, shape_meta_table: __MODULE__.ShapeMeta]
+
+      shape_cache_opts = [
+        server: shape_cache_name,
+        shape_meta_table: __MODULE__.ShapeMeta
+      ]
 
       replication_opts = [
         publication_name: ctx.publication_name,
@@ -678,6 +686,7 @@ defmodule Electric.Shapes.ConsumerTest do
       shape_cache_config =
         [
           name: shape_cache_name,
+          electric_instance_id: ctx.electric_instance_id,
           shape_meta_table: __MODULE__.ShapeMeta,
           storage: storage,
           db_pool: ctx.pool,
@@ -686,7 +695,7 @@ defmodule Electric.Shapes.ConsumerTest do
           inspector: ctx.inspector,
           chunk_bytes_threshold: 10_000,
           log_producer: __MODULE__.LogCollector,
-          consumer_supervisor: __MODULE__.ConsumerSupervisor,
+          consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(ctx.electric_instance_id),
           prepare_tables_fn: {
             Electric.Postgres.Configuration,
             :configure_tables_for_replication!,
@@ -700,6 +709,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       {:ok, _super} =
         Electric.Shapes.Supervisor.start_link(
+          electric_instance_id: ctx.electric_instance_id,
           log_collector:
             {Electric.Replication.ShapeLogCollector,
              name: __MODULE__.LogCollector, inspector: ctx.inspector},
@@ -710,7 +720,7 @@ defmodule Electric.Shapes.ConsumerTest do
              connection_manager: nil},
           shape_cache: {Electric.ShapeCache, shape_cache_config},
           consumer_supervisor:
-            {Electric.Shapes.ConsumerSupervisor, name: __MODULE__.ConsumerSupervisor}
+            {Electric.Shapes.ConsumerSupervisor, electric_instance_id: ctx.electric_instance_id}
         )
 
       %{db_conn: conn} = ctx
