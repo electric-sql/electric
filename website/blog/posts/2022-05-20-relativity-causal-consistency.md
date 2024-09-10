@@ -31,22 +31,18 @@ To see this, first, let’s consider the total ordering assumption. Imagine that
 
 The point is that there’s no right answer, because they’re all working in completely different frames of reference. According to the relativity of simultaneity, there’s no total ordering of events that are separated by space.
 
-<div class="my-6 mt-8">
-  <figure class="figure mx-0 my-3">
-    <a href="/img/blog/relativity-causal-consistency/graph.png"
-        class="relative block text-center w-full no-visual"
-        target="_blank">
-      <img src="/img/blog/relativity-causal-consistency/graph.png"
-          class="figure-img img-fluid max-w-lg mx-auto"
-      />
-    </a>
-  </figure>
-  <figcaption class="figure-caption text-end text-small mb-3 mb-9 max-w-lg ml-auto">
+<figure>
+  <a href="/img/blog/relativity-causal-consistency/graph.png"
+      class="no-visual"
+      target="_blank">
+    <img src="/img/blog/relativity-causal-consistency/graph.png"
+        style="width: 100%; max-width: 450px;"
+    />
+  </a>
+</figure>
 
-In physics, the [relativity of simultaneity](https://en.wikipedia.org/wiki/Relativity_of_simultaneity) is the concept that distant simultaneity – whether two spatially separated events occur at the same time – is not absolute, but depends on the observer's reference frame.
-
-  </figcaption>
-</div>
+> [!NOTE] No total ordering of events
+> In physics, the [relativity of simultaneity](https://en.wikipedia.org/wiki/Relativity_of_simultaneity) is the concept that distant simultaneity – whether two spatially separated events occur at the same time – is not absolute, but depends on the observer's reference frame.
 
 ## Latency
 
@@ -62,24 +58,12 @@ Enter causal consistency. A distributed system that implements causal consistenc
 
 For example, if Alice posts a comment on a collaborative document and Bob then responds to that comment, it doesn’t matter if Alice and Bob are standing light-years apart – Claire will never see Bob’s reply without Alice’s message. Causally consistent databases keep track of causal relationships (using vector clocks), but allow other events that aren’t causally related to be *indeterminately* ordered, so that there’s no need for a total order to be imposed.
 
-<div class="row mt-4 pb-4">
-  <div class="col-lg-6">
-    <div class="embed-container">
-      <iframe src="https://www.youtube-nocookie.com/embed/OKHIdpOAxto"
-          frameborder="0"
-          allow="encrypted-media; picture-in-picture"
-          allowfullscreen>
-      </iframe>
-    </div>
+<div class="side-by-side-videos">
+  <div class="embed-container">
+    <YoutubeEmbed video-id="OKHIdpOAxto" />
   </div>
-  <div class="col-lg-6">
-    <div class="embed-container">
-      <iframe src="https://www.youtube-nocookie.com/embed/x-D8iFU1d-o"
-          frameborder="0"
-          allow="encrypted-media; picture-in-picture"
-          allowfullscreen>
-      </iframe>
-    </div>
+  <div class="embed-container">
+    <YoutubeEmbed video-id="x-D8iFU1d-o" />
   </div>
 </div>
 
@@ -91,6 +75,6 @@ As we increasingly move our computer systems into space, it enables us to build 
 
 ### Embracing causal consistency
 
-Here on earth right now, causal consistency -- and specifically the [transactional causal consistency that ElectricSQL is based on](https://legacy.electric-sql.com/docs/reference/consistency) -- is the strongest possible consistency mode for a coordination-free, local-first system.
+Here on earth right now, causal consistency &mdash; and specifically the [transactional causal consistency that ElectricSQL is based on](https://legacy.electric-sql.com/docs/reference/consistency) &mdash; is the strongest possible consistency mode for a coordination-free, local-first system.
 
 Embracing it allows you to develop local-first systems that fit the world more naturally than consensus based systems and, as a result, eliminate complexity and dissonance from mapping a total order onto a fundamentally concurrent and relativistic world.
