@@ -37,9 +37,18 @@ defmodule Electric.Postgres.ConfigurationTest do
          %{pool: conn, publication_name: publication} do
       assert get_table_identity(conn, {"public", "items"}) == "d"
       assert list_tables_in_publication(conn, publication) == []
-      Configuration.configure_tables_for_replication!(conn, [{"public", "items"}], publication)
+
+      Configuration.configure_tables_for_replication!(
+        conn,
+        [{{"public", "items"}, "(value ILIKE 'yes%')"}],
+        publication
+      )
+
       assert get_table_identity(conn, {"public", "items"}) == "f"
-      assert list_tables_in_publication(conn, publication) == [{"public", "items"}]
+
+      assert list_tables_in_publication(conn, publication) == [
+               {"public", "items", "(value ~~* 'yes%'::text)"}
+             ]
     end
 
     test "works with multiple tables", %{pool: conn, publication_name: publication} do
@@ -49,7 +58,10 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       Configuration.configure_tables_for_replication!(
         conn,
-        [{"public", "items"}, {"public", "other_table"}],
+        [
+          {{"public", "items"}, "(value ILIKE 'yes%')"},
+          {{"public", "other_table"}, "(value ILIKE 'no%')"}
+        ],
         publication
       )
 
@@ -57,20 +69,29 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert get_table_identity(conn, {"public", "other_table"}) == "f"
 
       assert list_tables_in_publication(conn, publication) == [
-               {"public", "items"},
-               {"public", "other_table"}
+               {"public", "items", "(value ~~* 'yes%'::text)"},
+               {"public", "other_table", "(value ~~* 'no%'::text)"}
              ]
     end
 
     test "doesn't fail when one of the tables is already configured",
          %{pool: conn, publication_name: publication} do
-      Configuration.configure_tables_for_replication!(conn, [{"public", "items"}], publication)
-      assert get_table_identity(conn, {"public", "other_table"}) == "d"
-      assert list_tables_in_publication(conn, publication) == [{"public", "items"}]
-
       Configuration.configure_tables_for_replication!(
         conn,
-        [{"public", "items"}, {"public", "other_table"}],
+        [{{"public", "items"}, "(value ILIKE 'yes%')"}],
+        publication
+      )
+
+      assert get_table_identity(conn, {"public", "other_table"}) == "d"
+
+      assert list_tables_in_publication(conn, publication) == [
+               {"public", "items", "(value ~~* 'yes%'::text)"}
+             ]
+
+      # Configure `items` table again but with a different where clause
+      Configuration.configure_tables_for_replication!(
+        conn,
+        [{{"public", "items"}, "(value ILIKE 'no%')"}, {{"public", "other_table"}, nil}],
         publication
       )
 
@@ -78,8 +99,21 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert get_table_identity(conn, {"public", "other_table"}) == "f"
 
       assert list_tables_in_publication(conn, publication) == [
-               {"public", "items"},
-               {"public", "other_table"}
+               {"public", "items", "((value ~~* 'yes%'::text) OR (value ~~* 'no%'::text))"},
+               {"public", "other_table", nil}
+             ]
+
+      # Now configure it again but for a shape that has no where clause
+      # the resulting publication should no longer have a filter for that table
+      Configuration.configure_tables_for_replication!(
+        conn,
+        [{{"public", "items"}, nil}, {{"public", "other_table"}, "(value ILIKE 'no%')"}],
+        publication
+      )
+
+      assert list_tables_in_publication(conn, publication) == [
+               {"public", "items", nil},
+               {"public", "other_table", "(value ~~* 'no%'::text)"}
              ]
     end
 
@@ -87,7 +121,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert_raise Postgrex.Error, ~r/undefined_object/, fn ->
         Configuration.configure_tables_for_replication!(
           conn,
-          [{"public", "items"}],
+          [{{"public", "items"}, nil}],
           "nonexistent"
         )
       end
@@ -113,7 +147,7 @@ defmodule Electric.Postgres.ConfigurationTest do
   defp list_tables_in_publication(conn, publication) do
     Postgrex.query!(
       conn,
-      "SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = $1 ORDER BY tablename",
+      "SELECT schemaname, tablename, rowfilter FROM pg_publication_tables WHERE pubname = $1 ORDER BY tablename",
       [publication]
     )
     |> Map.fetch!(:rows)
