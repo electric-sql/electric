@@ -102,6 +102,15 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, [], state}
   end
 
+  def handle_cast({:snapshot_exists, shape_id}, %{shape_id: shape_id} = state) do
+    %{snapshot_xmin: xmin} = state
+
+    cast_shape_cache({:snapshot_xmin_known, shape_id, xmin}, state)
+    cast_shape_cache({:snapshot_started, shape_id}, state)
+
+    {:noreply, [], state}
+  end
+
   # `Shapes.Dispatcher` only works with single-events, so we can safely assert
   # that here
   def handle_events([%Changes.Relation{}], _from, state) do

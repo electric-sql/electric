@@ -30,7 +30,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     %{shape_id: shape_id, shape: shape, electric_instance_id: electric_instance_id} = state
 
     case Shapes.Consumer.whereis(electric_instance_id, shape_id) do
-      parent when is_pid(parent) ->
+      consumer when is_pid(consumer) ->
         if not Storage.snapshot_started?(state.storage) do
           %{
             db_pool: pool,
@@ -47,13 +47,21 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             fn ->
               try do
                 Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [pool, affected_tables])
-                apply(create_snapshot_fn, [parent, shape_id, shape, pool, storage])
+                apply(create_snapshot_fn, [consumer, shape_id, shape, pool, storage])
               rescue
                 error ->
-                  GenServer.cast(parent, {:snapshot_failed, shape_id, error, __STACKTRACE__})
+                  GenServer.cast(consumer, {:snapshot_failed, shape_id, error, __STACKTRACE__})
               end
             end
           )
+        else
+          # Let the shape cache know that the snapshot is available. When the
+          # shape cache starts and restores the shapes from disk, it doesn't
+          # know about the snapshot status of each shape, and because the
+          # storage does some clean up on start, e.g. in the case of a format
+          # upgrade, we only know the actual on-disk state of the shape data
+          # once things are running.
+          GenServer.cast(consumer, {:snapshot_exists, shape_id})
         end
 
         {:stop, :normal, state}

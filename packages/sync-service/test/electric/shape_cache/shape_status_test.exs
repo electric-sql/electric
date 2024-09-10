@@ -172,21 +172,19 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert {:ok, nil} == ShapeStatus.snapshot_xmin(state, shape_id)
     assert ShapeStatus.set_snapshot_xmin(state, shape_id, 1234)
     assert {:ok, 1234} == ShapeStatus.snapshot_xmin(state, shape_id)
-
-    refute ShapeStatus.snapshot_xmin?(state, "sdfsodf")
   end
 
-  test "snapshot_xmin?/2", ctx do
+  test "snapshot_started?/2", ctx do
     {:ok, state, [shape_id]} = new_state(ctx, shapes: [shape!()])
 
-    refute ShapeStatus.set_snapshot_xmin(state, "sdfsodf", 1234)
+    refute ShapeStatus.snapshot_started?(state, "sdfsodf")
+    refute ShapeStatus.snapshot_started?(state.shape_meta_table, "sdfsodf")
+    refute ShapeStatus.snapshot_started?(state, shape_id)
 
-    refute ShapeStatus.snapshot_xmin?(state, "sdfsodf")
-    refute ShapeStatus.snapshot_xmin?(state.shape_meta_table, "sdfsodf")
-    refute ShapeStatus.snapshot_xmin?(state, shape_id)
-    assert ShapeStatus.set_snapshot_xmin(state, shape_id, 1234)
-    assert ShapeStatus.snapshot_xmin?(state, shape_id)
-    assert ShapeStatus.snapshot_xmin?(state.shape_meta_table, shape_id)
+    ShapeStatus.mark_snapshot_started(state, shape_id)
+
+    assert ShapeStatus.snapshot_started?(state, shape_id)
+    assert ShapeStatus.snapshot_started?(state.shape_meta_table, shape_id)
   end
 
   test "relation data", ctx do
