@@ -362,8 +362,8 @@ defmodule Electric.ShapeCache do
 
   defp clean_up_shape(state, shape_id) do
     Electric.Shapes.ConsumerSupervisor.stop_shape_consumer(
-      state.electric_instance_id,
       state.consumer_supervisor,
+      state.electric_instance_id,
       shape_id
     )
 
