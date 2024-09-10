@@ -48,6 +48,7 @@ defmodule Electric.ShapeCache do
               type: @genserver_name_schema,
               default: __MODULE__
             ],
+            electric_instance_id: [type: :atom, required: true],
             shape_meta_table: [
               type: :atom,
               default: @default_shape_meta_table
@@ -56,10 +57,7 @@ defmodule Electric.ShapeCache do
               type: {:or, [:atom, :pid]},
               default: Electric.Replication.ShapeLogCollector
             ],
-            consumer_supervisor: [
-              type: @genserver_name_schema,
-              default: Electric.Shapes.ConsumerSupervisor.name()
-            ],
+            consumer_supervisor: [type: @genserver_name_schema, required: true],
             storage: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],
             inspector: [type: :mod_arg, required: true],
@@ -189,6 +187,7 @@ defmodule Electric.ShapeCache do
 
     state = %{
       name: opts.name,
+      electric_instance_id: opts.electric_instance_id,
       storage: opts.storage,
       chunk_bytes_threshold: opts.chunk_bytes_threshold,
       inspector: opts.inspector,
@@ -362,7 +361,11 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_shape(state, shape_id) do
-    Electric.Shapes.ConsumerSupervisor.stop_shape_consumer(state.consumer_supervisor, shape_id)
+    Electric.Shapes.ConsumerSupervisor.stop_shape_consumer(
+      state.consumer_supervisor,
+      state.electric_instance_id,
+      shape_id
+    )
 
     state.shape_status.remove_shape(state.persistent_state, shape_id)
   end
@@ -398,6 +401,7 @@ defmodule Electric.ShapeCache do
     with {:ok, pid} <-
            Electric.Shapes.ConsumerSupervisor.start_shape_consumer(
              state.consumer_supervisor,
+             electric_instance_id: state.electric_instance_id,
              shape_id: shape_id,
              shape: shape,
              storage: state.storage,
@@ -410,7 +414,7 @@ defmodule Electric.ShapeCache do
              prepare_tables_fn: state.prepare_tables_fn,
              create_snapshot_fn: state.create_snapshot_fn
            ) do
-      consumer = Shapes.Consumer.name(shape_id)
+      consumer = Shapes.Consumer.name(state.electric_instance_id, shape_id)
 
       {:ok, snapshot_xmin, latest_offset} = Shapes.Consumer.initial_state(consumer)
 
