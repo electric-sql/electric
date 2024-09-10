@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.4.3
+
+### Patch Changes
+
+- ce0df75: Fix initial snapshot race condition
+
 ## 0.4.2
 
 ### Patch Changes
