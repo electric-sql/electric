@@ -34,7 +34,7 @@
 
 ## Confirm slot invalidation in Postgres.
 [shell pg]
-  ?invalidating slot "electric_slot" because its restart_lsn \d+/\d+ exceeds max_slot_wal_keep_size
+  ?invalidating slot "electric_slot" because its restart_lsn \d+/[a-zA-Z0-9]+ exceeds max_slot_wal_keep_size
 
 ## Observe the fatal connection error.
 [shell electric]
