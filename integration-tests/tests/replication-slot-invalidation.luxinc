@@ -15,7 +15,7 @@
       -e POSTGRES_PASSWORD=password \
       -e POSTGRES_INITDB_ARGS=${initdb_args} \
       -p 5432 \
-      postgres:14-alpine \
+      postgres:15-alpine \
         -c wal_level=logical ${config_opts}
   
     ??database system is ready to accept connections
