@@ -1,6 +1,6 @@
 [doc Verify handling of the loss and restoration of database connection]
 
-[include replication-slot-invalidation.luxinc]
+[include macros.luxinc]
 
 [global pg_container_name=postgres-disconnection__pg]
 
