@@ -134,7 +134,7 @@ paths:
               description: |-
                 Cache control header as a string of comma separated directives.
 
-                Supported directives are: `max-age`, `stale-while-revalidate`, `no-store`, `no-cache`, `must-revalidate`.
+                Supported directives are: `max-age`, `stale-while-revalidate`.
             etag:
               schema:
                 type: string
@@ -143,12 +143,6 @@ paths:
                 Etag header specifying the shape ID and offset for efficient caching.
 
                 In the format `{shape_id}:{start_offset}:{end_offset}`.
-            pragma:
-              schema:
-                type: string
-                enum:
-                  - no-cache
-              description: Pragma header for backwards compatibility with HTTP/1.0 caches (that don't have a Cache-Control HTTP/1.1 header).
             x-electric-chunk-last-offset:
               schema:
                 type: string

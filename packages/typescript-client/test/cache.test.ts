@@ -64,7 +64,7 @@ const it = testWithIssuesTable.extend<{
 })
 
 describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
-  it(`should always get non-cached response in live mode`, async ({
+  it(`should get a short max-age cache-conrol header in live mode`, async ({
     insertIssues,
     proxyCacheBaseUrl,
     issuesTableUrl,
@@ -93,14 +93,14 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     expect(liveRes.status).toBe(200)
     expect(getCacheStatus(liveRes)).toBe(CacheStatus.MISS)
 
-    // Second request still gets non-cached response
+    // Second request gets a cached response
     const cachedRes = await fetch(
       `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?${searchParams.toString()}`,
       {}
     )
     expect(cachedRes.status).toBe(200)
 
-    expect(getCacheStatus(cachedRes)).toBe(CacheStatus.MISS)
+    expect(getCacheStatus(cachedRes)).toBe(CacheStatus.HIT)
   })
 
   it(`should get cached response on second request`, async ({
