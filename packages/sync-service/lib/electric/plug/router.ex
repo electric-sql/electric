@@ -3,6 +3,8 @@ defmodule Electric.Plug.Router do
 
   plug Plug.RequestId, assign_as: :plug_request_id
   plug :server_header, Electric.version()
+  # converts HEAD requests to GET requests
+  plug Plug.Head
   plug :match
   plug Electric.Plug.LabelProcessPlug
   plug Plug.Telemetry, event_prefix: [:electric, :routing]
