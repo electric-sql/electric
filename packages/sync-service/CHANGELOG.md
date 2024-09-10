@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 0.4.2
+
+### Patch Changes
+
+- c60cadb: Handle Postgres Point In Time Recoveries (PITR) by cleaning all shapes.
+- a95a269: Support OPTIONS request required for preflight requests.
+- 6703657: feat: add cache max-age of 5 seconds to ?live requests so request collapsing works
+- 6895352: Support HTTP HEAD requests.
+
 ## 0.4.1
 
 ### Patch Changes
