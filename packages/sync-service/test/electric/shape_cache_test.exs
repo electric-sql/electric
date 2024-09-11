@@ -125,7 +125,7 @@ defmodule Electric.ShapeCacheTest do
 
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
-          prepare_tables_fn: fn nil, [{"public", "items"}] ->
+          prepare_tables_fn: fn nil, [{{"public", "items"}, nil}] ->
             send(test_pid, {:called, :prepare_tables_fn})
           end,
           create_snapshot_fn: fn parent, shape_id, _shape, _, storage ->

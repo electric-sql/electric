@@ -47,6 +47,8 @@ defmodule Electric.ConnectionManager do
       :pool_pid,
       # Backoff term used for reconnection with exponential back-off.
       :backoff,
+      # PostgreSQL server version
+      :pg_version,
       :electric_instance_id
     ]
   end
@@ -66,6 +68,14 @@ defmodule Electric.ConnectionManager do
   @type options :: [option]
 
   @name __MODULE__
+
+  @doc """
+  Returns the version of the PostgreSQL server.
+  """
+  @spec get_pg_version(GenServer.server()) :: float()
+  def get_pg_version(server) do
+    GenServer.call(server, :get_pg_version)
+  end
 
   @spec start_link(options) :: GenServer.on_start()
   def start_link(opts) do
@@ -113,6 +123,11 @@ defmodule Electric.ConnectionManager do
   end
 
   @impl true
+  def handle_call(:get_pg_version, _from, %{pg_version: pg_version} = state) do
+    {:reply, pg_version, state}
+  end
+
+  @impl true
   def handle_continue(:start_replication_client, state) do
     case start_replication_client(state) do
       {:ok, _pid} ->
@@ -144,11 +159,13 @@ defmodule Electric.ConnectionManager do
       {:ok, pid} ->
         Electric.Timeline.check(get_pg_timeline(pid), state.timeline_opts)
 
+        pg_version = query_pg_major_version(pid)
+
         # Now we have everything ready to start accepting and processing logical messages from
         # Postgres.
         Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
 
-        state = %{state | pool_pid: pid}
+        state = %{state | pool_pid: pid, pg_version: pg_version}
         {:noreply, state}
 
       {:error, reason} ->
@@ -378,5 +395,17 @@ defmodule Electric.ConnectionManager do
       {:ok, %Postgrex.Result{rows: [[timeline_id]]}} -> timeline_id
       {:error, _reason} -> nil
     end
+  end
+
+  def query_pg_major_version(conn) do
+    [[setting]] =
+      Postgrex.query!(
+        conn,
+        "SELECT floor(setting::numeric)::integer FROM pg_settings WHERE name = 'server_version'",
+        []
+      )
+      |> Map.fetch!(:rows)
+
+    setting
   end
 end
