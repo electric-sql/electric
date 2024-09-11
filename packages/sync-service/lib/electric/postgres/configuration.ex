@@ -7,7 +7,8 @@ defmodule Electric.Postgres.Configuration do
   alias Electric.Shapes.Shape
 
   @type filter() :: String.t() | nil
-  @type maybe_filter() :: filter() | :filter_not_found
+  @type maybe_filter() :: filter() | :relation_not_found
+  @type filters() :: %{Electric.relation() => filter()}
 
   @doc """
   Ensure that all tables are configured for replication.
@@ -32,13 +33,20 @@ defmodule Electric.Postgres.Configuration do
           table = Utils.relation_to_sql(relation),
           do: Postgrex.query!(conn, "ALTER TABLE #{table} REPLICA IDENTITY FULL", [])
 
-      for {relation, rel_where_clause} <- relations, table = Utils.relation_to_sql(relation) do
+      for {relation, rel_where_clause} <- relations do
         Postgrex.query!(conn, "SAVEPOINT before_publication", [])
 
-        filter = get_publication_filter(conn, relation, publication_name)
+        filters = get_publication_filters(conn, publication_name)
+
+        # Get the existing filter for the table
+        # and extend it with the where clause for the table
+        # and update the table in the map with the new filter
+        filter = Map.get(filters, relation, :relation_not_found)
+        rel_filter = extend_where_clause(filter, rel_where_clause)
+        filters = Map.put(filters, relation, rel_filter)
 
         alter_publication_sql =
-          make_alter_publication_query(table, publication_name, filter, rel_where_clause)
+          make_alter_publication_query(publication_name, filters)
 
         case Postgrex.query(conn, alter_publication_sql, []) do
           {:ok, _} ->
@@ -58,41 +66,54 @@ defmodule Electric.Postgres.Configuration do
     end)
   end
 
-  # Returns the filter of the given publication.
-  # If the publication has no filter it returns `nil`.
-  # If the publication does not exist it returns `:publication_not_found`.
-  @spec get_publication_filter(Postgrex.conn(), Electric.relation(), String.t()) :: maybe_filter()
-  defp get_publication_filter(conn, {schema, tbl}, publication_name) do
-    case Postgrex.query!(
-           conn,
-           "SELECT rowfilter FROM pg_publication_tables WHERE pubname = $1 AND schemaname = $2 AND tablename = $3",
-           [publication_name, schema, tbl]
-         ).rows do
-      [[rowfilter]] -> rowfilter
-      _ -> :filter_not_found
-    end
+  # Returns the filters grouped by table for the given publication.
+  @spec get_publication_filters(Postgrex.conn(), String.t()) :: filters()
+  defp get_publication_filters(conn, publication) do
+    Postgrex.query!(
+      conn,
+      "SELECT schemaname, tablename, rowfilter FROM pg_publication_tables WHERE pubname = $1",
+      [publication]
+    )
+    |> Map.fetch!(:rows)
+    |> Enum.map(&{Enum.take(&1, 2) |> List.to_tuple(), Enum.at(&1, 2)})
+    |> Map.new()
   end
 
-  # Creates a SQL query that alters the given publication
-  # to add or set a table based on the publication's filters for that table
-  # and the shape's where clause for that table.
-  @spec make_alter_publication_query(String.t(), String.t(), maybe_filter(), filter()) ::
-          String.t()
-  defp make_alter_publication_query(table, publication_name, :filter_not_found, nil) do
-    "ALTER PUBLICATION #{publication_name} ADD TABLE #{table}"
+  # Joins the existing filter for the table with the where clause for the table.
+  # If one of them is `nil` (i.e. no filter) then the resulting filter is `nil`.
+  @spec extend_where_clause(maybe_filter(), filter()) :: filter()
+  defp extend_where_clause(:relation_not_found, where_clause) do
+    where_clause
   end
 
-  defp make_alter_publication_query(table, publication_name, :filter_not_found, where_clause) do
-    "ALTER PUBLICATION #{publication_name} ADD TABLE #{table} WHERE #{where_clause}"
+  defp extend_where_clause(filter, where_clause) when is_nil(filter) or is_nil(where_clause) do
+    nil
   end
 
-  defp make_alter_publication_query(table, publication_name, filter, where_clause)
-       when is_nil(filter) or is_nil(where_clause) do
-    # if one of the filters is nil, then we should not use a filter for the table
-    "ALTER PUBLICATION #{publication_name} SET TABLE #{table}"
+  defp extend_where_clause(filter, where_clause) do
+    "(#{filter} OR #{where_clause})"
   end
 
-  defp make_alter_publication_query(table, publication_name, filter, where_clause) do
-    "ALTER PUBLICATION #{publication_name} SET TABLE #{table} WHERE (#{filter} OR #{where_clause})"
+  # Makes an SQL query that alters the given publication whith the given tables and filters.
+  @spec make_alter_publication_query(String.t(), filters()) :: String.t()
+  defp make_alter_publication_query(publication_name, filters) do
+    base_sql = "ALTER PUBLICATION #{publication_name} SET TABLE "
+
+    tables =
+      filters
+      |> Enum.map(&make_table_clause/1)
+      |> Enum.join(", ")
+
+    base_sql <> tables
+  end
+
+  @spec make_table_clause(filter()) :: String.t()
+  defp make_table_clause({{schema, tbl}, nil}) do
+    Utils.relation_to_sql({schema, tbl})
+  end
+
+  defp make_table_clause({{schema, tbl}, where}) do
+    table = Utils.relation_to_sql({schema, tbl})
+    table <> " WHERE " <> where
   end
 end

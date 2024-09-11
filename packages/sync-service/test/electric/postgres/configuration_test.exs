@@ -74,6 +74,45 @@ defmodule Electric.Postgres.ConfigurationTest do
              ]
     end
 
+    test "keeps all tables when updating one of them", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      assert get_table_identity(conn, {"public", "items"}) == "d"
+      assert get_table_identity(conn, {"public", "other_table"}) == "d"
+      assert list_tables_in_publication(conn, publication) == []
+
+      Configuration.configure_tables_for_replication!(
+        conn,
+        [
+          {{"public", "items"}, "(value ILIKE 'yes%')"},
+          {{"public", "other_table"}, "(value ILIKE 'no%')"}
+        ],
+        publication
+      )
+
+      assert get_table_identity(conn, {"public", "items"}) == "f"
+      assert get_table_identity(conn, {"public", "other_table"}) == "f"
+
+      assert list_tables_in_publication(conn, publication) == [
+               {"public", "items", "(value ~~* 'yes%'::text)"},
+               {"public", "other_table", "(value ~~* 'no%'::text)"}
+             ]
+
+      Configuration.configure_tables_for_replication!(
+        conn,
+        [
+          {{"public", "other_table"}, "(value ILIKE 'yes%')"}
+        ],
+        publication
+      )
+
+      assert list_tables_in_publication(conn, publication) == [
+               {"public", "items", "(value ~~* 'yes%'::text)"},
+               {"public", "other_table", "((value ~~* 'no%'::text) OR (value ~~* 'yes%'::text))"}
+             ]
+    end
+
     test "doesn't fail when one of the tables is already configured",
          %{pool: conn, publication_name: publication} do
       Configuration.configure_tables_for_replication!(
@@ -113,7 +152,7 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       assert list_tables_in_publication(conn, publication) == [
                {"public", "items", nil},
-               {"public", "other_table", "(value ~~* 'no%'::text)"}
+               {"public", "other_table", nil}
              ]
     end
 
