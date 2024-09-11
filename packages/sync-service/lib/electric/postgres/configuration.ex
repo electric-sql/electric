@@ -24,14 +24,53 @@ defmodule Electric.Postgres.Configuration do
   @spec configure_tables_for_replication!(
           Postgrex.conn(),
           [Shape.table_with_where_clause()],
-          String.t()
+          (-> String.t()),
+          float()
         ) ::
           {:ok, [:ok]}
-  def configure_tables_for_replication!(pool, relations, publication_name) do
+  def configure_tables_for_replication!(pool, relations, get_pg_version, publication_name) do
+    configure_tables_for_replication_internal!(
+      pool,
+      relations,
+      get_pg_version.(),
+      publication_name
+    )
+  end
+
+  defp configure_tables_for_replication_internal!(pool, relations, pg_version, publication_name)
+       when pg_version <= 14 do
     Postgrex.transaction(pool, fn conn ->
-      for {relation, _} <- relations,
-          table = Utils.relation_to_sql(relation),
-          do: Postgrex.query!(conn, "ALTER TABLE #{table} REPLICA IDENTITY FULL", [])
+      set_replica_identity!(conn, relations)
+
+      for {relation, _} <- relations, table = Utils.relation_to_sql(relation) do
+        Postgrex.query!(conn, "SAVEPOINT before_publication", [])
+
+        # PG 14 and below do not support filters on tables of publications
+        case Postgrex.query(
+               conn,
+               "ALTER PUBLICATION #{publication_name} ADD TABLE #{table}",
+               []
+             ) do
+          {:ok, _} ->
+            Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
+            :ok
+
+          # Duplicate object error is raised if we're trying to add a table to the publication when it's already there.
+          {:error, %{postgres: %{code: :duplicate_object}}} ->
+            Postgrex.query!(conn, "ROLLBACK TO SAVEPOINT before_publication", [])
+            Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
+            :ok
+
+          {:error, reason} ->
+            raise reason
+        end
+      end
+    end)
+  end
+
+  defp configure_tables_for_replication_internal!(pool, relations, _pg_version, publication_name) do
+    Postgrex.transaction(pool, fn conn ->
+      set_replica_identity!(conn, relations)
 
       for {relation, rel_where_clause} <- relations do
         Postgrex.query!(conn, "SAVEPOINT before_publication", [])
@@ -53,17 +92,18 @@ defmodule Electric.Postgres.Configuration do
             Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
             :ok
 
-          # Duplicate object error is raised if we're trying to add a table to the publication when it's already there.
-          {:error, %{postgres: %{code: :duplicate_object}}} ->
-            Postgrex.query!(conn, "ROLLBACK TO SAVEPOINT before_publication", [])
-            Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
-            :ok
-
           {:error, reason} ->
             raise reason
         end
       end
     end)
+  end
+
+  defp set_replica_identity!(conn, relations) do
+    for {relation, _} <- relations,
+        table = Utils.relation_to_sql(relation) do
+      Postgrex.query!(conn, "ALTER TABLE #{table} REPLICA IDENTITY FULL", [])
+    end
   end
 
   # Returns the filters grouped by table for the given publication.

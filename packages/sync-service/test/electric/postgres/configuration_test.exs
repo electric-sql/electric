@@ -5,6 +5,7 @@ defmodule Electric.Postgres.ConfigurationTest do
 
   setup {Support.DbSetup, :with_unique_db}
   setup {Support.DbSetup, :with_publication}
+  setup {Support.DbSetup, :with_pg_version}
 
   setup %{db_conn: conn} do
     Postgrex.query!(
@@ -34,13 +35,14 @@ defmodule Electric.Postgres.ConfigurationTest do
 
   describe "configure_tables_for_replication!/3" do
     test "sets REPLICA IDENTITY on the table and adds it to the publication",
-         %{pool: conn, publication_name: publication} do
+         %{pool: conn, publication_name: publication, get_pg_version: get_pg_version} do
       assert get_table_identity(conn, {"public", "items"}) == "d"
       assert list_tables_in_publication(conn, publication) == []
 
       Configuration.configure_tables_for_replication!(
         conn,
         [{{"public", "items"}, "(value ILIKE 'yes%')"}],
+        get_pg_version,
         publication
       )
 
@@ -51,7 +53,11 @@ defmodule Electric.Postgres.ConfigurationTest do
              ]
     end
 
-    test "works with multiple tables", %{pool: conn, publication_name: publication} do
+    test "works with multiple tables", %{
+      pool: conn,
+      publication_name: publication,
+      get_pg_version: get_pg_version
+    } do
       assert get_table_identity(conn, {"public", "items"}) == "d"
       assert get_table_identity(conn, {"public", "other_table"}) == "d"
       assert list_tables_in_publication(conn, publication) == []
@@ -62,6 +68,7 @@ defmodule Electric.Postgres.ConfigurationTest do
           {{"public", "items"}, "(value ILIKE 'yes%')"},
           {{"public", "other_table"}, "(value ILIKE 'no%')"}
         ],
+        get_pg_version,
         publication
       )
 
@@ -76,7 +83,8 @@ defmodule Electric.Postgres.ConfigurationTest do
 
     test "keeps all tables when updating one of them", %{
       pool: conn,
-      publication_name: publication
+      publication_name: publication,
+      get_pg_version: get_pg_version
     } do
       assert get_table_identity(conn, {"public", "items"}) == "d"
       assert get_table_identity(conn, {"public", "other_table"}) == "d"
@@ -88,6 +96,7 @@ defmodule Electric.Postgres.ConfigurationTest do
           {{"public", "items"}, "(value ILIKE 'yes%')"},
           {{"public", "other_table"}, "(value ILIKE 'no%')"}
         ],
+        get_pg_version,
         publication
       )
 
@@ -104,6 +113,7 @@ defmodule Electric.Postgres.ConfigurationTest do
         [
           {{"public", "other_table"}, "(value ILIKE 'yes%')"}
         ],
+        get_pg_version,
         publication
       )
 
@@ -114,10 +124,11 @@ defmodule Electric.Postgres.ConfigurationTest do
     end
 
     test "doesn't fail when one of the tables is already configured",
-         %{pool: conn, publication_name: publication} do
+         %{pool: conn, publication_name: publication, get_pg_version: get_pg_version} do
       Configuration.configure_tables_for_replication!(
         conn,
         [{{"public", "items"}, "(value ILIKE 'yes%')"}],
+        get_pg_version,
         publication
       )
 
@@ -131,6 +142,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       Configuration.configure_tables_for_replication!(
         conn,
         [{{"public", "items"}, "(value ILIKE 'no%')"}, {{"public", "other_table"}, nil}],
+        get_pg_version,
         publication
       )
 
@@ -147,6 +159,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       Configuration.configure_tables_for_replication!(
         conn,
         [{{"public", "items"}, nil}, {{"public", "other_table"}, "(value ILIKE 'no%')"}],
+        get_pg_version,
         publication
       )
 
@@ -156,11 +169,12 @@ defmodule Electric.Postgres.ConfigurationTest do
              ]
     end
 
-    test "fails when a publication doesn't exist", %{pool: conn} do
+    test "fails when a publication doesn't exist", %{pool: conn, get_pg_version: get_pg_version} do
       assert_raise Postgrex.Error, ~r/undefined_object/, fn ->
         Configuration.configure_tables_for_replication!(
           conn,
           [{{"public", "items"}, nil}],
+          get_pg_version,
           "nonexistent"
         )
       end

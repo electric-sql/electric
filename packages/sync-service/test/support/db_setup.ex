@@ -48,6 +48,11 @@ defmodule Support.DbSetup do
     {:ok, %{publication_name: "electric_test_publication"}}
   end
 
+  def with_pg_version(ctx) do
+    pg_version = Electric.ConnectionManager.query_pg_version(ctx.db_conn)
+    {:ok, %{get_pg_version: fn -> pg_version end}}
+  end
+
   def with_shared_db(_ctx) do
     config = Application.fetch_env!(:electric, :connection_opts)
     {:ok, pool} = Postgrex.start_link(config ++ @postgrex_start_opts)

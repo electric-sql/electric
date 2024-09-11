@@ -667,6 +667,8 @@ defmodule Electric.Shapes.ConsumerTest do
         }
       ]
 
+      get_pg_version = fn -> 14 end
+
       shape_cache_config =
         [
           name: shape_cache_name,
@@ -683,7 +685,7 @@ defmodule Electric.Shapes.ConsumerTest do
           prepare_tables_fn: {
             Electric.Postgres.Configuration,
             :configure_tables_for_replication!,
-            [ctx.publication_name]
+            [get_pg_version, ctx.publication_name]
           },
           create_snapshot_fn: fn parent, shape_id, _shape, _, _storage ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, 0})
