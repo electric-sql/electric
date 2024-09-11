@@ -48,9 +48,15 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       assert get_table_identity(conn, {"public", "items"}) == "f"
 
-      assert list_tables_in_publication(conn, publication) == [
-               {"public", "items", "(value ~~* 'yes%'::text)"}
-             ]
+      pg_version = get_pg_version.()
+
+      assert list_tables_in_publication(conn, publication) ==
+               expected_filters(
+                 [
+                   {"public", "items", "(value ~~* 'yes%'::text)"}
+                 ],
+                 pg_version
+               )
     end
 
     test "works with multiple tables", %{
@@ -75,10 +81,16 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert get_table_identity(conn, {"public", "items"}) == "f"
       assert get_table_identity(conn, {"public", "other_table"}) == "f"
 
-      assert list_tables_in_publication(conn, publication) == [
-               {"public", "items", "(value ~~* 'yes%'::text)"},
-               {"public", "other_table", "(value ~~* 'no%'::text)"}
-             ]
+      pg_version = get_pg_version.()
+
+      assert list_tables_in_publication(conn, publication) ==
+               expected_filters(
+                 [
+                   {"public", "items", "(value ~~* 'yes%'::text)"},
+                   {"public", "other_table", "(value ~~* 'no%'::text)"}
+                 ],
+                 pg_version
+               )
     end
 
     test "keeps all tables when updating one of them", %{
@@ -103,10 +115,16 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert get_table_identity(conn, {"public", "items"}) == "f"
       assert get_table_identity(conn, {"public", "other_table"}) == "f"
 
-      assert list_tables_in_publication(conn, publication) == [
-               {"public", "items", "(value ~~* 'yes%'::text)"},
-               {"public", "other_table", "(value ~~* 'no%'::text)"}
-             ]
+      pg_version = get_pg_version.()
+
+      assert list_tables_in_publication(conn, publication) ==
+               expected_filters(
+                 [
+                   {"public", "items", "(value ~~* 'yes%'::text)"},
+                   {"public", "other_table", "(value ~~* 'no%'::text)"}
+                 ],
+                 pg_version
+               )
 
       Configuration.configure_tables_for_replication!(
         conn,
@@ -117,10 +135,15 @@ defmodule Electric.Postgres.ConfigurationTest do
         publication
       )
 
-      assert list_tables_in_publication(conn, publication) == [
-               {"public", "items", "(value ~~* 'yes%'::text)"},
-               {"public", "other_table", "((value ~~* 'no%'::text) OR (value ~~* 'yes%'::text))"}
-             ]
+      assert list_tables_in_publication(conn, publication) ==
+               expected_filters(
+                 [
+                   {"public", "items", "(value ~~* 'yes%'::text)"},
+                   {"public", "other_table",
+                    "((value ~~* 'no%'::text) OR (value ~~* 'yes%'::text))"}
+                 ],
+                 pg_version
+               )
     end
 
     test "doesn't fail when one of the tables is already configured",
@@ -134,9 +157,15 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       assert get_table_identity(conn, {"public", "other_table"}) == "d"
 
-      assert list_tables_in_publication(conn, publication) == [
-               {"public", "items", "(value ~~* 'yes%'::text)"}
-             ]
+      pg_version = get_pg_version.()
+
+      assert list_tables_in_publication(conn, publication) ==
+               expected_filters(
+                 [
+                   {"public", "items", "(value ~~* 'yes%'::text)"}
+                 ],
+                 pg_version
+               )
 
       # Configure `items` table again but with a different where clause
       Configuration.configure_tables_for_replication!(
@@ -149,10 +178,14 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert get_table_identity(conn, {"public", "items"}) == "f"
       assert get_table_identity(conn, {"public", "other_table"}) == "f"
 
-      assert list_tables_in_publication(conn, publication) == [
-               {"public", "items", "((value ~~* 'yes%'::text) OR (value ~~* 'no%'::text))"},
-               {"public", "other_table", nil}
-             ]
+      assert list_tables_in_publication(conn, publication) ==
+               expected_filters(
+                 [
+                   {"public", "items", "((value ~~* 'yes%'::text) OR (value ~~* 'no%'::text))"},
+                   {"public", "other_table", nil}
+                 ],
+                 pg_version
+               )
 
       # Now configure it again but for a shape that has no where clause
       # the resulting publication should no longer have a filter for that table
@@ -163,10 +196,14 @@ defmodule Electric.Postgres.ConfigurationTest do
         publication
       )
 
-      assert list_tables_in_publication(conn, publication) == [
-               {"public", "items", nil},
-               {"public", "other_table", nil}
-             ]
+      assert list_tables_in_publication(conn, publication) ==
+               expected_filters(
+                 [
+                   {"public", "items", nil},
+                   {"public", "other_table", nil}
+                 ],
+                 pg_version
+               )
     end
 
     test "fails when a publication doesn't exist", %{pool: conn, get_pg_version: get_pg_version} do
@@ -198,6 +235,21 @@ defmodule Electric.Postgres.ConfigurationTest do
   end
 
   defp list_tables_in_publication(conn, publication) do
+    pg_version = Electric.ConnectionManager.query_pg_version(conn)
+    list_tables_in_pub(conn, publication, pg_version)
+  end
+
+  defp list_tables_in_pub(conn, publication, pg_version) when pg_version <= 14 do
+    Postgrex.query!(
+      conn,
+      "SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = $1 ORDER BY tablename",
+      [publication]
+    )
+    |> Map.fetch!(:rows)
+    |> Enum.map(&List.to_tuple/1)
+  end
+
+  defp list_tables_in_pub(conn, publication, _pg_version) do
     Postgrex.query!(
       conn,
       "SELECT schemaname, tablename, rowfilter FROM pg_publication_tables WHERE pubname = $1 ORDER BY tablename",
@@ -206,4 +258,10 @@ defmodule Electric.Postgres.ConfigurationTest do
     |> Map.fetch!(:rows)
     |> Enum.map(&List.to_tuple/1)
   end
+
+  defp expected_filters(filters, pg_version) when pg_version <= 14 do
+    Enum.map(filters, fn {schema, table, _filter} -> {schema, table} end)
+  end
+
+  defp expected_filters(filters, _pg_version), do: filters
 end
