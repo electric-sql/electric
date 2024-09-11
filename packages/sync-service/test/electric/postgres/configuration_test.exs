@@ -235,7 +235,7 @@ defmodule Electric.Postgres.ConfigurationTest do
   end
 
   defp list_tables_in_publication(conn, publication) do
-    pg_version = Electric.ConnectionManager.query_pg_version(conn)
+    pg_version = Electric.ConnectionManager.query_pg_major_version(conn)
     list_tables_in_pub(conn, publication, pg_version)
   end
 
