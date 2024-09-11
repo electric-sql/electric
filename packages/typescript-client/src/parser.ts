@@ -93,7 +93,7 @@ export class MessageParser<T extends Row> {
       // typeof value === `object` is needed because
       // there could be a column named `value`
       // and the value associated to that column will be a string
-      if (key === `value` && typeof value === `object` && value != null) {
+      if (key === `value` && typeof value === `object` && value !== null) {
         // Parse the row values
         const row = value as Record<string, Value>
         Object.keys(row).forEach((key) => {
