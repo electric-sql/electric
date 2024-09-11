@@ -214,11 +214,11 @@ describe(`Message parser`, () => {
 
   it(`should parse null value on column named value`, () => {
     const schema = {
-      a: { type: `text`, dims: 1 },
+      value: { type: `text`, dims: 1 },
     }
 
-    expect(parser.parse(`[ { "value": null } ]`, schema)).toEqual([
-      { value: null },
+    expect(parser.parse(`[ { "value": {"value": null} } ]`, schema)).toEqual([
+      { value: { value: null } },
     ])
   })
 })
