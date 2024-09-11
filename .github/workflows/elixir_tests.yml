@@ -10,7 +10,63 @@ permissions:
 
 jobs:
   build:
-    name: Build and test
+    name: Build and test with PostgreSQL 14
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/sync-service
+    env:
+      MIX_ENV: test
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 54321:5432
+    steps:
+      - uses: actions/checkout@v4
+      - name: 'Set PG settings'
+        run: |
+          docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
+          docker restart ${{ job.services.postgres.id }}
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: '.tool-versions'
+      - name: Restore dependencies cache
+        uses: actions/cache@v3
+        with:
+          path: packages/sync-service/deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('packages/sync-service/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+      - name: Restore compiled code
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            packages/sync-service/_build/*/lib
+            !packages/sync-service/_build/*/lib/electric
+          key: ${{ runner.os }}-build-test-${{ hashFiles('packages/sync-service/mix.lock') }}
+      - name: Install dependencies
+        run: mix deps.get && mix deps.compile
+      - name: Save compiled code
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            packages/sync-service/_build/*/lib
+            !packages/sync-service/_build/*/lib/electric
+          key: ${{ runner.os }}-build-test-${{ hashFiles('packages/sync-service/mix.lock') }}
+      - name: Compiles without warnings
+        run: mix compile --force --all-warnings --warnings-as-errors
+      - name: Run tests
+        run: mix test
+  test_pg_15:
+    name: Build and test with PostgreSQL 15
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -64,7 +120,7 @@ jobs:
       - name: Compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
       - name: Run tests
-        run: mix test
+        run: mix test test/electric/postgres/configuration_test.exs
   formatting:
     name: Check formatting
     runs-on: ubuntu-latest
