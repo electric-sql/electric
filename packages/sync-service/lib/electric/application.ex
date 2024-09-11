@@ -28,8 +28,13 @@ defmodule Electric.Application do
     with {:ok, storage_opts} <- storage_module.shared_opts(storage_opts) do
       storage = {storage_module, storage_opts}
 
+      get_pg_version = fn ->
+        Electric.ConnectionManager.get_pg_version(Electric.ConnectionManager)
+      end
+
       prepare_tables_fn =
-        {Electric.Postgres.Configuration, :configure_tables_for_replication!, [publication_name]}
+        {Electric.Postgres.Configuration, :configure_tables_for_replication!,
+         [get_pg_version, publication_name]}
 
       inspector =
         {Electric.Postgres.Inspector.EtsInspector,
