@@ -42,7 +42,7 @@ Shapes are defined by:
 - a `where` clause, used to filter the rows in that table, such as `status='active'`
 
 > [!IMPORTANT] Limitations
-> Shapes are currently single table, whole row only. You can sync all the rows in a table, or a subset of the rows in that table. You can't yet [select columns](#whole-rows) or sync an [include tree](#single-table).
+> Shapes are currently single table, whole row only. You can sync all the rows in a table, or a subset of the rows in that table. You can't yet [select columns](#whole-rows) or sync an [include tree](#single-table) without filtering or joining in the client.
 
 ### `root_table`
 
@@ -134,11 +134,20 @@ See the [Quickstart](/docs/quickstart) and [HTTP API](/docs/api/http) docs for m
 
 Shapes are currently single table only.
 
-In the old version of Electric, Shapes had an include tree that allowed you to sync nested relations. The new Electric has not yet implemented support for include trees.
+In the [old version of Electric](https://legacy.electric-sql.com/docs/usage/data-access/shapes), Shapes had an include tree that allowed you to sync nested relations. The new Electric has not yet implemented support for include trees.
 
 You can upvote and discuss adding support for include trees here:
 
 - [Shape support for include trees #1608](https://github.com/electric-sql/electric/discussions/1608)
+
+> [!TIP] Include tree workarounds
+> There are some practical workarounds you can already use to sync related data, based on subscribing to multiple shapes and joining in the client.
+>
+> For a one-level deep include tree, such as "sync this project with its issues", you can sync one shape for projects `where="id=..."` and another for issues `where="project_id=..."`.
+>
+> For multi-level include trees, such as "sync this project with its issues and their comments", you can denormalise the `project_id` onto the lower tables so that you can also sync comments `where="project_id=1234"`.
+>
+> Where necessary, you can use triggers to update these denormalised columns.
 
 ### Whole rows
 
