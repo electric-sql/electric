@@ -46,9 +46,6 @@ paths:
             Can be just a tablename, or can be prefixed by the database schema
             using a `.` delimiter, such as `foo.issues`. If you don't provide
             a schema prefix, then the table is assumed to be in the `public.` schema.
-
-            Note that tablenames with special characters may not be parsed correctly
-            pending https://github.com/electric-sql/electric/issues/185
         # Query parameters
         - name: offset
           in: query
