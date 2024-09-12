@@ -160,8 +160,16 @@ describe(`Message parser`, () => {
   const parser = new MessageParser()
 
   it(`should parse null values`, () => {
-    const messages = `[ { "value": { "a": null } } ]`
-    const expectedParsedMessages = [{ value: { a: null } }]
+    const messages = `[ { "value": { "a": null } }, { "value": { "value": null } } ]`
+    const expectedParsedMessages = [
+      { value: { a: null } },
+      { value: { value: null } },
+    ]
+
+    const schema = (tpe: string, dims: number | undefined) => ({
+      a: { type: tpe, dims },
+      value: { type: tpe, dims },
+    })
 
     const sampleDims = [undefined, 1, 2]
 
@@ -171,32 +179,38 @@ describe(`Message parser`, () => {
         parser.parse(messages, { a: { type: `int2`, dims, not_null: true } })
       ).toThrowError(`Column a is not nullable`)
 
+      expect(() =>
+        parser.parse(messages, {
+          value: { type: `int2`, dims, not_null: true },
+        })
+      ).toThrowError(`Column value is not nullable`)
+
       // Otherwise, it should parse as null
-      expect(parser.parse(messages, { a: { type: `int2`, dims } })).toEqual(
+      expect(parser.parse(messages, schema(`int2`, dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, { a: { type: `int4`, dims } })).toEqual(
+      expect(parser.parse(messages, schema(`int4`, dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, { a: { type: `int8`, dims } })).toEqual(
+      expect(parser.parse(messages, schema(`int8`, dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, { a: { type: `bool`, dims } })).toEqual(
+      expect(parser.parse(messages, schema(`bool`, dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, { a: { type: `float4`, dims } })).toEqual(
+      expect(parser.parse(messages, schema(`float4`, dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, { a: { type: `float8`, dims } })).toEqual(
+      expect(parser.parse(messages, schema(`float8`, dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, { a: { type: `json`, dims } })).toEqual(
+      expect(parser.parse(messages, schema(`json`, dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, { a: { type: `jsonb`, dims } })).toEqual(
+      expect(parser.parse(messages, schema(`jsonb`, dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, { a: { type: `text`, dims } })).toEqual(
+      expect(parser.parse(messages, schema(`text`, dims))).toEqual(
         expectedParsedMessages
       )
     }
@@ -210,15 +224,5 @@ describe(`Message parser`, () => {
     expect(
       parser.parse(`[ { "value": { "a": "{1,2,NULL,4,5}" } } ]`, schema)
     ).toEqual([{ value: { a: [1, 2, null, 4, 5] } }])
-  })
-
-  it(`should parse null value on column named value`, () => {
-    const schema = {
-      value: { type: `text`, dims: 1 },
-    }
-
-    expect(parser.parse(`[ { "value": {"value": null} } ]`, schema)).toEqual([
-      { value: { value: null } },
-    ])
   })
 })
