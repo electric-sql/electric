@@ -10,7 +10,7 @@ How to authenticate users and authorize data access.
 
 Electric [syncs data over HTTP](/docs/api/http). This means that (unlike other sync engines where you have to use their specific APIs for auth) with Electric you can authenticate and authorize data access the same way you do for normal web resources like API endpoints.
 
-### Recommended pattern
+## Recommended pattern
 
 The main pattern we recommend is to authorise at the [Shape](/docs/guides/shapes) level.
 
@@ -144,3 +144,12 @@ Note that with this pattern, if you need it to, the auth endpoint that proxies t
     />
   </a>
 </figure>
+
+## Alternative auth modes
+
+We have a GitHub Discussions label for [auth feature requests](https://github.com/electric-sql/electric/discussions?discussions_q=label%3Aauth). This includes:
+
+- [RLS support](https://github.com/electric-sql/electric/discussions/1587)
+- [Token-based auth](https://github.com/electric-sql/electric/discussions/1674)
+
+If you would like or need alternative strategies for auth, please upvote and/or contribute to the discussions there.
