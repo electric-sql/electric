@@ -30,8 +30,8 @@ So when you make a request to sync a shape, route it via your API, validate the 
 For example, you could implement with the following steps:
 
 1. add an `Authorization` header to your [`GET /shape` request](/docs/api/http#syncing-shapes)
-2. uses the header to check that the client exists and has access to the requested data.
-3. if not, returns a `401` or `403` status to tell the client it doesn't have access
+2. use the header to check that the client exists and has access to the requested data
+3. if not, return a `401` or `403` status to tell the client it doesn't have access
 4. if the client does have access, proxy the request to Electric and stream the response back to the client
 
 ### Using the Typescript client
@@ -82,7 +82,7 @@ export async function GET(
   const url = new URL(request.url)
   const { table } = params
 
-  // Constuct the upstream URL
+  // Construct the upstream URL
   const originUrl = new URL(`http://localhost:3000/v1/shape/${table}`)
 
   // Copy over the shape_id & offset query params that the
@@ -93,7 +93,10 @@ export async function GET(
     }
   })
 
-  // authentication and authorization
+  //
+  // Authentication and authorization
+  //
+
   const user = await loadUser(request.headers.get(`authorization`))
 
   // If the user isn't set, return 401
