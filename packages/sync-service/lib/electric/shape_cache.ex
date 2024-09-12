@@ -13,6 +13,8 @@ defmodule Electric.ShapeCacheBehaviour do
   @doc "Update a shape's status with a new log offset"
   @callback update_shape_latest_offset(shape_id(), LogOffset.t(), keyword()) :: :ok
 
+  @callback get_shape(shape_def(), opts :: keyword()) ::
+              {shape_id(), current_snapshot_offset :: LogOffset.t()}
   @callback get_or_create_shape_id(shape_def(), opts :: keyword()) ::
               {shape_id(), current_snapshot_offset :: LogOffset.t()}
 
@@ -86,12 +88,16 @@ defmodule Electric.ShapeCache do
   end
 
   @impl Electric.ShapeCacheBehaviour
-  def get_or_create_shape_id(shape, opts \\ []) do
+  def get_shape(shape, opts \\ []) do
     table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
+    shape_status.get_existing_shape(table, shape)
+  end
 
+  @impl Electric.ShapeCacheBehaviour
+  def get_or_create_shape_id(shape, opts \\ []) do
     # Get or create the shape ID and fire a snapshot if necessary
-    if shape_state = shape_status.get_existing_shape(table, shape) do
+    if shape_state = get_shape(shape, opts) do
       shape_state
     else
       server = Access.get(opts, :server, __MODULE__)

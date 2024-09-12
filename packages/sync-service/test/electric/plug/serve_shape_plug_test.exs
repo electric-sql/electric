@@ -215,7 +215,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "returns log when offset is >= 0" do
       Mock.ShapeCache
-      |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
+      |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
       end)
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
@@ -273,7 +273,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "returns 304 Not Modified when If-None-Match matches ETag" do
       Mock.ShapeCache
-      |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
+      |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
       end)
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
@@ -302,7 +302,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "handles live updates" do
       Mock.ShapeCache
-      |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
+      |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
       end)
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
@@ -363,7 +363,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "handles shape rotation" do
       Mock.ShapeCache
-      |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
+      |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
       end)
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
@@ -410,7 +410,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "sends an up-to-date response after a timeout if no changes are observed" do
       Mock.ShapeCache
-      |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
+      |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
       end)
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
@@ -444,7 +444,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "send 409 when shape ID requested does not exist" do
       Mock.ShapeCache
-      |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
+      |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
       end)
       |> stub(:has_shape?, fn "foo", _opts -> false end)
