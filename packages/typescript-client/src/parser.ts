@@ -90,10 +90,11 @@ export class MessageParser<T extends Row> {
 
   parse(messages: string, schema: Schema): Message<T>[] {
     return JSON.parse(messages, (key, value) => {
-      // typeof value === `object` is needed because
-      // there could be a column named `value`
-      // and the value associated to that column will be a string
-      if (key === `value` && typeof value === `object`) {
+      // typeof value === `object` && value !== null
+      // is needed because there could be a column named `value`
+      // and the value associated to that column will be a string or null.
+      // But `typeof null === 'object'` so we need to make an explicit check.
+      if (key === `value` && typeof value === `object` && value !== null) {
         // Parse the row values
         const row = value as Record<string, Value>
         Object.keys(row).forEach((key) => {
