@@ -442,7 +442,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
     end
 
-    test "send 409 when shape ID requested does not exist" do
+    test "sends 409 when requested shape ID does not exist" do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
@@ -465,6 +465,46 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
       assert get_resp_header(conn, "x-electric-shape-id") == [@test_shape_id]
       assert get_resp_header(conn, "location") == ["/?shape_id=#{@test_shape_id}&offset=-1"]
+    end
+
+    test "sends 400 when no shape exists for the given shape definition" do
+      Mock.ShapeCache
+      |> expect(:get_shape, fn @test_shape, _opts -> nil end)
+      |> stub(:has_shape?, fn @test_shape_id, _opts -> false end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_id, opts -> {@test_shape_id, opts} end)
+
+      conn =
+        conn(
+          :get,
+          %{"root_table" => "public.users"},
+          "?offset=#{"50_12"}&shape_id=#{@test_shape_id}"
+        )
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+      assert conn.resp_body == "The provided shape ID does not match the shape definition."
+    end
+
+    test "sends 400 when no shape exists for the given shape definition even if shape ID exists" do
+      Mock.ShapeCache
+      |> expect(:get_shape, fn @test_shape, _opts -> nil end)
+      |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_id, opts -> {@test_shape_id, opts} end)
+
+      conn =
+        conn(
+          :get,
+          %{"root_table" => "public.users"},
+          "?offset=#{"50_12"}&shape_id=#{@test_shape_id}"
+        )
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+      assert conn.resp_body == "The provided shape ID does not match the shape definition."
     end
   end
 

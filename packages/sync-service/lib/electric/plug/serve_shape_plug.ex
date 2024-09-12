@@ -12,7 +12,6 @@ defmodule Electric.Plug.ServeShapePlug do
   # Control messages
   @up_to_date [Jason.encode!(%{headers: %{control: "up-to-date"}})]
   @must_refetch Jason.encode!([%{headers: %{control: "must-refetch"}}])
-  @shape_not_found "Did not find any shapes matching the provided definition."
   @shape_mismatch "The provided shape ID does not match the shape definition."
 
   defmodule Params do
@@ -163,9 +162,11 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp handle_shape_info(%Conn{} = conn, nil) do
-    # Shape not found, return 404
+    # Shape not found, return 400 because the user came in with a shape ID
+    # but there are no shapes matching the shape definition
+    # so the shape ID cannot match the shape definition
     conn
-    |> send_resp(404, @shape_not_found)
+    |> send_resp(400, @shape_mismatch)
     |> halt()
   end
 
