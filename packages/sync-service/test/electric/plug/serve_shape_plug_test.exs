@@ -442,7 +442,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
     end
 
-    test "sends 409 when requested shape ID does not exist" do
+    test "sends 409 with a redirect to existing shape when requested shape ID does not exist" do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
@@ -467,13 +467,18 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert get_resp_header(conn, "location") == ["/?shape_id=#{@test_shape_id}&offset=-1"]
     end
 
-    test "sends 400 when no shape exists for the given shape definition" do
+    test "creates a new shape when shape ID does not exist and sends a 409 redirecting to the newly created shape" do
+      new_shape_id = "new-shape-id"
+
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts -> nil end)
       |> stub(:has_shape?, fn @test_shape_id, _opts -> false end)
+      |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
+        {new_shape_id, @test_offset}
+      end)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, opts -> {@test_shape_id, opts} end)
+      |> stub(:for_shape, fn new_shape_id, opts -> {new_shape_id, opts} end)
 
       conn =
         conn(
@@ -483,11 +488,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
         )
         |> ServeShapePlug.call([])
 
-      assert conn.status == 400
-      assert conn.resp_body == "The provided shape ID does not match the shape definition."
+      assert conn.status == 409
+
+      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
+      assert get_resp_header(conn, "x-electric-shape-id") == [new_shape_id]
+      assert get_resp_header(conn, "location") == ["/?shape_id=#{new_shape_id}&offset=-1"]
     end
 
-    test "sends 400 when no shape exists for the given shape definition even if shape ID exists" do
+    test "sends 400 when shape ID does not match shape definition" do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts -> nil end)
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
@@ -504,7 +512,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> ServeShapePlug.call([])
 
       assert conn.status == 400
-      assert conn.resp_body == "The provided shape ID does not match the shape definition."
+      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
     end
   end
 

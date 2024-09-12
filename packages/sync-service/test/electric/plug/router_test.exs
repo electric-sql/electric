@@ -681,8 +681,7 @@ defmodule Electric.Plug.RouterTest do
     end
 
     test "GET receives 400 when shape ID does not match shape definition", %{
-      opts: opts,
-      db_conn: db_conn
+      opts: opts
     } do
       where = "value ILIKE 'yes%'"
 
@@ -704,27 +703,29 @@ defmodule Electric.Plug.RouterTest do
         |> Router.call(opts)
 
       assert %{status: 400} = conn
-      assert conn.resp_body == "The provided shape ID does not match the shape definition."
+      assert conn.resp_body == Jason.encode!([%{headers: %{control: "must-refetch"}}])
     end
 
-    test "GET receives 400 when shape ID is not found and no shape matches the shape definition",
+    test "GET receives 409 to a newly created shape when shape ID is not found and no shape matches the shape definition",
          %{
-           opts: opts,
-           db_conn: db_conn
+           opts: opts
          } do
       # Make the next request but forget to include the where clause
       conn =
         conn("GET", "/v1/shape/items", %{offset: "0_0", shape_id: "nonexistent"})
         |> Router.call(opts)
 
-      assert %{status: 400} = conn
-      assert conn.resp_body == "The provided shape ID does not match the shape definition."
+      assert %{status: 409} = conn
+      assert conn.resp_body == Jason.encode!([%{headers: %{control: "must-refetch"}}])
+      new_shape_id = get_resp_header(conn, "x-electric-shape-id")
+
+      assert get_resp_header(conn, "location") ==
+               "/v1/shape/items?shape_id=#{new_shape_id}&offset=-1"
     end
 
     test "GET receives 409 when shape ID is not found but there is another shape matching the definition",
          %{
-           opts: opts,
-           db_conn: db_conn
+           opts: opts
          } do
       where = "value ILIKE 'yes%'"
 

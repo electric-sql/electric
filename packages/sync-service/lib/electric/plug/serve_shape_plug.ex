@@ -12,7 +12,6 @@ defmodule Electric.Plug.ServeShapePlug do
   # Control messages
   @up_to_date [Jason.encode!(%{headers: %{control: "up-to-date"}})]
   @must_refetch Jason.encode!([%{headers: %{control: "must-refetch"}}])
-  @shape_mismatch "The provided shape ID does not match the shape definition."
 
   defmodule Params do
     use Ecto.Schema
@@ -161,13 +160,27 @@ defmodule Electric.Plug.ServeShapePlug do
     Shapes.get_shape(config, shape)
   end
 
-  defp handle_shape_info(%Conn{} = conn, nil) do
-    # Shape not found, return 400 because the user came in with a shape ID
-    # but there are no shapes matching the shape definition
-    # so the shape ID cannot match the shape definition
-    conn
-    |> send_resp(400, @shape_mismatch)
-    |> halt()
+  defp handle_shape_info(
+         %Conn{assigns: %{shape_definition: shape, config: config, shape_id: shape_id}} = conn,
+         nil
+       ) do
+    # There is no shape that matches the shape definition (because shape info is `nil`)
+    if shape_id != nil && Shapes.has_shape?(config, shape_id) do
+      # but there is a shape that matches the shape ID
+      # thus the shape ID does not match the shape definition
+      # and we return a 400 bad request status code
+      conn
+      |> send_resp(400, @must_refetch)
+      |> halt()
+    else
+      # The shape ID does not exist or no longer exists
+      # e.g. it may have been deleted.
+      # Hence, create a new shape for this shape definition
+      # and return a 409 with a redirect to the newly created shape.
+      # (will be done by the recursive `handle_shape_info` call)
+      shape_info = Shapes.get_or_create_shape_id(config, shape)
+      handle_shape_info(conn, shape_info)
+    end
   end
 
   defp handle_shape_info(
@@ -190,8 +203,10 @@ defmodule Electric.Plug.ServeShapePlug do
     if Shapes.has_shape?(config, shape_id) do
       # The shape with the provided ID exists but does not match the shape definition
       # otherwise we would have found it and it would have matched the previous function clause
+      IO.puts("400 - SHAPE ID NOT FOUND")
+
       conn
-      |> send_resp(400, @shape_mismatch)
+      |> send_resp(400, @must_refetch)
       |> halt()
     else
       # The requested shape_id is not found, returns 409 along with a location redirect for clients to
