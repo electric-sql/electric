@@ -94,7 +94,7 @@ These requests both return an array of [Shape Log](/docs/api/http#shape-log) ent
 
 ### Typescript
 
-You can use the [Typescript Client](/docs/api/clients/typescript) to process the Shape Log and materialised it into `Shape` object for you.
+You can use the [Typescript Client](/docs/api/clients/typescript) to process the Shape Log and materialised it into a `Shape` object for you.
 
 First install using:
 
