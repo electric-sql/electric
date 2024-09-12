@@ -1,4 +1,7 @@
 ---
+title: Auth - Guide
+description: >-
+  How to authenticate users and authorize data access with Electric.
 outline: deep
 ---
 
