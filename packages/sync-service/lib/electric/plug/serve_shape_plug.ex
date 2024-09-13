@@ -120,7 +120,6 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # We're starting listening as soon as possible to not miss stuff that was added since we've asked for last offset
   plug :listen_for_new_changes
-  plug :validate_shape_offset
   plug :determine_log_chunk_offset
   plug :generate_etag
   plug :validate_and_put_etag
@@ -146,15 +145,85 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp load_shape_info(%Conn{} = conn, _) do
-    shape = conn.assigns.shape_definition
+    shape_info = get_or_create_shape_id(conn.assigns)
+    handle_shape_info(conn, shape_info)
+  end
 
-    {shape_id, last_offset} =
-      Shapes.get_or_create_shape_id(conn.assigns.config, shape)
+  # No shape_id is provided so we can get the existing one for this shape
+  # or create a new shape if it does not yet exist
+  defp get_or_create_shape_id(%{shape_definition: shape, config: config, shape_id: nil}) do
+    Shapes.get_or_create_shape_id(config, shape)
+  end
 
+  # A shape ID is provided so we need to return the shape that matches the shape ID and the shape definition
+  defp get_or_create_shape_id(%{shape_definition: shape, config: config}) do
+    Shapes.get_shape(config, shape)
+  end
+
+  defp handle_shape_info(
+         %Conn{assigns: %{shape_definition: shape, config: config, shape_id: shape_id}} = conn,
+         nil
+       ) do
+    # There is no shape that matches the shape definition (because shape info is `nil`)
+    if shape_id != nil && Shapes.has_shape?(config, shape_id) do
+      # but there is a shape that matches the shape ID
+      # thus the shape ID does not match the shape definition
+      # and we return a 400 bad request status code
+      conn
+      |> send_resp(400, @must_refetch)
+      |> halt()
+    else
+      # The shape ID does not exist or no longer exists
+      # e.g. it may have been deleted.
+      # Hence, create a new shape for this shape definition
+      # and return a 409 with a redirect to the newly created shape.
+      # (will be done by the recursive `handle_shape_info` call)
+      shape_info = Shapes.get_or_create_shape_id(config, shape)
+      handle_shape_info(conn, shape_info)
+    end
+  end
+
+  defp handle_shape_info(
+         %Conn{assigns: %{shape_id: shape_id}} = conn,
+         {active_shape_id, last_offset}
+       )
+       when is_nil(shape_id) or shape_id == active_shape_id do
+    # We found a shape that matches the shape definition
+    # and the shape has the same ID as the shape ID provided by the user
     conn
-    |> assign(:active_shape_id, shape_id)
+    |> assign(:active_shape_id, active_shape_id)
     |> assign(:last_offset, last_offset)
-    |> put_resp_header("x-electric-shape-id", shape_id)
+    |> put_resp_header("x-electric-shape-id", active_shape_id)
+  end
+
+  defp handle_shape_info(
+         %Conn{assigns: %{shape_id: shape_id, config: config}} = conn,
+         {active_shape_id, _}
+       ) do
+    if Shapes.has_shape?(config, shape_id) do
+      # The shape with the provided ID exists but does not match the shape definition
+      # otherwise we would have found it and it would have matched the previous function clause
+      IO.puts("400 - SHAPE ID NOT FOUND")
+
+      conn
+      |> send_resp(400, @must_refetch)
+      |> halt()
+    else
+      # The requested shape_id is not found, returns 409 along with a location redirect for clients to
+      # re-request the shape from scratch with the new shape id which acts as a consistent cache buster
+      # e.g. GET /v1/shape/{root_table}?shape_id={new_shape_id}&offset=-1
+
+      # TODO: discuss returning a 307 redirect rather than a 409, the client
+      # will have to detect this and throw out old data
+      conn
+      |> put_resp_header("x-electric-shape-id", active_shape_id)
+      |> put_resp_header(
+        "location",
+        "#{conn.request_path}?shape_id=#{active_shape_id}&offset=-1"
+      )
+      |> send_resp(409, @must_refetch)
+      |> halt()
+    end
   end
 
   defp schema(shape) do
@@ -172,34 +241,6 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp put_schema_header(conn, _), do: conn
-
-  # If the offset requested is -1, noop as we can always serve it
-  def validate_shape_offset(%Conn{assigns: %{offset: @before_all_offset}} = conn, _) do
-    # noop
-    conn
-  end
-
-  # If the requested shape_id is not found, returns 409 along with a location redirect for clients to
-  # re-request the shape from scratch with the new shape id which acts as a consistent cache buster
-  # e.g. GET /v1/shape/{root_table}?shape_id={new_shape_id}&offset=-1
-  def validate_shape_offset(%Conn{} = conn, _) do
-    shape_id = conn.assigns.shape_id
-    active_shape_id = conn.assigns.active_shape_id
-
-    if !Shapes.has_shape?(conn.assigns.config, shape_id) do
-      # TODO: discuss returning a 307 redirect rather than a 409, the client
-      # will have to detect this and throw out old data
-      conn
-      |> put_resp_header(
-        "location",
-        "#{conn.request_path}?shape_id=#{active_shape_id}&offset=-1"
-      )
-      |> send_resp(409, @must_refetch)
-      |> halt()
-    else
-      conn
-    end
-  end
 
   # If chunk offsets are available, use those instead of the latest available offset
   # to optimize for cache hits and response sizes

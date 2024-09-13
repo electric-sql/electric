@@ -680,6 +680,75 @@ defmodule Electric.Plug.RouterTest do
              ] = Jason.decode!(conn.resp_body)
     end
 
+    test "GET receives 400 when shape ID does not match shape definition", %{
+      opts: opts
+    } do
+      where = "value ILIKE 'yes%'"
+
+      # Initial shape request
+      # forces the shape to be created
+      conn =
+        conn("GET", "/v1/shape/items", %{offset: "-1", where: where})
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      assert conn.resp_body != ""
+
+      shape_id = get_resp_shape_id(conn)
+      [next_offset] = Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset")
+
+      # Make the next request but forget to include the where clause
+      conn =
+        conn("GET", "/v1/shape/items", %{offset: next_offset, shape_id: shape_id})
+        |> Router.call(opts)
+
+      assert %{status: 400} = conn
+      assert conn.resp_body == Jason.encode!([%{headers: %{control: "must-refetch"}}])
+    end
+
+    test "GET receives 409 to a newly created shape when shape ID is not found and no shape matches the shape definition",
+         %{
+           opts: opts
+         } do
+      # Make the next request but forget to include the where clause
+      conn =
+        conn("GET", "/v1/shape/items", %{offset: "0_0", shape_id: "nonexistent"})
+        |> Router.call(opts)
+
+      assert %{status: 409} = conn
+      assert conn.resp_body == Jason.encode!([%{headers: %{control: "must-refetch"}}])
+      new_shape_id = get_resp_header(conn, "x-electric-shape-id")
+
+      assert get_resp_header(conn, "location") ==
+               "/v1/shape/items?shape_id=#{new_shape_id}&offset=-1"
+    end
+
+    test "GET receives 409 when shape ID is not found but there is another shape matching the definition",
+         %{
+           opts: opts
+         } do
+      where = "value ILIKE 'yes%'"
+
+      # Initial shape request
+      # forces the shape to be created
+      conn =
+        conn("GET", "/v1/shape/items", %{offset: "-1", where: where})
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      assert conn.resp_body != ""
+
+      shape_id = get_resp_shape_id(conn)
+
+      # Request the same shape definition but with invalid shape_id
+      conn =
+        conn("GET", "/v1/shape/items", %{offset: "0_0", shape_id: "nonexistent", where: where})
+        |> Router.call(opts)
+
+      assert %{status: 409} = conn
+      [^shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+    end
+
     @tag with_sql: [
            "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
          ]
