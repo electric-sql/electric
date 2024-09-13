@@ -1,5 +1,7 @@
 # Basic Tanstack Query example
 
+[demo](https://x.com/msfstef/status/1828763769498952173)
+
 ## Setup
 
 1. Make sure you've installed all dependencies for the monorepo and built packages
