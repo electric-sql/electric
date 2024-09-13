@@ -9,6 +9,8 @@ outline: deep
 
 How to authenticate users and authorize data access.
 
+See our [auth example](https://github.com/electric-sql/electric/tree/main/examples/auth).
+
 ## Standard HTTP authentication and authorization
 
 Electric [syncs data over HTTP](/docs/api/http). This means that (unlike other sync engines where you have to use their specific APIs for auth) with Electric you can authenticate and authorize data access the same way you do for normal web resources like API endpoints.
