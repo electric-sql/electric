@@ -40,6 +40,16 @@ defmodule Electric.Shapes do
   end
 
   @doc """
+  Get the shape that corresponds to this shape definition and return it along with the latest offset of the shape
+  """
+  @spec get_shape(keyword(), Shape.t()) :: {shape_id(), LogOffset.t()}
+  def get_shape(config, shape_def) do
+    {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
+
+    shape_cache.get_shape(shape_def, opts)
+  end
+
+  @doc """
   Get or create a shape ID and return it along with the latest offset of the shape
   """
   @spec get_or_create_shape_id(keyword(), Shape.t()) :: {shape_id(), LogOffset.t()}

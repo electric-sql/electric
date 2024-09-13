@@ -235,7 +235,13 @@ export class ShapeStream<T extends Row = Row> {
           else break
         } catch (e) {
           if (!(e instanceof FetchError)) throw e // should never happen
-          if (e.status == 409) {
+          if (e.status == 400) {
+            // The request is invalid, most likely because the shape has been deleted.
+            // We should start from scratch, this will force the shape to be recreated.
+            this.reset()
+            this.publish(e.json as Message<T>[])
+            continue
+          } else if (e.status == 409) {
             // Upon receiving a 409, we should start from scratch
             // with the newly provided shape ID
             const newShapeId = e.headers[`x-electric-shape-id`]
