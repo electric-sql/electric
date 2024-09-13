@@ -1,5 +1,12 @@
 # @electric-sql/client
 
+## 0.4.1
+
+### Patch Changes
+
+- e3a07b7: Return 400 if shape ID does not match shape definition. Also handle 400 status codes on the client.
+- 412ea8e: Fix bug that occured when parsing column named "value" with a null value.
+
 ## 0.4.0
 
 ### Minor Changes

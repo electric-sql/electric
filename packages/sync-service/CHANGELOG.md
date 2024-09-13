@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 0.4.4
+
+### Patch Changes
+
+- e3a07b7: Return 400 if shape ID does not match shape definition. Also handle 400 status codes on the client.
+- 5c684bd: Add shape filters to Postgres publication to reduce processing load on Electric.
+
 ## 0.4.3
 
 ### Patch Changes
