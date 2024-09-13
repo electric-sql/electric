@@ -1,27 +1,26 @@
 ---
+title: Quickstart
+description: >-
+  Get up-and-running with Electric and real-time sync of your Postgres data.
 outline: 2
 ---
 
 # Quickstart
 
-This guide will get you up and running with `electric` and real-time sync of your Postgres data. First using the [HTTP API](/docs/api/http) directly. Then using our [TypeScript client](/docs/api/clients/typescript) with a [React hook](/docs/api/integrations/react) to sync data into a simple application.
+Let's get you up-and-running with Electric and real-time sync of your Postgres data.
+
+First we'll setup Electric and show you how to use the low-level HTTP API directly. Then we'll create a simple React app using our higher-level TypeScript client.
 
 ## Setup
 
-You need to have a Postgres database and to run Electric in front of it.
-
-You can use any Postgres (new or existing) that has logical replication enabled. You also need to connect as a database user that has the [`REPLICATION` privilege](https://www.postgresql.org/docs/current/logical-replication-security.html).
-
-Electric is an [Elixir](https://elixir-lang.org) web application published as a Docker image at [electricsql/electric](https://hub.docker.com/r/electricsql/electric). It connects to Postgres via a `DATABASE_URL`.
-
-Make sure you have Docker running with [Docker Compose](https://docs.docker.com/compose). Then create a new folder to work in:
+We're going to run a fresh Postgres and Electric using [Docker Compose](https://docs.docker.com/compose). First create a new folder to work in:
 
 ```sh
 mkdir my-first-electric
 cd my-first-electric
 ```
 
-Run a fresh Postgres and Electric using this [docker-compose.yaml](https://github.com/electric-sql/electric/blob/main/website/public/docker-compose.yaml) file:
+Then download and run this [docker-compose.yaml](https://github.com/electric-sql/electric/blob/main/website/public/docker-compose.yaml) file:
 
 ```sh
 curl -O https://electric-sql.com/docker-compose.yaml
@@ -32,9 +31,9 @@ You can now start using Electric!
 
 ## HTTP API
 
-First let's try the [HTTP API](/docs/api/http).
+First let's try the low-level [HTTP API](/docs/api/http).
 
-In a different terminal, use `curl` to request a [Shape](/docs/guides/shapes) containing all rows in the `foo` table:
+In a new terminal, use `curl` to request a [Shape](/docs/guides/shapes) containing all rows in the `foo` table:
 
 ```sh
 curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
@@ -43,7 +42,7 @@ curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
 ::: info A bit of explanation about the URL structure.
 
 - `/v1/shape/` is a standard prefix with the API version and the shape sync endpoint path
-- `foo` is the name of the root table of the shape (and is required); if you wanted to sync data from the `items` table, you would change the path to `/v1/shape/items`
+- `foo` is the name of the [`root_table`](/docs/guides/shapes#root-table) of the shape (and is required); if you wanted to sync data from the `items` table, you would change the path to `/v1/shape/items`
 - `offset=-1` means we're asking for the *entire* Shape as we don't have any of the data cached locally yet. If we had previously fetched the shape and wanted to see if there were any updates, we'd set the offset to the last offset we'd already seen.
 :::
 
@@ -139,7 +138,7 @@ At this point, you could continue to fetch data using HTTP requests. However, le
 
 ## React app
 
-Run the following to create a react app:
+Run the following to create a standard React app:
 
 ```sh
 npm create --yes vite@latest react-app -- --template react-ts
@@ -216,4 +215,4 @@ Note that the row with id `2` has the name `"Bob"`. Go back to your Postgres cli
 UPDATE foo SET name = 'James' WHERE id = 2;
 ```
 
-Congratulations! You've built your first real-time, reactive `electric` app!
+Congratulations! You've built your first real-time, reactive Electric app!
