@@ -39,4 +39,4 @@ It connects to your Postgres using a `DATABASE_URL`, consumes the logical replic
 
 ## How do I use it?
 
-See the [Quickstart](/docs/quickstart) and [Examples](https://github.com/electric-sql/electric/tree/main/examples).
+See the [Quickstart](/docs/quickstart), [Installation](/docs/guides/installation) guide and [Examples](https://github.com/electric-sql/electric/tree/main/examples).
