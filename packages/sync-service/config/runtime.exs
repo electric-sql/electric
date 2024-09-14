@@ -32,9 +32,26 @@ prometheus_port = env!("PROMETHEUS_PORT", :integer, nil)
 case otel_export do
   "otlp" ->
     if endpoint = env!("OTLP_ENDPOINT", :string, nil) do
+      # Shortcut config for Honeycomb.io:
+      # users may set the optional HNY_API_KEY and HNY_DATASET environment variables
+      # and specify the Honeycomb URL in OTLP_ENDPOINT to export traces directly to
+      # Honeycomb, without the need to run an OpenTelemetry Collector.
+      honeycomb_api_key = env!("HNY_API_KEY", :string, nil)
+      honeycomb_dataset = env!("HNY_DATASET", :string, nil)
+
+      headers =
+        Enum.reject(
+          [
+            {"x-honeycomb-team", honeycomb_api_key},
+            {"x-honeycomb-dataset", honeycomb_dataset}
+          ],
+          fn {_, val} -> is_nil(val) end
+        )
+
       config :opentelemetry_exporter,
         otlp_protocol: :http_protobuf,
         otlp_endpoint: endpoint,
+        otlp_headers: headers,
         otlp_compression: :gzip
     end
 
