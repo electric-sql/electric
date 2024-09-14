@@ -122,17 +122,21 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def make_new_snapshot!(data_stream, %FS{} = opts) do
-    OpenTelemetry.with_span("storage.make_new_snapshot", [storage_impl: "mixed_disk"], fn ->
-      data_stream
-      |> Stream.map(&[&1, ?\n])
-      # Use the 4 byte marker (ASCII "end of transmission") to indicate the end of the snapshot,
-      # so that concurrent readers can detect that the snapshot has been completed.
-      |> Stream.concat([<<4::utf8>>])
-      |> Stream.into(File.stream!(shape_snapshot_path(opts), [:append, :delayed_write]))
-      |> Stream.run()
+    OpenTelemetry.with_span(
+      "storage.make_new_snapshot",
+      [storage_impl: "mixed_disk", "shape.id": opts.shape_id],
+      fn ->
+        data_stream
+        |> Stream.map(&[&1, ?\n])
+        # Use the 4 byte marker (ASCII "end of transmission") to indicate the end of the snapshot,
+        # so that concurrent readers can detect that the snapshot has been completed.
+        |> Stream.concat([<<4::utf8>>])
+        |> Stream.into(File.stream!(shape_snapshot_path(opts), [:append, :delayed_write]))
+        |> Stream.run()
 
-      CubDB.put(opts.db, @snapshot_meta_key, LogOffset.first())
-    end)
+        CubDB.put(opts.db, @snapshot_meta_key, LogOffset.first())
+      end
+    )
   end
 
   @impl Electric.ShapeCache.Storage
