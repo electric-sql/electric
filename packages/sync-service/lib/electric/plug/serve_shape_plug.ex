@@ -505,14 +505,35 @@ defmodule Electric.Plug.ServeShapePlug do
           query: conn.query_string
         }
         |> to_string(),
+      SC.Trace.http_client_ip() => client_ip(conn),
       SC.Trace.http_scheme() => conn.scheme,
       SC.Trace.net_peer_name() => conn.host,
       SC.Trace.net_peer_port() => conn.port,
       SC.Trace.http_target() => conn.request_path,
       SC.Trace.http_method() => conn.method,
       SC.Trace.http_status_code() => conn.status,
-      SC.Trace.net_transport() => :"IP.TCP"
+      SC.Trace.net_transport() => :"IP.TCP",
+      SC.Trace.http_user_agent() => user_agent(conn)
     }
+  end
+
+  defp client_ip(%Plug.Conn{remote_ip: remote_ip} = conn) do
+    case Plug.Conn.get_req_header(conn, "x-forwarded-for") do
+      [] ->
+        remote_ip
+        |> :inet_parse.ntoa()
+        |> to_string()
+
+      [ip_address | _] ->
+        ip_address
+    end
+  end
+
+  defp user_agent(%Plug.Conn{} = conn) do
+    case Plug.Conn.get_req_header(conn, "user-agent") do
+      [] -> ""
+      [head | _] -> head
+    end
   end
 
   defp query_params_attr(map) do
