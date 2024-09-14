@@ -1,10 +1,16 @@
 defmodule Electric.Plug.ServeShapePlug do
-  require Logger
+  use Plug.Builder
+
+  alias OpenTelemetry.SemanticConventions, as: SC
+
   alias Electric.Shapes
   alias Electric.Schema
   alias Electric.Replication.LogOffset
+  alias Electric.Telemetry.OpenTelemetry
   alias Plug.Conn
-  use Plug.Builder
+
+  require Logger
+  require SC.Trace
 
   # Aliasing for pattern matching
   @before_all_offset LogOffset.before_all()
@@ -118,7 +124,8 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :load_shape_info
   plug :put_schema_header
 
-  # We're starting listening as soon as possible to not miss stuff that was added since we've asked for last offset
+  # We're starting listening as soon as possible to not miss stuff that was added since we've
+  # asked for last offset
   plug :listen_for_new_changes
   plug :determine_log_chunk_offset
   plug :generate_etag
@@ -145,8 +152,10 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp load_shape_info(%Conn{} = conn, _) do
-    shape_info = get_or_create_shape_id(conn.assigns)
-    handle_shape_info(conn, shape_info)
+    OpenTelemetry.with_span("serve_shape_plug.load_shape_info", open_telemetry_attrs(conn), fn ->
+      shape_info = get_or_create_shape_id(conn.assigns)
+      handle_shape_info(conn, shape_info)
+    end)
   end
 
   # No shape_id is provided so we can get the existing one for this shape
@@ -290,8 +299,8 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  defp put_resp_cache_headers(%Conn{} = conn, _) do
-    if conn.assigns.live do
+  defp put_resp_cache_headers(%Conn{assigns: %{config: config, live: live}} = conn, _) do
+    if live do
       put_resp_header(
         conn,
         "cache-control",
@@ -301,7 +310,7 @@ defmodule Electric.Plug.ServeShapePlug do
       put_resp_header(
         conn,
         "cache-control",
-        "max-age=#{conn.assigns.config[:max_age]}, stale-while-revalidate=#{conn.assigns.config[:stale_age]}"
+        "max-age=#{config[:max_age]}, stale-while-revalidate=#{config[:stale_age]}"
       )
     end
   end
@@ -324,29 +333,37 @@ defmodule Electric.Plug.ServeShapePlug do
          } = conn,
          _
        ) do
-    case Shapes.get_snapshot(conn.assigns.config, shape_id) do
-      {:ok, {offset, snapshot}} ->
-        log =
-          Shapes.get_log_stream(conn.assigns.config, shape_id,
-            since: offset,
-            up_to: chunk_end_offset
-          )
+    OpenTelemetry.with_span(
+      "serve_shape_plug.serve_log_or_snapshot",
+      open_telemetry_attrs(conn),
+      fn ->
+        case Shapes.get_snapshot(conn.assigns.config, shape_id) do
+          {:ok, {offset, snapshot}} ->
+            OpenTelemetry.with_span("serve_shape_plug.get_log_stream", [], fn ->
+              log =
+                Shapes.get_log_stream(conn.assigns.config, shape_id,
+                  since: offset,
+                  up_to: chunk_end_offset
+                )
 
-        [snapshot, log, maybe_up_to_date(conn)]
-        |> Stream.concat()
-        |> to_json_stream()
-        |> Stream.chunk_every(500)
-        |> send_stream(conn, 200)
+              [snapshot, log, maybe_up_to_date(conn)]
+              |> Stream.concat()
+              |> to_json_stream()
+              |> Stream.chunk_every(500)
+              |> send_stream(conn, 200)
+            end)
 
-      {:error, reason} ->
-        Logger.warning("Could not serve a snapshot because of #{inspect(reason)}")
+          {:error, reason} ->
+            Logger.warning("Could not serve a snapshot because of #{inspect(reason)}")
 
-        send_resp(
-          conn,
-          500,
-          Jason.encode_to_iodata!(%{error: "Failed creating or fetching the snapshot"})
-        )
-    end
+            send_resp(
+              conn,
+              500,
+              Jason.encode_to_iodata!(%{error: "Failed creating or fetching the snapshot"})
+            )
+        end
+      end
+    )
   end
 
   # Otherwise, serve log since that offset
@@ -360,18 +377,27 @@ defmodule Electric.Plug.ServeShapePlug do
          } = conn,
          _
        ) do
-    log =
-      Shapes.get_log_stream(conn.assigns.config, shape_id, since: offset, up_to: chunk_end_offset)
+    OpenTelemetry.with_span(
+      "serve_shape_plug.get_log_stream_and_maybe_hold",
+      open_telemetry_attrs(conn),
+      fn ->
+        log =
+          Shapes.get_log_stream(conn.assigns.config, shape_id,
+            since: offset,
+            up_to: chunk_end_offset
+          )
 
-    if Enum.take(log, 1) == [] and conn.assigns.live do
-      hold_until_change(conn, shape_id)
-    else
-      [log, maybe_up_to_date(conn)]
-      |> Stream.concat()
-      |> to_json_stream()
-      |> Stream.chunk_every(500)
-      |> send_stream(conn, 200)
-    end
+        if Enum.take(log, 1) == [] and conn.assigns.live do
+          hold_until_change(conn, shape_id)
+        else
+          [log, maybe_up_to_date(conn)]
+          |> Stream.concat()
+          |> to_json_stream()
+          |> Stream.chunk_every(500)
+          |> send_stream(conn, 200)
+        end
+      end
+    )
   end
 
   @json_list_start "["
@@ -389,17 +415,23 @@ defmodule Electric.Plug.ServeShapePlug do
     conn = Conn.send_chunked(conn, status)
 
     Enum.reduce_while(stream, conn, fn chunk, conn ->
-      case Conn.chunk(conn, chunk) do
-        {:ok, conn} ->
-          {:cont, conn}
+      OpenTelemetry.with_span(
+        "serve_shape_plug.serve_log_or_snapshot.chunk",
+        [chunk_size: IO.iodata_length(chunk)],
+        fn ->
+          case Conn.chunk(conn, chunk) do
+            {:ok, conn} ->
+              {:cont, conn}
 
-        {:error, "closed"} ->
-          {:halt, conn}
+            {:error, "closed"} ->
+              {:halt, conn}
 
-        {:error, reason} ->
-          Logger.error("Error while streaming response: #{inspect(reason)}")
-          {:halt, conn}
-      end
+            {:error, reason} ->
+              Logger.error("Error while streaming response: #{inspect(reason)}")
+              {:halt, conn}
+          end
+        end
+      )
     end)
   end
 
@@ -454,5 +486,38 @@ defmodule Electric.Plug.ServeShapePlug do
       # If we timeout, return an empty body and 204 as there's no response body.
       long_poll_timeout -> send_resp(conn, 204, ["[", @up_to_date, "]"])
     end
+  end
+
+  defp open_telemetry_attrs(%Plug.Conn{} = conn) do
+    %{
+      :"shape.id" => Map.get(conn.query_params, "shape_id"),
+      :"conn.assigns" => Map.delete(conn.assigns, :config),
+      :"http.req_headers" => conn.req_headers,
+      :"http.resp_headers" => conn.resp_headers,
+      :"http.query_string" => conn.query_string,
+      :"http.query_params" => query_params_attr(conn.query_params),
+      SC.Trace.http_url() =>
+        %URI{
+          scheme: to_string(conn.scheme),
+          host: conn.host,
+          port: conn.port,
+          path: conn.request_path,
+          query: conn.query_string
+        }
+        |> to_string(),
+      SC.Trace.http_scheme() => conn.scheme,
+      SC.Trace.net_peer_name() => conn.host,
+      SC.Trace.net_peer_port() => conn.port,
+      SC.Trace.http_target() => conn.request_path,
+      SC.Trace.http_method() => conn.method,
+      SC.Trace.http_status_code() => conn.status,
+      SC.Trace.net_transport() => :"IP.TCP"
+    }
+  end
+
+  defp query_params_attr(map) do
+    map
+    |> Enum.map(fn {key, val} -> key <> "=" <> val end)
+    |> Enum.sort()
   end
 end
