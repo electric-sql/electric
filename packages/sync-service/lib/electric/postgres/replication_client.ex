@@ -9,6 +9,7 @@ defmodule Electric.Postgres.ReplicationClient do
   alias Electric.Postgres.ReplicationClient.Collector
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
   alias Electric.Replication.Changes.Relation
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -190,8 +191,30 @@ defmodule Electric.Postgres.ReplicationClient do
         <<@repl_msg_x_log_data, _wal_start::64, wal_end::64, _clock::64, rest::binary>>,
         %State{} = state
       ) do
-    rest
-    |> Decoder.decode()
+    OpenTelemetry.with_span(
+      "replication_client.process_x_log_data",
+      [msg_size: byte_size(rest)],
+      fn -> process_x_log_data(rest, wal_end, state) end
+    )
+  end
+
+  def handle_data(<<@repl_msg_primary_keepalive, wal_end::64, _clock::64, reply>>, state) do
+    Logger.debug(fn ->
+      "Primary Keepalive: wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)}) reply=#{reply}"
+    end)
+
+    messages =
+      case reply do
+        1 -> [encode_standby_status_update(state)]
+        0 -> []
+      end
+
+    {:noreply, messages, state}
+  end
+
+  defp process_x_log_data(data, wal_end, %State{} = state) do
+    data
+    |> decode_message()
     # # Useful for debugging:
     # |> tap(fn %struct{} = msg ->
     #   message_type = struct |> to_string() |> String.split(".") |> List.last()
@@ -209,7 +232,13 @@ defmodule Electric.Postgres.ReplicationClient do
 
       {%Relation{} = rel, %Collector{} = txn_collector} ->
         {m, f, args} = state.relation_received
-        apply(m, f, [rel | args])
+
+        OpenTelemetry.with_span(
+          "replication_client.relation_received",
+          ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
+          fn -> apply(m, f, [rel | args]) end
+        )
+
         {:noreply, %{state | txn_collector: txn_collector}}
 
       {txn, %Collector{} = txn_collector} ->
@@ -224,7 +253,12 @@ defmodule Electric.Postgres.ReplicationClient do
         # backends will require different timeouts and the timeout will need to
         # accomodate varying number of shape consumers. The default of 5_000 ms
         # should work for our file-based storage backends, for now.
-        case apply(m, f, [txn | args]) do
+        OpenTelemetry.with_span(
+          "replication_client.transaction_received",
+          [num_changes: length(txn.changes), num_relations: MapSet.size(txn.affected_relations)],
+          fn -> apply(m, f, [txn | args]) end
+        )
+        |> case do
           :ok ->
             # We currently process incoming replication messages sequentially, persisting each
             # new transaction into the shape log store. So, when the applied function
@@ -244,18 +278,12 @@ defmodule Electric.Postgres.ReplicationClient do
     end
   end
 
-  def handle_data(<<@repl_msg_primary_keepalive, wal_end::64, _clock::64, reply>>, state) do
-    Logger.debug(fn ->
-      "Primary Keepalive: wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)}) reply=#{reply}"
-    end)
-
-    messages =
-      case reply do
-        1 -> [encode_standby_status_update(state)]
-        0 -> []
-      end
-
-    {:noreply, messages, state}
+  defp decode_message(data) do
+    OpenTelemetry.with_span(
+      "replication_client.decode_message",
+      [msg_size: byte_size(data)],
+      fn -> Decoder.decode(data) end
+    )
   end
 
   defp encode_standby_status_update(state) do

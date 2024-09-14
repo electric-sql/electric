@@ -43,7 +43,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
           OpenTelemetry.with_span(
             "shape_cache.create_snapshot_task",
-            [],
+            shape_attrs(shape_id, shape),
             fn ->
               try do
                 Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [pool, affected_tables])
@@ -80,28 +80,36 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     Postgrex.transaction(
       db_pool,
       fn conn ->
-        OpenTelemetry.with_span("shape_cache.query_in_readonly_txn", [], fn ->
-          Postgrex.query!(conn, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY", [])
+        OpenTelemetry.with_span(
+          "shape_cache.query_in_readonly_txn",
+          shape_attrs(shape_id, shape),
+          fn ->
+            Postgrex.query!(conn, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY", [])
 
-          %{rows: [[xmin]]} =
-            Postgrex.query!(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())", [])
+            %{rows: [[xmin]]} =
+              Postgrex.query!(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())", [])
 
-          GenServer.cast(parent, {:snapshot_xmin_known, shape_id, xmin})
+            GenServer.cast(parent, {:snapshot_xmin_known, shape_id, xmin})
 
-          # Enforce display settings *before* querying initial data to maintain consistent
-          # formatting between snapshot and live log entries.
-          Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
+            # Enforce display settings *before* querying initial data to maintain consistent
+            # formatting between snapshot and live log entries.
+            Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
 
-          stream = Querying.stream_initial_data(conn, shape)
+            stream = Querying.stream_initial_data(conn, shape)
 
-          GenServer.cast(parent, {:snapshot_started, shape_id})
+            GenServer.cast(parent, {:snapshot_started, shape_id})
 
-          # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
-          # that way it has the relation, but it is still missing the pk_cols
-          Storage.make_new_snapshot!(stream, storage)
-        end)
+            # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
+            # that way it has the relation, but it is still missing the pk_cols
+            Storage.make_new_snapshot!(stream, storage)
+          end
+        )
       end,
       timeout: :infinity
     )
+  end
+
+  defp shape_attrs(shape_id, shape) do
+    ["shape.id": shape_id, "shape.root_table": shape.root_table, "shape.where": shape.where]
   end
 end

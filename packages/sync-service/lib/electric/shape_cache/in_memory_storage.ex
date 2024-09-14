@@ -173,19 +173,23 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   @impl Electric.ShapeCache.Storage
   def make_new_snapshot!(data_stream, %MS{} = opts) do
-    OpenTelemetry.with_span("storage.make_new_snapshot", [storage_impl: "in_memory"], fn ->
-      table = opts.snapshot_table
+    OpenTelemetry.with_span(
+      "storage.make_new_snapshot",
+      [storage_impl: "in_memory", "shape.id": opts.shape_id],
+      fn ->
+        table = opts.snapshot_table
 
-      data_stream
-      |> Stream.with_index(1)
-      |> Stream.map(fn {log_item, index} -> {snapshot_key(index), log_item} end)
-      |> Stream.chunk_every(500)
-      |> Stream.each(fn chunk -> :ets.insert(table, chunk) end)
-      |> Stream.run()
+        data_stream
+        |> Stream.with_index(1)
+        |> Stream.map(fn {log_item, index} -> {snapshot_key(index), log_item} end)
+        |> Stream.chunk_every(500)
+        |> Stream.each(fn chunk -> :ets.insert(table, chunk) end)
+        |> Stream.run()
 
-      :ets.insert(table, {snapshot_end(), 0})
-      :ok
-    end)
+        :ets.insert(table, {snapshot_end(), 0})
+        :ok
+      end
+    )
   end
 
   @impl Electric.ShapeCache.Storage
