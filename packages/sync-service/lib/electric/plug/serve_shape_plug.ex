@@ -414,6 +414,8 @@ defmodule Electric.Plug.ServeShapePlug do
   defp send_stream(stream, conn, status) do
     conn = Conn.send_chunked(conn, status)
 
+    OpenTelemetry.add_span_attributes(%{SC.Trace.http_status_code() => status})
+
     Enum.reduce_while(stream, conn, fn chunk, conn ->
       OpenTelemetry.with_span(
         "serve_shape_plug.serve_log_or_snapshot.chunk",
