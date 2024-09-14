@@ -44,8 +44,10 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @doc """
   Create a span that starts at the current point in time and ends when `fun` returns.
 
-  Calling this function inside an another span establishes a parent-child relationship between
-  the two, as long as both calls happens within the same Elixir process. See `async_fun/4` for
+  Returns the result of calling the function `fun`.
+
+  Calling this function inside another span establishes a parent-child relationship between
+  the two, as long as both calls happen within the same Elixir process. See `async_fun/4` for
   interprocess progragation of span context.
   """
   @spec with_span(span_name(), span_attrs(), (-> t)) :: t when t: term
