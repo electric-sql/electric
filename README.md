@@ -81,7 +81,7 @@ Again, see the [Quickstart](https://electric-sql.com/docs/quickstart) and the [D
 
 ## HTTP API Docs
 
-The HTTP API is defined in an [OpenAPI spec](https://swagger.io/specification/) in [docs/electric-api.yaml](./docs/electric-api.yaml).
+The HTTP API is defined in an [OpenAPI spec](https://swagger.io/specification/) in [website/electric-api.yaml](./website/electric-api.yaml).
 
 ## Developing Electric
 
