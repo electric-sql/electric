@@ -95,6 +95,10 @@ export class Shape<T extends Row = Row> {
     return this.#stream.lastSynced()
   }
 
+  isLoading() {
+    return this.#stream.isLoading()
+  }
+
   isConnected(): boolean {
     return this.#stream.isConnected()
   }
