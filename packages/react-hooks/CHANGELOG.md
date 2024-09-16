@@ -1,5 +1,16 @@
 # @electric-sql/react
 
+## 0.4.0
+
+### Minor Changes
+
+- 7765d50: Expose isLoading status in ShapeStream and Shape classes and in useShape React hook.
+
+### Patch Changes
+
+- Updated dependencies [7765d50]
+  - @electric-sql/client@0.5.0
+
 ## 0.3.6
 
 ### Patch Changes
