@@ -22,7 +22,9 @@ defmodule Electric.MixProject do
       releases: [
         electric: [
           applications: [
-            electric: :permanent
+            electric: :permanent,
+            opentelemetry: :temporary,
+            opentelemetry_exporter: :permanent
           ],
           include_executables_for: [:unix]
         ]
