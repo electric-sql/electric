@@ -45,3 +45,9 @@ export function isControlMessage<T extends Row = Row>(
 ): message is ControlMessage {
   return !isChangeMessage(message)
 }
+
+export function isUpToDateMessage<T extends Row = Row>(
+  message: Message<T>
+): message is ControlMessage & { up_to_date: true } {
+  return isControlMessage(message) && message.headers.control === `up-to-date`
+}
