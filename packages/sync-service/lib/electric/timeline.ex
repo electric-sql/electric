@@ -1,17 +1,21 @@
 defmodule Electric.Timeline do
   @moduledoc """
-  Genserver that tracks the Postgres timeline ID.
   Module exporting functions for handling Postgres timelines.
+  Verifies the Postgres ID and its timeline.
   """
   require Logger
   alias Electric.PersistentKV
 
-  @type timeline :: integer() | nil
+  @type pg_id :: non_neg_integer()
+  @type timeline_id :: integer()
+  @type timeline :: {pg_id(), timeline_id()} | nil
 
   @timeline_key "timeline_id"
 
   @doc """
-  Checks the provided `pg_timeline` against Electric's timeline.
+  Checks that we're connected to the same Postgres DB as before and on the same timeline.
+  TO this end, it checks the provided `pg_id` against the persisted PG ID.
+  If the PG IDs match, it also checks the provided `pg_timeline` against the persisted timeline.
   Normally, Postgres and Electric are on the same timeline and nothing must be done.
   If the timelines differ, that indicates that a Point In Time Recovery (PITR) has occurred and all shapes must be cleaned.
   If we fail to fetch timeline information, we also clean all shapes for safety as we can't be sure that Postgres and Electric are on the same timeline.
@@ -22,41 +26,45 @@ defmodule Electric.Timeline do
     verify_timeline(pg_timeline, electric_timeline, opts)
   end
 
-  # Handles the different cases of timeline comparison
   @spec verify_timeline(timeline(), timeline(), keyword()) :: :ok
-  defp verify_timeline(nil, _, opts) do
-    Logger.warning("Unknown Postgres timeline; rotating shapes.")
-    clean_all_shapes(opts)
-    store_timeline(nil, opts)
-  end
-
-  defp verify_timeline(timeline_id, timeline_id, _opts) do
-    Logger.info("Connected to Postgres timeline #{timeline_id}")
+  defp verify_timeline({pg_id, timeline_id} = timeline, timeline, _) do
+    Logger.info("Connected to Postgres #{pg_id} and timeline #{timeline_id}")
     :ok
   end
 
-  defp verify_timeline(pg_timeline_id, nil, opts) do
+  defp verify_timeline({pg_id, timeline_id} = timeline, nil, opts) do
     Logger.info("No previous timeline detected.")
-    Logger.info("Connected to Postgres timeline #{pg_timeline_id}")
-    # Store new timeline
-    store_timeline(pg_timeline_id, opts)
+    Logger.info("Connected to Postgres #{pg_id} and timeline #{timeline_id}")
+    store_timeline(timeline, opts)
   end
 
-  defp verify_timeline(pg_timeline_id, _, opts) do
-    Logger.info("Detected PITR to timeline #{pg_timeline_id}; rotating shapes.")
+  defp verify_timeline({pg_id, _} = timeline, {electric_pg_id, _}, opts)
+       when pg_id != electric_pg_id do
+    Logger.warning(
+      "Detected different Postgres DB, with ID: #{pg_id}. Old Postgres DB had ID #{electric_pg_id}. Cleaning all shapes."
+    )
+
+    clean_all_shapes_and_store_timeline(timeline, opts)
+  end
+
+  defp verify_timeline({_, timeline_id} = timeline, _, opts) do
+    Logger.warning("Detected PITR to timeline #{timeline_id}; cleaning all shapes.")
+    clean_all_shapes_and_store_timeline(timeline, opts)
+  end
+
+  defp clean_all_shapes_and_store_timeline(timeline, opts) do
     clean_all_shapes(opts)
-    # Store new timeline only after all shapes have been cleaned
-    store_timeline(pg_timeline_id, opts)
+    store_timeline(timeline, opts)
   end
 
-  # Loads the timeline ID from persistent storage
+  # Loads the PG ID and timeline ID from persistent storage
   @spec load_timeline(keyword()) :: timeline()
   def load_timeline(opts) do
     kv = make_serialized_kv(opts)
 
     case PersistentKV.get(kv, @timeline_key) do
-      {:ok, timeline_id} ->
-        timeline_id
+      {:ok, [pg_id, timeline_id]} ->
+        {pg_id, timeline_id}
 
       {:error, :not_found} ->
         nil
@@ -67,9 +75,9 @@ defmodule Electric.Timeline do
     end
   end
 
-  defp store_timeline(timeline_id, opts) do
+  def store_timeline({pg_id, timeline_id}, opts) do
     kv = make_serialized_kv(opts)
-    :ok = PersistentKV.set(kv, @timeline_key, timeline_id)
+    :ok = PersistentKV.set(kv, @timeline_key, [pg_id, timeline_id])
   end
 
   defp make_serialized_kv(opts) do

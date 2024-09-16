@@ -157,7 +157,7 @@ defmodule Electric.ConnectionManager do
   def handle_continue(:start_connection_pool, state) do
     case start_connection_pool(state.connection_opts, state.pool_opts) do
       {:ok, pid} ->
-        Electric.Timeline.check(get_pg_timeline(pid), state.timeline_opts)
+        Electric.Timeline.check({get_pg_id(pid), get_pg_timeline(pid)}, state.timeline_opts)
 
         pg_version = query_pg_major_version(pid)
 
@@ -390,10 +390,15 @@ defmodule Electric.ConnectionManager do
     Keyword.put(connection_opts, :socket_options, tcp_opts)
   end
 
+  defp get_pg_id(conn) do
+    case Postgrex.query!(conn, "SELECT system_identifier FROM pg_control_system()", []) do
+      %Postgrex.Result{rows: [[system_identifier]]} -> system_identifier
+    end
+  end
+
   defp get_pg_timeline(conn) do
-    case Postgrex.query(conn, "SELECT timeline_id FROM pg_control_checkpoint()", []) do
-      {:ok, %Postgrex.Result{rows: [[timeline_id]]}} -> timeline_id
-      {:error, _reason} -> nil
+    case Postgrex.query!(conn, "SELECT timeline_id FROM pg_control_checkpoint()", []) do
+      %Postgrex.Result{rows: [[timeline_id]]} -> timeline_id
     end
   end
 
