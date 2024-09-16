@@ -95,6 +95,14 @@ export class Shape<T extends Row = Row> {
     return this.#error
   }
 
+  lastSynced() {
+    return this.#stream.lastSynced()
+  }
+
+  isConnected(): boolean {
+    return this.#stream.isConnected()
+  }
+
   subscribe(callback: ShapeChangedCallback<T>): () => void {
     const subscriptionId = Math.random()
 

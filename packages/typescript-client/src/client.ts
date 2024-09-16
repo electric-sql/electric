@@ -3,7 +3,11 @@ import { MessageParser, Parser } from './parser'
 import { isUpToDateMessage } from './helpers'
 import { MessageProcessor } from './queue'
 import { FetchError, FetchBackoffAbortError } from './error'
-import { BackoffOptions, createFetchWithBackoff } from './fetch'
+import {
+  BackoffDefaults,
+  BackoffOptions,
+  createFetchWithBackoff,
+} from './fetch'
 import {
   CHUNK_LAST_OFFSET_HEADER,
   SHAPE_ID_HEADER,
@@ -61,6 +65,8 @@ export interface ShapeStreamInterface<T extends Row = Row> {
   ): () => void
 
   isLoading(): boolean
+  lastSynced(): number
+  isConnected(): boolean
 
   isUpToDate: boolean
   shapeId?: string
@@ -131,7 +137,13 @@ export class ShapeStream<T extends Row = Row>
     this.#fetchClient = createFetchWithBackoff(
       options.fetchClient ??
         ((...args: Parameters<typeof fetch>) => fetch(...args)),
-      options.backoffOptions
+      {
+        ...(options.backoffOptions ?? BackoffDefaults),
+        onFailedAttempt: () => {
+          this.#connected = false
+          options.backoffOptions?.onFailedAttempt?.()
+        },
+      }
     )
 
     this.start()
@@ -171,6 +183,7 @@ export class ShapeStream<T extends Row = Row>
         let response!: Response
         try {
           response = await this.#fetchClient(fetchUrl.toString(), { signal })
+          this.#connected = true
         } catch (e) {
           if (e instanceof FetchBackoffAbortError) break // interrupted
           if (!(e instanceof FetchError)) throw e // should never happen

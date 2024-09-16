@@ -4,6 +4,7 @@ export interface BackoffOptions {
   initialDelay: number
   maxDelay: number
   multiplier: number
+  onFailedAttempt?: () => void
   debug?: boolean
 }
 
@@ -17,7 +18,13 @@ export function createFetchWithBackoff(
   fetchClient: typeof fetch,
   backoffOptions: BackoffOptions = BackoffDefaults
 ): typeof fetch {
-  const { initialDelay, maxDelay, multiplier, debug = false } = backoffOptions
+  const {
+    initialDelay,
+    maxDelay,
+    multiplier,
+    debug = false,
+    onFailedAttempt,
+  } = backoffOptions
   return async (...args: Parameters<typeof fetch>): Promise<Response> => {
     const url = args[0]
     const options = args[1]
@@ -37,6 +44,7 @@ export function createFetchWithBackoff(
         if (result.ok) return result
         else throw await FetchError.fromResponse(result, url.toString())
       } catch (e) {
+        onFailedAttempt?.()
         if (options?.signal?.aborted) {
           throw new FetchBackoffAbortError()
         } else if (
