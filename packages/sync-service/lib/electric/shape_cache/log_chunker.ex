@@ -1,4 +1,6 @@
 defmodule Electric.ShapeCache.LogChunker do
+  # Default chunk size of 10 MB to ensure caches accept them
+  # see: https://github.com/electric-sql/electric/issues/1581
   @default_threshold 10 * 1024 * 1024
 
   @doc """
