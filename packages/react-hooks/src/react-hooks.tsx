@@ -68,6 +68,8 @@ export interface UseShapeResult<T extends Row = Row> {
    * @type {Shape<T>}
    */
   shape: Shape<T>
+  /** True during initial fetch. False afterwise. */
+  isLoading: boolean
   error: Shape<T>[`error`]
   isError: boolean
 }
@@ -82,6 +84,7 @@ function shapeSubscribe<T extends Row>(shape: Shape<T>, callback: () => void) {
 function parseShapeData<T extends Row>(shape: Shape<T>): UseShapeResult<T> {
   return {
     data: [...shape.valueSync.values()],
+    isLoading: shape.isLoading(),
     isError: shape.error !== false,
     shape,
     error: shape.error,
