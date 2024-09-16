@@ -55,7 +55,7 @@ defmodule Support.ComponentSetup do
     shape_meta_table = :"shape_meta_#{full_test_name(ctx)}"
     server = :"shape_cache_#{full_test_name(ctx)}"
     consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
-    get_pg_version = fn -> 14 end
+    get_pg_version = fn -> Application.fetch_env!(:electric, :major_pg_version_for_tests) end
 
     start_opts =
       [
@@ -76,7 +76,6 @@ defmodule Support.ComponentSetup do
         {
           Electric.Postgres.Configuration,
           :configure_tables_for_replication!,
-          # TODO: can pass PG version here, then in Application also pass it there, or pass a function that returns the version
           [get_pg_version, ctx.publication_name]
         }
       end)
