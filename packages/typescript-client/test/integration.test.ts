@@ -724,8 +724,8 @@ describe(`HTTP Sync`, () => {
       // before any subsequent requests after the initial one, ensure
       // that the existing shape is deleted and some more data is inserted
       if (statusCodesReceived.length === 1 && statusCodesReceived[0] === 200) {
-        await clearIssuesShape(issueStream.shapeId)
         await insertIssues({ id: secondRowId, title: `foo2` })
+        await clearIssuesShape(issueStream.shapeId)
       }
 
       const response = await fetch(...args)
