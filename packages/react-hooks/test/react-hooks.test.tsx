@@ -60,6 +60,22 @@ describe(`useShape`, () => {
     )
   })
 
+  it(`should expose isLoading status`, async ({ issuesTableUrl }) => {
+    const { result } = renderHook(() =>
+      useShape({
+        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        fetchClient: async (input, init) => {
+          await sleep(10)
+          return fetch(input, init)
+        },
+      })
+    )
+
+    expect(result.current.isLoading).toBe(true)
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+  })
+
   it(`should keep the state value in sync`, async ({
     aborter,
     issuesTableUrl,

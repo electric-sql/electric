@@ -301,4 +301,20 @@ describe(`Shape`, () => {
     // the initial fetch finished and we've not subscribed to changes
     expect(shapeStream.isConnected()).false
   })
+
+  it(`should expose isLoading status`, async ({ issuesTableUrl }) => {
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      fetchClient: async (input, init) => {
+        await sleep(20)
+        return fetch(input, init)
+      },
+    })
+
+    expect(shapeStream.isLoading()).true
+
+    await sleep(100) // give some time for the initial fetch to complete
+
+    expect(shapeStream.isLoading()).false
+  })
 })
