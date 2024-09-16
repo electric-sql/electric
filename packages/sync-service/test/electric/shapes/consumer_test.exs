@@ -130,7 +130,8 @@ defmodule Electric.Shapes.ConsumerTest do
                registry: registry_name,
                shape_cache: {Mock.ShapeCache, []},
                storage: storage,
-               chunk_bytes_threshold: 10_000,
+               chunk_bytes_threshold:
+                 Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
                prepare_tables_fn: &prepare_tables_fn/2},
               id: {Shapes.Consumer.Supervisor, shape_id}
             )
@@ -674,7 +675,7 @@ defmodule Electric.Shapes.ConsumerTest do
           persistent_kv: ctx.persistent_kv,
           registry: ctx.registry,
           inspector: ctx.inspector,
-          chunk_bytes_threshold: 10_000,
+          chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
           log_producer: ShapeLogCollector.name(ctx.electric_instance_id),
           consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(ctx.electric_instance_id),
           prepare_tables_fn: {
