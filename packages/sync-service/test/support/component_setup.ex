@@ -76,7 +76,6 @@ defmodule Support.ComponentSetup do
         {
           Electric.Postgres.Configuration,
           :configure_tables_for_replication!,
-          # TODO: can pass PG version here, then in Application also pass it there, or pass a function that returns the version
           [get_pg_version, ctx.publication_name]
         }
       end)
