@@ -294,7 +294,11 @@ describe(`HTTP Sync`, () => {
         ]
       )
 
-      await sleep(100)
+      await vi.waitFor(async () => {
+        const res = await fetch(`${BASE_URL}/v1/shape/${tableUrl}?offset=-1`)
+        const body = (await res.json()) as Message[]
+        expect(body.length).greaterThan(2)
+      })
       const updatedData = client.valueSync
 
       expect([...updatedData.values()]).toMatchObject([
@@ -720,7 +724,7 @@ describe(`HTTP Sync`, () => {
       // before any subsequent requests after the initial one, ensure
       // that the existing shape is deleted and some more data is inserted
       if (statusCodesReceived.length === 1 && statusCodesReceived[0] === 200) {
-        await clearIssuesShape()
+        await clearIssuesShape(issueStream.shapeId)
         await insertIssues({ id: secondRowId, title: `foo2` })
       }
 
