@@ -1,0 +1,40 @@
+[doc Verify handling of the loss and restoration of database connection]
+
+[include macros.luxinc]
+
+[global pg_container_name=postgres-disconnection__pg]
+
+###
+
+## Start a new Postgres cluster
+[invoke setup_pg "" ""]
+
+## Start the sync service.
+[invoke setup_electric]
+
+[shell electric]
+  ??[info] Starting replication from postgres
+
+  # Reset the failure pattern because we'll be matching on an error.
+  -
+
+[invoke stop_pg]
+
+## Observe the connection error.
+[shell electric]
+  ??[warning] Database connection in replication mode failed
+  ??[warning] Reconnecting in 
+
+## Start the Postgres container back up.
+[invoke resume_pg]
+
+[shell electric]
+  -$fail_pattern
+
+  # Increase the timeout before the next match to give Electric time to reconnect
+  [timeout 15]
+
+  ??[info] Starting replication from postgres
+
+[cleanup]
+  [invoke teardown]

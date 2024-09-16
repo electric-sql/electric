@@ -2,19 +2,20 @@
 [global fail_pattern=(?i)error|fatal|no such]
 
 [global pg_container_name=]
-[global database_url=]
+[global pg_host_port=54331]
+[global database_url=postgresql://postgres:password@localhost:$pg_host_port/postgres?sslmode=disable]
 
 [macro setup_pg initdb_args config_opts]
   [shell pg]
     -$fail_pattern
   
-    !docker run --rm \
+    !docker run \
       --name $pg_container_name \
       -e POSTGRES_DB=electric \
       -e POSTGRES_USER=postgres \
       -e POSTGRES_PASSWORD=password \
       -e POSTGRES_INITDB_ARGS=${initdb_args} \
-      -p 5432 \
+      -p $pg_host_port:5432 \
       postgres:14-alpine \
         -c wal_level=logical ${config_opts}
   
@@ -23,12 +24,21 @@
     # Reset the failure pattern to avoid false failures when Electric tries to create an already
     # existing publication or replication slot.
     -
+[endmacro]
 
-  [shell get_container_port]
-    !docker inspect $pg_container_name --format '{{json .NetworkSettings.Ports}}'
-    ?"HostIp":"0.0.0.0","HostPort":"(\d+)"
-    [local port=$1]
-    [global database_url=postgresql://postgres:password@localhost:$port/postgres?sslmode=disable]
+[macro stop_pg]
+  [shell pg_lifecycle]
+    # This timeout is needed until https://github.com/electric-sql/electric/issues/1632 is fixed.
+    !docker stop -t 1 $pg_container_name
+[endmacro]
+
+[macro resume_pg]
+  [shell pg_lifecycle]
+    !docker start $pg_container_name
+
+  [shell pg]
+    !docker attach $pg_container_name
+    ??database system is ready to accept connections
 [endmacro]
 
 [macro seed_pg]
