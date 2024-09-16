@@ -610,6 +610,98 @@ describe(`HTTP Sync`, () => {
     )
   })
 
+  it(`should chunk a large log with reasonably sized chunks`, async ({
+    insertIssues,
+    issuesTableUrl,
+    aborter,
+  }) => {
+    // Add an initial row
+    await insertIssues({ id: uuidv4(), title: `foo` })
+
+    // Get initial data
+    let lastOffset: Offset = `-1`
+    const issueStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      subscribe: true,
+      signal: aborter.signal,
+    })
+
+    await h.forEachMessage(issueStream, aborter, (res, msg) => {
+      if (`offset` in msg) {
+        lastOffset = msg.offset
+      }
+      if (isUpToDateMessage(msg)) {
+        res()
+        aborter.abort()
+      }
+    })
+
+    const getTitleWithSize = (byteSize: number) =>
+      Array.from({ length: byteSize }, () =>
+        // generate random ASCII code
+        String.fromCharCode(Math.floor(32 + Math.random() * (126 - 32)))
+      ).join(``)
+
+    // add a bunch of rows with very large titles to force chunking
+    await insertIssues(
+      ...Array.from({ length: 35 }, () => ({
+        id: uuidv4(),
+        title: getTitleWithSize(1e3),
+      }))
+    )
+
+    // And wait until it's definitely seen
+    await vi.waitFor(async () => {
+      const res = await fetch(
+        `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`
+      )
+      const body = (await res.json()) as Message[]
+      expect(body.length).greaterThan(2)
+    })
+
+    const responseSizes: number[] = []
+
+    const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
+      const res = await fetch(...args)
+      if (res.status === 200) {
+        const resBlob = await res.clone().blob()
+        responseSizes.push(resBlob.size)
+      }
+      return res
+    }
+
+    const newAborter = new AbortController()
+    const newIssueStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      subscribe: false,
+      signal: newAborter.signal,
+      offset: lastOffset,
+      shapeId: issueStream.shapeId,
+      fetchClient: fetchWrapper,
+    })
+
+    await h.forEachMessage(newIssueStream, aborter, (res, msg) => {
+      if (isUpToDateMessage(msg)) {
+        res()
+      }
+    })
+
+    // should have received at least 2 responses/chunks
+    const numChunks = responseSizes.length
+    expect(numChunks).greaterThanOrEqual(2)
+    for (let i = 0; i < numChunks; i++) {
+      const responseSize = responseSizes[i]
+      const isLastResponse = i === numChunks - 1
+      if (!isLastResponse) {
+        // expect chunks to be close to 10 kB +- some kB
+        expect(responseSize).closeTo(10 * 1e3, 1e3)
+      } else {
+        // expect last response to be ~ 10 kB or less
+        expect(responseSize).toBeLessThan(11 * 1e3)
+      }
+    }
+  })
+
   it(`should detect shape deprecation and restart syncing`, async ({
     expect,
     insertIssues,
