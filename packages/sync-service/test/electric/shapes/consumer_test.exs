@@ -663,7 +663,7 @@ defmodule Electric.Shapes.ConsumerTest do
         }
       ]
 
-      get_pg_version = fn -> 14 end
+      get_pg_version = fn -> Application.fetch_env!(:electric, :major_pg_version_for_tests) end
 
       shape_cache_config =
         [
