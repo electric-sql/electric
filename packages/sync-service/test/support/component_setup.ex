@@ -48,7 +48,7 @@ defmodule Support.ComponentSetup do
   end
 
   def with_log_chunking(_ctx) do
-    %{chunk_bytes_threshold: 10_000}
+    %{chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold()}
   end
 
   def with_shape_cache(ctx, additional_opts \\ []) do
