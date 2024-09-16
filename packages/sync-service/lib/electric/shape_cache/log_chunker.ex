@@ -1,5 +1,5 @@
 defmodule Electric.ShapeCache.LogChunker do
-  @default_threshold 10_000
+  @default_threshold 10_000_000
 
   @doc """
   Add bytes to the current chunk of a given shape - if the chunk exceeds the specified
