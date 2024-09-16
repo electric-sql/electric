@@ -10,8 +10,12 @@ import {
 } from './fetch'
 import {
   CHUNK_LAST_OFFSET_HEADER,
+  LIVE_QUERY_PARAM,
+  OFFSET_QUERY_PARAM,
   SHAPE_ID_HEADER,
+  SHAPE_ID_QUERY_PARAM,
   SHAPE_SCHEMA_HEADER,
+  WHERE_QUERY_PARAM,
 } from './constants'
 
 /**
@@ -175,16 +179,16 @@ export class ShapeStream<T extends Row = Row>
         this.options.subscribe
       ) {
         const fetchUrl = new URL(url)
-        if (where) fetchUrl.searchParams.set(`where`, where)
-        fetchUrl.searchParams.set(`offset`, this.#lastOffset)
+        if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
+        fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
 
         if (this.#isUpToDate) {
-          fetchUrl.searchParams.set(`live`, `true`)
+          fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
         }
 
         if (this.#shapeId) {
           // This should probably be a header for better cache breaking?
-          fetchUrl.searchParams.set(`shape_id`, this.#shapeId!)
+          fetchUrl.searchParams.set(SHAPE_ID_QUERY_PARAM, this.#shapeId!)
         }
 
         let response!: Response
