@@ -126,7 +126,7 @@ defmodule Electric.Shapes.ConsumerTest do
                shape_id: shape_id,
                shape: shape,
                electric_instance_id: ctx.electric_instance_id,
-               log_producer: producer,
+               log_producer: ShapeLogCollector.name(ctx.electric_instance_id),
                registry: registry_name,
                shape_cache: {Mock.ShapeCache, []},
                storage: storage,

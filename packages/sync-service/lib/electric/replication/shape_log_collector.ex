@@ -27,7 +27,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def name(electric_instance_id) do
-    :"shape_log_collector #{electric_instance_id}"
+    Electric.Application.process_name(electric_instance_id, __MODULE__)
   end
 
   # use `GenStage.call/2` here to make the event processing synchronous.
