@@ -363,6 +363,11 @@ export class ShapeStream<T extends Row = Row> {
     return this.connected
   }
 
+  /** True during initial fetch. False afterwise.  */
+  isLoading(): boolean {
+    return !this.isUpToDate
+  }
+
   private notifyUpToDateSubscribers() {
     this.upToDateSubscribers.forEach(([callback]) => {
       callback()
@@ -512,6 +517,11 @@ export class Shape<T extends Row = Row> {
 
   isConnected(): boolean {
     return this.stream.isConnected()
+  }
+
+  /** True during initial fetch. False afterwise. */
+  isLoading(): boolean {
+    return this.stream.isLoading()
   }
 
   get value(): Promise<ShapeData<T>> {
