@@ -9,7 +9,10 @@ config :logger, level: :debug
 #   handle_otp_reports: true,
 #   handle_sasl_reports: true
 
-if config_env() == :test, do: config(:logger, level: :info)
+if config_env() == :test do
+  config(:logger, level: :info)
+  config(:electric, major_pg_version_for_tests: env!("POSTGRES_MAJOR_VERSION", :integer, 15))
+end
 
 if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])

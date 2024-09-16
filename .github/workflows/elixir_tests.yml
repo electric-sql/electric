@@ -22,6 +22,7 @@ jobs:
         image: postgres:14-alpine
         env:
           POSTGRES_PASSWORD: password
+          POSTGRES_MAJOR_VERSION: 14
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -78,6 +79,7 @@ jobs:
         image: postgres:15-alpine
         env:
           POSTGRES_PASSWORD: password
+          POSTGRES_MAJOR_VERSION: 15
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
