@@ -761,7 +761,7 @@ defmodule Electric.ShapeCacheTest do
 
       assert_raise ArgumentError,
                    ~r"the table identifier does not refer to an existing ETS table",
-                   fn -> Enum.count(Storage.get_log_stream(@zero_offset, storage)) end
+                   fn -> Stream.run(Storage.get_log_stream(@zero_offset, storage)) end
 
       assert_raise RuntimeError,
                    ~r"Snapshot no longer available",
