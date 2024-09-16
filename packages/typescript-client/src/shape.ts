@@ -50,7 +50,7 @@ export class Shape<T extends Row = Row> {
 
   constructor(stream: ShapeStreamInterface<T>) {
     this.#stream = stream
-    this.#stream.subscribe(
+    this.#stream.subscribeSync(
       this.#process.bind(this),
       this.#handleError.bind(this)
     )
@@ -70,19 +70,15 @@ export class Shape<T extends Row = Row> {
   }
 
   get value(): Promise<ShapeData<T>> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       if (this.#stream.isUpToDate) {
         resolve(this.valueSync)
       } else {
-        const unsubscribe = this.#stream.subscribeOnceToUpToDate(
-          () => {
-            unsubscribe()
-            resolve(this.valueSync)
-          },
-          (e) => {
-            throw e
-          }
-        )
+        const unsubscribe = this.subscribe((shapeData) => {
+          unsubscribe()
+          if (this.#error) reject(this.#error)
+          resolve(shapeData)
+        })
       }
     })
   }

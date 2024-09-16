@@ -1,7 +1,7 @@
 import { Message, Offset, Schema, Row, MaybePromise } from './types'
 import { MessageParser, Parser } from './parser'
 import { isUpToDateMessage } from './helpers'
-import { MessageProcessor } from './queue'
+import { MessageProcessor, MessageProcessorInterface } from './queue'
 import { FetchError, FetchBackoffAbortError } from './error'
 import {
   BackoffDefaults,
@@ -55,6 +55,10 @@ export interface ShapeStreamOptions {
 export interface ShapeStreamInterface<T extends Row = Row> {
   subscribe(
     callback: (messages: Message<T>[]) => MaybePromise<void>,
+    onError?: (error: FetchError | Error) => void
+  ): void
+  subscribeSync(
+    callback: (messages: Message<T>[]) => void,
     onError?: (error: FetchError | Error) => void
   ): void
   unsubscribeAllUpToDateSubscribers(): void
@@ -113,7 +117,10 @@ export class ShapeStream<T extends Row = Row>
 
   readonly #subscribers = new Map<
     number,
-    [MessageProcessor<Message<T>[]>, ((error: Error) => void) | undefined]
+    [
+      MessageProcessorInterface<Message<T>[]>,
+      ((error: Error) => void) | undefined,
+    ]
   >()
   readonly #upToDateSubscribers = new Map<
     number,
@@ -261,6 +268,23 @@ export class ShapeStream<T extends Row = Row>
   ) {
     const subscriptionId = Math.random()
     const subscriber = new MessageProcessor(callback)
+
+    this.#subscribers.set(subscriptionId, [subscriber, onError])
+
+    return () => {
+      this.#subscribers.delete(subscriptionId)
+    }
+  }
+
+  subscribeSync(
+    callback: (messages: Message<T>[]) => void,
+    onError?: (error: FetchError | Error) => void
+  ) {
+    const subscriptionId = Math.random()
+    const subscriber: MessageProcessorInterface<Message<T>[]> = {
+      process: callback,
+      waitForProcessing: async () => {},
+    }
 
     this.#subscribers.set(subscriptionId, [subscriber, onError])
 

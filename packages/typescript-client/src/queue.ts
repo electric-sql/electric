@@ -20,6 +20,11 @@ export class AsyncProcessingQueue {
   }
 }
 
+export interface MessageProcessorInterface<T> {
+  process(messages: T): MaybePromise<void>
+  waitForProcessing(): Promise<void>
+}
+
 /**
  * Receives messages, puts them on a queue and processes
  * them synchronously or asynchronously by passing to a
@@ -28,7 +33,7 @@ export class AsyncProcessingQueue {
  * @constructor
  * @param {(message: T) => MaybePromise<void>} callback function
  */
-export class MessageProcessor<T> {
+export class MessageProcessor<T> implements MessageProcessorInterface<T> {
   readonly #queue = new AsyncProcessingQueue()
   readonly #callback: (messages: T) => MaybePromise<void>
 

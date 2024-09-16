@@ -135,10 +135,12 @@ describe(`Shape`, () => {
     const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
       // clear the shape and modify the data after the initial request
       if (requestsMade === 1) {
-        await clearIssuesShape()
         // new shape data should have just second issue and not first
         await deleteIssue({ id: id1, title: `foo1` })
         await insertIssues({ id: id2, title: `foo2` })
+        await sleep(100)
+        await clearIssuesShape(shapeStream.shapeId)
+
         rotationTime = Date.now()
       }
 
