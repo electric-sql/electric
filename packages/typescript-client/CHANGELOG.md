@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 0.5.0
+
+### Minor Changes
+
+- 7765d50: Expose isLoading status in ShapeStream and Shape classes and in useShape React hook.
+
 ## 0.4.1
 
 ### Patch Changes

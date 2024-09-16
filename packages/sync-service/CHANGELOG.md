@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 0.5.1
+
+### Patch Changes
+
+- 0b8fbc4: Run filter logic for PG version 15 in unit tests.
+- aaf9c75: Clean up underlying shape data when cleaning up shape.
+
 ## 0.5.0
 
 ### Minor Changes
