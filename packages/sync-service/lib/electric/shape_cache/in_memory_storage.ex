@@ -39,7 +39,10 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     opts
   end
 
-  def for_shape(shape_id, %{table_base_name: table_base_name}) do
+  def for_shape(shape_id, %{
+        table_base_name: table_base_name,
+        electric_instance_id: electric_instance_id
+      }) do
     snapshot_table_name = :"#{table_base_name}.Snapshot_#{shape_id}"
     log_table_name = :"#{table_base_name}.Log_#{shape_id}"
     chunk_checkpoint_table_name = :"#{table_base_name}.ChunkCheckpoint_#{shape_id}"
@@ -49,13 +52,15 @@ defmodule Electric.ShapeCache.InMemoryStorage do
       shape_id: shape_id,
       snapshot_table: snapshot_table_name,
       log_table: log_table_name,
-      chunk_checkpoint_table: chunk_checkpoint_table_name
+      chunk_checkpoint_table: chunk_checkpoint_table_name,
+      electric_instance_id: electric_instance_id
     }
   end
 
   @impl Electric.ShapeCache.Storage
   def start_link(%MS{} = opts) do
     if is_nil(opts.shape_id), do: raise("cannot start an un-attached storage instance")
+    if is_nil(opts.electric_instance_id), do: raise("electric_instance_id cannot be nil")
 
     Agent.start_link(
       fn ->

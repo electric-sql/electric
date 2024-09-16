@@ -55,10 +55,7 @@ defmodule Electric.ShapeCache do
               type: :atom,
               default: @default_shape_meta_table
             ],
-            log_producer: [
-              type: {:or, [:atom, :pid]},
-              default: Electric.Replication.ShapeLogCollector
-            ],
+            log_producer: [type: @genserver_name_schema, required: true],
             consumer_supervisor: [type: @genserver_name_schema, required: true],
             storage: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],

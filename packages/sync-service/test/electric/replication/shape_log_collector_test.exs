@@ -25,7 +25,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       # Start the ShapeLogCollector process
       opts = [
-        name: __MODULE__.ShapeLogCollector,
+        electric_instance_id: ctx.electric_instance_id,
         inspector: {Mock.Inspector, []},
         demand: :forward
       ]
@@ -61,7 +61,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           shape_meta_table: shape_meta_table,
           persistent_kv: Electric.PersistentKV.Memory.new!(),
           prepare_tables_fn: fn _, _ -> {:ok, [:ok]} end,
-          log_producer: __MODULE__.ShapeLogCollector,
+          log_producer: ShapeLogCollector.name(ctx.electric_instance_id),
           electric_instance_id: ctx.electric_instance_id,
           consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(ctx.electric_instance_id),
           registry: registry_name
