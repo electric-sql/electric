@@ -104,16 +104,14 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_log_collector(ctx) do
-    name = :"shape_log_collector_#{full_test_name(ctx)}"
-
     {:ok, _} =
       ShapeLogCollector.start_link(
-        name: name,
+        electric_instance_id: ctx.electric_instance_id,
         inspector: ctx.inspector,
         link_consumers: Map.get(ctx, :link_log_collector, true)
       )
 
-    %{shape_log_collector: name}
+    %{shape_log_collector: ShapeLogCollector.name(ctx.electric_instance_id)}
   end
 
   def with_replication_client(ctx) do

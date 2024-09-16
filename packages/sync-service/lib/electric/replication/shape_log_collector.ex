@@ -11,12 +11,8 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   require Logger
 
-  @genserver_name_schema {:or, [:atom, {:tuple, [:atom, :atom, :any]}]}
   @schema NimbleOptions.new!(
-            name: [
-              type: @genserver_name_schema,
-              default: __MODULE__
-            ],
+            electric_instance_id: [type: :atom, required: true],
             inspector: [type: :mod_arg, required: true],
             # see https://hexdocs.pm/gen_stage/GenStage.html#c:init/1-options
             demand: [type: {:in, [:forward, :accumulate]}, default: :accumulate],
@@ -26,8 +22,12 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
-      GenStage.start_link(__MODULE__, Map.new(opts), name: opts[:name])
+      GenStage.start_link(__MODULE__, Map.new(opts), name: name(opts[:electric_instance_id]))
     end
+  end
+
+  def name(electric_instance_id) do
+    :"shape_log_collector #{electric_instance_id}"
   end
 
   # use `GenStage.call/2` here to make the event processing synchronous.
@@ -37,11 +37,11 @@ defmodule Electric.Replication.ShapeLogCollector do
   # clause in the matching `handle_call/3` function and then use
   # `GenServer.reply/2` in the `demand/2` callback to inform the replication
   # client that the replication message has been processed.
-  def store_transaction(%Transaction{} = txn, server \\ __MODULE__) do
+  def store_transaction(%Transaction{} = txn, server) do
     GenStage.call(server, {:new_txn, txn})
   end
 
-  def handle_relation_msg(%Changes.Relation{} = rel, server \\ __MODULE__) do
+  def handle_relation_msg(%Changes.Relation{} = rel, server) do
     GenServer.call(server, {:relation_msg, rel})
   end
 

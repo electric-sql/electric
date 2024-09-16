@@ -5,6 +5,7 @@ defmodule Electric.Shapes.ConsumerTest do
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
+  alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes
@@ -101,8 +102,8 @@ defmodule Electric.Shapes.ConsumerTest do
         })
 
       {:ok, producer} =
-        Electric.Replication.ShapeLogCollector.start_link(
-          name: __MODULE__.ShapeLogCollector,
+        ShapeLogCollector.start_link(
+          electric_instance_id: ctx.electric_instance_id,
           demand: :forward,
           inspector:
             Support.StubInspector.new([
@@ -165,14 +166,14 @@ defmodule Electric.Shapes.ConsumerTest do
           log_offset: LogOffset.first()
         })
 
-      assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
       assert_receive {^ref, :new_changes, ^last_log_offset}, 1000
       assert_receive {Support.TestStorage, :append_to_log!, @shape_id1, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_id2, _}
 
       txn2 = %{txn | xid: xid}
 
-      assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn2, ctx.producer)
+      assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.producer)
       assert_receive {^ref, :new_changes, ^last_log_offset}, 1000
       assert_receive {Support.TestStorage, :append_to_log!, @shape_id1, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_id2, _}
@@ -216,7 +217,7 @@ defmodule Electric.Shapes.ConsumerTest do
           log_offset: LogOffset.increment(LogOffset.first(), 2)
         })
 
-      assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
 
       assert_receive {^ref1, :new_changes, ^last_log_offset}, 1000
       assert_receive {^ref2, :new_changes, ^last_log_offset}, 1000
@@ -258,7 +259,7 @@ defmodule Electric.Shapes.ConsumerTest do
           log_offset: LogOffset.first()
         })
 
-      assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
 
       assert_receive {Support.TestStorage, :append_to_log!, @shape_id2, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_id1, _}
@@ -283,7 +284,7 @@ defmodule Electric.Shapes.ConsumerTest do
         })
 
       assert_consumer_shutdown(ctx.electric_instance_id, @shape_id1, fn ->
-        assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
+        assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
       end)
 
       assert_receive {Support.TestStorage, :cleanup!, @shape_id1}
@@ -333,7 +334,7 @@ defmodule Electric.Shapes.ConsumerTest do
         })
 
       assert_consumer_shutdown(ctx.electric_instance_id, @shape_id1, fn ->
-        assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
+        assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
       end)
 
       refute_receive {Support.TestStorage, :append_to_log!, @shape_id1, _}
@@ -361,7 +362,7 @@ defmodule Electric.Shapes.ConsumerTest do
           log_offset: LogOffset.first()
         })
 
-      assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
       assert_receive {Support.TestStorage, :append_to_log!, @shape_id1, _}
       assert_receive {^ref, :new_changes, ^last_log_offset}, 1000
     end
@@ -381,12 +382,6 @@ defmodule Electric.Shapes.ConsumerTest do
     ]
 
     setup(ctx) do
-      {:ok, producer} =
-        Electric.Replication.ShapeLogCollector.start_link(
-          name: __MODULE__.ShapeLogCollector,
-          inspector: Support.StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
-        )
-
       snapshot_delay = Map.get(ctx, :snapshot_delay, nil)
 
       %{shape_cache_opts: shape_cache_opts} =
@@ -395,7 +390,7 @@ defmodule Electric.Shapes.ConsumerTest do
             pool: nil,
             inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
           }),
-          log_producer: producer,
+          log_producer: ctx.shape_log_collector,
           prepare_tables_fn: fn _, _ -> :ok end,
           create_snapshot_fn: fn parent, shape_id, _shape, _, storage ->
             if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
@@ -406,7 +401,7 @@ defmodule Electric.Shapes.ConsumerTest do
         )
 
       [
-        producer: producer,
+        producer: ctx.shape_log_collector,
         shape_cache_opts: shape_cache_opts
       ]
     end
@@ -442,7 +437,7 @@ defmodule Electric.Shapes.ConsumerTest do
           log_offset: LogOffset.new(lsn, 0)
         })
 
-      assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
 
       assert_receive {Shapes.Consumer, ^ref, 11}
 
@@ -453,7 +448,7 @@ defmodule Electric.Shapes.ConsumerTest do
                |> Enum.map(&:json.decode/1)
 
       # If we encounter & store the same transaction, log stream should be stable
-      assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
 
       assert_receive {Shapes.Consumer, ^ref, 11}
 
@@ -502,8 +497,8 @@ defmodule Electric.Shapes.ConsumerTest do
           log_offset: LogOffset.new(lsn2, 0)
         })
 
-      assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn1, ctx.producer)
-      assert :ok = Electric.Replication.ShapeLogCollector.store_transaction(txn2, ctx.producer)
+      assert :ok = ShapeLogCollector.store_transaction(txn1, ctx.producer)
+      assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.producer)
 
       :started = ShapeCache.await_snapshot_start(shape_id, shape_cache_opts)
 
@@ -656,14 +651,14 @@ defmodule Electric.Shapes.ConsumerTest do
         try_creating_publication?: true,
         slot_name: ctx.slot_name,
         transaction_received: {
-          Electric.Replication.ShapeLogCollector,
+          ShapeLogCollector,
           :store_transaction,
-          [__MODULE__.LogCollector]
+          [ShapeLogCollector.name(ctx.electric_instance_id)]
         },
         relation_received: {
-          Electric.Replication.ShapeLogCollector,
+          ShapeLogCollector,
           :handle_relation_msg,
-          [__MODULE__.LogCollector]
+          [ShapeLogCollector.name(ctx.electric_instance_id)]
         }
       ]
 
@@ -680,7 +675,7 @@ defmodule Electric.Shapes.ConsumerTest do
           registry: ctx.registry,
           inspector: ctx.inspector,
           chunk_bytes_threshold: 10_000,
-          log_producer: __MODULE__.LogCollector,
+          log_producer: ShapeLogCollector.name(ctx.electric_instance_id),
           consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(ctx.electric_instance_id),
           prepare_tables_fn: {
             Electric.Postgres.Configuration,
@@ -697,8 +692,8 @@ defmodule Electric.Shapes.ConsumerTest do
         Electric.Shapes.Supervisor.start_link(
           electric_instance_id: ctx.electric_instance_id,
           log_collector:
-            {Electric.Replication.ShapeLogCollector,
-             name: __MODULE__.LogCollector, inspector: ctx.inspector},
+            {ShapeLogCollector,
+             electric_instance_id: ctx.electric_instance_id, inspector: ctx.inspector},
           replication_client:
             {Electric.Postgres.ReplicationClient,
              connection_opts: ctx.db_config,
