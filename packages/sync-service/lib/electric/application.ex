@@ -48,6 +48,7 @@ defmodule Electric.Application do
       per_env_processes =
         if Application.fetch_env!(:electric, :environment) != :test do
           electric_instance_id = Application.fetch_env!(:electric, :electric_instance_id)
+          shape_log_collector = Electric.Replication.ShapeLogCollector.name(electric_instance_id)
 
           shape_cache =
             {Electric.ShapeCache,
@@ -56,7 +57,7 @@ defmodule Electric.Application do
              inspector: inspector,
              prepare_tables_fn: prepare_tables_fn,
              chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
-             log_producer: Electric.Replication.ShapeLogCollector,
+             log_producer: shape_log_collector,
              consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(electric_instance_id),
              persistent_kv: persistent_kv,
              registry: Registry.ShapeChanges}
@@ -69,9 +70,11 @@ defmodule Electric.Application do
               try_creating_publication?: true,
               slot_name: slot_name,
               transaction_received:
-                {Electric.Replication.ShapeLogCollector, :store_transaction, []},
+                {Electric.Replication.ShapeLogCollector, :store_transaction,
+                 [shape_log_collector]},
               relation_received:
-                {Electric.Replication.ShapeLogCollector, :handle_relation_msg, []}
+                {Electric.Replication.ShapeLogCollector, :handle_relation_msg,
+                 [shape_log_collector]}
             ],
             pool_opts: [
               name: Electric.DbPool,
@@ -82,7 +85,9 @@ defmodule Electric.Application do
               shape_cache: {Electric.ShapeCache, []},
               persistent_kv: persistent_kv
             ],
-            log_collector: {Electric.Replication.ShapeLogCollector, inspector: inspector},
+            log_collector:
+              {Electric.Replication.ShapeLogCollector,
+               electric_instance_id: electric_instance_id, inspector: inspector},
             shape_cache: shape_cache
           ]
 
