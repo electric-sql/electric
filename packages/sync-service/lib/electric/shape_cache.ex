@@ -146,7 +146,7 @@ defmodule Electric.ShapeCache do
   @spec clean_all_shapes(keyword()) :: :ok
   def clean_all_shapes(opts) do
     server = Access.get(opts, :server, __MODULE__)
-    GenServer.call(server, {:clean_all})
+    GenStage.call(server, {:clean_all})
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -329,7 +329,7 @@ defmodule Electric.ShapeCache do
   def handle_call({:clean_all}, _from, state) do
     Logger.info("Cleaning up all shapes")
     clean_up_all_shapes(state)
-    {:reply, :ok, state}
+    {:reply, :ok, [], state}
   end
 
   @impl GenStage
