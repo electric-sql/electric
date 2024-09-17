@@ -46,7 +46,7 @@ By default, `ShapeStream` parses the following Postgres types into native JavaSc
 - `int8` is parsed into a JavaScript `BigInt`
 - `bool` is parsed into a JavaScript `Boolean`
 - `json` and `jsonb` are parsed into JavaScript values/arrays/objects using `JSON.parse`
-- Postgres Arrays are parsed into JavaScript arrays, e.g. `"&#123;{1,2},{3,4}}"` is parsed into `[[1,2],[3,4]]`
+- Postgres Arrays are parsed into JavaScript arrays, e.g. <code v-pre>"{{1,2},{3,4}}"</code> is parsed into `[[1,2],[3,4]]`
 
 All other types aren't parsed and are left in the string format as they were served by the HTTP endpoint.
 
