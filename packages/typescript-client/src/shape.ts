@@ -50,7 +50,7 @@ export class Shape<T extends Row = Row> {
 
   constructor(stream: ShapeStreamInterface<T>) {
     this.#stream = stream
-    this.#stream.subscribeSync(
+    this.#stream.subscribe(
       this.#process.bind(this),
       this.#handleError.bind(this)
     )

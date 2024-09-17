@@ -61,10 +61,6 @@ export interface ShapeStreamInterface<T extends Row = Row> {
     callback: (messages: Message<T>[]) => MaybePromise<void>,
     onError?: (error: FetchError | Error) => void
   ): void
-  subscribeSync(
-    callback: (messages: Message<T>[]) => void,
-    onError?: (error: FetchError | Error) => void
-  ): void
   unsubscribeAllUpToDateSubscribers(): void
   unsubscribeAll(): void
   subscribeOnceToUpToDate(
@@ -272,23 +268,6 @@ export class ShapeStream<T extends Row = Row>
   ) {
     const subscriptionId = Math.random()
     const subscriber = new MessageProcessor(callback)
-
-    this.#subscribers.set(subscriptionId, [subscriber, onError])
-
-    return () => {
-      this.#subscribers.delete(subscriptionId)
-    }
-  }
-
-  subscribeSync(
-    callback: (messages: Message<T>[]) => void,
-    onError?: (error: FetchError | Error) => void
-  ) {
-    const subscriptionId = Math.random()
-    const subscriber: MessageProcessorInterface<Message<T>[]> = {
-      process: callback,
-      waitForProcessing: async () => {},
-    }
 
     this.#subscribers.set(subscriptionId, [subscriber, onError])
 

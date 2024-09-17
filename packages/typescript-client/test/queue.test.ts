@@ -2,6 +2,20 @@ import { describe, it, expect, vi } from 'vitest'
 import { AsyncProcessingQueue, MessageProcessor } from '../src/queue'
 
 describe(`AsyncProcessingQueue`, () => {
+  it(`should process synchronous callbacks in order`, () => {
+    let last = 0
+    const cb1 = vi.fn().mockImplementationOnce(() => (last = 1))
+    const cb2 = vi.fn().mockImplementationOnce(() => (last = 2))
+    const processor = new AsyncProcessingQueue()
+
+    processor.process(cb1)
+    processor.process(cb2)
+
+    expect(cb1).toHaveBeenCalledOnce()
+    expect(cb2).toHaveBeenCalledOnce()
+    expect(last).toBe(2)
+  })
+
   it(`should process asynchronous callbacks in order`, async () => {
     let last = 0
     const cb1 = vi
@@ -19,13 +33,48 @@ describe(`AsyncProcessingQueue`, () => {
     processor.process(cb1)
     processor.process(cb2)
 
-    expect(cb1).not.toHaveBeenCalled()
+    expect(cb1).toHaveBeenCalledOnce()
     expect(cb2).not.toHaveBeenCalled()
 
     await processor.waitForProcessing()
     expect(cb1).toHaveBeenCalledOnce()
     expect(cb2).toHaveBeenCalledOnce()
     expect(last).toBe(2)
+  })
+
+  it(`should process both async and sync callbacks in order`, async () => {
+    let last = 0
+    const cb1 = vi.fn().mockImplementation(() => (last = 1))
+    const cb2 = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise((res) => setTimeout(() => res((last = 2)), 10))
+      )
+    const cb3 = vi.fn().mockImplementation(() => (last = 3))
+    const cb4 = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise((res) => setTimeout(() => res((last = 4)), 5))
+      )
+
+    const processor = new AsyncProcessingQueue()
+
+    processor.process(cb1)
+    processor.process(cb2)
+    processor.process(cb3)
+    processor.process(cb4)
+
+    expect(cb1).toHaveBeenCalledOnce()
+    expect(cb2).toHaveBeenCalledOnce()
+    expect(cb3).not.toHaveBeenCalled()
+    expect(cb4).not.toHaveBeenCalled()
+    expect(last).toBe(1) // only sync has been called so far
+
+    await processor.waitForProcessing()
+
+    expect(cb3).toHaveBeenCalledOnce()
+    expect(cb4).toHaveBeenCalledOnce()
+    expect(last).toBe(4)
   })
 
   it(`should complete processing when waitForProcessing is called multiple times`, async () => {
