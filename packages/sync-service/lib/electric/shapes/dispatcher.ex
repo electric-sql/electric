@@ -111,6 +111,11 @@ defmodule Electric.Shapes.Dispatcher do
   end
 
   @impl GenStage.Dispatcher
+  # handle the no subscribers case here to make the real dispatch impl easier
+  def dispatch([event], _length, {_n, 0, _pending, [], _pids} = state) do
+    {:ok, [event], state}
+  end
+
   def dispatch([event], _length, {n, 0, _pending, subs, pids}) do
     {waiting, pending} =
       subs
@@ -124,7 +129,11 @@ defmodule Electric.Shapes.Dispatcher do
       end)
       |> case do
         {0, _pending} ->
-          {0, nil}
+          # even though no subscriber wants the event, we still need to generate demand
+          # so that we can complete the loop in the log collector
+          [{sub, _selector} | _] = subs
+          send(self(), {:"$gen_producer", sub, {:ask, 1}})
+          {1, MapSet.new([sub])}
 
         {waiting, pending} ->
           {waiting, pending}
