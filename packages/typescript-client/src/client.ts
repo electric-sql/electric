@@ -370,9 +370,7 @@ export class ShapeStream<T extends Row = Row>
   }
 }
 
-function validateOptions(
-  options: Partial<ShapeStreamOptions>
-): options is ShapeStreamOptions {
+function validateOptions(options: Partial<ShapeStreamOptions>): void {
   if (!options.url) {
     throw new Error(`Invalid shape option. It must provide the url`)
   }
@@ -391,5 +389,5 @@ function validateOptions(
       `shapeId is required if this isn't an initial fetch (i.e. offset > -1)`
     )
   }
-  return true
+  return
 }
