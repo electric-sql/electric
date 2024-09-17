@@ -411,6 +411,12 @@ a.no-visual:hover {
 .vp-doc a.VPButton {
   text-decoration: none;
 }
+.VPButton.electric,
+.VPButton.electric:hover {
+  background-color: var(--electric-color);
+  border-color: var(--electric-color);
+  color: var(--vp-c-bg);
+}
 .VPButton.pglite,
 .VPButton.pglite:hover {
   background-color: var(--pglite-color);

@@ -6,10 +6,6 @@ description: >-
 outline: deep
 ---
 
-<script setup>
-import { VPButton } from 'vitepress/theme-without-fonts'
-</script>
-
 <img src="/img/icons/pglite.svg" class="product-icon" />
 
 # PGlite
