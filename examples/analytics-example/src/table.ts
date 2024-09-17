@@ -3,7 +3,7 @@ export const listingsPrimaryKey = `listing_id`
 
 // Create local tables to sync data into
 export const createListingsTableSql = `
-  CREATE TABLE ${listingsTableName} (
+  CREATE TABLE IF NOT EXISTS ${listingsTableName} (
     ${listingsPrimaryKey} INT PRIMARY KEY,
     name TEXT,
     host_id INT,

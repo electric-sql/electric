@@ -1,0 +1,35 @@
+export type Listing = {
+  listing_id: number
+  name: string
+  host_id: number
+  host_since?: Date
+  host_location?: string
+  host_response_time?: string
+  host_response_rate?: number
+  host_acceptance_rate?: number
+  host_is_superhost?: boolean
+  host_total_listings_count?: number
+  host_has_profile_pic?: boolean
+  host_identity_verified?: boolean
+  neighbourhood?: string
+  district?: string
+  city?: string
+  latitude?: number
+  longitude?: number
+  property_type?: string
+  room_type?: string
+  accommodates?: number
+  bedrooms?: number
+  amenities?: string[]
+  price?: number
+  minimum_nights?: number
+  maximum_nights?: number
+  review_scores_rating?: number
+  review_scores_accuracy?: number
+  review_scores_cleanliness?: number
+  review_scores_checkin?: number
+  review_scores_communication?: number
+  review_scores_location?: number
+  review_scores_value?: number
+  instant_bookable?: boolean
+}

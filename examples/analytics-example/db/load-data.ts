@@ -13,6 +13,7 @@ const DATA_FOLDER = path.join(
 const ZIP_URL = `https://maven-datasets.s3.amazonaws.com/Airbnb/Airbnb+Data.zip`
 const ZIP_FILE_PATH = path.join(DATA_FOLDER, `Airbnb_Data.zip`)
 const CSV_FILE_PATH = path.join(DATA_FOLDER, `Airbnb Data`, `Listings.csv`)
+const SKIP_EVERY_N_ROWS = 4
 
 // PostgreSQL connection configuration
 if (!process.env.DATABASE_URL) {
@@ -20,7 +21,6 @@ if (!process.env.DATABASE_URL) {
 }
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  // idleTimeoutMillis: 0,
   connectionTimeoutMillis: 0,
 })
 
@@ -90,10 +90,19 @@ async function loadCsvToPostgres(): Promise<void> {
     await client.query(`BEGIN`)
 
     let rowCount = 0
+    let skipCount = 0
 
     const stream = fs.createReadStream(CSV_FILE_PATH).pipe(csvParser())
     console.log(`Rows added: 0`)
     for await (const row of stream) {
+      if (SKIP_EVERY_N_ROWS > 0) {
+        if (skipCount < SKIP_EVERY_N_ROWS) {
+          skipCount++
+          continue
+        }
+        skipCount = 0
+      }
+
       const query = `
       INSERT INTO airbnb_listings (
         listing_id, name, host_id, host_since, host_location, host_response_time, 
@@ -153,9 +162,6 @@ async function loadCsvToPostgres(): Promise<void> {
         process.stdout.clearScreenDown()
         console.log(`Rows added: ${rowCount}`)
       }
-
-      // TODO: remove this limit
-      if (rowCount > 100000) break
     }
 
     console.log(`Finished loading ${rowCount} rows into PostgreSQL.`)

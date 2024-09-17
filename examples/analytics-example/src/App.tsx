@@ -17,7 +17,7 @@ import { Example } from "./Example"
 
 // Initialize PGlite with extensions
 const db = await PGlite.create({
-  dataDir: `memory://`,
+  dataDir: `idb://analytics-example`,
   extensions: { live, electric: electricSync() },
 })
 
