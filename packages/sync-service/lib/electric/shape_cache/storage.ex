@@ -59,8 +59,16 @@ defmodule Electric.ShapeCache.Storage do
 
   @callback mark_snapshot_as_started(shape_opts()) :: :ok
 
-  @doc "Append log items from one transaction to the log"
-  @callback append_to_log!(Enumerable.t(log_item()), shape_opts()) :: :ok
+  @doc """
+  Append log items from one transaction to the log.
+
+  Each storage implementation is responsible for handling transient errors
+  using some retry strategy.
+
+  If the backend fails to write within the expected time, or some other error
+  occurs, then this should raise.
+  """
+  @callback append_to_log!(Enumerable.t(log_item()), shape_opts()) :: :ok | no_return()
 
   @doc "Get stream of the log for a shape since a given offset"
   @callback get_log_stream(offset :: LogOffset.t(), max_offset :: LogOffset.t(), shape_opts()) ::

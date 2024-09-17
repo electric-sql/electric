@@ -76,6 +76,7 @@ defmodule Electric.MixProject do
         {:pg_query_ex, "0.5.3"},
         {:plug, "~> 1.16"},
         {:postgrex, "~> 0.19"},
+        {:retry, "~> 0.18"},
         {:telemetry_metrics_prometheus_core, "~> 1.1"},
         {:telemetry_metrics_statsd, "~> 0.7"},
         {:telemetry_poller, "~> 1.1"},
