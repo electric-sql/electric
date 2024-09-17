@@ -107,13 +107,13 @@ So, hopefully now our motivation is clear. We needed to find a way to simplify E
 
 ## What's changed?
 
-Electric Next is a [sync engine](/product/electric), not a local-first software platform.
+Electric Next is a [sync engine](/product/sync), not a local-first software platform.
 
 It can be used for a wide range of [use cases](/use-cases/state-transfer), syncing data into apps, workers, services, agents and environments. These include but are not limited to local-first software development.
 
 ### Sync engine
 
-When we look at our stack, the part that we see as most core is the [sync engine](/product/electric).
+When we look at our stack, the part that we see as most core is the [sync engine](/product/sync).
 
 This is the component of Electric that syncs data between Postgres and local clients. Consuming Postgres logical replication, managing partial replication using Shapes and syncing data to and from clients over a replication protocol. It’s where there’s the most complexity. Where we can add the most value and is hardest to develop yourself.
 

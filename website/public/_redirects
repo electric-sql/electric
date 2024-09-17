@@ -79,3 +79,7 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /docs/usage/data-modelling/*    /docs/intro
 /docs/usage/installation        /docs/quickstart
 /docs/usage/installation/*      /docs/quickstart
+
+# Renamed pages on new site
+/product/ddn                    /product/cloud
+/product/electric               /product/sync

@@ -21,7 +21,7 @@ hero:
       target: '_blank'
       link: https://github.com/electric-sql
 features:
-  - title: Electric Sync
+  - title: Sync
     details: >-
       <span class="para">
         Sync subsets of your Postgres data into
@@ -31,12 +31,12 @@ features:
       </span>
     icon:
       src: '/img/icons/electric.svg'
-    link: '/product/electric'
-  - title: Data Delivery Network
+    link: '/product/sync'
+  - title: Cloud
     details: >-
       <span class="para">
-        Sync data faster than you can query it.
-        <span class="no-wrap-lg">Scale out to</span>
+        Hosted Electric sync that's blazing fast and
+        <span class="no-wrap-lg">scales to</span>
         millions
         <span class="no-wrap">of users</span>.
       </span>
@@ -44,11 +44,11 @@ features:
       </span>
     icon:
       src: '/img/icons/ddn.svg'
-    link: '/product/ddn'
+    link: '/product/cloud'
   - title: PGlite
     details: >-
       <span class="para">
-        Embed a lightweight WASM Postgres with
+        Sync into a lightweight WASM Postgres with
         <span class="no-wrap">real-time</span>,
         <span class="no-wrap">reactive bindings</span>.
       </span>
@@ -101,7 +101,12 @@ const renderStarCount = async (repoName, initialStarCount) => {
     return
   }
 
-  const linkEl = document.createElement('a')
+  let linkEl = container.querySelector('a')
+  if (linkEl) {
+    return
+  }
+
+  linkEl = document.createElement('a')
   linkEl.setAttribute('href', `https://github.com/electric-sql/${repoName}`)
   linkEl.setAttribute('_target', `_blank`)
   linkEl.classList.add('VPButton', 'medium', 'alt')
@@ -133,6 +138,21 @@ onMounted(async () => {
         link.prepend(icon)
       })
     }
+
+    let signUp = document.querySelector(`span.feature-cta.sign-up-link`)
+    if (!signUp) {
+      return
+    }
+    let linkEl = signUp.querySelector('a')
+    if (linkEl) {
+      return
+    }
+    linkEl = document.createElement('a')
+    linkEl.setAttribute('href', '/product/cloud/sign-up')
+    linkEl.classList.add('VPButton', 'medium', 'alt')
+    linkEl.innerHTML = '<span class="vpi-electric-icon"></span> Sign up'
+    signUp.append(linkEl)
+
 
     renderStarCount('electric', initialStarCounts.electric)
     renderStarCount('pglite', initialStarCounts.pglite)
