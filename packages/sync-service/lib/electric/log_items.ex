@@ -88,7 +88,7 @@ defmodule Electric.LogItems do
   defp take_pks_or_all(record, pks), do: Map.take(record, pks)
 
   @spec from_snapshot_row_stream(
-          row_stream :: Stream.t(list()),
+          row_stream :: Enumerable.t(list()),
           offset :: LogOffset.t(),
           shape :: Shape.t(),
           query_info :: Postgrex.Query.t()
