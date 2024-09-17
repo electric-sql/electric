@@ -1,5 +1,12 @@
 # @electric-sql/client
 
+## 0.5.1
+
+### Patch Changes
+
+- 9992a74: Client refactor and fix `Shape` state synchronization with `ShapeStream`.
+- 70da0b5: Expose lastSyncedAt field in ShapeStream and Shape classes and in the useShape React hook.
+
 ## 0.5.0
 
 ### Minor Changes

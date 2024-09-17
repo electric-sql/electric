@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 0.5.2
+
+### Patch Changes
+
+- 5e72067: Fix the configuration of OpenTelemetry libraries, removing the "inets_not_started" warning from log output.
+- e7fdb14: Fix how Electric reads PG's version number.
+- df3c174: Don't crash when there are no active shapes
+- fa879b1: Don't timeout when writing to lots of shapes
+
 ## 0.5.1
 
 ### Patch Changes
