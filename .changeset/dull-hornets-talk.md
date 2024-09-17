@@ -2,4 +2,4 @@
 "@electric-sql/client": patch
 ---
 
-Add `subscribeSync` method to ensure `Shape` up-to-date guarantees.
+Client refactor and new `subscribeSync` method to ensure `Shape` up-to-date guarantees.
