@@ -374,6 +374,47 @@ describe(`HTTP Sync`, () => {
     )
   })
 
+  it.only(`should wait for processing before advancing stream`, async ({
+    aborter,
+    issuesTableUrl,
+
+    insertIssues,
+  }) => {
+    // With initial data
+    await insertIssues({ id: uuidv4(), title: `original insert` })
+
+    const fetchWrapper = vi
+      .fn()
+      .mockImplementation((...args: Parameters<typeof fetch>) => {
+        return fetch(...args)
+      })
+
+    const shapeData = new Map()
+    const issueStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+    })
+
+    await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
+      if (!isChangeMessage(msg)) return
+      shapeData.set(msg.key, msg.value)
+
+      if (nth === 0) {
+        expect(fetchWrapper).toHaveBeenCalledTimes(1)
+
+        // ensure fetch has not been called again while
+        // waiting for processing
+        await insertIssues({ title: `foo1` })
+        await sleep(100)
+        expect(fetchWrapper).toHaveBeenCalledTimes(1)
+      } else if (nth === 1) {
+        expect(fetchWrapper).toHaveBeenCalledTimes(2)
+        res()
+      }
+    })
+  })
+
   it(`multiple clients can get the same data in parallel`, async ({
     issuesTableUrl,
     updateIssue,
