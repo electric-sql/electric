@@ -1,7 +1,13 @@
 import { FetchError, FetchBackoffAbortError } from './error'
 
 export interface BackoffOptions {
+  /**
+   * Initial delay before retrying in milliseconds
+   */
   initialDelay: number
+  /**
+   * Maximum retry delay in milliseconds
+   */
   maxDelay: number
   multiplier: number
   onFailedAttempt?: () => void
