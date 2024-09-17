@@ -9,6 +9,7 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.Replication.Changes.Transaction
   alias Electric.ShapeCache
   alias Electric.Shapes.Shape
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -145,6 +146,14 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_txn(%Transaction{} = txn, state) do
+    OpenTelemetry.with_span(
+      "shapes_consumer.handle_txn",
+      shape_attrs(state.shape_id, state.shape),
+      fn -> do_handle_txn(txn, state) end
+    )
+  end
+
+  defp do_handle_txn(%Transaction{} = txn, state) do
     %{
       shape: shape,
       shape_id: shape_id,
@@ -258,5 +267,9 @@ defmodule Electric.Shapes.Consumer do
       end)
 
     {log_items, new_log_state}
+  end
+
+  defp shape_attrs(shape_id, shape) do
+    ["shape.id": shape_id, "shape.root_table": shape.root_table, "shape.where": shape.where]
   end
 end
