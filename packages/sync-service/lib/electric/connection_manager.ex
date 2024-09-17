@@ -51,6 +51,19 @@ defmodule Electric.ConnectionManager do
       :pg_version,
       :electric_instance_id
     ]
+
+    defimpl Inspect do
+      def inspect(state, opts) do
+        redacted = put_in(state.connection_opts[:password], "********")
+
+        Inspect.Map.inspect(
+          redacted,
+          Macro.inspect_atom(:literal, Electric.ConnectionManager.State),
+          Electric.ConnectionManager.State.__info__(:struct),
+          opts
+        )
+      end
+    end
   end
 
   use GenServer
