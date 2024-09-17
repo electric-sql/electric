@@ -374,7 +374,7 @@ describe(`HTTP Sync`, () => {
     )
   })
 
-  it.only(`should wait for processing before advancing stream`, async ({
+  it(`should wait for processing before advancing stream`, async ({
     aborter,
     issuesTableUrl,
 
