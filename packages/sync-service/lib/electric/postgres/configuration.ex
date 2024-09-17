@@ -10,6 +10,8 @@ defmodule Electric.Postgres.Configuration do
   @type maybe_filter() :: filter() | :relation_not_found
   @type filters() :: %{Electric.relation() => filter()}
 
+  @pg_15 150_000
+
   @doc """
   Ensure that all tables are configured for replication.
 
@@ -38,7 +40,7 @@ defmodule Electric.Postgres.Configuration do
   end
 
   defp configure_tables_for_replication_internal!(pool, relations, pg_version, publication_name)
-       when pg_version <= 14 do
+       when pg_version < @pg_15 do
     Postgrex.transaction(pool, fn conn ->
       set_replica_identity!(conn, relations)
 

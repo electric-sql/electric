@@ -55,7 +55,7 @@ defmodule Support.ComponentSetup do
     shape_meta_table = :"shape_meta_#{full_test_name(ctx)}"
     server = :"shape_cache_#{full_test_name(ctx)}"
     consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
-    get_pg_version = fn -> Application.fetch_env!(:electric, :major_pg_version_for_tests) end
+    get_pg_version = fn -> Application.fetch_env!(:electric, :pg_version_for_tests) end
 
     start_opts =
       [
