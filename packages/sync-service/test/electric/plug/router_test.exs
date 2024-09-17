@@ -116,15 +116,6 @@ defmodule Electric.Plug.RouterTest do
       assert [%{"value" => %{"value" => "test value 1"}}, %{"headers" => _}] =
                Jason.decode!(conn.resp_body)
 
-      # Add another shape to avoid the bug mentioned here: https://github.com/electric-sql/electric/issues/1688
-      # which causes this test to sporadically fail.
-      # TODO: Remove this GET once #1688 has been fixed
-      conn =
-        conn("GET", "/v1/shape/items", offset: -1, where: "1=1")
-        |> Router.call(opts)
-
-      assert %{status: 200} = conn
-
       assert %{status: 202} =
                conn("DELETE", "/v1/shape/items?shape_id=#{shape1_id}")
                |> Router.call(opts)
