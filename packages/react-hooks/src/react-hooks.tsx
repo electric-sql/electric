@@ -70,6 +70,8 @@ export interface UseShapeResult<T extends Row = Row> {
   shape: Shape<T>
   /** True during initial fetch. False afterwise. */
   isLoading: boolean
+  /** Unix time at which we last synced. Undefined when `isLoading` is true. */
+  lastSyncedAt?: number
   error: Shape<T>[`error`]
   isError: boolean
 }
@@ -85,6 +87,7 @@ function parseShapeData<T extends Row>(shape: Shape<T>): UseShapeResult<T> {
   return {
     data: [...shape.valueSync.values()],
     isLoading: shape.isLoading(),
+    lastSyncedAt: shape.lastSyncedAt(),
     isError: shape.error !== false,
     shape,
     error: shape.error,
