@@ -21,8 +21,8 @@ module.exports = {
   plugins: [`prettier`],
   rules: {
     quotes: [`error`, `backtick`],
-    'no-unused-vars': `off`,
-    '@typescript-eslint/no-unused-vars': [
+    "no-unused-vars": `off`,
+    "@typescript-eslint/no-unused-vars": [
       `error`,
       {
         argsIgnorePattern: `^_`,
@@ -31,4 +31,11 @@ module.exports = {
       },
     ],
   },
+  ignorePatterns: [
+    `**/node_modules/**`,
+    `**/dist/**`,
+    `tsup.config.ts`,
+    `vitest.config.ts`,
+    `.eslintrc.js`,
+  ],
 }

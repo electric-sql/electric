@@ -8,15 +8,15 @@ import pg from "pg"
 // Constants for folder and file paths
 const DATA_FOLDER = path.join(
   fileURLToPath(path.dirname(import.meta.url)),
-  "data"
+  `data`
 )
-const ZIP_URL = "https://maven-datasets.s3.amazonaws.com/Airbnb/Airbnb+Data.zip"
-const ZIP_FILE_PATH = path.join(DATA_FOLDER, "Airbnb_Data.zip")
-const CSV_FILE_PATH = path.join(DATA_FOLDER, "Airbnb Data", "Listings.csv")
+const ZIP_URL = `https://maven-datasets.s3.amazonaws.com/Airbnb/Airbnb+Data.zip`
+const ZIP_FILE_PATH = path.join(DATA_FOLDER, `Airbnb_Data.zip`)
+const CSV_FILE_PATH = path.join(DATA_FOLDER, `Airbnb Data`, `Listings.csv`)
 
 // PostgreSQL connection configuration
 if (!process.env.DATABASE_URL) {
-  throw new Error('No "DATABASE_URL" environment variable found.')
+  throw new Error(`No "DATABASE_URL" environment variable found.`)
 }
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
@@ -50,19 +50,19 @@ async function downloadZipFile(): Promise<void> {
 
     console.log(`Downloaded zip file to ${ZIP_FILE_PATH}`)
   } else {
-    console.log("Zip file already exists.")
+    console.log(`Zip file already exists.`)
   }
 }
 
 // Function to extract the zip file
 function extractZipFile(): void {
   if (!fs.existsSync(CSV_FILE_PATH)) {
-    console.log("Extracting zip file...")
+    console.log(`Extracting zip file...`)
     const zip = new AdmZip(ZIP_FILE_PATH)
     zip.extractAllTo(DATA_FOLDER, true)
     console.log(`Extracted files to ${DATA_FOLDER}`)
   } else {
-    console.log("CSV file already exists.")
+    console.log(`CSV file already exists.`)
   }
 }
 
@@ -79,14 +79,14 @@ const safeParseInt = (value: string) => {
 // Function to load CSV data into PostgreSQL
 async function loadCsvToPostgres(): Promise<void> {
   if (!fs.existsSync(CSV_FILE_PATH)) {
-    console.error("Listings.csv not found.")
+    console.error(`Listings.csv not found.`)
     return
   }
 
   const client = await pool.connect()
 
   try {
-    console.log("Loading data from Listings.csv into PostgreSQL...")
+    console.log(`Loading data from Listings.csv into PostgreSQL...`)
     await client.query(`BEGIN`)
 
     let rowCount = 0
@@ -119,10 +119,10 @@ async function loadCsvToPostgres(): Promise<void> {
         row.host_response_time,
         safeParseFloat(row.host_response_rate),
         safeParseFloat(row.host_acceptance_rate),
-        row.host_is_superhost === "t",
+        row.host_is_superhost === `t`,
         safeParseInt(row.host_total_listings_count),
-        row.host_has_profile_pic === "t",
-        row.host_identity_verified === "t",
+        row.host_has_profile_pic === `t`,
+        row.host_identity_verified === `t`,
         row.neighbourhood,
         row.district,
         row.city,
@@ -143,7 +143,7 @@ async function loadCsvToPostgres(): Promise<void> {
         safeParseInt(row.review_scores_communication),
         safeParseInt(row.review_scores_location),
         safeParseInt(row.review_scores_value),
-        row.instant_bookable === "t",
+        row.instant_bookable === `t`,
       ]
 
       await client.query(query, values)
@@ -160,7 +160,7 @@ async function loadCsvToPostgres(): Promise<void> {
     await client.query(`COMMIT`)
   } catch (err) {
     await client.query(`ROLLBACK`)
-    console.error("Error loading data into PostgreSQL:", err)
+    console.error(`Error loading data into PostgreSQL:`, err)
   } finally {
     client.release()
   }
@@ -183,5 +183,5 @@ async function main() {
 
 // Run the main function
 main().catch((err) => {
-  console.error("An error occurred:", err)
+  console.error(`An error occurred:`, err)
 })
