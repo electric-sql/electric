@@ -31,7 +31,18 @@ jobs:
         with:
           version: pnpm ci:version
           publish: pnpm ci:publish
-          title: 'chore: publish new package versions'
+          title: "chore: publish new package versions"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
+      - name: Publish to Hex
+        uses: synchronal/hex-publish-action@v3
+        with:
+          working_directory: "packages/sync-service"
+          name: "electric"
+          key: "${{ secrets.HEX_PM_KEY }}"
+          tag-release: false
