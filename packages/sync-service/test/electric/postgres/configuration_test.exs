@@ -3,6 +3,8 @@ defmodule Electric.Postgres.ConfigurationTest do
 
   alias Electric.Postgres.Configuration
 
+  @pg_15 150_000
+
   setup {Support.DbSetup, :with_unique_db}
   setup {Support.DbSetup, :with_publication}
   setup {Support.DbSetup, :with_pg_version}
@@ -235,11 +237,11 @@ defmodule Electric.Postgres.ConfigurationTest do
   end
 
   defp list_tables_in_publication(conn, publication) do
-    pg_version = Electric.ConnectionManager.query_pg_major_version(conn)
+    pg_version = Electric.ConnectionManager.query_pg_version(conn)
     list_tables_in_pub(conn, publication, pg_version)
   end
 
-  defp list_tables_in_pub(conn, publication, pg_version) when pg_version <= 14 do
+  defp list_tables_in_pub(conn, publication, pg_version) when pg_version < @pg_15 do
     Postgrex.query!(
       conn,
       "SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = $1 ORDER BY tablename",
@@ -259,7 +261,7 @@ defmodule Electric.Postgres.ConfigurationTest do
     |> Enum.map(&List.to_tuple/1)
   end
 
-  defp expected_filters(filters, pg_version) when pg_version <= 14 do
+  defp expected_filters(filters, pg_version) when pg_version < @pg_15 do
     Enum.map(filters, fn {schema, table, _filter} -> {schema, table} end)
   end
 

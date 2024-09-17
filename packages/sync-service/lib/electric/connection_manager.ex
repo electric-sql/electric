@@ -159,7 +159,7 @@ defmodule Electric.ConnectionManager do
       {:ok, pid} ->
         Electric.Timeline.check({get_pg_id(pid), get_pg_timeline(pid)}, state.timeline_opts)
 
-        pg_version = query_pg_major_version(pid)
+        pg_version = query_pg_version(pid)
 
         # Now we have everything ready to start accepting and processing logical messages from
         # Postgres.
@@ -402,11 +402,11 @@ defmodule Electric.ConnectionManager do
     end
   end
 
-  def query_pg_major_version(conn) do
+  def query_pg_version(conn) do
     [[setting]] =
       Postgrex.query!(
         conn,
-        "SELECT floor(setting::numeric)::integer FROM pg_settings WHERE name = 'server_version'",
+        "SELECT current_setting('server_version_num')",
         []
       )
       |> Map.fetch!(:rows)

@@ -49,7 +49,7 @@ defmodule Support.DbSetup do
   end
 
   def with_pg_version(ctx) do
-    pg_version = Electric.ConnectionManager.query_pg_major_version(ctx.db_conn)
+    pg_version = Electric.ConnectionManager.query_pg_version(ctx.db_conn)
     {:ok, %{get_pg_version: fn -> pg_version end}}
   end
 
