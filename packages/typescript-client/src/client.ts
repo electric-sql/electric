@@ -319,10 +319,16 @@ export class ShapeStream<T extends Row = Row>
   }
 
   async #publish(messages: Message<T>[]): Promise<void> {
-    await Promise.allSettled(
-      Array.from(this.#subscribers.values()).map(([callback, __]) =>
-        callback(messages)
-      )
+    await Promise.all(
+      Array.from(this.#subscribers.values()).map(async ([callback, __]) => {
+        try {
+          await callback(messages)
+        } catch (err) {
+          queueMicrotask(() => {
+            throw err
+          })
+        }
+      })
     )
   }
 
