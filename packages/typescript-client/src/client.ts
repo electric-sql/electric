@@ -1,7 +1,6 @@
 import { Message, Offset, Schema, Row, MaybePromise } from './types'
 import { MessageParser, Parser } from './parser'
 import { isUpToDateMessage } from './helpers'
-import { MessageProcessor, MessageProcessorInterface } from './queue'
 import { FetchError, FetchBackoffAbortError } from './error'
 import {
   BackoffDefaults,
@@ -119,7 +118,7 @@ export class ShapeStream<T extends Row = Row>
   readonly #subscribers = new Map<
     number,
     [
-      MessageProcessorInterface<Message<T>[]>,
+      (messages: Message<T>[]) => MaybePromise<void>,
       ((error: Error) => void) | undefined,
     ]
   >()
@@ -199,14 +198,14 @@ export class ShapeStream<T extends Row = Row>
             // The request is invalid, most likely because the shape has been deleted.
             // We should start from scratch, this will force the shape to be recreated.
             this.#reset()
-            this.#publish(e.json as Message<T>[])
+            await this.#publish(e.json as Message<T>[])
             continue
           } else if (e.status == 409) {
             // Upon receiving a 409, we should start from scratch
             // with the newly provided shape ID
             const newShapeId = e.headers[SHAPE_ID_HEADER]
             this.#reset(newShapeId)
-            this.#publish(e.json as Message<T>[])
+            await this.#publish(e.json as Message<T>[])
             continue
           } else if (e.status >= 400 && e.status < 500) {
             // Notify subscribers
@@ -246,16 +245,17 @@ export class ShapeStream<T extends Row = Row>
 
         // Update isUpToDate
         if (batch.length > 0) {
+          const prevUpToDate = this.#isUpToDate
           const lastMessage = batch[batch.length - 1]
           if (isUpToDateMessage(lastMessage)) {
             this.#lastSyncedAt = Date.now()
-            if (!this.#isUpToDate) {
-              this.#isUpToDate = true
-              this.#notifyUpToDateSubscribers()
-            }
+            this.#isUpToDate = true
           }
 
-          this.#publish(batch)
+          await this.#publish(batch)
+          if (!prevUpToDate && this.#isUpToDate) {
+            this.#notifyUpToDateSubscribers()
+          }
         }
       }
     } finally {
@@ -268,9 +268,8 @@ export class ShapeStream<T extends Row = Row>
     onError?: (error: FetchError | Error) => void
   ) {
     const subscriptionId = Math.random()
-    const subscriber = new MessageProcessor(callback)
 
-    this.#subscribers.set(subscriptionId, [subscriber, onError])
+    this.#subscribers.set(subscriptionId, [callback, onError])
 
     return () => {
       this.#subscribers.delete(subscriptionId)
@@ -319,10 +318,12 @@ export class ShapeStream<T extends Row = Row>
     return !this.isUpToDate
   }
 
-  #publish(messages: Message<T>[]) {
-    this.#subscribers.forEach(([subscriber, _]) => {
-      subscriber.process(messages)
-    })
+  async #publish(messages: Message<T>[]): Promise<void> {
+    await Promise.allSettled(
+      Array.from(this.#subscribers.values()).map(([callback, __]) =>
+        callback(messages)
+      )
+    )
   }
 
   #sendErrorToSubscribers(error: Error) {
