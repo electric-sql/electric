@@ -1,28 +1,44 @@
 import { describe, expect, it } from 'vitest'
 import { isChangeMessage, isControlMessage, Message } from '../src'
+import { isUpToDateMessage } from '../src/helpers'
 
 describe(`helpers`, () => {
-  it(`should correctly detect ChangeMessages`, () => {
-    const message = {
-      headers: {
-        operation: `insert`,
-      },
-      offset: `-1`,
-      key: `key`,
-      value: { key: `value` },
-    } as Message
+  const changeMsg = {
+    headers: {
+      operation: `insert`,
+    },
+    offset: `-1`,
+    key: `key`,
+    value: { key: `value` },
+  } as Message
 
-    expect(isChangeMessage(message)).toBe(true)
-    expect(isControlMessage(message)).toBe(false)
+  const upToDateMsg = {
+    headers: {
+      control: `up-to-date`,
+    },
+  } as Message
+
+  const mustRefetchMsg = {
+    headers: {
+      control: `must-refetch`,
+    },
+  } as Message
+
+  it(`should correctly detect ChangeMessages`, () => {
+    expect(isChangeMessage(changeMsg)).toBe(true)
+    expect(isControlMessage(changeMsg)).toBe(false)
   })
 
   it(`should correctly detect ControlMessages`, () => {
-    const message = {
-      headers: {
-        control: `up-to-date`,
-      },
-    } as Message
-    expect(isControlMessage(message)).toBe(true)
-    expect(isChangeMessage(message)).toBe(false)
+    expect(isControlMessage(upToDateMsg)).toBe(true)
+    expect(isControlMessage(mustRefetchMsg)).toBe(true)
+    expect(isChangeMessage(upToDateMsg)).toBe(false)
+    expect(isChangeMessage(mustRefetchMsg)).toBe(false)
+  })
+
+  it(`should correctly detect up-to-date message`, () => {
+    expect(isUpToDateMessage(upToDateMsg)).toBe(true)
+    expect(isUpToDateMessage(mustRefetchMsg)).toBe(false)
+    expect(isUpToDateMessage(changeMsg)).toBe(false)
   })
 })
