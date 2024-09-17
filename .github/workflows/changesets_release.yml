@@ -23,6 +23,10 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r build
       - name: Create Release Pull Request or Publish
@@ -35,14 +39,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - uses: erlef/setup-beam@v1
-        with:
-          version-type: strict
-          version-file: ".tool-versions"
-      - name: Publish to Hex
-        uses: synchronal/hex-publish-action@v3
-        with:
-          working-directory: "packages/sync-service"
-          name: "electric"
-          key: "${{ secrets.HEX_PM_KEY }}"
-          tag-release: false
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}

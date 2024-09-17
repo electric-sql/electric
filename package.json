@@ -10,6 +10,8 @@
     "example-backend:down": "dotenv  -e .env.dev -- docker compose -f .support/docker-compose.yml down --volumes",
     "stylecheck-all": "pnpm --if-present --recursive run stylecheck",
     "ci:version": "pnpm exec changeset version",
-    "ci:publish": "pnpm changeset publish"
+    "ci:publish": "pnpm '/^ci:publish:.+/'",
+    "ci:publish:npm": "pnpm changeset publish",
+    "ci:publish:hex": "pnpm run --dir packages/sync-service publish:hex"
   }
 }
