@@ -13,10 +13,14 @@ From the root directory:
 
 `pnpm run backend:up`
 
-3. Start the dev server
+3. Load the data into the database, this might take some time
+
+`pnpm run db:load-data`
+
+4. Start the dev server
 
 `pnpm run dev`
 
-4. When done, tear down the backend containers so you can run other examples
+5. When done, tear down the backend containers so you can run other examples
 
 `pnpm run backend:down`
