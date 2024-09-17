@@ -1,5 +1,5 @@
 import type { GlobalSetupContext } from 'vitest/node'
-import { FetchError } from '../../src/client'
+import { FetchError } from '../../src/error'
 import { makePgClient } from './test-helpers'
 
 const url = process.env.ELECTRIC_URL ?? `http://localhost:3000`

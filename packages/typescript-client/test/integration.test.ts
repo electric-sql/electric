@@ -2,9 +2,9 @@ import { parse } from 'cache-control-parser'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
 import { assert, describe, expect, inject, vi } from 'vitest'
-import { Shape, ShapeStream } from '../src/client'
-import { Message, Offset, Row } from '../src/types'
-import { isChangeMessage, isControlMessage } from '../src'
+import { Shape, ShapeStream } from '../src'
+import { Message, Offset } from '../src/types'
+import { isChangeMessage, isUpToDateMessage } from '../src/helpers'
 import {
   IssueRow,
   testWithIssuesTable as it,
@@ -13,9 +13,6 @@ import {
 import * as h from './support/test-helpers'
 
 const BASE_URL = inject(`baseUrl`)
-
-const isUpToDateMessage = <T extends Row>(msg: Message<T>) =>
-  isControlMessage(msg) && msg.headers.control === `up-to-date`
 
 it(`sanity check`, async ({ dbClient, issuesTableSql }) => {
   const result = await dbClient.query(`SELECT * FROM ${issuesTableSql}`)
@@ -433,11 +430,12 @@ describe(`HTTP Sync`, () => {
     issuesTableUrl,
     insertIssues,
   }) => {
+    // initialize storage for the cases where persisted shape streams are tested
     await insertIssues({ title: `foo1` }, { title: `foo2` }, { title: `foo3` })
     await sleep(50)
 
     let lastOffset: Offset = `-1`
-    const issueStream = new ShapeStream({
+    const issueStream = new ShapeStream<IssueRow>({
       url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter.signal,
       subscribe: false,
@@ -474,7 +472,8 @@ describe(`HTTP Sync`, () => {
       offset: lastOffset,
       shapeId: issueStream.shapeId,
     })
-    await h.forEachMessage(newIssueStream, aborter, (res, msg, nth) => {
+
+    await h.forEachMessage(newIssueStream, newAborter, (res, msg, nth) => {
       if (isUpToDateMessage(msg)) {
         res()
       } else {

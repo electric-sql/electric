@@ -2,7 +2,7 @@ import { describe, expect, inject, vi } from 'vitest'
 import { v4 as uuidv4 } from 'uuid'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
-import { ShapeStream, Shape, FetchError } from '../src/client'
+import { ShapeStream, Shape, FetchError } from '../src'
 
 const BASE_URL = inject(`baseUrl`)
 
@@ -135,10 +135,12 @@ describe(`Shape`, () => {
     const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
       // clear the shape and modify the data after the initial request
       if (requestsMade === 1) {
-        await clearIssuesShape()
         // new shape data should have just second issue and not first
         await deleteIssue({ id: id1, title: `foo1` })
         await insertIssues({ id: id2, title: `foo2` })
+        await sleep(100)
+        await clearIssuesShape(shapeStream.shapeId)
+
         rotationTime = Date.now()
       }
 
