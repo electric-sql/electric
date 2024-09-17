@@ -17,6 +17,15 @@ importers:
 
   examples/analytics-example:
     dependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.2.7
+        version: 0.2.7
+      '@electric-sql/pglite-react':
+        specifier: ^0.2.7
+        version: 0.2.7(@electric-sql/pglite@0.2.7)(react@18.3.1)
+      '@electric-sql/pglite-sync':
+        specifier: ^0.2.7
+        version: 0.2.7(@electric-sql/pglite@0.2.7)
       '@electric-sql/react':
         specifier: workspace:*
         version: link:../../packages/react-hooks
@@ -1266,6 +1275,23 @@ packages:
         optional: true
       search-insights:
         optional: true
+
+  '@electric-sql/client@0.3.4':
+    resolution: {integrity: sha512-LffHg/zL6OK65Qw7jzvwK3VUYh1QGt/bWzeols/BgH62F3ljIuKrK/VZM1ceNMrsnSnfzg+xWo48QJRH/QWhKg==}
+
+  '@electric-sql/pglite-react@0.2.7':
+    resolution: {integrity: sha512-QCq6PhgSatgOSbBvxjgRuh59VhlkULmwX9VcpLwki3wY/c0gSmOX7OORV7Hp4tnkxnnmrRDVhfjca+KLcw54BQ==}
+    peerDependencies:
+      '@electric-sql/pglite': ^0.2.7
+      react: ^18.0.0
+
+  '@electric-sql/pglite-sync@0.2.7':
+    resolution: {integrity: sha512-57XSOHtlO7pPAKbAEtS6rEKh7bUg4JT6YP2x2+JkPwmcAee3FHnIeuKE9BvjweEO+qhX1sqE9u45EV6zbScnCw==}
+    peerDependencies:
+      '@electric-sql/pglite': ^0.2.7
+
+  '@electric-sql/pglite@0.2.7':
+    resolution: {integrity: sha512-8Il//XHTAtZ8VeQF+6P1UjsIoaAJyO4LwOMoXhSFaHpmkwKs63cUhHHNzLzUmcZvP/ZTmlT3+xTiWfU/EyoxwQ==}
 
   '@emotion/hash@0.9.2':
     resolution: {integrity: sha512-MyqliTZGuOm3+5ZRSaaBGP3USLw6+EGykkwZns2EPC5g8jJ4z9OrdZY9apkl3+UP9+sdz76YYkwCKP5gh8iY3g==}
@@ -9525,6 +9551,22 @@ snapshots:
       search-insights: 2.17.1
     transitivePeerDependencies:
       - '@algolia/client-search'
+
+  '@electric-sql/client@0.3.4':
+    optionalDependencies:
+      '@rollup/rollup-darwin-arm64': 4.21.0
+
+  '@electric-sql/pglite-react@0.2.7(@electric-sql/pglite@0.2.7)(react@18.3.1)':
+    dependencies:
+      '@electric-sql/pglite': 0.2.7
+      react: 18.3.1
+
+  '@electric-sql/pglite-sync@0.2.7(@electric-sql/pglite@0.2.7)':
+    dependencies:
+      '@electric-sql/client': 0.3.4
+      '@electric-sql/pglite': 0.2.7
+
+  '@electric-sql/pglite@0.2.7': {}
 
   '@emotion/hash@0.9.2': {}
 
