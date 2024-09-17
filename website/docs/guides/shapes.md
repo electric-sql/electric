@@ -177,4 +177,4 @@ You can upvote and discuss adding support for mutable shapes here:
 ### Dropping tables
 
 When dropping a table from Postgres you need to *manually* delete all shapes that are defined on that table.
-Electric doesn't automatically delete the shape because Postgres does not stream DDL statements (such as `DROP TABLE`) on the logical replication stream that Electric uses to detect changes.
+Electric doesn't automatically delete those shapes because Postgres does not stream DDL statements (such as `DROP TABLE`) on the logical replication stream that Electric uses to detect changes.
