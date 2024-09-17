@@ -302,8 +302,7 @@ paths:
         This clears the shape log and forces any clients requesting the shape
         to create a new shape and resync from scratch.
 
-        **WARNING** Delete shape should only be used in development and only works
-        if Electric is configured to `allow_shape_deletion`.
+        **NOTE** Delete shape only works if Electric is configured to `allow_shape_deletion`.
       parameters:
         # Path parameters
         - name: root_table
