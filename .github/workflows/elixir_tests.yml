@@ -17,7 +17,7 @@ jobs:
         working-directory: packages/sync-service
     env:
       MIX_ENV: test
-      POSTGRES_MAJOR_VERSION: 14
+      POSTGRES_VERSION: 140006
     services:
       postgres:
         image: postgres:14-alpine
@@ -74,7 +74,7 @@ jobs:
         working-directory: packages/sync-service
     env:
       MIX_ENV: test
-      POSTGRES_MAJOR_VERSION: 15
+      POSTGRES_VERSION: 150001
     services:
       postgres:
         image: postgres:15-alpine

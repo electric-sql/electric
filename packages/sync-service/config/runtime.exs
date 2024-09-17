@@ -11,7 +11,7 @@ config :logger, level: :debug
 
 if config_env() == :test do
   config(:logger, level: :info)
-  config(:electric, major_pg_version_for_tests: env!("POSTGRES_MAJOR_VERSION", :integer, 15))
+  config(:electric, pg_version_for_tests: env!("POSTGRES_VERSION", :integer, 150_001))
 end
 
 if config_env() in [:dev, :test] do
