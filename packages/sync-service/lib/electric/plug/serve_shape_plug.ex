@@ -121,6 +121,7 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :cors
   plug :put_resp_content_type, "application/json"
   plug :validate_query_params
+  plug :set_open_telemetry_attrs_before_send
   plug :load_shape_info
   plug :put_schema_header
 
@@ -152,8 +153,18 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
+  defp set_open_telemetry_attrs_before_send(%Conn{} = conn, _) do
+    register_before_send(conn, fn conn ->
+      conn
+      |> open_telemetry_attrs()
+      |> OpenTelemetry.add_span_attributes()
+
+      conn
+    end)
+  end
+
   defp load_shape_info(%Conn{} = conn, _) do
-    OpenTelemetry.with_span("serve_shape_plug.load_shape_info", open_telemetry_attrs(conn), fn ->
+    OpenTelemetry.with_span("serve_shape_plug.load_shape_info", [], fn ->
       shape_info = get_or_create_shape_id(conn.assigns)
       handle_shape_info(conn, shape_info)
     end)
@@ -337,58 +348,64 @@ defmodule Electric.Plug.ServeShapePlug do
 
   def cors(conn, _opts) do
     conn
-    |> Conn.put_resp_header("access-control-allow-origin", "*")
-    |> Conn.put_resp_header("access-control-expose-headers", "*")
-    |> Conn.put_resp_header("access-control-allow-methods", "GET, POST, OPTIONS")
+    |> put_resp_header("access-control-allow-origin", "*")
+    |> put_resp_header("access-control-expose-headers", "*")
+    |> put_resp_header("access-control-allow-methods", "GET, POST, OPTIONS")
   end
 
   # If offset is -1, we're serving a snapshot
-  defp serve_log_or_snapshot(
-         %Conn{
-           assigns: %{
-             offset: @before_all_offset,
-             chunk_end_offset: chunk_end_offset,
-             active_shape_id: shape_id,
-             up_to_date: maybe_up_to_date
-           }
-         } = conn,
-         _
-       ) do
+  defp serve_log_or_snapshot(%Conn{assigns: %{offset: @before_all_offset}} = conn, _) do
     OpenTelemetry.with_span(
       "serve_shape_plug.serve_log_or_snapshot",
-      open_telemetry_attrs(conn),
-      fn ->
-        case Shapes.get_snapshot(conn.assigns.config, shape_id) do
-          {:ok, {offset, snapshot}} ->
-            OpenTelemetry.with_span("serve_shape_plug.get_log_stream", [], fn ->
-              log =
-                Shapes.get_log_stream(conn.assigns.config, shape_id,
-                  since: offset,
-                  up_to: chunk_end_offset
-                )
-
-              [snapshot, log, maybe_up_to_date]
-              |> Stream.concat()
-              |> to_json_stream()
-              |> Stream.chunk_every(500)
-              |> send_stream(conn, 200)
-            end)
-
-          {:error, reason} ->
-            Logger.warning("Could not serve a snapshot because of #{inspect(reason)}")
-
-            send_resp(
-              conn,
-              500,
-              Jason.encode_to_iodata!(%{error: "Failed creating or fetching the snapshot"})
-            )
-        end
-      end
+      [],
+      fn -> serve_snapshot(conn) end
     )
   end
 
   # Otherwise, serve log since that offset
-  defp serve_log_or_snapshot(
+  defp serve_log_or_snapshot(conn, _) do
+    OpenTelemetry.with_span(
+      "serve_shape_plug.get_log_stream_and_maybe_hold",
+      [],
+      fn -> serve_shape_log(conn) end
+    )
+  end
+
+
+  defp serve_snapshot(
+         %Conn{assigns: %{chunk_end_offset: chunk_end_offset, active_shape_id: shape_id,
+
+             up_to_date: maybe_up_to_date
+         }} = conn
+       ) do
+    case Shapes.get_snapshot(conn.assigns.config, shape_id) do
+      {:ok, {offset, snapshot}} ->
+        OpenTelemetry.with_span("serve_shape_plug.get_log_stream", [], fn ->
+          log =
+            Shapes.get_log_stream(conn.assigns.config, shape_id,
+              since: offset,
+              up_to: chunk_end_offset
+            )
+
+          [snapshot, log, maybe_up_to_date]
+          |> Stream.concat()
+          |> to_json_stream()
+          |> Stream.chunk_every(500)
+          |> send_stream(conn, 200)
+        end)
+
+      {:error, reason} ->
+        Logger.warning("Could not serve a snapshot because of #{inspect(reason)}")
+
+        send_resp(
+          conn,
+          500,
+          Jason.encode_to_iodata!(%{error: "Failed creating or fetching the snapshot"})
+        )
+    end
+  end
+
+  defp serve_shape_log(
          %Conn{
            assigns: %{
              offset: offset,
@@ -396,30 +413,25 @@ defmodule Electric.Plug.ServeShapePlug do
              active_shape_id: shape_id,
              up_to_date: maybe_up_to_date
            }
-         } = conn,
-         _
+         } = conn
        ) do
-    OpenTelemetry.with_span(
-      "serve_shape_plug.get_log_stream_and_maybe_hold",
-      open_telemetry_attrs(conn),
-      fn ->
-        log =
-          Shapes.get_log_stream(conn.assigns.config, shape_id,
-            since: offset,
-            up_to: chunk_end_offset
-          )
+    log =
+      Shapes.get_log_stream(conn.assigns.config, shape_id,
+        since: offset,
+        up_to: chunk_end_offset
+      )
 
-        if Enum.take(log, 1) == [] and conn.assigns.live do
-          hold_until_change(conn, shape_id)
-        else
-          [log, maybe_up_to_date]
-          |> Stream.concat()
-          |> to_json_stream()
-          |> Stream.chunk_every(500)
-          |> send_stream(conn, 200)
-        end
-      end
-    )
+    if Enum.take(log, 1) == [] and conn.assigns.live do
+      conn
+      |> assign(:ot_is_immediate_response, false)
+      |> hold_until_change(shape_id)
+    else
+      [log, maybe_up_to_date]
+      |> Stream.concat()
+      |> to_json_stream()
+      |> Stream.chunk_every(500)
+      |> send_stream(conn, 200)
+    end
   end
 
   @json_list_start "["
@@ -434,16 +446,14 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp send_stream(stream, conn, status) do
-    conn = Conn.send_chunked(conn, status)
-
-    OpenTelemetry.add_span_attributes(%{SC.Trace.http_status_code() => status})
+    conn = send_chunked(conn, status)
 
     Enum.reduce_while(stream, conn, fn chunk, conn ->
       OpenTelemetry.with_span(
         "serve_shape_plug.serve_log_or_snapshot.chunk",
         [chunk_size: IO.iodata_length(chunk)],
         fn ->
-          case Conn.chunk(conn, chunk) do
+          case chunk(conn, chunk) do
             {:ok, conn} ->
               {:cont, conn}
 
@@ -491,35 +501,40 @@ defmodule Electric.Plug.ServeShapePlug do
         # update last offset header
         |> put_resp_header("electric-chunk-last-offset", "#{latest_log_offset}")
         |> determine_up_to_date([])
-        |> serve_log_or_snapshot([])
+        |> serve_shape_log()
 
       {^ref, :shape_rotation} ->
         # We may want to notify the client better that the shape ID had changed, but just closing the response
         # and letting the client handle it on reconnection is good enough.
-        send_resp(conn, 200, ["[", @up_to_date, "]"])
+        conn
+        |> assign(:ot_is_shape_rotated, true)
+        |> assign(:ot_is_empty_response, true)
+        |> send_resp(200, ["[", @up_to_date, "]"])
     after
       # If we timeout, return an empty body and 204 as there's no response body.
-      long_poll_timeout -> send_resp(conn, 204, ["[", @up_to_date, "]"])
+      long_poll_timeout ->
+        conn
+        |> assign(:ot_is_long_poll_timeout, true)
+        |> assign(:ot_is_empty_response, true)
+        |> send_resp(204, ["[", @up_to_date, "]"])
     end
   end
 
-  defp open_telemetry_attrs(%Plug.Conn{} = conn) do
+  defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do
     %{
-      :"shape.id" => Map.get(conn.query_params, "shape_id"),
-      :"conn.assigns" => Map.delete(conn.assigns, :config),
-      :"http.req_headers" => conn.req_headers,
-      :"http.resp_headers" => conn.resp_headers,
-      :"http.query_string" => conn.query_string,
-      :"http.query_params" => query_params_attr(conn.query_params),
-      SC.Trace.http_url() =>
-        %URI{
-          scheme: to_string(conn.scheme),
-          host: conn.host,
-          port: conn.port,
-          path: conn.request_path,
-          query: conn.query_string
-        }
-        |> to_string(),
+      "shape.id" =>
+        conn.query_params["shape_id"] || assigns[:active_shape_id] || assigns[:shape_id],
+      "shape.where" => assigns[:where],
+      "shape.root_table" => assigns[:root_table],
+      "shape.definition" => assigns[:shape_definition],
+      "shape_req.is_live" => assigns[:live],
+      "shape_req.offset" => assigns[:offset],
+      "shape_req.is_shape_rotated" => assigns[:ot_is_shape_rotated] || false,
+      "shape_req.is_long_poll_timeout" => assigns[:ot_is_long_poll_timeout] || false,
+      "shape_req.is_empty_response" => assigns[:ot_is_empty_response] || false,
+      "shape_req.is_immediate_response" => assigns[:ot_is_immediate_response] || true,
+      "http.request_id" => assigns[:plug_request_id],
+      "http.query_string" => conn.query_string,
       SC.Trace.http_client_ip() => client_ip(conn),
       SC.Trace.http_scheme() => conn.scheme,
       SC.Trace.net_peer_name() => conn.host,
@@ -528,12 +543,24 @@ defmodule Electric.Plug.ServeShapePlug do
       SC.Trace.http_method() => conn.method,
       SC.Trace.http_status_code() => conn.status,
       SC.Trace.net_transport() => :"IP.TCP",
-      SC.Trace.http_user_agent() => user_agent(conn)
+      SC.Trace.http_user_agent() => user_agent(conn),
+      SC.Trace.http_url() =>
+        %URI{
+          scheme: to_string(conn.scheme),
+          host: conn.host,
+          port: conn.port,
+          path: conn.request_path,
+          query: conn.query_string
+        }
+        |> to_string()
     }
+    |> Map.merge(Map.new(conn.query_params, fn {k, v} -> {"http.query_param.#{k}", v} end))
+    |> Map.merge(Map.new(conn.req_headers, fn {k, v} -> {"http.req_header.#{k}", v} end))
+    |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.resp_header.#{k}", v} end))
   end
 
-  defp client_ip(%Plug.Conn{remote_ip: remote_ip} = conn) do
-    case Plug.Conn.get_req_header(conn, "x-forwarded-for") do
+  defp client_ip(%Conn{remote_ip: remote_ip} = conn) do
+    case get_req_header(conn, "x-forwarded-for") do
       [] ->
         remote_ip
         |> :inet_parse.ntoa()
@@ -544,16 +571,10 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  defp user_agent(%Plug.Conn{} = conn) do
-    case Plug.Conn.get_req_header(conn, "user-agent") do
+  defp user_agent(%Conn{} = conn) do
+    case get_req_header(conn, "user-agent") do
       [] -> ""
       [head | _] -> head
     end
-  end
-
-  defp query_params_attr(map) do
-    map
-    |> Enum.map(fn {key, val} -> key <> "=" <> val end)
-    |> Enum.sort()
   end
 end
