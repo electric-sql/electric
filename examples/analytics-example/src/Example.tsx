@@ -1,38 +1,21 @@
-import { useShape } from "@electric-sql/react"
+import { useLiveQuery } from "@electric-sql/pglite-react"
+import { listingsTableName } from "./table"
+
 import "./Example.css"
 
-type Item = { id: string }
-
-const baseUrl = import.meta.env.ELECTRIC_URL ?? `http://localhost:3000`
+type Item = { name: string }
 
 export const Example = () => {
-  const { data: items } = useShape<Item>({
-    url: `${baseUrl}/v1/shape/items`,
-  })
+  const result = useLiveQuery<Item>(
+    `SELECT * FROM ${listingsTableName} LIMIT 10;`,
+    []
+  )
 
-  /*
-  const addItem = async () => {
-    console.log(`'addItem' is not implemented`)
-  }
-
-  const clearItems = async () => {
-    console.log(`'clearItems' is not implemented`)
-  }
-
-      <div className="controls">
-        <button className="button" onClick={addItem}>
-          Add
-        </button>
-        <button className="button" onClick={clearItems}>
-          Clear
-        </button>
-      </div>
-      */
   return (
     <div>
-      {items.map((item: Item, index: number) => (
+      {result?.rows.map((item: Item, index: number) => (
         <p key={index} className="item">
-          <code>{item.id}</code>
+          <code>{item.name}</code>
         </p>
       ))}
     </div>

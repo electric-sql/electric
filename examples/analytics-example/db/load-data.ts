@@ -153,6 +153,9 @@ async function loadCsvToPostgres(): Promise<void> {
         process.stdout.clearScreenDown()
         console.log(`Rows added: ${rowCount}`)
       }
+
+      // TODO: remove this limit
+      if (rowCount > 100000) break
     }
 
     console.log(`Finished loading ${rowCount} rows into PostgreSQL.`)
