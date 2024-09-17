@@ -56,7 +56,7 @@ export default defineConfig({
     },
     logo: '/img/brand/logo.svg',
     nav: [
-      { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
+      { text: 'Product', link: '/product/sync', activeMatch: '/product/' },
       { text: 'Use cases', link: '/use-cases/state-transfer', activeMatch: '/use-cases/' },
       { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/'},
       { text: 'Blog', link: '/blog', activeMatch: '/blog/'},
@@ -70,8 +70,11 @@ export default defineConfig({
         {
           text: 'Product',
           items: [
-            { text: 'Electric', link: '/product/electric' },
-            { text: 'DDN', link: '/product/ddn' },
+            { text: 'Sync', link: '/product/sync' },
+            { text: 'Cloud', link: '/product/cloud', items: [
+                { text: 'Sign-up', link: '/product/cloud/sign-up' }
+              ]
+            },
             { text: 'PGlite', link: '/product/pglite' },
           ]
         }
