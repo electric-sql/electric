@@ -30,7 +30,7 @@ export const PriceHistogram = () => {
       SELECT
         min_price,
         max_price,
-        GREATEST((max_price - min_price) / $2::float, 1.0) AS bin_width
+        LEAST(2 * min_price, GREATEST((max_price - min_price) / $2::float, 1.0)) AS bin_width
       FROM price_limits
     )
     SELECT
@@ -54,11 +54,6 @@ export const PriceHistogram = () => {
   `,
     [city, 30, city]
   )
-
-  const resultA = useLiveQuery(`SELECT COUNT(*) FROM ${listingsTableName}`, [
-    city,
-  ])
-  console.log(resultA?.rows[0])
 
   const chartData = useMemo(
     () => ({
