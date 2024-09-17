@@ -13,7 +13,7 @@ function isThenable(value: MaybePromise<void>): value is Promise<void> {
  * Processes messages asynchronously in order.
  */
 export class AsyncProcessingQueue {
-  #processingChain: Promise<void> | void = undefined
+  #processingChain: MaybePromise<void> = undefined
 
   public process(callback: () => MaybePromise<void>): MaybePromise<void> {
     this.#processingChain = isThenable(this.#processingChain)
