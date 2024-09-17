@@ -17,6 +17,8 @@ defmodule Electric.ShapeCache.Storage do
   @type log_item :: {LogOffset.t(), Querying.json_iodata()} | {:chunk_boundary | LogOffset.t()}
   @type log_state :: %{current_chunk_byte_size: non_neg_integer()}
   @type log :: Enumerable.t(Querying.json_iodata())
+  @type for_shape_opt :: {:readonly, boolean()}
+  @type for_shape_opts :: [for_shape_opt()]
 
   @type row :: list()
 
@@ -24,13 +26,13 @@ defmodule Electric.ShapeCache.Storage do
   @callback shared_opts(Keyword.t()) :: {:ok, compiled_opts()} | {:error, term()}
 
   @doc "Initialise shape-specific opts from the shared, global, configuration"
-  @callback for_shape(shape_id(), compiled_opts()) :: shape_opts()
+  @callback for_shape(shape_id(), compiled_opts(), for_shape_opts()) :: shape_opts()
 
   @doc "Start any processes required to run the storage backend"
   @callback start_link(shape_opts()) :: GenServer.on_start()
 
   @doc "Run any initial setup tasks"
-  @callback initialise(shape_opts()) :: :ok
+  @callback initialise(shape_opts()) :: {:ok, shape_opts()}
 
   @doc """
   Get the current xmin and offset for the shape storage.
@@ -107,8 +109,8 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def for_shape(shape_id, {mod, opts}) do
-    {mod, mod.for_shape(shape_id, opts)}
+  def for_shape(shape_id, {mod, storage_opts}, opts \\ []) do
+    {mod, mod.for_shape(shape_id, storage_opts, opts)}
   end
 
   @impl __MODULE__
@@ -118,7 +120,9 @@ defmodule Electric.ShapeCache.Storage do
 
   @impl __MODULE__
   def initialise({mod, shape_opts}) do
-    mod.initialise(shape_opts)
+    with {:ok, shape_opts} <- mod.initialise(shape_opts) do
+      {:ok, {mod, shape_opts}}
+    end
   end
 
   @impl __MODULE__

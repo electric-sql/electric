@@ -220,6 +220,7 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "get_or_create_shape_id/2 against real db" do
+    @moduletag tmp_dir: true
     setup [
       :with_electric_instance_id,
       :with_in_memory_storage,
@@ -805,7 +806,7 @@ defmodule Electric.ShapeCacheTest do
 
     setup [
       :with_electric_instance_id,
-      :with_cub_db_storage,
+      :with_persistent_storage,
       :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
@@ -909,7 +910,7 @@ defmodule Electric.ShapeCacheTest do
       stop_shape_cache(context)
       # Wait 1 millisecond to ensure shape IDs are not generated the same
       Process.sleep(1)
-      with_cub_db_storage(context)
+      with_persistent_storage(context)
 
       with_shape_cache(Map.put(context, :inspector, @stub_inspector),
         prepare_tables_fn: @prepare_tables_noop,

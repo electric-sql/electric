@@ -116,6 +116,9 @@ defmodule Electric.Replication.LogOffset do
   @spec first() :: t
   def first(), do: %LogOffset{tx_offset: 0, op_offset: 0}
 
+  @last_tx 0xFFFFFFFFFFFFFFFF
+  @last_op :infinity
+
   @doc """
   The last possible offset in the log.
 
@@ -128,7 +131,18 @@ defmodule Electric.Replication.LogOffset do
       :lt
   """
   @spec last() :: t
-  def last(), do: %LogOffset{tx_offset: 0xFFFFFFFFFFFFFFFF, op_offset: :infinity}
+  def last(), do: %LogOffset{tx_offset: @last_tx, op_offset: @last_op}
+
+  @doc """
+  Tests to see if this is the `last/0` offset.
+  """
+  @spec last?(t()) :: boolean()
+  def last?(%LogOffset{tx_offset: @last_tx, op_offset: @last_op}), do: true
+  def last?(_), do: false
+
+  @spec first?(t()) :: boolean()
+  def first?(%LogOffset{tx_offset: 0, op_offset: 0}), do: true
+  def first?(_), do: false
 
   @doc """
   Increments the offset of the change inside the transaction.

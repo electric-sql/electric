@@ -52,7 +52,7 @@ defmodule Electric.Shapes.Consumer do
 
     Logger.metadata(shape_id: config.shape_id)
 
-    :ok = ShapeCache.Storage.initialise(storage)
+    {:ok, storage} = ShapeCache.Storage.initialise(storage)
 
     {:ok, latest_offset, snapshot_xmin} = ShapeCache.Storage.get_current_position(storage)
 
@@ -61,6 +61,7 @@ defmodule Electric.Shapes.Consumer do
         latest_offset: latest_offset,
         snapshot_xmin: snapshot_xmin,
         log_state: @initial_log_state,
+        storage: storage,
         buffer: [],
         monitors: []
       })

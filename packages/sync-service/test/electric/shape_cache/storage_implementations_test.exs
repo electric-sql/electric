@@ -1,4 +1,4 @@
-defmodule Electric.ShapeCache.StorageImplimentationsTest do
+defmodule Electric.ShapeCache.StorageImplementationsTest do
   use ExUnit.Case, async: true
 
   alias Electric.ShapeCache.FileStorage
@@ -6,6 +6,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes
   alias Electric.ShapeCache.InMemoryStorage
+  alias Electric.ShapeCache.SQLiteStorage
   alias Electric.Utils
 
   import Support.TestUtils
@@ -36,7 +37,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   setup :with_electric_instance_id
 
-  for module <- [InMemoryStorage, FileStorage] do
+  for module <- [InMemoryStorage, FileStorage, SQLiteStorage] do
     module_name = module |> Module.split() |> List.last()
 
     doctest module, import: true
@@ -47,6 +48,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
 
       setup :start_storage
+      setup :initialise_storage
 
       test "returns false when shape does not exist", %{module: storage, opts: opts} do
         assert storage.snapshot_started?(opts) == false
@@ -64,7 +66,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         {:ok, %{module: unquote(module)}}
       end
 
-      setup :start_storage
+      setup [:start_storage, :initialise_storage]
 
       test "returns snapshot when shape does exist", %{module: storage, opts: opts} do
         storage.mark_snapshot_as_started(opts)
@@ -161,7 +163,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         {:ok, %{module: unquote(module)}}
       end
 
-      setup :start_storage
+      setup [:start_storage, :initialise_storage]
 
       test "adds items to the log", %{module: storage, opts: opts} do
         lsn = Lsn.from_integer(1000)
@@ -230,7 +232,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         {:ok, %{module: unquote(module)}}
       end
 
-      setup :start_storage
+      setup [:start_storage, :initialise_storage]
 
       test "returns correct stream of log items", %{module: storage, opts: opts} do
         lsn1 = Lsn.from_integer(1000)
@@ -373,7 +375,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         {:ok, %{module: unquote(module)}}
       end
 
-      setup :start_storage
+      setup [:start_storage, :initialise_storage]
 
       test "causes snapshot_started?/2 to return false", %{module: storage, opts: opts} do
         storage.make_new_snapshot!(@data_stream, opts)
@@ -419,7 +421,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   end
 
   # Tests for storage implementations that are recoverable
-  for module <- [FileStorage] do
+  for module <- [FileStorage, SQLiteStorage] do
     module_name = module |> Module.split() |> List.last()
 
     describe "#{module_name}.initialise/1" do
@@ -433,14 +435,14 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         module: storage,
         opts: opts
       } do
-        storage.initialise(opts)
+        {:ok, opts} = storage.initialise(opts)
 
         storage.mark_snapshot_as_started(opts)
         storage.make_new_snapshot!(@data_stream, opts)
         # storage.set_snapshot_xmin(11, opts)
         assert storage.snapshot_started?(opts)
 
-        storage.initialise(opts)
+        {:ok, opts} = storage.initialise(opts)
 
         refute storage.snapshot_started?(opts)
       end
@@ -449,12 +451,12 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         module: storage,
         opts: opts
       } do
-        storage.initialise(opts)
+        {:ok, opts} = storage.initialise(opts)
 
         storage.mark_snapshot_as_started(opts)
         storage.set_snapshot_xmin(22, opts)
 
-        storage.initialise(opts)
+        {:ok, opts} = storage.initialise(opts)
 
         refute storage.snapshot_started?(opts)
       end
@@ -463,13 +465,13 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         module: storage,
         opts: opts
       } do
-        storage.initialise(opts)
+        {:ok, opts} = storage.initialise(opts)
 
         storage.mark_snapshot_as_started(opts)
         storage.make_new_snapshot!(@data_stream, opts)
         storage.set_snapshot_xmin(11, opts)
 
-        storage.initialise(%{opts | version: "new-version"})
+        {:ok, opts} = storage.initialise(%{opts | version: "new-version"})
 
         refute storage.snapshot_started?(opts)
       end
@@ -481,7 +483,13 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
     shape_opts = module.for_shape(@shape_id, opts)
 
-    {:ok, _} = module.start_link(shape_opts)
+    module.start_link(shape_opts)
+
+    {:ok, %{module: module, opts: shape_opts}}
+  end
+
+  defp initialise_storage(%{module: module, opts: shape_opts}) do
+    {:ok, shape_opts} = module.initialise(shape_opts)
 
     {:ok, %{module: module, opts: shape_opts}}
   end
@@ -491,6 +499,13 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       snapshot_ets_table: String.to_atom("snapshot_ets_table_#{Utils.uuid4()}"),
       log_ets_table: String.to_atom("log_ets_table_#{Utils.uuid4()}"),
       chunk_checkpoint_ets_table: String.to_atom("chunk_checkpoint_ets_table_#{Utils.uuid4()}"),
+      electric_instance_id: electric_instance_id
+    ]
+  end
+
+  defp opts(SQLiteStorage, %{tmp_dir: tmp_dir, electric_instance_id: electric_instance_id}) do
+    [
+      storage_dir: tmp_dir,
       electric_instance_id: electric_instance_id
     ]
   end

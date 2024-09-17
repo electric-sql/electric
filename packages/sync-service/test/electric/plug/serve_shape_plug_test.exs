@@ -110,7 +110,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset = LogOffset.increment(@first_offset)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, _opts, _ -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
         next_offset
       end)
@@ -155,7 +155,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset = LogOffset.increment(@first_offset)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, _opts, _ -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
         next_offset
       end)
@@ -193,7 +193,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset = LogOffset.increment(@first_offset)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, _opts, _ -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
         next_offset
       end)
@@ -224,7 +224,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_next_offset = LogOffset.increment(next_offset)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, _opts, _ -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @start_offset_50, _ ->
         next_next_offset
       end)
@@ -279,7 +279,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, _opts, _ -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @start_offset_50, _ ->
         @test_offset
       end)
@@ -312,7 +312,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset_str = "#{next_offset}"
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, _opts, _ -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
         nil
       end)
@@ -371,7 +371,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       test_pid = self()
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, _opts, _ -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
         nil
       end)
@@ -416,7 +416,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, _opts, _ -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
         nil
       end)
@@ -450,7 +450,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> stub(:has_shape?, fn "foo", _opts -> false end)
 
       Mock.Storage
-      |> stub(:for_shape, fn "foo", opts -> {"foo", opts} end)
+      |> stub(:for_shape, fn "foo", opts, _ -> {"foo", opts} end)
 
       conn =
         conn(
@@ -478,7 +478,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end)
 
       Mock.Storage
-      |> stub(:for_shape, fn new_shape_id, opts -> {new_shape_id, opts} end)
+      |> stub(:for_shape, fn new_shape_id, opts, _ -> {new_shape_id, opts} end)
 
       conn =
         conn(
@@ -501,7 +501,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, opts -> {@test_shape_id, opts} end)
+      |> stub(:for_shape, fn @test_shape_id, opts, _ -> {@test_shape_id, opts} end)
 
       conn =
         conn(

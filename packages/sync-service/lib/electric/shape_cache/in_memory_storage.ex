@@ -35,14 +35,20 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def for_shape(shape_id, %{shape_id: shape_id} = opts) do
-    opts
+  def for_shape(shape_id, storage, opts \\ [])
+
+  def for_shape(shape_id, %{shape_id: shape_id} = storage, _opts) do
+    storage
   end
 
-  def for_shape(shape_id, %{
-        table_base_name: table_base_name,
-        electric_instance_id: electric_instance_id
-      }) do
+  def for_shape(
+        shape_id,
+        %{
+          table_base_name: table_base_name,
+          electric_instance_id: electric_instance_id
+        },
+        _opts
+      ) do
     snapshot_table_name = :"#{table_base_name}.Snapshot_#{shape_id}"
     log_table_name = :"#{table_base_name}.Log_#{shape_id}"
     chunk_checkpoint_table_name = :"#{table_base_name}.ChunkCheckpoint_#{shape_id}"
@@ -104,7 +110,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def initialise(%MS{} = _opts), do: :ok
+  def initialise(%MS{} = opts), do: {:ok, opts}
 
   @impl Electric.ShapeCache.Storage
   def snapshot_started?(%MS{} = opts) do
@@ -210,7 +216,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
     log_items
     |> Enum.map(fn
-      {:chunk_boundary, offset} -> {storage_offset(offset), :checkpoint}
+      {:chunk_boundary, offset} -> {{:offset, storage_offset(offset)}, :checkpoint}
       {offset, json_log_item} -> {{:offset, storage_offset(offset)}, json_log_item}
     end)
     |> Enum.split_with(fn item -> match?({_, :checkpoint}, item) end)

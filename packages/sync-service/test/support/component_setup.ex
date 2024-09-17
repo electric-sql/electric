@@ -5,6 +5,7 @@ defmodule Support.ComponentSetup do
   alias Electric.ShapeCache
   alias Electric.ShapeCache.FileStorage
   alias Electric.ShapeCache.InMemoryStorage
+  alias Electric.ShapeCache.SQLiteStorage
   alias Electric.Postgres.Inspector.EtsInspector
 
   def with_electric_instance_id(ctx) do
@@ -40,6 +41,20 @@ defmodule Support.ComponentSetup do
       )
 
     %{storage: {FileStorage, storage_opts}}
+  end
+
+  def with_sqlite_storage(ctx) do
+    {:ok, storage_opts} =
+      SQLiteStorage.shared_opts(
+        storage_dir: ctx.tmp_dir,
+        electric_instance_id: ctx.electric_instance_id
+      )
+
+    %{storage: {SQLiteStorage, storage_opts}}
+  end
+
+  def with_persistent_storage(ctx) do
+    with_sqlite_storage(ctx)
   end
 
   def with_persistent_kv(_ctx) do
@@ -145,7 +160,7 @@ defmodule Support.ComponentSetup do
       Keyword.get(opts, :inspector, &with_inspector/1),
       Keyword.get(opts, :persistent_kv, &with_persistent_kv/1),
       Keyword.get(opts, :log_chunking, &with_log_chunking/1),
-      Keyword.get(opts, :storage, &with_cub_db_storage/1),
+      Keyword.get(opts, :storage, &with_persistent_storage/1),
       Keyword.get(opts, :log_collector, &with_shape_log_collector/1),
       Keyword.get(opts, :shape_cache, &with_shape_cache/1),
       Keyword.get(opts, :replication_client, &with_replication_client/1)

@@ -103,6 +103,6 @@ defmodule Electric.Shapes do
   end
 
   defp shape_storage(config, shape_id) do
-    Storage.for_shape(shape_id, Access.fetch!(config, :storage))
+    Storage.for_shape(shape_id, Access.fetch!(config, :storage), readonly: true)
   end
 end

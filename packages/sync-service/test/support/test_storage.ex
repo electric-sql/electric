@@ -38,7 +38,9 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def for_shape(shape_id, {parent, init, storage}) do
+  def for_shape(shape_id, storage, opts \\ [])
+
+  def for_shape(shape_id, {parent, init, storage}, _opts) do
     send(parent, {__MODULE__, :for_shape, shape_id})
     shape_init = Map.get(init, shape_id, [])
     {parent, shape_id, shape_init, Storage.for_shape(shape_id, storage)}
@@ -53,14 +55,12 @@ defmodule Support.TestStorage do
   def initialise({parent, shape_id, init, storage}) do
     send(parent, {__MODULE__, :initialise, shape_id})
 
-    {module, opts} = storage
-
-    with :ok <- Storage.initialise(storage) do
+    with {:ok, {module, opts} = storage} <- Storage.initialise(storage) do
       for {name, args} <- init do
         apply(module, name, args ++ [opts])
       end
 
-      :ok
+      {:ok, {parent, shape_id, init, storage}}
     end
   end
 

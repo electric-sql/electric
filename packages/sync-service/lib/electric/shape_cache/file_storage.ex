@@ -27,11 +27,17 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def for_shape(shape_id, %FS{shape_id: shape_id} = opts) do
-    opts
+  def for_shape(shape_id, storage, opts \\ [])
+
+  def for_shape(shape_id, %FS{shape_id: shape_id} = storage, _opts) do
+    storage
   end
 
-  def for_shape(shape_id, %{base_path: base_path, electric_instance_id: electric_instance_id}) do
+  def for_shape(
+        shape_id,
+        %{base_path: base_path, electric_instance_id: electric_instance_id},
+        _opts
+      ) do
     %FS{
       base_path: base_path,
       shape_id: shape_id,
@@ -77,7 +83,8 @@ defmodule Electric.ShapeCache.FileStorage do
       cleanup!(opts)
     end
 
-    CubDB.put(opts.db, @version_key, @version)
+    :ok = CubDB.put(opts.db, @version_key, @version)
+    {:ok, opts}
   end
 
   @impl Electric.ShapeCache.Storage

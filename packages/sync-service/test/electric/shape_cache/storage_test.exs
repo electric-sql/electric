@@ -14,7 +14,7 @@ defmodule Electric.ShapeCache.StorageTest do
     shape_id = "test"
 
     Mock.Storage
-    |> Mox.stub(:for_shape, fn ^shape_id, :opts -> {shape_id, :opts} end)
+    |> Mox.stub(:for_shape, fn ^shape_id, :opts, _ -> {shape_id, :opts} end)
     |> Mox.expect(:make_new_snapshot!, fn _, {^shape_id, :opts} -> :ok end)
     |> Mox.expect(:snapshot_started?, fn {^shape_id, :opts} -> true end)
     |> Mox.expect(:get_snapshot, fn {^shape_id, :opts} -> {1, []} end)
@@ -34,7 +34,7 @@ defmodule Electric.ShapeCache.StorageTest do
     storage = {Mock.Storage, :opts}
 
     Mock.Storage
-    |> Mox.stub(:for_shape, fn shape_id, :opts -> {shape_id, :opts} end)
+    |> Mox.stub(:for_shape, fn shape_id, :opts, _ -> {shape_id, :opts} end)
     |> Mox.expect(:get_log_stream, fn _, _, {_shape_id, :opts} -> [] end)
 
     l1 = LogOffset.new(26_877_408, 10)

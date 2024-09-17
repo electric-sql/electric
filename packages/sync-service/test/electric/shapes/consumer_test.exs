@@ -579,12 +579,12 @@ defmodule Electric.Shapes.ConsumerTest do
       :ignore
     end
 
-    def for_shape(shape_id, opts) do
-      Map.put(opts, :shape_id, shape_id)
+    def for_shape(shape_id, storage_opts, _opts) do
+      Map.put(storage_opts, :shape_id, shape_id)
     end
 
-    def initialise(_opts) do
-      :ok
+    def initialise(opts) do
+      {:ok, opts}
     end
 
     def snapshot_started?(opts) do
