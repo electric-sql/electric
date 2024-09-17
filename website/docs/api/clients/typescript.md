@@ -4,15 +4,9 @@ outline: deep
 
 # TypeScript client
 
-The client is defined in [packages/typescript-client](https://github.com/electric-sql/electric/tree/main/packages/typescript-client). It provides [ShapeStream](#shapestream) and [Shape](#shape) primitives to stream and materialize shapes.
+The TypeScript client is a higher-level client interface that wraps the [HTTP API](/docs/api/http) to make it easy to sync [Shapes](/docs/guides/shapes) in the web browser and other JavaScript environments.
 
-## Use cases
-
-Real-time Postgres sync for modern apps.
-
-Electric provides an [HTTP interface](/docs/api/http) to Postgres to enable a massive number of clients to query and get real-time updates to subsets of the database, called [Shapes](/docs/guides/shapes). In this way, Electric turns Postgres into a real-time database.
-
-The TypeScript client helps ease reading Shapes from the HTTP API in the browser and other JavaScript environments, like edge functions and server-side JavaScript applications. It supports both fine-grained and coarse-grained reactivity patterns &mdash; you can subscribe to see every row that changes, or you can just subscribe to get the whole shape whenever it changes.
+Defined in [packages/typescript-client](https://github.com/electric-sql/electric/tree/main/packages/typescript-client), it provides a [ShapeStream](#shapestream) primitive to subscribe to a change stream and a [Shape](#shape) primitive to get the whole shape whenever it changes.
 
 ## Install
 

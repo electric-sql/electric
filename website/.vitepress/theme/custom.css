@@ -94,6 +94,7 @@
 
 .vpi-electric-icon {
   --icon: url(/img/brand/icon.svg);
+  margin-left: -4px !important;
 }
 
 .feature-cta {
@@ -121,14 +122,16 @@
   color: var(--vp-button-alt-hover-text);
   background-color: var(--vp-button-alt-hover-bg)
 }
-.action a {
+.action a,
+.cloud-cta a {
   display: inline-flex !important;
   align-items: center;
 }
 .action a .vpi-social-discord,
 .action a .vpi-social-github,
 .feature-cta a .vpi-social-github,
-.feature-cta a .vpi-electric-icon {
+.feature-cta a .vpi-electric-icon,
+.cloud-cta a .vpi-electric-icon {
   display: block;
   width: 1.42rem;
   height: 1.42rem;
@@ -137,7 +140,8 @@
 }
 @media (min-width: 768px) and (max-width: 825px) {
   .feature-cta a .vpi-social-github,
-  .feature-cta a .vpi-electric-icon {
+  .feature-cta a .vpi-electric-icon,
+  .cloud-cta a .vpi-electric-icon {
     width: 1.36rem;
     height: 1.36rem;
     margin-left: -0.2rem;
@@ -411,6 +415,36 @@ a.no-visual:hover {
 .vp-doc a.VPButton {
   text-decoration: none;
 }
+.VPButton {
+  display: inline-block;
+  border: 1px solid transparent;
+  text-align: center;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: color 0.25s, border-color 0.25s, background-color 0.25s;
+}
+.VPButton.brand {
+  background-color: var(--vp-button-brand-bg);
+  border-color: var(--vp-button-brand-border);
+  color: var(--vp-button-brand-text);
+}
+.VPButton.brand:hover {
+  background-color: var(--vp-button-brand-hover-bg);
+  border-color: var(--vp-button-brand-hover-border);
+  color: var(--vp-button-brand-hover-text);
+}
+.VPButton.brand:active {
+  background-color: var(--vp-button-brand-active-bg);
+  border-color: var(--vp-button-brand-active-border);
+  color: var(--vp-button-brand-active-text);
+}
+
+.VPButton.electric,
+.VPButton.electric:hover {
+  background-color: var(--electric-color);
+  border-color: var(--electric-color);
+  color: var(--vp-c-bg);
+}
 .VPButton.pglite,
 .VPButton.pglite:hover {
   background-color: var(--pglite-color);
@@ -486,7 +520,7 @@ iframe {
 .VPFeature h2.title {
   font-size: 20px;
 }
-.VPFeature.link[href="/product/electric"]:hover {
+.VPFeature.link[href="/product/sync"]:hover {
   border-color: var(--electric-color);
 }
 .VPFeature.link[href="/product/pglite"]:hover {

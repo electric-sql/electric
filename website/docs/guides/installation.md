@@ -7,7 +7,7 @@ outline: [2, 3]
 
 # Installation
 
-You need to have a [Postgres](https://www.postgresql.org) database and to run [Electric](/product/electric) in front of it.
+You need to have a [Postgres](https://www.postgresql.org) database and to run the [Electric sync service](/product/sync) in front of it.
 
 ## How to run Electric
 
