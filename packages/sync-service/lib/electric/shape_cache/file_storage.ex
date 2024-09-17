@@ -1,4 +1,6 @@
 defmodule Electric.ShapeCache.FileStorage do
+  use Retry
+
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Replication.LogOffset
   alias __MODULE__, as: FS
@@ -201,12 +203,16 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def append_to_log!(log_items, %FS{} = opts) do
-    log_items
-    |> Enum.map(fn
-      {:chunk_boundary, offset} -> {chunk_checkpoint_key(offset), nil}
-      {offset, json_log_item} -> {log_key(offset), json_log_item}
-    end)
-    |> then(&CubDB.put_multi(opts.db, &1))
+    retry with: linear_backoff(50, 2) |> expiry(5_000) do
+      log_items
+      |> Enum.map(fn
+        {:chunk_boundary, offset} -> {chunk_checkpoint_key(offset), nil}
+        {offset, json_log_item} -> {log_key(offset), json_log_item}
+      end)
+      |> then(&CubDB.put_multi(opts.db, &1))
+    else
+      error -> raise(error)
+    end
 
     :ok
   end
