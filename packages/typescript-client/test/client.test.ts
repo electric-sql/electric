@@ -16,6 +16,8 @@ describe(`Shape`, () => {
     const map = await shape.value
 
     expect(map).toEqual(new Map())
+    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
+    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
   })
 
@@ -46,6 +48,8 @@ describe(`Shape`, () => {
     })
 
     expect(map).toEqual(expectedValue)
+    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
+    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
   })
 
@@ -74,6 +78,8 @@ describe(`Shape`, () => {
       priority: 10,
     })
     expect(map).toEqual(expectedValue)
+    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
+    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
 
     await sleep(100)
@@ -98,6 +104,8 @@ describe(`Shape`, () => {
       priority: 10,
     })
     expect(shape.valueSync).toEqual(expectedValue)
+    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(intermediate)
+    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - intermediate)
 
     shape.unsubscribeAll()
@@ -211,6 +219,8 @@ describe(`Shape`, () => {
       priority: 10,
     })
     expect(value).toEqual(expectedValue)
+    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
+    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
 
     shape.unsubscribeAll()

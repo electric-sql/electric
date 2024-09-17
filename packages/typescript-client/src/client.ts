@@ -69,6 +69,7 @@ export interface ShapeStreamInterface<T extends Row = Row> {
   ): () => void
 
   isLoading(): boolean
+  lastSyncedAt(): number | undefined
   lastSynced(): number
   isConnected(): boolean
 
@@ -297,12 +298,18 @@ export class ShapeStream<T extends Row = Row>
     this.#upToDateSubscribers.clear()
   }
 
+  /** Unix time at which we last synced. Undefined when `isLoading` is true. */
+  lastSyncedAt(): number | undefined {
+    return this.#lastSyncedAt
+  }
+
   /** Time elapsed since last sync (in ms). Infinity if we did not yet sync. */
   lastSynced(): number {
     if (this.#lastSyncedAt === undefined) return Infinity
     return Date.now() - this.#lastSyncedAt
   }
 
+  /** Indicates if we are connected to the Electric sync service. */
   isConnected(): boolean {
     return this.#connected
   }

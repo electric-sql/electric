@@ -91,14 +91,22 @@ export class Shape<T extends Row = Row> {
     return this.#error
   }
 
+  /** Unix time at which we last synced. Undefined when `isLoading` is true. */
+  lastSyncedAt(): number | undefined {
+    return this.#stream.lastSyncedAt()
+  }
+
+  /** Time elapsed since last sync (in ms). Infinity if we did not yet sync. */
   lastSynced() {
     return this.#stream.lastSynced()
   }
 
+  /** True during initial fetch. False afterwise.  */
   isLoading() {
     return this.#stream.isLoading()
   }
 
+  /** Indicates if we are connected to the Electric sync service. */
   isConnected(): boolean {
     return this.#stream.isConnected()
   }

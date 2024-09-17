@@ -76,6 +76,29 @@ describe(`useShape`, () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false))
   })
 
+  it(`should expose time at which we last synced`, async ({
+    issuesTableUrl,
+  }) => {
+    const { result } = renderHook(() =>
+      useShape({
+        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        fetchClient: async (input, init) => {
+          await sleep(50)
+          return fetch(input, init)
+        },
+      })
+    )
+
+    expect(result.current.lastSyncedAt).toBeUndefined()
+    const now = Date.now()
+
+    await sleep(150)
+
+    await waitFor(() => expect(result.current.lastSyncedAt).toBeDefined())
+
+    expect(result.current.lastSyncedAt).toBeGreaterThanOrEqual(now)
+  })
+
   it(`should keep the state value in sync`, async ({
     aborter,
     issuesTableUrl,
