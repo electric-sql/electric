@@ -42,7 +42,7 @@ jobs:
       - name: Publish to Hex
         uses: synchronal/hex-publish-action@v3
         with:
-          working_directory: "packages/sync-service"
+          working-directory: "packages/sync-service"
           name: "electric"
           key: "${{ secrets.HEX_PM_KEY }}"
           tag-release: false
