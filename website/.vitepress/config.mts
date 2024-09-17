@@ -217,7 +217,7 @@ export default defineConfig({
 
     const title = `${fm.title || siteData.title} | ${fm.titleTemplate || 'ElectricSQL'}`
     const description = fm.description || siteData.description
-    const image = `https://electric-sql.com${fm.image || '/img/postgres-sync.jpg'}`
+    const image = `https://electric-sql.com${fm.image || '/img/meta/why-fetch-when-you-can-sync.jpg'}`
 
     head.push(['meta', { name: 'twitter:card', content: 'summary_large_image' }])
     head.push(['meta', { name: 'twitter:image', content: image }])
