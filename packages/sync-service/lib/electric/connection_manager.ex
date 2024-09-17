@@ -406,7 +406,7 @@ defmodule Electric.ConnectionManager do
     [[setting]] =
       Postgrex.query!(
         conn,
-        "SELECT current_setting('server_version_num')",
+        "SELECT current_setting('server_version_num')::integer",
         []
       )
       |> Map.fetch!(:rows)
