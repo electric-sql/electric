@@ -176,12 +176,26 @@ export function createFetchWithChunkBuffer(
     prefetchMap.clear()
     prefetchAborter.abort()
     prefetchAborter = new AbortController()
-    args[1]?.signal?.addEventListener(`abort`, () => prefetchAborter.abort())
     return prefetchClient(args[0], {
       ...(args[1] ?? {}),
-      signal: prefetchAborter.signal,
+      signal: chainAborter(prefetchAborter, args[1]?.signal),
     })
   }
 
   return prefetchEntryClient
+}
+
+/**
+ * Chains an abort controller on an optional source signal's
+ * aborted state - if the source signal is aborted, the provided abort
+ * controller will also abort
+ */
+function chainAborter(
+  aborter: AbortController,
+  sourceSignal?: AbortSignal
+): AbortSignal {
+  if (!sourceSignal) return aborter.signal
+  if (sourceSignal.aborted) aborter.abort()
+  else sourceSignal.addEventListener(`abort`, () => aborter.abort())
+  return aborter.signal
 }
