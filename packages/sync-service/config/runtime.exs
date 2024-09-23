@@ -127,9 +127,6 @@ chunk_bytes_threshold =
     Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
   )
 
-default_file_storage_impl = Electric.ShapeCache.FileStorage
-# default_file_storage_impl = Electric.ShapeCache.SQLiteStorage
-
 {storage_mod, storage_opts} =
   env!(
     "STORAGE",
@@ -139,14 +136,18 @@ default_file_storage_impl = Electric.ShapeCache.FileStorage
           {Electric.ShapeCache.InMemoryStorage, electric_instance_id: electric_instance_id}
 
         "file" ->
-          {default_file_storage_impl,
+          {Electric.ShapeCache.FileStorage,
+           storage_dir: shape_path, electric_instance_id: electric_instance_id}
+
+        "sqlite" ->
+          {Electric.ShapeCache.SQLiteStorage,
            storage_dir: shape_path, electric_instance_id: electric_instance_id}
 
         _ ->
-          raise Dotenvy.Error, message: "storage must be one of: MEMORY, FILE"
+          raise Dotenvy.Error, message: "storage must be one of: MEMORY, FILE, SQLITE"
       end
     end,
-    {default_file_storage_impl,
+    {Electric.ShapeCache.FileStorage,
      storage_dir: shape_path, electric_instance_id: electric_instance_id}
   )
 
