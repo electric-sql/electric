@@ -128,6 +128,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # asked for last offset
   plug :listen_for_new_changes
   plug :determine_log_chunk_offset
+  plug :determine_up_to_date
   plug :generate_etag
   plug :validate_and_put_etag
   plug :put_resp_cache_headers
@@ -264,6 +265,23 @@ defmodule Electric.Plug.ServeShapePlug do
     |> put_resp_header("electric-chunk-last-offset", "#{chunk_end_offset}")
   end
 
+  defp determine_up_to_date(
+         %Conn{
+           assigns: %{chunk_end_offset: chunk_end_offset, last_offset: last_offset}
+         } = conn,
+         _
+       ) do
+    if LogOffset.compare(chunk_end_offset, last_offset) == :lt do
+      conn
+      |> assign(:up_to_date, [])
+      |> delete_resp_header("electric-chunk-up-to-date")
+    else
+      conn
+      |> assign(:up_to_date, [@up_to_date])
+      |> put_resp_header("electric-chunk-up-to-date", "true")
+    end
+  end
+
   defp generate_etag(%Conn{} = conn, _) do
     %{
       offset: offset,
@@ -328,7 +346,8 @@ defmodule Electric.Plug.ServeShapePlug do
            assigns: %{
              offset: @before_all_offset,
              chunk_end_offset: chunk_end_offset,
-             active_shape_id: shape_id
+             active_shape_id: shape_id,
+             up_to_date: maybe_up_to_date
            }
          } = conn,
          _
@@ -346,7 +365,7 @@ defmodule Electric.Plug.ServeShapePlug do
                   up_to: chunk_end_offset
                 )
 
-              [snapshot, log, maybe_up_to_date(conn)]
+              [snapshot, log, maybe_up_to_date]
               |> Stream.concat()
               |> to_json_stream()
               |> Stream.chunk_every(500)
@@ -372,7 +391,8 @@ defmodule Electric.Plug.ServeShapePlug do
            assigns: %{
              offset: offset,
              chunk_end_offset: chunk_end_offset,
-             active_shape_id: shape_id
+             active_shape_id: shape_id,
+             up_to_date: maybe_up_to_date
            }
          } = conn,
          _
@@ -390,7 +410,7 @@ defmodule Electric.Plug.ServeShapePlug do
         if Enum.take(log, 1) == [] and conn.assigns.live do
           hold_until_change(conn, shape_id)
         else
-          [log, maybe_up_to_date(conn)]
+          [log, maybe_up_to_date]
           |> Stream.concat()
           |> to_json_stream()
           |> Stream.chunk_every(500)
@@ -437,16 +457,6 @@ defmodule Electric.Plug.ServeShapePlug do
     end)
   end
 
-  defp maybe_up_to_date(%Conn{
-         assigns: %{chunk_end_offset: chunk_end_offset, last_offset: last_offset}
-       }) do
-    if LogOffset.compare(chunk_end_offset, last_offset) == :lt do
-      []
-    else
-      [@up_to_date]
-    end
-  end
-
   defp listen_for_new_changes(%Conn{} = conn, _) when not conn.assigns.live, do: conn
 
   defp listen_for_new_changes(%Conn{assigns: assigns} = conn, _) do
@@ -478,6 +488,7 @@ defmodule Electric.Plug.ServeShapePlug do
         |> assign(:chunk_end_offset, latest_log_offset)
         # update last offset header
         |> put_resp_header("electric-chunk-last-offset", "#{latest_log_offset}")
+        |> determine_up_to_date([])
         |> serve_log_or_snapshot([])
 
       {^ref, :shape_rotation} ->

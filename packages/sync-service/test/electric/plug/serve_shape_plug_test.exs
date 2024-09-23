@@ -269,6 +269,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset") == [
                "#{next_next_offset}"
              ]
+
+      assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == []
     end
 
     test "returns 304 Not Modified when If-None-Match matches ETag" do
@@ -358,6 +360,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
 
       assert Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset") == [next_offset_str]
+      assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == ["true"]
       assert Plug.Conn.get_resp_header(conn, "electric-schema") == []
     end
 
@@ -406,6 +409,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 200
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "up-to-date"}}]
+      assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == ["true"]
     end
 
     test "sends an up-to-date response after a timeout if no changes are observed" do
@@ -440,6 +444,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
                "max-age=5, stale-while-revalidate=5"
              ]
+
+      assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == ["true"]
     end
 
     test "sends 409 with a redirect to existing shape when requested shape ID does not exist" do
