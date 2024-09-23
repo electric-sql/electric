@@ -382,11 +382,11 @@ defmodule Electric.ShapeCache.SQLiteStorage do
   end
 
   @get_log_stream_unbounded_query log_stream_query.(
-                                    "WHERE (offset_tx > ?1) OR (offset_tx = ?2 AND offset_op > ?3)"
+                                    "WHERE (offset_tx > ?1) OR (offset_tx = ?1 AND offset_op > ?2)"
                                   )
   @get_log_stream_range_query log_stream_query.("""
-                              WHERE ((offset_tx > ?1) OR (offset_tx = ?2 AND offset_op > ?3))
-                                AND ((offset_tx < ?4) OR (offset_tx = ?5 AND offset_op <= ?6))
+                              WHERE ((offset_tx > ?1) OR (offset_tx = ?1 AND offset_op > ?2))
+                                AND ((offset_tx < ?3) OR (offset_tx = ?3 AND offset_op <= ?4))
                               """)
 
   @snapshot_read_row_count 100
@@ -400,17 +400,10 @@ defmodule Electric.ShapeCache.SQLiteStorage do
       fn ->
         {query, params} =
           if LogOffset.last?(max_offset) do
-            {@get_log_stream_unbounded_query, [tx_offset_min, tx_offset_min, op_offset_min]}
+            {@get_log_stream_unbounded_query, [tx_offset_min, op_offset_min]}
           else
             {@get_log_stream_range_query,
-             [
-               tx_offset_min,
-               tx_offset_min,
-               op_offset_min,
-               tx_offset_max,
-               tx_offset_max,
-               op_offset_max
-             ]}
+             [tx_offset_min, op_offset_min, tx_offset_max, op_offset_max]}
           end
 
         {:ok, stmt} = Sqlite3.prepare(conn, query)
