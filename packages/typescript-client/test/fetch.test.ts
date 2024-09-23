@@ -201,40 +201,53 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledWith(nextUrl, expect.anything())
   })
 
-  it(`should stop prefetching after reaching maxChunksToPrefetch`, async () => {
+  it(`should stop and resume prefetching after reaching maxChunksToPrefetch`, async () => {
     const maxPrefetchNum = 2
     const fetchWrapper = createFetchWithChunkBuffer(mockFetch, {
       maxChunksToPrefetch: maxPrefetchNum,
     })
 
-    const initialResponse = new Response(`initial chunk`, {
-      status: 200,
-      headers: responseHeaders({
-        [SHAPE_ID_HEADER]: `123`,
-        [CHUNK_LAST_OFFSET_HEADER]: `0`,
-      }),
-    })
-
     const responses = Array.from(
-      { length: maxPrefetchNum + 1 },
+      // initial + prefetched + next prefetch after one consumed
+      { length: 1 + maxPrefetchNum + 1 },
       (_, idx) =>
         new Response(`next chunk`, {
           status: 200,
           headers: responseHeaders({
             [SHAPE_ID_HEADER]: `123`,
-            [CHUNK_LAST_OFFSET_HEADER]: `${idx + 1}`,
+            [CHUNK_LAST_OFFSET_HEADER]: `${idx}`,
           }),
         })
     )
-
-    mockFetch.mockResolvedValueOnce(initialResponse)
     responses.forEach((response) => mockFetch.mockResolvedValueOnce(response))
 
     // First request should trigger one prefetch
     await fetchWrapper(baseUrl)
+    await sleep()
 
     // Check fetch call count: 1 for initial, maxPrefetchNum for prefetch
     expect(mockFetch).toHaveBeenCalledTimes(1 + maxPrefetchNum)
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      `${baseUrl}?shape_id=123&offset=0`,
+      expect.anything()
+    )
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      3,
+      `${baseUrl}?shape_id=123&offset=1`,
+      expect.anything()
+    )
+
+    // Second request consumes one of the prefetched responses and
+    // next one fires up
+    await fetchWrapper(`${baseUrl}?shape_id=123&offset=0`)
+    await sleep()
+    expect(mockFetch).toHaveBeenCalledTimes(1 + maxPrefetchNum + 1)
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      4,
+      `${baseUrl}?shape_id=123&offset=2`,
+      expect.anything()
+    )
   })
 
   it(`should not prefetch if response is not ok`, async () => {

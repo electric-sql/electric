@@ -94,26 +94,6 @@ const ChunkPrefetchDefaults = {
   maxChunksToPrefetch: 2,
 }
 
-function getNextChunkUrl(baseUrl: string, res: Response): string | null {
-  const shapeId = res.headers.get(SHAPE_ID_HEADER)
-  const lastOffset = res.headers.get(CHUNK_LAST_OFFSET_HEADER)
-  const isUpToDate = res.headers.get(CHUNK_UP_TO_DATE_HEADER)
-
-  // only prefetch if shape ID and offset for next chunk are available, and
-  // response is not already up-to-date
-  if (!shapeId || !lastOffset || isUpToDate) return null
-
-  const nextUrl = new URL(baseUrl)
-
-  // don't prefetch live requests, rushing them will only
-  // potentially miss more recent data
-  if (nextUrl.searchParams.has(LIVE_QUERY_PARAM)) return null
-
-  nextUrl.searchParams.set(SHAPE_ID_QUERY_PARAM, shapeId)
-  nextUrl.searchParams.set(OFFSET_QUERY_PARAM, lastOffset)
-  return nextUrl.toString()
-}
-
 /**
  * Creates a fetch client that prefetches subsequent log chunks for
  * consumption by the shape stream without waiting for the chunk bodies
@@ -130,31 +110,51 @@ export function createFetchWithChunkBuffer(
   const prefetchMap: Map<string, Promise<Response>> = new Map()
   let prefetchAborter: AbortController = new AbortController()
 
+  const getNextUrlToPrefetch = async (
+    url: string,
+    response: Response
+  ): Promise<string | void> => {
+    // do not prefetch next response if current fails
+    if (!response.ok) return
+
+    // check if next request is already prefetched and recursively
+    // follow chain until first request that has not been prefetched is found
+    const nextUrl = getNextChunkUrl(url, response)
+    if (nextUrl && prefetchMap.has(nextUrl)) {
+      return prefetchMap
+        .get(nextUrl)!
+        .then((res) => getNextUrlToPrefetch(nextUrl, res))
+        .catch(() => {})
+    }
+
+    return nextUrl
+  }
+
   const prefetchClient = async (
+    prefetchedRequest?: Promise<Response>,
     ...args: Parameters<typeof fetch>
   ): Promise<Response> => {
-    const result = await fetchClient(...args)
+    const url = args[0].toString()
+    const result = await (prefetchedRequest ?? fetchClient(...args))
 
-    // do not prefetch next response if current fails
-    if (!result.ok || args[1]?.signal?.aborted) return result
+    // kick off a prefetch of the next response if available
+    getNextUrlToPrefetch(url, result).then((nextUrl) => {
+      // if aborted or unavailable, terminate prefetch chain
+      if (args[1]?.signal?.aborted || !nextUrl) return
 
-    // do not prefetch more than specified amount
-    if (prefetchMap.size >= prefetchOptions.maxChunksToPrefetch) return result
+      // do not prefetch more than specified amount
+      if (prefetchMap.size >= prefetchOptions.maxChunksToPrefetch) return
 
-    const nextUrl = getNextChunkUrl(args[0].toString(), result)
+      const prefetchPromise = prefetchClient(
+        prefetchMap.get(nextUrl),
+        nextUrl,
+        args[1]
+      )
 
-    // do not prefetch if next URL is not valid or already prefetched
-    if (!nextUrl || prefetchMap.has(nextUrl)) return result
-
-    // prefetch next response and return current one using the prefetch
-    // client to allow for subsequent responses to be prefetched
-    try {
-      const prefetchPromise = prefetchClient(nextUrl, args[1])
+      // delete prefetched requests that fail to avoid polluting chain
       prefetchPromise.catch(() => prefetchMap.delete(nextUrl))
       prefetchMap.set(nextUrl, prefetchPromise)
-    } catch (_) {
-      // ignore prefetch errors
-    }
+    })
 
     return result
   }
@@ -163,27 +163,53 @@ export function createFetchWithChunkBuffer(
     ...args: Parameters<typeof fetch>
   ): Promise<Response> => {
     const url = args[0].toString()
+    const prefetchedRequest = prefetchMap.get(url)
 
-    // if already prefetched, serve that and delete from map
-    const prefetchRes = prefetchMap.get(url)
-    if (prefetchRes) {
-      prefetchMap.delete(url)
-      return prefetchRes
+    // if a prefetched request for given URL is not available, clear all current
+    // prefetched requests and start again, as request that came in does not belong
+    // in the current "prefetch chain" and should start a new one (e.g. shape rotation)
+    if (!prefetchedRequest) {
+      prefetchAborter.abort()
+      prefetchMap.clear()
+      prefetchAborter = new AbortController()
+      return prefetchClient(undefined, args[0], {
+        ...(args[1] ?? {}),
+        signal: chainAborter(prefetchAborter, args[1]?.signal),
+      })
     }
 
-    // otherwise clear current prefetched responses (and abort active requests)
-    // and start again, as request that came in does not belong on the current
-    // "prefetch chain" and should start a new chain instead (e.g. shape rotation)
-    prefetchMap.clear()
-    prefetchAborter.abort()
-    prefetchAborter = new AbortController()
-    return prefetchClient(args[0], {
+    // otherwise consume prefetched request and attempt to prefetch more
+    prefetchMap.delete(url)
+    return prefetchClient(prefetchedRequest, url, {
       ...(args[1] ?? {}),
-      signal: chainAborter(prefetchAborter, args[1]?.signal),
+      signal: prefetchAborter.signal,
     })
   }
 
   return prefetchEntryClient
+}
+
+/**
+ * Generate the next chunk's URL if the url and response are valid
+ */
+function getNextChunkUrl(url: string, res: Response): string | void {
+  const shapeId = res.headers.get(SHAPE_ID_HEADER)
+  const lastOffset = res.headers.get(CHUNK_LAST_OFFSET_HEADER)
+  const isUpToDate = res.headers.get(CHUNK_UP_TO_DATE_HEADER)
+
+  // only prefetch if shape ID and offset for next chunk are available, and
+  // response is not already up-to-date
+  if (!shapeId || !lastOffset || isUpToDate) return
+
+  const nextUrl = new URL(url)
+
+  // don't prefetch live requests, rushing them will only
+  // potentially miss more recent data
+  if (nextUrl.searchParams.has(LIVE_QUERY_PARAM)) return
+
+  nextUrl.searchParams.set(SHAPE_ID_QUERY_PARAM, shapeId)
+  nextUrl.searchParams.set(OFFSET_QUERY_PARAM, lastOffset)
+  return nextUrl.toString()
 }
 
 /**
