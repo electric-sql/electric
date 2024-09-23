@@ -6,6 +6,7 @@ import {
   BackoffDefaults,
   BackoffOptions,
   createFetchWithBackoff,
+  createFetchWithChunkBuffer,
 } from './fetch'
 import {
   CHUNK_LAST_OFFSET_HEADER,
@@ -141,17 +142,23 @@ export class ShapeStream<T extends Row = Row>
     this.#shapeId = this.options.shapeId
     this.#messageParser = new MessageParser<T>(options.parser)
 
-    this.#fetchClient = createFetchWithBackoff(
+    const baseFetchClient =
       options.fetchClient ??
-        ((...args: Parameters<typeof fetch>) => fetch(...args)),
-      {
-        ...(options.backoffOptions ?? BackoffDefaults),
-        onFailedAttempt: () => {
-          this.#connected = false
-          options.backoffOptions?.onFailedAttempt?.()
-        },
-      }
+      ((...args: Parameters<typeof fetch>) => fetch(...args))
+
+    const fetchWithBackoffClient = createFetchWithBackoff(baseFetchClient, {
+      ...(options.backoffOptions ?? BackoffDefaults),
+      onFailedAttempt: () => {
+        this.#connected = false
+        options.backoffOptions?.onFailedAttempt?.()
+      },
+    })
+
+    const fetchWithPrefetchAndBAckoffClient = createFetchWithChunkBuffer(
+      fetchWithBackoffClient
     )
+
+    this.#fetchClient = fetchWithPrefetchAndBAckoffClient
 
     this.start()
   }

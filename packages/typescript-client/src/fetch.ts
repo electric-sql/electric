@@ -1,3 +1,11 @@
+import {
+  CHUNK_LAST_OFFSET_HEADER,
+  CHUNK_UP_TO_DATE_HEADER,
+  LIVE_QUERY_PARAM,
+  OFFSET_QUERY_PARAM,
+  SHAPE_ID_HEADER,
+  SHAPE_ID_QUERY_PARAM,
+} from './constants'
 import { FetchError, FetchBackoffAbortError } from './error'
 
 export interface BackoffOptions {
@@ -76,4 +84,88 @@ export function createFetchWithBackoff(
       }
     }
   }
+}
+
+interface ChunkPrefetchOptions {
+  maxChunksToPrefetch: number
+}
+
+const ChunkPrefetchDefaults = {
+  maxChunksToPrefetch: 2,
+}
+
+function getNextChunkUrl(baseUrl: string, res: Response): string | null {
+  const shapeId = res.headers.get(SHAPE_ID_HEADER)
+  const lastOffset = res.headers.get(CHUNK_LAST_OFFSET_HEADER)
+  const isUpToDate = res.headers.get(CHUNK_UP_TO_DATE_HEADER)
+
+  // only prefetch if shape ID and offset for next chunk are available, and
+  // response is not already up-to-date
+  if (!shapeId || !lastOffset || isUpToDate) return null
+
+  const nextUrl = new URL(baseUrl)
+
+  // don't prefetch live requests, rushing them will only
+  // potentially miss more recent data
+  if (nextUrl.searchParams.has(LIVE_QUERY_PARAM)) return null
+
+  nextUrl.searchParams.set(SHAPE_ID_QUERY_PARAM, shapeId)
+  nextUrl.searchParams.set(OFFSET_QUERY_PARAM, lastOffset)
+  return nextUrl.toString()
+}
+
+/**
+ * Creates a fetch client that prefetches subsequent log chunks for
+ * consumption by the shape stream without waiting for the chunk bodies
+ * themselves to be loaded.
+ *
+ * @param fetchClient the client to wrap
+ * @param prefetchOptions options to configure prefetching
+ * @returns wrapped client with prefetch capabilities
+ */
+export function createFetchWithChunkBuffer(
+  fetchClient: typeof fetch,
+  prefetchOptions: ChunkPrefetchOptions = ChunkPrefetchDefaults
+): typeof fetch {
+  const prefetchMap: Map<string, Promise<Response>> = new Map()
+  const prefetchClient = async (
+    ...args: Parameters<typeof fetch>
+  ): Promise<Response> => {
+    const url = args[0].toString()
+
+    // if already prefetched, serve that and delete from map
+    const prefetchRes = prefetchMap.get(url)
+    if (prefetchRes) {
+      prefetchMap.delete(url)
+      return prefetchRes
+    }
+
+    // otherwise fetch from network
+    const result = await fetchClient(...args)
+
+    // do not prefetch next response if current fails
+    if (!result.ok) return result
+
+    // do not prefetch more than specified amount
+    if (prefetchMap.size >= prefetchOptions.maxChunksToPrefetch) return result
+
+    const nextUrl = getNextChunkUrl(url, result)
+
+    // do not prefetch if next URL is not valid
+    if (!nextUrl) return result
+
+    // prefetch next response and return current one
+    const [_, ...restArgs] = args
+    try {
+      const prefetchPromise = prefetchClient(nextUrl, ...restArgs)
+      prefetchPromise.catch(() => prefetchMap.delete(nextUrl))
+      prefetchMap.set(nextUrl, prefetchPromise)
+    } catch (err) {
+      console.log(`Failed prefetching`, err)
+    }
+
+    return result
+  }
+
+  return prefetchClient
 }

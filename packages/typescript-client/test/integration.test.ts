@@ -396,20 +396,22 @@ describe(`HTTP Sync`, () => {
       fetchClient: fetchWrapper,
     })
 
+    let numFetchCalls = 0
+
     await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
       if (!isChangeMessage(msg)) return
       shapeData.set(msg.key, msg.value)
 
       if (nth === 0) {
-        expect(fetchWrapper).toHaveBeenCalledTimes(1)
+        numFetchCalls = fetchWrapper.mock.calls.length
 
         // ensure fetch has not been called again while
         // waiting for processing
         await insertIssues({ title: `foo1` })
         await sleep(100)
-        expect(fetchWrapper).toHaveBeenCalledTimes(1)
+        expect(fetchWrapper).toHaveBeenCalledTimes(numFetchCalls)
       } else if (nth === 1) {
-        expect(fetchWrapper).toHaveBeenCalledTimes(2)
+        expect(fetchWrapper.mock.calls.length).greaterThan(numFetchCalls)
         res()
       }
     })
