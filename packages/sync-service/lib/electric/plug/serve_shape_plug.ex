@@ -202,7 +202,7 @@ defmodule Electric.Plug.ServeShapePlug do
     conn
     |> assign(:active_shape_id, active_shape_id)
     |> assign(:last_offset, last_offset)
-    |> put_resp_header("x-electric-shape-id", active_shape_id)
+    |> put_resp_header("electric-shape-id", active_shape_id)
   end
 
   defp handle_shape_info(
@@ -225,7 +225,7 @@ defmodule Electric.Plug.ServeShapePlug do
       # TODO: discuss returning a 307 redirect rather than a 409, the client
       # will have to detect this and throw out old data
       conn
-      |> put_resp_header("x-electric-shape-id", active_shape_id)
+      |> put_resp_header("electric-shape-id", active_shape_id)
       |> put_resp_header(
         "location",
         "#{conn.request_path}?shape_id=#{active_shape_id}&offset=-1"
@@ -246,7 +246,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # Only adds schema header when not in live mode
   defp put_schema_header(conn, _) when not conn.assigns.live do
     shape = conn.assigns.shape_definition
-    put_resp_header(conn, "x-electric-schema", schema(shape))
+    put_resp_header(conn, "electric-schema", schema(shape))
   end
 
   defp put_schema_header(conn, _), do: conn
@@ -261,7 +261,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
     conn
     |> assign(:chunk_end_offset, chunk_end_offset)
-    |> put_resp_header("x-electric-chunk-last-offset", "#{chunk_end_offset}")
+    |> put_resp_header("electric-chunk-last-offset", "#{chunk_end_offset}")
   end
 
   defp generate_etag(%Conn{} = conn, _) do
@@ -477,7 +477,7 @@ defmodule Electric.Plug.ServeShapePlug do
         |> assign(:last_offset, latest_log_offset)
         |> assign(:chunk_end_offset, latest_log_offset)
         # update last offset header
-        |> put_resp_header("x-electric-chunk-last-offset", "#{latest_log_offset}")
+        |> put_resp_header("electric-chunk-last-offset", "#{latest_log_offset}")
         |> serve_log_or_snapshot([])
 
       {^ref, :shape_rotation} ->

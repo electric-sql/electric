@@ -141,7 +141,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
                "#{@test_shape_id}:-1:#{next_offset}"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "x-electric-shape-id") == [@test_shape_id]
+      assert Plug.Conn.get_resp_header(conn, "electric-shape-id") == [@test_shape_id]
     end
 
     test "snapshot has correct cache control headers" do
@@ -208,7 +208,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         conn(:get, %{"root_table" => "public.users"}, "?offset=-1")
         |> ServeShapePlug.call([])
 
-      assert Plug.Conn.get_resp_header(conn, "x-electric-schema") == [
+      assert Plug.Conn.get_resp_header(conn, "electric-schema") == [
                ~s|{"id":{"type":"int8","pk_index":0}}|
              ]
     end
@@ -264,9 +264,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
                "#{@test_shape_id}:#{@start_offset_50}:#{next_next_offset}"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "x-electric-shape-id") == [@test_shape_id]
+      assert Plug.Conn.get_resp_header(conn, "electric-shape-id") == [@test_shape_id]
 
-      assert Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset") == [
+      assert Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset") == [
                "#{next_next_offset}"
              ]
     end
@@ -357,8 +357,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
                "max-age=5, stale-while-revalidate=5"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset") == [next_offset_str]
-      assert Plug.Conn.get_resp_header(conn, "x-electric-schema") == []
+      assert Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset") == [next_offset_str]
+      assert Plug.Conn.get_resp_header(conn, "electric-schema") == []
     end
 
     test "handles shape rotation" do
@@ -463,7 +463,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 409
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
-      assert get_resp_header(conn, "x-electric-shape-id") == [@test_shape_id]
+      assert get_resp_header(conn, "electric-shape-id") == [@test_shape_id]
       assert get_resp_header(conn, "location") == ["/?shape_id=#{@test_shape_id}&offset=-1"]
     end
 
@@ -491,7 +491,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 409
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
-      assert get_resp_header(conn, "x-electric-shape-id") == [new_shape_id]
+      assert get_resp_header(conn, "electric-shape-id") == [new_shape_id]
       assert get_resp_header(conn, "location") == ["/?shape_id=#{new_shape_id}&offset=-1"]
     end
 

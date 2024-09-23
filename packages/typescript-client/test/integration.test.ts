@@ -115,7 +115,7 @@ describe(`HTTP Sync`, () => {
       `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
-    const shapeId = res.headers.get(`x-electric-shape-id`)
+    const shapeId = res.headers.get(`electric-shape-id`)
     expect(shapeId).to.exist
   })
 
@@ -126,7 +126,7 @@ describe(`HTTP Sync`, () => {
       `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
-    const lastOffset = res.headers.get(`x-electric-chunk-last-offset`)
+    const lastOffset = res.headers.get(`electric-chunk-last-offset`)
     expect(lastOffset).to.exist
   })
 
@@ -537,7 +537,7 @@ describe(`HTTP Sync`, () => {
     const midMessage = messages.slice(-6)[0]
     assert(`offset` in midMessage)
     const midOffset = midMessage.offset
-    const shapeId = res.headers.get(`x-electric-shape-id`)
+    const shapeId = res.headers.get(`electric-shape-id`)
     const etag = res.headers.get(`etag`)
     assert(etag !== null, `Response should have etag header`)
 
