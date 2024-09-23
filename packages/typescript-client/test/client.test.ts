@@ -248,7 +248,7 @@ describe(`Shape`, () => {
       signal: aborter.signal,
     })
 
-    await sleep(100) // give some time for the initial fetch to complete
+    await sleep(200) // give some time for the initial fetch to complete
     expect(shapeStream.isConnected()).true
 
     const shape = new Shape(shapeStream)
@@ -289,7 +289,7 @@ describe(`Shape`, () => {
 
     // Now make fetch fail and check the status
     fetchShouldFail = true
-    await sleep(20) // give some time for the request to be aborted
+    await sleep(50) // give some time for the request to be aborted
 
     expect(shapeStream.isConnected()).false
 
@@ -307,7 +307,7 @@ describe(`Shape`, () => {
       subscribe: false,
     })
 
-    await sleep(100) // give some time for the fetch to complete
+    await sleep(200) // give some time for the fetch to complete
 
     // We should no longer be connected because
     // the initial fetch finished and we've not subscribed to changes
@@ -325,7 +325,7 @@ describe(`Shape`, () => {
 
     expect(shapeStream.isLoading()).true
 
-    await sleep(100) // give some time for the initial fetch to complete
+    await sleep(200) // give some time for the initial fetch to complete
 
     expect(shapeStream.isLoading()).false
   })

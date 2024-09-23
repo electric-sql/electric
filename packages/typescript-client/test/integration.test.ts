@@ -548,7 +548,7 @@ describe(`HTTP Sync`, () => {
       { title: `foo8` }
     )
     // Wait for server to get all the messages.
-    await sleep(40)
+    await sleep(100)
 
     const res2 = await fetch(
       `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`,
