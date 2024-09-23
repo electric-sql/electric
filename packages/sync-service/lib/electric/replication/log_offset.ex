@@ -99,6 +99,9 @@ defmodule Electric.Replication.LogOffset do
                   (offset1.tx_offset == offset2.tx_offset and
                      offset1.op_offset < offset2.op_offset)
 
+  @before_all_tx -1
+  @before_all_op 0
+
   @doc """
   An offset that is smaller than all offsets in the log.
 
@@ -108,7 +111,7 @@ defmodule Electric.Replication.LogOffset do
       :lt
   """
   @spec before_all() :: t
-  def before_all(), do: %LogOffset{tx_offset: -1, op_offset: 0}
+  def before_all(), do: %LogOffset{tx_offset: @before_all_tx, op_offset: @before_all_op}
 
   @doc """
   The first possible offset in the log.
@@ -135,14 +138,60 @@ defmodule Electric.Replication.LogOffset do
 
   @doc """
   Tests to see if this is the `last/0` offset.
+
+  ## Examples
+
+      iex> last?(last())
+      true
+
+      iex> last?(new(10, 5))
+      false
+
+      iex> last?(first())
+      false
   """
   @spec last?(t()) :: boolean()
   def last?(%LogOffset{tx_offset: @last_tx, op_offset: @last_op}), do: true
   def last?(_), do: false
 
+  @doc """
+  Tests to see if the given offset is the first entry.
+
+  ## Examples
+
+      iex> first?(first())
+      true
+
+      iex> first?(new(10, 5))
+      false
+
+      iex> first?(last())
+      false
+  """
   @spec first?(t()) :: boolean()
   def first?(%LogOffset{tx_offset: 0, op_offset: 0}), do: true
   def first?(_), do: false
+
+  @doc """
+  Tests to see if the given offset comes before any others.
+
+  ## Examples
+
+      iex> before_all?(before_all())
+      true
+
+      iex> before_all?(first())
+      false
+
+      iex> before_all?(new(10, 5))
+      false
+
+      iex> before_all?(last())
+      false
+  """
+  @spec before_all?(t()) :: boolean()
+  def before_all?(%LogOffset{tx_offset: @before_all_tx, op_offset: @before_all_op}), do: true
+  def before_all?(_), do: false
 
   @doc """
   Increments the offset of the change inside the transaction.

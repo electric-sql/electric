@@ -348,6 +348,11 @@ defmodule Electric.ShapeCache.SQLiteStorage do
   def append_to_log!(log_items, %S{} = storage) do
     %{conn: conn, stmts: %{append_stmt: append_stmt, chunk_stmt: chunk_stmt}} = storage
 
+    # Doing these writes in a tx seems to make the timings a fairly consistent ~0.2-1ms
+    # even with large update sizes. Without the tx, larger updates can push the timing to
+    # ~3ms.
+    :ok = Sqlite3.execute(conn, "BEGIN")
+
     Enum.reduce(log_items, {append_stmt, chunk_stmt}, fn
       {:chunk_boundary, offset}, {append_stmt, chunk_stmt} ->
         %LogOffset{tx_offset: tx_offset, op_offset: op_offset} = offset
@@ -362,6 +367,8 @@ defmodule Electric.ShapeCache.SQLiteStorage do
         :done = Sqlite3.step(conn, append_stmt)
         {append_stmt, chunk_stmt}
     end)
+
+    :ok = Sqlite3.execute(conn, "COMMIT")
 
     :ok
   end
@@ -381,6 +388,8 @@ defmodule Electric.ShapeCache.SQLiteStorage do
                               WHERE ((offset_tx > ?1) OR (offset_tx = ?2 AND offset_op > ?3))
                                 AND ((offset_tx < ?4) OR (offset_tx = ?5 AND offset_op <= ?6))
                               """)
+
+  @snapshot_read_row_count 100
 
   @impl Electric.ShapeCache.Storage
   def get_log_stream(offset, max_offset, %S{conn: conn}) do
@@ -407,15 +416,19 @@ defmodule Electric.ShapeCache.SQLiteStorage do
         {:ok, stmt} = Sqlite3.prepare(conn, query)
         :ok = Sqlite3.bind(conn, stmt, params)
 
-        {conn, stmt}
+        {:stream, conn, stmt}
       end,
-      fn {conn, stmt} ->
-        case Sqlite3.step(conn, stmt) do
-          {:row, row} -> {row, {conn, stmt}}
-          :done -> {:halt, {conn, stmt}}
-        end
+      fn
+        {:stream, conn, stmt} ->
+          case Sqlite3.multi_step(conn, stmt, @snapshot_read_row_count) do
+            {:rows, rows} -> {List.flatten(rows), {:stream, conn, stmt}}
+            {:done, rows} -> {List.flatten(rows), {:halt, conn, stmt}}
+          end
+
+        {:halt, conn, stmt} ->
+          {:halt, {:halt, conn, stmt}}
       end,
-      fn {conn, stmt} ->
+      fn {:halt, conn, stmt} ->
         :ok = Sqlite3.release(conn, stmt)
       end
     )
@@ -443,9 +456,13 @@ defmodule Electric.ShapeCache.SQLiteStorage do
       "UPDATE #{@metadata_table} SET xmin = NULL, snapshot_started = 0, snapshot_complete = 0, offset = NULL"
     ]
 
+    :ok = Sqlite3.execute(conn, "BEGIN")
+
     for stmt <- stmts do
       :ok = Sqlite3.execute(conn, stmt)
     end
+
+    :ok = Sqlite3.execute(conn, "COMMIT")
 
     :ok
   end
@@ -477,7 +494,7 @@ defmodule Electric.ShapeCache.SQLiteStorage do
 
   defp update_row(%S{conn: conn}, query, params) do
     with {:ok, statement} <- Sqlite3.prepare(conn, query),
-         :ok <- Exqlite.Sqlite3.bind(conn, statement, params),
+         :ok <- Sqlite3.bind(conn, statement, params),
          :done <- Sqlite3.step(conn, statement),
          :ok = Sqlite3.release(conn, statement) do
       :ok
@@ -497,10 +514,13 @@ defmodule Electric.ShapeCache.SQLiteStorage do
     path
   end
 
-  def select(%S{conn: conn}, query) do
+  # convenience function to pull all results for a query
+  @doc false
+  def select(%S{conn: conn}, query, params \\ []) do
     Stream.resource(
       fn ->
         {:ok, stmt} = Sqlite3.prepare(conn, query)
+        :ok = Sqlite3.bind(conn, stmt, params)
 
         stmt
       end,
