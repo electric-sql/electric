@@ -154,11 +154,7 @@ export class ShapeStream<T extends Row = Row>
       },
     })
 
-    const fetchWithPrefetchAndBAckoffClient = createFetchWithChunkBuffer(
-      fetchWithBackoffClient
-    )
-
-    this.#fetchClient = fetchWithPrefetchAndBAckoffClient
+    this.#fetchClient = createFetchWithChunkBuffer(fetchWithBackoffClient)
 
     this.start()
   }
