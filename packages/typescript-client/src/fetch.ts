@@ -172,7 +172,8 @@ export function createFetchWithChunkBuffer(
     }
 
     // otherwise clear current prefetched responses (and abort active requests)
-    // and start again
+    // and start again, as request that came in does not belong on the current
+    // "prefetch chain" and should start a new chain instead (e.g. shape rotation)
     prefetchMap.clear()
     prefetchAborter.abort()
     prefetchAborter = new AbortController()
