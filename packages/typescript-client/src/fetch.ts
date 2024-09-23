@@ -128,7 +128,38 @@ export function createFetchWithChunkBuffer(
   prefetchOptions: ChunkPrefetchOptions = ChunkPrefetchDefaults
 ): typeof fetch {
   const prefetchMap: Map<string, Promise<Response>> = new Map()
+  let prefetchAborter: AbortController = new AbortController()
+
   const prefetchClient = async (
+    ...args: Parameters<typeof fetch>
+  ): Promise<Response> => {
+    const result = await fetchClient(...args)
+
+    // do not prefetch next response if current fails
+    if (!result.ok || args[1]?.signal?.aborted) return result
+
+    // do not prefetch more than specified amount
+    if (prefetchMap.size >= prefetchOptions.maxChunksToPrefetch) return result
+
+    const nextUrl = getNextChunkUrl(args[0].toString(), result)
+
+    // do not prefetch if next URL is not valid or already prefetched
+    if (!nextUrl || prefetchMap.has(nextUrl)) return result
+
+    // prefetch next response and return current one using the prefetch
+    // client to allow for subsequent responses to be prefetched
+    try {
+      const prefetchPromise = prefetchClient(nextUrl, args[1])
+      prefetchPromise.catch(() => prefetchMap.delete(nextUrl))
+      prefetchMap.set(nextUrl, prefetchPromise)
+    } catch (_) {
+      // ignore prefetch errors
+    }
+
+    return result
+  }
+
+  const prefetchEntryClient = (
     ...args: Parameters<typeof fetch>
   ): Promise<Response> => {
     const url = args[0].toString()
@@ -140,32 +171,17 @@ export function createFetchWithChunkBuffer(
       return prefetchRes
     }
 
-    // otherwise fetch from network
-    const result = await fetchClient(...args)
-
-    // do not prefetch next response if current fails
-    if (!result.ok) return result
-
-    // do not prefetch more than specified amount
-    if (prefetchMap.size >= prefetchOptions.maxChunksToPrefetch) return result
-
-    const nextUrl = getNextChunkUrl(url, result)
-
-    // do not prefetch if next URL is not valid
-    if (!nextUrl) return result
-
-    // prefetch next response and return current one
-    const [_, ...restArgs] = args
-    try {
-      const prefetchPromise = prefetchClient(nextUrl, ...restArgs)
-      prefetchPromise.catch(() => prefetchMap.delete(nextUrl))
-      prefetchMap.set(nextUrl, prefetchPromise)
-    } catch (err) {
-      console.log(`Failed prefetching`, err)
-    }
-
-    return result
+    // otherwise clear current prefetched responses (and abort active requests)
+    // and start again
+    prefetchMap.clear()
+    prefetchAborter.abort()
+    prefetchAborter = new AbortController()
+    args[1]?.signal?.addEventListener(`abort`, () => prefetchAborter.abort())
+    return prefetchClient(args[0], {
+      ...(args[1] ?? {}),
+      signal: prefetchAborter.signal,
+    })
   }
 
-  return prefetchClient
+  return prefetchEntryClient
 }

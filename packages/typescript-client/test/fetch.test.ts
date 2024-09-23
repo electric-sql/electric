@@ -1,4 +1,5 @@
 import { describe, beforeEach, it, expect, vi, type Mock } from 'vitest'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { FetchError, FetchBackoffAbortError } from '../src/error'
 import {
   createFetchWithBackoff,
@@ -152,7 +153,7 @@ describe(`createFetchWithBackoff`, () => {
 
 describe(`createFetchWithChunkBuffer`, () => {
   const baseUrl = `https://example.com/v1/shape/foo`
-  let mockFetch: ReturnType<typeof vi.fn>
+  let mockFetch: Mock<typeof fetch>
   const responseHeaders = (headers: Record<string, string>) => {
     return new Headers(headers)
   }
@@ -172,7 +173,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     const result = await fetchWrapper(baseUrl)
     expect(result).toBe(mockResponse)
     expect(mockFetch).toHaveBeenCalledTimes(1)
-    expect(mockFetch).toHaveBeenCalledWith(baseUrl)
+    expect(mockFetch).toHaveBeenCalledWith(baseUrl, expect.anything())
   })
 
   it(`should prefetch the next chunk when headers are present`, async () => {
@@ -197,7 +198,7 @@ describe(`createFetchWithChunkBuffer`, () => {
 
     // Check if the next chunk was prefetched
     const nextUrl = `${baseUrl}?shape_id=123&offset=456`
-    expect(mockFetch).toHaveBeenCalledWith(nextUrl)
+    expect(mockFetch).toHaveBeenCalledWith(nextUrl, expect.anything())
   })
 
   it(`should stop prefetching after reaching maxChunksToPrefetch`, async () => {
@@ -270,9 +271,92 @@ describe(`createFetchWithChunkBuffer`, () => {
 
     // Prefetch should have been attempted but failed
     const nextUrl = `${baseUrl}?shape_id=123&offset=456`
-    expect(mockFetch).toHaveBeenCalledWith(nextUrl)
+    expect(mockFetch).toHaveBeenCalledWith(nextUrl, expect.anything())
 
     // One for the main request, one for the prefetch
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it(`should clear and abort prefetches on new entry`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch, {
+      maxChunksToPrefetch: 2,
+    })
+
+    Array.from({ length: 10 }, (_, idx) =>
+      mockFetch.mockImplementationOnce(async () => {
+        await sleep()
+        return new Response(`chunk`, {
+          status: 200,
+          headers: responseHeaders({
+            [SHAPE_ID_HEADER]: `123`,
+            [CHUNK_LAST_OFFSET_HEADER]: `${idx}`,
+          }),
+        })
+      })
+    )
+
+    await fetchWrapper(baseUrl)
+
+    // main + one prefetch - second prefetch not yet done
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+
+    // requesting a different path should clear the prefetches
+    const altUrl = `${baseUrl}/bar`
+    await fetchWrapper(altUrl)
+    await sleep()
+
+    // main + 2 prefetches of new URL
+    expect(mockFetch).toHaveBeenCalledTimes(5)
+
+    // should have called the base + prefetch of base
+    expect(mockFetch).toHaveBeenNthCalledWith(1, baseUrl, expect.anything())
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      `${baseUrl}?shape_id=123&offset=0`,
+      expect.anything()
+    )
+
+    // once interrupted it should have called the alt + the 2 prefetches
+    expect(mockFetch).toHaveBeenNthCalledWith(3, altUrl, expect.anything())
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      4,
+      `${altUrl}?shape_id=123&offset=2`,
+      expect.anything()
+    )
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      5,
+      `${altUrl}?shape_id=123&offset=3`,
+      expect.anything()
+    )
+  })
+
+  it(`should respect wrapped client's aborter`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch, {
+      maxChunksToPrefetch: 2,
+    })
+
+    Array.from({ length: 10 }, (_, idx) =>
+      mockFetch.mockImplementationOnce(async () => {
+        await sleep()
+        return new Response(`chunk`, {
+          status: 200,
+          headers: responseHeaders({
+            [SHAPE_ID_HEADER]: `123`,
+            [CHUNK_LAST_OFFSET_HEADER]: `${idx}`,
+          }),
+        })
+      })
+    )
+
+    const aborter = new AbortController()
+    await fetchWrapper(baseUrl, { signal: aborter.signal })
+
+    // main + one prefetch - second prefetch not yet done
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    aborter.abort()
+    await sleep(10)
+
+    // no new prefetches since main request was aborted
     expect(mockFetch).toHaveBeenCalledTimes(2)
   })
 })
