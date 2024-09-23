@@ -274,6 +274,8 @@ defmodule Electric.Plug.ServeShapePlug do
     if LogOffset.compare(chunk_end_offset, last_offset) == :lt do
       conn
       |> assign(:up_to_date, [])
+      # header might have been added on first pass but no longer valid
+      # if listening to live changes and an incomplete chunk is formed
       |> delete_resp_header("electric-chunk-up-to-date")
     else
       conn
