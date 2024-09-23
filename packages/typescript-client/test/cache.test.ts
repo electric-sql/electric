@@ -81,8 +81,8 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     // add some data and follow with live request
     await insertIssues({ title: `foo` })
     const searchParams = new URLSearchParams({
-      offset: initialRes.headers.get(`x-electric-chunk-last-offset`)!,
-      shape_id: initialRes.headers.get(`x-electric-shape-id`)!,
+      offset: initialRes.headers.get(`electric-chunk-last-offset`)!,
+      shape_id: initialRes.headers.get(`electric-shape-id`)!,
       live: `true`,
     })
 
@@ -215,7 +215,7 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
     )
     expect(client1Res.status).toBe(200)
     const originalShapeId =
-      client1Res.headers.get(`x-electric-shape-id`) ?? undefined
+      client1Res.headers.get(`electric-shape-id`) ?? undefined
     assert(originalShapeId, `Should have shape ID`)
     expect(getCacheStatus(client1Res)).toBe(CacheStatus.MISS)
     //const messages = client1Res.status === 204 ? [] : await client1Res.json()
@@ -227,7 +227,7 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
       {}
     )
     expect(client2Res.status).toBe(200)
-    const shapeId2 = client2Res.headers.get(`x-electric-shape-id`) ?? undefined
+    const shapeId2 = client2Res.headers.get(`electric-shape-id`) ?? undefined
 
     expect(
       originalShapeId,
@@ -236,7 +236,7 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
 
     expect(getCacheStatus(client2Res)).toBe(CacheStatus.HIT)
 
-    const latestOffset = client2Res.headers.get(`x-electric-chunk-last-offset`)
+    const latestOffset = client2Res.headers.get(`electric-chunk-last-offset`)
     assert(latestOffset, `latestOffset should be defined`)
 
     // Now GC the shape
@@ -261,7 +261,7 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
     expect(newCacheIgnoredSyncRes.status).toBe(200)
     expect(getCacheStatus(newCacheIgnoredSyncRes)).toBe(CacheStatus.MISS)
     const cacheBustedShapeId =
-      newCacheIgnoredSyncRes.headers.get(`x-electric-shape-id`)
+      newCacheIgnoredSyncRes.headers.get(`electric-shape-id`)
     assert(cacheBustedShapeId)
     expect(cacheBustedShapeId).not.toBe(originalShapeId)
 
@@ -271,7 +271,7 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
       {}
     )
     const cachedShapeId =
-      newInitialSyncRes.headers.get(`x-electric-shape-id`) ?? undefined
+      newInitialSyncRes.headers.get(`electric-shape-id`) ?? undefined
     expect(newInitialSyncRes.status).toBe(200)
     expect(getCacheStatus(newInitialSyncRes)).toBe(CacheStatus.HIT)
     expect(cachedShapeId, `Got old shape id that is out of scope`).not.toBe(
