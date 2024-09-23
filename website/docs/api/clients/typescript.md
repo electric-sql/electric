@@ -32,6 +32,8 @@ const stream = new ShapeStream({
 
 stream.subscribe(messages => {
   // messages is an array with one or more row updates
+  // and the stream will wait for all subscribers to process them
+  // before proceeding
 })
 ```
 
