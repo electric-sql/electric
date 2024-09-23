@@ -196,6 +196,9 @@ function chainAborter(
 ): AbortSignal {
   if (!sourceSignal) return aborter.signal
   if (sourceSignal.aborted) aborter.abort()
-  else sourceSignal.addEventListener(`abort`, () => aborter.abort())
+  else
+    sourceSignal.addEventListener(`abort`, () => aborter.abort(), {
+      once: true,
+    })
   return aborter.signal
 }
