@@ -280,7 +280,7 @@ defmodule Electric.Plug.ServeShapePlug do
     else
       conn
       |> assign(:up_to_date, [@up_to_date])
-      |> put_resp_header("electric-chunk-up-to-date", "true")
+      |> put_resp_header("electric-chunk-up-to-date", "")
     end
   end
 
