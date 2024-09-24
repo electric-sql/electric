@@ -154,7 +154,9 @@ class PrefetchQueue {
     maxPrefetchedRequests: number
     fetchClient?: typeof fetch
   }) {
-    this.#fetchClient = options.fetchClient ?? ((...args) => fetch(...args))
+    this.#fetchClient =
+      options.fetchClient ??
+      ((...args: Parameters<typeof fetch>) => fetch(...args))
     this.#maxPrefetchedRequests = options.maxPrefetchedRequests
     this.#queueHeadUrl = options.url.toString()
     this.#queueTailUrl = this.#queueHeadUrl
