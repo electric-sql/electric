@@ -8,6 +8,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.{Relation, Transaction}
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -45,7 +46,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   # determinining how long a write should reasonably take and if that fails
   # it should raise.
   def store_transaction(%Transaction{} = txn, server) do
-    GenStage.call(server, {:new_txn, txn}, :infinity)
+    ot_span_ctx = OpenTelemetry.get_current_context()
+    GenStage.call(server, {:new_txn, txn, ot_span_ctx}, :infinity)
   end
 
   def handle_relation_msg(%Changes.Relation{} = rel, server) do
@@ -113,16 +115,20 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:noreply, [], remove_subscription(from, state)}
   end
 
-  def handle_call({:new_txn, %Transaction{xid: xid, lsn: lsn} = txn}, from, state) do
+  def handle_call({:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, ot_span_ctx}, from, state) do
+    OpenTelemetry.set_current_context(ot_span_ctx)
+
     Logger.info("Received transaction #{xid} from Postgres at #{lsn}")
-    Logger.debug(fn -> "Txn received: #{inspect(txn)}" end)
-    handle_transaction(txn, from, state)
+    Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
+
+    OpenTelemetry.with_span("shape_log_collector.handle_txn", [], fn ->
+      handle_transaction(txn, from, state)
+    end)
   end
 
   def handle_call({:relation_msg, %Relation{} = rel}, from, %{producer: nil} = state) do
     Logger.info("Received Relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
     Logger.debug(fn -> "Relation received: #{inspect(rel)}" end)
-
     {:noreply, [rel], %{state | producer: from}}
   end
 
@@ -134,10 +140,15 @@ defmodule Electric.Replication.ShapeLogCollector do
   # will prompt the `GenServer.reply/2` call.
   defp handle_transaction(txn, _from, %{subscriptions: {0, _}} = state) do
     Logger.debug(fn -> "Dropping transaction #{txn.xid}: no active consumers" end)
+
+    OpenTelemetry.add_span_attributes("txn.is_dropped": true)
+
     {:reply, :ok, [], state}
   end
 
   defp handle_transaction(txn, from, state) do
+    OpenTelemetry.add_span_attributes("txn.is_dropped": false)
+
     pk_cols_of_relations =
       for relation <- txn.affected_relations, into: %{} do
         {:ok, info} = Inspector.load_column_info(relation, state.inspector)

@@ -29,6 +29,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   [2]: https://github.com/open-telemetry/opentelemetry-erlang
   """
 
+  require Logger
   require OpenTelemetry.SemanticConventions.Trace
 
   @typep span_name :: String.t()
@@ -69,7 +70,8 @@ defmodule Electric.Telemetry.OpenTelemetry do
     ]
 
     :telemetry.span(erlang_telemetry_event, Map.new(attributes), fn ->
-      {:otel_tracer.with_span(tracer(), name, span_opts, fn _span_ctx -> fun.() end), %{}}
+      fun_result = :otel_tracer.with_span(tracer(), name, span_opts, fn _span_ctx -> fun.() end)
+      {fun_result, %{}}
     end)
   end
 
@@ -122,13 +124,13 @@ defmodule Electric.Telemetry.OpenTelemetry do
 
   defp tracer, do: :opentelemetry.get_tracer()
 
-  defp get_current_context do
+  def get_current_context do
     :otel_tracer.current_span_ctx()
   end
 
   # Set the span on otel_ctx of the current process to `span_ctx`, so that subsequent `with_span()`
   # calls are registered as its child.
-  defp set_current_context(span_ctx) do
+  def set_current_context(span_ctx) do
     :otel_tracer.set_current_span(span_ctx)
   end
 

@@ -128,7 +128,11 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_events([%Transaction{}] = txns, _from, state) do
-    handle_txns(txns, state)
+    OpenTelemetry.with_span(
+      "shapes_consumer.handle_txns",
+      [snapshot_xmin: state.snapshot_xmin],
+      fn -> handle_txns(txns, state) end
+    )
   end
 
   defp handle_txns(txns, state) do
@@ -146,11 +150,12 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_txn(%Transaction{} = txn, state) do
-    OpenTelemetry.with_span(
-      "shapes_consumer.handle_txn",
-      shape_attrs(state.shape_id, state.shape),
-      fn -> do_handle_txn(txn, state) end
-    )
+    ot_attrs =
+      [xid: txn.xid, num_changes: length(txn.changes)] ++ shape_attrs(state.shape_id, state.shape)
+
+    OpenTelemetry.with_span("shapes_consumer.handle_txn", ot_attrs, fn ->
+      do_handle_txn(txn, state)
+    end)
   end
 
   defp do_handle_txn(%Transaction{} = txn, state) do
@@ -164,7 +169,7 @@ defmodule Electric.Shapes.Consumer do
       storage: storage
     } = state
 
-    Logger.debug(fn -> "Txn received: #{inspect(txn)}" end)
+    Logger.debug(fn -> "Txn received in Shapes.Consumer: #{inspect(txn)}" end)
 
     %{xid: xid, changes: changes, lsn: _lsn, last_log_offset: last_log_offset} = txn
 
