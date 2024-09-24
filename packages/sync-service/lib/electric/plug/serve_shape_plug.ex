@@ -117,14 +117,15 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
+  # start_telemetry_span needs to always be the first plug here.
+  plug :start_telemetry_span
+
   plug :fetch_query_params
   plug :cors
   plug :put_resp_content_type, "application/json"
   plug :validate_query_params
-  plug :set_open_telemetry_attrs_before_send
   plug :load_shape_info
   plug :put_schema_header
-
   # We're starting listening as soon as possible to not miss stuff that was added since we've
   # asked for last offset
   plug :listen_for_new_changes
@@ -134,6 +135,9 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :validate_and_put_etag
   plug :put_resp_cache_headers
   plug :serve_log_or_snapshot
+
+  # end_telemetry_span needs to always be the last plug here.
+  plug :end_telemetry_span
 
   defp validate_query_params(%Conn{} = conn, _) do
     Logger.info("Query String: #{conn.query_string}")
@@ -151,16 +155,6 @@ defmodule Electric.Plug.ServeShapePlug do
         |> send_resp(400, Jason.encode_to_iodata!(error_map))
         |> halt()
     end
-  end
-
-  defp set_open_telemetry_attrs_before_send(%Conn{} = conn, _) do
-    register_before_send(conn, fn conn ->
-      conn
-      |> open_telemetry_attrs()
-      |> OpenTelemetry.add_span_attributes()
-
-      conn
-    end)
   end
 
   defp load_shape_info(%Conn{} = conn, _) do
@@ -576,5 +570,35 @@ defmodule Electric.Plug.ServeShapePlug do
       [] -> ""
       [head | _] -> head
     end
+  end
+
+  #
+  ### Telemetry
+  #
+
+  # Below, OpentelemetryTelemetry does the heavy lifting of setting up the span context in the
+  # current Elixir process to correctly attribute subsequent calls to OpenTelemetry.with_span()
+  # in this module as descendants of the root span, as they are all invoked in the same process
+  # unless a new process is spawned explicitly.
+
+  # Start the root span for the shape request, serving as an ancestor for any subsequent
+  # sub-span.
+  defp start_telemetry_span(conn, _) do
+    OpentelemetryTelemetry.start_telemetry_span(OpenTelemetry, "ShapeGet", %{}, %{})
+    conn
+  end
+
+  # Assign root span attributes based on the latest state of Plug.Conn and end the root span.
+  #
+  # We want to have all the relevant HTTP and shape request attributes on the root span. This
+  # is the place to assign them because we keep this plug last in the "plug pipeline" defined
+  # in this module.
+  defp end_telemetry_span(conn, _) do
+    conn
+    |> open_telemetry_attrs()
+    |> OpenTelemetry.add_span_attributes()
+
+    OpentelemetryTelemetry.end_telemetry_span(OpenTelemetry, %{})
+    conn
   end
 end
