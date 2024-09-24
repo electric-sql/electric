@@ -403,6 +403,7 @@ describe(`HTTP Sync`, () => {
       shapeData.set(msg.key, msg.value)
 
       if (nth === 0) {
+        await sleep(100)
         numFetchCalls = fetchWrapper.mock.calls.length
 
         // ensure fetch has not been called again while
