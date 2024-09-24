@@ -440,25 +440,26 @@ defmodule Electric.Plug.ServeShapePlug do
   defp send_stream(stream, conn, status) do
     conn = send_chunked(conn, status)
 
-    Enum.reduce_while(stream, conn, fn chunk, conn ->
-      OpenTelemetry.with_span(
-        "ShapeGet.stream_chunk",
-        [chunk_size: IO.iodata_length(chunk)],
-        fn ->
+    {conn, bytes_sent} =
+      Enum.reduce_while(stream, {conn, 0}, fn chunk, {conn, bytes_sent} ->
+        chunk_size = IO.iodata_length(chunk)
+
+        OpenTelemetry.with_span("ShapeGet.stream_chunk", [chunk_size: chunk_size], fn ->
           case chunk(conn, chunk) do
             {:ok, conn} ->
-              {:cont, conn}
+              {:cont, {conn, bytes_sent + chunk_size}}
 
             {:error, "closed"} ->
-              {:halt, conn}
+              {:halt, {conn, bytes_sent}}
 
             {:error, reason} ->
               Logger.error("Error while streaming response: #{inspect(reason)}")
-              {:halt, conn}
+              {:halt, {conn, bytes_sent}}
           end
-        end
-      )
-    end)
+        end)
+      end)
+
+    assign(conn, :streaming_bytes_sent, bytes_sent)
   end
 
   defp listen_for_new_changes(%Conn{} = conn, _) when not conn.assigns.live, do: conn
@@ -536,6 +537,7 @@ defmodule Electric.Plug.ServeShapePlug do
       SC.Trace.http_target() => conn.request_path,
       SC.Trace.http_method() => conn.method,
       SC.Trace.http_status_code() => conn.status,
+      SC.Trace.http_response_content_length() => assigns[:streaming_bytes_sent],
       SC.Trace.net_transport() => :"IP.TCP",
       SC.Trace.http_user_agent() => user_agent(conn),
       SC.Trace.http_url() =>
@@ -549,8 +551,8 @@ defmodule Electric.Plug.ServeShapePlug do
         |> to_string()
     }
     |> Map.merge(Map.new(conn.query_params, fn {k, v} -> {"http.query_param.#{k}", v} end))
-    |> Map.merge(Map.new(conn.req_headers, fn {k, v} -> {"http.req_header.#{k}", v} end))
-    |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.resp_header.#{k}", v} end))
+    |> Map.merge(Map.new(conn.req_headers, fn {k, v} -> {"http.request.header.#{k}", v} end))
+    |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.response.header.#{k}", v} end))
   end
 
   defp client_ip(%Conn{remote_ip: remote_ip} = conn) do
