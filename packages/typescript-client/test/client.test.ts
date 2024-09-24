@@ -152,8 +152,8 @@ describe(`Shape`, () => {
         rotationTime = Date.now()
       }
 
-      const response = await fetch(...args)
       requestsMade++
+      const response = await fetch(...args)
       return response
     }
 

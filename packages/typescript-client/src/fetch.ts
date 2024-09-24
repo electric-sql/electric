@@ -107,86 +107,124 @@ export function createFetchWithChunkBuffer(
   fetchClient: typeof fetch,
   prefetchOptions: ChunkPrefetchOptions = ChunkPrefetchDefaults
 ): typeof fetch {
-  const prefetchMap: Map<string, Promise<Response>> = new Map()
-  let prefetchAborter: AbortController = new AbortController()
+  const { maxChunksToPrefetch } = prefetchOptions
 
-  const getNextUrlToPrefetch = async (
-    url: string,
-    response: Response
-  ): Promise<string | void> => {
-    // do not prefetch next response if current fails
-    if (!response.ok) return
+  let prefetchQueue: PrefetchQueue
 
-    // check if next request is already prefetched and recursively
-    // follow chain until first request that has not been prefetched is found
+  const prefetchClient = async (...args: Parameters<typeof fetchClient>) => {
+    const url = args[0].toString()
+
+    // try to consume from the prefetch queue first, and if request is
+    // not present abort the prefetch queue as it must no longer be valid
+    const prefetchedRequest = prefetchQueue?.consume(...args)
+    if (prefetchedRequest) return prefetchedRequest
+    else prefetchQueue?.abort()
+
+    // perform request and fire off prefetch queue if request is eligible
+    const response = await fetchClient(...args)
     const nextUrl = getNextChunkUrl(url, response)
-    if (nextUrl && prefetchMap.has(nextUrl)) {
-      return prefetchMap
-        .get(nextUrl)!
-        .then((res) => getNextUrlToPrefetch(nextUrl, res))
-        .catch(() => {})
-    }
-
-    return nextUrl
-  }
-
-  const prefetchClient = async (
-    prefetchedRequest?: Promise<Response>,
-    ...args: Parameters<typeof fetch>
-  ): Promise<Response> => {
-    const url = args[0].toString()
-    const result = await (prefetchedRequest ?? fetchClient(...args))
-
-    // kick off a prefetch of the next response if available
-    getNextUrlToPrefetch(url, result).then((nextUrl) => {
-      // if aborted or unavailable, terminate prefetch chain
-      if (args[1]?.signal?.aborted || !nextUrl) return
-
-      // do not prefetch more than specified amount
-      if (prefetchMap.size >= prefetchOptions.maxChunksToPrefetch) return
-
-      const prefetchPromise = prefetchClient(
-        prefetchMap.get(nextUrl),
-        nextUrl,
-        args[1]
-      )
-
-      // delete prefetched requests that fail to avoid polluting chain
-      prefetchPromise.catch(() => prefetchMap.delete(nextUrl))
-      prefetchMap.set(nextUrl, prefetchPromise)
-    })
-
-    return result
-  }
-
-  const prefetchEntryClient = (
-    ...args: Parameters<typeof fetch>
-  ): Promise<Response> => {
-    const url = args[0].toString()
-    const prefetchedRequest = prefetchMap.get(url)
-
-    // if a prefetched request for given URL is not available, clear all current
-    // prefetched requests and start again, as request that came in does not belong
-    // in the current "prefetch chain" and should start a new one (e.g. shape rotation)
-    if (!prefetchedRequest) {
-      prefetchAborter.abort()
-      prefetchMap.clear()
-      prefetchAborter = new AbortController()
-      return prefetchClient(undefined, args[0], {
-        ...(args[1] ?? {}),
-        signal: chainAborter(prefetchAborter, args[1]?.signal),
+    if (nextUrl) {
+      prefetchQueue = new PrefetchQueue({
+        fetchClient,
+        maxPrefetchedRequests: maxChunksToPrefetch,
+        url: nextUrl,
+        requestInit: args[1],
       })
     }
 
-    // otherwise consume prefetched request and attempt to prefetch more
-    prefetchMap.delete(url)
-    return prefetchClient(prefetchedRequest, url, {
-      ...(args[1] ?? {}),
-      signal: prefetchAborter.signal,
-    })
+    return response
   }
 
-  return prefetchEntryClient
+  return prefetchClient
+}
+
+class PrefetchQueue {
+  readonly #fetchClient: typeof fetch
+  readonly #maxPrefetchedRequests: number
+  readonly #prefetchQueue = new Map<
+    string,
+    [Promise<Response>, AbortController]
+  >()
+  #queueHeadUrl: string | void
+  #queueTailUrl: string
+
+  constructor(options: {
+    url: Parameters<typeof fetch>[0]
+    requestInit: Parameters<typeof fetch>[1]
+    maxPrefetchedRequests: number
+    fetchClient?: typeof fetch
+  }) {
+    this.#fetchClient = options.fetchClient ?? ((...args) => fetch(...args))
+    this.#maxPrefetchedRequests = options.maxPrefetchedRequests
+    this.#queueHeadUrl = options.url.toString()
+    this.#queueTailUrl = this.#queueHeadUrl
+    this.#prefetch(options.url, options.requestInit)
+  }
+
+  abort(): void {
+    this.#prefetchQueue.forEach(([_, aborter]) => aborter.abort())
+  }
+
+  consume(...args: Parameters<typeof fetch>): Promise<Response> | void {
+    const url = args[0].toString()
+
+    const request = this.#prefetchQueue.get(url)?.[0]
+    // only consume if request is in queue and is the queue "head"
+    // if request is in the queue but not the head, the queue is being
+    // consumed out of order and should be restarted
+    if (!request || url !== this.#queueHeadUrl) return
+    this.#prefetchQueue.delete(url)
+
+    // fire off new prefetch since request has been consumed
+    request
+      .then((response) => {
+        const nextUrl = getNextChunkUrl(url, response)
+        this.#queueHeadUrl = nextUrl
+        if (!this.#prefetchQueue.has(this.#queueTailUrl)) {
+          this.#prefetch(this.#queueTailUrl, args[1])
+        }
+      })
+      .catch(() => {})
+
+    return request
+  }
+
+  #prefetch(...args: Parameters<typeof fetch>): void {
+    const url = args[0].toString()
+
+    // only prefetch when queue is not full
+    if (this.#prefetchQueue.size >= this.#maxPrefetchedRequests) return
+
+    // initialize aborter per request, to avoid aborting consumed requests that
+    // are still streaming their bodies to the consumer
+    const aborter = new AbortController()
+
+    try {
+      const request =
+        this.#prefetchQueue.get(url)?.[0] ??
+        this.#fetchClient(url, {
+          ...(args[1] ?? {}),
+          signal: chainAborter(aborter, args[1]?.signal),
+        })
+      this.#prefetchQueue.set(url, [request, aborter])
+      request
+        .then((response) => {
+          // only keep prefetching if response chain is uninterrupted
+          if (!response.ok || aborter.signal.aborted) return
+
+          const nextUrl = getNextChunkUrl(url, response)
+
+          // only prefetch when there is a next URL
+          if (!nextUrl || nextUrl === url) return
+
+          this.#queueTailUrl = nextUrl
+          return this.#prefetch(nextUrl, args[1])
+        })
+        .catch(() => {})
+    } catch (_) {
+      // ignore prefetch errors
+    }
+  }
 }
 
 /**
@@ -195,7 +233,7 @@ export function createFetchWithChunkBuffer(
 function getNextChunkUrl(url: string, res: Response): string | void {
   const shapeId = res.headers.get(SHAPE_ID_HEADER)
   const lastOffset = res.headers.get(CHUNK_LAST_OFFSET_HEADER)
-  const isUpToDate = res.headers.get(CHUNK_UP_TO_DATE_HEADER)
+  const isUpToDate = res.headers.has(CHUNK_UP_TO_DATE_HEADER)
 
   // only prefetch if shape ID and offset for next chunk are available, and
   // response is not already up-to-date

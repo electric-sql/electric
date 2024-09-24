@@ -173,7 +173,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     const result = await fetchWrapper(baseUrl)
     expect(result).toBe(mockResponse)
     expect(mockFetch).toHaveBeenCalledTimes(1)
-    expect(mockFetch).toHaveBeenCalledWith(baseUrl, expect.anything())
+    expect(mockFetch).toHaveBeenCalledWith(baseUrl)
   })
 
   it(`should prefetch the next chunk when headers are present`, async () => {
@@ -322,7 +322,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledTimes(5)
 
     // should have called the base + prefetch of base
-    expect(mockFetch).toHaveBeenNthCalledWith(1, baseUrl, expect.anything())
+    expect(mockFetch).toHaveBeenNthCalledWith(1, baseUrl)
     expect(mockFetch).toHaveBeenNthCalledWith(
       2,
       `${baseUrl}?shape_id=123&offset=0`,
@@ -330,7 +330,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     )
 
     // once interrupted it should have called the alt + the 2 prefetches
-    expect(mockFetch).toHaveBeenNthCalledWith(3, altUrl, expect.anything())
+    expect(mockFetch).toHaveBeenNthCalledWith(3, altUrl)
     expect(mockFetch).toHaveBeenNthCalledWith(
       4,
       `${altUrl}?shape_id=123&offset=2`,
