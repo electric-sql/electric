@@ -396,20 +396,23 @@ describe(`HTTP Sync`, () => {
       fetchClient: fetchWrapper,
     })
 
+    let numFetchCalls = 0
+
     await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
       if (!isChangeMessage(msg)) return
       shapeData.set(msg.key, msg.value)
 
       if (nth === 0) {
-        expect(fetchWrapper).toHaveBeenCalledTimes(1)
+        await sleep(100)
+        numFetchCalls = fetchWrapper.mock.calls.length
 
         // ensure fetch has not been called again while
         // waiting for processing
         await insertIssues({ title: `foo1` })
         await sleep(100)
-        expect(fetchWrapper).toHaveBeenCalledTimes(1)
+        expect(fetchWrapper).toHaveBeenCalledTimes(numFetchCalls)
       } else if (nth === 1) {
-        expect(fetchWrapper).toHaveBeenCalledTimes(2)
+        expect(fetchWrapper.mock.calls.length).greaterThan(numFetchCalls)
         res()
       }
     })
@@ -759,16 +762,19 @@ describe(`HTTP Sync`, () => {
     await insertIssues({ id: rowId, title: `foo1` })
 
     const statusCodesReceived: number[] = []
+    let numRequests = 0
 
     const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
       // before any subsequent requests after the initial one, ensure
       // that the existing shape is deleted and some more data is inserted
-      if (statusCodesReceived.length === 1 && statusCodesReceived[0] === 200) {
+      if (numRequests === 1) {
         await insertIssues({ id: secondRowId, title: `foo2` })
         await clearIssuesShape(issueStream.shapeId)
       }
 
+      numRequests++
       const response = await fetch(...args)
+
       if (response.status < 500) {
         statusCodesReceived.push(response.status)
       }

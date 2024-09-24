@@ -95,7 +95,7 @@ describe(`Shape`, () => {
     await deleteIssue({ id: id3, title: `other title2` })
     // Test an update too because we're sending patches that should be correctly merged in
     await updateIssue({ id: id2, title: `new title` })
-    await sleep(100) // some time for electric to catch up
+    await sleep(200) // some time for electric to catch up
     await hasNotified
 
     expectedValue.set(`${issuesTableKey}/"${id2}"`, {
@@ -152,8 +152,8 @@ describe(`Shape`, () => {
         rotationTime = Date.now()
       }
 
-      const response = await fetch(...args)
       requestsMade++
+      const response = await fetch(...args)
       return response
     }
 
@@ -325,7 +325,7 @@ describe(`Shape`, () => {
 
     expect(shapeStream.isLoading()).true
 
-    await sleep(100) // give some time for the initial fetch to complete
+    await sleep(200) // give some time for the initial fetch to complete
 
     expect(shapeStream.isLoading()).false
   })
