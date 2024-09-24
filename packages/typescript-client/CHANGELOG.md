@@ -1,5 +1,16 @@
 # @electric-sql/client
 
+## 0.6.0
+
+### Minor Changes
+
+- b0d258d: Rename Electric's custom HTTP headers to remove the x- prefix.
+
+### Patch Changes
+
+- df6cc5b: Wait for `ShapeStream` subscriber callbacks before requesting data to allow developer to implement backpressure.
+- e459a62: Implement configurable chunk prefetching to `ShapeStream` to accelerate stream consumption.
+
 ## 0.5.1
 
 ### Patch Changes

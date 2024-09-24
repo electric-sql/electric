@@ -1,5 +1,15 @@
 # @core/sync-service
 
+## 0.6.0
+
+### Minor Changes
+
+- b0d258d: Rename Electric's custom HTTP headers to remove the x- prefix.
+
+### Patch Changes
+
+- e459a62: Add `electric-chunk-up-to-date` header to up-to-date responses for optimizing caching and prefetching.
+
 ## 0.5.2
 
 ### Patch Changes
