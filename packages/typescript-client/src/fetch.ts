@@ -117,8 +117,11 @@ export function createFetchWithChunkBuffer(
     // try to consume from the prefetch queue first, and if request is
     // not present abort the prefetch queue as it must no longer be valid
     const prefetchedRequest = prefetchQueue?.consume(...args)
-    if (prefetchedRequest) return prefetchedRequest
-    else prefetchQueue?.abort()
+    if (prefetchedRequest) {
+      return prefetchedRequest
+    }
+
+    prefetchQueue?.abort()
 
     // perform request and fire off prefetch queue if request is eligible
     const response = await fetchClient(...args)
