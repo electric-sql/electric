@@ -389,7 +389,10 @@ defmodule Electric.Plug.ServeShapePlug do
         end)
 
       {:error, reason} ->
-        Logger.warning("Could not serve a snapshot because of #{inspect(reason)}")
+        error_msg = "Could not serve a snapshot because of #{inspect(reason)}"
+
+        Logger.warning(error_msg)
+        OpenTelemetry.record_exception(error_msg)
 
         send_resp(
           conn,
@@ -528,6 +531,7 @@ defmodule Electric.Plug.ServeShapePlug do
       "shape_req.is_empty_response" => assigns[:ot_is_empty_response] || false,
       "shape_req.is_immediate_response" => assigns[:ot_is_immediate_response] || true,
       "shape_req.is_cached" => conn.status == 304,
+      "shape_req.is_error" => conn.status >= 400,
       "http.request_id" => assigns[:plug_request_id],
       "http.query_string" => conn.query_string,
       SC.Trace.http_client_ip() => client_ip(conn),
