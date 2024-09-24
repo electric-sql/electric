@@ -1,6 +1,9 @@
 defmodule Electric.Plug.ServeShapePlug do
   use Plug.Builder
 
+  # The halt/1 function is redefined further down below
+  import Plug.Conn, except: [halt: 1]
+
   alias OpenTelemetry.SemanticConventions, as: SC
 
   alias Electric.Shapes
@@ -597,5 +600,14 @@ defmodule Electric.Plug.ServeShapePlug do
 
     OpentelemetryTelemetry.end_telemetry_span(OpenTelemetry, %{})
     conn
+  end
+
+  # This overrides Plug.Conn.halt/1 (which is deliberately "unimported" at the top of this
+  # module) so that we can record the response status in the OpenTelemetry span for this
+  # request.
+  defp halt(conn) do
+    conn
+    |> end_telemetry_span(nil)
+    |> Plug.Conn.halt()
   end
 end
