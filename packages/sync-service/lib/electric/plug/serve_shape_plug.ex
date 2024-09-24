@@ -527,6 +527,7 @@ defmodule Electric.Plug.ServeShapePlug do
       "shape_req.is_long_poll_timeout" => assigns[:ot_is_long_poll_timeout] || false,
       "shape_req.is_empty_response" => assigns[:ot_is_empty_response] || false,
       "shape_req.is_immediate_response" => assigns[:ot_is_immediate_response] || true,
+      "shape_req.is_cached" => conn.status == 304,
       "http.request_id" => assigns[:plug_request_id],
       "http.query_string" => conn.query_string,
       SC.Trace.http_client_ip() => client_ip(conn),
