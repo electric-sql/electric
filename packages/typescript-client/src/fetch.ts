@@ -205,12 +205,10 @@ class PrefetchQueue {
     const aborter = new AbortController()
 
     try {
-      const request =
-        this.#prefetchQueue.get(url)?.[0] ??
-        this.#fetchClient(url, {
-          ...(args[1] ?? {}),
-          signal: chainAborter(aborter, args[1]?.signal),
-        })
+      const request = this.#fetchClient(url, {
+        ...(args[1] ?? {}),
+        signal: chainAborter(aborter, args[1]?.signal),
+      })
       this.#prefetchQueue.set(url, [request, aborter])
       request
         .then((response) => {
