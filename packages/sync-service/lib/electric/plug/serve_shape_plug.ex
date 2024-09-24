@@ -158,7 +158,7 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp load_shape_info(%Conn{} = conn, _) do
-    OpenTelemetry.with_span("serve_shape_plug.load_shape_info", [], fn ->
+    OpenTelemetry.with_span("ShapeGet.load_shape_info", [], fn ->
       shape_info = get_or_create_shape_id(conn.assigns)
       handle_shape_info(conn, shape_info)
     end)
@@ -349,44 +349,36 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # If offset is -1, we're serving a snapshot
   defp serve_log_or_snapshot(%Conn{assigns: %{offset: @before_all_offset}} = conn, _) do
-    OpenTelemetry.with_span(
-      "serve_shape_plug.serve_log_or_snapshot",
-      [],
-      fn -> serve_snapshot(conn) end
-    )
+    OpenTelemetry.with_span("ShapeGet.serve_snapshot", [], fn -> serve_snapshot(conn) end)
   end
 
   # Otherwise, serve log since that offset
   defp serve_log_or_snapshot(conn, _) do
-    OpenTelemetry.with_span(
-      "serve_shape_plug.get_log_stream_and_maybe_hold",
-      [],
-      fn -> serve_shape_log(conn) end
-    )
+    OpenTelemetry.with_span("ShapeGet.serve_shape_log", [], fn -> serve_shape_log(conn) end)
   end
 
-
   defp serve_snapshot(
-         %Conn{assigns: %{chunk_end_offset: chunk_end_offset, active_shape_id: shape_id,
-
+         %Conn{
+           assigns: %{
+             chunk_end_offset: chunk_end_offset,
+             active_shape_id: shape_id,
              up_to_date: maybe_up_to_date
-         }} = conn
+           }
+         } = conn
        ) do
     case Shapes.get_snapshot(conn.assigns.config, shape_id) do
       {:ok, {offset, snapshot}} ->
-        OpenTelemetry.with_span("serve_shape_plug.get_log_stream", [], fn ->
-          log =
-            Shapes.get_log_stream(conn.assigns.config, shape_id,
-              since: offset,
-              up_to: chunk_end_offset
-            )
+        log =
+          Shapes.get_log_stream(conn.assigns.config, shape_id,
+            since: offset,
+            up_to: chunk_end_offset
+          )
 
-          [snapshot, log, maybe_up_to_date]
-          |> Stream.concat()
-          |> to_json_stream()
-          |> Stream.chunk_every(500)
-          |> send_stream(conn, 200)
-        end)
+        [snapshot, log, maybe_up_to_date]
+        |> Stream.concat()
+        |> to_json_stream()
+        |> Stream.chunk_every(500)
+        |> send_stream(conn, 200)
 
       {:error, reason} ->
         error_msg = "Could not serve a snapshot because of #{inspect(reason)}"
@@ -447,7 +439,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
     Enum.reduce_while(stream, conn, fn chunk, conn ->
       OpenTelemetry.with_span(
-        "serve_shape_plug.serve_log_or_snapshot.chunk",
+        "ShapeGet.stream_chunk",
         [chunk_size: IO.iodata_length(chunk)],
         fn ->
           case chunk(conn, chunk) do
