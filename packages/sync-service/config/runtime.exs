@@ -92,6 +92,8 @@ else
   config :electric, connection_opts: connection_opts, electric_instance_id: electric_instance_id
 end
 
+config :electric, listen_on_ipv6?: env!("LISTEN_ON_IPV6", :boolean, false)
+
 enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)
 cache_max_age = env!("CACHE_MAX_AGE", :integer, 60)
 cache_stale_age = env!("CACHE_STALE_AGE", :integer, 60 * 5)
