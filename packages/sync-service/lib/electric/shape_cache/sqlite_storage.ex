@@ -421,7 +421,7 @@ defmodule Electric.ShapeCache.SQLiteStorage do
         {:halt, conn, stmt} ->
           {:halt, {:halt, conn, stmt}}
       end,
-      fn {:halt, conn, stmt} ->
+      fn {_, conn, stmt} ->
         :ok = Sqlite3.release(conn, stmt)
       end
     )

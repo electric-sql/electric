@@ -368,6 +368,65 @@ defmodule Electric.ShapeCache.StorageImplementationsTest do
 
         assert [%{headers: %{operation: "update"}}] = entries
       end
+
+      test "returns correct log stream for tx with lots of updates", %{
+        module: storage,
+        opts: opts
+      } do
+        lsn1 = Lsn.from_integer(1000)
+        lsn2 = Lsn.from_integer(2000)
+        items1_count = Enum.random(100..900)
+        items2_count = Enum.random(100..900)
+
+        log_items1 =
+          Enum.map(1..items1_count, fn n ->
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "1-#{n}", "name" => "Test 1/#{n}"},
+              log_offset: LogOffset.new(lsn1, n)
+            }
+          end)
+          |> changes_to_log_items()
+
+        log_items2 =
+          Enum.map(1..items2_count, fn n ->
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "2-#{n}", "name" => "Test 2/#{n}"},
+              log_offset: LogOffset.new(lsn2, n)
+            }
+          end)
+          |> changes_to_log_items()
+
+        :ok = storage.append_to_log!(log_items1, opts)
+        :ok = storage.append_to_log!(log_items2, opts)
+
+        stream =
+          storage.get_log_stream(
+            LogOffset.first(),
+            LogOffset.last(),
+            opts
+          )
+
+        entries = Enum.into(stream, [])
+
+        assert length(entries) == items1_count + items2_count
+
+        stream =
+          storage.get_log_stream(
+            LogOffset.new(lsn2, 0),
+            LogOffset.last(),
+            opts
+          )
+
+        entries = Enum.into(stream, [])
+
+        assert length(entries) == items2_count
+
+        # assert that the stream can cope with early termination
+        entries = stream |> Stream.take(100) |> Enum.into([])
+        assert length(entries) == 100
+      end
     end
 
     describe "#{module_name}.cleanup!/2" do
