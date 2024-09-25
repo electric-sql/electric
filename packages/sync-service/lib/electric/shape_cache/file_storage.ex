@@ -57,7 +57,7 @@ defmodule Electric.ShapeCache.FileStorage do
   @impl Electric.ShapeCache.Storage
   def start_link(%FS{cubdb_dir: dir, db: db} = opts) do
     with :ok <- initialise_filesystem(opts) do
-      CubDB.start_link(data_dir: dir, name: db)
+      CubDB.start_link(data_dir: dir, name: db, auto_file_sync: false)
     end
   end
 
