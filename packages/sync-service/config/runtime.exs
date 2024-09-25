@@ -119,7 +119,7 @@ persistent_kv =
           raise Dotenvy.Error, message: "PERSISTENT_STATE must be one of: MEMORY, FILE"
       end
     end,
-    {Electric.PersistentKV.Filesystem, :new!, root: persistent_state_path}
+    {Electric.PersistentKV.Memory, :new!, []}
   )
 
 chunk_bytes_threshold =
@@ -145,8 +145,7 @@ chunk_bytes_threshold =
           raise Dotenvy.Error, message: "storage must be one of: MEMORY, FILE"
       end
     end,
-    {Electric.ShapeCache.FileStorage,
-     storage_dir: shape_path, electric_instance_id: electric_instance_id}
+    {Electric.ShapeCache.InMemoryStorage, electric_instance_id: electric_instance_id}
   )
 
 storage = {storage_mod, storage_opts}
