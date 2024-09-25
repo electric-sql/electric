@@ -22,6 +22,7 @@ defmodule Electric.ShapeCache.SQLiteStorage do
 
   defstruct [
     :base_path,
+    :path,
     :electric_instance_id,
     :shape_id,
     :conn,
@@ -62,6 +63,7 @@ defmodule Electric.ShapeCache.SQLiteStorage do
 
     %S{
       base_path: base_path,
+      path: path,
       electric_instance_id: electric_instance_id,
       shape_id: shape_id,
       conn: conn
@@ -124,6 +126,7 @@ defmodule Electric.ShapeCache.SQLiteStorage do
     #
     # And much faster...
     :ok = Sqlite3.execute(conn, "PRAGMA main.synchronous=NORMAL")
+    :ok = Sqlite3.execute(conn, "PRAGMA temp_store=MEMORY")
 
     :ok =
       Sqlite3.execute(conn, """
@@ -274,7 +277,22 @@ defmodule Electric.ShapeCache.SQLiteStorage do
   @insert_snapshot_row_query "INSERT INTO #{@snapshot_table} (last, data) VALUES (?1, ?2)"
 
   @impl Electric.ShapeCache.Storage
-  def make_new_snapshot!(data_stream, %S{conn: conn} = storage) do
+  def make_new_snapshot!(data_stream, %S{} = storage) do
+    # This is a per-connection setting. Lower the durability requirements for creating the snapshot
+    # https://www.sqlite.org/pragma.html#pragma_synchronous
+    #
+    # > With synchronous OFF (0), SQLite continues without syncing as soon as
+    # > it has handed data off to the operating system. If the application
+    # > running SQLite crashes, the data will be safe, but the database might
+    # > become corrupted if the operating system crashes or the computer loses
+    # > power before that data has been written to the disk surface. On the other
+    # > hand, commits can be orders of magnitude faster with synchronous OFF. 
+
+    {:ok, conn} = Sqlite3.open(storage.path)
+    :ok = Sqlite3.execute(conn, "PRAGMA main.synchronous=OFF")
+
+    rows_per_commit = 100
+
     OpenTelemetry.with_span(
       "storage.make_new_snapshot",
       [storage_impl: "sqlite", "shape.id": storage.shape_id],
@@ -282,20 +300,33 @@ defmodule Electric.ShapeCache.SQLiteStorage do
         data_stream
         |> Stream.transform(
           fn ->
+            :ok = Sqlite3.execute(conn, "BEGIN IMMEDIATE")
             {:ok, statement} = Sqlite3.prepare(conn, @insert_snapshot_row_query)
-            {conn, statement}
+            {conn, statement, 0}
           end,
-          fn row, {conn, statement} ->
+          fn row, {conn, statement, n} ->
             :ok = Sqlite3.bind(conn, statement, [0, row])
             :done = Sqlite3.step(conn, statement)
 
-            {[], {conn, statement}}
+            n =
+              if n == rows_per_commit do
+                :ok = Sqlite3.execute(conn, "COMMIT")
+                :ok = Sqlite3.execute(conn, "BEGIN IMMEDIATE")
+                0
+              else
+                n + 1
+              end
+
+            {[], {conn, statement, n}}
           end,
-          fn {conn, statement} ->
+          fn {conn, statement, _} ->
             # add the final `last` entry
             :ok = Sqlite3.bind(conn, statement, [1, ""])
             :done = Sqlite3.step(conn, statement)
+
+            :ok = Sqlite3.execute(conn, "COMMIT")
             :ok = Sqlite3.release(conn, statement)
+            :ok = Sqlite3.close(conn)
 
             :ok = update_row(storage, @mark_snapshot_as_complete_query, [1])
           end
@@ -305,6 +336,7 @@ defmodule Electric.ShapeCache.SQLiteStorage do
     )
   end
 
+  @snapshot_read_row_count 250
   @snapshot_row_query "SELECT _rowid_, last, data FROM #{@snapshot_table} WHERE _rowid_ > ?1 ORDER BY _rowid_"
 
   @impl Electric.ShapeCache.Storage
@@ -315,33 +347,55 @@ defmodule Electric.ShapeCache.SQLiteStorage do
          fn ->
            {:ok, statement} = Sqlite3.prepare(conn, @snapshot_row_query)
            :ok = Sqlite3.bind(conn, statement, [-1])
-           {conn, statement, -1, nil}
+           {:stream, conn, statement, -1, nil}
          end,
-         fn {conn, statement, offset, eos_seen} ->
-           case Sqlite3.step(conn, statement) do
-             {:row, [id, 0, data]} ->
-               {[data], {conn, statement, id, eos_seen}}
+         fn
+           {:stream, conn, statement, _offset, eos_seen} ->
+             case Sqlite3.multi_step(conn, statement, @snapshot_read_row_count) do
+               {:rows, rows} ->
+                 {data, {id, last?}} = accumulate_snapshot(rows)
 
-             {:row, [id, 1, _]} ->
-               {:halt, {conn, statement, id, eos_seen}}
+                 if last? do
+                   {data, {:halt, conn, statement, id, eos_seen}}
+                 else
+                   {data, {:stream, conn, statement, id, eos_seen}}
+                 end
 
-             :done ->
-               if is_integer(eos_seen) && System.monotonic_time(:millisecond) - eos_seen > 60_000 do
-                 raise "Snapshot hasn't updated in 60s"
-               else
-                 Process.sleep(20)
-                 :ok = Sqlite3.bind(conn, statement, [offset])
-                 {[], {conn, statement, offset, eos_seen}}
-               end
-           end
+               {:done, rows} ->
+                 {data, {id, last?}} = accumulate_snapshot(rows)
+
+                 if last? do
+                   {data, {:halt, conn, statement, id, eos_seen}}
+                 else
+                   if is_integer(eos_seen) &&
+                        System.monotonic_time(:millisecond) - eos_seen > 60_000 do
+                     raise "Snapshot hasn't updated in 60s"
+                   else
+                     Process.sleep(20)
+
+                     :ok = Sqlite3.bind(conn, statement, [id])
+                     {data, {:stream, conn, statement, id, eos_seen}}
+                   end
+                 end
+             end
+
+           {:halt, _conn, _statement, _offset, _eos_seen} = state ->
+             {:halt, state}
          end,
-         fn {conn, statement, _offset, _eos_seen} ->
+         fn {_, conn, statement, _offset, _eos_seen} ->
            :ok = Sqlite3.release(conn, statement)
          end
        )}
     else
       raise "Snapshot no longer available"
     end
+  end
+
+  defp accumulate_snapshot(rows) do
+    Enum.flat_map_reduce(rows, {-1, false}, fn
+      [id, 0, data], {_id, last?} -> {[data], {id, last?}}
+      [id, 1, _data], {_id, _last?} -> {[], {id, true}}
+    end)
   end
 
   @impl Electric.ShapeCache.Storage
@@ -388,8 +442,6 @@ defmodule Electric.ShapeCache.SQLiteStorage do
                               WHERE ((offset_tx > ?1) OR (offset_tx = ?1 AND offset_op > ?2))
                                 AND ((offset_tx < ?3) OR (offset_tx = ?3 AND offset_op <= ?4))
                               """)
-
-  @snapshot_read_row_count 100
 
   @impl Electric.ShapeCache.Storage
   def get_log_stream(offset, max_offset, %S{conn: conn}) do

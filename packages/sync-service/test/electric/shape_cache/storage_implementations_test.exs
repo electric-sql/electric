@@ -14,8 +14,6 @@ defmodule Electric.ShapeCache.StorageImplementationsTest do
 
   @moduletag :tmp_dir
 
-  @shape_id "the-shape-id"
-
   @snapshot_offset LogOffset.first()
   @snapshot_offset_encoded to_string(@snapshot_offset)
   @zero_offset LogOffset.first()
@@ -36,6 +34,11 @@ defmodule Electric.ShapeCache.StorageImplementationsTest do
                |> Enum.map(&Jason.encode_to_iodata!/1)
 
   setup :with_electric_instance_id
+
+  setup do
+    # randomize the shape id to prevent accidental usage of some existing tmp files
+    [shape_id: "the-shape-id-#{:crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)}"]
+  end
 
   for module <- [InMemoryStorage, FileStorage, SQLiteStorage] do
     module_name = module |> Module.split() |> List.last()
@@ -120,12 +123,12 @@ defmodule Electric.ShapeCache.StorageImplementationsTest do
         module: storage,
         opts: opts
       } do
-        row_count = 10
+        row_count = 1000
 
         data_stream =
           Stream.map(1..row_count, fn i ->
             # Sleep to give the read process time to run
-            Process.sleep(1)
+            if rem(i, 10) == 0, do: Process.sleep(1)
 
             [
               %{
@@ -537,10 +540,10 @@ defmodule Electric.ShapeCache.StorageImplementationsTest do
     end
   end
 
-  defp start_storage(%{module: module} = context) do
+  defp start_storage(%{module: module, shape_id: shape_id} = context) do
     {:ok, opts} = module |> opts(context) |> module.shared_opts()
 
-    shape_opts = module.for_shape(@shape_id, opts)
+    shape_opts = module.for_shape(shape_id, opts)
 
     module.start_link(shape_opts)
 
