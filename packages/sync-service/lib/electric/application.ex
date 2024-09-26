@@ -79,7 +79,12 @@ defmodule Electric.Application do
             pool_opts: [
               name: Electric.DbPool,
               pool_size: Application.fetch_env!(:electric, :db_pool_size),
-              types: PgInterop.Postgrex.Types
+              types: PgInterop.Postgrex.Types,
+              # Set a max queue wait time of 5 seconds (2 * 2500ms)
+              #
+              # https://hexdocs.pm/db_connection/2.4.1/DBConnection.html#start_link/2-queue-config
+              queue_target: 2500,
+              queue_interval: 10_000
             ],
             timeline_opts: [
               shape_cache: {Electric.ShapeCache, []},
