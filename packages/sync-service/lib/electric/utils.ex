@@ -206,10 +206,7 @@ defmodule Electric.Utils do
       iex> quote_name("foo")
       ~S|"foo"|
 
-      iex> quote_name(~S|"foo"|)
-      ~S|"foo"|
-
-      iex> quote_name(~S|"fo""o"|)
+      iex> quote_name(~S|fo"o|)
       ~S|"fo""o"|
   """
   @spec quote_name(String.t()) :: String.t()
