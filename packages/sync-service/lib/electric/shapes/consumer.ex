@@ -66,8 +66,21 @@ defmodule Electric.Shapes.Consumer do
         monitors: []
       })
 
-    {:consumer, state, subscribe_to: [{producer, [max_demand: 1, selector: nil]}]}
+    {:consumer, state,
+     subscribe_to: [{producer, [max_demand: 1, selector: &selector(&1, config.shape)]}]}
   end
+
+  defp selector(%Transaction{changes: changes}, shape) do
+    changes
+    |> Stream.flat_map(&Shape.convert_change(shape, &1))
+    |> Enum.take(1)
+    |> case do
+      [] -> false
+      [_] -> true
+    end
+  end
+
+  defp selector(_, _), do: false
 
   def handle_call(:initial_state, _from, %{snapshot_xmin: xmin, latest_offset: offset} = state) do
     {:reply, {:ok, xmin, offset}, [], state}
@@ -109,12 +122,6 @@ defmodule Electric.Shapes.Consumer do
     cast_shape_cache({:snapshot_xmin_known, shape_id, xmin}, state)
     cast_shape_cache({:snapshot_started, shape_id}, state)
 
-    {:noreply, [], state}
-  end
-
-  # `Shapes.Dispatcher` only works with single-events, so we can safely assert
-  # that here
-  def handle_events([%Changes.Relation{}], _from, state) do
     {:noreply, [], state}
   end
 
