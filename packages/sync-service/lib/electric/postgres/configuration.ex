@@ -44,13 +44,15 @@ defmodule Electric.Postgres.Configuration do
     Postgrex.transaction(pool, fn conn ->
       set_replica_identity!(conn, relations)
 
-      for {relation, _} <- relations, table = Utils.relation_to_sql(relation) do
+      for {relation, _} <- relations,
+          table = Utils.relation_to_sql(relation),
+          publication = Utils.quote_name(publication_name) do
         Postgrex.query!(conn, "SAVEPOINT before_publication", [])
 
         # PG 14 and below do not support filters on tables of publications
         case Postgrex.query(
                conn,
-               "ALTER PUBLICATION #{publication_name} ADD TABLE #{table}",
+               "ALTER PUBLICATION #{publication} ADD TABLE #{table}",
                []
              ) do
           {:ok, _} ->
@@ -139,7 +141,7 @@ defmodule Electric.Postgres.Configuration do
   # Makes an SQL query that alters the given publication whith the given tables and filters.
   @spec make_alter_publication_query(String.t(), filters()) :: String.t()
   defp make_alter_publication_query(publication_name, filters) do
-    base_sql = "ALTER PUBLICATION #{publication_name} SET TABLE "
+    base_sql = "ALTER PUBLICATION #{Utils.quote_name(publication_name)} SET TABLE "
 
     tables =
       filters

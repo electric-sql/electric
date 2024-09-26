@@ -7,6 +7,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   connection into the logical streaming mode. This helps keep the main `ReplicationClient`
   module focused on the handling of logical messages.
   """
+  alias Electric.Utils
 
   require Logger
 
@@ -46,7 +47,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   defp create_publication_query(state) do
     # We're creating an "empty" publication because first snapshot creation should add the table
-    query = "CREATE PUBLICATION #{state.publication_name}"
+    query = "CREATE PUBLICATION #{Utils.quote_name(state.publication_name)}"
     {:query, query, state}
   end
 
@@ -72,7 +73,9 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   ###
 
   defp create_slot_query(state) do
-    query = "CREATE_REPLICATION_SLOT #{state.slot_name} LOGICAL pgoutput NOEXPORT_SNAPSHOT"
+    query =
+      "CREATE_REPLICATION_SLOT #{Utils.quote_name(state.slot_name)} LOGICAL pgoutput NOEXPORT_SNAPSHOT"
+
     {:query, query, state}
   end
 
@@ -114,11 +117,13 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   ###
 
-  # Start a long query that will block until the lock becomes available.
+  # Start a long query that will block until the lock becomes available, based
+  # on the OID of the replication slot - such that if the slot is dropped and recreated
+  # this lock will no longer sto
   # NOTE: alternatively use pg_try_advisory_lock and retry with exponential backoff
   defp waiting_for_lock_query(state) do
     query =
-      "SELECT pg_advisory_lock(datoid::bigint) FROM pg_replication_slots WHERE slot_name = '#{state.slot_name}'"
+      "SELECT pg_advisory_lock(datoid::bigint) FROM pg_replication_slots WHERE slot_name = '#{Utils.quote_name(state.slot_name)}'"
 
     {:query, query, state}
   end
@@ -166,7 +171,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   # will be executed after this.
   defp start_replication_slot_query(state) do
     query =
-      "START_REPLICATION SLOT #{state.slot_name} LOGICAL 0/0 (proto_version '1', publication_names '#{state.publication_name}')"
+      "START_REPLICATION SLOT #{Utils.quote_name(state.slot_name)} LOGICAL 0/0 (proto_version '1', publication_names '#{state.publication_name}')"
 
     Logger.info("Starting replication from postgres")
 
