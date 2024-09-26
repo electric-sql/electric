@@ -91,11 +91,7 @@ defmodule Electric.Shapes.Consumer do
   defp selector(%Transaction{changes: changes}, shape) do
     changes
     |> Stream.flat_map(&Shape.convert_change(shape, &1))
-    |> Enum.take(1)
-    |> case do
-      [] -> false
-      [_] -> true
-    end
+    |> Enum.any?()
   end
 
   defp selector(_, _), do: false
