@@ -161,6 +161,7 @@ config :electric,
   instance_id: instance_id,
   telemetry_statsd_host: statsd_host,
   db_pool_size: env!("DB_POOL_SIZE", :integer, 50),
+  replication_stream_id: env!("REPLICATION_STREAM_ID", :string, "default"),
   prometheus_port: prometheus_port,
   storage: storage,
   persistent_kv: persistent_kv

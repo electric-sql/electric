@@ -22,8 +22,9 @@ defmodule Electric.Application do
 
     persistent_kv = apply(kv_module, kv_fun, [kv_params])
 
-    publication_name = "electric_publication"
-    slot_name = "electric_slot"
+    replication_stream_id = Application.fetch_env!(:electric, :replication_stream_id)
+    publication_name = "electric_publication_#{replication_stream_id}"
+    slot_name = "electric_slot_#{replication_stream_id}"
 
     with {:ok, storage_opts} <- storage_module.shared_opts(storage_opts) do
       storage = {storage_module, storage_opts}
