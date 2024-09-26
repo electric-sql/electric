@@ -118,13 +118,10 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   ###
 
   # Start a long query that will block until the lock becomes available, based
-  # on the OID of the replication slot - such that if the slot is dropped and recreated
-  # this lock will no longer sto
+  # on a hash of the slot name to ensure lock is held even if slot is recreated.
   # NOTE: alternatively use pg_try_advisory_lock and retry with exponential backoff
   defp waiting_for_lock_query(state) do
-    query =
-      "SELECT pg_advisory_lock(datoid::bigint) FROM pg_replication_slots WHERE slot_name = '#{Utils.quote_name(state.slot_name)}'"
-
+    query = "SELECT pg_advisory_lock(hashtext('#{state.slot_name}'))"
     {:query, query, state}
   end
 
