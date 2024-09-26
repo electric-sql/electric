@@ -13,6 +13,8 @@ defmodule Electric.Postgres.ReplicationClient do
 
   require Logger
 
+  @type status :: :starting | :waiting | :active
+
   @type step ::
           :disconnected
           | :connected
@@ -35,6 +37,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :display_settings,
       origin: "postgres",
       txn_collector: %Collector{},
+      connection_manager: nil,
       step: :disconnected,
       # Cache the end_lsn of the last processed Commit message to report it back to Postgres
       # on demand via standby status update messages -
@@ -56,6 +59,7 @@ defmodule Electric.Postgres.ReplicationClient do
             slot_name: String.t(),
             origin: String.t(),
             txn_collector: Collector.t(),
+            connection_manager: GenServer.server(),
             step: Electric.Postgres.ReplicationClient.step(),
             display_settings: [String.t()],
             applied_wal: non_neg_integer
@@ -67,7 +71,8 @@ defmodule Electric.Postgres.ReplicationClient do
                    publication_name: [required: true, type: :string],
                    try_creating_publication?: [required: true, type: :boolean],
                    start_streaming?: [type: :boolean, default: true],
-                   slot_name: [required: true, type: :string]
+                   slot_name: [required: true, type: :string],
+                   connection_manager: [required: true, type: :pid]
                  )
 
     @spec new(Access.t()) :: t()
@@ -102,6 +107,7 @@ defmodule Electric.Postgres.ReplicationClient do
     # the connection error. Without this, we may observe undesirable restarts in tests between
     # one test process exiting and the next one starting.
     connect_opts = [auto_reconnect: false] ++ connection_opts
+    replication_opts = [connection_manager: connection_manager] ++ replication_opts
 
     case Postgrex.ReplicationConnection.start_link(__MODULE__, replication_opts, connect_opts) do
       {:ok, pid} ->
@@ -133,6 +139,22 @@ defmodule Electric.Postgres.ReplicationClient do
 
   def start_streaming(client) do
     send(client, :start_streaming)
+  end
+
+  @doc """
+  Returns the current state of the replication client.
+  """
+  @spec get_status(pid()) :: status()
+  def get_status(client) do
+    send(client, {:get_status, self()})
+
+    receive do
+      {:replication_status, status} ->
+        status
+    after
+      # Timeout in case no response is received
+      5000 -> :starting
+    end
   end
 
   # The `Postgrex.ReplicationConnection` behaviour does not adhere to gen server conventions and
@@ -182,6 +204,12 @@ defmodule Electric.Postgres.ReplicationClient do
 
   def handle_info(:start_streaming, %State{step: step} = state) do
     Logger.debug("Replication client requested to start streaming while step=#{step}")
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:get_status, pid}, %State{step: step} = state) do
+    send(pid, {:replication_status, get_replication_status(step)})
     {:noreply, state}
   end
 
@@ -276,6 +304,20 @@ defmodule Electric.Postgres.ReplicationClient do
             Logger.error("Unexpected result from calling #{inspect(m)}.#{f}(): #{inspect(other)}")
             {:noreply, state}
         end
+    end
+  end
+
+  @spec get_replication_status(step()) :: status()
+  defp get_replication_status(step) do
+    case step do
+      _ when step in [:disconnected, :connected, :create_publication, :create_slot] ->
+        :starting
+
+      :waiting_for_lock ->
+        :waiting
+
+      _ when step in [:set_display_setting, :ready_to_stream, :streaming] ->
+        :active
     end
   end
 

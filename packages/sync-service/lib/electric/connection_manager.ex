@@ -77,6 +77,14 @@ defmodule Electric.ConnectionManager do
     GenServer.call(server, :get_pg_version)
   end
 
+  @doc """
+  Returns the version of the PostgreSQL server.
+  """
+  @spec get_replication_status(GenServer.server()) :: Electric.Postgres.ReplicationClient.status()
+  def get_replication_status(server) do
+    GenServer.call(server, :get_replication_status)
+  end
+
   @spec start_link(options) :: GenServer.on_start()
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: @name)
@@ -125,6 +133,19 @@ defmodule Electric.ConnectionManager do
   @impl true
   def handle_call(:get_pg_version, _from, %{pg_version: pg_version} = state) do
     {:reply, pg_version, state}
+  end
+
+  def handle_call(
+        :get_replication_status,
+        _from,
+        %{replication_client_pid: replication_client_pid} = state
+      ) do
+    status =
+      if is_nil(replication_client_pid),
+        do: :starting,
+        else: Electric.Postgres.ReplicationClient.get_status(replication_client_pid)
+
+    {:reply, status, state}
   end
 
   @impl true

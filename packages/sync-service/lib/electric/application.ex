@@ -33,6 +33,14 @@ defmodule Electric.Application do
         Electric.ConnectionManager.get_pg_version(Electric.ConnectionManager)
       end
 
+      get_service_status = fn ->
+        Electric.ServiceStatus.check(%{
+          get_replication_status: fn ->
+            Electric.ConnectionManager.get_replication_status(Electric.ConnectionManager)
+          end
+        })
+      end
+
       prepare_tables_fn =
         {Electric.Postgres.Configuration, :configure_tables_for_replication!,
          [get_pg_version, publication_name]}
@@ -104,6 +112,7 @@ defmodule Electric.Application do
                 storage: storage,
                 registry: Registry.ShapeChanges,
                 shape_cache: {Electric.ShapeCache, []},
+                get_service_status: get_service_status,
                 inspector: inspector,
                 long_poll_timeout: 20_000,
                 max_age: Application.fetch_env!(:electric, :cache_max_age),
