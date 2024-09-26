@@ -18,6 +18,7 @@ defmodule Electric.Postgres.ReplicationClient do
           | :connected
           | :create_publication
           | :create_slot
+          | :waiting_for_lock
           | :set_display_setting
           | :ready_to_stream
           | :streaming
