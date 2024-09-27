@@ -25,6 +25,11 @@ export default defineConfig({
       rel: 'icon',
       type: 'image/svg+xml',
       href: '/img/brand/favicon.svg'
+    }],
+    ['script', {
+      defer: 'defer',
+      'data-domain': 'electric-sql.com',
+      src: 'https://plausible.io/js/script.js',
     }]
   ],
   ignoreDeadLinks: 'localhostLinks',
