@@ -1,5 +1,5 @@
 defmodule Electric.ServiceStatus do
-  @type status() :: :starting | :ready | :active | :stopping
+  @type status() :: :waiting | :starting | :active | :stopping
 
   @type option ::
           {:get_connection_status, (-> Electric.ConnectionManager.status())}
