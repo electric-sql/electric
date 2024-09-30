@@ -17,6 +17,10 @@
   ??[info] Lock acquired from postgres with name electric_slot_default
   ??[info] Starting replication from postgres
   
+# First service should be health and active
+[shell orchestator]
+  !curl -X GET http://localhost:3000/v1/health
+  ??{"status":"active"}
 
 ## Start the second sync service.
 [invoke setup_electric_shell "electric_2" "3001"]
@@ -28,6 +32,14 @@
   ??[info] Acquiring lock from postgres with name electric_slot_default
   [sleep 2]
 
+
+# Second service should be in waiting state, ready to take over
+[shell orchestator]
+  !curl -X GET http://localhost:3000/v1/health
+  ??{"status":"active"}
+  !curl -X GET http://localhost:3001/v1/health
+  ??{"status":"waiting"}
+
 ## Terminate first electric
 [shell electric_1]
   !System.halt()
@@ -37,6 +49,11 @@
   -$fail_pattern
   ??[info] Lock acquired from postgres with name electric_slot_default
   ??[info] Starting replication from postgres
+
+# Second service is now healthy and active
+[shell orchestator]
+  !curl -X GET http://localhost:3001/v1/health
+  ??{"status":"active"}
 
 [cleanup]
   [invoke teardown]

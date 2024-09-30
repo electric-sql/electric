@@ -148,8 +148,8 @@ defmodule Electric.ConnectionManager do
         not pg_lock_acquired ->
           :waiting
 
-        is_nil(state.replication_client_pid) || is_nil(state.pool_id) ||
-            not Process.alive?(state.pool_id) ->
+        is_nil(state.replication_client_pid) || is_nil(state.pool_pid) ||
+            not Process.alive?(state.pool_pid) ->
           :starting
 
         true ->
