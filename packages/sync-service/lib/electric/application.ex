@@ -34,11 +34,11 @@ defmodule Electric.Application do
       end
 
       get_service_status = fn ->
-        Electric.ServiceStatus.check(%{
-          get_replication_status: fn ->
-            Electric.ConnectionManager.get_replication_status(Electric.ConnectionManager)
+        Electric.ServiceStatus.check(
+          get_connection_status: fn ->
+            Electric.ConnectionManager.get_status(Electric.ConnectionManager)
           end
-        })
+        )
       end
 
       prepare_tables_fn =

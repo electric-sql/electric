@@ -47,6 +47,8 @@ defmodule Electric.ConnectionManager do
       :pool_pid,
       # Backoff term used for reconnection with exponential back-off.
       :backoff,
+      # Flag indicating whether the lock on the replication has been acquired.
+      :pg_lock_acquired,
       # PostgreSQL server version
       :pg_version,
       :electric_instance_id
@@ -56,6 +58,8 @@ defmodule Electric.ConnectionManager do
   use GenServer
 
   require Logger
+
+  @type status :: :waiting | :starting | :active
 
   @type option ::
           {:connection_opts, Keyword.t()}
@@ -78,11 +82,11 @@ defmodule Electric.ConnectionManager do
   end
 
   @doc """
-  Returns the version of the PostgreSQL server.
+  Returns the status of the connection manager.
   """
-  @spec get_replication_status(GenServer.server()) :: Electric.Postgres.ReplicationClient.status()
-  def get_replication_status(server) do
-    GenServer.call(server, :get_replication_status)
+  @spec get_status(GenServer.server()) :: status()
+  def get_status(server) do
+    GenServer.call(server, :get_status)
   end
 
   @spec start_link(options) :: GenServer.on_start()
@@ -120,14 +124,21 @@ defmodule Electric.ConnectionManager do
         timeline_opts: timeline_opts,
         log_collector: Keyword.fetch!(opts, :log_collector),
         shape_cache: Keyword.fetch!(opts, :shape_cache),
+        pg_lock_acquired: false,
         backoff: {:backoff.init(1000, 10_000), nil},
         electric_instance_id: Keyword.fetch!(opts, :electric_instance_id)
       }
 
-    # We try to start the replication connection first because it requires additional
-    # priveleges compared to regular "pooled" connections, so failure to open a replication
-    # connection should be reported ASAP.
-    {:ok, state, {:continue, :start_replication_client}}
+    # Try to acquire the connection lock on the replication slot
+    # before starting shape and replication processes, to ensure
+    # a single active sync service is connected to Postgres per slot.
+    Electric.LockConnection.start_link(
+      connection_opts,
+      self(),
+      Keyword.fetch!(replication_opts, :slot_name)
+    )
+
+    {:ok, state}
   end
 
   @impl true
@@ -136,14 +147,17 @@ defmodule Electric.ConnectionManager do
   end
 
   def handle_call(
-        :get_replication_status,
+        :get_status,
         _from,
-        %{replication_client_pid: replication_client_pid} = state
+        %{replication_client_pid: replication_client_pid, pg_lock_acquired: pg_lock_acquired} =
+          state
       ) do
     status =
-      if is_nil(replication_client_pid),
-        do: :starting,
-        else: Electric.Postgres.ReplicationClient.get_status(replication_client_pid)
+      cond do
+        not pg_lock_acquired -> :waiting
+        is_nil(replication_client_pid) -> :starting
+        true -> :active
+      end
 
     {:reply, status, state}
   end
@@ -239,6 +253,13 @@ defmodule Electric.ConnectionManager do
         Electric.Postgres.ReplicationClient.start_streaming(pid)
         {:noreply, state}
     end
+  end
+
+  def handle_cast(:connection_lock_acquired, state) do
+    # As soon as we acquire the connection lock, we try to start the replication connection
+    # first because it requires additional privileges compared to regular "pooled" connections,
+    # so failure to open a replication connection should be reported ASAP.
+    {:noreply, %{state | pg_lock_acquired: true}, {:continue, :start_replication_client}}
   end
 
   defp start_replication_client(state) do

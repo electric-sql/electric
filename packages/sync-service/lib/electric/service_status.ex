@@ -1,15 +1,17 @@
 defmodule Electric.ServiceStatus do
   @type status() :: :starting | :ready | :active | :stopping
 
-  @type opts() ::
-          Keyword.t(get_replication_status: (-> Electric.Postgres.ReplicationClient.status()))
+  @type option ::
+          {:get_connection_status, (-> Electric.ConnectionManager.status())}
 
-  @spec check(opts()) :: status()
+  @type options :: [option]
+
+  @spec check(options()) :: status()
   def check(opts) do
-    with replication_status <- opts.get_replication_status.() do
-      case replication_status do
+    with connection_status <- opts.get_connection_status.() do
+      case connection_status do
+        :waiting -> :waiting
         :starting -> :starting
-        :waiting -> :ready
         :active -> :active
       end
     end

@@ -13,14 +13,11 @@ defmodule Electric.Postgres.ReplicationClient do
 
   require Logger
 
-  @type status :: :starting | :waiting | :active
-
   @type step ::
           :disconnected
           | :connected
           | :create_publication
           | :create_slot
-          | :waiting_for_lock
           | :set_display_setting
           | :ready_to_stream
           | :streaming
@@ -137,22 +134,6 @@ defmodule Electric.Postgres.ReplicationClient do
     send(client, :start_streaming)
   end
 
-  @doc """
-  Returns the current state of the replication client.
-  """
-  @spec get_status(pid()) :: status()
-  def get_status(client) do
-    send(client, {:get_status, self()})
-
-    receive do
-      {:replication_status, status} ->
-        status
-    after
-      # Timeout in case no response is received
-      5000 -> :starting
-    end
-  end
-
   # The `Postgrex.ReplicationConnection` behaviour does not adhere to gen server conventions and
   # establishes its own. Unless the `sync_connect: false` option is passed to `start_link()`, the
   # connection process will try opening a replication connection to Postgres before returning
@@ -200,12 +181,6 @@ defmodule Electric.Postgres.ReplicationClient do
 
   def handle_info(:start_streaming, %State{step: step} = state) do
     Logger.debug("Replication client requested to start streaming while step=#{step}")
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info({:get_status, pid}, %State{step: step} = state) do
-    send(pid, {:replication_status, get_replication_status(step)})
     {:noreply, state}
   end
 
@@ -300,20 +275,6 @@ defmodule Electric.Postgres.ReplicationClient do
             Logger.error("Unexpected result from calling #{inspect(m)}.#{f}(): #{inspect(other)}")
             {:noreply, state}
         end
-    end
-  end
-
-  @spec get_replication_status(step()) :: status()
-  defp get_replication_status(step) do
-    case step do
-      _ when step in [:disconnected, :connected, :create_publication, :create_slot] ->
-        :starting
-
-      :waiting_for_lock ->
-        :waiting
-
-      _ when step in [:set_display_setting, :ready_to_stream, :streaming] ->
-        :active
     end
   end
 

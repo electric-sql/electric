@@ -117,27 +117,6 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   ###
 
-  # Start a long query that will block until the lock becomes available, based
-  # on a hash of the slot name to ensure lock is held even if slot is recreated.
-  # NOTE: alternatively use pg_try_advisory_lock and retry with exponential backoff
-  defp waiting_for_lock_query(state) do
-    query = "SELECT pg_advisory_lock(hashtext('#{state.slot_name}'))"
-    {:query, query, state}
-  end
-
-  # Sucessfully acquired the lock for the replication slot.
-  defp waiting_for_lock_result([%Postgrex.Result{} = _result], state) do
-    Logger.debug("Acquired advisory lock on replication slot")
-    state
-  end
-
-  defp waiting_for_lock_result(%Postgrex.Error{} = error, _state) do
-    # Unexpected error, fail loudly.
-    raise error
-  end
-
-  ###
-
   defp set_display_setting_query(%{display_settings: [query | rest]} = state) do
     {:query, query, %{state | display_settings: rest}}
   end
@@ -186,8 +165,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   defp next_step(%{step: :connected, try_creating_publication?: true}), do: :create_publication
   defp next_step(%{step: :connected}), do: :create_slot
   defp next_step(%{step: :create_publication}), do: :create_slot
-  defp next_step(%{step: :create_slot}), do: :waiting_for_lock
-  defp next_step(%{step: :waiting_for_lock}), do: :set_display_setting
+  defp next_step(%{step: :create_slot}), do: :set_display_setting
 
   defp next_step(%{step: :set_display_setting, display_settings: queries}) when queries != [],
     do: :set_display_setting
@@ -204,7 +182,6 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   defp query_for_step(:create_publication, state), do: create_publication_query(state)
   defp query_for_step(:create_slot, state), do: create_slot_query(state)
-  defp query_for_step(:waiting_for_lock, state), do: waiting_for_lock_query(state)
   defp query_for_step(:set_display_setting, state), do: set_display_setting_query(state)
   defp query_for_step(:ready_to_stream, state), do: ready_to_stream(state)
   defp query_for_step(:streaming, state), do: start_replication_slot_query(state)
@@ -220,9 +197,6 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   defp dispatch_query_result(:create_slot, result, state),
     do: create_slot_result(result, state)
-
-  defp dispatch_query_result(:waiting_for_lock, result, state),
-    do: waiting_for_lock_result(result, state)
 
   defp dispatch_query_result(:set_display_setting, result, state),
     do: set_display_setting_result(result, state)
