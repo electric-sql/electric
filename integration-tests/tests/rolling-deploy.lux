@@ -1,0 +1,42 @@
+[doc Verify handling of an Electric rolling deploy]
+
+[include macros.luxinc]
+
+[global pg_container_name=rolling-deploy__pg]
+
+###
+
+## Start a new Postgres cluster
+[invoke setup_pg "" ""]
+
+## Start the first sync service.
+[invoke setup_electric_shell "electric_1" "3000"]
+
+[shell electric_1]
+  ??[info] Acquiring lock from postgres with name electric_slot_default
+  ??[info] Lock acquired from postgres with name electric_slot_default
+  ??[info] Starting replication from postgres
+  
+
+## Start the second sync service.
+[invoke setup_electric_shell "electric_2" "3001"]
+
+## Assert that the lock is not acquired and replication does not start
+## in the second electric
+[shell electric_2]
+  -Lock acquired from postgres|Starting replication from postgres|$fail_pattern
+  ??[info] Acquiring lock from postgres with name electric_slot_default
+  [sleep 2]
+
+## Terminate first electric
+[shell electric_1]
+  !System.halt()
+
+## Lock should now be acquired and replication starting
+[shell electric_2]
+  -$fail_pattern
+  ??[info] Lock acquired from postgres with name electric_slot_default
+  ??[info] Starting replication from postgres
+
+[cleanup]
+  [invoke teardown]

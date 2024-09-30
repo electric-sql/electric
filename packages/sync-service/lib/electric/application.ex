@@ -118,7 +118,7 @@ defmodule Electric.Application do
                 max_age: Application.fetch_env!(:electric, :cache_max_age),
                 stale_age: Application.fetch_env!(:electric, :cache_stale_age),
                 allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},
-             port: 3000,
+             port: Application.fetch_env!(:electric, :service_port),
              thousand_island_options: http_listener_options()}
           ]
           |> add_prometheus_router(Application.fetch_env!(:electric, :prometheus_port))

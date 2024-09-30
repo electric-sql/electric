@@ -55,6 +55,7 @@ defmodule Electric.LockConnection do
       notify_lock_acquired(state)
       {:noreply, state}
     else
+      Logger.info("Acquiring lock from postgres with name #{state.lock_name}")
       {:query, lock_query(state), state}
     end
   end
@@ -64,9 +65,10 @@ defmodule Electric.LockConnection do
   end
 
   @impl true
-  def handle_result(results, state) when is_list(results) do
+  def handle_result([%Postgrex.Result{}] = _results, state) do
+    Logger.info("Lock acquired from postgres with name #{state.lock_name}")
     notify_lock_acquired(state)
-    {:noreply, state}
+    {:noreply, %{state | lock_acquired: true}}
   end
 
   @impl true
