@@ -99,7 +99,7 @@ defmodule Electric.Shapes.Shape do
 
   defp validate_table(definition) when is_binary(definition) do
     regex =
-      ~r/^((?<schema>([a-z_][a-zA-Z0-9_]*|"(""|[^"])+"))\.)?(?<table>([a-z_][a-zA-Z0-9_]*|"(""|[^"])+"))$/
+      ~r/^((?<schema>([\p{L}_][\p{L}0-9_$]*|"(""|[^"])+"))\.)?(?<table>([\p{L}_][\p{L}0-9_$]*|"(""|[^"])+"))$/u
 
     case Regex.run(regex, definition, capture: :all_names) do
       ["", table_name] when table_name != "" ->
