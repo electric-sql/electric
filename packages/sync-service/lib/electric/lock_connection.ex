@@ -12,6 +12,13 @@ defmodule Electric.LockConnection do
   require Logger
   @behaviour Postgrex.SimpleConnection
 
+  @type option ::
+          {:connection_opts, Keyword.t()}
+          | {:connection_manager, GenServer.server()}
+          | {:lock_name, String.t()}
+
+  @type options :: [option]
+
   defmodule State do
     defstruct [
       :connection_manager,
@@ -21,9 +28,12 @@ defmodule Electric.LockConnection do
     ]
   end
 
-  @spec start_link(Keyword.t(), GenServer.server(), String.t()) ::
-          {:ok, pid()} | {:error, Postgrex.Error.t() | term()}
-  def start_link(connection_opts, connection_manager, lock_name) do
+  @spec start_link(options()) :: {:ok, pid()} | {:error, Postgrex.Error.t() | term()}
+  def start_link(
+        connection_opts: connection_opts,
+        connection_manager: connection_manager,
+        lock_name: lock_name
+      ) do
     case Postgrex.SimpleConnection.start_link(
            __MODULE__,
            [connection_manager: connection_manager, lock_name: lock_name],

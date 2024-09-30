@@ -161,9 +161,9 @@ defmodule Electric.ConnectionManager do
 
   def handle_continue(:start_lock_connection, state) do
     case Electric.LockConnection.start_link(
-           state.connection_opts,
-           self(),
-           Keyword.fetch!(state.replication_opts, :slot_name)
+           connection_opts: state.connection_opts,
+           connection_manager: self(),
+           lock_name: Keyword.fetch!(state.replication_opts, :slot_name)
          ) do
       {:ok, lock_connection_pid} ->
         {:noreply, %{state | lock_connection_pid: lock_connection_pid}}
