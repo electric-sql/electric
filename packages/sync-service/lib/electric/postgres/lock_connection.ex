@@ -1,4 +1,4 @@
-defmodule Electric.LockConnection do
+defmodule Electric.Postgres.LockConnection do
   @moduledoc """
   A Postgres connection that ensures an advisory lock is held for its entire duration,
   useful for ensuring only a single sync service instance can be using a single

@@ -160,7 +160,7 @@ defmodule Electric.ConnectionManager do
   end
 
   def handle_continue(:start_lock_connection, state) do
-    case Electric.LockConnection.start_link(
+    case Electric.Postgres.LockConnection.start_link(
            connection_opts: state.connection_opts,
            connection_manager: self(),
            lock_name: Keyword.fetch!(state.replication_opts, :slot_name)
