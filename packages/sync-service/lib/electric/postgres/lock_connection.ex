@@ -75,7 +75,7 @@ defmodule Electric.Postgres.LockConnection do
   end
 
   @impl true
-  def handle_result([%Postgrex.Result{}] = _results, state) do
+  def handle_result([_] = _results, state) do
     Logger.info("Lock acquired from postgres with name #{state.lock_name}")
     notify_lock_acquired(state)
     {:noreply, %{state | lock_acquired: true}}
