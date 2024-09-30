@@ -23,7 +23,6 @@ services:
   electric:
     image: electricsql/electric:latest
     environment:
-      OTEL_EXPORT: ${OTEL_EXPORT:-otlp}
       OTLP_ENDPOINT: http://otel:4318/
       PROMETHEUS_PORT: ${PROMETHEUS_PORT:-4000}
       DATABASE_URL: postgresql://postgres:password@postgres:5432/electric
