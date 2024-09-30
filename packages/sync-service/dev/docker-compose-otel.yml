@@ -45,8 +45,6 @@ services:
     command: ['--config=/conf/otel-collector-config.yaml']
     volumes:
       - ./otel-collector-honeycomb-config.yaml:/conf/otel-collector-config.yaml
-    depends_on:
-      - electric
   nginx:
     image: nginx:latest
     ports:
