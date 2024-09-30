@@ -33,6 +33,29 @@ defmodule Electric.Plug.RouterTest do
     end
   end
 
+  describe "/v1/health" do
+    setup [:with_unique_db]
+
+    setup do
+      %{publication_name: "electric_test_publication", slot_name: "electric_test_slot"}
+    end
+
+    setup :with_complete_stack
+
+    setup(ctx,
+      do: %{opts: Router.init(build_router_opts(ctx, get_service_status: fn -> :active end))}
+    )
+
+    test "GET returns health status of service", %{opts: opts} do
+      conn =
+        conn("GET", "/v1/health")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      assert Jason.decode!(conn.resp_body) == %{"status" => "active"}
+    end
+  end
+
   describe "/v1/shapes" do
     setup [:with_unique_db, :with_basic_tables, :with_sql_execute]
 
