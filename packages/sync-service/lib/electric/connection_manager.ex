@@ -267,7 +267,7 @@ defmodule Electric.ConnectionManager do
     end
   end
 
-  def handle_cast(:connection_lock_acquired, state) do
+  def handle_cast(:lock_connection_acquired, state) do
     # As soon as we acquire the connection lock, we try to start the replication connection
     # first because it requires additional privileges compared to regular "pooled" connections,
     # so failure to open a replication connection should be reported ASAP.
