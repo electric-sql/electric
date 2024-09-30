@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.6.1
+
+### Patch Changes
+
+- 8d886ba: Add LISTEN_ON_IPV6=true|false configuration option to support IPv6 network interfaces.
+
 ## 0.6.0
 
 ### Minor Changes
