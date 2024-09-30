@@ -51,7 +51,7 @@ defmodule Electric.LockConnection do
 
   @impl true
   def handle_info(:acquire_lock, state) do
-    if(state.lock_acquired) do
+    if state.lock_acquired do
       notify_lock_acquired(state)
       {:noreply, state}
     else
