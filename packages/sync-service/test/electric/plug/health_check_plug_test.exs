@@ -64,12 +64,12 @@ defmodule Electric.Plug.HealthCheckPlugTest do
       assert Jason.decode!(conn.resp_body) == %{"status" => "active"}
     end
 
-    test "returns 500 when stopping" do
+    test "returns 503 when stopping" do
       conn =
         conn(%{connection_status: :stopping})
         |> HealthCheckPlug.call([])
 
-      assert conn.status == 500
+      assert conn.status == 503
       assert Jason.decode!(conn.resp_body) == %{"status" => "stopping"}
     end
   end

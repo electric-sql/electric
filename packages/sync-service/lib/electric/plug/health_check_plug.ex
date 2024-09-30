@@ -15,7 +15,7 @@ defmodule Electric.Plug.HealthCheckPlug do
         :waiting -> {200, "waiting"}
         :starting -> {200, "starting"}
         :active -> {200, "active"}
-        :stopping -> {500, "stopping"}
+        :stopping -> {503, "stopping"}
       end
 
     conn |> assign(:status_text, status_text) |> assign(:status_code, status_code)
