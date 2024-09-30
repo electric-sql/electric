@@ -29,44 +29,44 @@ config :opentelemetry,
   resource_detectors: [:otel_resource_env_var, :otel_resource_app_env],
   resource: %{service: %{name: service_name, version: version}, instance: %{id: instance_id}}
 
+otel_debug = env!("OTEL_DEBUG", :integer, 0)
 otel_export = env!("OTEL_EXPORT", :string, nil)
 prometheus_port = env!("PROMETHEUS_PORT", :integer, nil)
 
-case otel_export do
-  "otlp" ->
-    if endpoint = env!("OTLP_ENDPOINT", :string, nil) do
-      # Shortcut config for Honeycomb.io:
-      # users may set the optional HNY_API_KEY and HNY_DATASET environment variables
-      # and specify the Honeycomb URL in OTLP_ENDPOINT to export traces directly to
-      # Honeycomb, without the need to run an OpenTelemetry Collector.
-      honeycomb_api_key = env!("HNY_API_KEY", :string, nil)
-      honeycomb_dataset = env!("HNY_DATASET", :string, nil)
+if otel_debug == 1 do
+  # In this mode, each span is printed to stdout as soon as it ends, without batching.
+  config :opentelemetry, :processors,
+    otel_simple_processor: %{exporter: {:otel_exporter_stdout, []}}
+else
+  config :opentelemetry,
+    processors: [],
+    traces_exporter: :none
+end
 
-      headers =
-        Enum.reject(
-          [
-            {"x-honeycomb-team", honeycomb_api_key},
-            {"x-honeycomb-dataset", honeycomb_dataset}
-          ],
-          fn {_, val} -> is_nil(val) end
-        )
+if otel_export == "otlp" do
+  if endpoint = env!("OTLP_ENDPOINT", :string, nil) do
+    # Shortcut config for Honeycomb.io:
+    # users may set the optional HNY_API_KEY and HNY_DATASET environment variables
+    # and specify the Honeycomb URL in OTLP_ENDPOINT to export traces directly to
+    # Honeycomb, without the need to run an OpenTelemetry Collector.
+    honeycomb_api_key = env!("HNY_API_KEY", :string, nil)
+    honeycomb_dataset = env!("HNY_DATASET", :string, nil)
 
-      config :opentelemetry_exporter,
-        otlp_protocol: :http_protobuf,
-        otlp_endpoint: endpoint,
-        otlp_headers: headers,
-        otlp_compression: :gzip
-    end
+    headers =
+      Enum.reject(
+        [
+          {"x-honeycomb-team", honeycomb_api_key},
+          {"x-honeycomb-dataset", honeycomb_dataset}
+        ],
+        fn {_, val} -> is_nil(val) end
+      )
 
-  "debug" ->
-    # In this mode, each span is printed to stdout as soon as it ends, without batching.
-    config :opentelemetry, :processors,
-      otel_simple_processor: %{exporter: {:otel_exporter_stdout, []}}
-
-  _ ->
-    config :opentelemetry,
-      processors: [],
-      traces_exporter: :none
+    config :opentelemetry_exporter,
+      otlp_protocol: :http_protobuf,
+      otlp_endpoint: endpoint,
+      otlp_headers: headers,
+      otlp_compression: :gzip
+  end
 end
 
 if Config.config_env() == :test do
