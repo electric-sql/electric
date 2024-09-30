@@ -43,6 +43,8 @@ defmodule Electric.ConnectionManager do
       :shape_cache,
       # PID of the replication client.
       :replication_client_pid,
+      # PID of the Postgres connection lock.
+      :lock_connection_pid,
       # PID of the database connection pool (a `Postgrex` process).
       :pool_pid,
       # Backoff term used for reconnection with exponential back-off.
@@ -132,13 +134,7 @@ defmodule Electric.ConnectionManager do
     # Try to acquire the connection lock on the replication slot
     # before starting shape and replication processes, to ensure
     # a single active sync service is connected to Postgres per slot.
-    Electric.LockConnection.start_link(
-      connection_opts,
-      self(),
-      Keyword.fetch!(replication_opts, :slot_name)
-    )
-
-    {:ok, state}
+    {:ok, state, {:continue, :start_lock_connection}}
   end
 
   @impl true
@@ -146,22 +142,14 @@ defmodule Electric.ConnectionManager do
     {:reply, pg_version, state}
   end
 
-  def handle_call(
-        :get_status,
-        _from,
-        %{
-          replication_client_pid: replication_client_pid,
-          pool_id: pool_id,
-          pg_lock_acquired: pg_lock_acquired
-        } =
-          state
-      ) do
+  def handle_call(:get_status, _from, %{pg_lock_acquired: pg_lock_acquired} = state) do
     status =
       cond do
         not pg_lock_acquired ->
           :waiting
 
-        is_nil(replication_client_pid) || is_nil(pool_id) || not Process.alive?(pool_id) ->
+        is_nil(state.replication_client_pid) || is_nil(state.pool_id) ||
+            not Process.alive?(state.pool_id) ->
           :starting
 
         true ->
@@ -169,6 +157,20 @@ defmodule Electric.ConnectionManager do
       end
 
     {:reply, status, state}
+  end
+
+  def handle_continue(:start_lock_connection, state) do
+    case Electric.LockConnection.start_link(
+           state.connection_opts,
+           self(),
+           Keyword.fetch!(state.replication_opts, :slot_name)
+         ) do
+      {:ok, lock_connection_pid} ->
+        {:noreply, %{state | lock_connection_pid: lock_connection_pid}}
+
+      {:error, reason} ->
+        handle_connection_error(reason, state, "lock_connection")
+    end
   end
 
   @impl true
@@ -232,6 +234,7 @@ defmodule Electric.ConnectionManager do
 
     tag =
       cond do
+        pid == state.lock_connection_pid -> :lock_connection
         pid == state.replication_client_pid -> :replication_connection
         pid == state.pool_pid -> :database_pool
       end
@@ -324,6 +327,7 @@ defmodule Electric.ConnectionManager do
 
     step =
       cond do
+        is_nil(state.lock_connection_pid) -> :start_lock_connection
         is_nil(state.replication_client_pid) -> :start_replication_client
         is_nil(state.pool_pid) -> :start_connection_pool
       end

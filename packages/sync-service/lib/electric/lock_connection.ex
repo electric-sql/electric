@@ -21,19 +21,20 @@ defmodule Electric.LockConnection do
     ]
   end
 
-  @spec start_link(Keyword.t(), GenServer.server(), String.t()) :: {:ok, pid()} | {:error, any()}
+  @spec start_link(Keyword.t(), GenServer.server(), String.t()) ::
+          {:ok, pid()} | {:error, Postgrex.Error.t() | term()}
   def start_link(connection_opts, connection_manager, lock_name) do
     case Postgrex.SimpleConnection.start_link(
            __MODULE__,
            [connection_manager: connection_manager, lock_name: lock_name],
-           connection_opts ++ [timeout: :infinity]
+           connection_opts ++ [timeout: :infinity, auto_reconnect: false]
          ) do
       {:ok, pid} ->
         send(pid, :acquire_lock)
         {:ok, pid}
 
       {:error, error} ->
-        raise error
+        {:error, error}
     end
   end
 
