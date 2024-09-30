@@ -7,6 +7,9 @@ defmodule Electric.Plug.HealthCheckPlug do
   plug :put_relevant_headers
   plug :send_response
 
+  # Match service status to a status code and status message,
+  # keeping the message name decoupled from the internal representation
+  # of the status to ensure the API is stable
   defp check_service_status(conn, _) do
     get_service_status = Access.fetch!(conn.assigns.config, :get_service_status)
 

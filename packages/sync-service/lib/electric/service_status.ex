@@ -9,6 +9,9 @@ defmodule Electric.ServiceStatus do
   @spec check(options()) :: status()
   def check(opts) do
     with connection_status <- opts.get_connection_status.() do
+      # Match the connection status ot a service status - currently
+      # they are one and the same but keeping this decoupled for future
+      # additions to conditions that determine service status
       case connection_status do
         :waiting -> :waiting
         :starting -> :starting
