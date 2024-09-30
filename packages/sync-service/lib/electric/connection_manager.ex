@@ -149,14 +149,23 @@ defmodule Electric.ConnectionManager do
   def handle_call(
         :get_status,
         _from,
-        %{replication_client_pid: replication_client_pid, pg_lock_acquired: pg_lock_acquired} =
+        %{
+          replication_client_pid: replication_client_pid,
+          pool_id: pool_id,
+          pg_lock_acquired: pg_lock_acquired
+        } =
           state
       ) do
     status =
       cond do
-        not pg_lock_acquired -> :waiting
-        is_nil(replication_client_pid) -> :starting
-        true -> :active
+        not pg_lock_acquired ->
+          :waiting
+
+        is_nil(replication_client_pid) || is_nil(pool_id) || not Process.alive?(pool_id) ->
+          :starting
+
+        true ->
+          :active
       end
 
     {:reply, status, state}
