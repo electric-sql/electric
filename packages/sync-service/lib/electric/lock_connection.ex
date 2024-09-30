@@ -16,7 +16,8 @@ defmodule Electric.LockConnection do
     defstruct [
       :connection_manager,
       :lock_acquired,
-      :lock_name
+      :lock_name,
+      :backoff
     ]
   end
 
@@ -42,7 +43,8 @@ defmodule Electric.LockConnection do
      %State{
        connection_manager: Keyword.fetch!(opts, :connection_manager),
        lock_name: Keyword.fetch!(opts, :lock_name),
-       lock_acquired: false
+       lock_acquired: false,
+       backoff: {:backoff.init(1000, 10_000), nil}
      }}
   end
 
@@ -56,6 +58,10 @@ defmodule Electric.LockConnection do
     end
   end
 
+  def handle_info({:timeout, tref, msg}, %{backoff: {backoff, tref}} = state) do
+    handle_info(msg, %{state | backoff: {backoff, nil}})
+  end
+
   @impl true
   def handle_result(results, state) when is_list(results) do
     notify_lock_acquired(state)
@@ -63,8 +69,15 @@ defmodule Electric.LockConnection do
   end
 
   @impl true
-  def handle_result(%Postgrex.Error{} = _error, state) do
-    {:query, lock_query(state), %{state | lock_acquired: false}}
+  def handle_result(%Postgrex.Error{} = error, %State{backoff: {backoff, _}} = state) do
+    {time, backoff} = :backoff.fail(backoff)
+    tref = :erlang.start_timer(time, self(), :acquire_lock)
+
+    Logger.error(
+      "Failed to acquire lock #{state.lock_name} with reason #{inspect(error)} - retrying in #{inspect(time)}ms."
+    )
+
+    {:noreply, %{state | lock_acquired: false, backoff: {backoff, tref}}}
   end
 
   defp notify_lock_acquired(%State{connection_manager: connection_manager} = _state) do
