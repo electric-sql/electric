@@ -37,7 +37,6 @@ defmodule Electric.Postgres.ReplicationClient do
       :display_settings,
       origin: "postgres",
       txn_collector: %Collector{},
-      connection_manager: nil,
       step: :disconnected,
       # Cache the end_lsn of the last processed Commit message to report it back to Postgres
       # on demand via standby status update messages -
@@ -59,7 +58,6 @@ defmodule Electric.Postgres.ReplicationClient do
             slot_name: String.t(),
             origin: String.t(),
             txn_collector: Collector.t(),
-            connection_manager: GenServer.server(),
             step: Electric.Postgres.ReplicationClient.step(),
             display_settings: [String.t()],
             applied_wal: non_neg_integer
@@ -71,8 +69,7 @@ defmodule Electric.Postgres.ReplicationClient do
                    publication_name: [required: true, type: :string],
                    try_creating_publication?: [required: true, type: :boolean],
                    start_streaming?: [type: :boolean, default: true],
-                   slot_name: [required: true, type: :string],
-                   connection_manager: [required: true, type: :pid]
+                   slot_name: [required: true, type: :string]
                  )
 
     @spec new(Access.t()) :: t()
@@ -107,7 +104,6 @@ defmodule Electric.Postgres.ReplicationClient do
     # the connection error. Without this, we may observe undesirable restarts in tests between
     # one test process exiting and the next one starting.
     connect_opts = [auto_reconnect: false] ++ connection_opts
-    replication_opts = [connection_manager: connection_manager] ++ replication_opts
 
     case Postgrex.ReplicationConnection.start_link(__MODULE__, replication_opts, connect_opts) do
       {:ok, pid} ->
