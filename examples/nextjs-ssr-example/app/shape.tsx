@@ -30,7 +30,15 @@ function getServerShape() {
   }
 
   const stream = new ShapeStream({
-    url: `http://localhost:3000/v1/shape/items`,
+    url: `http://localhost:3001/shape-proxy/items`,
+    // hack to avoid caching behaviour in next 14.
+    // it should work with cache: `no-store` but it doesn't
+    fetchClient: (...args) => {
+      const _url: URL =
+        args[0] instanceof URL ? args[0] : new URL(args[0] as string)
+      _url.searchParams.set(`_rand`, Math.random().toString())
+      return fetch(...args)
+    },
   })
   const shape = new Shape(stream)
 
