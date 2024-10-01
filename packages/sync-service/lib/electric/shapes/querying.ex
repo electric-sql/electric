@@ -13,21 +13,22 @@ defmodule Electric.Shapes.Querying do
 
   @spec stream_initial_data(DBConnection.t(), Shape.t()) :: json_result_stream()
   def stream_initial_data(conn, %Shape{root_table: root_table, table_info: table_info} = shape) do
-    OpenTelemetry.with_span("shape_read.stream_initial_data", [], fn ->
-      table = Utils.relation_to_sql(root_table)
+    []
+    # OpenTelemetry.with_span("shape_read.stream_initial_data", [], fn ->
+    #   table = Utils.relation_to_sql(root_table)
 
-      where =
-        if not is_nil(shape.where), do: " WHERE " <> shape.where.query, else: ""
+    #   where =
+    #     if not is_nil(shape.where), do: " WHERE " <> shape.where.query, else: ""
 
-      {json_like_select, params} = json_like_select(table_info, root_table, Shape.pk(shape))
+    #   {json_like_select, params} = json_like_select(table_info, root_table, Shape.pk(shape))
 
-      query =
-        Postgrex.prepare!(conn, table, ~s|SELECT #{json_like_select} FROM #{table} #{where}|)
+    #   query =
+    #     Postgrex.prepare!(conn, table, ~s|SELECT #{json_like_select} FROM #{table} #{where}|)
 
-      Postgrex.stream(conn, query, params)
-      |> Stream.flat_map(& &1.rows)
-      |> Stream.map(&hd/1)
-    end)
+    #   Postgrex.stream(conn, query, params)
+    #   |> Stream.flat_map(& &1.rows)
+    #   |> Stream.map(&hd/1)
+    # end)
   end
 
   defp json_like_select(table_info, root_table, pk_cols) do
