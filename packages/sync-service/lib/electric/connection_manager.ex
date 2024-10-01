@@ -75,6 +75,8 @@ defmodule Electric.ConnectionManager do
 
   @name __MODULE__
 
+  @lock_status_logging_interval 10_000
+
   @doc """
   Returns the version of the PostgreSQL server.
   """
@@ -166,6 +168,7 @@ defmodule Electric.ConnectionManager do
            lock_name: Keyword.fetch!(state.replication_opts, :slot_name)
          ) do
       {:ok, lock_connection_pid} ->
+        Process.send_after(self(), :log_lock_connection_status, @lock_status_logging_interval)
         {:noreply, %{state | lock_connection_pid: lock_connection_pid}}
 
       {:error, reason} ->
@@ -250,6 +253,17 @@ defmodule Electric.ConnectionManager do
     {:noreply, %{state | replication_client_pid: nil}}
   end
 
+  # Periodically log the status of the lock connection until it is acquired for
+  # easier debugging and diagnostics.
+  def handle_info(:log_lock_connection_status, state) do
+    if not state.pg_lock_acquired do
+      Logger.warning(fn -> "Waiting for postgres lock to be acquired..." end)
+      Process.send_after(self(), :log_lock_connection_status, @lock_status_logging_interval)
+    end
+
+    {:noreply, state}
+  end
+
   @impl true
   def handle_cast({:connection_opts, pid, connection_opts}, state) do
     Process.monitor(pid)
@@ -267,7 +281,7 @@ defmodule Electric.ConnectionManager do
     end
   end
 
-  def handle_cast(:lock_connection_acquired, state) do
+  def handle_cast(:lock_connection_acquired, %{pg_lock_acquired: false} = state) do
     # As soon as we acquire the connection lock, we try to start the replication connection
     # first because it requires additional privileges compared to regular "pooled" connections,
     # so failure to open a replication connection should be reported ASAP.
