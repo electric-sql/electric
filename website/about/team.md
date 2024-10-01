@@ -21,7 +21,7 @@ const { advisors, angels, team, vcs } = data
 # Team
 
 > [!TIP] We're hiring!
-> See the [jobs page](/about/jobs) for active roles.
+> See the [jobs page](/about/jobs/) for active roles.
 
 ## Core team
 
