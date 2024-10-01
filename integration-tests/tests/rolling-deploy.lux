@@ -43,6 +43,9 @@
 ## Terminate first electric
 [shell electric_1]
   !System.halt()
+  
+  # Confirm Electric process exit.
+  ??$PS1
 
 ## Lock should now be acquired and replication starting
 [shell electric_2]
