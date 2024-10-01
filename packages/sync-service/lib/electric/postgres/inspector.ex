@@ -19,19 +19,39 @@ defmodule Electric.Postgres.Inspector do
 
   @callback clean_column_info(relation(), opts :: term()) :: true
 
+  @callback get_namespace_and_tablename(relation(), opts :: term()) ::
+              {:ok, relation()} | :table_not_found
+
   @type inspector :: {module(), opts :: term()}
 
   @doc """
   Load column information about a given table using a provided inspector.
   """
   @spec load_column_info(relation(), inspector()) :: {:ok, [column_info()]} | :table_not_found
-  def load_column_info(relation, {module, opts}), do: module.load_column_info(relation, opts)
+  def load_column_info(relation, {module, opts}) do
+    module.load_column_info(relation, opts)
+  end
 
   @doc """
   Clean up column information about a given table using a provided inspector.
   """
   @spec clean_column_info(relation(), inspector()) :: true
   def clean_column_info(relation, {module, opts}), do: module.clean_column_info(relation, opts)
+
+  @doc """
+  Expects the table name provided by the user
+  and validates that the table exists and returns the namespace and table name.
+
+  The table name can be quoted or unquoted and can optionally be qualified,
+  e.g. `users` would return `{"public", "users"}`,
+       `usErs` would return `{"public", "users"}`,
+       `"Users"` would return `{"public", "Users"}`,
+       `some_schema.users` would return `{"some_schema", "users"}`.
+  """
+  @spec get_namespace_and_tablename(String.t(), inspector()) ::
+          relation() | {:error, String.t()}
+  def get_namespace_and_tablename(table, {module, opts}),
+    do: module.get_namespace_and_tablename(table, opts)
 
   @doc """
   Get columns that should be considered a PK for table. If the table

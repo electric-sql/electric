@@ -29,6 +29,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
     result = Postgrex.query!(conn, query, [tbl, namespace])
 
     if Enum.empty?(result.rows) do
+      # Fixme: this is not necessarily true. The table might exist but have no columns.
       :table_not_found
     else
       columns = Enum.map(result.columns, &String.to_atom/1)
@@ -38,4 +39,28 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
   end
 
   def clean_column_info(_, _), do: true
+
+  def get_namespace_and_tablename(table, conn) do
+    # The extra cast from $1 to text is needed because of Postgrex' OID type encoding
+    # see: https://github.com/elixir-ecto/postgrex#oid-type-encoding
+    query = """
+    SELECT nspname, relname
+    FROM pg_class
+    JOIN pg_namespace ON relnamespace = pg_namespace.oid
+    WHERE
+      relkind = 'r' AND
+      pg_class.oid = $1::text::regclass
+    """
+
+    case Postgrex.query(conn, query, [table]) do
+      {:ok, result} ->
+        # We expect exactly one row because the query didn't fail
+        # so the relation exists since we could cast it to a regclass
+        info = Enum.at(result.rows, 0)
+        {Enum.at(info, 0), Enum.at(info, 1)}
+
+      {:error, err} ->
+        {:error, Exception.message(err)}
+    end
+  end
 end

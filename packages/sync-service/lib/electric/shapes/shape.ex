@@ -7,7 +7,6 @@ defmodule Electric.Shapes.Shape do
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Runner
   alias Electric.Replication.Changes
-  alias Electric.Utils
 
   @enforce_keys [:root_table]
   defstruct [:root_table, :table_info, :where]
@@ -64,8 +63,9 @@ defmodule Electric.Shapes.Shape do
   def new(table, opts) do
     opts = NimbleOptions.validate!(opts, @shape_schema)
 
-    with {:ok, table} <- validate_table(table),
-         {:ok, column_info, pk_cols} <- load_column_info(table, Access.fetch!(opts, :inspector)),
+    with inspector <- Access.fetch!(opts, :inspector),
+         {:ok, table} <- validate_table(table, inspector),
+         {:ok, column_info, pk_cols} <- load_column_info(table, inspector),
          refs = Inspector.columns_to_expr(column_info),
          {:ok, where} <- maybe_parse_where_clause(Access.get(opts, :where), refs) do
       {:ok,
@@ -97,22 +97,13 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  defp validate_table(definition) when is_binary(definition) do
-    regex =
-      ~r/^((?<schema>([\p{L}_][\p{L}0-9_$]*|"(""|[^"])+"))\.)?(?<table>([\p{L}_][\p{L}0-9_$]*|"(""|[^"])+"))$/u
+  defp validate_table(root_table, inspector) when is_binary(root_table) do
+    case Inspector.get_namespace_and_tablename(root_table, inspector) do
+      {:error, err} ->
+        {:error, [err]}
 
-    case Regex.run(regex, definition, capture: :all_names) do
-      ["", table_name] when table_name != "" ->
-        table_name = Utils.parse_quoted_name(table_name)
-        {:ok, {"public", table_name}}
-
-      [schema_name, table_name] when table_name != "" ->
-        schema_name = Utils.parse_quoted_name(schema_name)
-        table_name = Utils.parse_quoted_name(table_name)
-        {:ok, {schema_name, table_name}}
-
-      _ ->
-        {:error, ["table name does not match expected format"]}
+      table ->
+        {:ok, table}
     end
   end
 

@@ -217,7 +217,7 @@ defmodule Electric.Utils do
       ~S|FooBar|
 
       iex> parse_quoted_name(~S|FooBar|)
-      ~S|foobar|
+      ~S|FooBar|
   """
   def parse_quoted_name(str) do
     if String.first(str) == ~s(") && String.last(str) == ~s(") do
@@ -226,7 +226,7 @@ defmodule Electric.Utils do
       |> String.slice(1..-2//1)
       |> String.replace(~r/""/, ~s("))
     else
-      String.downcase(str)
+      str
     end
   end
 

@@ -28,6 +28,9 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   def load_column_info({"public", "users"}, _),
     do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
 
+  def get_namespace_and_tablename(tbl, _),
+    do: Support.StubInspector.get_namespace_and_tablename(tbl, nil)
+
   setup do
     start_link_supervised!({Registry, keys: :duplicate, name: @registry})
     :ok
@@ -70,7 +73,9 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "root_table" => ["table name does not match expected format"]
+               "root_table" => [
+                 "invalid name syntax"
+               ]
              }
     end
 

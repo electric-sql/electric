@@ -6,8 +6,6 @@ defmodule Electric.Shapes.ShapeTest do
   alias Electric.Replication.Changes
   alias Electric.Shapes.Shape
 
-  @opts [inspector: {__MODULE__, nil}]
-
   @where Parser.parse_and_validate_expression!("value ILIKE '%matches%'", %{["value"] => :text})
 
   describe "convert_change/2" do
@@ -121,66 +119,136 @@ defmodule Electric.Shapes.ShapeTest do
   end
 
   describe "new/2" do
-    test "builds up a table correctly" do
-      assert {:ok, %Shape{root_table: {"public", "table"}}} = Shape.new(~S|table|, @opts)
-      assert {:ok, %Shape{root_table: {"public", "_table123"}}} = Shape.new(~S|_table123|, @opts)
-      assert {:ok, %Shape{root_table: {"public", "Table"}}} = Shape.new(~S|"Table"|, @opts)
+    import Support.DbSetup
+    import Support.DbStructureSetup
+    import Support.ComponentSetup
+
+    setup [:with_shared_db, :with_inspector, :with_sql_execute]
+
+    @tag with_sql: [
+           "CREATE SCHEMA IF NOT EXISTS test",
+           "CREATE SCHEMA IF NOT EXISTS θtestθ",
+           "CREATE SCHEMA IF NOT EXISTS foo",
+           ~S|CREATE SCHEMA IF NOT EXISTS "foo.bar"|,
+           "CREATE TABLE IF NOT EXISTS public.tbl (a INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS public._table123 (a INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS public.table$ (a INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS public.θtable (a INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS public.Δtbl (a INT PRIMARY KEY)",
+           ~S|CREATE TABLE IF NOT EXISTS public."Tbl" (a INT PRIMARY KEY)|,
+           ~S|CREATE TABLE IF NOT EXISTS public."!table "".a" (a INT PRIMARY KEY)|,
+           ~S|CREATE TABLE IF NOT EXISTS θtestθ.θtableθ (a INT PRIMARY KEY)|,
+           ~S|CREATE TABLE IF NOT EXISTS test.tbl (a INT PRIMARY KEY)|,
+           ~S|CREATE TABLE IF NOT EXISTS public."foo.bar.baz" (a INT PRIMARY KEY)|,
+           ~S|CREATE TABLE IF NOT EXISTS "foo"."bar.baz" (a INT PRIMARY KEY)|,
+           ~S|CREATE TABLE IF NOT EXISTS "foo.bar"."baz" (a INT PRIMARY KEY)|
+         ]
+    test "builds up a table correctly", %{inspector: inspector} do
+      assert {:ok, %Shape{root_table: {"public", "tbl"}}} =
+               Shape.new(~S|tbl|, inspector: inspector)
+
+      assert {:ok, %Shape{root_table: {"public", "_table123"}}} =
+               Shape.new(~S|_table123|, inspector: inspector)
+
+      assert {:ok, %Shape{root_table: {"public", "table$"}}} =
+               Shape.new(~S|table$|, inspector: inspector)
+
+      assert {:ok, %Shape{root_table: {"public", "θtable"}}} =
+               Shape.new(~S|θtable|, inspector: inspector)
+
+      assert {:ok, %Shape{root_table: {"public", "Δtbl"}}} =
+               Shape.new(~S|Δtbl|, inspector: inspector)
+
+      assert {:ok, %Shape{root_table: {"public", "tbl"}}} =
+               Shape.new(~S|Tbl|, inspector: inspector)
+
+      assert {:ok, %Shape{root_table: {"public", "Tbl"}}} =
+               Shape.new(~S|"Tbl"|, inspector: inspector)
 
       assert {:ok, %Shape{root_table: {"public", ~S|!table ".a|}}} =
-               Shape.new(~S|"!table "".a"|, @opts)
+               Shape.new(~S|"!table "".a"|, inspector: inspector)
 
-      assert {:ok, %Shape{root_table: {"test", "table"}}} = Shape.new(~S|test.table|, @opts)
-      assert {:ok, %Shape{root_table: {"test", "table"}}} = Shape.new(~S|"test".table|, @opts)
-      assert {:ok, %Shape{root_table: {"test", "table"}}} = Shape.new(~S|test."table"|, @opts)
-      assert {:ok, %Shape{root_table: {"test", "table"}}} = Shape.new(~S|"test"."table"|, @opts)
+      assert {:ok, %Shape{root_table: {"θtestθ", "θtableθ"}}} =
+               Shape.new(~S|θtestθ.θtableθ|, inspector: inspector)
+
+      assert {:ok, %Shape{root_table: {"test", "tbl"}}} =
+               Shape.new(~S|test.tbl|, inspector: inspector)
+
+      assert {:ok, %Shape{root_table: {"test", "tbl"}}} =
+               Shape.new(~S|"test".tbl|, inspector: inspector)
+
+      assert {:ok, %Shape{root_table: {"test", "tbl"}}} =
+               Shape.new(~S|test."tbl"|, inspector: inspector)
+
+      assert {:ok, %Shape{root_table: {"test", "tbl"}}} =
+               Shape.new(~S|"test"."tbl"|, inspector: inspector)
 
       assert {:ok, %Shape{root_table: {"public", "foo.bar.baz"}}} =
-               Shape.new(~S|"foo.bar.baz"|, @opts)
+               Shape.new(~S|"foo.bar.baz"|, inspector: inspector)
 
-      assert {:ok, %Shape{root_table: {"foo", "bar.baz"}}} = Shape.new(~S|"foo"."bar.baz"|, @opts)
-      assert {:ok, %Shape{root_table: {"foo.bar", "baz"}}} = Shape.new(~S|"foo.bar"."baz"|, @opts)
+      assert {:ok, %Shape{root_table: {"foo", "bar.baz"}}} =
+               Shape.new(~S|"foo"."bar.baz"|, inspector: inspector)
+
+      assert {:ok, %Shape{root_table: {"foo.bar", "baz"}}} =
+               Shape.new(~S|"foo.bar"."baz"|, inspector: inspector)
     end
 
-    test "errors on malformed strings" do
-      {:error, ["table name does not match expected format"]} = Shape.new("", @opts)
-      {:error, ["table name does not match expected format"]} = Shape.new("123table", @opts)
-      {:error, ["table name does not match expected format"]} = Shape.new("Table", @opts)
-      {:error, ["table name does not match expected format"]} = Shape.new(" table", @opts)
-      {:error, ["table name does not match expected format"]} = Shape.new("$table", @opts)
-      {:error, ["table name does not match expected format"]} = Shape.new(~S|ta"ble|, @opts)
-      {:error, ["table name does not match expected format"]} = Shape.new(~S|ta""ble|, @opts)
+    test "errors on empty table name", %{inspector: inspector} do
+      {:error, ["ERROR 42602 (invalid_name) invalid name syntax"]} =
+        Shape.new("", inspector: inspector)
     end
 
-    test "errors when the table doesn't exist" do
-      {:error, ["table not found"]} = Shape.new("nonexistent", @opts)
+    test "errors when the table doesn't exist", %{inspector: inspector} do
+      {:error, [~S|ERROR 42P01 (undefined_table) relation "nonexistent" does not exist|]} =
+        Shape.new("nonexistent", inspector: inspector)
     end
 
-    test "builds a shape with a where clause" do
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS other_table (value TEXT PRIMARY KEY)"
+         ]
+    test "builds a shape with a where clause", %{inspector: inspector} do
       assert {:ok, %Shape{where: %{query: "value = 'test'"}}} =
-               Shape.new("other_table", @opts ++ [where: "value = 'test'"])
+               Shape.new("other_table", inspector: inspector, where: "value = 'test'")
     end
 
-    test "validates a where clause based on inspected columns" do
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS other_table (value TEXT PRIMARY KEY)"
+         ]
+    test "validates a where clause based on inspected columns", %{inspector: inspector} do
       assert {:error, "At location 6" <> _} =
-               Shape.new("other_table", @opts ++ [where: "value + 1 > 10"])
+               Shape.new("other_table", inspector: inspector, where: "value + 1 > 10")
     end
   end
 
   describe "new!/2" do
-    test "should build up a table correctly" do
-      assert %Shape{root_table: {"public", "table"}} = Shape.new!("table", @opts)
-      assert %Shape{root_table: {"test", "table"}} = Shape.new!("test.table", @opts)
+    import Support.DbSetup
+    import Support.DbStructureSetup
+    import Support.ComponentSetup
+
+    setup [:with_shared_db, :with_inspector, :with_sql_execute]
+
+    @tag with_sql: [
+           "CREATE SCHEMA IF NOT EXISTS test",
+           "CREATE TABLE IF NOT EXISTS tbl (a INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS test.tbl (a INT PRIMARY KEY)"
+         ]
+    test "should build up a table correctly", %{inspector: inspector} do
+      assert %Shape{root_table: {"public", "tbl"}} = Shape.new!("tbl", inspector: inspector)
+      assert %Shape{root_table: {"test", "tbl"}} = Shape.new!("test.tbl", inspector: inspector)
     end
 
-    test "should raise on malformed strings" do
+    test "should raise on malformed strings", %{inspector: inspector} do
       assert_raise RuntimeError, fn ->
-        Shape.new!("", @opts)
+        Shape.new!("", inspector: inspector)
       end
     end
 
-    test "raises on malformed where clause" do
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS other_table (value TEXT PRIMARY KEY)"
+         ]
+    test "raises on malformed where clause", %{inspector: inspector} do
       assert_raise RuntimeError, fn ->
-        Shape.new!("other_table", @opts ++ [where: "value + 1 > 10"])
+        Shape.new!("other_table", inspector: inspector, where: "value + 1 > 10")
       end
     end
   end
@@ -289,5 +357,20 @@ defmodule Electric.Shapes.ShapeTest do
   def load_column_info({"foo.bar", "baz"}, _),
     do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
 
+  def load_column_info({"public", "table$"}, _),
+    do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
+
+  def load_column_info({"public", "Δtbl"}, _),
+    do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
+
+  def load_column_info({"public", "θtable"}, _),
+    do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
+
+  def load_column_info({"θtestθ", "θtableθ"}, _),
+    do: {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
+
   def load_column_info(_, _), do: :table_not_found
+
+  def get_namespace_and_tablename(tbl, _),
+    do: Support.StubInspector.get_namespace_and_tablename(tbl, nil)
 end

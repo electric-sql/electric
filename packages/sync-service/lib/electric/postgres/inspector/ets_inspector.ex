@@ -36,6 +36,11 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     :ets.delete(ets_table, {table, :columns})
   end
 
+  @impl Electric.Postgres.Inspector
+  def get_namespace_and_tablename(table, opts) do
+    GenServer.call(opts[:server], {:get_namespace_and_tablename, table})
+  end
+
   ## Internal API
 
   @impl GenServer
@@ -69,6 +74,10 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     end
   rescue
     e -> {:reply, {:error, e, __STACKTRACE__}, state}
+  end
+
+  def handle_call({:get_namespace_and_tablename, table}, _from, state) do
+    {:reply, DirectInspector.get_namespace_and_tablename(table, state.pg_pool), state}
   end
 
   @column_info_position 2

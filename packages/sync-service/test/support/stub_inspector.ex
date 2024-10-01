@@ -1,4 +1,5 @@
 defmodule Support.StubInspector do
+  alias Electric.Utils
   @behaviour Electric.Postgres.Inspector
 
   def new(opts), do: {__MODULE__, opts}
@@ -18,6 +19,26 @@ defmodule Support.StubInspector do
     opts
     |> Map.fetch!(relation)
     |> then(&load_column_info(relation, &1))
+  end
+
+  @impl true
+  def get_namespace_and_tablename(table, _) do
+    regex =
+      ~r/^((?<schema>([\p{L}_][\p{L}0-9_$]*|"(""|[^"])+"))\.)?(?<table>([\p{L}_][\p{L}0-9_$]*|"(""|[^"])+"))$/u
+
+    case Regex.run(regex, table, capture: :all_names) do
+      ["", table_name] when table_name != "" ->
+        table_name = Utils.parse_quoted_name(table_name)
+        {"public", table_name}
+
+      [schema_name, table_name] when table_name != "" ->
+        schema_name = Utils.parse_quoted_name(schema_name)
+        table_name = Utils.parse_quoted_name(table_name)
+        {schema_name, table_name}
+
+      _ ->
+        {:error, "invalid name syntax"}
+    end
   end
 
   @impl true

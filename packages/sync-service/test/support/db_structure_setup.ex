@@ -27,8 +27,11 @@ defmodule Support.DbStructureSetup do
         sql
         |> List.wrap()
         |> Enum.map(fn
-          stmt when is_binary(stmt) -> Postgrex.query!(conn, stmt, [])
-          {stmt, params} -> Postgrex.query!(conn, stmt, params)
+          stmt when is_binary(stmt) ->
+            Postgrex.query!(conn, stmt, [])
+
+          {stmt, params} ->
+            Postgrex.query!(conn, stmt, params)
         end)
       end)
 
