@@ -18,12 +18,10 @@ const { advisors, angels, team, vcs } = data
   }
 </style>
 
-<!--
-> [!INFO] We're hiring!
-> See the [jobs page](/about/jobs) for active roles.
--->
-
 # Team
+
+> [!TIP] We're hiring!
+> See the [jobs page](/about/jobs/) for active roles.
 
 ## Core team
 
