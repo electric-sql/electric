@@ -20,11 +20,11 @@ Add `useShape` to a component
 import { useShape } from "@electric-sql/react"
 
 export default function MyComponent () {
-  const { isUpToDate, data } = useShape({
+  const { isLoading, data } = useShape({
     url: "http://my-api.com/shape/foo",
   })
 
-  if (!isUpToDate) {
+  if (isLoading) {
     return <div>loading</div>
   }
 
