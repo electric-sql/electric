@@ -195,7 +195,14 @@ export default defineConfig({
           items: [
             { text: 'Community', link: '/about/community' },
             { text: 'Team', link: '/about/team' },
-            { text: 'Jobs', link: '/about/jobs' },
+            {
+              text: 'Jobs',
+              link: '/about/jobs',
+              items: [
+                { text: 'PGlite Engineer', link: '/about/jobs/pglite-engineer' }
+              ],
+              collapsed: false
+            },
             {
               text: 'Legal',
               items: [
