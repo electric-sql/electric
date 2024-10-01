@@ -39,8 +39,8 @@ defmodule Electric.Postgres.Configuration do
     )
   end
 
-  defp configure_tables_for_replication_internal!(pool, relations, pg_version, publication_name)
-       when pg_version < @pg_15 do
+  defp configure_tables_for_replication_internal!(pool, relations, pg_version, publication_name) do
+    # when pg_version < @pg_15 do
     Postgrex.transaction(pool, fn conn ->
       set_replica_identity!(conn, relations)
 
@@ -72,36 +72,37 @@ defmodule Electric.Postgres.Configuration do
     end)
   end
 
-  defp configure_tables_for_replication_internal!(pool, relations, _pg_version, publication_name) do
-    Postgrex.transaction(pool, fn conn ->
-      set_replica_identity!(conn, relations)
+  # defp configure_tables_for_replication_internal!(pool, relations, _pg_version, publication_name) do
+  #   Postgrex.transaction(pool, fn conn ->
+  #     set_replica_identity!(conn, relations)
 
-      for {relation, rel_where_clause} <- relations do
-        Postgrex.query!(conn, "SAVEPOINT before_publication", [])
+  #     for {relation, rel_where_clause} <- relations do
+  #       Postgrex.query!(conn, "SAVEPOINT before_publication", [])
 
-        filters = get_publication_filters(conn, publication_name)
+  #       filters = get_publication_filters(conn, publication_name)
 
-        # Get the existing filter for the table
-        # and extend it with the where clause for the table
-        # and update the table in the map with the new filter
-        filter = Map.get(filters, relation, :relation_not_found)
-        rel_filter = extend_where_clause(filter, rel_where_clause)
-        filters = Map.put(filters, relation, rel_filter)
+  #       # Get the existing filter for the table
+  #       # and extend it with the where clause for the table
+  #       # and update the table in the map with the new filter
+  #       filter = Map.get(filters, relation, :relation_not_found)
+  #       rel_filter = extend_where_clause(filter, rel_where_clause)
+  #       filters = Map.put(filters, relation, rel_filter)
 
-        alter_publication_sql =
-          make_alter_publication_query(publication_name, filters)
+  #       alter_publication_sql =
+  #         make_alter_publication_query(publication_name, filters)
+  #         |> dbg()
 
-        case Postgrex.query(conn, alter_publication_sql, []) do
-          {:ok, _} ->
-            Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
-            :ok
+  #       case Postgrex.query(conn, alter_publication_sql, []) do
+  #         {:ok, _} ->
+  #           Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
+  #           :ok
 
-          {:error, reason} ->
-            raise reason
-        end
-      end
-    end)
-  end
+  #         {:error, reason} ->
+  #           raise reason
+  #       end
+  #     end
+  #   end)
+  # end
 
   defp set_replica_identity!(conn, relations) do
     for {relation, _} <- relations,
