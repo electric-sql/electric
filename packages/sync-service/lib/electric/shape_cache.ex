@@ -143,6 +143,7 @@ defmodule Electric.ShapeCache do
   @spec clean_all_shapes(keyword()) :: :ok
   def clean_all_shapes(opts) do
     server = Access.get(opts, :server, __MODULE__)
+    # TODO times out for 10k shapes
     GenStage.call(server, {:clean_all})
   end
 

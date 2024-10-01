@@ -90,7 +90,7 @@ defmodule Electric.Timeline do
   @spec clean_all_shapes(keyword()) :: :ok
   defp clean_all_shapes(opts) do
     {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
-    shape_cache.clean_all_shapes(opts)
+    # shape_cache.clean_all_shapes(opts)
     :ok
   end
 end
