@@ -21,6 +21,12 @@ We're looking for a generalist web and systems engineer to join the core PGlite 
 
 PGlite is a [lightweight embeddable/WASM Postgres](https://pglite.dev). It's a fast growing open source project, with 8k GitHub stars and over 100k weekly downloads. It opens up new possibilities for local-first apps and systems built on an embedded, real-time, reactive Postgres, such as [https://postgres.new](https://postgres.new)
 
+<div style="max-width: 452px; margin: 24px 0">
+  <div class="embed-container">
+    <YoutubeEmbed video-id="ooWaPVvljlU" />
+  </div>
+</div>
+
 You'll be part of the core PGlite team at [ElectricSQL](https://electric-sql.com/about/team), working closely with [Sam Willis](https://github.com/samwillis) and [Paul Peny](https://github.com/pmp-p). It's a full time or contract role, working remotely in Europe or eastern US. Remuneration depends on how the hiring is structured but would be a ~€80-100k salary for full time (we work a 4 day week).
 
 See the [Jobs](/about/jobs/) and [Team](/about/team) pages for more information about working at Electric and to see the team you'll be joining.
@@ -33,9 +39,9 @@ Current priorities include developing a libpglite version of PGite that can be e
 - improve the OPFS VFS so that it works in Safari, this probably involves creating a mini-filesystem (using b-trees) that maps multiple files to a single file
 - fix bugs in PGlite - could be anything from JS/TS bugs to chasing down obscure issues caused by Postgres being compiled to WASM
 - help to port Postgres extensions that are written in c++ (e.g.: `pg_duck`) or Rust (e.g.: `pg_search`) to PGlite
-- create a Postgres extension that allows you to call Javascript functions from Postgres triggers
+- create a Postgres extension that allows you to call Javascript functions from Postgres&nbsp;triggers
 - investigate and build out support for PGlite on various serverless/edge platforms (Cloudflare, Fastly), would involve building VFSs backed by object stores and optimising the WASM build for restricted environments
-- document how to build Postgres extensions for PGlite for common languages (C, C++, Rust)
+- document how to build Postgres extensions for PGlite for common languages like <span class="no-wrap">C, C++ and Rust</span>
 
 It's a core role at a fast moving project, so priorities evolve quickly. It's essential that you're self-directed and can be productive in a small team environment.
 
