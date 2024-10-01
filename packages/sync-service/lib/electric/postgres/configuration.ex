@@ -44,13 +44,15 @@ defmodule Electric.Postgres.Configuration do
     Postgrex.transaction(pool, fn conn ->
       set_replica_identity!(conn, relations)
 
-      for {relation, _} <- relations, table = Utils.relation_to_sql(relation) do
+      for {relation, _} <- relations,
+          table = Utils.relation_to_sql(relation),
+          publication = Utils.quote_name(publication_name) do
         Postgrex.query!(conn, "SAVEPOINT before_publication", [])
 
         # PG 14 and below do not support filters on tables of publications
         case Postgrex.query(
                conn,
-               "ALTER PUBLICATION #{publication_name} ADD TABLE #{table}",
+               "ALTER PUBLICATION #{publication} ADD TABLE #{table}",
                []
              ) do
           {:ok, _} ->
@@ -121,6 +123,28 @@ defmodule Electric.Postgres.Configuration do
     |> Map.new()
   end
 
+  @doc """
+  Drops all tables from the given publication.
+  """
+  @spec drop_all_publication_tables(Postgrex.conn(), String.t()) :: Postgrex.Result.t()
+  def drop_all_publication_tables(conn, publication_name) do
+    Postgrex.query!(
+      conn,
+      "
+      DO $$
+      DECLARE
+        r RECORD;
+      BEGIN
+        FOR r IN (SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = '#{publication_name}')
+        LOOP
+          EXECUTE 'ALTER PUBLICATION #{Utils.quote_name(publication_name)} DROP TABLE ' || r.schemaname || '.' || r.tablename || ';';
+        END LOOP;
+      END $$;
+      ",
+      []
+    )
+  end
+
   # Joins the existing filter for the table with the where clause for the table.
   # If one of them is `nil` (i.e. no filter) then the resulting filter is `nil`.
   @spec extend_where_clause(maybe_filter(), filter()) :: filter()
@@ -139,7 +163,7 @@ defmodule Electric.Postgres.Configuration do
   # Makes an SQL query that alters the given publication whith the given tables and filters.
   @spec make_alter_publication_query(String.t(), filters()) :: String.t()
   defp make_alter_publication_query(publication_name, filters) do
-    base_sql = "ALTER PUBLICATION #{publication_name} SET TABLE "
+    base_sql = "ALTER PUBLICATION #{Utils.quote_name(publication_name)} SET TABLE "
 
     tables =
       filters

@@ -162,6 +162,7 @@ defmodule Support.ComponentSetup do
       long_poll_timeout: Access.get(overrides, :long_poll_timeout, 5_000),
       max_age: Access.get(overrides, :max_age, 60),
       stale_age: Access.get(overrides, :stale_age, 300),
+      get_service_status: Access.get(overrides, :get_service_status, fn -> :active end),
       chunk_bytes_threshold:
         Access.get(overrides, :chunk_bytes_threshold, ctx.chunk_bytes_threshold),
       allow_shape_deletion: Access.get(overrides, :allow_shape_deletion, true)

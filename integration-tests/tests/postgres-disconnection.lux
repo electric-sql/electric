@@ -22,7 +22,7 @@
 
 ## Observe the connection error.
 [shell electric]
-  ??[warning] Database connection in replication mode failed
+  ??[warning] Database connection in lock_connection mode failed
   ??[warning] Reconnecting in 
 
 ## Start the Postgres container back up.
