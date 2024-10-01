@@ -64,7 +64,13 @@ You can use logical operators like `AND` and `OR` to group multiple conditions, 
 - `title='Electric' OR title='SQL'`
 - `title='Electric' AND status='todo'`
 
-Where clauses can only refer to columns in the target row; you can't perform joins or refer to other tables. Where clauses also can't use SQL functions like `count()`.
+> [!WARNING] Limitations
+> 1. where clauses can only refer to columns in the target row
+> 1. where clauses can't perform joins or refer to other tables
+> 1. where clauses can't use non-deterministic SQL functions like `count()`
+> 1. [Arrays](https://github.com/electric-sql/electric/issues/1767) and [Enums](https://github.com/electric-sql/electric/issues/1709) are not supported in where clauses
+>
+> If you need to use a data type or where clause feature that isn't yet supported, please feel free to [raise a Feature Request](https://github.com/electric-sql/electric/discussions/categories/feature-requests) on GitHub.
 
 ## Subscribing to shapes
 
