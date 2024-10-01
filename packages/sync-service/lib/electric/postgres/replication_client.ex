@@ -100,7 +100,7 @@ defmodule Electric.Postgres.ReplicationClient do
     # Disable the reconnection logic in Postgex.ReplicationConnection to force it to exit with
     # the connection error. Without this, we may observe undesirable restarts in tests between
     # one test process exiting and the next one starting.
-    connect_opts = [auto_reconnect: false] ++ connection_opts
+    connect_opts = [auto_reconnect: false] ++ Electric.Utils.deobfuscate_password(connection_opts)
 
     case Postgrex.ReplicationConnection.start_link(__MODULE__, replication_opts, connect_opts) do
       {:ok, pid} ->
