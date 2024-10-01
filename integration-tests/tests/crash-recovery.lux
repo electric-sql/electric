@@ -1,0 +1,67 @@
+[doc Verify handling of an Electric crash recovery]
+
+[include macros.luxinc]
+
+[global pg_container_name=crash-recovery__pg]
+
+###
+
+## Start a new Postgres cluster
+[invoke setup_pg "" ""]
+
+## Add some data
+[invoke start_psql]
+[shell psql]
+  """!
+  CREATE TABLE items (
+    id UUID PRIMARY KEY,
+    val TEXT
+  );
+  """
+  ??CREATE TABLE
+
+  """!
+  INSERT INTO
+    items (id, val)
+  SELECT
+    gen_random_uuid(),
+    '#' || generate_series || ' test val'
+  FROM
+    generate_series(1, 10);
+  """
+  ??INSERT 0 10
+
+## Start the sync service.
+[invoke setup_electric]
+
+[shell electric]
+  ??[info] Starting replication from postgres
+  
+# Initialize a shape and collect the offset
+[shell client]
+  # strip ANSI codes from response for easier matching
+  !curl -I http://localhost:3000/v1/shape/items?offset=-1 | sed 's/\x1b\[[0-9;]*m//g'
+  ?electric-shape-id: ([\d-]+)
+  [local shape_id=$1]
+  ?electric-chunk-last-offset: ([\w\d_]+)
+  [local last_offset=$1]
+
+## Terminate electric after giving it some time to create the shape
+[shell electric]
+  ?Txn received
+  [sleep 2]
+  !System.halt()
+  ??$PS1
+
+## Start the sync service again.
+[invoke setup_electric]
+[shell electric]
+  ??[info] Starting replication from postgres
+
+# Client should be able to continue same shape
+[shell client]
+  !curl -I "http://localhost:3000/v1/shape/items?offset=$last_offset&shape_id=$shape_id"
+  ??HTTP/1.1 200 OK
+
+[cleanup]
+  [invoke teardown]
