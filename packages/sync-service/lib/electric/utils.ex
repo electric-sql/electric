@@ -200,6 +200,19 @@ defmodule Electric.Utils do
   def escape_quotes(text), do: :binary.replace(text, ~S|"|, ~S|""|, [:global])
 
   @doc """
+  Quote a string for use in SQL queries.
+
+  ## Examples
+      iex> quote_name("foo")
+      ~S|"foo"|
+
+      iex> quote_name(~S|fo"o|)
+      ~S|"fo""o"|
+  """
+  @spec quote_name(String.t()) :: String.t()
+  def quote_name(str), do: ~s|"#{escape_quotes(str)}"|
+
+  @doc """
   Parses quoted names.
 
   ## Examples

@@ -41,6 +41,11 @@
     ??database system is ready to accept connections
 [endmacro]
 
+[macro start_psql]
+  [shell psql]
+    !docker exec -u postgres -it $pg_container_name psql
+[endmacro]
+
 [macro seed_pg]
   [shell psql]
     !docker exec -u postgres -it $pg_container_name psql
@@ -68,10 +73,14 @@
 [endmacro]
 
 [macro setup_electric]
-  [shell electric]
+  [invoke setup_electric_shell "electric" "3000"]
+[endmacro]
+
+[macro setup_electric_shell shell_name port]
+  [shell $shell_name]
     -$fail_pattern
   
-    !DATABASE_URL=$database_url ../electric_dev.sh
+    !DATABASE_URL=$database_url PORT=$port ../electric_dev.sh
 [endmacro]
 
 [macro teardown]
