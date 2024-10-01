@@ -29,14 +29,12 @@ defmodule Electric.Postgres.LockConnection do
   end
 
   @spec start_link(options()) :: {:ok, pid()} | {:error, Postgrex.Error.t() | term()}
-  def start_link(
-        connection_opts: connection_opts,
-        connection_manager: connection_manager,
-        lock_name: lock_name
-      ) do
+  def start_link(opts) do
+    {connection_opts, init_opts} = Keyword.pop(opts, :connection_opts)
+
     case Postgrex.SimpleConnection.start_link(
            __MODULE__,
-           [connection_manager: connection_manager, lock_name: lock_name],
+           init_opts,
            connection_opts ++ [timeout: :infinity, auto_reconnect: false]
          ) do
       {:ok, pid} ->
