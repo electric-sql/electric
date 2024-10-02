@@ -129,7 +129,7 @@ defmodule Electric.Shapes.Consumer do
 
   def handle_events([%Transaction{}] = txns, _from, state) do
     OpenTelemetry.with_span(
-      "shapes_consumer.handle_txns",
+      "shape_write.consumer.handle_txns",
       [snapshot_xmin: state.snapshot_xmin],
       fn -> handle_txns(txns, state) end
     )
@@ -153,7 +153,7 @@ defmodule Electric.Shapes.Consumer do
     ot_attrs =
       [xid: txn.xid, num_changes: length(txn.changes)] ++ shape_attrs(state.shape_id, state.shape)
 
-    OpenTelemetry.with_span("shapes_consumer.handle_txn", ot_attrs, fn ->
+    OpenTelemetry.with_span("shape_write.consumer.handle_txn", ot_attrs, fn ->
       do_handle_txn(txn, state)
     end)
   end

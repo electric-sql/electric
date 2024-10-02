@@ -163,7 +163,7 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp load_shape_info(%Conn{} = conn, _) do
-    OpenTelemetry.with_span("ShapeGet.load_shape_info", [], fn ->
+    OpenTelemetry.with_span("shape_get.plug.load_shape_info", [], fn ->
       shape_info = get_or_create_shape_id(conn.assigns)
       handle_shape_info(conn, shape_info)
     end)
@@ -354,12 +354,12 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # If offset is -1, we're serving a snapshot
   defp serve_log_or_snapshot(%Conn{assigns: %{offset: @before_all_offset}} = conn, _) do
-    OpenTelemetry.with_span("ShapeGet.serve_snapshot", [], fn -> serve_snapshot(conn) end)
+    OpenTelemetry.with_span("shape_get.plug.serve_snapshot", [], fn -> serve_snapshot(conn) end)
   end
 
   # Otherwise, serve log since that offset
   defp serve_log_or_snapshot(conn, _) do
-    OpenTelemetry.with_span("ShapeGet.serve_shape_log", [], fn -> serve_shape_log(conn) end)
+    OpenTelemetry.with_span("shape_get.plug.serve_shape_log", [], fn -> serve_shape_log(conn) end)
   end
 
   defp serve_snapshot(
@@ -446,7 +446,7 @@ defmodule Electric.Plug.ServeShapePlug do
       Enum.reduce_while(stream, {conn, 0}, fn chunk, {conn, bytes_sent} ->
         chunk_size = IO.iodata_length(chunk)
 
-        OpenTelemetry.with_span("ShapeGet.stream_chunk", [chunk_size: chunk_size], fn ->
+        OpenTelemetry.with_span("shape_get.plug.stream_chunk", [chunk_size: chunk_size], fn ->
           case chunk(conn, chunk) do
             {:ok, conn} ->
               {:cont, {conn, bytes_sent + chunk_size}}
@@ -607,7 +607,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # Start the root span for the shape request, serving as an ancestor for any subsequent
   # sub-span.
   defp start_telemetry_span(conn, _) do
-    OpentelemetryTelemetry.start_telemetry_span(OpenTelemetry, "ShapeGet", %{}, %{})
+    OpentelemetryTelemetry.start_telemetry_span(OpenTelemetry, "Plug_shape_get", %{}, %{})
     add_span_attrs_from_conn(conn)
     conn
   end
