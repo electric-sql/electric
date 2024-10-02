@@ -1,5 +1,6 @@
 defmodule Electric.Plug.ServeShapePlug do
   use Plug.Builder
+  use Plug.ErrorHandler
 
   # The halt/1 function is redefined further down below
   import Plug.Conn, except: [halt: 1]
@@ -120,10 +121,11 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  # start_telemetry_span needs to always be the first plug here.
+  plug :fetch_query_params
+
+  # start_telemetry_span needs to always be the first plug after fetching query params.
   plug :start_telemetry_span
 
-  plug :fetch_query_params
   plug :cors
   plug :put_resp_content_type, "application/json"
   plug :validate_query_params
@@ -450,10 +452,14 @@ defmodule Electric.Plug.ServeShapePlug do
               {:cont, {conn, bytes_sent + chunk_size}}
 
             {:error, "closed"} ->
+              error_str = "Connection closed unexpectedly while streaming response"
+              conn = assign(conn, :error_str, error_str)
               {:halt, {conn, bytes_sent}}
 
             {:error, reason} ->
-              Logger.error("Error while streaming response: #{inspect(reason)}")
+              error_str = "Error while streaming response: #{inspect(reason)}"
+              Logger.error(error_str)
+              conn = assign(conn, :error_str, error_str)
               {:halt, {conn, bytes_sent}}
           end
         end)
@@ -514,9 +520,22 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do
+    shape_id =
+      if is_struct(conn.query_params, Plug.Conn.Unfetched) do
+        assigns[:active_shape_id] || assigns[:shape_id]
+      else
+        conn.query_params["shape_id"] || assigns[:active_shape_id] || assigns[:shape_id]
+      end
+
+    query_params_map =
+      if is_struct(conn.query_params, Plug.Conn.Unfetched) do
+        %{}
+      else
+        Map.new(conn.query_params, fn {k, v} -> {"http.query_param.#{k}", v} end)
+      end
+
     %{
-      "shape.id" =>
-        conn.query_params["shape_id"] || assigns[:active_shape_id] || assigns[:shape_id],
+      "shape.id" => shape_id,
       "shape.where" => assigns[:where],
       "shape.root_table" => assigns[:root_table],
       "shape.definition" => assigns[:shape_definition],
@@ -526,8 +545,9 @@ defmodule Electric.Plug.ServeShapePlug do
       "shape_req.is_long_poll_timeout" => assigns[:ot_is_long_poll_timeout] || false,
       "shape_req.is_empty_response" => assigns[:ot_is_empty_response] || false,
       "shape_req.is_immediate_response" => assigns[:ot_is_immediate_response] || true,
-      "shape_req.is_cached" => conn.status == 304,
-      "shape_req.is_error" => conn.status >= 400,
+      "shape_req.is_cached" => if(conn.status, do: conn.status == 304),
+      "shape_req.is_error" => if(conn.status, do: conn.status >= 400),
+      "error.type" => assigns[:error_str],
       "http.request_id" => assigns[:plug_request_id],
       "http.query_string" => conn.query_string,
       SC.Trace.http_client_ip() => client_ip(conn),
@@ -550,7 +570,8 @@ defmodule Electric.Plug.ServeShapePlug do
         }
         |> to_string()
     }
-    |> Map.merge(Map.new(conn.query_params, fn {k, v} -> {"http.query_param.#{k}", v} end))
+    |> Map.filter(fn {_k, v} -> not is_nil(v) end)
+    |> Map.merge(query_params_map)
     |> Map.merge(Map.new(conn.req_headers, fn {k, v} -> {"http.request.header.#{k}", v} end))
     |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.response.header.#{k}", v} end))
   end
@@ -587,6 +608,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # sub-span.
   defp start_telemetry_span(conn, _) do
     OpentelemetryTelemetry.start_telemetry_span(OpenTelemetry, "ShapeGet", %{}, %{})
+    add_span_attrs_from_conn(conn)
     conn
   end
 
@@ -595,13 +617,16 @@ defmodule Electric.Plug.ServeShapePlug do
   # We want to have all the relevant HTTP and shape request attributes on the root span. This
   # is the place to assign them because we keep this plug last in the "plug pipeline" defined
   # in this module.
-  defp end_telemetry_span(conn, _) do
+  defp end_telemetry_span(conn, _ \\ nil) do
+    add_span_attrs_from_conn(conn)
+    OpentelemetryTelemetry.end_telemetry_span(OpenTelemetry, %{})
+    conn
+  end
+
+  defp add_span_attrs_from_conn(conn) do
     conn
     |> open_telemetry_attrs()
     |> OpenTelemetry.add_span_attributes()
-
-    OpentelemetryTelemetry.end_telemetry_span(OpenTelemetry, %{})
-    conn
   end
 
   # This overrides Plug.Conn.halt/1 (which is deliberately "unimported" at the top of this
@@ -609,7 +634,20 @@ defmodule Electric.Plug.ServeShapePlug do
   # request.
   defp halt(conn) do
     conn
-    |> end_telemetry_span(nil)
+    |> end_telemetry_span()
     |> Plug.Conn.halt()
+  end
+
+  @impl Plug.ErrorHandler
+  def handle_errors(conn, error) do
+    OpenTelemetry.record_exception(error.reason, error.stack)
+
+    error_str = Exception.format(error.kind, error.reason)
+
+    conn
+    |> assign(:error_str, error_str)
+    |> end_telemetry_span()
+
+    conn
   end
 end
