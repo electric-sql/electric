@@ -9,7 +9,6 @@ defmodule Electric.Plug.Router do
   plug Electric.Plug.LabelProcessPlug
   plug Plug.Telemetry, event_prefix: [:electric, :routing]
   plug Plug.Logger
-  plug Plug.RequestId
   plug :dispatch
 
   match "/", via: [:get, :head], do: send_resp(conn, 200, "")

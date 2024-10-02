@@ -192,7 +192,7 @@ defmodule Electric.Postgres.ReplicationClient do
         %State{} = state
       ) do
     OpenTelemetry.with_span(
-      "replication_client.process_x_log_data",
+      "pg_txn.replication_client.process_x_log_data",
       [msg_size: byte_size(rest)],
       fn -> process_x_log_data(rest, wal_end, state) end
     )
@@ -234,7 +234,7 @@ defmodule Electric.Postgres.ReplicationClient do
         {m, f, args} = state.relation_received
 
         OpenTelemetry.with_span(
-          "replication_client.relation_received",
+          "pg_txn.replication_client.relation_received",
           ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
           fn -> apply(m, f, [rel | args]) end
         )
@@ -254,7 +254,7 @@ defmodule Electric.Postgres.ReplicationClient do
         # accomodate varying number of shape consumers. The default of 5_000 ms
         # should work for our file-based storage backends, for now.
         OpenTelemetry.with_span(
-          "replication_client.transaction_received",
+          "pg_txn.replication_client.transaction_received",
           [num_changes: length(txn.changes), num_relations: MapSet.size(txn.affected_relations)],
           fn -> apply(m, f, [txn | args]) end
         )
@@ -280,7 +280,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
   defp decode_message(data) do
     OpenTelemetry.with_span(
-      "replication_client.decode_message",
+      "pg_txn.replication_client.decode_message",
       [msg_size: byte_size(data)],
       fn -> Decoder.decode(data) end
     )
