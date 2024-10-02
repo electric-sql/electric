@@ -141,6 +141,8 @@ defmodule Electric.ConnectionManager do
 
   @impl true
   def handle_call(:get_pg_version, _from, %{pg_version: pg_version} = state) do
+    # If we haven't queried the PG version by the time it is requested, that's a fatal error.
+    false = is_nil(pg_version)
     {:reply, pg_version, state}
   end
 
@@ -208,13 +210,11 @@ defmodule Electric.ConnectionManager do
       {:ok, pid} ->
         Electric.Timeline.check({get_pg_id(pid), get_pg_timeline(pid)}, state.timeline_opts)
 
-        pg_version = query_pg_version(pid)
-
         # Now we have everything ready to start accepting and processing logical messages from
         # Postgres.
         Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
 
-        state = %{state | pool_pid: pid, pg_version: pg_version}
+        state = %{state | pool_pid: pid}
         {:noreply, state}
 
       {:error, reason} ->
@@ -279,6 +279,10 @@ defmodule Electric.ConnectionManager do
         Electric.Postgres.ReplicationClient.start_streaming(pid)
         {:noreply, state}
     end
+  end
+
+  def handle_cast({:pg_version, pg_version}, state) do
+    {:noreply, %{state | pg_version: pg_version}}
   end
 
   def handle_cast(:lock_connection_acquired, %{pg_lock_acquired: false} = state) do
@@ -469,17 +473,5 @@ defmodule Electric.ConnectionManager do
     case Postgrex.query!(conn, "SELECT timeline_id FROM pg_control_checkpoint()", []) do
       %Postgrex.Result{rows: [[timeline_id]]} -> timeline_id
     end
-  end
-
-  def query_pg_version(conn) do
-    [[setting]] =
-      Postgrex.query!(
-        conn,
-        "SELECT current_setting('server_version_num')::integer",
-        []
-      )
-      |> Map.fetch!(:rows)
-
-    setting
   end
 end
