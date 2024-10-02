@@ -9,6 +9,7 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.Replication.Changes.Transaction
   alias Electric.ShapeCache
   alias Electric.Shapes.Shape
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -127,7 +128,11 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_events([%Transaction{}] = txns, _from, state) do
-    handle_txns(txns, state)
+    OpenTelemetry.with_span(
+      "shape_write.consumer.handle_txns",
+      [snapshot_xmin: state.snapshot_xmin],
+      fn -> handle_txns(txns, state) end
+    )
   end
 
   defp handle_txns(txns, state) do
@@ -145,6 +150,15 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_txn(%Transaction{} = txn, state) do
+    ot_attrs =
+      [xid: txn.xid, num_changes: length(txn.changes)] ++ shape_attrs(state.shape_id, state.shape)
+
+    OpenTelemetry.with_span("shape_write.consumer.handle_txn", ot_attrs, fn ->
+      do_handle_txn(txn, state)
+    end)
+  end
+
+  defp do_handle_txn(%Transaction{} = txn, state) do
     %{
       shape: shape,
       shape_id: shape_id,
@@ -155,7 +169,7 @@ defmodule Electric.Shapes.Consumer do
       storage: storage
     } = state
 
-    Logger.debug(fn -> "Txn received: #{inspect(txn)}" end)
+    Logger.debug(fn -> "Txn received in Shapes.Consumer: #{inspect(txn)}" end)
 
     %{xid: xid, changes: changes, lsn: _lsn, last_log_offset: last_log_offset} = txn
 
@@ -258,5 +272,9 @@ defmodule Electric.Shapes.Consumer do
       end)
 
     {log_items, new_log_state}
+  end
+
+  defp shape_attrs(shape_id, shape) do
+    ["shape.id": shape_id, "shape.root_table": shape.root_table, "shape.where": shape.where]
   end
 end

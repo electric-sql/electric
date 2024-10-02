@@ -73,6 +73,7 @@ defmodule Electric.MixProject do
         {:nimble_options, "~> 1.1"},
         {:opentelemetry, "~> 1.4"},
         {:opentelemetry_exporter, "~> 1.6"},
+        {:opentelemetry_telemetry, "~> 1.1"},
         {:pg_query_ex, "0.5.3"},
         {:plug, "~> 1.16"},
         {:postgrex, "~> 0.19"},
