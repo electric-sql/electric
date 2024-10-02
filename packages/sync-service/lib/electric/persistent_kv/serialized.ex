@@ -11,6 +11,8 @@ defmodule Electric.PersistentKV.Serialized do
   end
 
   defimpl Electric.PersistentKV do
+    use Electric.Telemetry.TraceDecorator
+
     def set(kv, key, value) do
       with {:ok, json} <- encode(kv, value) do
         PersistentKV.set(kv.backend, key, json)
@@ -23,10 +25,12 @@ defmodule Electric.PersistentKV.Serialized do
       end
     end
 
+    @decorate trace()
     defp encode(%{encoder: {m, f, a}}, term) do
       apply(m, f, [term | a])
     end
 
+    @decorate trace()
     defp decode(%{decoder: {m, f, a}}, json) do
       apply(m, f, [json | a])
     end

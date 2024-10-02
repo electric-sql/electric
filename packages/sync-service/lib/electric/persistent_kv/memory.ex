@@ -31,6 +31,9 @@ defmodule Electric.PersistentKV.Memory do
   end
 
   defimpl Electric.PersistentKV do
+    use Electric.Telemetry.TraceDecorator
+
+    @decorate trace()
     def set(memory, key, value) do
       Agent.update(memory.pid, fn data ->
         notify(memory, {:set, key, value})

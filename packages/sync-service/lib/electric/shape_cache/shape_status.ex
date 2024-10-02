@@ -100,6 +100,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @spec add_shape(t(), Shape.t()) :: {:ok, shape_id(), LogOffset.t()} | {:error, term()}
+  @decorate trace()
   def add_shape(state, shape) do
     {hash, shape_id} = Shape.generate_id(shape)
     # fresh snapshots always start with a zero offset - only once they
@@ -324,6 +325,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     %Column{name: name, type_oid: type_oid}
   end
 
+  @decorate trace()
   defp save(state) do
     shapes = Map.new(list_shapes(state))
     relations = list_relations(state)

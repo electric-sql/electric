@@ -101,7 +101,7 @@ defmodule Electric.ShapeCache do
       shape_state
     else
       server = Access.get(opts, :server, __MODULE__)
-      GenStage.call(server, {:create_or_wait_shape_id, shape})
+      GenStage.call(server, {:create_or_wait_shape_id, shape, OpenTelemetry.Ctx.get_current()})
     end
   end
 
@@ -272,21 +272,28 @@ defmodule Electric.ShapeCache do
   end
 
   @impl GenStage
-  @decorate trace()
-  def handle_call({:create_or_wait_shape_id, shape}, _from, %{shape_status: shape_status} = state) do
-    {{shape_id, latest_offset}, state} =
-      if shape_state = shape_status.get_existing_shape(state.persistent_state, shape) do
-        {shape_state, state}
-      else
-        {:ok, shape_id} = shape_status.add_shape(state.persistent_state, shape)
+  def handle_call(
+        {:create_or_wait_shape_id, shape, ctx},
+        _from,
+        %{shape_status: shape_status} = state
+      ) do
+    OpenTelemetry.Ctx.attach(ctx)
 
-        {:ok, _pid, _snapshot_xmin, latest_offset} = start_shape(shape_id, shape, state)
-        {{shape_id, latest_offset}, state}
-      end
+    Electric.Telemetry.OpenTelemetry.with_span("shape_cache.create_or_wait_shape_id", [], fn ->
+      {{shape_id, latest_offset}, state} =
+        if shape_state = shape_status.get_existing_shape(state.persistent_state, shape) do
+          {shape_state, state}
+        else
+          {:ok, shape_id} = shape_status.add_shape(state.persistent_state, shape)
 
-    Logger.debug("Returning shape id #{shape_id} for shape #{inspect(shape)}")
+          {:ok, _pid, _snapshot_xmin, latest_offset} = start_shape(shape_id, shape, state)
+          {{shape_id, latest_offset}, state}
+        end
 
-    {:reply, {shape_id, latest_offset}, [], state}
+      Logger.debug("Returning shape id #{shape_id} for shape #{inspect(shape)}")
+
+      {:reply, {shape_id, latest_offset}, [], state}
+    end)
   end
 
   @decorate trace()
