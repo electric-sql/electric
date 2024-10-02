@@ -4,6 +4,7 @@ defmodule Electric.Shapes do
   alias Electric.ShapeCache
   alias Electric.Shapes.Shape
   require Logger
+  use Electric.Telemetry.TraceDecorator
 
   @type shape_id :: Electric.ShapeCacheBehaviour.shape_id()
 
@@ -43,6 +44,7 @@ defmodule Electric.Shapes do
   Get the shape that corresponds to this shape definition and return it along with the latest offset of the shape
   """
   @spec get_shape(keyword(), Shape.t()) :: {shape_id(), LogOffset.t()}
+  @decorate trace()
   def get_shape(config, shape_def) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
 
@@ -52,6 +54,7 @@ defmodule Electric.Shapes do
   @doc """
   Get or create a shape ID and return it along with the latest offset of the shape
   """
+  @decorate trace()
   @spec get_or_create_shape_id(keyword(), Shape.t()) :: {shape_id(), LogOffset.t()}
   def get_or_create_shape_id(config, shape_def) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})

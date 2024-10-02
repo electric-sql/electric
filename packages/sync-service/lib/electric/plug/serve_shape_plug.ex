@@ -1,6 +1,7 @@
 defmodule Electric.Plug.ServeShapePlug do
   use Plug.Builder
   use Plug.ErrorHandler
+  use Electric.Telemetry.TraceDecorator
 
   # The halt/1 function is redefined further down below
   import Plug.Conn, except: [halt: 1]
@@ -171,15 +172,18 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # No shape_id is provided so we can get the existing one for this shape
   # or create a new shape if it does not yet exist
+  @decorate trace()
   defp get_or_create_shape_id(%{shape_definition: shape, config: config, shape_id: nil}) do
     Shapes.get_or_create_shape_id(config, shape)
   end
 
   # A shape ID is provided so we need to return the shape that matches the shape ID and the shape definition
+  @decorate trace()
   defp get_or_create_shape_id(%{shape_definition: shape, config: config}) do
     Shapes.get_shape(config, shape)
   end
 
+  @decorate trace()
   defp handle_shape_info(
          %Conn{assigns: %{shape_definition: shape, config: config, shape_id: shape_id}} = conn,
          nil
@@ -203,6 +207,7 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
+  @decorate trace()
   defp handle_shape_info(
          %Conn{assigns: %{shape_id: shape_id}} = conn,
          {active_shape_id, last_offset}
@@ -216,6 +221,7 @@ defmodule Electric.Plug.ServeShapePlug do
     |> put_resp_header("electric-shape-id", active_shape_id)
   end
 
+  @decorate trace()
   defp handle_shape_info(
          %Conn{assigns: %{shape_id: shape_id, config: config}} = conn,
          {active_shape_id, _}

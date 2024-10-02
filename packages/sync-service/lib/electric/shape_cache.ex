@@ -30,6 +30,7 @@ end
 
 defmodule Electric.ShapeCache do
   use GenStage
+  use Electric.Telemetry.TraceDecorator
 
   alias Electric.Replication.Changes
   alias Electric.ShapeCache.ShapeStatus
@@ -85,6 +86,7 @@ defmodule Electric.ShapeCache do
   end
 
   @impl Electric.ShapeCacheBehaviour
+  @decorate trace()
   def get_shape(shape, opts \\ []) do
     table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
@@ -92,6 +94,7 @@ defmodule Electric.ShapeCache do
   end
 
   @impl Electric.ShapeCacheBehaviour
+  @decorate trace()
   def get_or_create_shape_id(shape, opts \\ []) do
     # Get or create the shape ID and fire a snapshot if necessary
     if shape_state = get_shape(shape, opts) do
@@ -269,6 +272,7 @@ defmodule Electric.ShapeCache do
   end
 
   @impl GenStage
+  @decorate trace()
   def handle_call({:create_or_wait_shape_id, shape}, _from, %{shape_status: shape_status} = state) do
     {{shape_id, latest_offset}, state} =
       if shape_state = shape_status.get_existing_shape(state.persistent_state, shape) do
@@ -285,6 +289,7 @@ defmodule Electric.ShapeCache do
     {:reply, {shape_id, latest_offset}, [], state}
   end
 
+  @decorate trace()
   def handle_call({:await_snapshot_start, shape_id}, from, %{shape_status: shape_status} = state) do
     cond do
       not is_known_shape_id?(state, shape_id) ->
@@ -300,11 +305,13 @@ defmodule Electric.ShapeCache do
     end
   end
 
+  @decorate trace()
   def handle_call({:wait_shape_id, shape_id}, _from, %{shape_status: shape_status} = state) do
     {:reply, !is_nil(shape_status.get_existing_shape(state.persistent_state, shape_id)), [],
      state}
   end
 
+  @decorate trace()
   def handle_call({:truncate, shape_id}, _from, state) do
     with {:ok, cleaned_up_shape} <- clean_up_shape(state, shape_id) do
       Logger.info(
@@ -315,6 +322,7 @@ defmodule Electric.ShapeCache do
     {:reply, :ok, [], state}
   end
 
+  @decorate trace()
   def handle_call({:clean, shape_id}, _from, state) do
     # ignore errors when cleaning up non-existant shape id
     with {:ok, cleaned_up_shape} <- clean_up_shape(state, shape_id) do
@@ -324,6 +332,7 @@ defmodule Electric.ShapeCache do
     {:reply, :ok, [], state}
   end
 
+  @decorate trace()
   def handle_call({:clean_all}, _from, state) do
     Logger.info("Cleaning up all shapes")
     clean_up_all_shapes(state)

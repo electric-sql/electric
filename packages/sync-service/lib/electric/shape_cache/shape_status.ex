@@ -43,6 +43,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   to access the data in the ETS from anywhere, so there's an internal api,
   using the full state and an external api using just the table name.
   """
+  use Electric.Telemetry.TraceDecorator
   alias Electric.PersistentKV
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
@@ -162,11 +163,13 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @spec get_existing_shape(t(), shape_id() | Shape.t()) :: nil | {shape_id(), LogOffset.t()}
+  @decorate trace()
   def get_existing_shape(%__MODULE__{shape_meta_table: table}, shape_or_id) do
     get_existing_shape(table, shape_or_id)
   end
 
   @spec get_existing_shape(table(), Shape.t()) :: nil | {shape_id(), LogOffset.t()}
+  @decorate trace()
   def get_existing_shape(meta_table, %Shape{} = shape) do
     hash = Shape.hash(shape)
 

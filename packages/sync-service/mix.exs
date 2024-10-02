@@ -66,6 +66,7 @@ defmodule Electric.MixProject do
         {:backoff, "~> 1.1"},
         {:bandit, "~> 1.5"},
         {:cubdb, "~> 2.0.2"},
+        {:decorator, "~> 1.2"},
         {:dotenvy, "~> 0.8"},
         {:ecto, "~> 3.11"},
         {:gen_stage, "~> 1.2"},
