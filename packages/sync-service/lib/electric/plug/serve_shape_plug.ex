@@ -534,6 +534,8 @@ defmodule Electric.Plug.ServeShapePlug do
         Map.new(conn.query_params, fn {k, v} -> {"http.query_param.#{k}", v} end)
       end
 
+    maybe_up_to_date = if up_to_date = assigns[:up_to_date], do: up_to_date != []
+
     %{
       "shape.id" => shape_id,
       "shape.where" => assigns[:where],
@@ -547,6 +549,7 @@ defmodule Electric.Plug.ServeShapePlug do
       "shape_req.is_immediate_response" => assigns[:ot_is_immediate_response] || true,
       "shape_req.is_cached" => if(conn.status, do: conn.status == 304),
       "shape_req.is_error" => if(conn.status, do: conn.status >= 400),
+      "shape_req.is_up_to_date" => maybe_up_to_date,
       "error.type" => assigns[:error_str],
       "http.request_id" => assigns[:plug_request_id],
       "http.query_string" => conn.query_string,
