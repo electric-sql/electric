@@ -33,7 +33,7 @@ See the [Jobs](/about/jobs/) and [Team](/about/team) pages for more information 
 
 You will collaborate with partners and contributors like Supabase and the wider open source community. So you need great communication skills and ideally experience of building open source. Technically, you need strong Typescript and systems programming experience, ideally in C++ and Rust. It would be great if (but is not essential that) you're familiar with some aspects of database internals, filesystems and WASM.
 
-Current priorities include developing a libpglite version of PGite that can be embedded in native apps, creating an HTTP/S3 VFS, multi-connection, robustness and stability improvements.  Example tasks that you might pick up include things like:
+Current priorities include developing a libpglite version of PGlite that can be embedded in native apps, creating an HTTP/S3 VFS, multi-connection, robustness and stability improvements.  Example tasks that you might pick up include things like:
 
 - write a HTTP VFS for PGlite (in Typescript) that allows an instance to load a database from a HTTP or S3 end point, using HTTP range requests
 - improve the OPFS VFS so that it works in Safari, this probably involves creating a mini-filesystem (using b-trees) that maps multiple files to a single file
