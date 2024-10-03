@@ -1,22 +1,25 @@
 "use client"
 
 import { v4 as uuidv4 } from "uuid"
-import { useShape, getShapeStream } from "@electric-sql/react"
+import {
+  useShape,
+  getShapeStream,
+  SerializedShapeData,
+} from "@electric-sql/react"
 import "./Example.css"
 import { matchStream } from "./match-stream"
-import { Offset, ShapeData } from "@electric-sql/client/*"
+import { Offset, ShapeStreamOptions } from "@electric-sql/client"
 import { useEffect, useOptimistic, useState } from "react"
-import { SSShape } from "./shape"
 
-let offset: Offset | undefined
-let shapeId: string | undefined = undefined
+const shapePosition: { shapeId?: string; offset?: Offset } = {
+  shapeId: undefined,
+  offset: `-1`,
+}
 
-const itemShape = () => {
+const baseItemShape: () => ShapeStreamOptions = () => {
   if (typeof window !== `undefined`) {
     return {
       url: new URL(`/shape-proxy/items`, window?.location.origin).href,
-      offset,
-      shapeId,
     }
   } else {
     const controller = new AbortController()
@@ -25,8 +28,15 @@ const itemShape = () => {
       url: new URL(`https://not-sure-how-this-works.com/shape-proxy/items`)
         .href,
       signal: controller.signal,
+      subscribe: false,
     }
   }
+}
+const itemShape = () => ({ ...baseItemShape(), ...shapePosition })
+
+const updateShapePosition = (offset: Offset, shapeId?: string) => {
+  shapePosition.offset = offset
+  shapePosition.shapeId = shapeId
 }
 
 type Item = { id: string }
@@ -67,22 +77,20 @@ async function clearItems() {
   return await Promise.all([findUpdatePromise, fetchPromise])
 }
 
-export default function Home({ shape }: { shape: SSShape }) {
+export default function Home({
+  shapes,
+}: {
+  shapes: { items: SerializedShapeData }
+}) {
   const [isClient, setIsClient] = useState(false)
   useEffect(() => setIsClient(true), [])
 
-  if (!offset) {
-    offset = shape.offset
-    shapeId = shape.shapeId ?? undefined
-  }
-
-  const shapeData = new Map(
-    Object.entries(shape?.data ?? new Map())
-  ) as ShapeData
+  const { shapeId, offset, data } = shapes.items
+  updateShapePosition(offset, shapeId)
 
   const { data: items } = useShape({
     ...itemShape(),
-    shapeData,
+    shapeData: new Map(Object.entries(data ?? new Map())),
   }) as unknown as {
     data: Item[]
   }

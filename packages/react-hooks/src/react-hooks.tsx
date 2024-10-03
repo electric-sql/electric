@@ -5,12 +5,18 @@ import {
   Row,
   GetExtensions,
   ShapeData,
+  Offset,
 } from '@electric-sql/client'
 import React from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
 
 type UnknownShape = Shape<Row<unknown>>
 type UnknownShapeStream = ShapeStream<Row<unknown>>
+export type SerializedShapeData = {
+  offset: Offset
+  shapeId: string | undefined
+  data?: Record<string, unknown>
+}
 
 const streamCache = new Map<string, UnknownShapeStream>()
 const shapeCache = new Map<UnknownShapeStream, UnknownShape>()
@@ -164,4 +170,15 @@ export function useShape<
   }, [shape, selector])
 
   return useShapeData()
+}
+export function getSerializedShape(
+  options: ShapeStreamOptions
+): SerializedShapeData {
+  const shapeStream = getShapeStream(options)
+  const shape = getShape(shapeStream)
+  return {
+    shapeId: shapeStream.shapeId,
+    offset: shapeStream.offset,
+    data: Object.fromEntries(shape.valueSync),
+  }
 }
