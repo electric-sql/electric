@@ -274,7 +274,7 @@ However, even just with the first release of Electric Next you can already sync 
 
 - syncing data into local apps using the [TypeScript](/docs/api/clients/typescript) and [Elixir](/docs/api/clients/elixir) clients
 - replacing hot-path data fetching and database queries in apps using [React](/docs/api/integrations/react), [MobX](/docs/api/integrations/react) and [TanStack](/docs/api/integrations/tanstack)
-- maintain live caches with automatic invalidation, as per [our Redis example](https://github.com/electric-sql/electric/blob/main/examples/redis-client/src/index.ts)
+- maintain live caches with automatic invalidation, as per [our Redis example](https://github.com/electric-sql/electric/blob/main/examples/redis-sync/src/index.ts)
 
 ### Roadmap
 
