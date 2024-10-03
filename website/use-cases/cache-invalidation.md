@@ -95,13 +95,13 @@ You don't need to manage cache invalidation seperately or set expiry dates of TT
 
 ## Real world example
 
-Let's look at a real world example, syncing data into a Redis cache. You can see the [full source code here](https://github.com/electric-sql/electric/tree/main/examples/redis-client).
+Let's look at a real world example, syncing data into a Redis cache. You can see the [full source code here](https://github.com/electric-sql/electric/tree/main/examples/redis-sync).
 
 ### Maintaining a Redis cache
 
 Many applications use [Redis](https://redis.io/docs/latest/develop/use/client-side-caching/) as a local cache. With Electric, you can define a [Shape](/docs/guides/shapes) and sync it into a [Redis hash](https://redis.io/docs/latest/develop/data-types/hashes/). The shape comes through as a [log](/docs/api/http#shape-log) of insert, update and delete messages. Apply these to the Redis hash and the cache automatically stays up-to-date:
 
-<<< @../../examples/redis-client/src/index.ts
+<<< @../../examples/redis-sync/src/index.ts
 
 ## Next steps
 
