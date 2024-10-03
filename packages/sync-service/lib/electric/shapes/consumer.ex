@@ -119,28 +119,20 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, [], state}
   end
 
-  def handle_cast(
-        {:snapshot_failed, shape_id,
-         %DBConnection.ConnectionError{reason: :queue_timeout} = error, _stacktrace},
-        %{shape_id: shape_id} = state
-      ) do
-    Logger.warning(
-      "Snapshot creation failed for #{shape_id} because of a connection pool queue timeout"
-    )
+  def handle_cast({:snapshot_failed, shape_id, error, stacktrace}, %{shape_id: shape_id} = state) do
+    if match?(%DBConnection.ConnectionError{reason: :queue_timeout}, error),
+      do:
+        Logger.warning(
+          "Snapshot creation failed for #{shape_id} because of a connection pool queue timeout"
+        ),
+      else:
+        Logger.error(
+          "Snapshot creation failed for #{shape_id} because of:\n#{Exception.format(:error, error, stacktrace)}"
+        )
 
     state = reply_to_snapshot_waiters({:error, error}, state)
     state = cleanup(state)
     {:stop, :normal, state}
-  end
-
-  def handle_cast({:snapshot_failed, shape_id, error, stacktrace}, %{shape_id: shape_id} = state) do
-    Logger.error(
-      "Snapshot creation failed for #{shape_id} because of:\n#{Exception.format(:error, error, stacktrace)}"
-    )
-
-    state = reply_to_snapshot_waiters({:error, error}, state)
-    state = cleanup(state)
-    {:stop, {:error, error}, state}
   end
 
   def handle_cast({:snapshot_exists, shape_id}, %{shape_id: shape_id} = state) do

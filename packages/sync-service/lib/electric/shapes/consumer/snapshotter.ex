@@ -35,6 +35,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           %{
             db_pool: pool,
             storage: storage,
+            run_with_conn_fn: run_with_conn_fn,
             create_snapshot_fn: create_snapshot_fn,
             prepare_tables_fn: prepare_tables_fn_or_mfa
           } = state
@@ -48,10 +49,13 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               try do
                 # Grab the same connection from the pool for both operations to
                 # ensure we only queue for it once.
-                DBConnection.run(pool, fn pool_conn ->
-                  Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [pool_conn, affected_tables])
-                  apply(create_snapshot_fn, [consumer, shape_id, shape, pool_conn, storage])
-                end)
+                apply(run_with_conn_fn, [
+                  pool,
+                  fn pool_conn ->
+                    Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [pool_conn, affected_tables])
+                    apply(create_snapshot_fn, [consumer, shape_id, shape, pool_conn, storage])
+                  end
+                ])
               rescue
                 error ->
                   GenServer.cast(consumer, {:snapshot_failed, shape_id, error, __STACKTRACE__})

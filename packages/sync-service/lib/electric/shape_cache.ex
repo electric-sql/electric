@@ -26,7 +26,6 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback clean_shape(shape_id(), keyword()) :: :ok
   @callback clean_all_shapes(GenServer.name()) :: :ok
   @callback has_shape?(shape_id(), keyword()) :: boolean()
-  @callback cast(term(), keyword()) :: :ok
 end
 
 defmodule Electric.ShapeCache do
@@ -68,6 +67,7 @@ defmodule Electric.ShapeCache do
             # NimbleOptions has no "implementation of protocol" type
             persistent_kv: [type: :any, required: true],
             db_pool: [type: {:or, [:atom, :pid]}, default: Electric.DbPool],
+            run_with_conn_fn: [type: {:fun, 2}, default: &DBConnection.run/2],
             prepare_tables_fn: [type: {:or, [:mfa, {:fun, 2}]}, required: true],
             create_snapshot_fn: [
               type: {:fun, 5},
@@ -79,12 +79,6 @@ defmodule Electric.ShapeCache do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
       GenStage.start_link(__MODULE__, Map.new(opts), name: opts[:name])
     end
-  end
-
-  @impl Electric.ShapeCacheBehaviour
-  def cast(message, opts) do
-    server = Access.get(opts, :server, __MODULE__)
-    GenStage.cast(server, message)
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -201,6 +195,7 @@ defmodule Electric.ShapeCache do
       shape_status: opts.shape_status,
       db_pool: opts.db_pool,
       persistent_state: persistent_state,
+      run_with_conn_fn: opts.run_with_conn_fn,
       create_snapshot_fn: opts.create_snapshot_fn,
       prepare_tables_fn: opts.prepare_tables_fn,
       log_producer: opts.log_producer,
@@ -310,10 +305,8 @@ defmodule Electric.ShapeCache do
   end
 
   def handle_call({:truncate, shape_id}, _from, state) do
-    with {:ok, cleaned_up_shape} <- clean_up_shape(state, shape_id) do
-      Logger.info(
-        "Truncating and rotating shape id, previous shape id #{shape_id}, definition: #{inspect(cleaned_up_shape)}"
-      )
+    with :ok <- clean_up_shape(state, shape_id) do
+      Logger.info("Truncating and rotating shape id, previous shape id #{shape_id} cleaned up")
     end
 
     {:reply, :ok, [], state}
@@ -321,8 +314,8 @@ defmodule Electric.ShapeCache do
 
   def handle_call({:clean, shape_id}, _from, state) do
     # ignore errors when cleaning up non-existant shape id
-    with {:ok, cleaned_up_shape} <- clean_up_shape(state, shape_id) do
-      Logger.info("Cleaning up shape #{shape_id}, definition: #{inspect(cleaned_up_shape)}")
+    with :ok <- clean_up_shape(state, shape_id) do
+      Logger.info("Cleaning up shape #{shape_id}")
     end
 
     {:reply, :ok, [], state}
@@ -340,6 +333,8 @@ defmodule Electric.ShapeCache do
       state.electric_instance_id,
       shape_id
     )
+
+    :ok
   end
 
   defp clean_up_all_shapes(state) do
@@ -379,6 +374,7 @@ defmodule Electric.ShapeCache do
                {__MODULE__, %{server: state.name, shape_meta_table: state.shape_meta_table}},
              registry: state.registry,
              db_pool: state.db_pool,
+             run_with_conn_fn: state.run_with_conn_fn,
              prepare_tables_fn: state.prepare_tables_fn,
              create_snapshot_fn: state.create_snapshot_fn
            ) do

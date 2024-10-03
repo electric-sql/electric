@@ -37,6 +37,8 @@ defmodule Electric.Shapes.ConsumerSupervisor do
           electric_instance_id: electric_instance_id,
           shape_id: shape_id
         })
+
+        :ok
     end
   end
 
