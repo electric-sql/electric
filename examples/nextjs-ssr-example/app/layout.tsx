@@ -1,6 +1,5 @@
 import "./style.css"
 import "./App.css"
-import Image from "next/image"
 
 export const metadata = {
   title: `Next.js Forms Example`,
@@ -17,7 +16,7 @@ export default function RootLayout({
       <body>
         <div className="App">
           <header className="App-header">
-            <Image src="/logo.svg" className="App-logo" alt="logo" />
+            <img src="/logo.svg" className="App-logo" alt="logo" />
             {children}
           </header>
         </div>
