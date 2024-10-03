@@ -54,6 +54,8 @@ defmodule Electric.Shapes.Consumer do
 
     Logger.metadata(shape_id: config.shape_id)
 
+    Process.flag(:trap_exit, true)
+
     :ok = ShapeCache.Storage.initialise(storage)
 
     {:ok, latest_offset, snapshot_xmin} = ShapeCache.Storage.get_current_position(storage)
@@ -99,12 +101,11 @@ defmodule Electric.Shapes.Consumer do
     {:stop, :normal, :ok, state}
   end
 
-  def handle_cast({:await_snapshot_start, from}, %{snapshot_started: true} = state) do
-    GenServer.reply(from, :started)
-    {:noreply, [], state}
+  def handle_call(:await_snapshot_start, _from, %{snapshot_started: true} = state) do
+    {:reply, :started, [], state}
   end
 
-  def handle_cast({:await_snapshot_start, from}, %{awaiting_snapshot_start: waiters} = state) do
+  def handle_call(:await_snapshot_start, from, %{awaiting_snapshot_start: waiters} = state) do
     Logger.debug("Starting a wait on the snapshot #{state.shape_id} for #{inspect(from)}}")
 
     {:noreply, [], %{state | awaiting_snapshot_start: [from | waiters]}}
@@ -140,6 +141,10 @@ defmodule Electric.Shapes.Consumer do
     state = set_snapshot_xmin(state.snapshot_xmin, state)
     state = set_snapshot_started(state)
     {:noreply, [], state}
+  end
+
+  def terminate(_reason, state) do
+    reply_to_snapshot_waiters({:error, "Shape terminated before snapshot was ready"}, state)
   end
 
   # `Shapes.Dispatcher` only works with single-events, so we can safely assert

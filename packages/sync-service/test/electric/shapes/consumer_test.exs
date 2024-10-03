@@ -656,6 +656,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       shape_cache_opts = [
         server: shape_cache_name,
+        electric_instance_id: ctx.electric_instance_id,
         shape_meta_table: __MODULE__.ShapeMeta
       ]
 

@@ -155,12 +155,18 @@ defmodule Electric.ShapeCache do
   def await_snapshot_start(shape_id, opts \\ []) when is_binary(shape_id) do
     table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
+    electric_instance_id = Access.fetch!(opts, :electric_instance_id)
 
-    if shape_status.snapshot_started?(table, shape_id) do
-      :started
-    else
-      server = Access.get(opts, :server, __MODULE__)
-      GenStage.call(server, {:await_snapshot_start, shape_id})
+    cond do
+      shape_status.snapshot_started?(table, shape_id) ->
+        :started
+
+      !shape_status.get_existing_shape(table, shape_id) ->
+        {:error, :unknown}
+
+      true ->
+        server = Electric.Shapes.Consumer.name(electric_instance_id, shape_id)
+        GenServer.call(server, :await_snapshot_start)
     end
   end
 
@@ -281,24 +287,6 @@ defmodule Electric.ShapeCache do
     {:reply, {shape_id, latest_offset}, [], state}
   end
 
-  def handle_call({:await_snapshot_start, shape_id}, from, %{shape_status: shape_status} = state) do
-    cond do
-      not is_known_shape_id?(state, shape_id) ->
-        {:reply, {:error, :unknown}, [], state}
-
-      shape_status.snapshot_started?(state.persistent_state, shape_id) ->
-        {:reply, :started, [], state}
-
-      true ->
-        GenServer.cast(
-          Electric.Shapes.Consumer.name(state.electric_instance_id, shape_id),
-          {:await_snapshot_start, from}
-        )
-
-        {:noreply, [], state}
-    end
-  end
-
   def handle_call({:wait_shape_id, shape_id}, _from, %{shape_status: shape_status} = state) do
     {:reply, !is_nil(shape_status.get_existing_shape(state.persistent_state, shape_id)), [],
      state}
@@ -344,10 +332,6 @@ defmodule Electric.ShapeCache do
     for shape_id <- shape_ids do
       clean_up_shape(state, shape_id)
     end
-  end
-
-  defp is_known_shape_id?(state, shape_id) do
-    !!state.shape_status.get_existing_shape(state.persistent_state, shape_id)
   end
 
   defp recover_shapes(state) do

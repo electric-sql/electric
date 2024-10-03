@@ -90,6 +90,7 @@ defmodule Support.ComponentSetup do
 
     shape_cache_opts = [
       server: server,
+      electric_instance_id: ctx.electric_instance_id,
       shape_meta_table: shape_meta_table,
       storage: ctx.storage
     ]
