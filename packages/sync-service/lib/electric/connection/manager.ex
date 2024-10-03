@@ -20,7 +20,7 @@ defmodule Electric.Connection.Manager do
          connection_opts: [...],
          replication_opts: [...],
          pool_opts: [...],
-         persistent_kv: ...}
+         timeline_opts: [...]}
       ]
 
       Supervisor.start_link(children, strategy: :one_for_one)
@@ -34,8 +34,8 @@ defmodule Electric.Connection.Manager do
       :replication_opts,
       # Database connection pool options
       :pool_opts,
-      # Application's persistent key-value storage reference
-      :persistent_kv,
+      # Options specific to `Electric.Timeline`
+      :timeline_opts,
       # PID of the replication client
       :replication_client_pid,
       # PID of the Postgres connection lock
@@ -55,7 +55,8 @@ defmodule Electric.Connection.Manager do
       # PostgreSQL system identifier
       :pg_system_identifier,
       # PostgreSQL timeline ID
-      :pg_timeline_id
+      :pg_timeline_id,
+      :tenant_id
     ]
   end
 
@@ -70,17 +71,25 @@ defmodule Electric.Connection.Manager do
           | {:connection_opts, Keyword.t()}
           | {:replication_opts, Keyword.t()}
           | {:pool_opts, Keyword.t()}
-          | {:persistent_kv, map()}
+          | {:timeline_opts, Keyword.t()}
 
   @type options :: [option]
-
-  @name __MODULE__
 
   @lock_status_logging_interval 10_000
 
   @spec start_link(options) :: GenServer.on_start()
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: @name)
+    GenServer.start_link(__MODULE__, opts, name: name(opts))
+  end
+
+  def name(electric_instance_id, tenant_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  end
+
+  def name(opts) do
+    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+    tenant_id = Keyword.fetch!(opts, :tenant_id)
+    name(electric_instance_id, tenant_id)
   end
 
   @doc """
@@ -128,17 +137,18 @@ defmodule Electric.Connection.Manager do
 
     pool_opts = Keyword.fetch!(opts, :pool_opts)
 
-    persistent_kv = Keyword.fetch!(opts, :persistent_kv)
+    timeline_opts = Keyword.fetch!(opts, :timeline_opts)
 
     state =
       %State{
         connection_opts: connection_opts,
         replication_opts: replication_opts,
         pool_opts: pool_opts,
-        persistent_kv: persistent_kv,
+        timeline_opts: timeline_opts,
         pg_lock_acquired: false,
         backoff: {:backoff.init(1000, 10_000), nil},
-        electric_instance_id: Keyword.fetch!(opts, :electric_instance_id)
+        electric_instance_id: Keyword.fetch!(opts, :electric_instance_id),
+        tenant_id: Keyword.fetch!(opts, :tenant_id)
       }
 
     # Try to acquire the connection lock on the replication slot
@@ -224,11 +234,12 @@ defmodule Electric.Connection.Manager do
         check_result =
           Electric.Timeline.check(
             {state.pg_system_identifier, state.pg_timeline_id},
-            state.persistent_kv
+            state.timeline_opts
           )
 
         {:ok, shapes_sup_pid} =
           Electric.Connection.Supervisor.start_shapes_supervisor(
+            tenant_id: state.tenant_id,
             purge_all_shapes?: check_result == :timeline_changed
           )
 

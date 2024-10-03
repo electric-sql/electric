@@ -45,6 +45,7 @@ defmodule Electric.Connection.Supervisor do
         {
           Electric.Shapes.Supervisor,
           electric_instance_id: app_config.electric_instance_id,
+          tenant_id: Keyword.fetch!(opts, :tenant_id),
           shape_cache: shape_cache_spec,
           log_collector: shape_log_collector_spec
         },

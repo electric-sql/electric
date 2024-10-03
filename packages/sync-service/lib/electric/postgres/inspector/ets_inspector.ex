@@ -8,15 +8,28 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   ## Public API
 
-  def start_link(opts),
-    do:
+  def name(electric_instance_id, tenant_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  end
+
+  def name(opts) do
+    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+    tenant_id = Keyword.fetch!(opts, :tenant_id)
+    name(electric_instance_id, tenant_id)
+  end
+
+  def start_link(opts) do
+    {:ok, pid} =
       GenServer.start_link(
         __MODULE__,
         Map.new(opts)
         |> Map.put_new(:pg_info_table, @default_pg_info_table)
         |> Map.put_new(:pg_relation_table, @default_pg_relation_table),
-        name: Access.get(opts, :name, __MODULE__)
+        name: Keyword.get_lazy(opts, :name, fn -> name(opts) end)
       )
+
+    {:ok, pid}
+  end
 
   @impl Electric.Postgres.Inspector
   def load_relation(table, opts) do
@@ -30,10 +43,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   end
 
   defp clean_relation(rel, opts_or_state) do
-    pg_relation_ets_table =
-      Access.get(opts_or_state, :pg_relation_table, @default_pg_relation_table)
-
-    pg_info_ets_table = Access.get(opts_or_state, :pg_info_table, @default_pg_info_table)
+    pg_relation_ets_table = get_relation_table(opts_or_state)
+    pg_info_ets_table = get_column_info_table(opts_or_state)
 
     # Delete all tables that are associated with the relation
     tables_from_ets(rel, opts_or_state)
@@ -58,7 +69,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   end
 
   defp clean_column_info(table, opts_or_state) do
-    ets_table = Access.get(opts_or_state, :pg_info_table, @default_pg_info_table)
+    ets_table = get_column_info_table(opts_or_state)
 
     :ets.delete(ets_table, {table, :columns})
   end
@@ -73,8 +84,11 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   @impl GenServer
   def init(opts) do
-    pg_info_table = :ets.new(opts.pg_info_table, [:named_table, :public, :set])
-    pg_relation_table = :ets.new(opts.pg_relation_table, [:named_table, :public, :bag])
+    # Each tenant creates its own ETS table.
+    # Name needs to be an atom but we don't want to dynamically create atoms.
+    # Instead, we will use the reference to the table that is returned by `:ets.new`
+    pg_info_table = :ets.new(opts.pg_info_table, [:public, :set])
+    pg_relation_table = :ets.new(opts.pg_relation_table, [:public, :bag])
 
     state = %{
       pg_info_table: pg_info_table,
@@ -141,6 +155,11 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     e -> {:reply, {:error, e, __STACKTRACE__}, state}
   end
 
+  @impl GenServer
+  def handle_call(:get_column_info_table, _from, state) do
+    {:reply, state.pg_info_table, state}
+  end
+
   @pg_rel_position 2
   defp relation_from_ets(table, opts_or_state) do
     ets_table = Access.get(opts_or_state, :pg_info_table, @default_pg_info_table)
@@ -150,7 +169,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   @pg_table_idx 1
   defp tables_from_ets(relation, opts_or_state) do
-    ets_table = Access.get(opts_or_state, :pg_relation_table, @default_pg_relation_table)
+    ets_table = get_relation_table(opts_or_state)
 
     :ets.lookup(ets_table, {relation, :relation_to_table})
     |> Enum.map(&elem(&1, @pg_table_idx))
@@ -158,8 +177,18 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   @column_info_position 2
   defp column_info_from_ets(table, opts_or_state) do
-    ets_table = Access.get(opts_or_state, :pg_info_table, @default_pg_info_table)
+    ets_table = get_column_info_table(opts_or_state)
 
     :ets.lookup_element(ets_table, {table, :columns}, @column_info_position, :not_found)
   end
+
+  # When called from within the GenServer it is passed the state
+  # which contains the reference to the ETS table.
+  # When called from outside the GenServer it is passed the opts keyword list
+  # which contains a reference to the GenServer.
+  defp get_column_info_table(%{pg_info_table: ets_table}), do: ets_table
+  defp get_column_info_table(opts), do: GenServer.call(opts[:server], :get_column_info_table)
+
+  defp get_relation_table(%{pg_relation_table: ets_table}), do: ets_table
+  defp get_relation_table(opts), do: GenServer.call(opts[:server], :get_relation_table)
 end
