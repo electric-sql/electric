@@ -199,7 +199,6 @@ defmodule Electric.ShapeCache do
       inspector: opts.inspector,
       shape_meta_table: opts.shape_meta_table,
       shape_status: opts.shape_status,
-      awaiting_snapshot_start: %{},
       db_pool: opts.db_pool,
       persistent_state: persistent_state,
       create_snapshot_fn: opts.create_snapshot_fn,
