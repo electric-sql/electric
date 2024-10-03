@@ -10,12 +10,12 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
   require Logger
 
-  def name(%{electric_instance_id: electric_instance_id, shape_id: shape_id}) do
-    name(electric_instance_id, shape_id)
+  def name(%{electric_instance_id: electric_instance_id, tenant_id: tenant_id, shape_id: shape_id}) do
+    name(electric_instance_id, tenant_id, shape_id)
   end
 
-  def name(electric_instance_id, shape_id) when is_binary(shape_id) do
-    Electric.Application.process_name(electric_instance_id, __MODULE__, shape_id)
+  def name(electric_instance_id, tenant_id, shape_id) when is_binary(shape_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_id)
   end
 
   def start_link(config) do
@@ -27,9 +27,14 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   end
 
   def handle_continue(:start_snapshot, state) do
-    %{shape_id: shape_id, shape: shape, electric_instance_id: electric_instance_id} = state
+    %{
+      shape_id: shape_id,
+      shape: shape,
+      electric_instance_id: electric_instance_id,
+      tenant_id: tenant_id
+    } = state
 
-    case Shapes.Consumer.whereis(electric_instance_id, shape_id) do
+    case Shapes.Consumer.whereis(electric_instance_id, tenant_id, shape_id) do
       consumer when is_pid(consumer) ->
         if not Storage.snapshot_started?(state.storage) do
           %{

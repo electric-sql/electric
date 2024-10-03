@@ -24,6 +24,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       }
     }
   }
+  @tenant_id "test_tenant"
 
   @snapshot_offset LogOffset.first()
   @snapshot_offset_encoded to_string(@snapshot_offset)
@@ -534,7 +535,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   defp start_storage(%{module: module} = context) do
     opts = module |> opts(context) |> module.shared_opts()
-    shape_opts = module.for_shape(@shape_id, opts)
+    shape_opts = module.for_shape(@shape_id, @tenant_id, opts)
     {:ok, _} = module.start_link(shape_opts)
     {:ok, %{module: module, opts: shape_opts}}
   end

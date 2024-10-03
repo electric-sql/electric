@@ -38,19 +38,15 @@ defmodule Electric.ShapeCache do
 
   @type shape_id :: Electric.ShapeCacheBehaviour.shape_id()
 
-  @default_shape_meta_table :shape_meta_table
-
-  @genserver_name_schema {:or, [:atom, {:tuple, [:atom, :atom, :any]}]}
+  @name_schema_tuple {:tuple, [:atom, :atom, :any]}
+  @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   @schema NimbleOptions.new!(
             name: [
               type: @genserver_name_schema,
-              default: __MODULE__
+              required: false
             ],
             electric_instance_id: [type: :atom, required: true],
-            shape_meta_table: [
-              type: :atom,
-              default: @default_shape_meta_table
-            ],
+            tenant_id: [type: :string, required: true],
             log_producer: [type: @genserver_name_schema, required: true],
             consumer_supervisor: [type: @genserver_name_schema, required: true],
             storage: [type: :mod_arg, required: true],
@@ -58,11 +54,8 @@ defmodule Electric.ShapeCache do
             inspector: [type: :mod_arg, required: true],
             shape_status: [type: :atom, default: Electric.ShapeCache.ShapeStatus],
             registry: [type: {:or, [:atom, :pid]}, required: true],
-            db_pool: [type: {:or, [:atom, :pid]}, default: Electric.DbPool],
-            run_with_conn_fn: [
-              type: {:fun, 2},
-              default: &Shapes.Consumer.Snapshotter.run_with_conn/2
-            ],
+            db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
+            run_with_conn_fn: [type: {:fun, 2}, default: &Shapes.Consumer.Snapshotter.run_with_conn/2],
             prepare_tables_fn: [type: {:or, [:mfa, {:fun, 2}]}, required: true],
             create_snapshot_fn: [
               type: {:fun, 5},
@@ -71,15 +64,44 @@ defmodule Electric.ShapeCache do
             purge_all_shapes?: [type: :boolean, required: false]
           )
 
+  def name(electric_instance_id, tenant_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  end
+
+  def name(opts) do
+    electric_instance_id = Access.fetch!(opts, :electric_instance_id)
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    name(electric_instance_id, tenant_id)
+  end
+
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
-      GenServer.start_link(__MODULE__, Map.new(opts), name: opts[:name])
+      electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+      tenant_id = Keyword.fetch!(opts, :tenant_id)
+      name = Keyword.get(opts, :name, name(electric_instance_id, tenant_id))
+
+      db_pool =
+        Keyword.get(
+          opts,
+          :db_pool,
+          Electric.Application.process_name(
+            Keyword.fetch!(opts, :electric_instance_id),
+            Keyword.fetch!(opts, :tenant_id),
+            Electric.DbPool
+          )
+        )
+
+      GenServer.start_link(
+        __MODULE__,
+        Map.new(opts) |> Map.put(:db_pool, db_pool) |> Map.put(:name, name),
+        name: name
+      )
     end
   end
 
   @impl Electric.ShapeCacheBehaviour
   def get_shape(shape, opts \\ []) do
-    table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
+    table = get_shape_meta_table(opts)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
     shape_status.get_existing_shape(table, shape)
   end
@@ -90,7 +112,7 @@ defmodule Electric.ShapeCache do
     if shape_state = get_shape(shape, opts) do
       shape_state
     else
-      server = Access.get(opts, :server, __MODULE__)
+      server = Access.get(opts, :server, name(opts))
       GenServer.call(server, {:create_or_wait_shape_id, shape})
     end
   end
@@ -99,7 +121,7 @@ defmodule Electric.ShapeCache do
   @spec update_shape_latest_offset(shape_id(), LogOffset.t(), opts :: keyword()) ::
           :ok | {:error, term()}
   def update_shape_latest_offset(shape_id, latest_offset, opts) do
-    meta_table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
+    meta_table = get_shape_meta_table(opts)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
     if shape_status.set_latest_offset(meta_table, shape_id, latest_offset) do
@@ -120,30 +142,31 @@ defmodule Electric.ShapeCache do
   @impl Electric.ShapeCacheBehaviour
   @spec clean_shape(shape_id(), keyword()) :: :ok
   def clean_shape(shape_id, opts) do
-    server = Access.get(opts, :server, __MODULE__)
+    server = Access.get(opts, :server, name(opts))
     GenServer.call(server, {:clean, shape_id})
   end
 
   @impl Electric.ShapeCacheBehaviour
   @spec clean_all_shapes(keyword()) :: :ok
   def clean_all_shapes(opts) do
-    server = Access.get(opts, :server, __MODULE__)
+    server = Access.get(opts, :server, name(opts))
     GenServer.call(server, {:clean_all})
   end
 
   @impl Electric.ShapeCacheBehaviour
   @spec handle_truncate(shape_id(), keyword()) :: :ok
   def handle_truncate(shape_id, opts \\ []) do
-    server = Access.get(opts, :server, __MODULE__)
+    server = Access.get(opts, :server, name(opts))
     GenServer.call(server, {:truncate, shape_id})
   end
 
   @impl Electric.ShapeCacheBehaviour
   @spec await_snapshot_start(shape_id(), keyword()) :: :started | {:error, term()}
   def await_snapshot_start(shape_id, opts \\ []) when is_binary(shape_id) do
-    table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
+    table = get_shape_meta_table(opts)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
     electric_instance_id = Access.fetch!(opts, :electric_instance_id)
+    tenant_id = Access.fetch!(opts, :tenant_id)
 
     cond do
       shape_status.snapshot_started?(table, shape_id) ->
@@ -153,39 +176,46 @@ defmodule Electric.ShapeCache do
         {:error, :unknown}
 
       true ->
-        server = Electric.Shapes.Consumer.name(electric_instance_id, shape_id)
+        server = Electric.Shapes.Consumer.name(electric_instance_id, tenant_id, shape_id)
         GenServer.call(server, :await_snapshot_start)
     end
   end
 
   @impl Electric.ShapeCacheBehaviour
   def has_shape?(shape_id, opts \\ []) do
-    table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
+    table = get_shape_meta_table(opts)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
     if shape_status.get_existing_shape(table, shape_id) do
       true
     else
-      server = Access.get(opts, :server, __MODULE__)
+      server = Access.get(opts, :server, name(opts))
       GenServer.call(server, {:wait_shape_id, shape_id})
     end
   end
 
   @impl GenServer
   def init(opts) do
+    # Each tenant creates its own ETS table for storing shape meta data.
+    # We don't use a named table to avoid creating atoms dynamically for each tenant.
+    # Instead, we use the reference to the table that is returned by `:ets.new`.
+    # This requires storing the reference in the GenServer and exposing it through a `get_shape_meta_table` method.
+    meta_table = :ets.new(:shape_meta_table, [:public, :ordered_set])
+
     {:ok, shape_status_state} =
       opts.shape_status.initialise(
-        shape_meta_table: opts.shape_meta_table,
+        shape_meta_table: meta_table,
         storage: opts.storage
       )
 
     state = %{
       name: opts.name,
       electric_instance_id: opts.electric_instance_id,
+      tenant_id: opts.tenant_id,
       storage: opts.storage,
       chunk_bytes_threshold: opts.chunk_bytes_threshold,
       inspector: opts.inspector,
-      shape_meta_table: opts.shape_meta_table,
+      shape_meta_table: meta_table,
       shape_status: opts.shape_status,
       db_pool: opts.db_pool,
       shape_status_state: shape_status_state,
@@ -261,10 +291,16 @@ defmodule Electric.ShapeCache do
     {:reply, :ok, state}
   end
 
+  # Returns a reference to the ETS table that stores shape meta data for this tenant
+  def handle_call(:get_shape_meta_table, _from, %{shape_meta_table: table} = state) do
+    {:reply, table, state}
+  end
+
   defp clean_up_shape(state, shape_id) do
     Electric.Shapes.ConsumerSupervisor.stop_shape_consumer(
       state.consumer_supervisor,
       state.electric_instance_id,
+      state.tenant_id,
       shape_id
     )
 
@@ -294,6 +330,7 @@ defmodule Electric.ShapeCache do
              state.consumer_supervisor,
              electric_instance_id: state.electric_instance_id,
              inspector: state.inspector,
+             tenant_id: state.tenant_id,
              shape_id: shape_id,
              shape: shape,
              shape_status: {state.shape_status, state.shape_status_state},
@@ -301,18 +338,29 @@ defmodule Electric.ShapeCache do
              chunk_bytes_threshold: state.chunk_bytes_threshold,
              log_producer: state.log_producer,
              shape_cache:
-               {__MODULE__, %{server: state.name, shape_meta_table: state.shape_meta_table}},
+               {__MODULE__,
+                %{
+                  server: state.name,
+                  shape_meta_table: state.shape_meta_table,
+                  electric_instance_id: state.electric_instance_id,
+                  tenant_id: state.tenant_id
+                }},
              registry: state.registry,
              db_pool: state.db_pool,
              run_with_conn_fn: state.run_with_conn_fn,
              prepare_tables_fn: state.prepare_tables_fn,
              create_snapshot_fn: state.create_snapshot_fn
            ) do
-      consumer = Shapes.Consumer.name(state.electric_instance_id, shape_id)
+      consumer = Shapes.Consumer.name(state.electric_instance_id, state.tenant_id, shape_id)
 
       {:ok, snapshot_xmin, latest_offset} = Shapes.Consumer.initial_state(consumer)
 
       {:ok, pid, snapshot_xmin, latest_offset}
     end
+  end
+
+  defp get_shape_meta_table(opts) do
+    server = Access.get(opts, :server, name(opts))
+    GenStage.call(server, :get_shape_meta_table)
   end
 end

@@ -65,6 +65,7 @@ defmodule Electric.ShapeCacheTest do
   describe "get_or_create_shape_id/2" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_no_pool,
@@ -95,6 +96,7 @@ defmodule Electric.ShapeCacheTest do
   describe "get_or_create_shape_id/2 shape initialization" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -117,7 +119,7 @@ defmodule Electric.ShapeCacheTest do
       assert offset == @zero_offset
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
       Process.sleep(100)
-      shape_storage = Storage.for_shape(shape_id, storage)
+      shape_storage = Storage.for_shape(shape_id, ctx.tenant_id, storage)
       assert Storage.snapshot_started?(shape_storage)
     end
 
@@ -197,11 +199,35 @@ defmodule Electric.ShapeCacheTest do
 
       assert_received {:called, :create_snapshot_fn}
     end
+#
+#    test "no-ops and warns if snapshot xmin is assigned to unknown shape_id", ctx do
+#      shape_id = "foo"
+#
+#      %{shape_cache_opts: opts} =
+#        with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
+#          prepare_tables_fn: @prepare_tables_noop
+#        )
+#
+#      shape_meta_table = Access.fetch!(opts, :shape_meta_table)
+#
+#      log =
+#        capture_log(fn ->
+#          GenServer.cast(Process.whereis(opts[:server]), {:snapshot_xmin_known, shape_id, 10})
+#          Process.sleep(10)
+#        end)
+#
+#      assert log =~
+#               "Got snapshot information for a #{shape_id}, that shape id is no longer valid. Ignoring."
+#
+#      # should have nothing in the meta table
+#      assert :ets.next_lookup(shape_meta_table, :_) == :"$end_of_table"
+#    end
   end
 
   describe "get_or_create_shape_id/2 against real db" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -224,10 +250,14 @@ defmodule Electric.ShapeCacheTest do
       :ok
     end
 
-    test "creates initial snapshot from DB data", %{storage: storage, shape_cache_opts: opts} do
+    test "creates initial snapshot from DB data", %{
+      storage: storage,
+      shape_cache_opts: opts,
+      tenant_id: tenant_id
+    } do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
-      storage = Storage.for_shape(shape_id, storage)
+      storage = Storage.for_shape(shape_id, tenant_id, storage)
       assert {@zero_offset, stream} = Storage.get_snapshot(storage)
 
       assert [%{"value" => %{"value" => "test1"}}, %{"value" => %{"value" => "test2"}}] =
@@ -247,7 +277,8 @@ defmodule Electric.ShapeCacheTest do
     test "uses correct display settings when querying initial data", %{
       pool: pool,
       storage: storage,
-      shape_cache_opts: opts
+      shape_cache_opts: opts,
+      tenant_id: tenant_id
     } do
       shape =
         update_in(
@@ -290,7 +321,7 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
-      storage = Storage.for_shape(shape_id, storage)
+      storage = Storage.for_shape(shape_id, tenant_id, storage)
       assert {@zero_offset, stream} = Storage.get_snapshot(storage)
 
       assert [
@@ -309,7 +340,11 @@ defmodule Electric.ShapeCacheTest do
              } = map
     end
 
-    test "updates latest offset correctly", %{shape_cache_opts: opts, storage: storage} do
+    test "updates latest offset correctly", %{
+      shape_cache_opts: opts,
+      tenant_id: tenant_id,
+      storage: storage
+    } do
       {shape_id, initial_offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
@@ -329,7 +364,7 @@ defmodule Electric.ShapeCacheTest do
       assert offset_after_log_entry == expected_offset_after_log_entry
 
       # Stop snapshot process gracefully to prevent errors being logged in the test
-      storage = Storage.for_shape(shape_id, storage)
+      storage = Storage.for_shape(shape_id, tenant_id, storage)
       {_, stream} = Storage.get_snapshot(storage)
       Stream.run(stream)
     end
@@ -367,6 +402,7 @@ defmodule Electric.ShapeCacheTest do
   describe "list_shapes/1" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -380,7 +416,7 @@ defmodule Electric.ShapeCacheTest do
           prepare_tables_fn: @prepare_tables_noop
         )
 
-      meta_table = Keyword.fetch!(opts, :shape_meta_table)
+      meta_table = Access.fetch!(opts, :shape_meta_table)
 
       assert ShapeCache.list_shapes(%{shape_meta_table: meta_table}) == []
     end
@@ -399,7 +435,7 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
-      meta_table = Keyword.fetch!(opts, :shape_meta_table)
+      meta_table = Access.fetch!(opts, :shape_meta_table)
       assert [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
       assert {:ok, 10} = ShapeStatus.snapshot_xmin(meta_table, shape_id)
     end
@@ -426,7 +462,7 @@ defmodule Electric.ShapeCacheTest do
       # Wait until we get to the waiting point in the snapshot
       assert_receive {:waiting_point, ref, pid}
 
-      meta_table = Keyword.fetch!(opts, :shape_meta_table)
+      meta_table = Access.fetch!(opts, :shape_meta_table)
       assert [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
 
       send(pid, {:continue, ref})
@@ -439,6 +475,7 @@ defmodule Electric.ShapeCacheTest do
   describe "has_shape?/2" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -481,6 +518,7 @@ defmodule Electric.ShapeCacheTest do
   describe "await_snapshot_start/4" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -506,7 +544,7 @@ defmodule Electric.ShapeCacheTest do
     test "returns an error if waiting is for an unknown shape id", ctx do
       shape_id = "orphaned_id"
 
-      storage = Storage.for_shape(shape_id, ctx.storage)
+      storage = Storage.for_shape(shape_id, ctx.tenant_id, ctx.storage)
 
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
@@ -547,7 +585,7 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
-      storage = Storage.for_shape(shape_id, ctx.storage)
+      storage = Storage.for_shape(shape_id, ctx.tenant_id, ctx.storage)
 
       tasks =
         for _id <- 1..10 do
@@ -590,7 +628,7 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
-      storage = Storage.for_shape(shape_id, ctx.storage)
+      storage = Storage.for_shape(shape_id, ctx.tenant_id, ctx.storage)
 
       tasks =
         for _ <- 1..10 do
@@ -644,6 +682,7 @@ defmodule Electric.ShapeCacheTest do
   describe "handle_truncate/2" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -666,7 +705,7 @@ defmodule Electric.ShapeCacheTest do
       Process.sleep(50)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
-      storage = Storage.for_shape(shape_id, ctx.storage)
+      storage = Storage.for_shape(shape_id, ctx.tenant_id, ctx.storage)
 
       Storage.append_to_log!(
         changes_to_log_items([
@@ -682,7 +721,9 @@ defmodule Electric.ShapeCacheTest do
       assert Storage.snapshot_started?(storage)
       assert Enum.count(Storage.get_log_stream(@zero_offset, storage)) == 1
 
-      ref = ctx.electric_instance_id |> Shapes.Consumer.whereis(shape_id) |> Process.monitor()
+      ref =
+        Shapes.Consumer.whereis(ctx.electric_instance_id, ctx.tenant_id, shape_id)
+        |> Process.monitor()
 
       log = capture_log(fn -> ShapeCache.handle_truncate(shape_id, opts) end)
       assert log =~ "Truncating and rotating shape id"
@@ -697,6 +738,7 @@ defmodule Electric.ShapeCacheTest do
   describe "clean_shape/2" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -719,7 +761,7 @@ defmodule Electric.ShapeCacheTest do
       Process.sleep(50)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
-      storage = Storage.for_shape(shape_id, ctx.storage)
+      storage = Storage.for_shape(shape_id, ctx.tenant_id, ctx.storage)
 
       Storage.append_to_log!(
         changes_to_log_items([
@@ -738,7 +780,10 @@ defmodule Electric.ShapeCacheTest do
       {module, _} = storage
 
       ref =
-        Process.monitor(module.name(ctx.electric_instance_id, shape_id) |> GenServer.whereis())
+        Process.monitor(
+          module.name(ctx.electric_instance_id, ctx.tenant_id, shape_id)
+          |> GenServer.whereis()
+        )
 
       log = capture_log(fn -> :ok = ShapeCache.clean_shape(shape_id, opts) end)
       assert log =~ "Cleaning up shape"
@@ -792,6 +837,7 @@ defmodule Electric.ShapeCacheTest do
 
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_cub_db_storage,
       :with_log_chunking,
       :with_registry,
@@ -827,9 +873,10 @@ defmodule Electric.ShapeCacheTest do
       [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
       {:ok, @snapshot_xmin} = ShapeStatus.snapshot_xmin(meta_table, shape_id)
 
-      restart_shape_cache(context)
+      %{shape_cache_opts: opts} = restart_shape_cache(context)
       :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
+      meta_table = Keyword.fetch!(opts, :shape_meta_table)
       assert [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
       {:ok, @snapshot_xmin} = ShapeStatus.snapshot_xmin(meta_table, shape_id)
     end
@@ -839,7 +886,7 @@ defmodule Electric.ShapeCacheTest do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
-      ref = Shapes.Consumer.monitor(context.electric_instance_id, shape_id)
+      ref = Shapes.Consumer.monitor(context.electric_instance_id, context.tenant_id, shape_id)
 
       ShapeLogCollector.store_transaction(
         %Changes.Transaction{
@@ -889,7 +936,7 @@ defmodule Electric.ShapeCacheTest do
 
       consumers =
         for {shape_id, _} <- shape_cache.list_shapes(Map.new(shape_cache_opts)) do
-          pid = Shapes.Consumer.whereis(ctx.electric_instance_id, shape_id)
+          pid = Shapes.Consumer.whereis(ctx.electric_instance_id, ctx.tenant_id, shape_id)
           {pid, Process.monitor(pid)}
         end
 
@@ -920,6 +967,263 @@ defmodule Electric.ShapeCacheTest do
       end
     end
   end
+
+#  describe "relation handling" do
+#    @describetag capture_log: true
+#
+#    @describetag :tmp_dir
+#    @snapshot_xmin 10
+#
+#    setup [
+#      :with_electric_instance_id,
+#      :with_tenant_id,
+#      :with_in_memory_storage,
+#      :with_persistent_kv,
+#      :with_log_chunking,
+#      :with_registry,
+#      :with_shape_log_collector,
+#      :with_no_pool
+#    ]
+#
+#    setup(ctx) do
+#      ctx =
+#        with_shape_cache(
+#          Map.merge(ctx, %{inspector: {Mock.Inspector, []}}),
+#          prepare_tables_fn: @prepare_tables_noop,
+#          create_snapshot_fn: fn parent, shape_id, _shape, _, storage ->
+#            GenServer.cast(parent, {:snapshot_xmin_known, shape_id, @snapshot_xmin})
+#            Storage.make_new_snapshot!([["test"]], storage)
+#            GenServer.cast(parent, {:snapshot_started, shape_id})
+#          end
+#        )
+#
+#      ctx
+#    end
+#
+#    defp monitor_consumer(electric_instance_id, tenant_id, shape_id) do
+#      Process.monitor(Shapes.Consumer.whereis(electric_instance_id, tenant_id, shape_id))
+#    end
+#
+#    defp shapes do
+#      shape1 =
+#        Shape.new!("public.test_table",
+#          inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+#        )
+#
+#      shape2 =
+#        Shape.new!("public.test_table",
+#          inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}]),
+#          where: "id > 5"
+#        )
+#
+#      shape3 =
+#        Shape.new!("public.other_table",
+#          inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+#        )
+#
+#      [shape1, shape2, shape3]
+#    end
+#
+#    defp start_shapes(%{
+#           shape_cache: {shape_cache, opts},
+#           electric_instance_id: electric_instance_id,
+#           tenant_id: tenant_id
+#         }) do
+#      [shape1, shape2, shape3] = shapes()
+#
+#      {shape_id1, _} = shape_cache.get_or_create_shape_id(shape1, opts)
+#      {shape_id2, _} = shape_cache.get_or_create_shape_id(shape2, opts)
+#      {shape_id3, _} = shape_cache.get_or_create_shape_id(shape3, opts)
+#
+#      :started = shape_cache.await_snapshot_start(shape_id1, opts)
+#      :started = shape_cache.await_snapshot_start(shape_id2, opts)
+#      :started = shape_cache.await_snapshot_start(shape_id3, opts)
+#
+#      ref1 = monitor_consumer(electric_instance_id, tenant_id, shape_id1)
+#      ref2 = monitor_consumer(electric_instance_id, tenant_id, shape_id2)
+#      ref3 = monitor_consumer(electric_instance_id, tenant_id, shape_id3)
+#
+#      [
+#        {shape_id1, ref1},
+#        {shape_id2, ref2},
+#        {shape_id3, ref3}
+#      ]
+#    end
+#
+#    test "stores relation if it is not known", ctx do
+#      %{shape_cache: {_shape_cache, opts}} = ctx
+#
+#      relation_id = "rel1"
+#
+#      rel = %Relation{
+#        id: relation_id,
+#        schema: "public",
+#        table: "test_table",
+#        columns: []
+#      }
+#
+#      Mock.Inspector
+#      |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
+#      |> allow(self(), opts[:server])
+#
+#      assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.shape_log_collector)
+#
+#      assert {:ok, ^rel} = wait_for_relation(ctx, relation_id)
+#    end
+#
+#    test "does not clean shapes if relation didn't change", ctx do
+#      %{shape_cache: {shape_cache, opts}} = ctx
+#
+#      relation_id = "rel1"
+#
+#      shape =
+#        Shape.new!("public.test_table",
+#          inspector: StubInspector.new([%{name: "id", type: :int8}])
+#        )
+#
+#      {shape_id, _} = shape_cache.get_or_create_shape_id(shape, opts)
+#
+#      ref = monitor_consumer(ctx.electric_instance_id, ctx.tenant_id, shape_id)
+#
+#      rel = %Relation{
+#        id: relation_id,
+#        schema: "public",
+#        table: "test_table",
+#        columns: []
+#      }
+#
+#      Mock.Inspector
+#      |> expect(:clean_column_info, 1, fn _, _ -> true end)
+#      |> allow(self(), opts[:server])
+#
+#      assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.shape_log_collector)
+#
+#      Mock.Inspector
+#      |> expect(:clean_column_info, 0, fn _, _ -> true end)
+#      |> allow(self(), opts[:server])
+#
+#      assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.shape_log_collector)
+#
+#      refute_receive {:DOWN, ^ref, :process, _, _}
+#    end
+#
+#    test "cleans inspector cache for new relations", ctx do
+#      %{shape_cache: {_shape_cache, opts}} = ctx
+#
+#      relation_id = "rel1"
+#
+#      [
+#        {_shape_id1, _ref1},
+#        {_shape_id2, _ref2},
+#        {_shape_id3, _ref3}
+#      ] = start_shapes(ctx)
+#
+#      rel = %Relation{
+#        id: relation_id,
+#        schema: "public",
+#        table: "test_table",
+#        columns: []
+#      }
+#
+#      Mock.Inspector
+#      |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
+#      |> allow(self(), opts[:server])
+#
+#      assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.shape_log_collector)
+#    end
+#
+#    test "cleans shapes affected by table renaming and logs a warning", ctx do
+#      %{shape_cache: {_shape_cache, opts}} = ctx
+#
+#      relation_id = "rel1"
+#
+#      [
+#        {_shape_id1, ref1},
+#        {_shape_id2, ref2},
+#        {_shape_id3, ref3}
+#      ] = start_shapes(ctx)
+#
+#      old_rel = %Relation{
+#        id: relation_id,
+#        schema: "public",
+#        table: "test_table",
+#        columns: []
+#      }
+#
+#      new_rel = %Relation{
+#        id: relation_id,
+#        schema: "public",
+#        table: "renamed_test_table",
+#        columns: []
+#      }
+#
+#      Mock.Inspector
+#      |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
+#      |> allow(self(), opts[:server])
+#
+#      assert :ok = ShapeLogCollector.handle_relation_msg(old_rel, ctx.shape_log_collector)
+#
+#      Mock.Inspector
+#      |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
+#      |> allow(self(), opts[:server])
+#
+#      log =
+#        capture_log(fn ->
+#          assert :ok = ShapeLogCollector.handle_relation_msg(new_rel, ctx.shape_log_collector)
+#          assert_receive {:DOWN, ^ref1, :process, _, _}
+#          assert_receive {:DOWN, ^ref2, :process, _, _}
+#          refute_receive {:DOWN, ^ref3, :process, _, _}
+#        end)
+#
+#      assert log =~ "Schema for the table public.test_table changed"
+#    end
+#
+#    test "cleans shapes affected by a relation change", ctx do
+#      %{shape_cache: {_shape_cache, opts}} = ctx
+#
+#      relation_id = "rel1"
+#
+#      [
+#        {_shape_id1, ref1},
+#        {_shape_id2, ref2},
+#        {_shape_id3, ref3}
+#      ] = start_shapes(ctx)
+#
+#      old_rel = %Relation{
+#        id: relation_id,
+#        schema: "public",
+#        table: "test_table",
+#        columns: [%Column{name: "id", type_oid: 901}]
+#      }
+#
+#      new_rel = %Relation{
+#        id: relation_id,
+#        schema: "public",
+#        table: "test_table",
+#        columns: [%Column{name: "id", type_oid: 123}]
+#      }
+#
+#      Mock.Inspector
+#      |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
+#      |> allow(self(), opts[:server])
+#
+#      assert :ok = ShapeLogCollector.handle_relation_msg(old_rel, ctx.shape_log_collector)
+#
+#      Mock.Inspector
+#      |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
+#      |> allow(self(), opts[:server])
+#
+#      log =
+#        capture_log(fn ->
+#          assert :ok = ShapeLogCollector.handle_relation_msg(new_rel, ctx.shape_log_collector)
+#          assert_receive {:DOWN, ^ref1, :process, _, _}
+#          assert_receive {:DOWN, ^ref2, :process, _, _}
+#          refute_receive {:DOWN, ^ref3, :process, _, _}
+#        end)
+#
+#      assert log =~ "Schema for the table public.test_table changed"
+#    end
+#  end
 
   def prepare_tables_noop(_, _), do: :ok
 

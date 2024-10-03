@@ -5,6 +5,7 @@ defmodule Electric.ShapeCache.Storage do
   alias Electric.Shapes.Querying
   alias Electric.Replication.LogOffset
 
+  @type tenant_id :: String.t()
   @type shape_id :: Electric.ShapeCacheBehaviour.shape_id()
   @type xmin :: Electric.ShapeCacheBehaviour.xmin()
   @type offset :: LogOffset.t()
@@ -25,7 +26,7 @@ defmodule Electric.ShapeCache.Storage do
   @callback shared_opts(Keyword.t()) :: compiled_opts()
 
   @doc "Initialise shape-specific opts from the shared, global, configuration"
-  @callback for_shape(shape_id(), compiled_opts()) :: shape_opts()
+  @callback for_shape(shape_id(), tenant_id(), compiled_opts()) :: shape_opts()
 
   @doc "Start any processes required to run the storage backend"
   @callback start_link(shape_opts()) :: GenServer.on_start()
@@ -113,8 +114,8 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def for_shape(shape_id, {mod, opts}) do
-    {mod, mod.for_shape(shape_id, opts)}
+  def for_shape(shape_id, tenant_id, {mod, opts}) do
+    {mod, mod.for_shape(shape_id, tenant_id, opts)}
   end
 
   @impl __MODULE__

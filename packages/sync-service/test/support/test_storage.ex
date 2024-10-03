@@ -38,10 +38,10 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def for_shape(shape_id, {parent, init, storage}) do
-    send(parent, {__MODULE__, :for_shape, shape_id})
+  def for_shape(shape_id, tenant_id, {parent, init, storage}) do
+    send(parent, {__MODULE__, :for_shape, shape_id, tenant_id})
     shape_init = Map.get(init, shape_id, [])
-    {parent, shape_id, shape_init, Storage.for_shape(shape_id, storage)}
+    {parent, shape_id, shape_init, Storage.for_shape(shape_id, tenant_id, storage)}
   end
 
   @impl Electric.ShapeCache.Storage

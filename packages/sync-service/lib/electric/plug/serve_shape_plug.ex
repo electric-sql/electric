@@ -9,6 +9,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   alias Electric.Shapes
   alias Electric.Schema
+  alias Electric.TenantManager
   alias Electric.Replication.LogOffset
   alias Electric.Telemetry.OpenTelemetry
   alias Plug.Conn
@@ -67,6 +68,7 @@ defmodule Electric.Plug.ServeShapePlug do
       field(:root_table, :string)
       field(:offset, :string)
       field(:shape_id, :string)
+      field(:database_id, :string)
       field(:live, :boolean, default: false)
       field(:where, :string)
       field(:columns, :string)
@@ -178,6 +180,8 @@ defmodule Electric.Plug.ServeShapePlug do
   # start_telemetry_span needs to always be the first plug after fetching query params.
   plug :start_telemetry_span
   plug :put_resp_content_type, "application/json"
+  plug :validate_tenant_id
+  plug :load_tenant
   plug :validate_query_params
   plug :load_shape_info
   plug :put_schema_header
@@ -193,6 +197,51 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # end_telemetry_span needs to always be the last plug here.
   plug :end_telemetry_span
+
+  defp validate_tenant_id(%Conn{} = conn, _) do
+    case Map.get(conn.query_params, "database_id", :not_found) do
+      :not_found ->
+        conn
+
+      id when is_binary(id) ->
+        assign(conn, :database_id, id)
+
+      _ ->
+        conn
+        |> send_resp(400, Jason.encode_to_iodata!("database_id should be a connection string"))
+        |> halt()
+    end
+  end
+
+  defp load_tenant(%Conn{assigns: %{database_id: tenant_id}} = conn, _) do
+    {:ok, tenant_config} = TenantManager.get_tenant(tenant_id, conn.assigns.config)
+    assign_tenant(conn, tenant_config)
+  end
+
+  defp load_tenant(%Conn{} = conn, _) do
+    # Tenant ID is not specified
+    # ask the tenant manager for the only tenant
+    # if there's more than one tenant we reply with an error
+    case TenantManager.get_only_tenant(conn.assigns.config) do
+      {:ok, tenant_config} ->
+        assign_tenant(conn, tenant_config)
+
+      {:error, :not_found} ->
+        conn
+        |> send_resp(400, Jason.encode_to_iodata!("No database found"))
+        |> halt()
+
+      {:error, :several_tenants} ->
+        conn
+        |> send_resp(
+          400,
+          Jason.encode_to_iodata!(
+            "Database ID was not provided and there are multiple databases. Please specify a database ID using the `database_id` query parameter."
+          )
+        )
+        |> halt()
+    end
+  end
 
   defp validate_query_params(%Conn{} = conn, _) do
     Logger.info("Query String: #{conn.query_string}")
@@ -210,6 +259,14 @@ defmodule Electric.Plug.ServeShapePlug do
         |> send_resp(400, Jason.encode_to_iodata!(error_map))
         |> halt()
     end
+  end
+
+  defp assign_tenant(%Conn{} = conn, tenant_config) do
+    id = tenant_config[:tenant_id]
+
+    conn
+    |> assign(:config, tenant_config)
+    |> assign(:tenant_id, id)
   end
 
   defp load_shape_info(%Conn{} = conn, _) do
@@ -313,10 +370,10 @@ defmodule Electric.Plug.ServeShapePlug do
   # If chunk offsets are available, use those instead of the latest available offset
   # to optimize for cache hits and response sizes
   defp determine_log_chunk_offset(%Conn{assigns: assigns} = conn, _) do
-    %{config: config, active_shape_id: shape_id, offset: offset} = assigns
+    %{config: config, active_shape_id: shape_id, offset: offset, tenant_id: tenant_id} = assigns
 
     chunk_end_offset =
-      Shapes.get_chunk_end_log_offset(config, shape_id, offset) || assigns.last_offset
+      Shapes.get_chunk_end_log_offset(config, shape_id, offset, tenant_id) || assigns.last_offset
 
     conn
     |> assign(:chunk_end_offset, chunk_end_offset)
@@ -432,14 +489,15 @@ defmodule Electric.Plug.ServeShapePlug do
            assigns: %{
              chunk_end_offset: chunk_end_offset,
              active_shape_id: shape_id,
+             tenant_id: tenant_id,
              up_to_date: maybe_up_to_date
            }
          } = conn
        ) do
-    case Shapes.get_snapshot(conn.assigns.config, shape_id) do
+    case Shapes.get_snapshot(conn.assigns.config, shape_id, tenant_id) do
       {:ok, {offset, snapshot}} ->
         log =
-          Shapes.get_log_stream(conn.assigns.config, shape_id,
+          Shapes.get_log_stream(conn.assigns.config, shape_id, tenant_id,
             since: offset,
             up_to: chunk_end_offset
           )
@@ -475,12 +533,13 @@ defmodule Electric.Plug.ServeShapePlug do
              offset: offset,
              chunk_end_offset: chunk_end_offset,
              active_shape_id: shape_id,
+             tenant_id: tenant_id,
              up_to_date: maybe_up_to_date
            }
          } = conn
        ) do
     log =
-      Shapes.get_log_stream(conn.assigns.config, shape_id,
+      Shapes.get_log_stream(conn.assigns.config, shape_id, tenant_id,
         since: offset,
         up_to: chunk_end_offset
       )
@@ -547,8 +606,12 @@ defmodule Electric.Plug.ServeShapePlug do
 
       ref = make_ref()
       registry = conn.assigns.config[:registry]
-      Registry.register(registry, shape_id, ref)
-      Logger.debug("Client #{inspect(self())} is registered for changes to #{shape_id}")
+      tenant = conn.assigns.tenant_id
+      Registry.register(registry, {tenant, shape_id}, ref)
+
+      Logger.debug(
+        "[Tenant #{tenant}]: Client #{inspect(self())} is registered for changes to #{shape_id}"
+      )
 
       assign(conn, :new_changes_ref, ref)
     else

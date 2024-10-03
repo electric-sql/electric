@@ -74,10 +74,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec initialise(options()) :: {:ok, t()} | {:error, term()}
   def initialise(opts) do
     with {:ok, config} <- NimbleOptions.validate(opts, @schema),
-         {:ok, table_name} = Access.fetch(config, :shape_meta_table),
+         {:ok, meta_table} = Access.fetch(config, :shape_meta_table),
          {:ok, storage} = Access.fetch(config, :storage) do
-      meta_table = :ets.new(table_name, [:named_table, :public, :ordered_set])
-
       state =
         struct(
           __MODULE__,
@@ -232,7 +230,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     snapshot_xmin(table, shape_id)
   end
 
-  def snapshot_xmin(meta_table, shape_id) when is_atom(meta_table) do
+  def snapshot_xmin(meta_table, shape_id) when is_reference(meta_table) do
     turn_raise_into_error(fn ->
       :ets.lookup_element(
         meta_table,

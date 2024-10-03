@@ -6,6 +6,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
   alias Electric.Replication.LogOffset
   alias Electric.Plug.ServeShapePlug
   alias Electric.Shapes.Shape
+  alias Electric.TenantManager
+
+  import Support.ComponentSetup
 
   alias Support.Mock
 
@@ -36,6 +39,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
   @first_offset LogOffset.first()
   @test_offset LogOffset.new(Lsn.from_integer(100), 0)
   @start_offset_50 LogOffset.new(Lsn.from_integer(50), 0)
+  @test_pg_id "12345"
 
   def load_column_info({"public", "users"}, _),
     do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
@@ -51,17 +55,29 @@ defmodule Electric.Plug.ServeShapePlugTest do
     :ok
   end
 
-  def conn(method, params, "?" <> _ = query_string) do
+  def conn(ctx, method, params, "?" <> _ = query_string) do
     # Pass mock dependencies to the plug
-    config = %{
+    tenant = [
+      electric_instance_id: ctx.electric_instance_id,
+      tenant_id: ctx.tenant_id,
+      pg_id: @test_pg_id,
       shape_cache: {Mock.ShapeCache, []},
       storage: {Mock.Storage, []},
       inspector: {__MODULE__, []},
       registry: @registry,
-      long_poll_timeout: 20_000,
-      max_age: 60,
-      stale_age: 300
-    }
+      long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
+      max_age: Access.get(ctx, :max_age, 60),
+      stale_age: Access.get(ctx, :stale_age, 300)
+    ]
+
+    # because test mode creates a tenant by default
+    TenantManager.delete_tenant(ctx.tenant_id)
+    :ok = TenantManager.store_tenant(tenant)
+
+    config = [
+      storage: {Mock.Storage, []},
+      tenant_manager: Electric.TenantManager
+    ]
 
     Plug.Test.conn(method, "/" <> query_string, params)
     |> assign(:config, config)
@@ -126,10 +142,16 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Electric.Plug.ServeShapePlug.TimeUtils.seconds_since_oct9th_2024_next_interval(conn) !=
                expected_interval
     end
+  end
 
-    test "returns 400 for invalid params" do
+  describe "serving shape" do
+    setup :with_electric_instance_id
+    setup :with_tenant_id
+
+    test "returns 400 for invalid params", ctx do
       conn =
-        conn(:get, %{"root_table" => ".invalid_shape"}, "?offset=invalid")
+        ctx
+        |> conn(:get, %{"root_table" => ".invalid_shape"}, "?offset=invalid")
         |> ServeShapePlug.call([])
 
       assert conn.status == 400
@@ -142,11 +164,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
              }
     end
 
-    test "returns 400 when table does not exist" do
+    test "returns 400 when table does not exist", ctx do
       # this will pass table name validation
       # but will fail to find the table
       conn =
-        conn(:get, %{"root_table" => "_val1d_schëmaΦ$.Φtàble"}, "?offset=-1")
+        ctx
+        |> conn(:get, %{"root_table" => "_val1d_schëmaΦ$.Φtàble"}, "?offset=-1")
         |> ServeShapePlug.call([])
 
       assert conn.status == 400
@@ -156,9 +179,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
              }
     end
 
-    test "returns 400 for missing shape_id when offset != -1" do
+    test "returns 400 for missing shape_id when offset != -1", ctx do
       conn =
-        conn(:get, %{"root_table" => "public.users"}, "?offset=#{LogOffset.first()}")
+        ctx
+        |> conn(:get, %{"root_table" => "public.users"}, "?offset=#{LogOffset.first()}")
         |> ServeShapePlug.call([])
 
       assert conn.status == 400
@@ -168,9 +192,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
              }
     end
 
-    test "returns 400 for live request when offset == -1" do
+    test "returns 400 for live request when offset == -1", ctx do
       conn =
-        conn(
+        ctx
+        |> conn(
           :get,
           %{"root_table" => "public.users"},
           "?offset=#{LogOffset.before_all()}&live=true"
@@ -184,7 +209,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              }
     end
 
-    test "returns snapshot when offset is -1" do
+    test "returns snapshot when offset is -1", %{tenant_id: tenant_id} = ctx do
       Mock.ShapeCache
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
@@ -195,7 +220,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset = LogOffset.increment(@first_offset)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, ^tenant_id, _opts -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
         next_offset
       end)
@@ -207,7 +232,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end)
 
       conn =
-        conn(:get, %{"root_table" => "public.users"}, "?offset=-1")
+        ctx
+        |> conn(:get, %{"root_table" => "public.users"}, "?offset=-1")
         |> ServeShapePlug.call([])
 
       assert conn.status == 200
@@ -229,7 +255,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Plug.Conn.get_resp_header(conn, "electric-shape-id") == [@test_shape_id]
     end
 
-    test "snapshot has correct cache control headers" do
+    test "snapshot has correct cache control headers", %{tenant_id: tenant_id} = ctx do
       Mock.ShapeCache
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
@@ -240,7 +266,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset = LogOffset.increment(@first_offset)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, ^tenant_id, _opts -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
         next_offset
       end)
@@ -255,9 +281,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
       stale_age = 312
 
       conn =
-        conn(:get, %{"root_table" => "public.users"}, "?offset=-1")
-        |> put_in_config(:max_age, max_age)
-        |> put_in_config(:stale_age, stale_age)
+        ctx
+        |> Map.put(:max_age, max_age)
+        |> Map.put(:stale_age, stale_age)
+        |> conn(:get, %{"root_table" => "public.users"}, "?offset=-1")
         |> ServeShapePlug.call([])
 
       assert conn.status == 200
@@ -267,7 +294,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
     end
 
-    test "response has correct schema header" do
+    test "response has correct schema header", %{tenant_id: tenant_id} = ctx do
       Mock.ShapeCache
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
@@ -278,7 +305,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset = LogOffset.increment(@first_offset)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, ^tenant_id, _opts -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
         next_offset
       end)
@@ -290,7 +317,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end)
 
       conn =
-        conn(:get, %{"root_table" => "public.users"}, "?offset=-1")
+        ctx
+        |> conn(:get, %{"root_table" => "public.users"}, "?offset=-1")
         |> ServeShapePlug.call([])
 
       assert Plug.Conn.get_resp_header(conn, "electric-schema") == [
@@ -298,7 +326,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
     end
 
-    test "returns log when offset is >= 0" do
+    test "returns log when offset is >= 0", %{tenant_id: tenant_id} = ctx do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
@@ -309,7 +337,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_next_offset = LogOffset.increment(next_offset)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, ^tenant_id, _opts -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @start_offset_50, _ ->
         next_next_offset
       end)
@@ -321,7 +349,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end)
 
       conn =
-        conn(
+        ctx
+        |> conn(
           :get,
           %{"root_table" => "public.users"},
           "?offset=#{@start_offset_50}&shape_id=#{@test_shape_id}"
@@ -358,7 +387,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == []
     end
 
-    test "returns 304 Not Modified when If-None-Match matches ETag" do
+    test "returns 304 Not Modified when If-None-Match matches ETag",
+         %{tenant_id: tenant_id} = ctx do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
@@ -366,13 +396,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, ^tenant_id, _opts -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @start_offset_50, _ ->
         @test_offset
       end)
 
       conn =
-        conn(
+        ctx
+        |> conn(
           :get,
           %{"root_table" => "public.users"},
           "?offset=#{@start_offset_50}&shape_id=#{@test_shape_id}"
@@ -387,7 +418,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.resp_body == ""
     end
 
-    test "handles live updates" do
+    test "handles live updates", %{tenant_id: tenant_id} = ctx do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
@@ -399,7 +430,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset_str = "#{next_offset}"
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, ^tenant_id, _opts -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
         nil
       end)
@@ -413,7 +444,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       task =
         Task.async(fn ->
-          conn(
+          ctx
+          |> conn(
             :get,
             %{"root_table" => "public.users"},
             "?offset=#{@test_offset}&shape_id=#{@test_shape_id}&live=true"
@@ -426,7 +458,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       Process.sleep(50)
 
       # Simulate new changes arriving
-      Registry.dispatch(@registry, @test_shape_id, fn [{pid, ref}] ->
+      Registry.dispatch(@registry, {ctx.tenant_id, @test_shape_id}, fn [{pid, ref}] ->
         send(pid, {ref, :new_changes, next_offset})
       end)
 
@@ -449,7 +481,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Plug.Conn.get_resp_header(conn, "electric-schema") == []
     end
 
-    test "handles shape rotation" do
+    test "handles shape rotation", %{tenant_id: tenant_id} = ctx do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
@@ -459,7 +491,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       test_pid = self()
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, ^tenant_id, _opts -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
         nil
       end)
@@ -470,7 +502,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       task =
         Task.async(fn ->
-          conn(
+          ctx
+          |> conn(
             :get,
             %{"root_table" => "public.users"},
             "?offset=#{@test_offset}&shape_id=#{@test_shape_id}&live=true"
@@ -483,7 +516,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       Process.sleep(50)
 
       # Simulate shape rotation
-      Registry.dispatch(@registry, @test_shape_id, fn [{pid, ref}] ->
+      Registry.dispatch(@registry, {ctx.tenant_id, @test_shape_id}, fn [{pid, ref}] ->
         send(pid, {ref, :shape_rotation})
       end)
 
@@ -497,7 +530,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == [""]
     end
 
-    test "sends an up-to-date response after a timeout if no changes are observed" do
+    test "sends an up-to-date response after a timeout if no changes are observed",
+         %{tenant_id: tenant_id} = ctx do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
@@ -505,7 +539,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, _opts -> @test_opts end)
+      |> stub(:for_shape, fn @test_shape_id, ^tenant_id, _opts -> @test_opts end)
       |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
         nil
       end)
@@ -514,12 +548,13 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end)
 
       conn =
-        conn(
+        ctx
+        |> Map.put(:long_poll_timeout, 100)
+        |> conn(
           :get,
           %{"root_table" => "public.users"},
           "?offset=#{@test_offset}&shape_id=#{@test_shape_id}&live=true"
         )
-        |> put_in_config(:long_poll_timeout, 100)
         |> ServeShapePlug.call([])
 
       assert conn.status == 204
@@ -533,7 +568,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == [""]
     end
 
-    test "sends 409 with a redirect to existing shape when requested shape ID does not exist" do
+    test "sends 409 with a redirect to existing shape when requested shape ID does not exist",
+         %{tenant_id: tenant_id} = ctx do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_id, @test_offset}
@@ -541,10 +577,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> stub(:has_shape?, fn "foo", _opts -> false end)
 
       Mock.Storage
-      |> stub(:for_shape, fn "foo", opts -> {"foo", opts} end)
+      |> stub(:for_shape, fn "foo", ^tenant_id, opts -> {"foo", opts} end)
 
       conn =
-        conn(
+        ctx
+        |> conn(
           :get,
           %{"root_table" => "public.users"},
           "?offset=#{"50_12"}&shape_id=foo"
@@ -558,7 +595,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert get_resp_header(conn, "location") == ["/?shape_id=#{@test_shape_id}&offset=-1"]
     end
 
-    test "creates a new shape when shape ID does not exist and sends a 409 redirecting to the newly created shape" do
+    test "creates a new shape when shape ID does not exist and sends a 409 redirecting to the newly created shape",
+         %{tenant_id: tenant_id} = ctx do
       new_shape_id = "new-shape-id"
 
       Mock.ShapeCache
@@ -569,10 +607,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end)
 
       Mock.Storage
-      |> stub(:for_shape, fn new_shape_id, opts -> {new_shape_id, opts} end)
+      |> stub(:for_shape, fn new_shape_id, ^tenant_id, opts -> {new_shape_id, opts} end)
 
       conn =
-        conn(
+        ctx
+        |> conn(
           :get,
           %{"root_table" => "public.users"},
           "?offset=#{"50_12"}&shape_id=#{@test_shape_id}"
@@ -586,16 +625,18 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert get_resp_header(conn, "location") == ["/?shape_id=#{new_shape_id}&offset=-1"]
     end
 
-    test "sends 400 when shape ID does not match shape definition" do
+    test "sends 400 when shape ID does not match shape definition",
+         %{tenant_id: tenant_id} = ctx do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts -> nil end)
       |> stub(:has_shape?, fn @test_shape_id, _opts -> true end)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_id, opts -> {@test_shape_id, opts} end)
+      |> stub(:for_shape, fn @test_shape_id, ^tenant_id, opts -> {@test_shape_id, opts} end)
 
       conn =
-        conn(
+        ctx
+        |> conn(
           :get,
           %{"root_table" => "public.users"},
           "?offset=#{"50_12"}&shape_id=#{@test_shape_id}"
@@ -643,7 +684,4 @@ defmodule Electric.Plug.ServeShapePlugTest do
              }
     end
   end
-
-  defp put_in_config(%Plug.Conn{assigns: assigns} = conn, key, value),
-    do: %{conn | assigns: put_in(assigns, [:config, key], value)}
 end
