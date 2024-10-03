@@ -643,7 +643,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   @impl Plug.ErrorHandler
   def handle_errors(conn, error) do
-    OpenTelemetry.record_exception(error.reason, error.stack)
+    OpenTelemetry.record_exception(error.kind, error.reason, error.stack)
 
     error_str = Exception.format(error.kind, error.reason)
 
