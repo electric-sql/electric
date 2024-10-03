@@ -326,18 +326,19 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @decorate trace()
-  defp save(state) do
-    shapes = Map.new(list_shapes(state))
-    relations = list_relations(state)
+  defp save(_state) do
+    # shapes = Map.new(list_shapes(state))
+    # relations = list_relations(state)
 
-    PersistentKV.set(
-      state.persistent_kv,
-      key(state),
-      %{
-        shapes: shapes,
-        relations: relations
-      }
-    )
+    # PersistentKV.set(
+    #   state.persistent_kv,
+    #   key(state),
+    #   %{
+    #     shapes: shapes,
+    #     relations: relations
+    #   }
+    # )
+    :ok
   end
 
   defp load(state) do
