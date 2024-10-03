@@ -1,17 +1,18 @@
 defmodule Electric.Application do
   use Application
+  require Config
 
   @process_registry_name Electric.Registry.Processes
   def process_registry, do: @process_registry_name
 
-  @spec process_name(atom(), atom()) :: {:via, atom(), atom()}
-  def process_name(electric_instance_id, module) when is_atom(module) do
-    {:via, Registry, {@process_registry_name, {module, electric_instance_id}}}
+  @spec process_name(atom(), String.t(), atom()) :: {:via, atom(), atom()}
+  def process_name(electric_instance_id, tenant_id, module) when is_atom(module) do
+    {:via, Registry, {@process_registry_name, {module, electric_instance_id, tenant_id}}}
   end
 
-  @spec process_name(atom(), atom(), term()) :: {:via, atom(), {atom(), term()}}
-  def process_name(electric_instance_id, module, id) when is_atom(module) do
-    {:via, Registry, {@process_registry_name, {module, electric_instance_id, id}}}
+  @spec process_name(atom(), String.t(), atom(), term()) :: {:via, atom(), {atom(), term()}}
+  def process_name(electric_instance_id, tenant_id, module, id) when is_atom(module) do
+    {:via, Registry, {@process_registry_name, {module, electric_instance_id, tenant_id, id}}}
   end
 
   @impl true
@@ -19,28 +20,6 @@ defmodule Electric.Application do
     :erlang.system_flag(:backtrace_depth, 50)
 
     config = configure()
-
-    shape_log_collector = Electric.Replication.ShapeLogCollector.name(config.electric_instance_id)
-
-    connection_manager_opts = [
-      electric_instance_id: config.electric_instance_id,
-      connection_opts: config.connection_opts,
-      replication_opts: [
-        publication_name: config.replication_opts.publication_name,
-        try_creating_publication?: true,
-        slot_name: config.replication_opts.slot_name,
-        transaction_received:
-          {Electric.Replication.ShapeLogCollector, :store_transaction, [shape_log_collector]},
-        relation_received:
-          {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [shape_log_collector]}
-      ],
-      pool_opts: [
-        name: Electric.DbPool,
-        pool_size: config.pool_opts.size,
-        types: PgInterop.Postgrex.Types
-      ],
-      persistent_kv: config.persistent_kv
-    ]
 
     # The root application supervisor starts the core global processes, including the HTTP
     # server and the database connection manager. The latter is responsible for establishing
@@ -60,30 +39,45 @@ defmodule Electric.Application do
            name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()},
           {Registry,
            name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
-          {Electric.Postgres.Inspector.EtsInspector, pool: Electric.DbPool},
+          Electric.TenantSupervisor,
+          Electric.TenantManager,
           {Bandit,
            plug:
              {Electric.Plug.Router,
-              storage: config.storage,
-              registry: Registry.ShapeChanges,
-              shape_cache: {Electric.ShapeCache, config.shape_cache_opts},
-              get_service_status: &Electric.ServiceStatus.check/0,
-              inspector: config.inspector,
-              long_poll_timeout: 20_000,
-              max_age: Application.fetch_env!(:electric, :cache_max_age),
-              stale_age: Application.fetch_env!(:electric, :cache_stale_age),
-              allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},
+              storage: config.storage, tenant_manager: Electric.TenantManager},
            port: Application.fetch_env!(:electric, :service_port),
            thousand_island_options: http_listener_options()}
+          # {Bandit,
+          #  plug:
+          #    {Electric.Plug.Router,
+          #     storage: config.storage,
+          #     registry: Registry.ShapeChanges,
+          #     shape_cache: {Electric.ShapeCache, config.shape_cache_opts},
+          #     get_service_status: &Electric.ServiceStatus.check/0,
+          #     inspector: config.inspector,
+          #     long_poll_timeout: 20_000,
+          #     max_age: Application.fetch_env!(:electric, :cache_max_age),
+          #     stale_age: Application.fetch_env!(:electric, :cache_stale_age),
+          #     allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},
+          #  port: Application.fetch_env!(:electric, :service_port),
+          #  thousand_island_options: http_listener_options()}
         ],
-        prometheus_endpoint(Application.fetch_env!(:electric, :prometheus_port)),
-        [{Electric.Connection.Supervisor, connection_manager_opts}]
+        prometheus_endpoint(Application.fetch_env!(:electric, :prometheus_port))
       ])
 
-    Supervisor.start_link(children,
-      strategy: :one_for_one,
-      name: Electric.Supervisor
-    )
+    {:ok, sup_pid} =
+      Supervisor.start_link(children,
+        strategy: :one_for_one,
+        name: Electric.Supervisor
+      )
+
+    if Application.get_env(:electric, :test_mode, false) do
+      test_tenant = Application.fetch_env!(:electric, :test_tenant)
+      connection_opts = Application.fetch_env!(:electric, :connection_opts)
+      Electric.TenantManager.create_tenant(test_tenant, connection_opts)
+    end
+
+    {:ok, sup_pid}
   end
 
   # This function is called once in the application's start() callback. It reads configuration
@@ -103,28 +97,6 @@ defmodule Electric.Application do
     publication_name = "electric_publication_#{replication_stream_id}"
     slot_name = "electric_slot_#{replication_stream_id}"
 
-    get_pg_version_fn = fn ->
-      Electric.Connection.Manager.get_pg_version(Electric.Connection.Manager)
-    end
-
-    prepare_tables_mfa =
-      {Electric.Postgres.Configuration, :configure_tables_for_replication!,
-       [get_pg_version_fn, publication_name]}
-
-    inspector =
-      {Electric.Postgres.Inspector.EtsInspector, server: Electric.Postgres.Inspector.EtsInspector}
-
-    shape_cache_opts = [
-      electric_instance_id: electric_instance_id,
-      storage: storage,
-      inspector: inspector,
-      prepare_tables_fn: prepare_tables_mfa,
-      chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
-      log_producer: Electric.Replication.ShapeLogCollector.name(electric_instance_id),
-      consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(electric_instance_id),
-      registry: Registry.ShapeChanges
-    ]
-
     config = %Electric.Application.Configuration{
       electric_instance_id: electric_instance_id,
       storage: storage,
@@ -137,9 +109,7 @@ defmodule Electric.Application do
       },
       pool_opts: %{
         size: Application.fetch_env!(:electric, :db_pool_size)
-      },
-      inspector: inspector,
-      shape_cache_opts: shape_cache_opts
+      }
     }
 
     Electric.Application.Configuration.save(config)
