@@ -3,8 +3,8 @@ import { isChangeMessage, isControlMessage } from './helpers'
 import { FetchError } from './error'
 import { ShapeStreamInterface } from './client'
 
-export type ShapeData<T extends Row = Row> = Map<string, T>
-export type ShapeChangedCallback<T extends Row = Row> = (
+export type ShapeData<T extends Row<unknown> = Row> = Map<string, T>
+export type ShapeChangedCallback<T extends Row<unknown> = Row> = (
   value: ShapeData<T>
 ) => void
 
@@ -39,7 +39,7 @@ export type ShapeChangedCallback<T extends Row = Row> = (
  *       console.log(shapeData)
  *     })
  */
-export class Shape<T extends Row = Row> {
+export class Shape<T extends Row<unknown> = Row> {
   readonly #stream: ShapeStreamInterface<T>
 
   readonly #data: ShapeData<T> = new Map()
