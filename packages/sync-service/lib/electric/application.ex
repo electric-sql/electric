@@ -22,14 +22,23 @@ defmodule Electric.Application do
 
     persistent_kv = apply(kv_module, kv_fun, [kv_params])
 
-    publication_name = "electric_publication"
-    slot_name = "electric_slot"
+    replication_stream_id = Application.fetch_env!(:electric, :replication_stream_id)
+    publication_name = "electric_publication_#{replication_stream_id}"
+    slot_name = "electric_slot_#{replication_stream_id}"
 
     with {:ok, storage_opts} <- storage_module.shared_opts(storage_opts) do
       storage = {storage_module, storage_opts}
 
       get_pg_version = fn ->
         Electric.ConnectionManager.get_pg_version(Electric.ConnectionManager)
+      end
+
+      get_service_status = fn ->
+        Electric.ServiceStatus.check(
+          get_connection_status: fn ->
+            Electric.ConnectionManager.get_status(Electric.ConnectionManager)
+          end
+        )
       end
 
       prepare_tables_fn =
@@ -103,12 +112,14 @@ defmodule Electric.Application do
                 storage: storage,
                 registry: Registry.ShapeChanges,
                 shape_cache: {Electric.ShapeCache, []},
+                get_service_status: get_service_status,
                 inspector: inspector,
                 long_poll_timeout: 20_000,
                 max_age: Application.fetch_env!(:electric, :cache_max_age),
                 stale_age: Application.fetch_env!(:electric, :cache_stale_age),
                 allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},
-             port: 3000}
+             port: Application.fetch_env!(:electric, :service_port),
+             thousand_island_options: http_listener_options()}
           ]
           |> add_prometheus_router(Application.fetch_env!(:electric, :prometheus_port))
         else
@@ -129,8 +140,18 @@ defmodule Electric.Application do
       [
         {
           Bandit,
-          plug: {Electric.Plug.UtilityRouter, []}, port: port
+          plug: {Electric.Plug.UtilityRouter, []},
+          port: port,
+          thousand_island_options: http_listener_options()
         }
       ]
+  end
+
+  defp http_listener_options do
+    if Application.get_env(:electric, :listen_on_ipv6?, false) do
+      [transport_options: [:inet6]]
+    else
+      []
+    end
   end
 end

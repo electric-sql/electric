@@ -23,6 +23,10 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r build
       - name: Create Release Pull Request or Publish
@@ -31,7 +35,8 @@ jobs:
         with:
           version: pnpm ci:version
           publish: pnpm ci:publish
-          title: 'chore: publish new package versions'
+          title: "chore: publish new package versions"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}

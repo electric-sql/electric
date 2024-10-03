@@ -25,6 +25,11 @@ export default defineConfig({
       rel: 'icon',
       type: 'image/svg+xml',
       href: '/img/brand/favicon.svg'
+    }],
+    ['script', {
+      defer: 'defer',
+      'data-domain': 'electric-sql.com',
+      src: 'https://plausible.io/js/script.js',
     }]
   ],
   ignoreDeadLinks: 'localhostLinks',
@@ -56,7 +61,7 @@ export default defineConfig({
     },
     logo: '/img/brand/logo.svg',
     nav: [
-      { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
+      { text: 'Product', link: '/product/sync', activeMatch: '/product/' },
       { text: 'Use cases', link: '/use-cases/state-transfer', activeMatch: '/use-cases/' },
       { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/'},
       { text: 'Blog', link: '/blog', activeMatch: '/blog/'},
@@ -70,8 +75,11 @@ export default defineConfig({
         {
           text: 'Product',
           items: [
-            { text: 'Electric', link: '/product/electric' },
-            { text: 'DDN', link: '/product/ddn' },
+            { text: 'Sync', link: '/product/sync' },
+            { text: 'Cloud', link: '/product/cloud', items: [
+                { text: 'Sign-up', link: '/product/cloud/sign-up' }
+              ]
+            },
             { text: 'PGlite', link: '/product/pglite' },
           ]
         }
@@ -187,7 +195,14 @@ export default defineConfig({
           items: [
             { text: 'Community', link: '/about/community' },
             { text: 'Team', link: '/about/team' },
-            { text: 'Jobs', link: '/about/jobs' },
+            {
+              text: 'Jobs',
+              link: '/about/jobs',
+              items: [
+                { text: 'PGlite Engineer', link: '/about/jobs/pglite-engineer' }
+              ],
+              collapsed: false
+            },
             {
               text: 'Legal',
               items: [
@@ -214,7 +229,7 @@ export default defineConfig({
 
     const title = `${fm.title || siteData.title} | ${fm.titleTemplate || 'ElectricSQL'}`
     const description = fm.description || siteData.description
-    const image = `https://electric-sql.com${fm.image || '/img/postgres-sync.jpg'}`
+    const image = `https://electric-sql.com${fm.image || '/img/meta/why-fetch-when-you-can-sync.jpg'}`
 
     head.push(['meta', { name: 'twitter:card', content: 'summary_large_image' }])
     head.push(['meta', { name: 'twitter:image', content: image }])

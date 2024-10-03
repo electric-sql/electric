@@ -365,6 +365,11 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_shape(state, shape_id) do
+    if state.shape_status.get_existing_shape(state.persistent_state, shape_id) !== nil do
+      shape_opts = Electric.ShapeCache.Storage.for_shape(shape_id, state.storage)
+      Electric.ShapeCache.Storage.cleanup!(shape_opts)
+    end
+
     Electric.Shapes.ConsumerSupervisor.stop_shape_consumer(
       state.consumer_supervisor,
       state.electric_instance_id,

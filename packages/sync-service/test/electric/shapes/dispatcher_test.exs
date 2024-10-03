@@ -160,4 +160,28 @@ defmodule Electric.Shapes.DispatcherTest do
     {:ok, 0, dispatcher} = D.cancel(c2, dispatcher)
     {:ok, 1, _dispatcher} = D.cancel(c3, dispatcher)
   end
+
+  test "if no consumers want the message then we return demand" do
+    dispatcher = dispatcher()
+
+    c1 = {_pid1, ref1} = consumer(1)
+    c2 = {_pid2, ref2} = consumer(2)
+    c3 = {_pid3, ref3} = consumer(3)
+
+    {:ok, 1, dispatcher} = D.subscribe([selector: &is_even/1], c1, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c2, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c3, dispatcher)
+
+    event = 3
+
+    {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
+    refute_receive {C, ^ref1, [^event]}
+    refute_receive {C, ^ref2, [^event]}
+    refute_receive {C, ^ref3, [^event]}
+    # none of the subscribers want the event, but we need to simulate the full cycle
+    # so the dispatcher should generate some fake demand. This goes to the 
+    # last subscriber, which is at the head of the list
+    assert_receive {:"$gen_producer", {_pid, ^ref3}, {:ask, 1}}
+    assert {:ok, 1, _dispatcher} = D.ask(1, c3, dispatcher)
+  end
 end

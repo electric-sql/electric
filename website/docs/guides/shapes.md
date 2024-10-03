@@ -68,7 +68,7 @@ Where clauses can only refer to columns in the target row; you can't perform joi
 
 ## Subscribing to shapes
 
-Local clients establish shape subscriptions, typically using [client libraries](/docs/api/clients/typescript). These sync data from the [Electric sync service](/product/electric) into the client using the [HTTP API](/docs/api/http).
+Local clients establish shape subscriptions, typically using [client libraries](/docs/api/clients/typescript). These sync data from the [Electric sync service](/product/sync) into the client using the [HTTP API](/docs/api/http).
 
 The sync service maintains shape subscriptions and streams any new data and data changes to the local
 client. In the client, shapes can be held as objects in memory, for example using a [`useShape`](/docs/api/integrations/react) hook, or in a normalised store or database like [PGlite](/product/pglite).
@@ -173,3 +173,11 @@ You can upvote and discuss adding support for mutable shapes here:
 ... add links to benchmarks here ...
 
 -->
+
+### Dropping tables
+
+When dropping a table from Postgres you need to *manually* delete all shapes that are defined on that table.
+This is especially important if you intend to recreate the table afterwards (possibly with a different schema) as the shape will contain stale data from the old table.
+Therefore, recreating the table only works if you first delete the shape.
+
+Electric does not yet automatically delete shapes when tables are dropped because Postgres does not stream DDL statements (such as `DROP TABLE`) on the logical replication stream that Electric uses to detect changes. However, we are actively exploring approaches for automated shape deletion in this [GitHub issue](https://github.com/electric-sql/electric/issues/1733).

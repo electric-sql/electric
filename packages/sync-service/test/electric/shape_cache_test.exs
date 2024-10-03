@@ -759,6 +759,14 @@ defmodule Electric.ShapeCacheTest do
 
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}
 
+      assert_raise ArgumentError,
+                   ~r"the table identifier does not refer to an existing ETS table",
+                   fn -> Stream.run(Storage.get_log_stream(@zero_offset, storage)) end
+
+      assert_raise RuntimeError,
+                   ~r"Snapshot no longer available",
+                   fn -> Storage.get_snapshot(storage) end
+
       {shape_id2, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert shape_id != shape_id2
     end

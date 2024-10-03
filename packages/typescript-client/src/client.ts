@@ -1,23 +1,22 @@
-import { Message, Offset, Schema, Row } from './types'
+import { Message, Offset, Schema, Row, MaybePromise } from './types'
 import { MessageParser, Parser } from './parser'
-import { isChangeMessage, isControlMessage } from './helpers'
-
-export type ShapeData<T extends Row = Row> = Map<string, T>
-export type ShapeChangedCallback<T extends Row = Row> = (
-  value: ShapeData<T>
-) => void
-
-export interface BackoffOptions {
-  initialDelay: number
-  maxDelay: number
-  multiplier: number
-}
-
-export const BackoffDefaults = {
-  initialDelay: 100,
-  maxDelay: 10_000,
-  multiplier: 1.3,
-}
+import { isUpToDateMessage } from './helpers'
+import { FetchError, FetchBackoffAbortError } from './error'
+import {
+  BackoffDefaults,
+  BackoffOptions,
+  createFetchWithBackoff,
+  createFetchWithChunkBuffer,
+} from './fetch'
+import {
+  CHUNK_LAST_OFFSET_HEADER,
+  LIVE_QUERY_PARAM,
+  OFFSET_QUERY_PARAM,
+  SHAPE_ID_HEADER,
+  SHAPE_ID_QUERY_PARAM,
+  SHAPE_SCHEMA_HEADER,
+  WHERE_QUERY_PARAM,
+} from './constants'
 
 /**
  * Options for constructing a ShapeStream.
@@ -57,86 +56,25 @@ export interface ShapeStreamOptions {
   parser?: Parser
 }
 
-/**
- * Receives batches of `messages`, puts them on a queue and processes
- * them asynchronously by passing to a registered callback function.
- *
- * @constructor
- * @param {(messages: Message[]) => void} callback function
- */
-class MessageProcessor<T extends Row = Row> {
-  private messageQueue: Message<T>[][] = []
-  private isProcessing = false
-  private callback: (messages: Message<T>[]) => void | Promise<void>
+export interface ShapeStreamInterface<T extends Row = Row> {
+  subscribe(
+    callback: (messages: Message<T>[]) => MaybePromise<void>,
+    onError?: (error: FetchError | Error) => void
+  ): void
+  unsubscribeAllUpToDateSubscribers(): void
+  unsubscribeAll(): void
+  subscribeOnceToUpToDate(
+    callback: () => MaybePromise<void>,
+    error: (err: FetchError | Error) => void
+  ): () => void
 
-  constructor(callback: (messages: Message<T>[]) => void | Promise<void>) {
-    this.callback = callback
-  }
+  isLoading(): boolean
+  lastSyncedAt(): number | undefined
+  lastSynced(): number
+  isConnected(): boolean
 
-  process(messages: Message<T>[]) {
-    this.messageQueue.push(messages)
-
-    if (!this.isProcessing) {
-      this.processQueue()
-    }
-  }
-
-  private async processQueue() {
-    this.isProcessing = true
-
-    while (this.messageQueue.length > 0) {
-      const messages = this.messageQueue.shift()!
-
-      await this.callback(messages)
-    }
-
-    this.isProcessing = false
-  }
-}
-
-export class FetchError extends Error {
-  status: number
-  text?: string
-  json?: object
-  headers: Record<string, string>
-
-  constructor(
-    status: number,
-    text: string | undefined,
-    json: object | undefined,
-    headers: Record<string, string>,
-    public url: string,
-    message?: string
-  ) {
-    super(
-      message ||
-        `HTTP Error ${status} at ${url}: ${text ?? JSON.stringify(json)}`
-    )
-    this.name = `FetchError`
-    this.status = status
-    this.text = text
-    this.json = json
-    this.headers = headers
-  }
-
-  static async fromResponse(
-    response: Response,
-    url: string
-  ): Promise<FetchError> {
-    const status = response.status
-    const headers = Object.fromEntries([...response.headers.entries()])
-    let text: string | undefined = undefined
-    let json: object | undefined = undefined
-
-    const contentType = response.headers.get(`content-type`)
-    if (contentType && contentType.includes(`application/json`)) {
-      json = (await response.json()) as object
-    } else {
-      text = await response.text()
-    }
-
-    return new FetchError(status, text, json, headers, url)
-  }
+  isUpToDate: boolean
+  shapeId?: string
 }
 
 /**
@@ -169,89 +107,113 @@ export class FetchError extends Error {
  * aborter.abort()
  * ```
  */
-export class ShapeStream<T extends Row = Row> {
-  private options: ShapeStreamOptions
-  private backoffOptions: BackoffOptions
-  private fetchClient: typeof fetch
-  private schema?: Schema
 
-  private subscribers = new Map<
+export class ShapeStream<T extends Row = Row>
+  implements ShapeStreamInterface<T>
+{
+  readonly options: ShapeStreamOptions
+
+  readonly #fetchClient: typeof fetch
+  readonly #messageParser: MessageParser<T>
+
+  readonly #subscribers = new Map<
     number,
-    [MessageProcessor<T>, ((error: Error) => void) | undefined]
+    [
+      (messages: Message<T>[]) => MaybePromise<void>,
+      ((error: Error) => void) | undefined,
+    ]
   >()
-  private upToDateSubscribers = new Map<
+  readonly #upToDateSubscribers = new Map<
     number,
     [() => void, (error: FetchError | Error) => void]
   >()
 
-  private lastOffset: Offset
-  private messageParser: MessageParser<T>
-  private lastSyncedAt?: number // unix time
-  public isUpToDate: boolean = false
-  private connected: boolean = false
-
-  shapeId?: string
+  #lastOffset: Offset
+  #lastSyncedAt?: number // unix time
+  #isUpToDate: boolean = false
+  #connected: boolean = false
+  #shapeId?: string
+  #schema?: Schema
 
   constructor(options: ShapeStreamOptions) {
-    this.validateOptions(options)
+    validateOptions(options)
     this.options = { subscribe: true, ...options }
-    this.lastOffset = this.options.offset ?? `-1`
-    this.shapeId = this.options.shapeId
-    this.messageParser = new MessageParser<T>(options.parser)
+    this.#lastOffset = this.options.offset ?? `-1`
+    this.#shapeId = this.options.shapeId
+    this.#messageParser = new MessageParser<T>(options.parser)
 
-    this.backoffOptions = options.backoffOptions ?? BackoffDefaults
-    this.fetchClient =
+    const baseFetchClient =
       options.fetchClient ??
       ((...args: Parameters<typeof fetch>) => fetch(...args))
+
+    const fetchWithBackoffClient = createFetchWithBackoff(baseFetchClient, {
+      ...(options.backoffOptions ?? BackoffDefaults),
+      onFailedAttempt: () => {
+        this.#connected = false
+        options.backoffOptions?.onFailedAttempt?.()
+      },
+    })
+
+    this.#fetchClient = createFetchWithChunkBuffer(fetchWithBackoffClient)
 
     this.start()
   }
 
+  get shapeId() {
+    return this.#shapeId
+  }
+
+  get isUpToDate() {
+    return this.#isUpToDate
+  }
+
   async start() {
-    this.isUpToDate = false
+    this.#isUpToDate = false
 
     const { url, where, signal } = this.options
 
     try {
-      while ((!signal?.aborted && !this.isUpToDate) || this.options.subscribe) {
+      while (
+        (!signal?.aborted && !this.#isUpToDate) ||
+        this.options.subscribe
+      ) {
         const fetchUrl = new URL(url)
-        if (where) fetchUrl.searchParams.set(`where`, where)
-        fetchUrl.searchParams.set(`offset`, this.lastOffset)
+        if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
+        fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
 
-        if (this.isUpToDate) {
-          fetchUrl.searchParams.set(`live`, `true`)
+        if (this.#isUpToDate) {
+          fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
         }
 
-        if (this.shapeId) {
+        if (this.#shapeId) {
           // This should probably be a header for better cache breaking?
-          fetchUrl.searchParams.set(`shape_id`, this.shapeId!)
+          fetchUrl.searchParams.set(SHAPE_ID_QUERY_PARAM, this.#shapeId!)
         }
 
         let response!: Response
-
         try {
-          const maybeResponse = await this.fetchWithBackoff(fetchUrl)
-          if (maybeResponse) response = maybeResponse
-          else break
+          response = await this.#fetchClient(fetchUrl.toString(), { signal })
+          this.#connected = true
         } catch (e) {
+          if (e instanceof FetchBackoffAbortError) break // interrupted
           if (!(e instanceof FetchError)) throw e // should never happen
           if (e.status == 400) {
             // The request is invalid, most likely because the shape has been deleted.
             // We should start from scratch, this will force the shape to be recreated.
-            this.reset()
-            this.publish(e.json as Message<T>[])
+            this.#reset()
+            await this.#publish(e.json as Message<T>[])
             continue
           } else if (e.status == 409) {
             // Upon receiving a 409, we should start from scratch
             // with the newly provided shape ID
-            const newShapeId = e.headers[`x-electric-shape-id`]
-            this.reset(newShapeId)
-            this.publish(e.json as Message<T>[])
+            const newShapeId = e.headers[SHAPE_ID_HEADER]
+            this.#reset(newShapeId)
+            await this.#publish(e.json as Message<T>[])
             continue
           } else if (e.status >= 400 && e.status < 500) {
             // Notify subscribers
-            this.sendErrorToUpToDateSubscribers(e)
-            this.sendErrorToSubscribers(e)
+            this.#sendErrorToUpToDateSubscribers(e)
+            this.#sendErrorToSubscribers(e)
 
             // 400 errors are not actionable without additional user input, so we're throwing them.
             throw e
@@ -259,108 +221,99 @@ export class ShapeStream<T extends Row = Row> {
         }
 
         const { headers, status } = response
-        const shapeId = headers.get(`X-Electric-Shape-Id`)
+        const shapeId = headers.get(SHAPE_ID_HEADER)
         if (shapeId) {
-          this.shapeId = shapeId
+          this.#shapeId = shapeId
         }
 
-        const lastOffset = headers.get(`X-Electric-Chunk-Last-Offset`)
+        const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
         if (lastOffset) {
-          this.lastOffset = lastOffset as Offset
+          this.#lastOffset = lastOffset as Offset
         }
 
         const getSchema = (): Schema => {
-          const schemaHeader = headers.get(`X-Electric-Schema`)
+          const schemaHeader = headers.get(SHAPE_SCHEMA_HEADER)
           return schemaHeader ? JSON.parse(schemaHeader) : {}
         }
-        this.schema = this.schema ?? getSchema()
+        this.#schema = this.#schema ?? getSchema()
 
         const messages = status === 204 ? `[]` : await response.text()
 
         if (status === 204) {
           // There's no content so we are live and up to date
-          this.lastSyncedAt = Date.now()
+          this.#lastSyncedAt = Date.now()
         }
 
-        const batch = this.messageParser.parse(messages, this.schema)
+        const batch = this.#messageParser.parse(messages, this.#schema)
 
         // Update isUpToDate
         if (batch.length > 0) {
+          const prevUpToDate = this.#isUpToDate
           const lastMessage = batch[batch.length - 1]
-          if (
-            isControlMessage(lastMessage) &&
-            lastMessage.headers.control === `up-to-date`
-          ) {
-            this.lastSyncedAt = Date.now()
-            if (!this.isUpToDate) {
-              this.isUpToDate = true
-              this.notifyUpToDateSubscribers()
-            }
+          if (isUpToDateMessage(lastMessage)) {
+            this.#lastSyncedAt = Date.now()
+            this.#isUpToDate = true
           }
 
-          this.publish(batch)
+          await this.#publish(batch)
+          if (!prevUpToDate && this.#isUpToDate) {
+            this.#notifyUpToDateSubscribers()
+          }
         }
       }
     } finally {
-      this.connected = false
+      this.#connected = false
     }
   }
 
   subscribe(
-    callback: (messages: Message<T>[]) => void | Promise<void>,
+    callback: (messages: Message<T>[]) => MaybePromise<void>,
     onError?: (error: FetchError | Error) => void
   ) {
     const subscriptionId = Math.random()
-    const subscriber = new MessageProcessor(callback)
 
-    this.subscribers.set(subscriptionId, [subscriber, onError])
+    this.#subscribers.set(subscriptionId, [callback, onError])
 
     return () => {
-      this.subscribers.delete(subscriptionId)
+      this.#subscribers.delete(subscriptionId)
     }
   }
 
   unsubscribeAll(): void {
-    this.subscribers.clear()
-  }
-
-  private publish(messages: Message<T>[]) {
-    this.subscribers.forEach(([subscriber, _]) => {
-      subscriber.process(messages)
-    })
-  }
-
-  private sendErrorToSubscribers(error: Error) {
-    this.subscribers.forEach(([_, errorFn]) => {
-      errorFn?.(error)
-    })
+    this.#subscribers.clear()
   }
 
   subscribeOnceToUpToDate(
-    callback: () => void | Promise<void>,
+    callback: () => MaybePromise<void>,
     error: (err: FetchError | Error) => void
   ) {
     const subscriptionId = Math.random()
 
-    this.upToDateSubscribers.set(subscriptionId, [callback, error])
+    this.#upToDateSubscribers.set(subscriptionId, [callback, error])
 
     return () => {
-      this.upToDateSubscribers.delete(subscriptionId)
+      this.#upToDateSubscribers.delete(subscriptionId)
     }
   }
 
   unsubscribeAllUpToDateSubscribers(): void {
-    this.upToDateSubscribers.clear()
+    this.#upToDateSubscribers.clear()
+  }
+
+  /** Unix time at which we last synced. Undefined when `isLoading` is true. */
+  lastSyncedAt(): number | undefined {
+    return this.#lastSyncedAt
   }
 
   /** Time elapsed since last sync (in ms). Infinity if we did not yet sync. */
   lastSynced(): number {
-    if (this.lastSyncedAt === undefined) return Infinity
-    return Date.now() - this.lastSyncedAt
+    if (this.#lastSyncedAt === undefined) return Infinity
+    return Date.now() - this.#lastSyncedAt
   }
 
+  /** Indicates if we are connected to the Electric sync service. */
   isConnected(): boolean {
-    return this.connected
+    return this.#connected
   }
 
   /** True during initial fetch. False afterwise.  */
@@ -368,15 +321,34 @@ export class ShapeStream<T extends Row = Row> {
     return !this.isUpToDate
   }
 
-  private notifyUpToDateSubscribers() {
-    this.upToDateSubscribers.forEach(([callback]) => {
+  async #publish(messages: Message<T>[]): Promise<void> {
+    await Promise.all(
+      Array.from(this.#subscribers.values()).map(async ([callback, __]) => {
+        try {
+          await callback(messages)
+        } catch (err) {
+          queueMicrotask(() => {
+            throw err
+          })
+        }
+      })
+    )
+  }
+
+  #sendErrorToSubscribers(error: Error) {
+    this.#subscribers.forEach(([_, errorFn]) => {
+      errorFn?.(error)
+    })
+  }
+
+  #notifyUpToDateSubscribers() {
+    this.#upToDateSubscribers.forEach(([callback]) => {
       callback()
     })
   }
 
-  private sendErrorToUpToDateSubscribers(error: FetchError | Error) {
-    // eslint-disable-next-line
-    this.upToDateSubscribers.forEach(([_, errorCallback]) =>
+  #sendErrorToUpToDateSubscribers(error: FetchError | Error) {
+    this.#upToDateSubscribers.forEach(([_, errorCallback]) =>
       errorCallback(error)
     )
   }
@@ -385,248 +357,33 @@ export class ShapeStream<T extends Row = Row> {
    * Resets the state of the stream, optionally with a provided
    * shape ID
    */
-  private reset(shapeId?: string) {
-    this.lastOffset = `-1`
-    this.shapeId = shapeId
-    this.isUpToDate = false
-    this.connected = false
-    this.schema = undefined
-  }
-
-  private validateOptions(options: ShapeStreamOptions): void {
-    if (!options.url) {
-      throw new Error(`Invalid shape option. It must provide the url`)
-    }
-    if (options.signal && !(options.signal instanceof AbortSignal)) {
-      throw new Error(
-        `Invalid signal option. It must be an instance of AbortSignal.`
-      )
-    }
-
-    if (
-      options.offset !== undefined &&
-      options.offset !== `-1` &&
-      !options.shapeId
-    ) {
-      throw new Error(
-        `shapeId is required if this isn't an initial fetch (i.e. offset > -1)`
-      )
-    }
-  }
-
-  private async fetchWithBackoff(url: URL) {
-    const { initialDelay, maxDelay, multiplier } = this.backoffOptions
-    const signal = this.options.signal
-
-    let delay = initialDelay
-    let attempt = 0
-
-    // eslint-disable-next-line no-constant-condition -- we're retrying with a lag until we get a non-500 response or the abort signal is triggered
-    while (true) {
-      try {
-        const result = await this.fetchClient(url.toString(), { signal })
-        if (result.ok) {
-          if (this.options.subscribe) {
-            this.connected = true
-          }
-          return result
-        } else throw await FetchError.fromResponse(result, url.toString())
-      } catch (e) {
-        this.connected = false
-        if (signal?.aborted) {
-          return undefined
-        } else if (
-          e instanceof FetchError &&
-          e.status >= 400 &&
-          e.status < 500
-        ) {
-          // Any client errors cannot be backed off on, leave it to the caller to handle.
-          throw e
-        } else {
-          // Exponentially backoff on errors.
-          // Wait for the current delay duration
-          await new Promise((resolve) => setTimeout(resolve, delay))
-
-          // Increase the delay for the next attempt
-          delay = Math.min(delay * multiplier, maxDelay)
-
-          attempt++
-          console.log(`Retry attempt #${attempt} after ${delay}ms`)
-        }
-      }
-    }
+  #reset(shapeId?: string) {
+    this.#lastOffset = `-1`
+    this.#shapeId = shapeId
+    this.#isUpToDate = false
+    this.#connected = false
+    this.#schema = undefined
   }
 }
 
-/**
- * A Shape is an object that subscribes to a shape log,
- * keeps a materialised shape `.value` in memory and
- * notifies subscribers when the value has changed.
- *
- * It can be used without a framework and as a primitive
- * to simplify developing framework hooks.
- *
- * @constructor
- * @param {ShapeStream<T extends Row>} - the underlying shape stream
- * @example
- * ```
- * const shapeStream = new ShapeStream<{ foo: number }>(url: 'http://localhost:3000/v1/shape/foo'})
- * const shape = new Shape(shapeStream)
- * ```
- *
- * `value` returns a promise that resolves the Shape data once the Shape has been
- * fully loaded (and when resuming from being offline):
- *
- *     const value = await shape.value
- *
- * `valueSync` returns the current data synchronously:
- *
- *     const value = shape.valueSync
- *
- *  Subscribe to updates. Called whenever the shape updates in Postgres.
- *
- *     shape.subscribe(shapeData => {
- *       console.log(shapeData)
- *     })
- */
-export class Shape<T extends Row = Row> {
-  private stream: ShapeStream<T>
-
-  private data: ShapeData<T> = new Map()
-  private subscribers = new Map<number, ShapeChangedCallback<T>>()
-  public error: FetchError | false = false
-  private hasNotifiedSubscribersUpToDate: boolean = false
-
-  constructor(stream: ShapeStream<T>) {
-    this.stream = stream
-    this.stream.subscribe(this.process.bind(this), this.handleError.bind(this))
-    const unsubscribe = this.stream.subscribeOnceToUpToDate(
-      () => {
-        unsubscribe()
-      },
-      (e) => {
-        this.handleError(e)
-        throw e
-      }
+function validateOptions(options: Partial<ShapeStreamOptions>): void {
+  if (!options.url) {
+    throw new Error(`Invalid shape option. It must provide the url`)
+  }
+  if (options.signal && !(options.signal instanceof AbortSignal)) {
+    throw new Error(
+      `Invalid signal option. It must be an instance of AbortSignal.`
     )
   }
 
-  lastSynced(): number {
-    return this.stream.lastSynced()
+  if (
+    options.offset !== undefined &&
+    options.offset !== `-1` &&
+    !options.shapeId
+  ) {
+    throw new Error(
+      `shapeId is required if this isn't an initial fetch (i.e. offset > -1)`
+    )
   }
-
-  isConnected(): boolean {
-    return this.stream.isConnected()
-  }
-
-  /** True during initial fetch. False afterwise. */
-  isLoading(): boolean {
-    return this.stream.isLoading()
-  }
-
-  get value(): Promise<ShapeData<T>> {
-    return new Promise((resolve) => {
-      if (this.stream.isUpToDate) {
-        resolve(this.valueSync)
-      } else {
-        const unsubscribe = this.stream.subscribeOnceToUpToDate(
-          () => {
-            unsubscribe()
-            resolve(this.valueSync)
-          },
-          (e) => {
-            throw e
-          }
-        )
-      }
-    })
-  }
-
-  get valueSync() {
-    return this.data
-  }
-
-  subscribe(callback: ShapeChangedCallback<T>): () => void {
-    const subscriptionId = Math.random()
-
-    this.subscribers.set(subscriptionId, callback)
-
-    return () => {
-      this.subscribers.delete(subscriptionId)
-    }
-  }
-
-  unsubscribeAll(): void {
-    this.subscribers.clear()
-  }
-
-  get numSubscribers() {
-    return this.subscribers.size
-  }
-
-  private process(messages: Message<T>[]): void {
-    let dataMayHaveChanged = false
-    let isUpToDate = false
-    let newlyUpToDate = false
-
-    messages.forEach((message) => {
-      if (isChangeMessage(message)) {
-        dataMayHaveChanged = [`insert`, `update`, `delete`].includes(
-          message.headers.operation
-        )
-
-        switch (message.headers.operation) {
-          case `insert`:
-            this.data.set(message.key, message.value)
-            break
-          case `update`:
-            this.data.set(message.key, {
-              ...this.data.get(message.key)!,
-              ...message.value,
-            })
-            break
-          case `delete`:
-            this.data.delete(message.key)
-            break
-        }
-      }
-
-      if (isControlMessage(message)) {
-        switch (message.headers.control) {
-          case `up-to-date`:
-            isUpToDate = true
-            if (!this.hasNotifiedSubscribersUpToDate) {
-              newlyUpToDate = true
-            }
-            break
-          case `must-refetch`:
-            this.data.clear()
-            this.error = false
-            isUpToDate = false
-            newlyUpToDate = false
-            break
-        }
-      }
-    })
-
-    // Always notify subscribers when the Shape first is up to date.
-    // FIXME this would be cleaner with a simple state machine.
-    if (newlyUpToDate || (isUpToDate && dataMayHaveChanged)) {
-      this.hasNotifiedSubscribersUpToDate = true
-      this.notify()
-    }
-  }
-
-  private handleError(e: Error): void {
-    if (e instanceof FetchError) {
-      this.error = e
-      this.notify()
-    }
-  }
-
-  private notify(): void {
-    this.subscribers.forEach((callback) => {
-      callback(this.valueSync)
-    })
-  }
+  return
 }

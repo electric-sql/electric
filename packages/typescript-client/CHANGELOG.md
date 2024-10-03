@@ -1,5 +1,29 @@
 # @electric-sql/client
 
+## 0.6.0
+
+### Minor Changes
+
+- b0d258d: Rename Electric's custom HTTP headers to remove the x- prefix.
+
+### Patch Changes
+
+- df6cc5b: Wait for `ShapeStream` subscriber callbacks before requesting data to allow developer to implement backpressure.
+- e459a62: Implement configurable chunk prefetching to `ShapeStream` to accelerate stream consumption.
+
+## 0.5.1
+
+### Patch Changes
+
+- 9992a74: Client refactor and fix `Shape` state synchronization with `ShapeStream`.
+- 70da0b5: Expose lastSyncedAt field in ShapeStream and Shape classes and in the useShape React hook.
+
+## 0.5.0
+
+### Minor Changes
+
+- 7765d50: Expose isLoading status in ShapeStream and Shape classes and in useShape React hook.
+
 ## 0.4.1
 
 ### Patch Changes

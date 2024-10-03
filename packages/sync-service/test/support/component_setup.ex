@@ -55,7 +55,7 @@ defmodule Support.ComponentSetup do
     shape_meta_table = :"shape_meta_#{full_test_name(ctx)}"
     server = :"shape_cache_#{full_test_name(ctx)}"
     consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
-    get_pg_version = fn -> Application.fetch_env!(:electric, :major_pg_version_for_tests) end
+    get_pg_version = fn -> Application.fetch_env!(:electric, :pg_version_for_tests) end
 
     start_opts =
       [
@@ -162,6 +162,7 @@ defmodule Support.ComponentSetup do
       long_poll_timeout: Access.get(overrides, :long_poll_timeout, 5_000),
       max_age: Access.get(overrides, :max_age, 60),
       stale_age: Access.get(overrides, :stale_age, 300),
+      get_service_status: Access.get(overrides, :get_service_status, fn -> :active end),
       chunk_bytes_threshold:
         Access.get(overrides, :chunk_bytes_threshold, ctx.chunk_bytes_threshold),
       allow_shape_deletion: Access.get(overrides, :allow_shape_deletion, true)

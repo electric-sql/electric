@@ -1,5 +1,45 @@
 # @core/sync-service
 
+## 0.6.2
+
+### Patch Changes
+
+- 5f6d202: - Wait for advisory lock on replication slot to enable rolling deploys.
+  - Configurable replication slot and publication name using `REPLICATION_STREAM_ID` environment variable.
+  - Add `HealthCheckPlug` API endopint at `v1/health` that returns `waiting`, `starting`,and `active` statuses.
+
+## 0.6.1
+
+### Patch Changes
+
+- 8d886ba: Add LISTEN_ON_IPV6=true|false configuration option to support IPv6 network interfaces.
+
+## 0.6.0
+
+### Minor Changes
+
+- b0d258d: Rename Electric's custom HTTP headers to remove the x- prefix.
+
+### Patch Changes
+
+- e459a62: Add `electric-chunk-up-to-date` header to up-to-date responses for optimizing caching and prefetching.
+
+## 0.5.2
+
+### Patch Changes
+
+- 5e72067: Fix the configuration of OpenTelemetry libraries, removing the "inets_not_started" warning from log output.
+- e7fdb14: Fix how Electric reads PG's version number.
+- df3c174: Don't crash when there are no active shapes
+- fa879b1: Don't timeout when writing to lots of shapes
+
+## 0.5.1
+
+### Patch Changes
+
+- 0b8fbc4: Run filter logic for PG version 15 in unit tests.
+- aaf9c75: Clean up underlying shape data when cleaning up shape.
+
 ## 0.5.0
 
 ### Minor Changes

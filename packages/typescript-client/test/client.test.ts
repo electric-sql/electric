@@ -2,7 +2,7 @@ import { describe, expect, inject, vi } from 'vitest'
 import { v4 as uuidv4 } from 'uuid'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
-import { ShapeStream, Shape, FetchError } from '../src/client'
+import { ShapeStream, Shape, FetchError } from '../src'
 
 const BASE_URL = inject(`baseUrl`)
 
@@ -16,6 +16,8 @@ describe(`Shape`, () => {
     const map = await shape.value
 
     expect(map).toEqual(new Map())
+    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
+    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
   })
 
@@ -46,6 +48,8 @@ describe(`Shape`, () => {
     })
 
     expect(map).toEqual(expectedValue)
+    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
+    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
   })
 
@@ -74,6 +78,8 @@ describe(`Shape`, () => {
       priority: 10,
     })
     expect(map).toEqual(expectedValue)
+    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
+    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
 
     await sleep(100)
@@ -89,7 +95,7 @@ describe(`Shape`, () => {
     await deleteIssue({ id: id3, title: `other title2` })
     // Test an update too because we're sending patches that should be correctly merged in
     await updateIssue({ id: id2, title: `new title` })
-    await sleep(100) // some time for electric to catch up
+    await sleep(200) // some time for electric to catch up
     await hasNotified
 
     expectedValue.set(`${issuesTableKey}/"${id2}"`, {
@@ -98,6 +104,8 @@ describe(`Shape`, () => {
       priority: 10,
     })
     expect(shape.valueSync).toEqual(expectedValue)
+    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(intermediate)
+    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - intermediate)
 
     shape.unsubscribeAll()
@@ -135,15 +143,17 @@ describe(`Shape`, () => {
     const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
       // clear the shape and modify the data after the initial request
       if (requestsMade === 1) {
-        await clearIssuesShape()
         // new shape data should have just second issue and not first
         await deleteIssue({ id: id1, title: `foo1` })
         await insertIssues({ id: id2, title: `foo2` })
+        await sleep(100)
+        await clearIssuesShape(shapeStream.shapeId)
+
         rotationTime = Date.now()
       }
 
-      const response = await fetch(...args)
       requestsMade++
+      const response = await fetch(...args)
       return response
     }
 
@@ -209,6 +219,8 @@ describe(`Shape`, () => {
       priority: 10,
     })
     expect(value).toEqual(expectedValue)
+    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
+    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
 
     shape.unsubscribeAll()
@@ -313,7 +325,7 @@ describe(`Shape`, () => {
 
     expect(shapeStream.isLoading()).true
 
-    await sleep(100) // give some time for the initial fetch to complete
+    await sleep(200) // give some time for the initial fetch to complete
 
     expect(shapeStream.isLoading()).false
   })

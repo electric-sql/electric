@@ -42,7 +42,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           affected_tables = Shape.affected_tables(shape)
 
           OpenTelemetry.with_span(
-            "shape_cache.create_snapshot_task",
+            "shape_snapshot.create_snapshot_task",
             shape_attrs(shape_id, shape),
             fn ->
               try do
@@ -81,7 +81,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
       db_pool,
       fn conn ->
         OpenTelemetry.with_span(
-          "shape_cache.query_in_readonly_txn",
+          "shape_snapshot.query_in_readonly_txn",
           shape_attrs(shape_id, shape),
           fn ->
             Postgrex.query!(conn, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY", [])

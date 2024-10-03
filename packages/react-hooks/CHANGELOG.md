@@ -1,5 +1,34 @@
 # @electric-sql/react
 
+## 0.4.2
+
+### Patch Changes
+
+- Updated dependencies [b0d258d]
+- Updated dependencies [df6cc5b]
+- Updated dependencies [e459a62]
+  - @electric-sql/client@0.6.0
+
+## 0.4.1
+
+### Patch Changes
+
+- 70da0b5: Expose lastSyncedAt field in ShapeStream and Shape classes and in the useShape React hook.
+- Updated dependencies [9992a74]
+- Updated dependencies [70da0b5]
+  - @electric-sql/client@0.5.1
+
+## 0.4.0
+
+### Minor Changes
+
+- 7765d50: Expose isLoading status in ShapeStream and Shape classes and in useShape React hook.
+
+### Patch Changes
+
+- Updated dependencies [7765d50]
+  - @electric-sql/client@0.5.0
+
 ## 0.3.6
 
 ### Patch Changes

@@ -33,6 +33,29 @@ defmodule Electric.Plug.RouterTest do
     end
   end
 
+  describe "/v1/health" do
+    setup [:with_unique_db]
+
+    setup do
+      %{publication_name: "electric_test_publication", slot_name: "electric_test_slot"}
+    end
+
+    setup :with_complete_stack
+
+    setup(ctx,
+      do: %{opts: Router.init(build_router_opts(ctx, get_service_status: fn -> :active end))}
+    )
+
+    test "GET returns health status of service", %{opts: opts} do
+      conn =
+        conn("GET", "/v1/health")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      assert Jason.decode!(conn.resp_body) == %{"status" => "active"}
+    end
+  end
+
   describe "/v1/shapes" do
     setup [:with_unique_db, :with_basic_tables, :with_sql_execute]
 
@@ -115,15 +138,6 @@ defmodule Electric.Plug.RouterTest do
 
       assert [%{"value" => %{"value" => "test value 1"}}, %{"headers" => _}] =
                Jason.decode!(conn.resp_body)
-
-      # Add another shape to avoid the bug mentioned here: https://github.com/electric-sql/electric/issues/1688
-      # which causes this test to sporadically fail.
-      # TODO: Remove this GET once #1688 has been fixed
-      conn =
-        conn("GET", "/v1/shape/items", offset: -1, where: "1=1")
-        |> Router.call(opts)
-
-      assert %{status: 200} = conn
 
       assert %{status: 202} =
                conn("DELETE", "/v1/shape/items?shape_id=#{shape1_id}")
@@ -627,8 +641,8 @@ defmodule Electric.Plug.RouterTest do
 
       conn = conn("GET", "/v1/shape/large_rows_table?offset=-1") |> Router.call(opts)
       assert %{status: 200} = conn
-      [shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
-      [next_offset] = Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset")
+      [shape_id] = Plug.Conn.get_resp_header(conn, "electric-shape-id")
+      [next_offset] = Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset")
 
       assert [_] = Jason.decode!(conn.resp_body)
 
@@ -669,7 +683,7 @@ defmodule Electric.Plug.RouterTest do
                }
              ] = Jason.decode!(conn.resp_body)
 
-      [next_offset] = Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset")
+      [next_offset] = Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset")
 
       conn =
         conn("GET", "/v1/shape/large_rows_table?offset=#{next_offset}&shape_id=#{shape_id}")
@@ -704,7 +718,7 @@ defmodule Electric.Plug.RouterTest do
       assert conn.resp_body != ""
 
       shape_id = get_resp_shape_id(conn)
-      [next_offset] = Plug.Conn.get_resp_header(conn, "x-electric-chunk-last-offset")
+      [next_offset] = Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset")
 
       # Make the next request but forget to include the where clause
       conn =
@@ -726,7 +740,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 409} = conn
       assert conn.resp_body == Jason.encode!([%{headers: %{control: "must-refetch"}}])
-      new_shape_id = get_resp_header(conn, "x-electric-shape-id")
+      new_shape_id = get_resp_header(conn, "electric-shape-id")
 
       assert get_resp_header(conn, "location") ==
                "/v1/shape/items?shape_id=#{new_shape_id}&offset=-1"
@@ -755,7 +769,7 @@ defmodule Electric.Plug.RouterTest do
         |> Router.call(opts)
 
       assert %{status: 409} = conn
-      [^shape_id] = Plug.Conn.get_resp_header(conn, "x-electric-shape-id")
+      [^shape_id] = Plug.Conn.get_resp_header(conn, "electric-shape-id")
     end
 
     @tag with_sql: [
@@ -806,8 +820,8 @@ defmodule Electric.Plug.RouterTest do
     end
   end
 
-  defp get_resp_shape_id(conn), do: get_resp_header(conn, "x-electric-shape-id")
-  defp get_resp_last_offset(conn), do: get_resp_header(conn, "x-electric-chunk-last-offset")
+  defp get_resp_shape_id(conn), do: get_resp_header(conn, "electric-shape-id")
+  defp get_resp_last_offset(conn), do: get_resp_header(conn, "electric-chunk-last-offset")
 
   defp get_resp_header(conn, header) do
     assert [val] = Plug.Conn.get_resp_header(conn, header)

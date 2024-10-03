@@ -49,7 +49,9 @@ defmodule Support.DbSetup do
   end
 
   def with_pg_version(ctx) do
-    pg_version = Electric.ConnectionManager.query_pg_major_version(ctx.db_conn)
+    %{rows: [[pg_version]]} =
+      Postgrex.query!(ctx.db_conn, "SELECT current_setting('server_version_num')::integer", [])
+
     {:ok, %{get_pg_version: fn -> pg_version end}}
   end
 

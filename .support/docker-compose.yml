@@ -21,7 +21,7 @@ services:
       - config_file=/etc/postgresql/postgresql.conf
 
   backend:
-    image: electricsql/electric:latest
+    image: electricsql/electric:canary
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/electric
     ports:

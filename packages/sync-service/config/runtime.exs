@@ -11,7 +11,7 @@ config :logger, level: :debug
 
 if config_env() == :test do
   config(:logger, level: :info)
-  config(:electric, major_pg_version_for_tests: env!("POSTGRES_MAJOR_VERSION", :integer, 15))
+  config(:electric, pg_version_for_tests: env!("POSTGRES_VERSION", :integer, 150_001))
 end
 
 if config_env() in [:dev, :test] do
@@ -92,6 +92,8 @@ else
   config :electric, connection_opts: connection_opts, electric_instance_id: electric_instance_id
 end
 
+config :electric, listen_on_ipv6?: env!("LISTEN_ON_IPV6", :boolean, false)
+
 enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)
 cache_max_age = env!("CACHE_MAX_AGE", :integer, 60)
 cache_stale_age = env!("CACHE_STALE_AGE", :integer, 60 * 5)
@@ -159,6 +161,8 @@ config :electric,
   instance_id: instance_id,
   telemetry_statsd_host: statsd_host,
   db_pool_size: env!("DB_POOL_SIZE", :integer, 50),
+  replication_stream_id: env!("REPLICATION_STREAM_ID", :string, "default"),
+  service_port: env!("PORT", :integer, 3000),
   prometheus_port: prometheus_port,
   storage: storage,
   persistent_kv: persistent_kv

@@ -2,9 +2,9 @@ import { parse } from 'cache-control-parser'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
 import { assert, describe, expect, inject, vi } from 'vitest'
-import { Shape, ShapeStream } from '../src/client'
-import { Message, Offset, Row } from '../src/types'
-import { isChangeMessage, isControlMessage } from '../src'
+import { Shape, ShapeStream } from '../src'
+import { Message, Offset } from '../src/types'
+import { isChangeMessage, isUpToDateMessage } from '../src/helpers'
 import {
   IssueRow,
   testWithIssuesTable as it,
@@ -13,9 +13,6 @@ import {
 import * as h from './support/test-helpers'
 
 const BASE_URL = inject(`baseUrl`)
-
-const isUpToDateMessage = <T extends Row>(msg: Message<T>) =>
-  isControlMessage(msg) && msg.headers.control === `up-to-date`
 
 it(`sanity check`, async ({ dbClient, issuesTableSql }) => {
   const result = await dbClient.query(`SELECT * FROM ${issuesTableSql}`)
@@ -118,7 +115,7 @@ describe(`HTTP Sync`, () => {
       `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
-    const shapeId = res.headers.get(`x-electric-shape-id`)
+    const shapeId = res.headers.get(`electric-shape-id`)
     expect(shapeId).to.exist
   })
 
@@ -129,7 +126,7 @@ describe(`HTTP Sync`, () => {
       `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
-    const lastOffset = res.headers.get(`x-electric-chunk-last-offset`)
+    const lastOffset = res.headers.get(`electric-chunk-last-offset`)
     expect(lastOffset).to.exist
   })
 
@@ -377,6 +374,50 @@ describe(`HTTP Sync`, () => {
     )
   })
 
+  it(`should wait for processing before advancing stream`, async ({
+    aborter,
+    issuesTableUrl,
+
+    insertIssues,
+  }) => {
+    // With initial data
+    await insertIssues({ id: uuidv4(), title: `original insert` })
+
+    const fetchWrapper = vi
+      .fn()
+      .mockImplementation((...args: Parameters<typeof fetch>) => {
+        return fetch(...args)
+      })
+
+    const shapeData = new Map()
+    const issueStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+    })
+
+    let numFetchCalls = 0
+
+    await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
+      if (!isChangeMessage(msg)) return
+      shapeData.set(msg.key, msg.value)
+
+      if (nth === 0) {
+        await sleep(100)
+        numFetchCalls = fetchWrapper.mock.calls.length
+
+        // ensure fetch has not been called again while
+        // waiting for processing
+        await insertIssues({ title: `foo1` })
+        await sleep(100)
+        expect(fetchWrapper).toHaveBeenCalledTimes(numFetchCalls)
+      } else if (nth === 1) {
+        expect(fetchWrapper.mock.calls.length).greaterThan(numFetchCalls)
+        res()
+      }
+    })
+  })
+
   it(`multiple clients can get the same data in parallel`, async ({
     issuesTableUrl,
     updateIssue,
@@ -433,11 +474,12 @@ describe(`HTTP Sync`, () => {
     issuesTableUrl,
     insertIssues,
   }) => {
+    // initialize storage for the cases where persisted shape streams are tested
     await insertIssues({ title: `foo1` }, { title: `foo2` }, { title: `foo3` })
     await sleep(50)
 
     let lastOffset: Offset = `-1`
-    const issueStream = new ShapeStream({
+    const issueStream = new ShapeStream<IssueRow>({
       url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       signal: aborter.signal,
       subscribe: false,
@@ -474,7 +516,8 @@ describe(`HTTP Sync`, () => {
       offset: lastOffset,
       shapeId: issueStream.shapeId,
     })
-    await h.forEachMessage(newIssueStream, aborter, (res, msg, nth) => {
+
+    await h.forEachMessage(newIssueStream, newAborter, (res, msg, nth) => {
       if (isUpToDateMessage(msg)) {
         res()
       } else {
@@ -538,7 +581,7 @@ describe(`HTTP Sync`, () => {
     const midMessage = messages.slice(-6)[0]
     assert(`offset` in midMessage)
     const midOffset = midMessage.offset
-    const shapeId = res.headers.get(`x-electric-shape-id`)
+    const shapeId = res.headers.get(`electric-shape-id`)
     const etag = res.headers.get(`etag`)
     assert(etag !== null, `Response should have etag header`)
 
@@ -719,16 +762,19 @@ describe(`HTTP Sync`, () => {
     await insertIssues({ id: rowId, title: `foo1` })
 
     const statusCodesReceived: number[] = []
+    let numRequests = 0
 
     const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
       // before any subsequent requests after the initial one, ensure
       // that the existing shape is deleted and some more data is inserted
-      if (statusCodesReceived.length === 1 && statusCodesReceived[0] === 200) {
-        await clearIssuesShape(issueStream.shapeId)
+      if (numRequests === 1) {
         await insertIssues({ id: secondRowId, title: `foo2` })
+        await clearIssuesShape(issueStream.shapeId)
       }
 
+      numRequests++
       const response = await fetch(...args)
+
       if (response.status < 500) {
         statusCodesReceived.push(response.status)
       }
