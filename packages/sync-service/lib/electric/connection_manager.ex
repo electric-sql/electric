@@ -53,7 +53,8 @@ defmodule Electric.ConnectionManager do
       :pg_lock_acquired,
       # PostgreSQL server version
       :pg_version,
-      :electric_instance_id
+      :electric_instance_id,
+      :tenant_id
     ]
   end
 
@@ -73,8 +74,6 @@ defmodule Electric.ConnectionManager do
 
   @type options :: [option]
 
-  @name __MODULE__
-
   @lock_status_logging_interval 10_000
 
   @doc """
@@ -93,9 +92,17 @@ defmodule Electric.ConnectionManager do
     GenServer.call(server, :get_status)
   end
 
+  def name(%{electric_instance_id: electric_instance_id, tenant_id: tenant_id} = _config) do
+    name(electric_instance_id, tenant_id)
+  end
+
+  def name(electric_instance_id, tenant_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  end
+
   @spec start_link(options) :: GenServer.on_start()
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: @name)
+    GenServer.start_link(__MODULE__, opts, name: name(opts))
   end
 
   @impl true
@@ -130,7 +137,8 @@ defmodule Electric.ConnectionManager do
         shape_cache: Keyword.fetch!(opts, :shape_cache),
         pg_lock_acquired: false,
         backoff: {:backoff.init(1000, 10_000), nil},
-        electric_instance_id: Keyword.fetch!(opts, :electric_instance_id)
+        electric_instance_id: Keyword.fetch!(opts, :electric_instance_id),
+        tenant_id: Keyword.fetch!(opts, :tenant_id)
       }
 
     # Try to acquire the connection lock on the replication slot
@@ -295,6 +303,7 @@ defmodule Electric.ConnectionManager do
   defp start_replication_client(state) do
     Electric.Shapes.Supervisor.start_link(
       electric_instance_id: state.electric_instance_id,
+      tenant_id: state.tenant_id,
       replication_client: {
         Electric.Postgres.ReplicationClient,
         connection_opts: state.connection_opts,

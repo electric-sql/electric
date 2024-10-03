@@ -33,6 +33,8 @@ defmodule Electric.Plug.ServeShapePlug do
       field(:root_table, :string)
       field(:offset, :string)
       field(:shape_id, :string)
+      # TODO: remove this and introduce an actual tenant ID path param
+      field(:tenant_id, :string, default: "test_tenant")
       field(:live, :boolean, default: false)
       field(:where, :string)
       field(:shape_definition, :string)
@@ -265,10 +267,10 @@ defmodule Electric.Plug.ServeShapePlug do
   # If chunk offsets are available, use those instead of the latest available offset
   # to optimize for cache hits and response sizes
   defp determine_log_chunk_offset(%Conn{assigns: assigns} = conn, _) do
-    %{config: config, active_shape_id: shape_id, offset: offset} = assigns
+    %{config: config, active_shape_id: shape_id, offset: offset, tenant_id: tenant_id} = assigns
 
     chunk_end_offset =
-      Shapes.get_chunk_end_log_offset(config, shape_id, offset) || assigns.last_offset
+      Shapes.get_chunk_end_log_offset(config, shape_id, offset, tenant_id) || assigns.last_offset
 
     conn
     |> assign(:chunk_end_offset, chunk_end_offset)
@@ -367,14 +369,15 @@ defmodule Electric.Plug.ServeShapePlug do
            assigns: %{
              chunk_end_offset: chunk_end_offset,
              active_shape_id: shape_id,
+             tenant_id: tenant_id,
              up_to_date: maybe_up_to_date
            }
          } = conn
        ) do
-    case Shapes.get_snapshot(conn.assigns.config, shape_id) do
+    case Shapes.get_snapshot(conn.assigns.config, shape_id, tenant_id) do
       {:ok, {offset, snapshot}} ->
         log =
-          Shapes.get_log_stream(conn.assigns.config, shape_id,
+          Shapes.get_log_stream(conn.assigns.config, shape_id, tenant_id,
             since: offset,
             up_to: chunk_end_offset
           )
@@ -405,12 +408,13 @@ defmodule Electric.Plug.ServeShapePlug do
              offset: offset,
              chunk_end_offset: chunk_end_offset,
              active_shape_id: shape_id,
+             tenant_id: tenant_id,
              up_to_date: maybe_up_to_date
            }
          } = conn
        ) do
     log =
-      Shapes.get_log_stream(conn.assigns.config, shape_id,
+      Shapes.get_log_stream(conn.assigns.config, shape_id, tenant_id,
         since: offset,
         up_to: chunk_end_offset
       )

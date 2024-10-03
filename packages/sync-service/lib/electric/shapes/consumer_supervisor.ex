@@ -8,16 +8,18 @@ defmodule Electric.Shapes.ConsumerSupervisor do
 
   require Logger
 
-  def name(electric_instance_id) do
-    Electric.Application.process_name(electric_instance_id, __MODULE__)
+  def name(electric_instance_id, tenant_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
   end
 
   def start_link(opts) do
     electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+    tenant_id = Keyword.fetch!(opts, :tenant_id)
 
     DynamicSupervisor.start_link(__MODULE__, [],
-      name: Keyword.get(opts, :name, name(electric_instance_id)),
-      electric_instance_id: electric_instance_id
+      name: Keyword.get(opts, :name, name(electric_instance_id, tenant_id)),
+      electric_instance_id: electric_instance_id,
+      tenant_id: tenant_id
     )
   end
 
@@ -27,8 +29,8 @@ defmodule Electric.Shapes.ConsumerSupervisor do
     DynamicSupervisor.start_child(name, {Consumer.Supervisor, config})
   end
 
-  def stop_shape_consumer(name, electric_instance_id, shape_id) do
-    case GenServer.whereis(Consumer.Supervisor.name(electric_instance_id, shape_id)) do
+  def stop_shape_consumer(name, electric_instance_id, tenant_id, shape_id) do
+    case GenServer.whereis(Consumer.Supervisor.name(electric_instance_id, tenant_id, shape_id)) do
       nil ->
         {:error, "no consumer for shape id #{inspect(shape_id)}"}
 

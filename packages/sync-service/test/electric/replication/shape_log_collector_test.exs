@@ -8,7 +8,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Replication.LogOffset
 
   alias Support.Mock
-  import Support.ComponentSetup, only: [with_electric_instance_id: 1]
+  import Support.ComponentSetup, only: [with_electric_instance_id: 1, with_tenant_id: 1]
 
   import Mox
 
@@ -16,6 +16,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
   setup :verify_on_exit!
   setup :with_electric_instance_id
+  setup :with_tenant_id
 
   setup(ctx) do
     # Start a test Registry
@@ -25,6 +26,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     # Start the ShapeLogCollector process
     opts = [
       electric_instance_id: ctx.electric_instance_id,
+      tenant_id: ctx.tenant_id,
       inspector: {Mock.Inspector, []},
       demand: :forward
     ]
@@ -35,7 +37,9 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     |> expect(:initialise, 1, fn opts -> Electric.ShapeCache.ShapeStatus.initialise(opts) end)
     |> expect(:list_shapes, 1, fn _ -> [] end)
     # allow the ShapeCache to call this mock
-    |> allow(self(), fn -> GenServer.whereis(Electric.ShapeCache) end)
+    |> allow(self(), fn ->
+      GenServer.whereis(Electric.ShapeCache.name(ctx.electric_instance_id, ctx.tenant_id))
+    end)
 
     # We need a ShapeCache process because it is a GenStage consumer
     # that handles the Relation events produced by ShapeLogCollector
@@ -50,9 +54,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         shape_meta_table: shape_meta_table,
         persistent_kv: Electric.PersistentKV.Memory.new!(),
         prepare_tables_fn: fn _, _ -> {:ok, [:ok]} end,
-        log_producer: ShapeLogCollector.name(ctx.electric_instance_id),
+        log_producer: ShapeLogCollector.name(ctx.electric_instance_id, ctx.tenant_id),
         electric_instance_id: ctx.electric_instance_id,
-        consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(ctx.electric_instance_id),
+        tenant_id: ctx.tenant_id,
+        consumer_supervisor:
+          Electric.Shapes.ConsumerSupervisor.name(ctx.electric_instance_id, ctx.tenant_id),
         registry: registry_name
       ]
 

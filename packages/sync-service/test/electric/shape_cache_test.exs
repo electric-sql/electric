@@ -63,6 +63,7 @@ defmodule Electric.ShapeCacheTest do
   describe "get_or_create_shape_id/2" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -94,6 +95,7 @@ defmodule Electric.ShapeCacheTest do
   describe "get_or_create_shape_id/2 shape initialization" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -116,7 +118,7 @@ defmodule Electric.ShapeCacheTest do
       assert offset == @zero_offset
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
       Process.sleep(100)
-      shape_storage = Storage.for_shape(shape_id, storage)
+      shape_storage = Storage.for_shape(shape_id, ctx.tenant_id, storage)
       assert Storage.snapshot_started?(shape_storage)
     end
 
@@ -222,6 +224,7 @@ defmodule Electric.ShapeCacheTest do
   describe "get_or_create_shape_id/2 against real db" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -245,10 +248,14 @@ defmodule Electric.ShapeCacheTest do
       :ok
     end
 
-    test "creates initial snapshot from DB data", %{storage: storage, shape_cache_opts: opts} do
+    test "creates initial snapshot from DB data", %{
+      storage: storage,
+      shape_cache_opts: opts,
+      tenant_id: tenant_id
+    } do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
-      storage = Storage.for_shape(shape_id, storage)
+      storage = Storage.for_shape(shape_id, tenant_id, storage)
       assert {@zero_offset, stream} = Storage.get_snapshot(storage)
 
       assert [%{"value" => %{"value" => "test1"}}, %{"value" => %{"value" => "test2"}}] =
@@ -268,7 +275,8 @@ defmodule Electric.ShapeCacheTest do
     test "uses correct display settings when querying initial data", %{
       pool: pool,
       storage: storage,
-      shape_cache_opts: opts
+      shape_cache_opts: opts,
+      tenant_id: tenant_id
     } do
       shape =
         update_in(
@@ -311,7 +319,7 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
-      storage = Storage.for_shape(shape_id, storage)
+      storage = Storage.for_shape(shape_id, tenant_id, storage)
       assert {@zero_offset, stream} = Storage.get_snapshot(storage)
 
       assert [
@@ -330,7 +338,11 @@ defmodule Electric.ShapeCacheTest do
              } = map
     end
 
-    test "updates latest offset correctly", %{shape_cache_opts: opts, storage: storage} do
+    test "updates latest offset correctly", %{
+      shape_cache_opts: opts,
+      tenant_id: tenant_id,
+      storage: storage
+    } do
       {shape_id, initial_offset} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
@@ -350,7 +362,7 @@ defmodule Electric.ShapeCacheTest do
       assert offset_after_log_entry == expected_offset_after_log_entry
 
       # Stop snapshot process gracefully to prevent errors being logged in the test
-      storage = Storage.for_shape(shape_id, storage)
+      storage = Storage.for_shape(shape_id, tenant_id, storage)
       {_, stream} = Storage.get_snapshot(storage)
       Stream.run(stream)
     end
@@ -388,6 +400,7 @@ defmodule Electric.ShapeCacheTest do
   describe "list_shapes/1" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -458,6 +471,7 @@ defmodule Electric.ShapeCacheTest do
   describe "has_shape?/2" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -499,6 +513,7 @@ defmodule Electric.ShapeCacheTest do
   describe "await_snapshot_start/4" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -524,7 +539,7 @@ defmodule Electric.ShapeCacheTest do
     test "returns an error if waiting is for an unknown shape id", ctx do
       shape_id = "orphaned_id"
 
-      storage = Storage.for_shape(shape_id, ctx.storage)
+      storage = Storage.for_shape(shape_id, ctx.tenant_id, ctx.storage)
 
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
@@ -563,7 +578,7 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
-      storage = Storage.for_shape(shape_id, ctx.storage)
+      storage = Storage.for_shape(shape_id, ctx.tenant_id, ctx.storage)
 
       tasks =
         for _id <- 1..10 do
@@ -605,7 +620,7 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
 
-      storage = Storage.for_shape(shape_id, ctx.storage)
+      storage = Storage.for_shape(shape_id, ctx.tenant_id, ctx.storage)
 
       tasks =
         for _ <- 1..10 do
@@ -658,6 +673,7 @@ defmodule Electric.ShapeCacheTest do
   describe "handle_truncate/2" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -680,7 +696,7 @@ defmodule Electric.ShapeCacheTest do
       Process.sleep(50)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
-      storage = Storage.for_shape(shape_id, ctx.storage)
+      storage = Storage.for_shape(shape_id, ctx.tenant_id, ctx.storage)
 
       Storage.append_to_log!(
         changes_to_log_items([
@@ -696,7 +712,9 @@ defmodule Electric.ShapeCacheTest do
       assert Storage.snapshot_started?(storage)
       assert Enum.count(Storage.get_log_stream(@zero_offset, storage)) == 1
 
-      ref = ctx.electric_instance_id |> Shapes.Consumer.whereis(shape_id) |> Process.monitor()
+      ref =
+        Shapes.Consumer.whereis(ctx.electric_instance_id, ctx.tenant_id, shape_id)
+        |> Process.monitor()
 
       log = capture_log(fn -> ShapeCache.handle_truncate(shape_id, opts) end)
       assert log =~ "Truncating and rotating shape id"
@@ -711,6 +729,7 @@ defmodule Electric.ShapeCacheTest do
   describe "clean_shape/2" do
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -733,7 +752,7 @@ defmodule Electric.ShapeCacheTest do
       Process.sleep(50)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
-      storage = Storage.for_shape(shape_id, ctx.storage)
+      storage = Storage.for_shape(shape_id, ctx.tenant_id, ctx.storage)
 
       Storage.append_to_log!(
         changes_to_log_items([
@@ -752,7 +771,10 @@ defmodule Electric.ShapeCacheTest do
       {module, _} = storage
 
       ref =
-        Process.monitor(module.name(ctx.electric_instance_id, shape_id) |> GenServer.whereis())
+        Process.monitor(
+          module.name(ctx.electric_instance_id, ctx.tenant_id, shape_id)
+          |> GenServer.whereis()
+        )
 
       log = capture_log(fn -> :ok = ShapeCache.clean_shape(shape_id, opts) end)
       assert log =~ "Cleaning up shape"
@@ -805,6 +827,7 @@ defmodule Electric.ShapeCacheTest do
 
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_cub_db_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -852,7 +875,7 @@ defmodule Electric.ShapeCacheTest do
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
-      ref = Shapes.Consumer.monitor(context.electric_instance_id, shape_id)
+      ref = Shapes.Consumer.monitor(context.electric_instance_id, context.tenant_id, shape_id)
 
       ShapeLogCollector.store_transaction(
         %Changes.Transaction{
@@ -926,7 +949,7 @@ defmodule Electric.ShapeCacheTest do
 
       consumers =
         for {shape_id, _} <- shape_cache.list_shapes(Map.new(shape_cache_opts)) do
-          pid = Shapes.Consumer.whereis(ctx.electric_instance_id, shape_id)
+          pid = Shapes.Consumer.whereis(ctx.electric_instance_id, ctx.tenant_id, shape_id)
           {pid, Process.monitor(pid)}
         end
 
@@ -966,6 +989,7 @@ defmodule Electric.ShapeCacheTest do
 
     setup [
       :with_electric_instance_id,
+      :with_tenant_id,
       :with_in_memory_storage,
       :with_persistent_kv,
       :with_log_chunking,
@@ -989,8 +1013,8 @@ defmodule Electric.ShapeCacheTest do
       ctx
     end
 
-    defp monitor_consumer(electric_instance_id, shape_id) do
-      electric_instance_id |> Shapes.Consumer.whereis(shape_id) |> Process.monitor()
+    defp monitor_consumer(electric_instance_id, tenant_id, shape_id) do
+      Process.monitor(Shapes.Consumer.whereis(electric_instance_id, tenant_id, shape_id))
     end
 
     defp shapes do
@@ -1015,7 +1039,8 @@ defmodule Electric.ShapeCacheTest do
 
     defp start_shapes(%{
            shape_cache: {shape_cache, opts},
-           electric_instance_id: electric_instance_id
+           electric_instance_id: electric_instance_id,
+           tenant_id: tenant_id
          }) do
       [shape1, shape2, shape3] = shapes()
 
@@ -1027,9 +1052,9 @@ defmodule Electric.ShapeCacheTest do
       :started = shape_cache.await_snapshot_start(shape_id2, opts)
       :started = shape_cache.await_snapshot_start(shape_id3, opts)
 
-      ref1 = monitor_consumer(electric_instance_id, shape_id1)
-      ref2 = monitor_consumer(electric_instance_id, shape_id2)
-      ref3 = monitor_consumer(electric_instance_id, shape_id3)
+      ref1 = monitor_consumer(electric_instance_id, tenant_id, shape_id1)
+      ref2 = monitor_consumer(electric_instance_id, tenant_id, shape_id2)
+      ref3 = monitor_consumer(electric_instance_id, tenant_id, shape_id3)
 
       [
         {shape_id1, ref1},
@@ -1071,7 +1096,7 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = shape_cache.get_or_create_shape_id(shape, opts)
 
-      ref = monitor_consumer(ctx.electric_instance_id, shape_id)
+      ref = monitor_consumer(ctx.electric_instance_id, ctx.tenant_id, shape_id)
 
       rel = %Relation{
         id: relation_id,

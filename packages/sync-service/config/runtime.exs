@@ -11,6 +11,7 @@ config :logger, level: :debug
 
 if config_env() == :test do
   config(:logger, level: :info)
+  config(:electric, test_mode: true)
   config(:electric, pg_version_for_tests: env!("POSTGRES_VERSION", :integer, 150_001))
 end
 
@@ -22,6 +23,8 @@ electric_instance_id = :default
 service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
 instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
 version = Electric.version()
+
+test_tenant = "test_tenant"
 
 config :telemetry_poller, :default, period: 500
 
@@ -79,18 +82,11 @@ if Config.config_env() == :test do
       database: "postgres",
       sslmode: :disable
     ]
-else
-  {:ok, database_url_config} =
-    env!("DATABASE_URL", :string)
-    |> Electric.Config.parse_postgresql_uri()
 
-  database_ipv6_config =
-    env!("DATABASE_USE_IPV6", :boolean, false)
-
-  connection_opts = [ipv6: database_ipv6_config] ++ database_url_config
-
-  config :electric, connection_opts: connection_opts, electric_instance_id: electric_instance_id
+  config :electric, test_tenant: test_tenant
 end
+
+config :electric, electric_instance_id: electric_instance_id
 
 config :electric, listen_on_ipv6?: env!("LISTEN_ON_IPV6", :boolean, false)
 

@@ -19,7 +19,8 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     :log_table,
     :chunk_checkpoint_table,
     :shape_id,
-    :electric_instance_id
+    :electric_instance_id,
+    :tenant_id
   ]
 
   @impl Electric.ShapeCache.Storage
@@ -30,16 +31,16 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     {:ok, %{table_base_name: table_base_name, electric_instance_id: electric_instance_id}}
   end
 
-  def name(electric_instance_id, shape_id) when is_binary(shape_id) do
-    Electric.Application.process_name(electric_instance_id, __MODULE__, shape_id)
+  def name(electric_instance_id, tenant_id, shape_id) when is_binary(shape_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_id)
   end
 
   @impl Electric.ShapeCache.Storage
-  def for_shape(shape_id, %{shape_id: shape_id} = opts) do
+  def for_shape(shape_id, _tenant_id, %{shape_id: shape_id} = opts) do
     opts
   end
 
-  def for_shape(shape_id, %{
+  def for_shape(shape_id, tenant_id, %{
         table_base_name: table_base_name,
         electric_instance_id: electric_instance_id
       }) do
@@ -53,7 +54,8 @@ defmodule Electric.ShapeCache.InMemoryStorage do
       snapshot_table: snapshot_table_name,
       log_table: log_table_name,
       chunk_checkpoint_table: chunk_checkpoint_table_name,
-      electric_instance_id: electric_instance_id
+      electric_instance_id: electric_instance_id,
+      tenant_id: tenant_id
     }
   end
 
@@ -61,6 +63,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def start_link(%MS{} = opts) do
     if is_nil(opts.shape_id), do: raise("cannot start an un-attached storage instance")
     if is_nil(opts.electric_instance_id), do: raise("electric_instance_id cannot be nil")
+    if is_nil(opts.tenant_id), do: raise("tenant_id cannot be nil")
 
     Agent.start_link(
       fn ->
@@ -70,7 +73,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
           chunk_checkpoint_table: storage_table(opts.chunk_checkpoint_table)
         }
       end,
-      name: name(opts.electric_instance_id, opts.shape_id)
+      name: name(opts.electric_instance_id, opts.tenant_id, opts.shape_id)
     )
   end
 

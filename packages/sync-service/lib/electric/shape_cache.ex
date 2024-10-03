@@ -44,13 +44,15 @@ defmodule Electric.ShapeCache do
 
   @default_shape_meta_table :shape_meta_table
 
-  @genserver_name_schema {:or, [:atom, {:tuple, [:atom, :atom, :any]}]}
+  @name_schema_tuple {:tuple, [:atom, :atom, :any]}
+  @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   @schema NimbleOptions.new!(
             name: [
               type: @genserver_name_schema,
-              default: __MODULE__
+              required: false
             ],
             electric_instance_id: [type: :atom, required: true],
+            tenant_id: [type: :string, required: true],
             shape_meta_table: [
               type: :atom,
               default: @default_shape_meta_table
@@ -64,7 +66,7 @@ defmodule Electric.ShapeCache do
             registry: [type: {:or, [:atom, :pid]}, required: true],
             # NimbleOptions has no "implementation of protocol" type
             persistent_kv: [type: :any, required: true],
-            db_pool: [type: {:or, [:atom, :pid]}, default: Electric.DbPool],
+            db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
             prepare_tables_fn: [type: {:or, [:mfa, {:fun, 2}]}, required: true],
             create_snapshot_fn: [
               type: {:fun, 5},
@@ -72,9 +74,32 @@ defmodule Electric.ShapeCache do
             ]
           )
 
+  def name(electric_instance_id, tenant_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  end
+
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
-      GenStage.start_link(__MODULE__, Map.new(opts), name: opts[:name])
+      electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+      tenant_id = Keyword.fetch!(opts, :tenant_id)
+      name = Keyword.get(opts, :name, name(electric_instance_id, tenant_id))
+
+      db_pool =
+        Keyword.get(
+          opts,
+          :db_pool,
+          Electric.Application.process_name(
+            Keyword.fetch!(opts, :electric_instance_id),
+            Keyword.fetch!(opts, :tenant_id),
+            Electric.DbPool
+          )
+        )
+
+      GenStage.start_link(
+        __MODULE__,
+        Map.new(opts) |> Map.put(:db_pool, db_pool) |> Map.put(:name, name),
+        name: name
+      )
     end
   end
 
@@ -191,6 +216,7 @@ defmodule Electric.ShapeCache do
     state = %{
       name: opts.name,
       electric_instance_id: opts.electric_instance_id,
+      tenant_id: opts.tenant_id,
       storage: opts.storage,
       chunk_bytes_threshold: opts.chunk_bytes_threshold,
       inspector: opts.inspector,
@@ -366,13 +392,14 @@ defmodule Electric.ShapeCache do
 
   defp clean_up_shape(state, shape_id) do
     if state.shape_status.get_existing_shape(state.persistent_state, shape_id) !== nil do
-      shape_opts = Electric.ShapeCache.Storage.for_shape(shape_id, state.storage)
+      shape_opts = Electric.ShapeCache.Storage.for_shape(shape_id, state.tenant_id, state.storage)
       Electric.ShapeCache.Storage.cleanup!(shape_opts)
     end
 
     Electric.Shapes.ConsumerSupervisor.stop_shape_consumer(
       state.consumer_supervisor,
       state.electric_instance_id,
+      state.tenant_id,
       shape_id
     )
 
@@ -411,6 +438,7 @@ defmodule Electric.ShapeCache do
            Electric.Shapes.ConsumerSupervisor.start_shape_consumer(
              state.consumer_supervisor,
              electric_instance_id: state.electric_instance_id,
+             tenant_id: state.tenant_id,
              shape_id: shape_id,
              shape: shape,
              storage: state.storage,
@@ -423,7 +451,7 @@ defmodule Electric.ShapeCache do
              prepare_tables_fn: state.prepare_tables_fn,
              create_snapshot_fn: state.create_snapshot_fn
            ) do
-      consumer = Shapes.Consumer.name(state.electric_instance_id, shape_id)
+      consumer = Shapes.Consumer.name(state.electric_instance_id, state.tenant_id, shape_id)
 
       {:ok, snapshot_xmin, latest_offset} = Shapes.Consumer.initial_state(consumer)
 

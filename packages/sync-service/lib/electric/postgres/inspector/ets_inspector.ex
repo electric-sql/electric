@@ -7,12 +7,20 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   ## Public API
 
+  def name(%{electric_instance_id: electric_instance_id, tenant_id: tenant_id}) do
+    name(electric_instance_id, tenant_id)
+  end
+
+  def name(electric_instance_id, tenant_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  end
+
   def start_link(opts),
     do:
       GenServer.start_link(
         __MODULE__,
         Map.new(opts) |> Map.put_new(:pg_info_table, @default_pg_info_table),
-        name: Access.get(opts, :name, __MODULE__)
+        name: Keyword.get_lazy(opts, :name, fn -> name(opts) end)
       )
 
   @impl Electric.Postgres.Inspector

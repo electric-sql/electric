@@ -17,12 +17,14 @@ defmodule Electric.Shapes.Supervisor do
     shape_cache = Keyword.fetch!(opts, :shape_cache)
     log_collector = Keyword.fetch!(opts, :log_collector)
     electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+    tenant_id = Keyword.fetch!(opts, :tenant_id)
 
     consumer_supervisor =
       Keyword.get(
         opts,
         :consumer_supervisor,
-        {Electric.Shapes.ConsumerSupervisor, [electric_instance_id: electric_instance_id]}
+        {Electric.Shapes.ConsumerSupervisor,
+         [electric_instance_id: electric_instance_id, tenant_id: tenant_id]}
       )
 
     children =
