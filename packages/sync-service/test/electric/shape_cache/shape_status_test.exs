@@ -252,6 +252,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   def load_column_info({"public", "table"}, _),
     do: {:ok, [%{name: "id", type: :int8, pk_position: 0}]}
 
-  def get_namespace_and_tablename(tbl, _),
-    do: StubInspector.get_namespace_and_tablename(tbl, nil)
+  def load_relation(tbl, _),
+    do: StubInspector.load_relation(tbl, nil)
 end

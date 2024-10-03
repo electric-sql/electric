@@ -2,6 +2,35 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
   @behaviour Electric.Postgres.Inspector
 
   @doc """
+  Returns the PG relation from the table name.
+  """
+  def load_relation(table, conn) do
+    # The extra cast from $1 to text is needed because of Postgrex' OID type encoding
+    # see: https://github.com/elixir-ecto/postgrex#oid-type-encoding
+    query = """
+    SELECT nspname, relname
+    FROM pg_class
+    JOIN pg_namespace ON relnamespace = pg_namespace.oid
+    WHERE
+      relkind = 'r' AND
+      pg_class.oid = $1::text::regclass
+    """
+
+    case Postgrex.query(conn, query, [table]) do
+      {:ok, result} ->
+        # We expect exactly one row because the query didn't fail
+        # so the relation exists since we could cast it to a regclass
+        info = Enum.at(result.rows, 0)
+        {:ok, {Enum.at(info, 0), Enum.at(info, 1)}}
+
+      {:error, err} ->
+        {:error, Exception.message(err)}
+    end
+  end
+
+  def clean_relation(_, _), do: true
+
+  @doc """
   Load table information (refs) from the database
   """
   def load_column_info({namespace, tbl}, conn) do
@@ -40,27 +69,5 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
 
   def clean_column_info(_, _), do: true
 
-  def get_namespace_and_tablename(table, conn) do
-    # The extra cast from $1 to text is needed because of Postgrex' OID type encoding
-    # see: https://github.com/elixir-ecto/postgrex#oid-type-encoding
-    query = """
-    SELECT nspname, relname
-    FROM pg_class
-    JOIN pg_namespace ON relnamespace = pg_namespace.oid
-    WHERE
-      relkind = 'r' AND
-      pg_class.oid = $1::text::regclass
-    """
-
-    case Postgrex.query(conn, query, [table]) do
-      {:ok, result} ->
-        # We expect exactly one row because the query didn't fail
-        # so the relation exists since we could cast it to a regclass
-        info = Enum.at(result.rows, 0)
-        {Enum.at(info, 0), Enum.at(info, 1)}
-
-      {:error, err} ->
-        {:error, Exception.message(err)}
-    end
-  end
+  def clean(_, _), do: true
 end

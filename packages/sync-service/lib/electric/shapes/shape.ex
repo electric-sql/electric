@@ -97,13 +97,13 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  defp validate_table(root_table, inspector) when is_binary(root_table) do
-    case Inspector.get_namespace_and_tablename(root_table, inspector) do
+  defp validate_table(table, inspector) when is_binary(table) do
+    case Inspector.load_relation(table, inspector) do
       {:error, err} ->
         {:error, [err]}
 
-      table ->
-        {:ok, table}
+      {:ok, rel} ->
+        {:ok, rel}
     end
   end
 

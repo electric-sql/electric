@@ -39,8 +39,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
   def load_column_info(_, _),
     do: :table_not_found
 
-  def get_namespace_and_tablename(tbl, _),
-    do: Support.StubInspector.get_namespace_and_tablename(tbl, nil)
+  def load_relation(tbl, _),
+    do: Support.StubInspector.load_relation(tbl, nil)
 
   setup do
     start_link_supervised!({Registry, keys: :duplicate, name: @registry})

@@ -131,11 +131,23 @@ defmodule Support.ComponentSetup do
   def with_inspector(ctx) do
     server = :"inspector #{full_test_name(ctx)}"
     pg_info_table = :"pg_info_table #{full_test_name(ctx)}"
+    pg_relation_table = :"pg_relation_table #{full_test_name(ctx)}"
 
     {:ok, _} =
-      EtsInspector.start_link(pg_info_table: pg_info_table, pool: ctx.db_conn, name: server)
+      EtsInspector.start_link(
+        pg_info_table: pg_info_table,
+        pg_relation_table: pg_relation_table,
+        pool: ctx.db_conn,
+        name: server
+      )
 
-    %{inspector: {EtsInspector, pg_info_table: pg_info_table, server: server}}
+    %{
+      inspector:
+        {EtsInspector,
+         pg_info_table: pg_info_table, pg_relation_table: pg_relation_table, server: server},
+      pg_info_table: pg_info_table,
+      pg_relation_table: pg_relation_table
+    }
   end
 
   def with_complete_stack(ctx, opts \\ []) do

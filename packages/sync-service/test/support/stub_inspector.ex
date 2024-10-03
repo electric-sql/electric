@@ -22,19 +22,19 @@ defmodule Support.StubInspector do
   end
 
   @impl true
-  def get_namespace_and_tablename(table, _) do
+  def load_relation(table, _) do
     regex =
       ~r/^((?<schema>([\p{L}_][\p{L}0-9_$]*|"(""|[^"])+"))\.)?(?<table>([\p{L}_][\p{L}0-9_$]*|"(""|[^"])+"))$/u
 
     case Regex.run(regex, table, capture: :all_names) do
       ["", table_name] when table_name != "" ->
         table_name = Utils.parse_quoted_name(table_name)
-        {"public", table_name}
+        {:ok, {"public", table_name}}
 
       [schema_name, table_name] when table_name != "" ->
         schema_name = Utils.parse_quoted_name(schema_name)
         table_name = Utils.parse_quoted_name(table_name)
-        {schema_name, table_name}
+        {:ok, {schema_name, table_name}}
 
       _ ->
         {:error, "invalid name syntax"}
@@ -43,4 +43,10 @@ defmodule Support.StubInspector do
 
   @impl true
   def clean_column_info(_, _), do: true
+
+  @impl true
+  def clean_relation(_, _), do: true
+
+  @impl true
+  def clean(_, _), do: true
 end

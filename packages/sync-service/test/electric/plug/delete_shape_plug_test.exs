@@ -28,8 +28,8 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   def load_column_info({"public", "users"}, _),
     do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
 
-  def get_namespace_and_tablename(tbl, _),
-    do: Support.StubInspector.get_namespace_and_tablename(tbl, nil)
+  def load_relation(tbl, _),
+    do: Support.StubInspector.load_relation(tbl, nil)
 
   setup do
     start_link_supervised!({Registry, keys: :duplicate, name: @registry})

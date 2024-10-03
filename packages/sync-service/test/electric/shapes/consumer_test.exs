@@ -48,8 +48,8 @@ defmodule Electric.Shapes.ConsumerTest do
     {"public", "test_table"}, _ -> {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
   end)
 
-  stub(Mock.Inspector, :get_namespace_and_tablename, fn
-    "public.test_table", _ -> {"public", "test_table"}
+  stub(Mock.Inspector, :load_relation, fn
+    tbl, _ -> StubInspector.load_relation(tbl, nil)
   end)
 
   setup :with_electric_instance_id
