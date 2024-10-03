@@ -199,7 +199,10 @@ defmodule Electric.Shapes.ShapeTest do
     end
 
     test "errors when the table doesn't exist", %{inspector: inspector} do
-      {:error, [~S|ERROR 42P01 (undefined_table) relation "nonexistent" does not exist|]} =
+      {:error,
+       [
+         ~S|Table "nonexistent" does not exist. If the table name contains capitals or special characters you must quote it.|
+       ]} =
         Shape.new("nonexistent", inspector: inspector)
     end
 

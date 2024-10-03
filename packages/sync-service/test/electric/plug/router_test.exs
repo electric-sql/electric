@@ -77,7 +77,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{
                "root_table" => [
-                 "ERROR 42P01 (undefined_table) relation \"nonexistent\" does not exist"
+                 ~s|Table "nonexistent" does not exist. If the table name contains capitals or special characters you must quote it.|
                ]
              } = Jason.decode!(conn.resp_body)
     end

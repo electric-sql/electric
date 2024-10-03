@@ -100,7 +100,16 @@ defmodule Electric.Shapes.Shape do
   defp validate_table(table, inspector) when is_binary(table) do
     case Inspector.load_relation(table, inspector) do
       {:error, err} ->
-        {:error, [err]}
+        case Regex.run(~r/.+ relation "(?<name>.+)" does not exist/, err, capture: :all_names) do
+          [table_name] ->
+            {:error,
+             [
+               ~s|Table "#{table_name}" does not exist. If the table name contains capitals or special characters you must quote it.|
+             ]}
+
+          _ ->
+            {:error, [err]}
+        end
 
       {:ok, rel} ->
         {:ok, rel}
