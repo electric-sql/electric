@@ -1,6 +1,7 @@
 -- Create a simple items table.
 CREATE TABLE IF NOT EXISTS items (
-  id TEXT PRIMARY KEY NOT NULL
+  id TEXT PRIMARY KEY NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
 -- Populate the table with 10 items.

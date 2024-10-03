@@ -9,7 +9,11 @@ import {
 import "./Example.css"
 import { matchStream } from "./match-stream"
 import { Offset, ShapeStreamOptions } from "@electric-sql/client"
-import { useEffect, useOptimistic, useState } from "react"
+import { useOptimistic } from "react"
+
+const parser = {
+  timestamptz: (date: string) => new Date(date).getTime(),
+}
 
 const shapePosition: { shapeId?: string; offset?: Offset } = {
   shapeId: undefined,
@@ -39,7 +43,7 @@ const updateShapePosition = (offset: Offset, shapeId?: string) => {
   shapePosition.shapeId = shapeId
 }
 
-type Item = { id: string }
+type Item = { id: string; created_at: number }
 
 async function createItem(newId: string) {
   const itemsStream = getShapeStream(itemShape())
@@ -82,15 +86,13 @@ export default function Home({
 }: {
   shapes: { items: SerializedShapeData }
 }) {
-  const [isClient, setIsClient] = useState(false)
-  useEffect(() => setIsClient(true), [])
-
   const { shapeId, offset, data } = shapes.items
   updateShapePosition(offset, shapeId)
 
   const { data: items } = useShape({
     ...itemShape(),
     shapeData: new Map(Object.entries(data ?? new Map())),
+    parser,
   }) as unknown as {
     data: Item[]
   }
@@ -108,20 +110,16 @@ export default function Home({
       // possible duplicates as there's a potential race condition where
       // useShape updates from the stream slightly before the action has finished.
       const itemsMap = new Map()
-      state.concat([{ id: newId }]).forEach((item) => {
-        itemsMap.set(item.id, { ...itemsMap.get(item.id), ...item })
-      })
+      state
+        .concat([{ id: newId, created_at: new Date().getTime() }])
+        .forEach((item) => {
+          itemsMap.set(item.id, { ...itemsMap.get(item.id), ...item })
+        })
       return Array.from(itemsMap.values())
     }
 
     return []
   })
-
-  // Can't render entries on the server because order of
-  // items is not guaranteed after de/serialization.
-  if (!isClient) {
-    return null
-  }
 
   return (
     <div>
@@ -146,11 +144,13 @@ export default function Home({
           Clear
         </button>
       </form>
-      {optimisticItems.map((item: Item, index: number) => (
-        <p key={index} className="item">
-          <code>{item.id}</code>
-        </p>
-      ))}
+      {optimisticItems
+        .sort((a, b) => a.created_at - b.created_at)
+        .map((item: Item, index: number) => (
+          <p key={index} className="item">
+            <code>{item.id}</code>
+          </p>
+        ))}
     </div>
   )
 }
