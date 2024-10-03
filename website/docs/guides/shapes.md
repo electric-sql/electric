@@ -65,10 +65,19 @@ You can use logical operators like `AND` and `OR` to group multiple conditions, 
 - `title='Electric' AND status='todo'`
 
 > [!WARNING] Limitations
+> Electric needs to be able to evaluate where clauses outside of Postgres, so it only supports a limited set of SQL types and expressions right now.
+> 1. you can use columns of numerical types, `boolean`, `uuid`, `text`, `interval`, date and time types (with the exception of `timetz`)
+> 1. operators that work on those types: arithmetics, comparisons, boolean operators like `OR`, string operators like `LIKE`, etc.
+> 1. [Arrays](https://github.com/electric-sql/electric/issues/1767) and [Enums](https://github.com/electric-sql/electric/issues/1709) are not yet supported in where clauses
+>
+> For the full and up-to-date list of supported types, operators and functions, see their implementation in [`known_functions.ex`](https://github.com/electric-sql/electric/blob/main/packages/sync-service/lib/electric/replication/eval/env/known_functions.ex), while some expressions are handled in the [parser](https://github.com/electric-sql/electric/blob/main/packages/sync-service/lib/electric/replication/eval/parser.ex) (look for the `do_parse_and_validate_tree()` function).
+>
+> ---
+>
+> Some general rules that shape where clauses abide by are:
 > 1. where clauses can only refer to columns in the target row
 > 1. where clauses can't perform joins or refer to other tables
-> 1. where clauses can't use non-deterministic SQL functions like `count()`
-> 1. [Arrays](https://github.com/electric-sql/electric/issues/1767) and [Enums](https://github.com/electric-sql/electric/issues/1709) are not supported in where clauses
+> 1. where clauses can't use non-deterministic SQL functions like `count()` or `now()`
 >
 > If you need to use a data type or where clause feature that isn't yet supported, please feel free to [raise a Feature Request](https://github.com/electric-sql/electric/discussions/categories/feature-requests) on GitHub.
 
