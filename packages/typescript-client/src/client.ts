@@ -28,7 +28,7 @@ import {
 /**
  * Options for constructing a ShapeStream.
  */
-export interface ShapeStreamOptions<T> {
+export interface ShapeStreamOptions<T = never> {
   /**
    * The full URL to where the Shape is hosted. This can either be the Electric server
    * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape/foo`
