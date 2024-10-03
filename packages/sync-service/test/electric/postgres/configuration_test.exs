@@ -237,7 +237,9 @@ defmodule Electric.Postgres.ConfigurationTest do
   end
 
   defp list_tables_in_publication(conn, publication) do
-    pg_version = Electric.ConnectionManager.query_pg_version(conn)
+    %{rows: [[pg_version]]} =
+      Postgrex.query!(conn, "SELECT current_setting('server_version_num')::integer", [])
+
     list_tables_in_pub(conn, publication, pg_version)
   end
 
