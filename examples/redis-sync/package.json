@@ -1,5 +1,5 @@
 {
-  "name": "@electric-examples/redis-client",
+  "name": "@electric-examples/redis-sync",
   "version": "0.0.1",
   "description": "An example Redis client for ElectricSQL",
   "main": "dist/index.js",
@@ -9,8 +9,10 @@
   ],
   "private": true,
   "scripts": {
-    "backend:up": "PROJECT_NAME=redis-client pnpm -C ../../ run example-backend:up",
-    "backend:down": "PROJECT_NAME=redis-client pnpm -C ../../ run example-backend:down",
+    "dev": "tsx src/index.ts",
+    "backend:up": "PROJECT_NAME=redis-sync pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=redis-sync pnpm -C ../../ run example-backend:down",
+    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
     "typecheck": "tsc -p tsconfig.json",
     "stylecheck": "eslint './*.{ts,js,tsx,jsx}' './tests/**/*.{ts,tsx}' './examples/**/*.{ts,tsx}' --no-error-on-unmatched-pattern"
   },
@@ -29,9 +31,11 @@
     "redis": "^4.6.14"
   },
   "devDependencies": {
+    "@databases/pg-migrations": "^5.0.3",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
     "@typescript-eslint/parser": "^7.14.1",
     "concurrently": "^8.2.2",
+    "dotenv-cli": "^7.4.2",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",
@@ -39,6 +43,7 @@
     "prettier": "^3.3.2",
     "shx": "^0.3.4",
     "tsup": "^8.0.1",
+    "tsx": "^4.19.1",
     "typescript": "^5.5.2"
   },
   "optionalDependencies": {

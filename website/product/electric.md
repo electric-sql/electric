@@ -27,7 +27,7 @@ You can sync data into:
 
 - web and mobile apps, [replacing data fetching with data sync](/examples/linearlite)
 - development environments, for example syncing data into [an embedded PGlite](/product/pglite)
-- edge workers and services, for example maintaining a low-latency [edge data cache](https://github.com/electric-sql/electric/blob/main/examples/redis-client/src/index.ts)
+- edge workers and services, for example maintaining a low-latency [edge data cache](https://github.com/electric-sql/electric/blob/main/examples/redis-sync/src/index.ts)
 - local AI systems running RAG, for example [using pgvector](https://electric-sql.com/blog/2024/02/05/local-first-ai-with-tauri-postgres-pgvector-llama)
 - databases like [PGlite](./pglite)
 
