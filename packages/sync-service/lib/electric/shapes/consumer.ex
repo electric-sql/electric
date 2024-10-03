@@ -49,7 +49,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def init(config) do
-    %{log_producer: producer, storage: storage} = config
+    %{log_producer: producer, storage: storage, shape_status: shape_status} = config
 
     Logger.metadata(shape_id: config.shape_id)
 
@@ -57,11 +57,21 @@ defmodule Electric.Shapes.Consumer do
 
     {:ok, latest_offset, snapshot_xmin} = ShapeCache.Storage.get_current_position(storage)
 
+    :ok =
+      shape_status.initialise_shape(
+        config.persistent_state,
+        config.shape_id,
+        snapshot_xmin,
+        latest_offset
+      )
+
     state =
       Map.merge(config, %{
         latest_offset: latest_offset,
         snapshot_xmin: snapshot_xmin,
         log_state: @initial_log_state,
+        snapshot_started: false,
+        awaiting_snapshot_start: [],
         buffer: [],
         monitors: []
       })
@@ -78,37 +88,74 @@ defmodule Electric.Shapes.Consumer do
     {:reply, ref, [], %{state | monitors: [{pid, ref} | monitors]}}
   end
 
-  def handle_cast({:snapshot_xmin_known, shape_id, xmin}, %{shape_id: shape_id} = state) do
-    ShapeCache.Storage.set_snapshot_xmin(xmin, state.storage)
+  def handle_call(:clean_and_stop, _from, state) do
+    state =
+      reply_to_snapshot_waiters({:error, "Shape terminated before snapshot completed"}, state)
 
-    cast_shape_cache({:snapshot_xmin_known, shape_id, xmin}, state)
-
-    handle_txns(state.buffer, %{state | snapshot_xmin: xmin, buffer: []})
+    # TODO: ensure cleanup occurs after snapshot is done/failed/interrupted to avoid
+    # any race conditions and leftover data
+    state = cleanup(state)
+    {:stop, :normal, :ok, state}
   end
 
-  def handle_cast({:snapshot_started, shape_id}, %{shape_id: shape_id} = state) do
-    ShapeCache.Storage.mark_snapshot_as_started(state.storage)
-    cast_shape_cache({:snapshot_started, shape_id}, state)
+  def handle_call(:await_snapshot_start, _from, %{snapshot_started: true} = state) do
+    {:reply, :started, [], state}
+  end
 
+  def handle_call(:await_snapshot_start, from, %{awaiting_snapshot_start: waiters} = state) do
+    Logger.debug("Starting a wait on the snapshot #{state.shape_id} for #{inspect(from)}}")
+
+    {:noreply, [], %{state | awaiting_snapshot_start: [from | waiters]}}
+  end
+
+  def handle_cast({:await_snapshot_start, from}, %{snapshot_started: true} = state) do
+    GenServer.reply(from, :started)
     {:noreply, [], state}
   end
 
-  def handle_cast({:snapshot_failed, shape_id, error, stacktrace}, state) do
+  def handle_cast({:await_snapshot_start, from}, %{awaiting_snapshot_start: waiters} = state) do
+    Logger.debug("Starting a wait on the snapshot #{state.shape_id} for #{inspect(from)}}")
+
+    {:noreply, [], %{state | awaiting_snapshot_start: [from | waiters]}}
+  end
+
+  def handle_cast({:snapshot_xmin_known, shape_id, xmin}, %{shape_id: shape_id} = state) do
+    state = set_snapshot_xmin(xmin, state)
+    handle_txns(state.buffer, %{state | buffer: []})
+  end
+
+  def handle_cast({:snapshot_started, shape_id}, %{shape_id: shape_id} = state) do
+    state = set_snapshot_started(state)
+    {:noreply, [], state}
+  end
+
+  def handle_cast(
+        {:snapshot_failed, shape_id,
+         %DBConnection.ConnectionError{reason: :queue_timeout} = error, _stacktrace},
+        %{shape_id: shape_id} = state
+      ) do
+    Logger.warning(
+      "Snapshot creation failed for #{shape_id} because of a connection pool queue timeout"
+    )
+
+    state = reply_to_snapshot_waiters({:error, error}, state)
+    state = cleanup(state)
+    {:stop, :normal, state}
+  end
+
+  def handle_cast({:snapshot_failed, shape_id, error, stacktrace}, %{shape_id: shape_id} = state) do
     Logger.error(
       "Snapshot creation failed for #{shape_id} because of:\n#{Exception.format(:error, error, stacktrace)}"
     )
 
-    cast_shape_cache({:snapshot_failed, shape_id, error, stacktrace}, state)
-
-    {:noreply, [], state}
+    state = reply_to_snapshot_waiters({:error, error}, state)
+    state = cleanup(state)
+    {:stop, {:error, error}, state}
   end
 
   def handle_cast({:snapshot_exists, shape_id}, %{shape_id: shape_id} = state) do
-    %{snapshot_xmin: xmin} = state
-
-    cast_shape_cache({:snapshot_xmin_known, shape_id, xmin}, state)
-    cast_shape_cache({:snapshot_started, shape_id}, state)
-
+    state = set_snapshot_xmin(state.snapshot_xmin, state)
+    state = set_snapshot_started(state)
     {:noreply, [], state}
   end
 
@@ -224,9 +271,44 @@ defmodule Electric.Shapes.Consumer do
     end)
   end
 
-  defp cast_shape_cache(message, state) do
-    %{shape_cache: {shape_cache, shape_cache_opts}} = state
-    shape_cache.cast(message, shape_cache_opts)
+  defp set_snapshot_xmin(xmin, %{snapshot_xmin: nil} = state) do
+    ShapeCache.Storage.set_snapshot_xmin(xmin, state.storage)
+    set_snapshot_xmin(xmin, %{state | snapshot_xmin: xmin})
+  end
+
+  defp set_snapshot_xmin(xmin, %{snapshot_xmin: xmin, shape_id: shape_id} = state) do
+    unless state.shape_status.set_snapshot_xmin(state.persistent_state, shape_id, xmin),
+      do:
+        Logger.warning(
+          "Got snapshot information for a #{shape_id}, that shape id is no longer valid. Ignoring."
+        )
+
+    state
+  end
+
+  defp set_snapshot_started(%{snapshot_started: false} = state) do
+    ShapeCache.Storage.mark_snapshot_as_started(state.storage)
+    set_snapshot_started(%{state | snapshot_started: true})
+  end
+
+  defp set_snapshot_started(%{shape_id: shape_id} = state) do
+    :ok = state.shape_status.mark_snapshot_started(state.persistent_state, shape_id)
+    reply_to_snapshot_waiters(:started, state)
+  end
+
+  defp cleanup(state) do
+    state.shape_status.remove_shape(state.persistent_state, state.shape_id)
+    ShapeCache.Storage.cleanup!(state.storage)
+    state
+  end
+
+  defp reply_to_snapshot_waiters(_reply, %{awaiting_snapshot_start: []} = state) do
+    state
+  end
+
+  defp reply_to_snapshot_waiters(reply, %{awaiting_snapshot_start: waiters} = state) do
+    for client <- List.wrap(waiters), not is_nil(client), do: GenStage.reply(client, reply)
+    %{state | awaiting_snapshot_start: []}
   end
 
   defp notify(_txn, %{monitors: []} = state), do: state

@@ -12,6 +12,8 @@ defmodule Electric.Shapes.Consumer.Supervisor do
             log_producer: [type: @genserver_name_schema, required: true],
             shape_cache: [type: :mod_arg, required: true],
             registry: [type: :atom, required: true],
+            persistent_state: [type: :any, required: true],
+            shape_status: [type: :atom, required: true],
             storage: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],
             db_pool: [type: {:or, [:atom, :pid]}, default: Electric.DbPool],
@@ -34,6 +36,14 @@ defmodule Electric.Shapes.Consumer.Supervisor do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
       config = Map.new(opts)
       Supervisor.start_link(__MODULE__, config, name: name(config))
+    end
+  end
+
+  def clean_and_stop(%{electric_instance_id: electric_instance_id, shape_id: shape_id}) do
+    # if consumer is present, terminate it gracefully, otherwise terminate supervisor
+    case GenServer.whereis(Electric.Shapes.Consumer.name(electric_instance_id, shape_id)) do
+      nil -> Supervisor.stop(name(electric_instance_id, shape_id))
+      consumer_pid when is_pid(consumer_pid) -> GenServer.call(consumer_pid, :clean_and_stop)
     end
   end
 

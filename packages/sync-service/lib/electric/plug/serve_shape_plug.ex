@@ -391,10 +391,15 @@ defmodule Electric.Plug.ServeShapePlug do
         Logger.warning(error_msg)
         OpenTelemetry.record_exception(error_msg)
 
+        {status_code, message} =
+          if match?(%DBConnection.ConnectionError{reason: :queue_timeout}, reason),
+            do: {429, "Could not establish connection to database - try again later"},
+            else: {500, "Failed creating or fetching the snapshot"}
+
         send_resp(
           conn,
-          500,
-          Jason.encode_to_iodata!(%{error: "Failed creating or fetching the snapshot"})
+          status_code,
+          Jason.encode_to_iodata!(%{error: message})
         )
     end
   end
@@ -643,9 +648,8 @@ defmodule Electric.Plug.ServeShapePlug do
 
   @impl Plug.ErrorHandler
   def handle_errors(conn, error) do
-    OpenTelemetry.record_exception(error.reason, error.stack)
-
     error_str = Exception.format(error.kind, error.reason)
+    OpenTelemetry.record_exception(error_str, error.stack)
 
     conn
     |> assign(:error_str, error_str)

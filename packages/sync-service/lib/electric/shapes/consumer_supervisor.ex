@@ -27,13 +27,16 @@ defmodule Electric.Shapes.ConsumerSupervisor do
     DynamicSupervisor.start_child(name, {Consumer.Supervisor, config})
   end
 
-  def stop_shape_consumer(name, electric_instance_id, shape_id) do
+  def stop_shape_consumer(_name, electric_instance_id, shape_id) do
     case GenServer.whereis(Consumer.Supervisor.name(electric_instance_id, shape_id)) do
       nil ->
         {:error, "no consumer for shape id #{inspect(shape_id)}"}
 
       pid when is_pid(pid) ->
-        DynamicSupervisor.terminate_child(name, pid)
+        Consumer.Supervisor.clean_and_stop(%{
+          electric_instance_id: electric_instance_id,
+          shape_id: shape_id
+        })
     end
   end
 
