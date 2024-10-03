@@ -98,16 +98,6 @@ defmodule Electric.Shapes.Consumer do
     {:stop, :normal, :ok, state}
   end
 
-  def handle_call(:await_snapshot_start, _from, %{snapshot_started: true} = state) do
-    {:reply, :started, [], state}
-  end
-
-  def handle_call(:await_snapshot_start, from, %{awaiting_snapshot_start: waiters} = state) do
-    Logger.debug("Starting a wait on the snapshot #{state.shape_id} for #{inspect(from)}}")
-
-    {:noreply, [], %{state | awaiting_snapshot_start: [from | waiters]}}
-  end
-
   def handle_cast({:await_snapshot_start, from}, %{snapshot_started: true} = state) do
     GenServer.reply(from, :started)
     {:noreply, [], state}
