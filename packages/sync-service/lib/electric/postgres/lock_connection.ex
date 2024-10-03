@@ -21,6 +21,7 @@ defmodule Electric.Postgres.LockConnection do
 
   defmodule State do
     defstruct [
+      :step,
       :connection_manager,
       :lock_acquired,
       :lock_name,
@@ -32,24 +33,20 @@ defmodule Electric.Postgres.LockConnection do
   def start_link(opts) do
     {connection_opts, init_opts} = Keyword.pop(opts, :connection_opts)
 
-    case Postgrex.SimpleConnection.start_link(
-           __MODULE__,
-           init_opts,
-           connection_opts ++ [timeout: :infinity, auto_reconnect: false]
-         ) do
-      {:ok, pid} ->
-        send(pid, :acquire_lock)
-        {:ok, pid}
-
-      {:error, error} ->
-        {:error, error}
-    end
+    Postgrex.SimpleConnection.start_link(
+      __MODULE__,
+      init_opts,
+      connection_opts ++ [timeout: :infinity, auto_reconnect: false]
+    )
   end
 
   @impl true
   def init(opts) do
+    send(self(), :query_pg_version)
+
     {:ok,
      %State{
+       step: :query_pg_version,
        connection_manager: Keyword.fetch!(opts, :connection_manager),
        lock_name: Keyword.fetch!(opts, :lock_name),
        lock_acquired: false,
@@ -58,6 +55,10 @@ defmodule Electric.Postgres.LockConnection do
   end
 
   @impl true
+  def handle_info(:query_pg_version, state) do
+    {:query, pg_version_query(), state}
+  end
+
   def handle_info(:acquire_lock, state) do
     if state.lock_acquired do
       notify_lock_acquired(state)
@@ -73,26 +74,47 @@ defmodule Electric.Postgres.LockConnection do
   end
 
   @impl true
-  def handle_result([_] = _results, state) do
-    Logger.info("Lock acquired from postgres with name #{state.lock_name}")
-    notify_lock_acquired(state)
-    {:noreply, %{state | lock_acquired: true}}
+  def handle_result(
+        [%Postgrex.Result{columns: ["server_version_num"], rows: [[version_str]]}],
+        state
+      ) do
+    Logger.info("Postgres server version reported as #{version_str}")
+    notify_pg_version(String.to_integer(version_str), state)
+    send(self(), :acquire_lock)
+    {:noreply, %{state | step: :acquire_lock}}
   end
 
-  @impl true
-  def handle_result(%Postgrex.Error{} = error, %State{backoff: {backoff, _}} = state) do
-    {time, backoff} = :backoff.fail(backoff)
-    tref = :erlang.start_timer(time, self(), :acquire_lock)
+  def handle_result([%Postgrex.Result{columns: ["pg_advisory_lock"]}], state) do
+    Logger.info("Lock acquired from postgres with name #{state.lock_name}")
+    notify_lock_acquired(state)
+    {:noreply, %{state | lock_acquired: true, step: :ready}}
+  end
 
-    Logger.error(
-      "Failed to acquire lock #{state.lock_name} with reason #{inspect(error)} - retrying in #{inspect(time)}ms."
-    )
+  def handle_result(%Postgrex.Error{} = error, %State{step: step, backoff: {backoff, _}} = state) do
+    error_str =
+      case step do
+        :query_pg_version -> "Failed to get Postgres server version"
+        :acquire_lock -> "Failed to acquire lock #{state.lock_name}"
+      end
+
+    {time, backoff} = :backoff.fail(backoff)
+    tref = :erlang.start_timer(time, self(), step)
+
+    Logger.error(error_str <> " with reason #{inspect(error)} - retrying in #{inspect(time)}ms.")
 
     {:noreply, %{state | lock_acquired: false, backoff: {backoff, tref}}}
   end
 
+  defp notify_pg_version(pg_version, %State{connection_manager: connection_manager}) do
+    GenServer.cast(connection_manager, {:pg_version, pg_version})
+  end
+
   defp notify_lock_acquired(%State{connection_manager: connection_manager} = _state) do
     GenServer.cast(connection_manager, :lock_connection_acquired)
+  end
+
+  defp pg_version_query do
+    "SELECT current_setting('server_version_num') AS server_version_num"
   end
 
   defp lock_query(%State{lock_name: name} = _state) do
