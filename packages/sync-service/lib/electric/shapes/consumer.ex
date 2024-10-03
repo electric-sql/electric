@@ -49,7 +49,8 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def init(config) do
-    %{log_producer: producer, storage: storage, shape_status: shape_status} = config
+    %{log_producer: producer, storage: storage, shape_status: {shape_status, shape_status_state}} =
+      config
 
     Logger.metadata(shape_id: config.shape_id)
 
@@ -59,7 +60,7 @@ defmodule Electric.Shapes.Consumer do
 
     :ok =
       shape_status.initialise_shape(
-        config.persistent_state,
+        shape_status_state,
         config.shape_id,
         snapshot_xmin,
         latest_offset
@@ -259,7 +260,9 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp set_snapshot_xmin(xmin, %{snapshot_xmin: xmin, shape_id: shape_id} = state) do
-    unless state.shape_status.set_snapshot_xmin(state.persistent_state, shape_id, xmin),
+    %{shape_status: {shape_status, shape_status_state}} = state
+
+    unless shape_status.set_snapshot_xmin(shape_status_state, shape_id, xmin),
       do:
         Logger.warning(
           "Got snapshot information for a #{shape_id}, that shape id is no longer valid. Ignoring."
@@ -274,12 +277,14 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp set_snapshot_started(%{shape_id: shape_id} = state) do
-    :ok = state.shape_status.mark_snapshot_started(state.persistent_state, shape_id)
+    %{shape_status: {shape_status, shape_status_state}} = state
+    :ok = shape_status.mark_snapshot_started(shape_status_state, shape_id)
     reply_to_snapshot_waiters(:started, state)
   end
 
   defp cleanup(state) do
-    state.shape_status.remove_shape(state.persistent_state, state.shape_id)
+    %{shape_status: {shape_status, shape_status_state}} = state
+    shape_status.remove_shape(shape_status_state, state.shape_id)
     ShapeCache.Storage.cleanup!(state.storage)
     state
   end

@@ -113,11 +113,10 @@ defmodule Electric.Shapes.ConsumerTest do
             ])
         )
 
-
       consumers =
         for {shape_id, shape} <- ctx.shapes do
           Mock.ShapeStatus
-          |> expect(:initialise_shape, 1, fn _, ^shape_id,_, _ -> :ok end)
+          |> expect(:initialise_shape, 1, fn _, ^shape_id, _, _ -> :ok end)
           |> expect(:set_snapshot_xmin, 1, fn _, ^shape_id, _ -> :ok end)
           |> expect(:mark_snapshot_started, 1, fn _, ^shape_id -> :ok end)
           |> allow(self(), fn ->
@@ -138,8 +137,7 @@ defmodule Electric.Shapes.ConsumerTest do
                log_producer: ShapeLogCollector.name(ctx.electric_instance_id),
                registry: registry_name,
                shape_cache: {Mock.ShapeCache, []},
-               shape_status: Mock.ShapeStatus,
-               persistent_state: ctx.persistent_kv,
+               shape_status: {Mock.ShapeStatus, ctx.persistent_kv},
                storage: storage,
                chunk_bytes_threshold:
                  Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
@@ -165,8 +163,8 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = lsn(@shape_id1, ctx)
 
       Mock.ShapeCache
-        |> expect(:update_shape_latest_offset, 2, fn @shape_id1, ^last_log_offset, _ -> :ok end)
-        |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> expect(:update_shape_latest_offset, 2, fn @shape_id1, ^last_log_offset, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
 
       ref = make_ref()
 
