@@ -12,8 +12,6 @@ defmodule Electric.Timeline do
 
   @type check_result :: :ok | :timeline_changed
 
-  @timeline_key "timeline_id"
-
   @doc """
   Checks that we're connected to the same Postgres DB as before and on the same timeline.
   TO this end, it checks the provided `pg_id` against the persisted PG ID.
@@ -22,14 +20,14 @@ defmodule Electric.Timeline do
   If the timelines differ, that indicates that a Point In Time Recovery (PITR) has occurred and all shapes must be cleaned.
   If we fail to fetch timeline information, we also clean all shapes for safety as we can't be sure that Postgres and Electric are on the same timeline.
   """
-  @spec check(timeline(), map()) :: check_result()
-  def check(pg_timeline, persistent_kv) do
-    electric_timeline = load_timeline(persistent_kv)
+  @spec check(timeline(), keyword()) :: check_result()
+  def check(pg_timeline, opts) do
+    electric_timeline = load_timeline(opts)
 
     # In any situation where the newly fetched timeline is different from the one we had
     # stored previously, overwrite the old one with the new one in our persistent KV store.
     if pg_timeline != electric_timeline do
-      :ok = store_timeline(pg_timeline, persistent_kv)
+      :ok = store_timeline(pg_timeline, opts)
     end
 
     # Now check for specific differences between the two timelines.
@@ -62,11 +60,11 @@ defmodule Electric.Timeline do
   end
 
   # Loads the PG ID and timeline ID from persistent storage
-  @spec load_timeline(map()) :: timeline()
-  def load_timeline(persistent_kv) do
-    kv = make_serialized_kv(persistent_kv)
+  @spec load_timeline(Keyword.t()) :: timeline()
+  def load_timeline(opts) do
+    kv = make_serialized_kv(opts)
 
-    case PersistentKV.get(kv, @timeline_key) do
+    case PersistentKV.get(kv, timeline_key(opts)) do
       {:ok, [pg_id, timeline_id]} ->
         {pg_id, timeline_id}
 
@@ -79,13 +77,20 @@ defmodule Electric.Timeline do
     end
   end
 
-  def store_timeline({pg_id, timeline_id}, persistent_kv) do
-    kv = make_serialized_kv(persistent_kv)
-    :ok = PersistentKV.set(kv, @timeline_key, [pg_id, timeline_id])
+  @spec store_timeline(timeline(), Keyword.t()) :: :ok
+  def store_timeline({pg_id, timeline_id}, opts) do
+    kv = make_serialized_kv(opts)
+    :ok = PersistentKV.set(kv, timeline_key(opts), [pg_id, timeline_id])
   end
 
-  defp make_serialized_kv(persistent_kv) do
+  defp make_serialized_kv(opts) do
+    kv_backend = Keyword.fetch!(opts, :persistent_kv)
     # defaults to using Jason encoder and decoder
-    PersistentKV.Serialized.new!(backend: persistent_kv)
+    PersistentKV.Serialized.new!(backend: kv_backend)
+  end
+
+  defp timeline_key(opts) do
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    "timeline_id_#{tenant_id}"
   end
 end

@@ -88,21 +88,24 @@ defmodule Electric.Postgres.ReplicationClient do
   @repl_msg_primary_keepalive ?k
   @repl_msg_standby_status_update ?r
 
-  def start_link(electric_instance_id, connection_opts, replication_opts) do
+  @spec start_link(Keyword.t()) :: :gen_statem.start_ret()
+  def start_link(opts) do
+    config = Map.new(opts)
+
     # Disable the reconnection logic in Postgex.ReplicationConnection to force it to exit with
     # the connection error. Without this, we may observe undesirable restarts in tests between
     # one test process exiting and the next one starting.
     start_opts =
       [
-        name: name(electric_instance_id),
+        name: name(config.electric_instance_id, config.tenant_id),
         auto_reconnect: false
-      ] ++ Electric.Utils.deobfuscate_password(connection_opts)
+      ] ++ Electric.Utils.deobfuscate_password(config.connection_opts)
 
-    Postgrex.ReplicationConnection.start_link(__MODULE__, replication_opts, start_opts)
+    Postgrex.ReplicationConnection.start_link(__MODULE__, config.replication_opts, start_opts)
   end
 
-  def name(electric_instance_id) do
-    Electric.Application.process_name(electric_instance_id, __MODULE__)
+  def name(electric_instance_id, tenant_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
   end
 
   def start_streaming(client) do
