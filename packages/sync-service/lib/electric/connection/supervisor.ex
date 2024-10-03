@@ -31,20 +31,22 @@ defmodule Electric.Connection.Supervisor do
   end
 
   def start_shapes_supervisor(opts) do
-    app_config = Electric.Application.Configuration.get()
+    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+    shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
+    inspector = Keyword.fetch!(shape_cache_opts, :inspector)
 
-    shape_cache_opts = app_config.shape_cache_opts ++ Keyword.take(opts, [:purge_all_shapes?])
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
     shape_log_collector_spec =
       {Electric.Replication.ShapeLogCollector,
-       electric_instance_id: app_config.electric_instance_id, inspector: app_config.inspector}
+       electric_instance_id: electric_instance_id, inspector: inspector}
 
     child_spec =
       Supervisor.child_spec(
         {
           Electric.Shapes.Supervisor,
-          electric_instance_id: app_config.electric_instance_id,
+          electric_instance_id: electric_instance_id,
+          tenant_id: Keyword.fetch!(opts, :tenant_id),
           shape_cache: shape_cache_spec,
           log_collector: shape_log_collector_spec
         },

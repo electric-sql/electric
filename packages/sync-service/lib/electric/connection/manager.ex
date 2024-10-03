@@ -20,7 +20,8 @@ defmodule Electric.Connection.Manager do
          connection_opts: [...],
          replication_opts: [...],
          pool_opts: [...],
-         persistent_kv: ...}
+         timeline_opts: [...],
+         shape_cache_opts: [...]}
       ]
 
       Supervisor.start_link(children, strategy: :one_for_one)
@@ -34,8 +35,10 @@ defmodule Electric.Connection.Manager do
       :replication_opts,
       # Database connection pool options
       :pool_opts,
-      # Application's persistent key-value storage reference
-      :persistent_kv,
+      # Options specific to `Electric.Timeline`
+      :timeline_opts,
+      # Options passed to the Shapes.Supervisor's start_link() function
+      :shape_cache_opts,
       # PID of the replication client
       :replication_client_pid,
       # PID of the Postgres connection lock
@@ -55,7 +58,8 @@ defmodule Electric.Connection.Manager do
       # PostgreSQL system identifier
       :pg_system_identifier,
       # PostgreSQL timeline ID
-      :pg_timeline_id
+      :pg_timeline_id,
+      :tenant_id
     ]
   end
 
@@ -70,17 +74,26 @@ defmodule Electric.Connection.Manager do
           | {:connection_opts, Keyword.t()}
           | {:replication_opts, Keyword.t()}
           | {:pool_opts, Keyword.t()}
-          | {:persistent_kv, map()}
+          | {:timeline_opts, Keyword.t()}
+          | {:shape_cache_opts, Keyword.t()}
 
   @type options :: [option]
-
-  @name __MODULE__
 
   @lock_status_logging_interval 10_000
 
   @spec start_link(options) :: GenServer.on_start()
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: @name)
+    GenServer.start_link(__MODULE__, opts, name: name(opts))
+  end
+
+  def name(electric_instance_id, tenant_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  end
+
+  def name(opts) do
+    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+    tenant_id = Keyword.fetch!(opts, :tenant_id)
+    name(electric_instance_id, tenant_id)
   end
 
   @doc """
@@ -127,18 +140,20 @@ defmodule Electric.Connection.Manager do
       |> Keyword.put(:connection_manager, self())
 
     pool_opts = Keyword.fetch!(opts, :pool_opts)
-
-    persistent_kv = Keyword.fetch!(opts, :persistent_kv)
+    timeline_opts = Keyword.fetch!(opts, :timeline_opts)
+    shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
 
     state =
       %State{
         connection_opts: connection_opts,
         replication_opts: replication_opts,
         pool_opts: pool_opts,
-        persistent_kv: persistent_kv,
+        timeline_opts: timeline_opts,
+        shape_cache_opts: shape_cache_opts,
         pg_lock_acquired: false,
         backoff: {:backoff.init(1000, 10_000), nil},
-        electric_instance_id: Keyword.fetch!(opts, :electric_instance_id)
+        electric_instance_id: Keyword.fetch!(opts, :electric_instance_id),
+        tenant_id: Keyword.fetch!(opts, :tenant_id)
       }
 
     # Try to acquire the connection lock on the replication slot
@@ -188,11 +203,12 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_continue(:start_replication_client, %State{replication_client_pid: nil} = state) do
-    case start_replication_client(
-           state.electric_instance_id,
-           state.connection_opts,
-           state.replication_opts
-         ) do
+    opts =
+      state
+      |> Map.take([:electric_instance_id, :tenant_id, :replication_opts, :connection_opts])
+      |> Map.to_list()
+
+    case start_replication_client(opts) do
       {:ok, pid, connection_opts} ->
         state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
 
@@ -224,12 +240,18 @@ defmodule Electric.Connection.Manager do
         check_result =
           Electric.Timeline.check(
             {state.pg_system_identifier, state.pg_timeline_id},
-            state.persistent_kv
+            state.timeline_opts
           )
+
+        shape_cache_opts =
+          state.shape_cache_opts
+          |> Keyword.put(:purge_all_shapes?, check_result == :timeline_changed)
 
         {:ok, shapes_sup_pid} =
           Electric.Connection.Supervisor.start_shapes_supervisor(
-            purge_all_shapes?: check_result == :timeline_changed
+            electric_instance_id: state.electric_instance_id,
+            tenant_id: state.tenant_id,
+            shape_cache_opts: shape_cache_opts
           )
 
         # Everything is ready to start accepting and processing logical messages from Postgres.
@@ -327,20 +349,18 @@ defmodule Electric.Connection.Manager do
      }}
   end
 
-  defp start_replication_client(electric_instance_id, connection_opts, replication_opts) do
-    case Electric.Postgres.ReplicationClient.start_link(
-           electric_instance_id,
-           connection_opts,
-           replication_opts
-         ) do
+  defp start_replication_client(opts) do
+    case Electric.Postgres.ReplicationClient.start_link(opts) do
       {:ok, pid} ->
-        {:ok, pid, connection_opts}
+        {:ok, pid, Keyword.fetch!(opts, :connection_opts)}
 
       {:error, %Postgrex.Error{message: "ssl not available"}} = error ->
-        if connection_opts[:sslmode] == :require do
+        sslmode = get_in(opts, [:connection_opts, :sslmode])
+
+        if sslmode == :require do
           error
         else
-          if connection_opts[:sslmode] do
+          if not is_nil(sslmode) do
             # Only log a warning when there's an explicit sslmode parameter in the database
             # config, meaning the user has requested a certain sslmode.
             Logger.warning(
@@ -348,8 +368,9 @@ defmodule Electric.Connection.Manager do
             )
           end
 
-          connection_opts = Keyword.put(connection_opts, :ssl, false)
-          start_replication_client(electric_instance_id, connection_opts, replication_opts)
+          opts
+          |> Keyword.update!(:connection_opts, &Keyword.put(&1, :ssl, false))
+          |> start_replication_client()
         end
 
       error ->
