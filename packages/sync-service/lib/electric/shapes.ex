@@ -10,9 +10,9 @@ defmodule Electric.Shapes do
   @doc """
   Get snapshot for the shape ID
   """
-  def get_snapshot(config, shape_id) do
+  def get_snapshot(config, shape_id, tenant_id) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
-    storage = shape_storage(config, shape_id)
+    storage = shape_storage(config, shape_id, tenant_id)
 
     if shape_cache.has_shape?(shape_id, opts) do
       with :started <- shape_cache.await_snapshot_start(shape_id, opts) do
@@ -26,11 +26,11 @@ defmodule Electric.Shapes do
   @doc """
   Get stream of the log since a given offset
   """
-  def get_log_stream(config, shape_id, opts) do
+  def get_log_stream(config, shape_id, tenant_id, opts) do
     {shape_cache, shape_cache_opts} = Access.get(config, :shape_cache, {ShapeCache, []})
     offset = Access.get(opts, :since, LogOffset.before_all())
     max_offset = Access.get(opts, :up_to, LogOffset.last())
-    storage = shape_storage(config, shape_id)
+    storage = shape_storage(config, shape_id, tenant_id)
 
     if shape_cache.has_shape?(shape_id, shape_cache_opts) do
       Storage.get_log_stream(offset, max_offset, storage)
@@ -64,10 +64,10 @@ defmodule Electric.Shapes do
 
   If `nil` is returned, chunk is not complete and the shape's latest offset should be used
   """
-  @spec get_chunk_end_log_offset(keyword(), shape_id(), LogOffset.t()) ::
+  @spec get_chunk_end_log_offset(keyword(), shape_id(), LogOffset.t(), String.t()) ::
           LogOffset.t() | nil
-  def get_chunk_end_log_offset(config, shape_id, offset) do
-    storage = shape_storage(config, shape_id)
+  def get_chunk_end_log_offset(config, shape_id, offset, tenant_id) do
+    storage = shape_storage(config, shape_id, tenant_id)
     Storage.get_chunk_end_log_offset(offset, storage)
   end
 
@@ -102,7 +102,7 @@ defmodule Electric.Shapes do
     :ok
   end
 
-  defp shape_storage(config, shape_id) do
-    Storage.for_shape(shape_id, Access.fetch!(config, :storage))
+  defp shape_storage(config, shape_id, tenant_id) do
+    Storage.for_shape(shape_id, tenant_id, Access.fetch!(config, :storage))
   end
 end
