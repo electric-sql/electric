@@ -38,7 +38,7 @@ export const testWithDbClient = test.extend<{
     use(async (table: string, shapeId?: string) => {
       const baseUrl = inject(`baseUrl`)
       const resp = await fetch(
-        `${baseUrl}/v1/shape/${table}${shapeId ? `?shape_id=${shapeId}` : ``}`,
+        `${baseUrl}/v1/shape/${table}${shapeId ? `?shape_handle=${shapeId}` : ``}`,
         {
           method: `DELETE`,
         }

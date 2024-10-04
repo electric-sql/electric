@@ -90,10 +90,10 @@ export async function GET(
   // Construct the upstream URL
   const originUrl = new URL(`http://localhost:3000/v1/shape/${table}`)
 
-  // Copy over the shape_id & offset query params that the
+  // Copy over the shape_handle & offset query params that the
   // Electric client adds so we return the right part of the Shape log.
   url.searchParams.forEach((value, key) => {
-    if ([`shape_id`, `offset`].includes(key)) {
+    if ([`shape_handle`, `offset`].includes(key)) {
       originUrl.searchParams.set(key, value)
     }
   })

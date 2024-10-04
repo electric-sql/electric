@@ -606,7 +606,7 @@ describe(`HTTP Sync`, () => {
 
     // Get etag for catchup
     const catchupEtagRes = await fetch(
-      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=${midOffset}&shape_id=${shapeId}`,
+      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=${midOffset}&shape_handle=${shapeId}`,
       {}
     )
     const catchupEtag = catchupEtagRes.headers.get(`etag`)
@@ -615,7 +615,7 @@ describe(`HTTP Sync`, () => {
     // Catch-up offsets should also use the same etag as they're
     // also working through the end of the current log.
     const catchupEtagValidation = await fetch(
-      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=${midOffset}&shape_id=${shapeId}`,
+      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=${midOffset}&shape_handle=${shapeId}`,
       {
         headers: { 'If-None-Match': catchupEtag },
       }

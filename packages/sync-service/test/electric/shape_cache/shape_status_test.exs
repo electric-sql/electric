@@ -41,13 +41,13 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     shapes = Keyword.get(opts, :shapes, [])
 
-    shape_ids =
+    shape_handles =
       for shape <- shapes do
-        {:ok, shape_id} = ShapeStatus.add_shape(state, shape)
-        shape_id
+        {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+        shape_handle
       end
 
-    {:ok, state, shape_ids}
+    {:ok, state, shape_handles}
   end
 
   test "starts empty", ctx do
@@ -58,7 +58,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   test "can recover shapes from storage", ctx do
     {:ok, state, []} = new_state(ctx)
     shape = shape!()
-    assert {:ok, shape_id} = ShapeStatus.add_shape(state, shape)
+    assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+    assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
 
     {:ok, state, []} =
       new_state(ctx,
@@ -73,24 +74,24 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   test "can add shapes", ctx do
     {:ok, state, []} = new_state(ctx)
     shape = shape!()
-    assert {:ok, shape_id} = ShapeStatus.add_shape(state, shape)
-    assert [{^shape_id, ^shape}] = ShapeStatus.list_shapes(state)
+    assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+    assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
   end
 
   test "can delete shape instances", ctx do
     {:ok, state, []} = new_state(ctx)
     shape_1 = shape!()
-    assert {:ok, shape_id_1} = ShapeStatus.add_shape(state, shape_1)
+    assert {:ok, shape_handle_1} = ShapeStatus.add_shape(state, shape_1)
 
     shape_2 = shape2!()
 
-    assert {:ok, shape_id_2} = ShapeStatus.add_shape(state, shape_2)
+    assert {:ok, shape_handle_2} = ShapeStatus.add_shape(state, shape_2)
 
-    assert Enum.sort_by([{shape_id_1, shape_1}, {shape_id_2, shape_2}], &elem(&1, 0)) ==
+    assert Enum.sort_by([{shape_handle_1, shape_1}, {shape_handle_2, shape_2}], &elem(&1, 0)) ==
              ShapeStatus.list_shapes(state) |> Enum.sort_by(&elem(&1, 0))
 
-    assert {:ok, ^shape_1} = ShapeStatus.remove_shape(state, shape_id_1)
-    assert [{^shape_id_2, ^shape_2}] = ShapeStatus.list_shapes(state)
+    assert {:ok, ^shape_handle_1} = ShapeStatus.remove_shape(state, shape_handle_1)
+    assert [{^shape_handle_2, ^shape_2}] = ShapeStatus.list_shapes(state)
   end
 
   test "get_existing_shape/2 with %Shape{}", ctx do
@@ -99,94 +100,94 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     refute ShapeStatus.get_existing_shape(state, shape)
 
-    assert {:ok, shape_id} = ShapeStatus.add_shape(state, shape)
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
+    assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(state, shape)
 
-    assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_id)
+    assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_handle)
     refute ShapeStatus.get_existing_shape(state, shape)
   end
 
-  test "get_existing_shape/2 with shape_id", ctx do
+  test "get_existing_shape/2 with shape_handle", ctx do
     shape = shape!()
-    {:ok, state, [shape_id]} = new_state(ctx, shapes: [shape])
+    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape])
 
     refute ShapeStatus.get_existing_shape(state, "1234")
 
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape_id)
+    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(state, shape)
+    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(state, shape_handle)
 
-    assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_id)
+    assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_handle)
     refute ShapeStatus.get_existing_shape(state, shape)
-    refute ShapeStatus.get_existing_shape(state, shape_id)
+    refute ShapeStatus.get_existing_shape(state, shape_handle)
   end
 
   test "get_existing_shape/2 public api", ctx do
     shape = shape!()
     table = table_name()
 
-    {:ok, state, [shape_id]} = new_state(ctx, table: table, shapes: [shape])
+    {:ok, state, [shape_handle]} = new_state(ctx, table: table, shapes: [shape])
 
     refute ShapeStatus.get_existing_shape(table, "1234")
 
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape)
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape_id)
+    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(table, shape)
+    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(table, shape_handle)
 
-    assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_id)
+    assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_handle)
     refute ShapeStatus.get_existing_shape(table, shape)
-    refute ShapeStatus.get_existing_shape(table, shape_id)
+    refute ShapeStatus.get_existing_shape(table, shape_handle)
   end
 
   test "latest_offset", ctx do
-    {:ok, state, [shape_id]} = new_state(ctx, shapes: [shape!()])
+    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
     assert :error = ShapeStatus.latest_offset(state, "sdfsodf")
-    assert ShapeStatus.latest_offset(state, shape_id) == {:ok, LogOffset.first()}
+    assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, LogOffset.first()}
     offset = LogOffset.new(100, 3)
-    assert ShapeStatus.set_latest_offset(state, shape_id, offset)
+    assert ShapeStatus.set_latest_offset(state, shape_handle, offset)
     refute ShapeStatus.set_latest_offset(state, "not my shape", offset)
-    assert ShapeStatus.latest_offset(state, shape_id) == {:ok, offset}
+    assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, offset}
   end
 
   test "latest_offset public api", ctx do
     table_name = table_name()
-    {:ok, _state, [shape_id]} = new_state(ctx, table: table_name, shapes: [shape!()])
+    {:ok, _state, [shape_handle]} = new_state(ctx, table: table_name, shapes: [shape!()])
     assert :error = ShapeStatus.latest_offset(table_name, "sdfsodf")
-    assert ShapeStatus.latest_offset(table_name, shape_id) == {:ok, LogOffset.first()}
+    assert ShapeStatus.latest_offset(table_name, shape_handle) == {:ok, LogOffset.first()}
     offset = LogOffset.new(100, 3)
     refute ShapeStatus.set_latest_offset(table_name, "not my shape", offset)
-    assert ShapeStatus.set_latest_offset(table_name, shape_id, offset)
-    assert ShapeStatus.latest_offset(table_name, shape_id) == {:ok, offset}
+    assert ShapeStatus.set_latest_offset(table_name, shape_handle, offset)
+    assert ShapeStatus.latest_offset(table_name, shape_handle) == {:ok, offset}
   end
 
   test "initialise_shape/4", ctx do
-    {:ok, state, [shape_id]} = new_state(ctx, shapes: [shape!()])
+    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
     offset = LogOffset.new(100, 3)
-    assert :ok = ShapeStatus.initialise_shape(state, shape_id, 1234, offset)
-    assert ShapeStatus.latest_offset(state, shape_id) == {:ok, offset}
-    assert ShapeStatus.snapshot_xmin(state, shape_id) == {:ok, 1234}
+    assert :ok = ShapeStatus.initialise_shape(state, shape_handle, 1234, offset)
+    assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, offset}
+    assert ShapeStatus.snapshot_xmin(state, shape_handle) == {:ok, 1234}
   end
 
   test "snapshot_xmin/2", ctx do
-    {:ok, state, [shape_id]} = new_state(ctx, shapes: [shape!()])
+    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
 
     refute ShapeStatus.set_snapshot_xmin(state, "sdfsodf", 1234)
 
     assert :error = ShapeStatus.snapshot_xmin(state, "sdfsodf")
-    assert {:ok, nil} == ShapeStatus.snapshot_xmin(state, shape_id)
-    assert ShapeStatus.set_snapshot_xmin(state, shape_id, 1234)
-    assert {:ok, 1234} == ShapeStatus.snapshot_xmin(state, shape_id)
+    assert {:ok, nil} == ShapeStatus.snapshot_xmin(state, shape_handle)
+    assert ShapeStatus.set_snapshot_xmin(state, shape_handle, 1234)
+    assert {:ok, 1234} == ShapeStatus.snapshot_xmin(state, shape_handle)
   end
 
   test "snapshot_started?/2", ctx do
-    {:ok, state, [shape_id]} = new_state(ctx, shapes: [shape!()])
+    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
 
     refute ShapeStatus.snapshot_started?(state, "sdfsodf")
     refute ShapeStatus.snapshot_started?(state.shape_meta_table, "sdfsodf")
-    refute ShapeStatus.snapshot_started?(state, shape_id)
+    refute ShapeStatus.snapshot_started?(state, shape_handle)
 
-    ShapeStatus.mark_snapshot_started(state, shape_id)
+    ShapeStatus.mark_snapshot_started(state, shape_handle)
 
-    assert ShapeStatus.snapshot_started?(state, shape_id)
-    assert ShapeStatus.snapshot_started?(state.shape_meta_table, shape_id)
+    assert ShapeStatus.snapshot_started?(state, shape_handle)
+    assert ShapeStatus.snapshot_started?(state.shape_meta_table, shape_handle)
   end
 
   def load_column_info({"public", "other_table"}, _),

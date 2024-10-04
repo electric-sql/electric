@@ -102,7 +102,7 @@ curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
 Then switch into a live mode to use long-polling to receive real-time updates:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape/foo?live=true&offset=...&shape_id=...'
+curl -i 'http://localhost:3000/v1/shape/foo?live=true&offset=...&shape_handle=...'
 ```
 
 These requests both return an array of [Shape Log](/docs/api/http#shape-log) entries. You can process these manually, or use a higher-level client.

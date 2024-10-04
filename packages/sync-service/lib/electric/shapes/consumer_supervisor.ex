@@ -22,15 +22,15 @@ defmodule Electric.Shapes.ConsumerSupervisor do
   end
 
   def start_shape_consumer(name, config) do
-    Logger.debug(fn -> "Starting consumer for #{Access.fetch!(config, :shape_id)}" end)
+    Logger.debug(fn -> "Starting consumer for #{Access.fetch!(config, :shape_handle)}" end)
 
     DynamicSupervisor.start_child(name, {Consumer.Supervisor, config})
   end
 
-  def stop_shape_consumer(_name, electric_instance_id, shape_id) do
-    case GenServer.whereis(Consumer.Supervisor.name(electric_instance_id, shape_id)) do
+  def stop_shape_consumer(_name, electric_instance_id, shape_handle) do
+    case GenServer.whereis(Consumer.Supervisor.name(electric_instance_id, shape_handle)) do
       nil ->
-        {:error, "no consumer for shape id #{inspect(shape_id)}"}
+        {:error, "no consumer for shape id #{inspect(shape_handle)}"}
 
       pid when is_pid(pid) ->
         Consumer.Supervisor.clean_and_stop(%{

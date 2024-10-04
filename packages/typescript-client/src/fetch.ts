@@ -3,8 +3,8 @@ import {
   CHUNK_UP_TO_DATE_HEADER,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
-  SHAPE_ID_HEADER,
-  SHAPE_ID_QUERY_PARAM,
+  SHAPE_HANDLE_HEADER,
+  SHAPE_HANDLE_QUERY_PARAM,
 } from './constants'
 import { FetchError, FetchBackoffAbortError } from './error'
 
@@ -245,7 +245,7 @@ class PrefetchQueue {
  * Generate the next chunk's URL if the url and response are valid
  */
 function getNextChunkUrl(url: string, res: Response): string | void {
-  const shapeId = res.headers.get(SHAPE_ID_HEADER)
+  const shapeId = res.headers.get(SHAPE_HANDLE_HEADER)
   const lastOffset = res.headers.get(CHUNK_LAST_OFFSET_HEADER)
   const isUpToDate = res.headers.has(CHUNK_UP_TO_DATE_HEADER)
 
@@ -259,7 +259,7 @@ function getNextChunkUrl(url: string, res: Response): string | void {
   // potentially miss more recent data
   if (nextUrl.searchParams.has(LIVE_QUERY_PARAM)) return
 
-  nextUrl.searchParams.set(SHAPE_ID_QUERY_PARAM, shapeId)
+  nextUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, shapeId)
   nextUrl.searchParams.set(OFFSET_QUERY_PARAM, lastOffset)
   return nextUrl.toString()
 }
