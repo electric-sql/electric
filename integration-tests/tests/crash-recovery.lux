@@ -40,7 +40,7 @@
 # Initialize a shape and collect the offset
 [shell client]
   # strip ANSI codes from response for easier matching
-  !curl -v -X GET http://localhost:3000/v1/shape/items?offset=-1
+  !curl -v -X GET http://localhost:3000/v1/shape?table=items&offset=-1
   ?electric-shape-id: ([\d-]+)
   [local shape_id=$1]
   ?electric-chunk-last-offset: ([\w\d_]+)
@@ -58,7 +58,7 @@
 
 # Client should be able to continue same shape
 [shell client]
-  !curl -v -X GET "http://localhost:3000/v1/shape/items?offset=$last_offset&shape_id=$shape_id"
+  !curl -v -X GET "http://localhost:3000/v1/shape?table=items&offset=$last_offset&shape_id=$shape_id"
   ??HTTP/1.1 200 OK
 
 [cleanup]

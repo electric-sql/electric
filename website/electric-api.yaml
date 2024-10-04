@@ -17,7 +17,7 @@ servers:
     description: Local server
 
 paths:
-  /v1/shape/{root_table}:
+  /v1/shape:
     get:
       summary: Get Shape
       description: |-
@@ -27,9 +27,9 @@ paths:
         Use `offset` to fetch data from a specific position in the shape
         log and the `live` parameter to consume real-time updates.
       parameters:
-        # Path parameters
+        # Query parameters
         - name: root_table
-          in: path
+          in: query
           schema:
             type: string
           examples:
@@ -46,7 +46,6 @@ paths:
             Can be just a tablename, or can be prefixed by the database schema
             using a `.` delimiter, such as `foo.issues`. If you don't provide
             a schema prefix, then the table is assumed to be in the `public.` schema.
-        # Query parameters
         - name: offset
           in: query
           schema:
