@@ -34,6 +34,6 @@ const Component = () => {
   )
 
   return (
-    <pre>{ JSON.stringify(items) }<pre>
-  )
+    <pre>{JSON.stringify(items)}<pre>
+      )
 }

@@ -30,7 +30,7 @@ The API allows you to sync [Shapes](/docs/guides/shapes) of data out of Postgres
 First you make an initial sync request to get the current data for the Shape, such as:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
+curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
 ```
 
 Then you switch into a live mode to use long-polling to receive real-time updates. We'll go over these steps in more detail below. First a note on the data that the endpoint returns.
@@ -87,7 +87,7 @@ Note that the other control message is `must-refetch` which indicates that the c
 Once a client is up-to-date, it can switch to live mode to receive real-time updates, by making requests with `live=true`, an `offset` and a `shape_id`, e.g.:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape/foo?live=true&offset=0_0&shape_id=3833821-1721812114261'
+curl -i 'http://localhost:3000/v1/shape?table=foo&live=true&offset=0_0&shape_id=3833821-1721812114261'
 ```
 
 The `live` parameter puts the server into live mode, where it will hold open the connection, waiting for new data arrive. This allows you to implement a long-polling strategy to consume real-time updates.

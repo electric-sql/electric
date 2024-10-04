@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # URL to download the JSON file from (without the output parameter)
-BASE_URL="http://localhost:3000/v1/shape/todos"
+BASE_URL="http://localhost:3000/v1/shape?table=todos"
 
 # Directory to store individual JSON files
 OFFSET_DIR="./json_files"
@@ -78,7 +78,7 @@ process_json() {
 
 # Main loop to poll for updates every second
 while true; do
-    url="$BASE_URL?offset=$LATEST_OFFSET"
+    url="$BASE_URL&offset=$LATEST_OFFSET"
     echo $url
 
     LATEST_OFFSET=$(process_json "$url" "shape-data.json")

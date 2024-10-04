@@ -12,7 +12,8 @@ import { useShape } from "@electric-sql/react"
 
 export default function MyComponent() {
   const { isLoading, lastSyncedAt, data } = useShape<{ title: string}>({
-    url: `http://localhost:3000/v1/shape/foo`,
+    url: `http://localhost:3000/v1/shape`,
+    table: `foo`,
   })
 
   if (isLoading) {

@@ -96,13 +96,13 @@ You can sync shapes manually using the
   <code>GET /v1/shape</code></a> endpoint. First make an initial sync request to get the current data for the Shape, such as:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
+curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
 ```
 
 Then switch into a live mode to use long-polling to receive real-time updates:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape/foo?live=true&offset=...&shape_id=...'
+curl -i 'http://localhost:3000/v1/shape?table=foo&live=true&offset=...&shape_id=...'
 ```
 
 These requests both return an array of [Shape Log](/docs/api/http#shape-log) entries. You can process these manually, or use a higher-level client.
@@ -123,7 +123,8 @@ Instantiate a `ShapeStream` and materialise into a `Shape`:
 import { ShapeStream, Shape } from '@electric-sql/client'
 
 const stream = new ShapeStream({
-  url: `http://localhost:3000/v1/shape/foo`,
+  url: `http://localhost:3000/v1/shape`,
+  table: `foo`,
 })
 const shape = new Shape(stream)
 

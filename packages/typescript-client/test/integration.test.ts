@@ -28,7 +28,8 @@ describe(`HTTP Sync`, () => {
     // Get initial data
     const shapeData = new Map()
     const issueStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       subscribe: false,
       signal: aborter.signal,
     })
@@ -65,7 +66,8 @@ describe(`HTTP Sync`, () => {
     // Get initial data
     const shapeData = new Map()
     const issueStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       signal: aborter.signal,
       fetchClient: fetchWrapper,
     })
@@ -116,7 +118,7 @@ describe(`HTTP Sync`, () => {
     issuesTableUrl,
   }) => {
     const res = await fetch(
-      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`,
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
     const shapeId = res.headers.get(`electric-shape-id`)
@@ -127,7 +129,7 @@ describe(`HTTP Sync`, () => {
     issuesTableUrl,
   }) => {
     const res = await fetch(
-      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`,
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
     const lastOffset = res.headers.get(`electric-chunk-last-offset`)
@@ -146,7 +148,8 @@ describe(`HTTP Sync`, () => {
     // Get initial data
     const shapeData = new Map()
     const issueStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       signal: aborter.signal,
     })
 
@@ -221,7 +224,8 @@ describe(`HTTP Sync`, () => {
 
       // Now fetch the data from the HTTP endpoint
       const issueStream = new ShapeStream({
-        url: `${BASE_URL}/v1/shape/${tableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: tableUrl,
         signal: aborter.signal,
       })
       const client = new Shape(issueStream)
@@ -296,7 +300,9 @@ describe(`HTTP Sync`, () => {
       )
 
       await vi.waitFor(async () => {
-        const res = await fetch(`${BASE_URL}/v1/shape/${tableUrl}?offset=-1`)
+        const res = await fetch(
+          `${BASE_URL}/v1/shape?table=${tableUrl}&offset=-1`
+        )
         const body = (await res.json()) as Message[]
         expect(body.length).greaterThan(1)
       })
@@ -348,7 +354,8 @@ describe(`HTTP Sync`, () => {
 
     const shapeData = new Map()
     const issueStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       signal: aborter.signal,
     })
     let secondRowId = ``
@@ -395,7 +402,8 @@ describe(`HTTP Sync`, () => {
 
     const shapeData = new Map()
     const issueStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       signal: aborter.signal,
       fetchClient: fetchWrapper,
     })
@@ -437,14 +445,16 @@ describe(`HTTP Sync`, () => {
     const shapeData1 = new Map()
     const aborter1 = new AbortController()
     const issueStream1 = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       signal: aborter1.signal,
     })
 
     const shapeData2 = new Map()
     const aborter2 = new AbortController()
     const issueStream2 = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       signal: aborter2.signal,
     })
 
@@ -484,7 +494,8 @@ describe(`HTTP Sync`, () => {
 
     let lastOffset: Offset = `-1`
     const issueStream = new ShapeStream<IssueRow>({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       signal: aborter.signal,
       subscribe: false,
     })
@@ -505,7 +516,7 @@ describe(`HTTP Sync`, () => {
     // And wait until it's definitely seen
     await vi.waitFor(async () => {
       const res = await fetch(
-        `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`
+        `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`
       )
       const body = (await res.json()) as Message[]
       expect(body).toHaveLength(12)
@@ -514,7 +525,8 @@ describe(`HTTP Sync`, () => {
     let catchupOpsCount = 0
     const newAborter = new AbortController()
     const newIssueStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       subscribe: false,
       signal: newAborter.signal,
       offset: lastOffset,
@@ -537,7 +549,7 @@ describe(`HTTP Sync`, () => {
     insertIssues,
   }) => {
     const res = await fetch(
-      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`,
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
     const cacheHeaders = res.headers.get(`cache-control`)
@@ -563,7 +575,7 @@ describe(`HTTP Sync`, () => {
     await sleep(40)
 
     const res2 = await fetch(
-      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`,
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
     const etag2Header = res2.headers.get(`etag`)
@@ -573,7 +585,7 @@ describe(`HTTP Sync`, () => {
 
   it(`should revalidate etags`, async ({ issuesTableUrl, insertIssues }) => {
     // Start the shape
-    await fetch(`${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`, {})
+    await fetch(`${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`, {})
     // Fill it up in separate transactions
     for (const i of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
       await insertIssues({ title: `foo${i}` })
@@ -582,7 +594,7 @@ describe(`HTTP Sync`, () => {
     await sleep(100)
 
     const res = await fetch(
-      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`,
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
     const messages = (await res.json()) as Message[]
@@ -595,7 +607,7 @@ describe(`HTTP Sync`, () => {
     assert(etag !== null, `Response should have etag header`)
 
     const etagValidation = await fetch(
-      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`,
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {
         headers: { 'If-None-Match': etag },
       }
@@ -606,7 +618,7 @@ describe(`HTTP Sync`, () => {
 
     // Get etag for catchup
     const catchupEtagRes = await fetch(
-      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=${midOffset}&shape_id=${shapeId}`,
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=${midOffset}&shape_id=${shapeId}`,
       {}
     )
     const catchupEtag = catchupEtagRes.headers.get(`etag`)
@@ -615,7 +627,7 @@ describe(`HTTP Sync`, () => {
     // Catch-up offsets should also use the same etag as they're
     // also working through the end of the current log.
     const catchupEtagValidation = await fetch(
-      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=${midOffset}&shape_id=${shapeId}`,
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=${midOffset}&shape_id=${shapeId}`,
       {
         headers: { 'If-None-Match': catchupEtag },
       }
@@ -641,7 +653,8 @@ describe(`HTTP Sync`, () => {
     // Get initial data
     const shapeData = new Map()
     const issueStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       where: `title LIKE 'foo%'`,
       subscribe: true,
       signal: aborter.signal,
@@ -721,7 +734,8 @@ describe(`HTTP Sync`, () => {
     // Get initial data
     let lastOffset: Offset = `-1`
     const issueStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       subscribe: true,
       signal: aborter.signal,
     })
@@ -753,7 +767,7 @@ describe(`HTTP Sync`, () => {
     // And wait until it's definitely seen
     await vi.waitFor(async () => {
       const res = await fetch(
-        `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`
+        `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`
       )
       const body = (await res.json()) as Message[]
       expect(body.length).greaterThan(2)
@@ -772,7 +786,8 @@ describe(`HTTP Sync`, () => {
 
     const newAborter = new AbortController()
     const newIssueStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       subscribe: false,
       signal: newAborter.signal,
       offset: lastOffset,
@@ -872,7 +887,8 @@ describe(`HTTP Sync`, () => {
     }
 
     const issueStream = new ShapeStream<IssueRow>({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       subscribe: true,
       signal: aborter.signal,
       fetchClient: fetchWrapper,
