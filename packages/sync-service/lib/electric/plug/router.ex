@@ -15,9 +15,9 @@ defmodule Electric.Plug.Router do
 
   match "/", via: [:get, :head], do: send_resp(conn, 200, "")
 
-  get "/v1/shape/:root_table", to: Electric.Plug.ServeShapePlug
-  delete "/v1/shape/:root_table", to: Electric.Plug.DeleteShapePlug
-  match "/v1/shape/:root_table", via: :options, to: Electric.Plug.OptionsShapePlug
+  get "/v1/shape", to: Electric.Plug.ServeShapePlug
+  delete "/v1/shape", to: Electric.Plug.DeleteShapePlug
+  match "/v1/shape", via: :options, to: Electric.Plug.OptionsShapePlug
 
   get "/v1/health", to: Electric.Plug.HealthCheckPlug
 

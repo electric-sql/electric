@@ -280,7 +280,7 @@ defmodule Electric.Plug.ServeShapePlug do
     else
       # The requested shape_id is not found, returns 409 along with a location redirect for clients to
       # re-request the shape from scratch with the new shape id which acts as a consistent cache buster
-      # e.g. GET /v1/shape/{root_table}?shape_id={new_shape_id}&offset=-1
+      # e.g. GET /v1/shape?table={root_table}&shape_id={new_shape_id}&offset=-1
 
       # TODO: discuss returning a 307 redirect rather than a 409, the client
       # will have to detect this and throw out old data

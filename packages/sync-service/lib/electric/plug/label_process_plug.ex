@@ -26,19 +26,19 @@ defmodule Electric.Plug.LabelProcessPlug do
 
       iex> process_label(%{
       ...>   method: "GET",
-      ...>   request_path: "/v1/shape/users",
-      ...>   query_string: "offset=-1",
+      ...>   request_path: "/v1/shape",
+      ...>   query_string: "table=users&offset=-1",
       ...>   assigns: %{plug_request_id: "F-jPUudNHxbD8lIAABQG"}
       ...> })
-      "Request F-jPUudNHxbD8lIAABQG - GET /v1/shape/users?offset=-1"
+      "Request F-jPUudNHxbD8lIAABQG - GET /v1/shape?table=users&offset=-1"
 
       iex> process_label(%{
       ...>   method: "GET",
-      ...>   request_path: "/v1/shape/users",
-      ...>   query_string: "",
+      ...>   request_path: "/v1/shape",
+      ...>   query_string: "table=users",
       ...>   assigns: %{plug_request_id: "F-jPUudNHxbD8lIAABQG"}
       ...> })
-      "Request F-jPUudNHxbD8lIAABQG - GET /v1/shape/users"
+      "Request F-jPUudNHxbD8lIAABQG - GET /v1/shape?table=users"
   """
   def process_label(conn) do
     "Request #{conn.assigns.plug_request_id} - #{conn.method} #{conn.request_path}#{query_suffix(conn)}"
