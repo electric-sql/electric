@@ -15,9 +15,9 @@ defmodule Electric.Plug.Router do
 
   match "/", via: [:get, :head], do: send_resp(conn, 200, "")
 
-  get "/v1/shape/:root_table", to: Electric.Plug.ServeShapePlug
-  delete "/v1/shape/:root_table", to: Electric.Plug.DeleteShapePlug
-  match "/v1/shape/:root_table", via: :options, to: Electric.Plug.OptionsShapePlug
+  get "/v1/shape", to: Electric.Plug.ServeShapePlug
+  delete "/v1/shape", to: Electric.Plug.DeleteShapePlug
+  match "/v1/shape", via: :options, to: Electric.Plug.OptionsShapePlug
 
   get "/v1/health", to: Electric.Plug.HealthCheckPlug
 
@@ -29,7 +29,7 @@ defmodule Electric.Plug.Router do
   def server_header(conn, version),
     do: conn |> Plug.Conn.put_resp_header("server", "ElectricSQL/#{version}")
 
-  def put_cors_headers(%Plug.Conn{path_info: ["v1", "shape", _ | _]} = conn, _opts),
+  def put_cors_headers(%Plug.Conn{path_info: ["v1", "shape" | _]} = conn, _opts),
     do: CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD", "DELETE", "OPTIONS"]})
 
   def put_cors_headers(%Plug.Conn{path_info: ["v1", "admin", _ | _]} = conn, _opts),

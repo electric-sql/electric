@@ -59,7 +59,7 @@ docker compose -f .support/docker-compose.yml up
 You can then use the [HTTP API](https://electric-sql.com/docs/api/http) to sync data from your Postgres. For example, to start syncing the whole `foo` table:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
+curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
 ```
 
 Or use one of the clients or integrations, such as the [`useShape`](https://electric-sql.com/docs/api/integrations/react) React hook:
@@ -69,7 +69,8 @@ import { useShape } from '@electric-sql/react'
 
 function Component() {
   const { data } = useShape({
-    url: `http://localhost:3000/v1/shape/foo`,
+    url: `http://localhost:3000/v1/shape`,
+    table: `foo`,
     where: `title LIKE 'foo%'`,
   })
 

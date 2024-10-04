@@ -47,7 +47,7 @@ export const testWithDbClient = test.extend<{
         } = {}
       ) => {
         const baseUrl = inject(`baseUrl`)
-        const url = new URL(`${baseUrl}/v1/shape/${table}`)
+        const url = new URL(`${baseUrl}/v1/shape?table=${table}`)
 
         if (!options.databaseId) {
           options.databaseId = inject(`databaseId`)

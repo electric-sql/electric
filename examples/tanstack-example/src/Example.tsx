@@ -14,7 +14,8 @@ const baseUrl = import.meta.env.ELECTRIC_URL ?? `http://localhost:3000`
 const baseApiUrl = `http://localhost:3001`
 
 const itemShape = () => ({
-  url: new URL(`/v1/shape/items`, baseUrl).href,
+  url: new URL(`/v1/shape`, baseUrl).href,
+  table: `items`
 })
 
 async function createItem(newId: string) {
@@ -43,11 +44,11 @@ async function clearItems(numItems: number) {
   const findUpdatePromise =
     numItems > 0
       ? matchStream({
-          stream: itemsStream,
-          operations: [`delete`],
-          // First delete will match
-          matchFn: () => true,
-        })
+        stream: itemsStream,
+        operations: [`delete`],
+        // First delete will match
+        matchFn: () => true,
+      })
       : Promise.resolve()
 
   // Delete all items

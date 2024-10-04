@@ -38,7 +38,7 @@ export const testWithDbClient = test.extend<{
     use(async (table: string, shapeId?: string) => {
       const baseUrl = inject(`baseUrl`)
       const resp = await fetch(
-        `${baseUrl}/v1/shape/${table}${shapeId ? `?shape_id=${shapeId}` : ``}`,
+        `${baseUrl}/v1/shape?table=${table}${shapeId ? `&shape_id=${shapeId}` : ``}`,
         {
           method: `DELETE`,
         }
@@ -47,7 +47,7 @@ export const testWithDbClient = test.extend<{
         console.error(
           await FetchError.fromResponse(
             resp,
-            `DELETE ${baseUrl}/v1/shape/${table}`
+            `DELETE ${baseUrl}/v1/shape?table=${table}`
           )
         )
         throw new Error(`Could not delete shape ${table} with ID ${shapeId}`)

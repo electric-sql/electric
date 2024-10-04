@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ShapeStream } from '../src'
 
 describe(`ShapeStream`, () => {
-  const shapeUrl = `https://example.com/v1/shape/foo`
+  const shapeUrl = `https://example.com/v1/shape`
   let aborter: AbortController
 
   beforeEach(() => {
@@ -25,6 +25,7 @@ describe(`ShapeStream`, () => {
     const aborter = new AbortController()
     new ShapeStream({
       url: shapeUrl,
+      table: `foo`,
       signal: aborter.signal,
       fetchClient: fetchWrapper,
       headers: {

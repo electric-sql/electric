@@ -80,7 +80,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     test "returns 404 if shape deletion is not allowed", ctx do
       conn =
         ctx
-        |> conn("DELETE", "?root_table=.invalid_shape", false)
+        |> conn("DELETE", "?table=.invalid_shape", false)
         |> DeleteShapePlug.call([])
 
       assert conn.status == 404
@@ -93,13 +93,13 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     test "returns 400 for invalid params", ctx do
       conn =
         ctx
-        |> conn("DELETE", "?root_table=.invalid_shape")
+        |> conn("DELETE", "?table=.invalid_shape")
         |> DeleteShapePlug.call([])
 
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "root_table" => [
+               "table" => [
                  "Invalid zero-length delimited identifier"
                ]
              }
@@ -122,7 +122,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
       conn =
         ctx
-        |> conn(:delete, "?root_table=public.users")
+        |> conn(:delete, "?table=public.users")
         |> DeleteShapePlug.call([])
 
       assert conn.status == 202
@@ -134,7 +134,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
       conn =
         ctx
-        |> conn(:delete, "?root_table=public.users&shape_id=#{@test_shape_id}")
+        |> conn(:delete, "?table=public.users&shape_id=#{@test_shape_id}")
         |> DeleteShapePlug.call([])
 
       assert conn.status == 202
