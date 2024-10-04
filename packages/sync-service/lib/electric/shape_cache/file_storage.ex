@@ -20,7 +20,7 @@ defmodule Electric.ShapeCache.FileStorage do
 
   defstruct [
     :base_path,
-    :shape_id,
+    :shape_handle,
     :db,
     :cubdb_dir,
     :shape_definition_dir,
@@ -39,28 +39,28 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def for_shape(shape_id, %FS{shape_id: shape_id} = opts) do
+  def for_shape(shape_handle, %FS{shape_handle: shape_handle} = opts) do
     opts
   end
 
   def for_shape(
-        shape_id,
+        shape_handle,
         %{base_path: base_path, electric_instance_id: electric_instance_id} = opts
       ) do
     %FS{
       base_path: base_path,
-      shape_id: shape_id,
-      db: name(electric_instance_id, shape_id),
-      cubdb_dir: Path.join([base_path, shape_id, "cubdb"]),
-      snapshot_dir: Path.join([base_path, shape_id, "snapshots"]),
-      shape_definition_dir: Path.join([base_path, shape_id]),
+      shape_handle: shape_handle,
+      db: name(electric_instance_id, shape_handle),
+      cubdb_dir: Path.join([base_path, shape_handle, "cubdb"]),
+      snapshot_dir: Path.join([base_path, shape_handle, "snapshots"]),
+      shape_definition_dir: Path.join([base_path, shape_handle]),
       electric_instance_id: electric_instance_id,
       extra_opts: Map.get(opts, :extra_opts, %{})
     }
   end
 
-  def name(electric_instance_id, shape_id) do
-    Electric.Application.process_name(electric_instance_id, __MODULE__, shape_id)
+  def name(electric_instance_id, shape_handle) do
+    Electric.Application.process_name(electric_instance_id, __MODULE__, shape_handle)
   end
 
   def child_spec(%FS{} = opts) do
@@ -193,7 +193,7 @@ defmodule Electric.ShapeCache.FileStorage do
   def make_new_snapshot!(data_stream, %FS{} = opts) do
     OpenTelemetry.with_span(
       "storage.make_new_snapshot",
-      [storage_impl: "mixed_disk", "shape.id": opts.shape_id],
+      [storage_impl: "mixed_disk", "shape.id": opts.shape_handle],
       fn ->
         data_stream
         |> Stream.map(&[&1, ?\n])

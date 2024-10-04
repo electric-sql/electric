@@ -22,8 +22,8 @@ import {
   COLUMNS_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
-  SHAPE_ID_HEADER,
-  SHAPE_ID_QUERY_PARAM,
+  SHAPE_HANDLE_HEADER,
+  SHAPE_HANDLE_QUERY_PARAM,
   SHAPE_SCHEMA_HEADER,
   WHERE_QUERY_PARAM,
 } from './constants'
@@ -224,7 +224,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         if (this.#shapeId) {
           // This should probably be a header for better cache breaking?
-          fetchUrl.searchParams.set(SHAPE_ID_QUERY_PARAM, this.#shapeId!)
+          fetchUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, this.#shapeId!)
         }
 
         let response!: Response
@@ -240,7 +240,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           if (e.status == 409) {
             // Upon receiving a 409, we should start from scratch
             // with the newly provided shape ID
-            const newShapeId = e.headers[SHAPE_ID_HEADER]
+            const newShapeId = e.headers[SHAPE_HANDLE_HEADER]
             this.#reset(newShapeId)
             await this.#publish(e.json as Message<T>[])
             continue
@@ -256,7 +256,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
 
         const { headers, status } = response
-        const shapeId = headers.get(SHAPE_ID_HEADER)
+        const shapeId = headers.get(SHAPE_HANDLE_HEADER)
         if (shapeId) {
           this.#shapeId = shapeId
         }

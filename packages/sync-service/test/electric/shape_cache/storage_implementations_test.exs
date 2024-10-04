@@ -13,7 +13,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   @moduletag :tmp_dir
 
-  @shape_id "the-shape-id"
+  @shape_handle "the-shape-id"
   @shape %Shape{
     root_table: {"public", "items"},
     root_table_id: 1,
@@ -534,7 +534,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   defp start_storage(%{module: module} = context) do
     opts = module |> opts(context) |> module.shared_opts()
-    shape_opts = module.for_shape(@shape_id, opts)
+    shape_opts = module.for_shape(@shape_handle, opts)
     {:ok, _} = module.start_link(shape_opts)
     {:ok, %{module: module, opts: shape_opts}}
   end

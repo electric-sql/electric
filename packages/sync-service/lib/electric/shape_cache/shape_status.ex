@@ -6,22 +6,22 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Replication.LogOffset
 
-  @type shape_id() :: Electric.ShapeCacheBehaviour.shape_id()
+  @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
   @type xmin() :: Electric.ShapeCacheBehaviour.xmin()
 
   @callback initialise(ShapeStatus.options()) :: {:ok, ShapeStatus.t()} | {:error, term()}
-  @callback list_shapes(ShapeStatus.t()) :: [{shape_id(), Shape.t()}]
-  @callback get_existing_shape(ShapeStatus.t(), Shape.t() | shape_id()) ::
-              {shape_id(), LogOffset.t()} | nil
+  @callback list_shapes(ShapeStatus.t()) :: [{shape_handle(), Shape.t()}]
+  @callback get_existing_shape(ShapeStatus.t(), Shape.t() | shape_handle()) ::
+              {shape_handle(), LogOffset.t()} | nil
   @callback add_shape(ShapeStatus.t(), Shape.t()) ::
-              {:ok, shape_id()} | {:error, term()}
-  @callback initialise_shape(ShapeStatus.t(), shape_id(), xmin(), LogOffset.t()) ::
+              {:ok, shape_handle()} | {:error, term()}
+  @callback initialise_shape(ShapeStatus.t(), shape_handle(), xmin(), LogOffset.t()) ::
               :ok
-  @callback set_snapshot_xmin(ShapeStatus.t(), shape_id(), xmin()) :: :ok
-  @callback set_latest_offset(ShapeStatus.t(), shape_id(), LogOffset.t()) :: :ok
-  @callback mark_snapshot_started(ShapeStatus.t(), shape_id()) :: :ok
-  @callback snapshot_started?(ShapeStatus.t(), shape_id()) :: boolean()
-  @callback remove_shape(ShapeStatus.t(), shape_id()) ::
+  @callback set_snapshot_xmin(ShapeStatus.t(), shape_handle(), xmin()) :: :ok
+  @callback set_latest_offset(ShapeStatus.t(), shape_handle(), LogOffset.t()) :: :ok
+  @callback mark_snapshot_started(ShapeStatus.t(), shape_handle()) :: :ok
+  @callback snapshot_started?(ShapeStatus.t(), shape_handle()) :: boolean()
+  @callback remove_shape(ShapeStatus.t(), shape_handle()) ::
               {:ok, Shape.t()} | {:error, term()}
 end
 
@@ -33,7 +33,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   the in-memory cache.
 
   The shape cache then loads this and starts processes (storage and consumer)
-  for each `{shape_id, %Shape{}}` pair. These then use their attached storage
+  for each `{shape_handle, %Shape{}}` pair. These then use their attached storage
   to recover the status information for the shape (snapshot xmin and latest
   offset).
 
@@ -53,7 +53,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   defstruct [:root, :shape_meta_table, :storage]
 
-  @type shape_id() :: Electric.ShapeCacheBehaviour.shape_id()
+  @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
   @type xmin() :: Electric.ShapeCacheBehaviour.xmin()
   @type table() :: atom() | reference()
   @type t() :: %__MODULE__{
@@ -91,9 +91,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @spec add_shape(t(), Shape.t()) :: {:ok, shape_id()} | {:error, term()}
+  @spec add_shape(t(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
   def add_shape(state, shape) do
-    {hash, shape_id} = Shape.generate_id(shape)
+    {hash, shape_handle} = Shape.generate_id(shape)
     # fresh snapshots always start with a zero offset - only once they
     # are folded into the log do we have non-zero offsets
     offset = LogOffset.first()
@@ -102,15 +102,15 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.insert_new(
         state.shape_meta_table,
         [
-          {{@shape_hash_lookup, hash}, shape_id},
-          {{@shape_meta_data, shape_id}, shape, nil, offset}
+          {{@shape_hash_lookup, hash}, shape_handle},
+          {{@shape_meta_data, shape_handle}, shape, nil, offset}
         ]
       )
 
-    {:ok, shape_id}
+    {:ok, shape_handle}
   end
 
-  @spec list_shapes(t()) :: [{shape_id(), Shape.t()}]
+  @spec list_shapes(t()) :: [{shape_handle(), Shape.t()}]
   def list_shapes(state) do
     :ets.select(state.shape_meta_table, [
       {
@@ -121,21 +121,21 @@ defmodule Electric.ShapeCache.ShapeStatus do
     ])
   end
 
-  @spec remove_shape(t(), shape_id()) :: {:ok, t()} | {:error, term()}
-  def remove_shape(state, shape_id) do
+  @spec remove_shape(t(), shape_handle()) :: {:ok, t()} | {:error, term()}
+  def remove_shape(state, shape_handle) do
     try do
       shape =
         :ets.lookup_element(
           state.shape_meta_table,
-          {@shape_meta_data, shape_id},
+          {@shape_meta_data, shape_handle},
           @shape_meta_shape_pos
         )
 
       :ets.select_delete(
         state.shape_meta_table,
         [
-          {{{@shape_meta_data, shape_id}, :_, :_, :_}, [], [true]},
-          {{{@shape_hash_lookup, :_}, shape_id}, [], [true]}
+          {{{@shape_meta_data, shape_handle}, :_, :_, :_}, [], [true]},
+          {{{@shape_hash_lookup, :_}, shape_handle}, [], [true]}
         ]
       )
 
@@ -146,16 +146,17 @@ defmodule Electric.ShapeCache.ShapeStatus do
       # keys, so we're doing our best to just delete everything without
       # crashing
       ArgumentError ->
-        {:error, "No shape matching #{inspect(shape_id)}"}
+        {:error, "No shape matching #{inspect(shape_handle)}"}
     end
   end
 
-  @spec get_existing_shape(t(), shape_id() | Shape.t()) :: nil | {shape_id(), LogOffset.t()}
+  @spec get_existing_shape(t(), shape_handle() | Shape.t()) ::
+          nil | {shape_handle(), LogOffset.t()}
   def get_existing_shape(%__MODULE__{shape_meta_table: table}, shape_or_id) do
     get_existing_shape(table, shape_or_id)
   end
 
-  @spec get_existing_shape(table(), Shape.t()) :: nil | {shape_id(), LogOffset.t()}
+  @spec get_existing_shape(table(), Shape.t()) :: nil | {shape_handle(), LogOffset.t()}
   def get_existing_shape(meta_table, %Shape{} = shape) do
     hash = Shape.hash(shape)
 
@@ -163,22 +164,22 @@ defmodule Electric.ShapeCache.ShapeStatus do
       [] ->
         nil
 
-      [shape_id] ->
-        {shape_id, latest_offset!(meta_table, shape_id)}
+      [shape_handle] ->
+        {shape_handle, latest_offset!(meta_table, shape_handle)}
     end
   end
 
-  @spec get_existing_shape(table(), shape_id()) :: nil | {shape_id(), LogOffset.t()}
-  def get_existing_shape(meta_table, shape_id) when is_binary(shape_id) do
-    case :ets.lookup(meta_table, {@shape_meta_data, shape_id}) do
+  @spec get_existing_shape(table(), shape_handle()) :: nil | {shape_handle(), LogOffset.t()}
+  def get_existing_shape(meta_table, shape_handle) when is_binary(shape_handle) do
+    case :ets.lookup(meta_table, {@shape_meta_data, shape_handle}) do
       [] -> nil
-      [{_, _shape, _xmin, offset}] -> {shape_id, offset}
+      [{_, _shape, _xmin, offset}] -> {shape_handle, offset}
     end
   end
 
-  @spec initialise_shape(t(), shape_id(), xmin(), LogOffset.t()) :: :ok
-  def initialise_shape(state, shape_id, snapshot_xmin, latest_offset) do
-    :ets.update_element(state.shape_meta_table, {@shape_meta_data, shape_id}, [
+  @spec initialise_shape(t(), shape_handle(), xmin(), LogOffset.t()) :: :ok
+  def initialise_shape(state, shape_handle, snapshot_xmin, latest_offset) do
+    :ets.update_element(state.shape_meta_table, {@shape_meta_data, shape_handle}, [
       {@shape_meta_xmin_pos, snapshot_xmin},
       {@shape_meta_latest_offset_pos, latest_offset}
     ])
@@ -186,75 +187,79 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ok
   end
 
-  def set_snapshot_xmin(state, shape_id, snapshot_xmin) do
-    :ets.update_element(state.shape_meta_table, {@shape_meta_data, shape_id}, [
+  def set_snapshot_xmin(state, shape_handle, snapshot_xmin) do
+    :ets.update_element(state.shape_meta_table, {@shape_meta_data, shape_handle}, [
       {@shape_meta_xmin_pos, snapshot_xmin}
     ])
   end
 
-  def set_latest_offset(%__MODULE__{shape_meta_table: table} = _state, shape_id, latest_offset) do
-    set_latest_offset(table, shape_id, latest_offset)
+  def set_latest_offset(
+        %__MODULE__{shape_meta_table: table} = _state,
+        shape_handle,
+        latest_offset
+      ) do
+    set_latest_offset(table, shape_handle, latest_offset)
   end
 
-  def set_latest_offset(meta_table, shape_id, latest_offset) do
-    :ets.update_element(meta_table, {@shape_meta_data, shape_id}, [
+  def set_latest_offset(meta_table, shape_handle, latest_offset) do
+    :ets.update_element(meta_table, {@shape_meta_data, shape_handle}, [
       {@shape_meta_latest_offset_pos, latest_offset}
     ])
   end
 
-  def latest_offset!(%__MODULE__{shape_meta_table: table} = _state, shape_id) do
-    latest_offset(table, shape_id)
+  def latest_offset!(%__MODULE__{shape_meta_table: table} = _state, shape_handle) do
+    latest_offset(table, shape_handle)
   end
 
-  def latest_offset!(meta_table, shape_id) do
+  def latest_offset!(meta_table, shape_handle) do
     :ets.lookup_element(
       meta_table,
-      {@shape_meta_data, shape_id},
+      {@shape_meta_data, shape_handle},
       @shape_meta_latest_offset_pos
     )
   end
 
-  def latest_offset(%__MODULE__{shape_meta_table: table} = _state, shape_id) do
-    latest_offset(table, shape_id)
+  def latest_offset(%__MODULE__{shape_meta_table: table} = _state, shape_handle) do
+    latest_offset(table, shape_handle)
   end
 
-  def latest_offset(meta_table, shape_id) do
+  def latest_offset(meta_table, shape_handle) do
     turn_raise_into_error(fn ->
       :ets.lookup_element(
         meta_table,
-        {@shape_meta_data, shape_id},
+        {@shape_meta_data, shape_handle},
         @shape_meta_latest_offset_pos
       )
     end)
   end
 
-  def snapshot_xmin(%__MODULE__{shape_meta_table: table} = _state, shape_id) do
-    snapshot_xmin(table, shape_id)
+  def snapshot_xmin(%__MODULE__{shape_meta_table: table} = _state, shape_handle) do
+    snapshot_xmin(table, shape_handle)
   end
 
-  def snapshot_xmin(meta_table, shape_id) when is_atom(meta_table) do
+  def snapshot_xmin(meta_table, shape_handle) when is_atom(meta_table) do
     turn_raise_into_error(fn ->
       :ets.lookup_element(
         meta_table,
-        {@shape_meta_data, shape_id},
+        {@shape_meta_data, shape_handle},
         @shape_meta_xmin_pos
       )
     end)
   end
 
-  def snapshot_started?(%__MODULE__{shape_meta_table: table} = _state, shape_id) do
-    snapshot_started?(table, shape_id)
+  def snapshot_started?(%__MODULE__{shape_meta_table: table} = _state, shape_handle) do
+    snapshot_started?(table, shape_handle)
   end
 
-  def snapshot_started?(meta_table, shape_id) do
-    case :ets.lookup(meta_table, {@snapshot_started, shape_id}) do
+  def snapshot_started?(meta_table, shape_handle) do
+    case :ets.lookup(meta_table, {@snapshot_started, shape_handle}) do
       [] -> false
-      [{{@snapshot_started, ^shape_id}, true}] -> true
+      [{{@snapshot_started, ^shape_handle}, true}] -> true
     end
   end
 
-  def mark_snapshot_started(%__MODULE__{shape_meta_table: table} = _state, shape_id) do
-    :ets.insert(table, {{@snapshot_started, shape_id}, true})
+  def mark_snapshot_started(%__MODULE__{shape_meta_table: table} = _state, shape_handle) do
+    :ets.insert(table, {{@snapshot_started, shape_handle}, true})
     :ok
   end
 
@@ -263,12 +268,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.insert(
         state.shape_meta_table,
         Enum.concat([
-          Enum.flat_map(shapes, fn {shape_id, shape} ->
+          Enum.flat_map(shapes, fn {shape_handle, shape} ->
             hash = Shape.hash(shape)
 
             [
-              {{@shape_hash_lookup, hash}, shape_id},
-              {{@shape_meta_data, shape_id}, shape, nil, LogOffset.first()}
+              {{@shape_hash_lookup, hash}, shape_handle},
+              {{@shape_meta_data, shape_handle}, shape, nil, LogOffset.first()}
             ]
           end)
         ])
