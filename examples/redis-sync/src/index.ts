@@ -70,8 +70,6 @@ client.connect().then(async () => {
       }
     })
 
-    // TODO update the docs code snippet too.
-
     // Execute all commands as a single transaction
     try {
       await pipeline.exec()
