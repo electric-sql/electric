@@ -555,7 +555,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
       assert get_resp_header(conn, "electric-shape-id") == [@test_shape_handle]
-      assert get_resp_header(conn, "location") == ["/?shape_handle=#{@test_shape_handle}&offset=-1"]
+
+      assert get_resp_header(conn, "location") == [
+               "/?shape_handle=#{@test_shape_handle}&offset=-1"
+             ]
     end
 
     test "creates a new shape when shape ID does not exist and sends a 409 redirecting to the newly created shape" do
