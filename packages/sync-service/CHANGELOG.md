@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 0.6.3
+
+### Patch Changes
+
+- c886f86: Query Postgres server version as early as possible so that it is available throughout the whole connection initialization process.
+- 841922d: Cover the processing of GET /shape with OpenTelemetry spans for improved observability.
+
 ## 0.6.2
 
 ### Patch Changes
