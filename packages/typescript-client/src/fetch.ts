@@ -245,13 +245,13 @@ class PrefetchQueue {
  * Generate the next chunk's URL if the url and response are valid
  */
 function getNextChunkUrl(url: string, res: Response): string | void {
-  const shapeId = res.headers.get(SHAPE_HANDLE_HEADER)
+  const shapeHandle = res.headers.get(SHAPE_HANDLE_HEADER)
   const lastOffset = res.headers.get(CHUNK_LAST_OFFSET_HEADER)
   const isUpToDate = res.headers.has(CHUNK_UP_TO_DATE_HEADER)
 
-  // only prefetch if shape ID and offset for next chunk are available, and
+  // only prefetch if shape handle and offset for next chunk are available, and
   // response is not already up-to-date
-  if (!shapeId || !lastOffset || isUpToDate) return
+  if (!shapeHandle || !lastOffset || isUpToDate) return
 
   const nextUrl = new URL(url)
 
@@ -259,7 +259,7 @@ function getNextChunkUrl(url: string, res: Response): string | void {
   // potentially miss more recent data
   if (nextUrl.searchParams.has(LIVE_QUERY_PARAM)) return
 
-  nextUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, shapeId)
+  nextUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, shapeHandle)
   nextUrl.searchParams.set(OFFSET_QUERY_PARAM, lastOffset)
   return nextUrl.toString()
 }

@@ -8,7 +8,7 @@ defmodule Electric.Shapes do
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
 
   @doc """
-  Get snapshot for the shape ID
+  Get snapshot for the shape handle
   """
   def get_snapshot(config, shape_handle) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
@@ -50,7 +50,7 @@ defmodule Electric.Shapes do
   end
 
   @doc """
-  Get or create a shape ID and return it along with the latest offset of the shape
+  Get or create a shape handle and return it along with the latest offset of the shape
   """
   @spec get_or_create_shape_handle(keyword(), Shape.t()) :: {shape_handle(), LogOffset.t()}
   def get_or_create_shape_handle(config, shape_def) do
@@ -72,7 +72,7 @@ defmodule Electric.Shapes do
   end
 
   @doc """
-  Check whether the log has an entry for a given shape ID
+  Check whether the log has an entry for a given shape handle
   """
   @spec has_shape?(keyword(), shape_handle()) :: boolean()
   def has_shape?(config, shape_handle) do
@@ -82,7 +82,7 @@ defmodule Electric.Shapes do
   end
 
   @doc """
-  Clean up all data (meta data and shape log + snapshot) associated with the given shape ID
+  Clean up all data (meta data and shape log + snapshot) associated with the given shape handle
   """
   @spec clean_shape(shape_handle(), keyword()) :: :ok
   def clean_shape(shape_handle, opts \\ []) do

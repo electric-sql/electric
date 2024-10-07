@@ -49,14 +49,14 @@ defmodule Electric.ShapeCache.Storage do
 
   @callback set_snapshot_xmin(xmin(), shape_opts()) :: :ok
 
-  @doc "Check if snapshot for a given shape id already exists"
+  @doc "Check if snapshot for a given shape handle already exists"
   @callback snapshot_started?(shape_opts()) :: boolean()
 
   @doc "Get the full snapshot for a given shape, also returning the offset this snapshot includes"
   @callback get_snapshot(shape_opts()) :: {offset :: LogOffset.t(), log()}
 
   @doc """
-  Make a new snapshot for a shape ID based on the meta information about the table and a stream of plain string rows
+  Make a new snapshot for a shape handle based on the meta information about the table and a stream of plain string rows
 
   Should raise an error if making the snapshot had failed for any reason.
   """
@@ -91,7 +91,7 @@ defmodule Electric.ShapeCache.Storage do
   """
   @callback get_chunk_end_log_offset(LogOffset.t(), shape_opts()) :: LogOffset.t() | nil
 
-  @doc "Clean up snapshots/logs for a shape id"
+  @doc "Clean up snapshots/logs for a shape handle"
   @callback cleanup!(shape_opts()) :: :ok
 
   @behaviour __MODULE__

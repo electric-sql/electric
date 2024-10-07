@@ -30,7 +30,7 @@ defmodule Electric.Shapes.ConsumerSupervisor do
   def stop_shape_consumer(_name, electric_instance_id, shape_handle) do
     case GenServer.whereis(Consumer.Supervisor.name(electric_instance_id, shape_handle)) do
       nil ->
-        {:error, "no consumer for shape id #{inspect(shape_handle)}"}
+        {:error, "no consumer for shape handle #{inspect(shape_handle)}"}
 
       pid when is_pid(pid) ->
         Consumer.Supervisor.clean_and_stop(%{

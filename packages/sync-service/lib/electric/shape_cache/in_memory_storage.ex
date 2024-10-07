@@ -195,7 +195,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def make_new_snapshot!(data_stream, %MS{} = opts) do
     OpenTelemetry.with_span(
       "storage.make_new_snapshot",
-      [storage_impl: "in_memory", "shape.id": opts.shape_handle],
+      [storage_impl: "in_memory", "shape.handle": opts.shape_handle],
       fn ->
         table = opts.snapshot_table
 

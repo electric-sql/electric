@@ -227,7 +227,7 @@ defmodule Electric.Plug.ServeShapePlug do
     Shapes.get_or_create_shape_handle(config, shape)
   end
 
-  # A shape ID is provided so we need to return the shape that matches the shape ID and the shape definition
+  # A shape handle is provided so we need to return the shape that matches the shape handle and the shape definition
   defp get_or_create_shape_handle(%{shape_definition: shape, config: config}) do
     Shapes.get_shape(config, shape)
   end
@@ -239,14 +239,14 @@ defmodule Electric.Plug.ServeShapePlug do
        ) do
     # There is no shape that matches the shape definition (because shape info is `nil`)
     if shape_handle != nil && Shapes.has_shape?(config, shape_handle) do
-      # but there is a shape that matches the shape ID
-      # thus the shape ID does not match the shape definition
+      # but there is a shape that matches the shape handle
+      # thus the shape handle does not match the shape definition
       # and we return a 400 bad request status code
       conn
       |> send_resp(400, @shape_definition_mismatch)
       |> halt()
     else
-      # The shape ID does not exist or no longer exists
+      # The shape handle does not exist or no longer exists
       # e.g. it may have been deleted.
       # Hence, create a new shape for this shape definition
       # and return a 409 with a redirect to the newly created shape.
@@ -262,11 +262,11 @@ defmodule Electric.Plug.ServeShapePlug do
        )
        when is_nil(shape_handle) or shape_handle == active_shape_handle do
     # We found a shape that matches the shape definition
-    # and the shape has the same ID as the shape ID provided by the user
+    # and the shape has the same ID as the shape handle provided by the user
     conn
     |> assign(:active_shape_handle, active_shape_handle)
     |> assign(:last_offset, last_offset)
-    |> put_resp_header("electric-shape-id", active_shape_handle)
+    |> put_resp_header("electric-shape-handle", active_shape_handle)
   end
 
   defp handle_shape_info(
@@ -281,13 +281,13 @@ defmodule Electric.Plug.ServeShapePlug do
       |> halt()
     else
       # The requested shape_handle is not found, returns 409 along with a location redirect for clients to
-      # re-request the shape from scratch with the new shape id which acts as a consistent cache buster
+      # re-request the shape from scratch with the new shape handle which acts as a consistent cache buster
       # e.g. GET /v1/shape/{root_table}?shape_handle={new_shape_handle}&offset=-1
 
       # TODO: discuss returning a 307 redirect rather than a 409, the client
       # will have to detect this and throw out old data
       conn
-      |> put_resp_header("electric-shape-id", active_shape_handle)
+      |> put_resp_header("electric-shape-handle", active_shape_handle)
       |> put_resp_header(
         "location",
         "#{conn.request_path}?shape_handle=#{active_shape_handle}&offset=-1"
@@ -576,7 +576,7 @@ defmodule Electric.Plug.ServeShapePlug do
         |> serve_shape_log()
 
       {^ref, :shape_rotation} ->
-        # We may want to notify the client better that the shape ID had changed, but just closing the response
+        # We may want to notify the client better that the shape handle had changed, but just closing the response
         # and letting the client handle it on reconnection is good enough.
         conn
         |> assign(:ot_is_shape_rotated, true)
@@ -611,7 +611,7 @@ defmodule Electric.Plug.ServeShapePlug do
     maybe_up_to_date = if up_to_date = assigns[:up_to_date], do: up_to_date != []
 
     %{
-      "shape.id" => shape_handle,
+      "shape.handle" => shape_handle,
       "shape.where" => assigns[:where],
       "shape.root_table" => assigns[:root_table],
       "shape.definition" => assigns[:shape_definition],

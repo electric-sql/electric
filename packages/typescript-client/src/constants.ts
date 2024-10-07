@@ -1,4 +1,4 @@
-export const SHAPE_HANDLE_HEADER = `electric-shape-id`
+export const SHAPE_HANDLE_HEADER = `electric-shape-handle`
 export const LIVE_CACHE_BUSTER_HEADER = `electric-next-cursor`
 export const LIVE_CACHE_BUSTER_QUERY_PARAM = `cursor`
 export const CHUNK_LAST_OFFSET_HEADER = `electric-chunk-last-offset`

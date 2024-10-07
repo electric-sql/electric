@@ -122,6 +122,6 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   end
 
   defp shape_attrs(shape_handle, shape) do
-    ["shape.id": shape_handle, "shape.root_table": shape.root_table, "shape.where": shape.where]
+    ["shape.handle": shape_handle, "shape.root_table": shape.root_table, "shape.where": shape.where]
   end
 end

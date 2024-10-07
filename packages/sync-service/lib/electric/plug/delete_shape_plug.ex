@@ -46,7 +46,7 @@ defmodule Electric.Plug.DeleteShapePlug do
         send_resp(conn, 202, "")
       end
     else
-      # FIXME: This has a race condition where we accidentally create a snapshot & shape id, but clean
+      # FIXME: This has a race condition where we accidentally create a snapshot & shape handle, but clean
       #        it before snapshot is actually made.
       with {shape_handle, _} <-
              Shapes.get_or_create_shape_handle(conn.assigns.config, conn.assigns.shape_definition),

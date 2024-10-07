@@ -131,7 +131,7 @@ defmodule Electric.Plug.RouterTest do
     @tag with_sql: [
            "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
          ]
-    test "DELETE forces the shape ID to be different on reconnect and new snapshot to be created",
+    test "DELETE forces the shape handle to be different on reconnect and new snapshot to be created",
          %{opts: opts, db_conn: db_conn} do
       conn =
         conn("GET", "/v1/shape/items?offset=-1")
@@ -688,7 +688,7 @@ defmodule Electric.Plug.RouterTest do
 
       conn = conn("GET", "/v1/shape/large_rows_table?offset=-1") |> Router.call(opts)
       assert %{status: 200} = conn
-      [shape_handle] = Plug.Conn.get_resp_header(conn, "electric-shape-id")
+      [shape_handle] = Plug.Conn.get_resp_header(conn, "electric-shape-handle")
       [next_offset] = Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset")
 
       assert [] = Jason.decode!(conn.resp_body)
@@ -756,7 +756,7 @@ defmodule Electric.Plug.RouterTest do
              ] = Jason.decode!(conn.resp_body)
     end
 
-    test "GET receives 400 when shape ID does not match shape definition", %{
+    test "GET receives 400 when shape handle does not match shape definition", %{
       opts: opts
     } do
       where = "value ILIKE 'yes%'"
@@ -787,7 +787,7 @@ defmodule Electric.Plug.RouterTest do
                })
     end
 
-    test "GET receives 409 to a newly created shape when shape ID is not found and no shape matches the shape definition",
+    test "GET receives 409 to a newly created shape when shape handle is not found and no shape matches the shape definition",
          %{
            opts: opts
          } do
@@ -798,13 +798,13 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 409} = conn
       assert conn.resp_body == Jason.encode!([%{headers: %{control: "must-refetch"}}])
-      new_shape_handle = get_resp_header(conn, "electric-shape-id")
+      new_shape_handle = get_resp_header(conn, "electric-shape-handle")
 
       assert get_resp_header(conn, "location") ==
                "/v1/shape/items?shape_handle=#{new_shape_handle}&offset=-1"
     end
 
-    test "GET receives 409 when shape ID is not found but there is another shape matching the definition",
+    test "GET receives 409 when shape handle is not found but there is another shape matching the definition",
          %{
            opts: opts
          } do
@@ -827,7 +827,7 @@ defmodule Electric.Plug.RouterTest do
         |> Router.call(opts)
 
       assert %{status: 409} = conn
-      [^shape_handle] = Plug.Conn.get_resp_header(conn, "electric-shape-id")
+      [^shape_handle] = Plug.Conn.get_resp_header(conn, "electric-shape-handle")
     end
 
     @tag with_sql: [
@@ -898,7 +898,7 @@ defmodule Electric.Plug.RouterTest do
     end
   end
 
-  defp get_resp_shape_handle(conn), do: get_resp_header(conn, "electric-shape-id")
+  defp get_resp_shape_handle(conn), do: get_resp_header(conn, "electric-shape-handle")
   defp get_resp_last_offset(conn), do: get_resp_header(conn, "electric-chunk-last-offset")
 
   defp get_resp_header(conn, header) do
