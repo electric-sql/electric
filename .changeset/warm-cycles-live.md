@@ -1,5 +1,5 @@
 ---
-"@core/sync-service": patch
+"@core/sync-service": minor
 ---
 
-Make `PersistentKV` store metadata in individual files on a per-shape basis.
+[BREAKING] Make `PersistentKV` store metadata in individual files on a per-shape basis.
