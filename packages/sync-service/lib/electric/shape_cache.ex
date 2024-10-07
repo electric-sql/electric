@@ -188,7 +188,8 @@ defmodule Electric.ShapeCache do
     {:ok, persistent_state} =
       opts.shape_status.initialise(
         persistent_kv: opts.persistent_kv,
-        shape_meta_table: opts.shape_meta_table
+        shape_meta_table: opts.shape_meta_table,
+        storage: opts.storage
       )
 
     state = %{

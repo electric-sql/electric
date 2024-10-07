@@ -135,6 +135,11 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
+  def get_all_stored_shapes({mod, opts}) do
+    mod.get_all_stored_shapes(opts)
+  end
+
+  @impl __MODULE__
   def get_current_position({mod, shape_opts}) do
     mod.get_current_position(shape_opts)
   end

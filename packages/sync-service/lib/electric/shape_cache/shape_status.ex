@@ -48,16 +48,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
   """
   alias Electric.PersistentKV
   alias Electric.Shapes.Shape
+  alias Electric.ShapeCache.Storage
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes.{Column, Relation}
 
   @schema NimbleOptions.new!(
             persistent_kv: [type: :any, required: true],
             shape_meta_table: [type: {:or, [:atom, :reference]}, required: true],
+            storage: [type: :mod_arg, required: true],
             root: [type: :string, default: "./shape_cache"]
           )
 
-  defstruct [:persistent_kv, :root, :shape_meta_table]
+  defstruct [:persistent_kv, :root, :shape_meta_table, :storage]
 
   @type shape_id() :: Electric.ShapeCacheBehaviour.shape_id()
   @type xmin() :: Electric.ShapeCacheBehaviour.xmin()
@@ -65,6 +67,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @type t() :: %__MODULE__{
           persistent_kv: PersistentKV.t(),
           root: String.t(),
+          storage: Storage.t(),
           shape_meta_table: table()
         }
   @type option() :: unquote(NimbleOptions.option_typespec(@schema))
@@ -82,11 +85,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def initialise(opts) do
     with {:ok, config} <- NimbleOptions.validate(opts, @schema),
          {:ok, kv_backend} <- Access.fetch(config, :persistent_kv),
-         {:ok, table_name} = Access.fetch(config, :shape_meta_table) do
+         {:ok, table_name} = Access.fetch(config, :shape_meta_table),
+         {:ok, storage} = Access.fetch(config, :storage) do
       persistent_kv =
         PersistentKV.Serialized.new!(
           backend: kv_backend,
-          decoder: {__MODULE__, :decode_shapes, []}
+          decoder: {__MODULE__, :decode_relations, []}
         )
 
       meta_table = :ets.new(table_name, [:named_table, :public, :ordered_set])
@@ -94,14 +98,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
       state =
         struct(
           __MODULE__,
-          Keyword.merge(config, persistent_kv: persistent_kv, shape_meta_table: meta_table)
+          Keyword.merge(config,
+            persistent_kv: persistent_kv,
+            shape_meta_table: meta_table,
+            storage: storage
+          )
         )
 
       load(state)
     end
   end
 
-  @spec add_shape(t(), Shape.t()) :: {:ok, shape_id(), LogOffset.t()} | {:error, term()}
+  @spec add_shape(t(), Shape.t()) :: {:ok, shape_id()} | {:error, term()}
   def add_shape(state, shape) do
     {hash, shape_id} = Shape.generate_id(shape)
     # fresh snapshots always start with a zero offset - only once they
@@ -117,9 +125,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
         ]
       )
 
-    with :ok <- save(state) do
-      {:ok, shape_id}
-    end
+    {:ok, shape_id}
   end
 
   @spec list_shapes(t()) :: [{shape_id(), Shape.t()}]
@@ -151,9 +157,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
         ]
       )
 
-      with :ok <- save(state) do
-        {:ok, shape}
-      end
+      {:ok, shape}
     rescue
       # Sometimes we're calling cleanup when snapshot creation has failed for
       # some reason. In those cases we're not sure about the state of the ETS
@@ -295,11 +299,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @doc false
-  def decode_shapes(json) do
-    with {:ok, %{"shapes" => shapes, "relations" => relations}} <- Jason.decode(json) do
+  def decode_relations(json) do
+    with {:ok, %{"relations" => relations}} <- Jason.decode(json) do
       {:ok,
        %{
-         shapes: Map.new(shapes, fn {id, shape} -> {id, Shape.from_json_safe!(shape)} end),
          relations:
            Map.new(relations, fn %{"id" => id} = relation ->
              {id, relation_from_json(relation)}
@@ -325,21 +328,20 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   defp save(state) do
-    shapes = Map.new(list_shapes(state))
     relations = list_relations(state)
 
     PersistentKV.set(
       state.persistent_kv,
       key(state),
       %{
-        shapes: shapes,
         relations: relations
       }
     )
   end
 
   defp load(state) do
-    with {:ok, %{shapes: shapes, relations: relations}} <- load_shapes(state) do
+    with {:ok, %{relations: relations}} <- load_relations(state),
+         {:ok, shapes} <- Storage.get_all_stored_shapes(state.storage) do
       :ets.insert(
         state.shape_meta_table,
         Enum.concat([
@@ -363,9 +365,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  defp load_shapes(state) do
+  defp load_relations(state) do
     case PersistentKV.get(state.persistent_kv, key(state)) do
-      {:ok, %{shapes: _shapes, relations: _relations} = data} ->
+      {:ok, %{relations: _relations} = data} ->
         {:ok, data}
 
       {:error, :not_found} ->
