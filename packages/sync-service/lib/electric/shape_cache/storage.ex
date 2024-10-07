@@ -1,6 +1,7 @@
 defmodule Electric.ShapeCache.Storage do
   import Electric.Replication.LogOffset, only: [is_log_offset_lt: 2]
 
+  alias Electric.Shapes.Shape
   alias Electric.Shapes.Querying
   alias Electric.Replication.LogOffset
 
@@ -31,6 +32,9 @@ defmodule Electric.ShapeCache.Storage do
 
   @doc "Run any initial setup tasks"
   @callback initialise(shape_opts()) :: :ok
+
+  @doc "Store the shape definition"
+  @callback set_shape_definition(Shape.t(), shape_opts()) :: :ok
 
   @doc """
   Get the current xmin and offset for the shape storage.
@@ -119,6 +123,11 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def initialise({mod, shape_opts}) do
     mod.initialise(shape_opts)
+  end
+
+  @impl __MODULE__
+  def set_shape_definition(shape, {mod, shape_opts}) do
+    mod.set_shape_definition(shape, shape_opts)
   end
 
   @impl __MODULE__
