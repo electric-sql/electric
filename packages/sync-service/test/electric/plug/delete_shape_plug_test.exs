@@ -24,7 +24,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       }
     }
   }
-  @test_shape_handle "test-shape-id"
+  @test_shape_handle "test-shape-handle"
 
   def load_column_info({"public", "users"}, _),
     do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}

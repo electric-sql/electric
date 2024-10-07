@@ -101,7 +101,7 @@ paths:
             type: string
           example: "3833821-1721812114261"
           description: |-
-            The shape ID returned by the initial shape request.
+            The shape handle returned by the initial shape request.
 
             This is a required parameter when this is not an initial sync request.
             I.e. when offset is not `-1`.
@@ -164,7 +164,7 @@ paths:
                 type: string
               example: "3833821-1721812114261:26800584_4:26800584_4"
               description: |-
-                Etag header specifying the shape ID and offset for efficient caching.
+                Etag header specifying the shape handle and offset for efficient caching.
 
                 In the format `{shape_handle}:{start_offset}:{end_offset}`.
             electric-chunk-last-offset:
@@ -183,7 +183,7 @@ paths:
                 type: string
               example: "3833821-1721812114261"
               description: |-
-                The shape ID.
+                The shape handle.
 
                 Must be provided as the `shape_handle` parameter when making
                 subsequent requests where `offset` is not `-1`.
@@ -312,7 +312,7 @@ paths:
                     description: Error message
                   shape_handle:
                     type: string
-                    description: The latest shape ID the client should sync.
+                    description: The latest shape handle the client should sync.
                   offset:
                     type: string
                     description: The offset from where to sync the given shape_handle.
@@ -374,7 +374,7 @@ paths:
       responses:
         "202":
           description: |-
-            Accepted. The shape has been deleted (or to be more precise: the shape ID
+            Accepted. The shape has been deleted (or to be more precise: the shape handle
             has been invalidated and the storage will be cleaned up eventually).
         "400":
           description: Bad request.

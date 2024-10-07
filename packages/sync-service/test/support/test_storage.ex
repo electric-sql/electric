@@ -5,7 +5,7 @@ defmodule Support.TestStorage do
 
   This is useful when mocking the storage doesn't work for some reason.
 
-  You can initialise the backing storage for a given shape id by passing a list
+  You can initialise the backing storage for a given shape handle by passing a list
   of `{function_name :: atom(), args :: []}` calls to make against it after the
   `initialise/1` call.
 

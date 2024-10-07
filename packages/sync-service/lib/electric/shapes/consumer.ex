@@ -254,7 +254,7 @@ defmodule Electric.Shapes.Consumer do
       Enum.any?(relevant_changes, &is_struct(&1, Changes.TruncatedRelation)) ->
         # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
         #       present in the transaction, we're considering the whole transaction empty, and
-        #       just rotate the shape id. "Correct" way to handle truncates is to be designed.
+        #       just rotate the shape handle. "Correct" way to handle truncates is to be designed.
         Logger.warning(
           "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
         )
@@ -389,6 +389,6 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp shape_attrs(shape_handle, shape) do
-    ["shape.id": shape_handle, "shape.root_table": shape.root_table, "shape.where": shape.where]
+    ["shape.handle": shape_handle, "shape.root_table": shape.root_table, "shape.where": shape.where]
   end
 end

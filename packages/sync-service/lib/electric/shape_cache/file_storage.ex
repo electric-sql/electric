@@ -193,7 +193,7 @@ defmodule Electric.ShapeCache.FileStorage do
   def make_new_snapshot!(data_stream, %FS{} = opts) do
     OpenTelemetry.with_span(
       "storage.make_new_snapshot",
-      [storage_impl: "mixed_disk", "shape.id": opts.shape_handle],
+      [storage_impl: "mixed_disk", "shape.handle": opts.shape_handle],
       fn ->
         data_stream
         |> Stream.map(&[&1, ?\n])

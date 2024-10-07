@@ -147,7 +147,7 @@ describe(`Shape`, () => {
         await deleteIssue({ id: id1, title: `foo1` })
         await insertIssues({ id: id2, title: `foo2` })
         await sleep(100)
-        await clearIssuesShape(shapeStream.shapeId)
+        await clearIssuesShape(shapeStream.shapeHandle)
 
         rotationTime = Date.now()
       }

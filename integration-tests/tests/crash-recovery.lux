@@ -41,7 +41,7 @@
 [shell client]
   # strip ANSI codes from response for easier matching
   !curl -v -X GET http://localhost:3000/v1/shape/items?offset=-1
-  ?electric-shape-id: ([\d-]+)
+  ?electric-shape-handle: ([\d-]+)
   [local shape_handle=$1]
   ?electric-chunk-last-offset: ([\w\d_]+)
   [local last_offset=$1]

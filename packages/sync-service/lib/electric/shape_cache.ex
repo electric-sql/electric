@@ -83,7 +83,7 @@ defmodule Electric.ShapeCache do
 
   @impl Electric.ShapeCacheBehaviour
   def get_or_create_shape_handle(shape, opts \\ []) do
-    # Get or create the shape ID and fire a snapshot if necessary
+    # Get or create the shape handle and fire a snapshot if necessary
     if shape_state = get_shape(shape, opts) do
       shape_state
     else

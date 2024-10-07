@@ -30,7 +30,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       }
     }
   }
-  @test_shape_handle "test-shape-id"
+  @test_shape_handle "test-shape-handle"
   @test_opts %{foo: "bar"}
   @before_all_offset LogOffset.before_all()
   @first_offset LogOffset.first()
@@ -226,7 +226,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
                "#{@test_shape_handle}:-1:#{next_offset}"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-shape-id") == [@test_shape_handle]
+      assert Plug.Conn.get_resp_header(conn, "electric-shape-handle") == [@test_shape_handle]
     end
 
     test "snapshot has correct cache control headers" do
@@ -349,7 +349,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
                "#{@test_shape_handle}:#{@start_offset_50}:#{next_next_offset}"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-shape-id") == [@test_shape_handle]
+      assert Plug.Conn.get_resp_header(conn, "electric-shape-handle") == [@test_shape_handle]
 
       assert Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset") == [
                "#{next_next_offset}"
@@ -533,7 +533,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == [""]
     end
 
-    test "sends 409 with a redirect to existing shape when requested shape ID does not exist" do
+    test "sends 409 with a redirect to existing shape when requested shape handle does not exist" do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_handle, @test_offset}
@@ -554,15 +554,15 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 409
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
-      assert get_resp_header(conn, "electric-shape-id") == [@test_shape_handle]
+      assert get_resp_header(conn, "electric-shape-handle") == [@test_shape_handle]
 
       assert get_resp_header(conn, "location") == [
                "/?shape_handle=#{@test_shape_handle}&offset=-1"
              ]
     end
 
-    test "creates a new shape when shape ID does not exist and sends a 409 redirecting to the newly created shape" do
-      new_shape_handle = "new-shape-id"
+    test "creates a new shape when shape handle does not exist and sends a 409 redirecting to the newly created shape" do
+      new_shape_handle = "new-shape-handle"
 
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts -> nil end)
@@ -585,11 +585,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 409
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
-      assert get_resp_header(conn, "electric-shape-id") == [new_shape_handle]
+      assert get_resp_header(conn, "electric-shape-handle") == [new_shape_handle]
       assert get_resp_header(conn, "location") == ["/?shape_handle=#{new_shape_handle}&offset=-1"]
     end
 
-    test "sends 400 when shape ID does not match shape definition" do
+    test "sends 400 when shape handle does not match shape definition" do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts -> nil end)
       |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)

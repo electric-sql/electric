@@ -13,7 +13,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   @moduletag :tmp_dir
 
-  @shape_handle "the-shape-id"
+  @shape_handle "the-shape-handle"
   @shape %Shape{
     root_table: {"public", "items"},
     root_table_id: 1,

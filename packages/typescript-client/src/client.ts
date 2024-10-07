@@ -53,7 +53,7 @@ export interface ShapeStreamOptions<T = never> {
    * will handle this automatically. A common scenario where you might pass an offset
    * is if you're maintaining a local cache of the log. If you've gone offline
    * and are re-starting a ShapeStream to catch-up to the latest state of the Shape,
-   * you'd pass in the last offset and shapeId you'd seen from the Electric server
+   * you'd pass in the last offset and shapeHandle you'd seen from the Electric server
    * so it knows at what point in the shape to catch you up from.
    */
   offset?: Offset
@@ -61,7 +61,7 @@ export interface ShapeStreamOptions<T = never> {
    * Similar to `offset`, this isn't typically used unless you're maintaining
    * a cache of the shape log.
    */
-  shapeId?: string
+  shapeHandle?: string
   backoffOptions?: BackoffOptions
 
   /**
@@ -98,7 +98,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   isConnected(): boolean
 
   isUpToDate: boolean
-  shapeId?: string
+  shapeHandle?: string
 }
 
 /**
@@ -157,7 +157,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #lastSyncedAt?: number // unix time
   #isUpToDate: boolean = false
   #connected: boolean = false
-  #shapeId?: string
+  #shapeHandle?: string
   #schema?: Schema
   #error?: unknown
 
@@ -166,7 +166,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.options = { subscribe: true, ...options }
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
-    this.#shapeId = this.options.shapeId
+    this.#shapeHandle = this.options.shapeHandle
     this.#messageParser = new MessageParser<T>(options.parser)
 
     const baseFetchClient =
@@ -186,8 +186,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.start()
   }
 
-  get shapeId() {
-    return this.#shapeId
+  get shapeHandle() {
+    return this.#shapeHandle
   }
 
   get isUpToDate() {
@@ -222,9 +222,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
           )
         }
 
-        if (this.#shapeId) {
+        if (this.#shapeHandle) {
           // This should probably be a header for better cache breaking?
-          fetchUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, this.#shapeId!)
+          fetchUrl.searchParams.set(
+            SHAPE_HANDLE_QUERY_PARAM,
+            this.#shapeHandle!
+          )
         }
 
         let response!: Response
@@ -239,9 +242,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
           if (!(e instanceof FetchError)) throw e // should never happen
           if (e.status == 409) {
             // Upon receiving a 409, we should start from scratch
-            // with the newly provided shape ID
-            const newShapeId = e.headers[SHAPE_HANDLE_HEADER]
-            this.#reset(newShapeId)
+            // with the newly provided shape handle
+            const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
+            this.#reset(newShapeHandle)
             await this.#publish(e.json as Message<T>[])
             continue
           } else if (e.status >= 400 && e.status < 500) {
@@ -256,9 +259,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
 
         const { headers, status } = response
-        const shapeId = headers.get(SHAPE_HANDLE_HEADER)
-        if (shapeId) {
-          this.#shapeId = shapeId
+        const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
+        if (shapeHandle) {
+          this.#shapeHandle = shapeHandle
         }
 
         const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
@@ -397,12 +400,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   /**
    * Resets the state of the stream, optionally with a provided
-   * shape ID
+   * shape handle
    */
-  #reset(shapeId?: string) {
+  #reset(shapeHandle?: string) {
     this.#lastOffset = `-1`
     this.#liveCacheBuster = ``
-    this.#shapeId = shapeId
+    this.#shapeHandle = shapeHandle
     this.#isUpToDate = false
     this.#connected = false
     this.#schema = undefined
@@ -422,10 +425,10 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (
     options.offset !== undefined &&
     options.offset !== `-1` &&
-    !options.shapeId
+    !options.shapeHandle
   ) {
     throw new Error(
-      `shapeId is required if this isn't an initial fetch (i.e. offset > -1)`
+      `shapeHandle is required if this isn't an initial fetch (i.e. offset > -1)`
     )
   }
   return
