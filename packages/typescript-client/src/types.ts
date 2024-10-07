@@ -1,13 +1,21 @@
-export type Value =
+/**
+ * Default types for SQL but can be extended with additional types when using a custom parser.
+ * @typeParam Extensions - Additional value types.
+ */
+export type Value<Extensions = never> =
   | string
   | number
   | boolean
   | bigint
   | null
-  | Value[]
-  | { [key: string]: Value }
+  | Extensions
+  | Value<Extensions>[]
+  | { [key: string]: Value<Extensions> }
 
-export type Row = { [key: string]: Value }
+export type Row<Extensions = never> = Record<string, Value<Extensions>>
+
+export type GetExtensions<T extends Row<unknown>> =
+  T extends Row<infer Extensions> ? Extensions : never
 
 export type Offset = `-1` | `${number}_${number}`
 
@@ -19,7 +27,7 @@ export type ControlMessage = {
   headers: Header & { control: `up-to-date` | `must-refetch` }
 }
 
-export type ChangeMessage<T extends Row = Row> = {
+export type ChangeMessage<T extends Row<unknown> = Row> = {
   key: string
   value: T
   headers: Header & { operation: `insert` | `update` | `delete` }
@@ -27,7 +35,9 @@ export type ChangeMessage<T extends Row = Row> = {
 }
 
 // Define the type for a record
-export type Message<T extends Row = Row> = ControlMessage | ChangeMessage<T>
+export type Message<T extends Row<unknown> = Row> =
+  | ControlMessage
+  | ChangeMessage<T>
 
 /**
  * Common properties for all columns.
@@ -104,7 +114,7 @@ export type ColumnInfo =
 
 export type Schema = { [key: string]: ColumnInfo }
 
-export type TypedMessages<T extends Row = Row> = {
+export type TypedMessages<T extends Row<unknown> = Row> = {
   messages: Array<Message<T>>
   schema: ColumnInfo
 }

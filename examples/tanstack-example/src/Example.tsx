@@ -61,7 +61,7 @@ export const Example = () => {
   const { data: items } = useShape<Item>(itemShape())
   const submissions: Item[] = useMutationState({
     filters: { status: `pending` },
-    select: (mutation) => mutation.state.context as Item | undefined,
+    select: (mutation) => mutation.state.context as Item,
   }).filter((item) => item !== undefined)
 
   const { mutateAsync: addItemMut } = useMutation({

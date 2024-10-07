@@ -1,4 +1,11 @@
-import { Message, Offset, Schema, Row, MaybePromise } from './types'
+import {
+  Message,
+  Offset,
+  Schema,
+  Row,
+  MaybePromise,
+  GetExtensions,
+} from './types'
 import { MessageParser, Parser } from './parser'
 import { isUpToDateMessage } from './helpers'
 import { FetchError, FetchBackoffAbortError } from './error'
@@ -21,7 +28,7 @@ import {
 /**
  * Options for constructing a ShapeStream.
  */
-export interface ShapeStreamOptions {
+export interface ShapeStreamOptions<T = never> {
   /**
    * The full URL to where the Shape is hosted. This can either be the Electric server
    * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape/foo`
@@ -53,10 +60,10 @@ export interface ShapeStreamOptions {
   subscribe?: boolean
   signal?: AbortSignal
   fetchClient?: typeof fetch
-  parser?: Parser
+  parser?: Parser<T>
 }
 
-export interface ShapeStreamInterface<T extends Row = Row> {
+export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   subscribe(
     callback: (messages: Message<T>[]) => MaybePromise<void>,
     onError?: (error: FetchError | Error) => void
@@ -108,10 +115,10 @@ export interface ShapeStreamInterface<T extends Row = Row> {
  * ```
  */
 
-export class ShapeStream<T extends Row = Row>
+export class ShapeStream<T extends Row<unknown> = Row>
   implements ShapeStreamInterface<T>
 {
-  readonly options: ShapeStreamOptions
+  readonly options: ShapeStreamOptions<GetExtensions<T>>
 
   readonly #fetchClient: typeof fetch
   readonly #messageParser: MessageParser<T>
@@ -135,7 +142,7 @@ export class ShapeStream<T extends Row = Row>
   #shapeId?: string
   #schema?: Schema
 
-  constructor(options: ShapeStreamOptions) {
+  constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     validateOptions(options)
     this.options = { subscribe: true, ...options }
     this.#lastOffset = this.options.offset ?? `-1`
@@ -366,7 +373,7 @@ export class ShapeStream<T extends Row = Row>
   }
 }
 
-function validateOptions(options: Partial<ShapeStreamOptions>): void {
+function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (!options.url) {
     throw new Error(`Invalid shape option. It must provide the url`)
   }

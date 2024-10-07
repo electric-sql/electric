@@ -15,6 +15,7 @@ describe(`useShape`, () => {
     foo: number
     bar: boolean
     baz: string
+    ts: Date
   }
 
   it(`should infer correct return type when a selector is provided`, () => {
@@ -25,6 +26,7 @@ describe(`useShape`, () => {
           foo: 5,
           bar: true,
           baz: `str`,
+          ts: new Date(),
         }
       },
     })
@@ -41,6 +43,7 @@ describe(`useShape`, () => {
           foo: 5,
           bar: true,
           baz: `str`,
+          ts: new Date(),
         }
       },
     })
