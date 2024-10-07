@@ -12,6 +12,7 @@ type CustomRow = {
   foo: number
   bar: boolean
   baz: string
+  ts: Date
 }
 
 describe(`client`, () => {
@@ -30,6 +31,11 @@ describe(`client`, () => {
     it(`should infer correct return type when provided`, () => {
       const shapeStream = new ShapeStream<CustomRow>({
         url: ``,
+        parser: {
+          timestampz: (date: string) => {
+            return new Date(date)
+          },
+        },
       })
 
       shapeStream.subscribe((msgs) => {
@@ -61,6 +67,11 @@ describe(`client`, () => {
     it(`should infer correct return type when provided`, async () => {
       const shapeStream = new ShapeStream<CustomRow>({
         url: ``,
+        parser: {
+          timestampz: (date: string) => {
+            return new Date(date)
+          },
+        },
       })
       const shape = new Shape(shapeStream)
       expectTypeOf(shape).toEqualTypeOf<Shape<CustomRow>>()

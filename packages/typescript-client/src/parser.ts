@@ -1,17 +1,23 @@
-import { ColumnInfo, Message, Row, Schema, Value } from './types'
+import { ColumnInfo, GetExtensions, Message, Row, Schema, Value } from './types'
 
 type NullToken = null | `NULL`
 type Token = Exclude<string, NullToken>
 type NullableToken = Token | NullToken
-export type ParseFunction = (
+export type ParseFunction<Extensions = never> = (
   value: Token,
   additionalInfo?: Omit<ColumnInfo, `type` | `dims`>
-) => Value
-type NullableParseFunction = (
+) => Value<Extensions>
+type NullableParseFunction<Extensions = never> = (
   value: NullableToken,
   additionalInfo?: Omit<ColumnInfo, `type` | `dims`>
-) => Value
-export type Parser = { [key: string]: ParseFunction }
+) => Value<Extensions>
+/**
+ * @typeParam Extensions - Additional types that can be parsed by this parser beyond the standard SQL types.
+ *                         Defaults to no additional types.
+ */
+export type Parser<Extensions = never> = {
+  [key: string]: ParseFunction<Extensions>
+}
 
 const parseNumber = (value: string) => Number(value)
 const parseBool = (value: string) => value === `true` || value === `t`
@@ -31,7 +37,10 @@ export const defaultParser: Parser = {
 }
 
 // Taken from: https://github.com/electric-sql/pglite/blob/main/packages/pglite/src/types.ts#L233-L279
-export function pgArrayParser(value: Token, parser?: ParseFunction): Value {
+export function pgArrayParser<Extensions>(
+  value: Token,
+  parser?: ParseFunction<Extensions>
+): Value<Extensions> {
   let i = 0
   let char = null
   let str = ``
@@ -39,7 +48,7 @@ export function pgArrayParser(value: Token, parser?: ParseFunction): Value {
   let last = 0
   let p: string | undefined = undefined
 
-  function loop(x: string): Value[] {
+  function loop(x: string): Array<Value<Extensions>> {
     const xs = []
     for (; i < x.length; i++) {
       char = x[i]
@@ -79,9 +88,9 @@ export function pgArrayParser(value: Token, parser?: ParseFunction): Value {
   return loop(value)[0]
 }
 
-export class MessageParser<T extends Row> {
-  private parser: Parser
-  constructor(parser?: Parser) {
+export class MessageParser<T extends Row<unknown>> {
+  private parser: Parser<GetExtensions<T>>
+  constructor(parser?: Parser<GetExtensions<T>>) {
     // Merge the provided parser with the default parser
     // to use the provided parser whenever defined
     // and otherwise fall back to the default parser
@@ -96,7 +105,7 @@ export class MessageParser<T extends Row> {
       // But `typeof null === 'object'` so we need to make an explicit check.
       if (key === `value` && typeof value === `object` && value !== null) {
         // Parse the row values
-        const row = value as Record<string, Value>
+        const row = value as Record<string, Value<GetExtensions<T>>>
         Object.keys(row).forEach((key) => {
           row[key] = this.parseRow(key, row[key] as NullableToken, schema)
         })
@@ -106,7 +115,11 @@ export class MessageParser<T extends Row> {
   }
 
   // Parses the message values using the provided parser based on the schema information
-  private parseRow(key: string, value: NullableToken, schema: Schema): Value {
+  private parseRow(
+    key: string,
+    value: NullableToken,
+    schema: Schema
+  ): Value<GetExtensions<T>> {
     const columnInfo = schema[key]
     if (!columnInfo) {
       // We don't have information about the value
@@ -137,11 +150,11 @@ export class MessageParser<T extends Row> {
   }
 }
 
-function makeNullableParser(
-  parser: ParseFunction,
+function makeNullableParser<Extensions>(
+  parser: ParseFunction<Extensions>,
   columnInfo: ColumnInfo,
   columnName?: string
-): NullableParseFunction {
+): NullableParseFunction<Extensions> {
   const isNullable = !(columnInfo.not_null ?? false)
   // The sync service contains `null` value for a column whose value is NULL
   // but if the column value is an array that contains a NULL value
