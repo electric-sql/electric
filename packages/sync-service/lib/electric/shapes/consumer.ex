@@ -389,6 +389,10 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp shape_attrs(shape_handle, shape) do
-    ["shape.handle": shape_handle, "shape.root_table": shape.root_table, "shape.where": shape.where]
+    [
+      "shape.handle": shape_handle,
+      "shape.root_table": shape.root_table,
+      "shape.where": shape.where
+    ]
   end
 end
