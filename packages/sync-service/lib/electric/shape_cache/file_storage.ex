@@ -48,7 +48,7 @@ defmodule Electric.ShapeCache.FileStorage do
       db: name(electric_instance_id, shape_id),
       cubdb_dir: Path.join([base_path, shape_id, "cubdb"]),
       snapshot_dir: Path.join([base_path, shape_id, "snapshots"]),
-      shape_definition_dir: Path.join([base_path, shape_id, "shape_definition"])
+      shape_definition_dir: Path.join([base_path, shape_id])
     }
   end
 
@@ -109,6 +109,30 @@ defmodule Electric.ShapeCache.FileStorage do
 
       {:error, reason} ->
         raise "Failed to write shape definition to file: #{reason}"
+    end
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def get_all_stored_shapes(%{base_path: base_path}) do
+    case File.ls(base_path) do
+      {:ok, shape_ids} ->
+        Enum.reduce(shape_ids, %{}, fn shape_id, acc ->
+          shape_def_path =
+            shape_definition_path(%{shape_definition_dir: Path.join(base_path, shape_id)})
+
+          with {:ok, shape_def_encoded} <- File.read(shape_def_path),
+               {:ok, shape_def_json} <- Jason.decode(shape_def_encoded),
+               shape = Electric.Shapes.Shape.from_json_safe!(shape_def_json) do
+            Map.put(acc, shape_id, shape)
+          else
+            # if the shape definition file cannot be read/decoded, just ignore it
+            {:error, _reason} -> acc
+          end
+        end)
+        |> then(&{:ok, &1})
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -290,7 +314,7 @@ defmodule Electric.ShapeCache.FileStorage do
     :ok
   end
 
-  defp shape_definition_path(%FS{shape_definition_dir: shape_definition_dir} = _opts) do
+  defp shape_definition_path(%{shape_definition_dir: shape_definition_dir} = _opts) do
     Path.join(shape_definition_dir, @shape_definition_file_name)
   end
 

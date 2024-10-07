@@ -113,6 +113,12 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def get_all_stored_shapes(_opts) do
+    # shapes not stored, empty map returned
+    {:ok, %{}}
+  end
+
+  @impl Electric.ShapeCache.Storage
   def snapshot_started?(%MS{} = opts) do
     try do
       :ets.member(opts.snapshot_table, snapshot_start())
