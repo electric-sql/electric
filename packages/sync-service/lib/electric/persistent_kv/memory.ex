@@ -48,6 +48,20 @@ defmodule Electric.PersistentKV.Memory do
       end
     end
 
+    def get_all(memory) do
+      data = Agent.get(memory.pid, & &1)
+      {:ok, data}
+    end
+
+    def delete(memory, key) do
+      Agent.update(memory.pid, fn data ->
+        notify(memory, {:delete, key})
+        Map.delete(data, key)
+      end)
+
+      :ok
+    end
+
     defp notify(%{parent: parent}, msg) when is_pid(parent) do
       send(parent, {Electric.PersistentKV.Memory, msg})
     end

@@ -74,6 +74,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @shape_meta_latest_offset_pos 4
   @relation_data :relation_data
   @snapshot_started :snapshot_started
+  @shape_key_prefix "shape_"
+  @relation_key_prefix "relation_"
 
   @spec initialise(options()) :: {:ok, t()} | {:error, term()}
   def initialise(opts) do
@@ -114,7 +116,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
         ]
       )
 
-    with :ok <- save(state) do
+    with :ok <-
+           PersistentKV.set(
+             state.persistent_kv,
+             shape_key(shape_id),
+             %{shape_id: shape_id, shape: shape}
+           ) do
       {:ok, shape_id}
     end
   end
@@ -148,7 +155,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
         ]
       )
 
-      with :ok <- save(state) do
+      with :ok <- PersistentKV.delete(state.persistent_kv, shape_key(shape_id)) do
         {:ok, shape}
       end
     rescue
@@ -282,7 +289,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   def store_relation(%__MODULE__{shape_meta_table: meta_table} = state, %Relation{} = relation) do
     with :ok <- store_relation(meta_table, relation) do
-      save(state)
+      PersistentKV.set(
+        state.persistent_kv,
+        relation_key(relation.id),
+        %{relation: relation}
+      )
     end
   end
 
@@ -293,15 +304,19 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @doc false
   def decode_shapes(json) do
-    with {:ok, %{"shapes" => shapes, "relations" => relations}} <- Jason.decode(json) do
-      {:ok,
-       %{
-         shapes: Map.new(shapes, fn {id, shape} -> {id, Shape.from_json_safe!(shape)} end),
-         relations:
-           Map.new(relations, fn %{"id" => id} = relation ->
-             {id, relation_from_json(relation)}
-           end)
-       }}
+    case Jason.decode(json) do
+      {:ok, %{"shape_id" => shape_id, "shape" => shape}} ->
+        {:ok, {shape_id, Shape.from_json_safe!(shape)}}
+
+      {:ok, %{"relation" => relation}} ->
+        {:ok, relation_from_json(relation)}
+
+      # do not decode non-shape/relation json
+      {:ok, other} ->
+        {:ok, other}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -321,70 +336,42 @@ defmodule Electric.ShapeCache.ShapeStatus do
     %Column{name: name, type_oid: type_oid}
   end
 
-  defp save(state) do
-    shapes = Map.new(list_shapes(state))
-    relations = list_relations(state)
-
-    PersistentKV.set(
-      state.persistent_kv,
-      key(state),
-      %{
-        shapes: shapes,
-        relations: relations
-      }
-    )
-  end
-
   defp load(state) do
-    with {:ok, %{shapes: shapes, relations: relations}} <- load_shapes(state) do
+    with {:ok, data} <- PersistentKV.get_all(state.persistent_kv) do
       :ets.insert(
         state.shape_meta_table,
-        Enum.concat([
-          Enum.flat_map(shapes, fn {shape_id, shape} ->
-            hash = Shape.hash(shape)
+        Enum.flat_map(data, fn {key, value} ->
+          case key do
+            @shape_key_prefix <> _ ->
+              {shape_id, shape} = value
 
-            [
-              {{@shape_hash_lookup, hash}, shape_id},
-              {{@shape_meta_data, shape_id}, shape, nil, LogOffset.first()}
-            ]
-          end),
-          Enum.flat_map(relations, fn {relation_id, relation} ->
-            [
-              {{@relation_data, relation_id}, relation}
-            ]
-          end)
-        ])
+              [
+                {{@shape_hash_lookup, Shape.hash(shape)}, shape_id},
+                {{@shape_meta_data, shape_id}, shape, nil, LogOffset.first()}
+              ]
+
+            @relation_key_prefix <> _ ->
+              [
+                {{@relation_data, value.id}, value}
+              ]
+
+            # ignore non-shape/relation keys
+            _ ->
+              []
+          end
+        end)
       )
 
       {:ok, state}
     end
   end
 
-  defp load_shapes(state) do
-    case PersistentKV.get(state.persistent_kv, key(state)) do
-      {:ok, %{shapes: _shapes, relations: _relations} = data} ->
-        {:ok, data}
-
-      {:error, :not_found} ->
-        {:ok, %{shapes: %{}, relations: %{}}}
-
-      error ->
-        error
-    end
+  defp shape_key(shape_id) do
+    "#{@shape_key_prefix}#{shape_id}.json"
   end
 
-  defp list_relations(%__MODULE__{shape_meta_table: meta_table}) do
-    :ets.select(meta_table, [
-      {
-        {{@relation_data, :"$1"}, :"$2"},
-        [true],
-        [:"$2"]
-      }
-    ])
-  end
-
-  defp key(state) do
-    Path.join(state.root, "shapes.json")
+  defp relation_key(relation_id) do
+    "#{@relation_key_prefix}#{relation_id}.json"
   end
 
   defp turn_raise_into_error(fun) do

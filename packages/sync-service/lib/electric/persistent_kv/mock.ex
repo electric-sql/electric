@@ -16,5 +16,13 @@ defmodule Electric.PersistentKV.Mock do
     def get(_memory, _key) do
       {:ok, 42}
     end
+
+    def get_all(_memory) do
+      {:ok, %{"foo" => 42}}
+    end
+
+    def delete(_memory, _key) do
+      :ok
+    end
   end
 end

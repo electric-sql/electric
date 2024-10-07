@@ -21,10 +21,41 @@ defmodule Electric.PersistentKV.Filesystem do
       end
     end
 
+    def get_all(fs) do
+      File.mkdir_p!(fs.root)
+
+      case Path.expand(fs.root) |> File.ls() do
+        {:ok, files} ->
+          files
+          |> Enum.reduce_while({:ok, %{}}, fn file, {:ok, acc} ->
+            file_path = join(fs, file)
+
+            case File.read(file_path) do
+              {:ok, content} ->
+                {:cont, {:ok, Map.put(acc, file, content)}}
+
+              {:error, reason} ->
+                {:halt, {:error, reason}}
+            end
+          end)
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+
     def set(fs, key, value) when is_binary(key) do
       with file_path = mkdir(fs, key),
            :ok <- atomic_write(file_path, value) do
         Logger.debug("[SET] #{file_path}")
+        :ok
+      end
+    end
+
+    def delete(fs, key) when is_binary(key) do
+      with file_path = join(fs, key),
+           :ok <- File.rm!(file_path) do
+        Logger.debug("[DELETE] #{file_path}")
         :ok
       end
     end
