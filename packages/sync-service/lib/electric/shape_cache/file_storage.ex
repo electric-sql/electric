@@ -131,6 +131,10 @@ defmodule Electric.ShapeCache.FileStorage do
         end)
         |> then(&{:ok, &1})
 
+      {:error, :enoent} ->
+        # if not present, there's no stored shapes
+        {:ok, %{}}
+
       {:error, reason} ->
         {:error, reason}
     end
