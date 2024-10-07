@@ -70,7 +70,7 @@ defmodule Electric.Timeline do
         nil
 
       error ->
-        Logger.warning("Failed to load timeline ID from persistent storage: #{error}")
+        Logger.warning("Failed to load timeline ID from persistent storage: #{inspect(error)}")
         nil
     end
   end
