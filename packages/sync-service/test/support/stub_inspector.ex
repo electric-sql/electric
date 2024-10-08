@@ -29,12 +29,12 @@ defmodule Support.StubInspector do
     case Regex.run(regex, table, capture: :all_names) do
       ["", table_name] when table_name != "" ->
         table_name = Utils.parse_quoted_name(table_name)
-        {:ok, {"public", table_name}}
+        {:ok, %{relation: {"public", table_name}, relation_id: 1}}
 
       [schema_name, table_name] when table_name != "" ->
         schema_name = Utils.parse_quoted_name(schema_name)
         table_name = Utils.parse_quoted_name(table_name)
-        {:ok, {schema_name, table_name}}
+        {:ok, %{relation: {schema_name, table_name}, relation_id: 1}}
 
       _ ->
         {:error, "invalid name syntax"}

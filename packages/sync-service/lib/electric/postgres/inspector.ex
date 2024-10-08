@@ -1,6 +1,7 @@
 defmodule Electric.Postgres.Inspector do
   alias Electric.Replication.Eval.Parser
   @type relation :: Electric.relation()
+  @type relation_id :: Electric.relation_id()
 
   @type column_info :: %{
           name: String.t(),
@@ -14,8 +15,13 @@ defmodule Electric.Postgres.Inspector do
           array_type: String.t()
         }
 
+  @type relation_info :: %{
+          relation_id: relation_id(),
+          relation: relation()
+        }
+
   @callback load_relation(String.t(), opts :: term()) ::
-              {:ok, relation()} | {:error, String.t()}
+              {:ok, relation_info()} | {:error, String.t()}
 
   @callback clean_relation(relation(), opts :: term()) :: true
 
@@ -38,7 +44,7 @@ defmodule Electric.Postgres.Inspector do
        `"Users"` would return `{"public", "Users"}`,
        `some_schema.users` would return `{"some_schema", "users"}`.
   """
-  @spec load_relation(String.t(), inspector()) :: {:ok, relation()} | {:error, String.t()}
+  @spec load_relation(String.t(), inspector()) :: {:ok, relation_info()} | {:error, String.t()}
   def load_relation(table, {module, opts}),
     do: module.load_relation(table, opts)
 

@@ -16,6 +16,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
   @test_shape %Shape{
     root_table: {"public", "users"},
+    root_table_id: 1,
     table_info: %{
       {"public", "users"} => %{
         columns: [%{name: "id", type: "int8", pk_position: 0}],

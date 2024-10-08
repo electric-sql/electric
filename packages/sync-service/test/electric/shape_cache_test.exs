@@ -24,6 +24,7 @@ defmodule Electric.ShapeCacheTest do
 
   @shape %Shape{
     root_table: {"public", "items"},
+    root_table_id: 1,
     table_info: %{
       {"public", "items"} => %{
         columns: [%{name: "id", type: :text}, %{name: "value", type: :text}],
@@ -346,7 +347,7 @@ defmodule Electric.ShapeCacheTest do
     end
 
     test "correctly propagates the error", %{shape_cache_opts: opts} do
-      shape = %Shape{root_table: {"public", "nonexistent"}}
+      shape = %Shape{root_table: {"public", "nonexistent"}, root_table_id: 2}
 
       {shape_id, log} =
         with_log(fn ->

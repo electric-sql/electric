@@ -12,14 +12,15 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     end
 
     test "returns relation from table name", %{opts: opts, table: table} do
-      assert {:ok, ^table} = EtsInspector.load_relation("PuBliC.ItEmS", opts)
+      assert {:ok, %{relation: ^table, relation_id: _}} =
+               EtsInspector.load_relation("PuBliC.ItEmS", opts)
     end
 
     test "returns same value from ETS cache as the original call", %{opts: opts, table: table} do
       original = EtsInspector.load_relation("PuBliC.ItEmS", opts)
       from_cache = EtsInspector.load_relation("PuBliC.ItEmS", opts)
       assert original == from_cache
-      assert {:ok, ^table} = original
+      assert {:ok, %{relation: ^table, relation_id: _}} = original
     end
 
     test "returns same value from ETS cache as the original call with concurrent calls", %{
@@ -30,7 +31,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       original = EtsInspector.load_relation("PuBliC.ItEmS", opts)
       from_cache = Task.await(task)
       assert original == from_cache
-      assert {:ok, ^table} = original
+      assert {:ok, %{relation: ^table, relation_id: _}} = original
     end
 
     @tag with_sql: [
@@ -43,12 +44,12 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       original1 = EtsInspector.load_relation("PuBliC.ITEMS", opts)
       from_cache1 = EtsInspector.load_relation("PuBliC.ITEMS", opts)
       assert original1 == from_cache1
-      assert {:ok, ^table} = original1
+      assert {:ok, %{relation: ^table, relation_id: _}} = original1
 
       original2 = EtsInspector.load_relation(~s|PuBliC."ITEMS"|, opts)
       from_cache2 = EtsInspector.load_relation(~s|PuBliC."ITEMS"|, opts)
       assert original2 == from_cache2
-      assert {:ok, {"public", "ITEMS"}} = original2
+      assert {:ok, %{relation: {"public", "ITEMS"}, relation_id: _}} = original2
     end
   end
 
