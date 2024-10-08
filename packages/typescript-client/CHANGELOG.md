@@ -1,5 +1,12 @@
 # @electric-sql/client
 
+## 0.6.1
+
+### Patch Changes
+
+- cfb7955: Implement utility `headers` option on `ShapeStream` to pass headers to attach to all requests, like authorization.
+- c980a76: Make parser generic such that it can be parameterized with additional types supported by custom parsers.
+
 ## 0.6.0
 
 ### Minor Changes
