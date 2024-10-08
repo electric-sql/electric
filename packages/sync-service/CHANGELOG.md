@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 0.7.0
+
+### Minor Changes
+
+- 9ed9511: Lets Postgres validate user-provided table identifier.
+  This means identifiers are now case insensitive unless you explitictly quote them.
+
 ## 0.6.3
 
 ### Patch Changes
