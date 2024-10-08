@@ -147,6 +147,22 @@ paths:
             select_columns_special:
               value: 'id,"Status-Check"'
               summary: Only include id and Status-Check columns, quoting the identifiers where necessary.
+        - name: replica
+          in: query
+          schema:
+            type: string
+            enum:
+              - default
+              - all
+          description: |-
+            Modifies the data sent in update and delete change messages.
+
+            When `replica=default` (the default) only changed columns are
+            included in the `value` of an update message and only the primary
+            keys are sent for a delete.
+
+            When set to `full` the entire row will be sent for updates and
+            deletes.
         # Headers
         - name: If-None-Match
           in: header
