@@ -6,6 +6,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   alias Electric.Replication.Changes.{Column, Relation}
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
+  alias Support.StubInspector
 
   defp shape! do
     assert {:ok, %Shape{where: %{query: "value = 'test'"}} = shape} =
@@ -250,4 +251,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
   def load_column_info({"public", "table"}, _),
     do: {:ok, [%{name: "id", type: :int8, pk_position: 0}]}
+
+  def load_relation(tbl, _),
+    do: StubInspector.load_relation(tbl, nil)
 end

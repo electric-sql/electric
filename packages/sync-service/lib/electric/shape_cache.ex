@@ -261,7 +261,7 @@ defmodule Electric.ShapeCache do
       # because the table name may have changed in the new relation
       # if there is no old relation, we use the new one
       rel = old_rel || relation
-      inspector.clean_column_info({rel.schema, rel.table}, inspector_opts)
+      inspector.clean({rel.schema, rel.table}, inspector_opts)
     end
 
     {:noreply, [], state}

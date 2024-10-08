@@ -214,6 +214,7 @@ defmodule Electric.Utils do
 
   @doc """
   Parses quoted names.
+  Lowercases unquoted names to match Postgres' case insensitivity.
 
   ## Examples
       iex> parse_quoted_name("foo")
@@ -224,6 +225,12 @@ defmodule Electric.Utils do
 
       iex> parse_quoted_name(~S|"fo""o"|)
       ~S|fo"o|
+
+      iex> parse_quoted_name(~S|"FooBar"|)
+      ~S|FooBar|
+
+      iex> parse_quoted_name(~S|FooBar|)
+      ~S|FooBar|
   """
   def parse_quoted_name(str) do
     if String.first(str) == ~s(") && String.last(str) == ~s(") do

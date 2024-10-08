@@ -36,6 +36,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
   def load_column_info({"public", "users"}, _),
     do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
 
+  def load_column_info(_, _),
+    do: :table_not_found
+
+  def load_relation(tbl, _),
+    do: Support.StubInspector.load_relation(tbl, nil)
+
   setup do
     start_link_supervised!({Registry, keys: :duplicate, name: @registry})
     :ok
@@ -67,7 +73,23 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == %{
                "offset" => ["has invalid format"],
-               "root_table" => ["table name does not match expected format"]
+               "root_table" => [
+                 "invalid name syntax"
+               ]
+             }
+    end
+
+    test "returns 400 when table does not exist" do
+      # this will pass table name validation
+      # but will fail to find the table
+      conn =
+        conn(:get, %{"root_table" => "_val1d_schëmaΦ$.Φtàble"}, "?offset=-1")
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "root_table" => ["table not found"]
              }
     end
 

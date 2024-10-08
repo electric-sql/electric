@@ -98,7 +98,11 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 400} = conn
 
-      assert %{"root_table" => ["table not found"]} = Jason.decode!(conn.resp_body)
+      assert %{
+               "root_table" => [
+                 ~s|Table "nonexistent" does not exist. If the table name contains capitals or special characters you must quote it.|
+               ]
+             } = Jason.decode!(conn.resp_body)
     end
 
     @tag additional_fields: "num INTEGER NOT NULL"
