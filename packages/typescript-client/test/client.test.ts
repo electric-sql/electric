@@ -342,7 +342,7 @@ describe(`Shape`, () => {
 
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
-      updateMode: ShapeStream.UpdateMode.FULL,
+      updateMode: `full`,
       signal: aborter.signal,
     })
     try {
