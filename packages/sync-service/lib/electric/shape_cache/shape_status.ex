@@ -67,7 +67,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @type t() :: %__MODULE__{
           persistent_kv: PersistentKV.t(),
           root: String.t(),
-          storage: Storage.t(),
+          storage: Storage.storage(),
           shape_meta_table: table()
         }
   @type option() :: unquote(NimbleOptions.option_typespec(@schema))
