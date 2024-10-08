@@ -44,9 +44,9 @@ defmodule Electric.ShapeCache.InMemoryStorage do
         table_base_name: table_base_name,
         electric_instance_id: electric_instance_id
       }) do
-    snapshot_table_name = :"#{table_base_name}.Snapshot_#{shape_id}"
-    log_table_name = :"#{table_base_name}.Log_#{shape_id}"
-    chunk_checkpoint_table_name = :"#{table_base_name}.ChunkCheckpoint_#{shape_id}"
+    snapshot_table_name = :"#{table_base_name}.#{tenant_id}.Snapshot_#{shape_id}"
+    log_table_name = :"#{table_base_name}.#{tenant_id}.Log_#{shape_id}"
+    chunk_checkpoint_table_name = :"#{table_base_name}.#{tenant_id}.ChunkCheckpoint_#{shape_id}"
 
     %__MODULE__{
       table_base_name: table_base_name,

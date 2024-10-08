@@ -124,7 +124,6 @@ defmodule Electric.TenantManager do
           shape_cache =
             {
               Electric.ShapeCache,
-              # TODO: keys of tenants are probably going to clash in the storage -> need to encode tenant id in the key
               electric_instance_id: electric_instance_id,
               tenant_id: tenant_id,
               storage: storage,
