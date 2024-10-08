@@ -20,8 +20,8 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
       {:ok, result} ->
         # We expect exactly one row because the query didn't fail
         # so the relation exists since we could cast it to a regclass
-        info = Enum.at(result.rows, 0)
-        {:ok, {Enum.at(info, 0), Enum.at(info, 1)}}
+        [[schema, table]] = result.rows
+        {:ok, {schema, table}}
 
       {:error, err} ->
         {:error, Exception.message(err)}
