@@ -23,6 +23,7 @@ import {
   SHAPE_ID_QUERY_PARAM,
   SHAPE_SCHEMA_HEADER,
   WHERE_QUERY_PARAM,
+  SEND_DELTAS_PARAM,
 } from './constants'
 
 /**
@@ -38,6 +39,17 @@ export interface ShapeStreamOptions<T = never> {
    * where clauses for the shape.
    */
   where?: string
+  /**
+   * If `sendDeltas` is `true` (the default) then Electric will only send the
+   * changed columns in an update.
+   *
+   * If it's `false` Electric will send the entire row with both changed and
+   * unchanged values.
+   *
+   * Setting `sendDeltas` to `false` will obviously result in higher bandwidth
+   * usage and so is not recommended.
+   */
+  sendDeltas?: boolean
   /**
    * The "offset" on the shape log. This is typically not set as the ShapeStream
    * will handle this automatically. A common scenario where you might pass an offset
@@ -148,6 +160,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #connected: boolean = false
   #shapeId?: string
   #schema?: Schema
+  #sendDeltas?: boolean = true
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     validateOptions(options)
@@ -155,6 +168,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#lastOffset = this.options.offset ?? `-1`
     this.#shapeId = this.options.shapeId
     this.#messageParser = new MessageParser<T>(options.parser)
+    this.#sendDeltas = this.options.sendDeltas
 
     const baseFetchClient =
       options.fetchClient ??
@@ -202,6 +216,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         if (this.#shapeId) {
           // This should probably be a header for better cache breaking?
           fetchUrl.searchParams.set(SHAPE_ID_QUERY_PARAM, this.#shapeId!)
+        }
+
+        if (!(this.#sendDeltas ?? true)) {
+          fetchUrl.searchParams.set(SEND_DELTAS_PARAM, `false`)
         }
 
         let response!: Response

@@ -13,7 +13,7 @@ defmodule Electric.LogItemsTest do
         relation: {"public", "test"}
       }
 
-      assert LogItems.from_change(record, 1, ["pk"]) ==
+      assert LogItems.from_change(record, 1, ["pk"], true) ==
                [
                  %{
                    offset: LogOffset.new(0, 0),
@@ -24,7 +24,7 @@ defmodule Electric.LogItemsTest do
                ]
 
       # And with empty PK
-      assert LogItems.from_change(record, 1, []) ==
+      assert LogItems.from_change(record, 1, [], true) ==
                [
                  %{
                    offset: LogOffset.new(0, 0),
@@ -43,7 +43,7 @@ defmodule Electric.LogItemsTest do
         relation: {"public", "test"}
       }
 
-      assert LogItems.from_change(record, 1, ["pk"]) ==
+      assert LogItems.from_change(record, 1, ["pk"], true) ==
                [
                  %{
                    offset: LogOffset.new(0, 0),
@@ -62,7 +62,7 @@ defmodule Electric.LogItemsTest do
         relation: {"public", "test"}
       }
 
-      assert LogItems.from_change(record, 1, []) ==
+      assert LogItems.from_change(record, 1, [], true) ==
                [
                  %{
                    offset: LogOffset.new(0, 0),
@@ -83,11 +83,32 @@ defmodule Electric.LogItemsTest do
           relation: {"public", "test"}
         })
 
-      assert LogItems.from_change(record, 1, ["pk"]) ==
+      assert LogItems.from_change(record, 1, ["pk"], true) ==
                [
                  %{
                    offset: LogOffset.new(0, 0),
                    value: %{"pk" => "10", "test" => "new"},
+                   key: "my_key",
+                   headers: %{relation: ["public", "test"], operation: :update, txid: 1}
+                 }
+               ]
+    end
+
+    test "when send_deltas=false sends entire row for updates" do
+      record =
+        Changes.UpdatedRecord.new(%{
+          key: "my_key",
+          old_record: %{"pk" => "10", "hello" => "world", "test" => "me"},
+          record: %{"pk" => "10", "hello" => "world", "test" => "new"},
+          log_offset: LogOffset.first(),
+          relation: {"public", "test"}
+        })
+
+      assert LogItems.from_change(record, 1, ["pk"], false) ==
+               [
+                 %{
+                   offset: LogOffset.new(0, 0),
+                   value: %{"pk" => "10", "hello" => "world", "test" => "new"},
                    key: "my_key",
                    headers: %{relation: ["public", "test"], operation: :update, txid: 1}
                  }
@@ -105,7 +126,7 @@ defmodule Electric.LogItemsTest do
           relation: {"public", "test"}
         })
 
-      assert LogItems.from_change(record, 1, ["pk"]) ==
+      assert LogItems.from_change(record, 1, ["pk"], true) ==
                [
                  %{
                    offset: LogOffset.new(0, 0),
@@ -143,7 +164,7 @@ defmodule Electric.LogItemsTest do
           relation: {"public", "test"}
         })
 
-      assert LogItems.from_change(record, 1, []) ==
+      assert LogItems.from_change(record, 1, [], true) ==
                [
                  %{
                    offset: LogOffset.new(0, 0),

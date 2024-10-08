@@ -38,6 +38,7 @@ stream.subscribe(messages => {
 ```
 
 By default, `ShapeStream` parses the following Postgres types into native JavaScript values:
+
 - `int2`, `int4`, `float4`, and `float8` are parsed into JavaScript `Number`
 - `int8` is parsed into a JavaScript `BigInt`
 - `bool` is parsed into a JavaScript `Boolean`
@@ -57,6 +58,28 @@ const stream = new ShapeStream({
   }
 })
 ```
+
+#### `sendDeltas`
+
+By default Electric only sends the changed columns in an update message -- it
+sends the deltas for an update, not the full row. If your use case requires the
+receipt of the full row, not just the changed columns, then disable the
+delta-mode for updates in your `ShapeStream`:
+
+```tsx
+import { ShapeStream } from "@electric-sql/client"
+
+const stream = new ShapeStream({
+  url: `http://localhost:3000/v1/shape/foo`,
+  sendDeltas: false,
+})
+```
+
+This is less efficient and will use much more bandwidth for the same shape,
+especially for tables with large static column values.
+
+Shapes with update deltas disabled are distinct from shapes with deltas
+enabled, even for the same table and where clause combination.
 
 ### `Shape`
 

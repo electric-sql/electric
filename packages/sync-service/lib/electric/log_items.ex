@@ -21,9 +21,10 @@ defmodule Electric.LogItems do
   @spec from_change(
           Changes.data_change(),
           txid :: non_neg_integer() | nil,
-          pk_cols :: [String.t()]
+          pk_cols :: [String.t()],
+          send_deltas :: boolean()
         ) :: [log_item(), ...]
-  def from_change(%Changes.NewRecord{} = change, txid, _) do
+  def from_change(%Changes.NewRecord{} = change, txid, _, _send_deltas) do
     [
       %{
         key: change.key,
@@ -34,7 +35,7 @@ defmodule Electric.LogItems do
     ]
   end
 
-  def from_change(%Changes.DeletedRecord{} = change, txid, pk_cols) do
+  def from_change(%Changes.DeletedRecord{} = change, txid, pk_cols, _send_deltas) do
     [
       %{
         key: change.key,
@@ -46,18 +47,18 @@ defmodule Electric.LogItems do
   end
 
   # `old_key` is nil when it's unchanged. This is not possible when there is no PK defined.
-  def from_change(%Changes.UpdatedRecord{old_key: nil} = change, txid, pk_cols) do
+  def from_change(%Changes.UpdatedRecord{old_key: nil} = change, txid, pk_cols, send_deltas) do
     [
       %{
         key: change.key,
-        value: Map.take(change.record, Enum.concat(pk_cols, change.changed_columns)),
+        value: update_values(change, pk_cols, send_deltas),
         headers: %{operation: :update, txid: txid, relation: Tuple.to_list(change.relation)},
         offset: change.log_offset
       }
     ]
   end
 
-  def from_change(%Changes.UpdatedRecord{} = change, txid, pk_cols) do
+  def from_change(%Changes.UpdatedRecord{} = change, txid, pk_cols, _send_deltas) do
     [
       %{
         key: change.old_key,
@@ -86,6 +87,14 @@ defmodule Electric.LogItems do
 
   defp take_pks_or_all(record, []), do: record
   defp take_pks_or_all(record, pks), do: Map.take(record, pks)
+
+  defp update_values(%{record: record, changed_columns: changed_columns}, pk_cols, true) do
+    Map.take(record, Enum.concat(pk_cols, changed_columns))
+  end
+
+  defp update_values(%{record: record}, _pk_cols, false) do
+    record
+  end
 
   @spec from_snapshot_row_stream(
           row_stream :: Enumerable.t(list()),

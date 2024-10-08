@@ -6,3 +6,4 @@ export const SHAPE_ID_QUERY_PARAM = `shape_id`
 export const OFFSET_QUERY_PARAM = `offset`
 export const WHERE_QUERY_PARAM = `where`
 export const LIVE_QUERY_PARAM = `live`
+export const SEND_DELTAS_PARAM = `send_deltas`
