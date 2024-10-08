@@ -32,7 +32,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
 
     Mock.ShapeStatus
-    |> expect(:initialise, 1, fn opts -> Electric.ShapeCache.ShapeStatus.initialise(opts) end)
+    |> expect(:initialise, 1, fn _opts -> {:ok, %{}} end)
     |> expect(:list_shapes, 1, fn _ -> [] end)
     # allow the ShapeCache to call this mock
     |> allow(self(), fn -> GenServer.whereis(Electric.ShapeCache) end)
