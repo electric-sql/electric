@@ -1,0 +1,12 @@
+Flask (BSD, 0.10.1) https://github.com/mitsuhiko/flask/raw/master/LICENSE
+gevent (MIT, 1.0.1) https://github.com/gevent/gevent/raw/master/LICENSE
+greenlet (MIT, 0.4.5) https://github.com/python-greenlet/greenlet/raw/master/LICENSE
+itsdangerous (BSD, 0.24) https://github.com/mitsuhiko/itsdangerous/raw/master/LICENSE
+Jinja2 (BSD, 2.7.3) https://github.com/mitsuhiko/jinja2/raw/master/LICENSE
+locustio (MIT, 0.7.2) https://github.com/locustio/locust/raw/master/LICENSE
+MarkupSafe (BSD, 0.23) https://github.com/mitsuhiko/markupsafe/raw/master/LICENSE
+msgpack-python (Apache, 0.4.6) https://github.com/msgpack/msgpack-python/raw/master/COPYING
+pyzmq (BSD, 14.5.0) https://github.com/zeromq/pyzmq/raw/master/COPYING.BSD
+requests (Apache, 2.6.2) https://github.com/kennethreitz/requests/raw/master/LICENSE
+Werkzeug (BSD, 0.10.4) https://github.com/mitsuhiko/werkzeug/raw/master/LICENSE
+psycopg2-binary  2.9.9    GNU Library or Lesser General Public License (LGPL)  https://github.com/psycopg/psycopg2/blob/master/LICENSE
