@@ -58,7 +58,7 @@ export interface ShapeStreamOptions<T = never> {
    * HTTP headers to attach to requests made by the client.
    * Can be used for adding authentication headers.
    */
-  headers?: { [key: string]: string }
+  headers?: Record<string, string>
 
   /**
    * Automatically fetch updates to the Shape. If you just want to sync the current
