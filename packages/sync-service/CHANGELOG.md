@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.7.1
+
+### Patch Changes
+
+- e499c05: Add the OTEL_DEBUG environment variable which is a flag to print Open Telemetry spans to stdout.
+
 ## 0.7.0
 
 ### Minor Changes
