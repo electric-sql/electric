@@ -108,15 +108,15 @@ describe(`HTTP Sync`, () => {
     expect(values).toHaveLength(0)
   })
 
-  it(`returns a header with the server shape id`, async ({
+  it(`returns a header with the server shape handle`, async ({
     issuesTableUrl,
   }) => {
     const res = await fetch(
       `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
-    const shapeId = res.headers.get(`electric-shape-id`)
-    expect(shapeId).to.exist
+    const shapeHandle = res.headers.get(`electric-shape-handle`)
+    expect(shapeHandle).to.exist
   })
 
   it(`returns a header with the chunk's last offset`, async ({
@@ -514,7 +514,7 @@ describe(`HTTP Sync`, () => {
       subscribe: false,
       signal: newAborter.signal,
       offset: lastOffset,
-      shapeId: issueStream.shapeId,
+      shapeHandle: issueStream.shapeHandle,
     })
 
     await h.forEachMessage(newIssueStream, newAborter, (res, msg, nth) => {
@@ -581,7 +581,7 @@ describe(`HTTP Sync`, () => {
     const midMessage = messages.slice(-6)[0]
     assert(`offset` in midMessage)
     const midOffset = midMessage.offset
-    const shapeId = res.headers.get(`electric-shape-id`)
+    const shapeHandle = res.headers.get(`electric-shape-handle`)
     const etag = res.headers.get(`etag`)
     assert(etag !== null, `Response should have etag header`)
 
@@ -597,7 +597,7 @@ describe(`HTTP Sync`, () => {
 
     // Get etag for catchup
     const catchupEtagRes = await fetch(
-      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=${midOffset}&shape_id=${shapeId}`,
+      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=${midOffset}&shape_handle=${shapeHandle}`,
       {}
     )
     const catchupEtag = catchupEtagRes.headers.get(`etag`)
@@ -606,7 +606,7 @@ describe(`HTTP Sync`, () => {
     // Catch-up offsets should also use the same etag as they're
     // also working through the end of the current log.
     const catchupEtagValidation = await fetch(
-      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=${midOffset}&shape_id=${shapeId}`,
+      `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=${midOffset}&shape_handle=${shapeHandle}`,
       {
         headers: { 'If-None-Match': catchupEtag },
       }
@@ -650,7 +650,7 @@ describe(`HTTP Sync`, () => {
       }
     })
 
-    await clearShape(issuesTableUrl, issueStream.shapeId!)
+    await clearShape(issuesTableUrl, issueStream.shapeHandle!)
 
     expect(shapeData).toEqual(
       new Map([[`${issuesTableKey}/"${id1}"`, { id: id1, title: `foo1` }]])
@@ -723,7 +723,7 @@ describe(`HTTP Sync`, () => {
       subscribe: false,
       signal: newAborter.signal,
       offset: lastOffset,
-      shapeId: issueStream.shapeId,
+      shapeHandle: issueStream.shapeHandle,
       fetchClient: fetchWrapper,
     })
 
@@ -769,7 +769,7 @@ describe(`HTTP Sync`, () => {
       // that the existing shape is deleted and some more data is inserted
       if (numRequests === 1) {
         await insertIssues({ id: secondRowId, title: `foo2` })
-        await clearIssuesShape(issueStream.shapeId)
+        await clearIssuesShape(issueStream.shapeHandle)
       }
 
       numRequests++
@@ -791,7 +791,7 @@ describe(`HTTP Sync`, () => {
 
     expect.assertions(11)
 
-    let originalShapeId: string | undefined
+    let originalShapeHandle: string | undefined
     let upToDateReachedCount = 0
     await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
       // shapeData.set(msg.key, msg.value)
@@ -824,8 +824,8 @@ describe(`HTTP Sync`, () => {
             title: `foo1`,
             priority: 10,
           })
-          expect(issueStream.shapeId).to.exist
-          originalShapeId = issueStream.shapeId
+          expect(issueStream.shapeHandle).to.exist
+          originalShapeHandle = issueStream.shapeHandle
           break
         case 1:
         case 2:
@@ -834,21 +834,21 @@ describe(`HTTP Sync`, () => {
 
           if (msg.value.id == rowId) {
             // message is the initial row again as it is a new shape
-            // with different shape id
+            // with different shape handle
             expect(msg.value).toEqual({
               id: rowId,
               title: `foo1`,
               priority: 10,
             })
-            expect(issueStream.shapeId).not.toBe(originalShapeId)
+            expect(issueStream.shapeHandle).not.toBe(originalShapeHandle)
           } else {
-            // should get the second row as well with the new shape ID
+            // should get the second row as well with the new shape handle
             expect(msg.value).toEqual({
               id: secondRowId,
               title: `foo2`,
               priority: 10,
             })
-            expect(issueStream.shapeId).not.toBe(originalShapeId)
+            expect(issueStream.shapeHandle).not.toBe(originalShapeHandle)
           }
           break
         default:

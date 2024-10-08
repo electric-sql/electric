@@ -6,7 +6,7 @@ import {
   BackoffDefaults,
   createFetchWithChunkBuffer,
 } from '../src/fetch'
-import { CHUNK_LAST_OFFSET_HEADER, SHAPE_ID_HEADER } from '../src/constants'
+import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
 
 describe(`createFetchWithBackoff`, () => {
   const initialDelay = 10
@@ -181,7 +181,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     const initialResponse = new Response(`initial chunk`, {
       status: 200,
       headers: responseHeaders({
-        [SHAPE_ID_HEADER]: `123`,
+        [SHAPE_HANDLE_HEADER]: `123`,
         [CHUNK_LAST_OFFSET_HEADER]: `456`,
       }),
     })
@@ -197,7 +197,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(result).toBe(initialResponse)
 
     // Check if the next chunk was prefetched
-    const nextUrl = `${baseUrl}?shape_id=123&offset=456`
+    const nextUrl = `${baseUrl}?shape_handle=123&offset=456`
     expect(mockFetch).toHaveBeenCalledWith(nextUrl, expect.anything())
   })
 
@@ -214,7 +214,7 @@ describe(`createFetchWithChunkBuffer`, () => {
         new Response(`next chunk`, {
           status: 200,
           headers: responseHeaders({
-            [SHAPE_ID_HEADER]: `123`,
+            [SHAPE_HANDLE_HEADER]: `123`,
             [CHUNK_LAST_OFFSET_HEADER]: `${idx}`,
           }),
         })
@@ -229,23 +229,23 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledTimes(1 + maxPrefetchNum)
     expect(mockFetch).toHaveBeenNthCalledWith(
       2,
-      `${baseUrl}?shape_id=123&offset=0`,
+      `${baseUrl}?shape_handle=123&offset=0`,
       expect.anything()
     )
     expect(mockFetch).toHaveBeenNthCalledWith(
       3,
-      `${baseUrl}?shape_id=123&offset=1`,
+      `${baseUrl}?shape_handle=123&offset=1`,
       expect.anything()
     )
 
     // Second request consumes one of the prefetched responses and
     // next one fires up
-    await fetchWrapper(`${baseUrl}?shape_id=123&offset=0`)
+    await fetchWrapper(`${baseUrl}?shape_handle=123&offset=0`)
     await sleep()
     expect(mockFetch).toHaveBeenCalledTimes(1 + maxPrefetchNum + 1)
     expect(mockFetch).toHaveBeenNthCalledWith(
       4,
-      `${baseUrl}?shape_id=123&offset=2`,
+      `${baseUrl}?shape_handle=123&offset=2`,
       expect.anything()
     )
   })
@@ -271,7 +271,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     const initialResponse = new Response(`initial chunk`, {
       status: 200,
       headers: responseHeaders({
-        [SHAPE_ID_HEADER]: `123`,
+        [SHAPE_HANDLE_HEADER]: `123`,
         [CHUNK_LAST_OFFSET_HEADER]: `456`,
       }),
     })
@@ -283,7 +283,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(result).toBe(initialResponse)
 
     // Prefetch should have been attempted but failed
-    const nextUrl = `${baseUrl}?shape_id=123&offset=456`
+    const nextUrl = `${baseUrl}?shape_handle=123&offset=456`
     expect(mockFetch).toHaveBeenCalledWith(nextUrl, expect.anything())
 
     // One for the main request, one for the prefetch
@@ -301,7 +301,7 @@ describe(`createFetchWithChunkBuffer`, () => {
         return new Response(`chunk`, {
           status: 200,
           headers: responseHeaders({
-            [SHAPE_ID_HEADER]: `123`,
+            [SHAPE_HANDLE_HEADER]: `123`,
             [CHUNK_LAST_OFFSET_HEADER]: `${idx}`,
           }),
         })
@@ -325,7 +325,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenNthCalledWith(1, baseUrl)
     expect(mockFetch).toHaveBeenNthCalledWith(
       2,
-      `${baseUrl}?shape_id=123&offset=0`,
+      `${baseUrl}?shape_handle=123&offset=0`,
       expect.anything()
     )
 
@@ -333,12 +333,12 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenNthCalledWith(3, altUrl)
     expect(mockFetch).toHaveBeenNthCalledWith(
       4,
-      `${altUrl}?shape_id=123&offset=2`,
+      `${altUrl}?shape_handle=123&offset=2`,
       expect.anything()
     )
     expect(mockFetch).toHaveBeenNthCalledWith(
       5,
-      `${altUrl}?shape_id=123&offset=3`,
+      `${altUrl}?shape_handle=123&offset=3`,
       expect.anything()
     )
   })
@@ -354,7 +354,7 @@ describe(`createFetchWithChunkBuffer`, () => {
         return new Response(`chunk`, {
           status: 200,
           headers: responseHeaders({
-            [SHAPE_ID_HEADER]: `123`,
+            [SHAPE_HANDLE_HEADER]: `123`,
             [CHUNK_LAST_OFFSET_HEADER]: `${idx}`,
           }),
         })
