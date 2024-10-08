@@ -9,8 +9,16 @@ defmodule Electric.Shapes.Shape do
   alias Electric.Replication.Changes
 
   @enforce_keys [:root_table, :root_table_id]
-  defstruct [:root_table, :root_table_id, :table_info, :where, :selected_columns]
+  defstruct [
+    :root_table,
+    :root_table_id,
+    :table_info,
+    :where,
+    :selected_columns,
+    replica: :default
+  ]
 
+  @type replica() :: :full | :default
   @type table_info() :: %{
           columns: [Inspector.column_info(), ...],
           pk: [String.t(), ...]
@@ -22,7 +30,8 @@ defmodule Electric.Shapes.Shape do
             Electric.relation() => table_info()
           },
           where: Electric.Replication.Eval.Expr.t() | nil,
-          selected_columns: [String.t(), ...] | nil
+          selected_columns: [String.t(), ...] | nil,
+          replica: replica()
         }
 
   @type table_with_where_clause() :: {Electric.relation(), String.t() | nil}
@@ -60,15 +69,18 @@ defmodule Electric.Shapes.Shape do
   @shape_schema NimbleOptions.new!(
                   where: [type: {:or, [:string, nil]}],
                   columns: [type: {:or, [{:list, :string}, nil]}],
+                  replica: [
+                    type: {:custom, __MODULE__, :verify_replica, []},
+                    default: :default
+                  ],
                   inspector: [
                     type: :mod_arg,
                     default: {Electric.Postgres.Inspector, Electric.DbPool}
                   ]
                 )
   def new(table, opts) do
-    opts = NimbleOptions.validate!(opts, @shape_schema)
-
-    with inspector <- Access.fetch!(opts, :inspector),
+    with {:ok, opts} <- NimbleOptions.validate(opts, @shape_schema),
+         inspector <- Access.fetch!(opts, :inspector),
          {:ok, %{relation: table, relation_id: relation_id}} <- validate_table(table, inspector),
          {:ok, column_info, pk_cols} <- load_column_info(table, inspector),
          {:ok, selected_columns} <-
@@ -81,7 +93,8 @@ defmodule Electric.Shapes.Shape do
          root_table_id: relation_id,
          table_info: %{table => %{pk: pk_cols, columns: column_info}},
          where: where,
-         selected_columns: selected_columns
+         selected_columns: selected_columns,
+         replica: Access.get(opts, :replica, :default)
        }}
     end
   end
@@ -164,6 +177,14 @@ defmodule Electric.Shapes.Shape do
         end
     end
   end
+
+  def verify_replica(mode) when mode in [:full, "full"], do: {:ok, :full}
+  def verify_replica(mode) when mode in [:default, "default"], do: {:ok, :default}
+
+  def verify_replica(invalid),
+    do:
+      {:error,
+       "Invalid value for replica: #{inspect(invalid)}. Expecting one of `full` or `default`"}
 
   @doc """
   List tables that are a part of this shape.
