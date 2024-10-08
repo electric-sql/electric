@@ -1051,7 +1051,7 @@ defmodule Electric.ShapeCacheTest do
       }
 
       Mock.Inspector
-      |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
+      |> expect(:clean, 1, fn {"public", "test_table"}, _ -> true end)
       |> allow(self(), opts[:server])
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.shape_log_collector)
@@ -1081,13 +1081,13 @@ defmodule Electric.ShapeCacheTest do
       }
 
       Mock.Inspector
-      |> expect(:clean_column_info, 1, fn _, _ -> true end)
+      |> expect(:clean, 1, fn _, _ -> true end)
       |> allow(self(), opts[:server])
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.shape_log_collector)
 
       Mock.Inspector
-      |> expect(:clean_column_info, 0, fn _, _ -> true end)
+      |> expect(:clean, 0, fn _, _ -> true end)
       |> allow(self(), opts[:server])
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.shape_log_collector)
@@ -1114,7 +1114,7 @@ defmodule Electric.ShapeCacheTest do
       }
 
       Mock.Inspector
-      |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
+      |> expect(:clean, 1, fn {"public", "test_table"}, _ -> true end)
       |> allow(self(), opts[:server])
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.shape_log_collector)
@@ -1146,13 +1146,13 @@ defmodule Electric.ShapeCacheTest do
       }
 
       Mock.Inspector
-      |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
+      |> expect(:clean, 1, fn {"public", "test_table"}, _ -> true end)
       |> allow(self(), opts[:server])
 
       assert :ok = ShapeLogCollector.handle_relation_msg(old_rel, ctx.shape_log_collector)
 
       Mock.Inspector
-      |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
+      |> expect(:clean, 1, fn {"public", "test_table"}, _ -> true end)
       |> allow(self(), opts[:server])
 
       log =
@@ -1192,13 +1192,13 @@ defmodule Electric.ShapeCacheTest do
       }
 
       Mock.Inspector
-      |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
+      |> expect(:clean, 1, fn {"public", "test_table"}, _ -> true end)
       |> allow(self(), opts[:server])
 
       assert :ok = ShapeLogCollector.handle_relation_msg(old_rel, ctx.shape_log_collector)
 
       Mock.Inspector
-      |> expect(:clean_column_info, 1, fn {"public", "test_table"}, _ -> true end)
+      |> expect(:clean, 1, fn {"public", "test_table"}, _ -> true end)
       |> allow(self(), opts[:server])
 
       log =

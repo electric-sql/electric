@@ -48,6 +48,10 @@ defmodule Electric.Shapes.ConsumerTest do
     {"public", "test_table"}, _ -> {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
   end)
 
+  stub(Mock.Inspector, :load_relation, fn
+    tbl, _ -> StubInspector.load_relation(tbl, nil)
+  end)
+
   setup :with_electric_instance_id
   setup :set_mox_from_context
   setup :verify_on_exit!
