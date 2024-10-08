@@ -66,7 +66,7 @@ defmodule Support.TestStorage do
 
   @impl Electric.ShapeCache.Storage
   def set_shape_definition(shape, {parent, shape_id, _, storage}) do
-    send(parent, {__MODULE__, :set_shape_definition, shape_id})
+    send(parent, {__MODULE__, :set_shape_definition, shape_id, shape})
     Storage.set_shape_definition(shape, storage)
   end
 

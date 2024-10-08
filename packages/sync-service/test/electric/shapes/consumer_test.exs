@@ -150,6 +150,8 @@ defmodule Electric.Shapes.ConsumerTest do
               id: {Shapes.Consumer.Supervisor, shape_id}
             )
 
+            assert_receive {Support.TestStorage, :set_shape_definition, ^shape_id, ^shape}
+
           consumer
         end
 
