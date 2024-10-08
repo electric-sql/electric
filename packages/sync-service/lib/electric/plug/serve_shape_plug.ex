@@ -36,6 +36,7 @@ defmodule Electric.Plug.ServeShapePlug do
       field(:live, :boolean, default: false)
       field(:where, :string)
       field(:shape_definition, :string)
+      field(:update_mode, Ecto.Enum, values: [:modified, :full], default: :modified)
     end
 
     def validate(params, opts) do
@@ -104,8 +105,9 @@ defmodule Electric.Plug.ServeShapePlug do
     def cast_root_table(%Ecto.Changeset{} = changeset, opts) do
       table = fetch_change!(changeset, :root_table)
       where = fetch_field!(changeset, :where)
+      update_mode = fetch_field!(changeset, :update_mode)
 
-      case Shapes.Shape.new(table, opts ++ [where: where]) do
+      case Shapes.Shape.new(table, opts ++ [where: where, update_mode: update_mode]) do
         {:ok, result} ->
           put_change(changeset, :shape_definition, result)
 
@@ -541,6 +543,7 @@ defmodule Electric.Plug.ServeShapePlug do
       "shape.where" => assigns[:where],
       "shape.root_table" => assigns[:root_table],
       "shape.definition" => assigns[:shape_definition],
+      "shape.update_mode" => assigns[:update_mode],
       "shape_req.is_live" => assigns[:live],
       "shape_req.offset" => assigns[:offset],
       "shape_req.is_shape_rotated" => assigns[:ot_is_shape_rotated] || false,

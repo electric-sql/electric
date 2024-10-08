@@ -10,8 +10,9 @@ defmodule Electric.Shapes.Shape do
   alias Electric.Utils
 
   @enforce_keys [:root_table]
-  defstruct [:root_table, :table_info, :where]
+  defstruct [:root_table, :table_info, :where, update_mode: :modified]
 
+  @type update_mode() :: :full | :modified
   @type table_info() :: %{
           columns: [Inspector.column_info(), ...],
           pk: [String.t(), ...]
@@ -21,7 +22,8 @@ defmodule Electric.Shapes.Shape do
           table_info: %{
             Electric.relation() => table_info()
           },
-          where: Electric.Replication.Eval.Expr.t() | nil
+          where: Electric.Replication.Eval.Expr.t() | nil,
+          update_mode: update_mode()
         }
 
   @type table_with_where_clause() :: {Electric.relation(), String.t() | nil}
@@ -56,15 +58,18 @@ defmodule Electric.Shapes.Shape do
 
   @shape_schema NimbleOptions.new!(
                   where: [type: {:or, [:string, nil]}],
+                  update_mode: [
+                    type: {:custom, __MODULE__, :verify_update_mode, []},
+                    default: :modified
+                  ],
                   inspector: [
                     type: :mod_arg,
                     default: {Electric.Postgres.Inspector, Electric.DbPool}
                   ]
                 )
   def new(table, opts) do
-    opts = NimbleOptions.validate!(opts, @shape_schema)
-
-    with {:ok, table} <- validate_table(table),
+    with {:ok, opts} <- NimbleOptions.validate(opts, @shape_schema),
+         {:ok, table} <- validate_table(table),
          {:ok, column_info, pk_cols} <- load_column_info(table, Access.fetch!(opts, :inspector)),
          refs = Inspector.columns_to_expr(column_info),
          {:ok, where} <- maybe_parse_where_clause(Access.get(opts, :where), refs) do
@@ -72,7 +77,8 @@ defmodule Electric.Shapes.Shape do
        %__MODULE__{
          root_table: table,
          table_info: %{table => %{pk: pk_cols, columns: column_info}},
-         where: where
+         where: where,
+         update_mode: Access.get(opts, :update_mode, :modified)
        }}
     end
   end
@@ -115,6 +121,14 @@ defmodule Electric.Shapes.Shape do
         {:error, ["table name does not match expected format"]}
     end
   end
+
+  def verify_update_mode(mode) when mode in [:full, "full"], do: {:ok, :full}
+  def verify_update_mode(mode) when mode in [:modified, "modified"], do: {:ok, :modified}
+
+  def verify_update_mode(invalid),
+    do:
+      {:error,
+       "Invalid value for update_mode: #{inspect(invalid)}. Expecting one of `full` or `modified`"}
 
   @doc """
   List tables that are a part of this shape.

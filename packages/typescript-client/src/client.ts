@@ -23,7 +23,10 @@ import {
   SHAPE_ID_QUERY_PARAM,
   SHAPE_SCHEMA_HEADER,
   WHERE_QUERY_PARAM,
+  UPDATE_MODE_PARAM,
 } from './constants'
+
+type UpdateMode = `full` | `modified`
 
 /**
  * Options for constructing a ShapeStream.
@@ -38,6 +41,17 @@ export interface ShapeStreamOptions<T = never> {
    * where clauses for the shape.
    */
   where?: string
+  /**
+   * If `updateMode` is `modified` (the default) then Electric will only send the
+   * changed columns in an update.
+   *
+   * If it's `full` Electric will send the entire row with both changed and
+   * unchanged values.
+   *
+   * Setting `updateMode` to `full` will obviously result in higher bandwidth
+   * usage and so is not recommended.
+   */
+  updateMode?: UpdateMode
   /**
    * The "offset" on the shape log. This is typically not set as the ShapeStream
    * will handle this automatically. A common scenario where you might pass an offset
@@ -118,6 +132,11 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
 export class ShapeStream<T extends Row<unknown> = Row>
   implements ShapeStreamInterface<T>
 {
+  static readonly UpdateMode = {
+    FULL: `full` as UpdateMode,
+    MODIFIED: `modified` as UpdateMode,
+  }
+
   readonly options: ShapeStreamOptions<GetExtensions<T>>
 
   readonly #fetchClient: typeof fetch
@@ -141,6 +160,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #connected: boolean = false
   #shapeId?: string
   #schema?: Schema
+  #updateMode?: UpdateMode
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     validateOptions(options)
@@ -148,6 +168,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#lastOffset = this.options.offset ?? `-1`
     this.#shapeId = this.options.shapeId
     this.#messageParser = new MessageParser<T>(options.parser)
+    this.#updateMode = this.options.updateMode
 
     const baseFetchClient =
       options.fetchClient ??
@@ -195,6 +216,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
         if (this.#shapeId) {
           // This should probably be a header for better cache breaking?
           fetchUrl.searchParams.set(SHAPE_ID_QUERY_PARAM, this.#shapeId!)
+        }
+
+        if (
+          (this.#updateMode ?? ShapeStream.UpdateMode.MODIFIED) ==
+          ShapeStream.UpdateMode.FULL
+        ) {
+          fetchUrl.searchParams.set(
+            UPDATE_MODE_PARAM,
+            ShapeStream.UpdateMode.FULL
+          )
         }
 
         let response!: Response

@@ -164,6 +164,16 @@ defmodule Electric.Shapes.ShapeTest do
       assert {:error, "At location 6" <> _} =
                Shape.new("other_table", @opts ++ [where: "value + 1 > 10"])
     end
+
+    test "assigns the correct update_mode value" do
+      assert {:ok, %Shape{update_mode: :modified}} =
+               Shape.new("other_table", @opts ++ [update_mode: :modified])
+
+      assert {:ok, %Shape{update_mode: :full}} =
+               Shape.new("other_table", @opts ++ [update_mode: :full])
+
+      assert {:error, _} = Shape.new("other_table", @opts ++ [update_mode: :teapot])
+    end
   end
 
   describe "new!/2" do
@@ -191,6 +201,19 @@ defmodule Electric.Shapes.ShapeTest do
 
       assert Shape.hash(%Shape{root_table: {"public", "table"}}) !=
                Shape.hash(%Shape{root_table: {"public", "table2"}})
+    end
+
+    test "different values of `send_delta` produce differing ids" do
+      refute Shape.hash(%Shape{
+               root_table: {"public", "table2"},
+               where: "something = true",
+               update_mode: :modified
+             }) ==
+               Shape.hash(%Shape{
+                 root_table: {"public", "table2"},
+                 where: "something = true",
+                 update_mode: :full
+               })
     end
   end
 
