@@ -53,7 +53,7 @@ defmodule Electric.TenantManager do
   """
   @spec get_tenant(String.t(), Keyword.t()) :: {:ok, Electric.Tenant.t()} | {:error, :not_found}
   def get_tenant(tenant_id, opts \\ []) do
-    server = Keyword.get(opts, :server, __MODULE__)
+    server = Keyword.get(opts, :tenant_manager, __MODULE__)
     GenServer.call(server, {:get_tenant, tenant_id})
   end
 
@@ -61,9 +61,9 @@ defmodule Electric.TenantManager do
   Creates a new tenant for the provided database URL.
   """
   @spec create_tenant(String.t(), Keyword.t(), Keyword.t()) ::
-          {:ok, Electric.Tenant.t()} | {:error, String.t()}
+          :ok | {:error, String.t()}
   def create_tenant(tenant_id, connection_opts, opts \\ []) do
-    server = Keyword.get(opts, :server, __MODULE__)
+    server = Keyword.get(opts, :tenant_manager, __MODULE__)
 
     # {:ok, database_url_config} = Electric.Config.parse_postgresql_uri(db_url)
     # connection_opts = [ipv6: db_use_ipv6] ++ database_url_config
@@ -205,7 +205,7 @@ defmodule Electric.TenantManager do
       case GenServer.call(server, {:store_tenant, tenant}) do
         :tenant_already_exists -> {:error, :tenant_already_exists}
         :db_already_in_use -> {:error, :db_already_in_use}
-        :ok -> {:ok, tenant}
+        :ok -> :ok
       end
     end
   end

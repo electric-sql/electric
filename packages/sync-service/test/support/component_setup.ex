@@ -165,6 +165,8 @@ defmodule Support.ComponentSetup do
 
   def build_router_opts(ctx, overrides \\ []) do
     [
+      # TODO: make a with_tenant_manager function and add it in with_complete_stack
+      tenant_manager: ctx.tenant_manager,
       storage: ctx.storage,
       registry: ctx.registry,
       shape_cache: ctx.shape_cache,
