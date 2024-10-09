@@ -150,6 +150,8 @@ defmodule Electric.Shapes.ConsumerTest do
               id: {Shapes.Consumer.Supervisor, shape_id}
             )
 
+          assert_receive {Support.TestStorage, :set_shape_definition, ^shape_id, ^shape}
+
           consumer
         end
 
@@ -547,7 +549,7 @@ defmodule Electric.Shapes.ConsumerTest do
     end
 
     def init(_opts) do
-      {:ok, %{shapes: %{}, crashing: %{}}}
+      {:ok, %{shapes: %{}, crashing: %{}, stored_shapes: %{}}}
     end
 
     def handle_call({:crash_once, shape_id}, _from, state) do
@@ -558,6 +560,14 @@ defmodule Electric.Shapes.ConsumerTest do
       {crash?, crashing} = Map.pop(state.crashing, shape_id, false)
 
       {:reply, crash?, %{state | crashing: crashing}}
+    end
+
+    def handle_call({:set_shape_definition, shape_id, shape}, _from, state) do
+      {:reply, :ok, %{state | stored_shapes: Map.put(state.stored_shapes, shape_id, shape)}}
+    end
+
+    def handle_call({:get_all_stored_shapes}, _from, state) do
+      {:reply, {:ok, state.stored_shapes}, state}
     end
 
     def handle_call({:get_current_position, shape_id}, _from, state) do
@@ -601,6 +611,14 @@ defmodule Electric.Shapes.ConsumerTest do
 
     def initialise(_opts) do
       :ok
+    end
+
+    def get_all_stored_shapes(opts) do
+      GenServer.call(opts.backend, {:get_all_stored_shapes})
+    end
+
+    def set_shape_definition(shape, opts) do
+      GenServer.call(opts.backend, {:set_shape_definition, opts.shape_id, shape})
     end
 
     def snapshot_started?(opts) do

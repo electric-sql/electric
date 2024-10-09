@@ -10,13 +10,23 @@ defmodule Electric.ShapeCache.FileStorage do
   @version 2
   @version_key :version
 
+  @shape_definition_file_name "shape_defintion.json"
+
   @xmin_key :snapshot_xmin
   @snapshot_meta_key :snapshot_meta
   @snapshot_started_key :snapshot_started
 
   @behaviour Electric.ShapeCache.Storage
 
-  defstruct [:base_path, :shape_id, :db, :cubdb_dir, :snapshot_dir, version: @version]
+  defstruct [
+    :base_path,
+    :shape_id,
+    :db,
+    :cubdb_dir,
+    :shape_definition_dir,
+    :snapshot_dir,
+    version: @version
+  ]
 
   @impl Electric.ShapeCache.Storage
   def shared_opts(opts) do
@@ -37,7 +47,8 @@ defmodule Electric.ShapeCache.FileStorage do
       shape_id: shape_id,
       db: name(electric_instance_id, shape_id),
       cubdb_dir: Path.join([base_path, shape_id, "cubdb"]),
-      snapshot_dir: Path.join([base_path, shape_id, "snapshots"])
+      snapshot_dir: Path.join([base_path, shape_id, "snapshots"]),
+      shape_definition_dir: Path.join([base_path, shape_id])
     }
   end
 
@@ -62,7 +73,8 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   defp initialise_filesystem(opts) do
-    with :ok <- File.mkdir_p(opts.cubdb_dir),
+    with :ok <- File.mkdir_p(opts.shape_definition_dir),
+         :ok <- File.mkdir_p(opts.cubdb_dir),
          :ok <- File.mkdir_p(opts.snapshot_dir) do
       :ok
     end
@@ -73,11 +85,59 @@ defmodule Electric.ShapeCache.FileStorage do
     stored_version = stored_version(opts)
 
     if stored_version != opts.version || snapshot_xmin(opts) == nil ||
+         not File.exists?(shape_definition_path(opts)) ||
          not CubDB.has_key?(opts.db, @snapshot_meta_key) do
       cleanup!(opts)
     end
 
     CubDB.put(opts.db, @version_key, @version)
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def set_shape_definition(shape, %FS{} = opts) do
+    file_path = shape_definition_path(opts)
+    encoded_shape = Jason.encode!(shape)
+
+    case File.write(file_path, encoded_shape, [:exclusive]) do
+      :ok ->
+        :ok
+
+      {:error, :eexist} ->
+        # file already exists - by virtue of the shape ID being the hash of the
+        # definition we do not need to compare them
+        :ok
+
+      {:error, reason} ->
+        raise "Failed to write shape definition to file: #{reason}"
+    end
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def get_all_stored_shapes(%{base_path: base_path}) do
+    case File.ls(base_path) do
+      {:ok, shape_ids} ->
+        Enum.reduce(shape_ids, %{}, fn shape_id, acc ->
+          shape_def_path =
+            shape_definition_path(%{shape_definition_dir: Path.join(base_path, shape_id)})
+
+          with {:ok, shape_def_encoded} <- File.read(shape_def_path),
+               {:ok, shape_def_json} <- Jason.decode(shape_def_encoded),
+               shape = Electric.Shapes.Shape.from_json_safe!(shape_def_json) do
+            Map.put(acc, shape_id, shape)
+          else
+            # if the shape definition file cannot be read/decoded, just ignore it
+            {:error, _reason} -> acc
+          end
+        end)
+        |> then(&{:ok, &1})
+
+      {:error, :enoent} ->
+        # if not present, there's no stored shapes
+        {:ok, %{}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @impl Electric.ShapeCache.Storage
@@ -253,7 +313,13 @@ defmodule Electric.ShapeCache.FileStorage do
 
     {:ok, _} = File.rm_rf(shape_snapshot_path(opts))
 
+    {:ok, _} = File.rm_rf(shape_definition_path(opts))
+
     :ok
+  end
+
+  defp shape_definition_path(%{shape_definition_dir: shape_definition_dir} = _opts) do
+    Path.join(shape_definition_dir, @shape_definition_file_name)
   end
 
   defp keys_from_range(min_key, max_key, opts) do

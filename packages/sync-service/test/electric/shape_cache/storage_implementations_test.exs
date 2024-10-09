@@ -1,6 +1,7 @@
 defmodule Electric.ShapeCache.StorageImplimentationsTest do
   use ExUnit.Case, async: true
 
+  alias Electric.Shapes.Shape
   alias Electric.ShapeCache.FileStorage
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
@@ -14,6 +15,15 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   @moduletag :tmp_dir
 
   @shape_id "the-shape-id"
+  @shape %Shape{
+    root_table: {"public", "items"},
+    table_info: %{
+      {"public", "items"} => %{
+        columns: [%{name: "id", type: :text}, %{name: "value", type: :text}],
+        pk: ["id"]
+      }
+    }
+  }
 
   @snapshot_offset LogOffset.first()
   @snapshot_offset_encoded to_string(@snapshot_offset)
@@ -429,12 +439,30 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
       setup :start_storage
 
+      test "removes the shape if the shape definition has not been set", %{
+        module: storage,
+        opts: opts
+      } do
+        storage.initialise(opts)
+
+        # storage.set_shape_definition(@shape, opts)
+        storage.mark_snapshot_as_started(opts)
+        storage.make_new_snapshot!(@data_stream, opts)
+        storage.set_snapshot_xmin(11, opts)
+        assert storage.snapshot_started?(opts)
+
+        storage.initialise(opts)
+
+        refute storage.snapshot_started?(opts)
+      end
+
       test "removes the shape if the snapshot_xmin has not been set", %{
         module: storage,
         opts: opts
       } do
         storage.initialise(opts)
 
+        storage.set_shape_definition(@shape, opts)
         storage.mark_snapshot_as_started(opts)
         storage.make_new_snapshot!(@data_stream, opts)
         # storage.set_snapshot_xmin(11, opts)
@@ -451,6 +479,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       } do
         storage.initialise(opts)
 
+        storage.set_shape_definition(@shape, opts)
         storage.mark_snapshot_as_started(opts)
         storage.set_snapshot_xmin(22, opts)
 
@@ -465,6 +494,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       } do
         storage.initialise(opts)
 
+        storage.set_shape_definition(@shape, opts)
         storage.mark_snapshot_as_started(opts)
         storage.make_new_snapshot!(@data_stream, opts)
         storage.set_snapshot_xmin(11, opts)
@@ -472,6 +502,32 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.initialise(%{opts | version: "new-version"})
 
         refute storage.snapshot_started?(opts)
+      end
+    end
+
+    describe "#{module_name}.get_all_stored_shapes/1" do
+      setup do
+        {:ok, %{module: unquote(module)}}
+      end
+
+      setup :start_storage
+
+      test "retrieves no shapes if no shapes persisted", %{
+        module: storage,
+        opts: opts
+      } do
+        assert {:ok, %{}} = Electric.ShapeCache.Storage.get_all_stored_shapes({storage, opts})
+      end
+
+      test "retrieves stored shapes", %{
+        module: storage,
+        opts: opts
+      } do
+        storage.initialise(opts)
+        storage.set_shape_definition(@shape, opts)
+
+        assert {:ok, %{@shape_id => @shape}} =
+                 Electric.ShapeCache.Storage.get_all_stored_shapes({storage, opts})
       end
     end
   end
