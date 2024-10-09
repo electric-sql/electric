@@ -10,7 +10,7 @@ defmodule Support.DbSetup do
 
   def with_unique_db(ctx) do
     base_config = Application.fetch_env!(:electric, :connection_opts)
-    {:ok, utility_pool} = Postgrex.start_link(base_config ++ @postgrex_start_opts)
+    {:ok, utility_pool} = start_db_pool(base_config)
     Process.unlink(utility_pool)
 
     db_name = to_string(ctx.test)
@@ -38,7 +38,7 @@ defmodule Support.DbSetup do
     end)
 
     updated_config = Keyword.put(base_config, :database, db_name)
-    {:ok, pool} = Postgrex.start_link(updated_config ++ @postgrex_start_opts)
+    {:ok, pool} = start_db_pool(updated_config)
 
     {:ok, %{utility_pool: utility_pool, db_config: updated_config, pool: pool, db_conn: pool}}
   end
@@ -57,7 +57,7 @@ defmodule Support.DbSetup do
 
   def with_shared_db(_ctx) do
     config = Application.fetch_env!(:electric, :connection_opts)
-    {:ok, pool} = Postgrex.start_link(config ++ @postgrex_start_opts)
+    {:ok, pool} = start_db_pool(config)
     {:ok, %{pool: pool, db_config: config, db_conn: pool}}
   end
 
@@ -111,4 +111,9 @@ defmodule Support.DbSetup do
 
   defp database_settings(%{database_settings: settings}), do: settings
   defp database_settings(_), do: []
+
+  defp start_db_pool(connection_opts) do
+    start_opts = Electric.Utils.deobfuscate_password(connection_opts) ++ @postgrex_start_opts
+    Postgrex.start_link(start_opts)
+  end
 end

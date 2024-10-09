@@ -260,4 +260,32 @@ defmodule Electric.Utils do
   def apply_fn_or_mfa({mod, fun, args}, more_args)
       when is_atom(mod) and is_atom(fun) and is_list(args) and is_list(more_args),
       do: apply(mod, fun, more_args ++ args)
+
+  @doc """
+  Given a keyword list of database connection options, obfuscate the password by wrapping it in
+  a zero-arity function.
+
+  This should be done as early as possible when parsing connection options from the OS env. The
+  aim of this obfuscation is to avoid accidentally leaking the password when inspecting connection
+  opts or logging them as part of a process state (which is done automatically by OTP when a
+  process that implements an OTP behaviour crashes).
+  """
+  @spec obfuscate_password(Keyword.t()) :: Keyword.t()
+  def obfuscate_password(connection_opts) do
+    Keyword.update!(connection_opts, :password, &wrap_in_fun/1)
+  end
+
+  @doc """
+  Undo the obfuscation applied by `obfuscate_password/1`.
+
+  This function should be called just before passing connection options to one of
+  `Postgrex` functions. Never store deobfuscated password in any of our process
+  states.
+  """
+  @spec deobfuscate_password(Keyword.t()) :: Keyword.t()
+  def deobfuscate_password(connection_opts) do
+    Keyword.update!(connection_opts, :password, fn passw -> passw.() end)
+  end
+
+  defp wrap_in_fun(val), do: fn -> val end
 end
