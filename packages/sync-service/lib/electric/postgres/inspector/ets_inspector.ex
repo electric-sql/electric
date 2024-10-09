@@ -3,25 +3,34 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   use GenServer
   @behaviour Electric.Postgres.Inspector
 
+  # TODO: we should either use a table per tenant,
+  #       or, use one table for all tenants and make the keys unique
+  #       by including the tenant_id in the key
+  #       --> we will need to pass the tenant_id to the functions of the public API
   @default_pg_info_table :pg_info_table
 
   ## Public API
-
-  def name(%{electric_instance_id: electric_instance_id, tenant_id: tenant_id}) do
-    name(electric_instance_id, tenant_id)
-  end
 
   def name(electric_instance_id, tenant_id) do
     Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
   end
 
-  def start_link(opts),
-    do:
+  def name(opts) do
+    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+    tenant_id = Keyword.fetch!(opts, :tenant_id)
+    name(electric_instance_id, tenant_id)
+  end
+
+  def start_link(opts) do
+    {:ok, pid} =
       GenServer.start_link(
         __MODULE__,
         Map.new(opts) |> Map.put_new(:pg_info_table, @default_pg_info_table),
         name: Keyword.get_lazy(opts, :name, fn -> name(opts) end)
       )
+
+    {:ok, pid}
+  end
 
   @impl Electric.Postgres.Inspector
   def load_column_info({_namespace, _table_name} = table, opts) do
@@ -49,6 +58,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   @impl GenServer
   def init(opts) do
     pg_info_table = :ets.new(opts.pg_info_table, [:named_table, :public, :set])
+
+    Process.flag(:trap_exit, true)
 
     state = %{
       pg_info_table: pg_info_table,

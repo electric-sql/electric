@@ -163,6 +163,7 @@ defmodule Electric.Shapes.Consumer do
     %{
       shape: shape,
       shape_id: shape_id,
+      tenant_id: tenant_id,
       log_state: log_state,
       chunk_bytes_threshold: chunk_bytes_threshold,
       shape_cache: {shape_cache, shape_cache_opts},
@@ -201,7 +202,7 @@ defmodule Electric.Shapes.Consumer do
 
         shape_cache.update_shape_latest_offset(shape_id, last_log_offset, shape_cache_opts)
 
-        notify_listeners(registry, :new_changes, shape_id, last_log_offset)
+        notify_listeners(registry, :new_changes, tenant_id, shape_id, last_log_offset)
 
         {:cont, notify(txn, %{state | log_state: new_log_state})}
 
@@ -214,10 +215,10 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp notify_listeners(registry, :new_changes, shape_id, latest_log_offset) do
-    Registry.dispatch(registry, shape_id, fn registered ->
+  defp notify_listeners(registry, :new_changes, tenant_id, shape_id, latest_log_offset) do
+    Registry.dispatch(registry, {tenant_id, shape_id}, fn registered ->
       Logger.debug(fn ->
-        "Notifying ~#{length(registered)} clients about new changes to #{shape_id}"
+        "[Tenant #{tenant_id}]: Notifying ~#{length(registered)} clients about new changes to #{shape_id}"
       end)
 
       for {pid, ref} <- registered,

@@ -78,7 +78,7 @@ defmodule Electric.Plug.AddDatabasePlug do
       :ok = TenantManager.create_tenant(tenant_id, connection_opts, conn.assigns.config)
 
       conn
-      |> send_resp(200, tenant_id)
+      |> send_resp(200, Jason.encode_to_iodata!(tenant_id))
       |> halt()
     end)
   end

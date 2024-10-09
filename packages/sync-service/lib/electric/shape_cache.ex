@@ -78,6 +78,12 @@ defmodule Electric.ShapeCache do
     Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
   end
 
+  def name(opts) do
+    electric_instance_id = Access.fetch!(opts, :electric_instance_id)
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    name(electric_instance_id, tenant_id)
+  end
+
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
       electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
@@ -105,7 +111,7 @@ defmodule Electric.ShapeCache do
 
   @impl Electric.ShapeCacheBehaviour
   def cast(message, opts) do
-    server = Access.get(opts, :server, __MODULE__)
+    server = Access.get(opts, :server, name(opts))
     GenStage.cast(server, message)
   end
 
@@ -122,7 +128,7 @@ defmodule Electric.ShapeCache do
     if shape_state = get_shape(shape, opts) do
       shape_state
     else
-      server = Access.get(opts, :server, __MODULE__)
+      server = Access.get(opts, :server, name(opts))
       GenStage.call(server, {:create_or_wait_shape_id, shape})
     end
   end
@@ -160,21 +166,21 @@ defmodule Electric.ShapeCache do
   @impl Electric.ShapeCacheBehaviour
   @spec clean_shape(shape_id(), keyword()) :: :ok
   def clean_shape(shape_id, opts) do
-    server = Access.get(opts, :server, __MODULE__)
+    server = Access.get(opts, :server, name(opts))
     GenStage.call(server, {:clean, shape_id})
   end
 
   @impl Electric.ShapeCacheBehaviour
   @spec clean_all_shapes(keyword()) :: :ok
   def clean_all_shapes(opts) do
-    server = Access.get(opts, :server, __MODULE__)
+    server = Access.get(opts, :server, name(opts))
     GenStage.call(server, {:clean_all})
   end
 
   @impl Electric.ShapeCacheBehaviour
   @spec handle_truncate(shape_id(), keyword()) :: :ok
   def handle_truncate(shape_id, opts \\ []) do
-    server = Access.get(opts, :server, __MODULE__)
+    server = Access.get(opts, :server, name(opts))
     GenStage.call(server, {:truncate, shape_id})
   end
 
@@ -187,7 +193,7 @@ defmodule Electric.ShapeCache do
     if shape_status.snapshot_started?(table, shape_id) do
       :started
     else
-      server = Access.get(opts, :server, __MODULE__)
+      server = Access.get(opts, :server, name(opts))
       GenStage.call(server, {:await_snapshot_start, shape_id})
     end
   end
@@ -200,7 +206,7 @@ defmodule Electric.ShapeCache do
     if shape_status.get_existing_shape(table, shape_id) do
       true
     else
-      server = Access.get(opts, :server, __MODULE__)
+      server = Access.get(opts, :server, name(opts))
       GenStage.call(server, {:wait_shape_id, shape_id})
     end
   end
@@ -445,7 +451,13 @@ defmodule Electric.ShapeCache do
              chunk_bytes_threshold: state.chunk_bytes_threshold,
              log_producer: state.log_producer,
              shape_cache:
-               {__MODULE__, %{server: state.name, shape_meta_table: state.shape_meta_table}},
+               {__MODULE__,
+                %{
+                  server: state.name,
+                  shape_meta_table: state.shape_meta_table,
+                  electric_instance_id: state.electric_instance_id,
+                  tenant_id: state.tenant_id
+                }},
              registry: state.registry,
              db_pool: state.db_pool,
              prepare_tables_fn: state.prepare_tables_fn,

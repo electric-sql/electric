@@ -26,6 +26,7 @@ defmodule Electric.Application do
       core_processes = [
         {Registry,
          name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()},
+        Electric.TenantSupervisor,
         Electric.TenantManager
       ]
 
@@ -33,6 +34,8 @@ defmodule Electric.Application do
         if Application.fetch_env!(:electric, :environment) != :test do
           [
             Electric.Telemetry,
+            {Registry,
+             name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
             {Bandit,
              plug:
                {Electric.Plug.Router, storage: storage, tenant_manager: Electric.TenantManager},
