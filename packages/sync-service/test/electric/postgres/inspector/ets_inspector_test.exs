@@ -12,14 +12,15 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     end
 
     test "returns relation from table name", %{opts: opts, table: table} do
-      assert {:ok, ^table} = EtsInspector.load_relation("PuBliC.ItEmS", opts)
+      assert {:ok, %{relation: ^table, relation_id: _}} =
+               EtsInspector.load_relation("PuBliC.ItEmS", opts)
     end
 
     test "returns same value from ETS cache as the original call", %{opts: opts, table: table} do
       original = EtsInspector.load_relation("PuBliC.ItEmS", opts)
       from_cache = EtsInspector.load_relation("PuBliC.ItEmS", opts)
       assert original == from_cache
-      assert {:ok, ^table} = original
+      assert {:ok, %{relation: ^table, relation_id: _}} = original
     end
 
     test "returns same value from ETS cache as the original call with concurrent calls", %{
@@ -30,7 +31,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       original = EtsInspector.load_relation("PuBliC.ItEmS", opts)
       from_cache = Task.await(task)
       assert original == from_cache
-      assert {:ok, ^table} = original
+      assert {:ok, %{relation: ^table, relation_id: _}} = original
     end
 
     @tag with_sql: [
@@ -43,16 +44,16 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       original1 = EtsInspector.load_relation("PuBliC.ITEMS", opts)
       from_cache1 = EtsInspector.load_relation("PuBliC.ITEMS", opts)
       assert original1 == from_cache1
-      assert {:ok, ^table} = original1
+      assert {:ok, %{relation: ^table, relation_id: _}} = original1
 
       original2 = EtsInspector.load_relation(~s|PuBliC."ITEMS"|, opts)
       from_cache2 = EtsInspector.load_relation(~s|PuBliC."ITEMS"|, opts)
       assert original2 == from_cache2
-      assert {:ok, {"public", "ITEMS"}} = original2
+      assert {:ok, %{relation: {"public", "ITEMS"}, relation_id: _}} = original2
     end
   end
 
-  describe "clean_relation/2" do
+  describe "clean/2" do
     setup [:with_inspector, :with_basic_tables, :with_sql_execute]
 
     setup %{
@@ -110,7 +111,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
 
       # Now clean up the relation
       # and check that it is no longer in the ETS cache
-      assert EtsInspector.clean_relation(relation, opts)
+      assert EtsInspector.clean(relation, opts)
 
       assert :ets.member(pg_relation_table, {relation, :relation_to_table}) == false
       assert :ets.member(pg_info_table, {table1, :table_to_relation}) == false

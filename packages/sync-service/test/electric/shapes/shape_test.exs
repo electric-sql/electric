@@ -7,16 +7,24 @@ defmodule Electric.Shapes.ShapeTest do
   alias Electric.Shapes.Shape
 
   @where Parser.parse_and_validate_expression!("value ILIKE '%matches%'", %{["value"] => :text})
+  @relation_id 1
 
   describe "convert_change/2" do
     test "skips changes for other tables" do
-      assert Shape.convert_change(%Shape{root_table: {"public", "table"}}, %NewRecord{
-               relation: {"public", "other_table"},
-               record: %{"value" => "my value"}
-             }) == []
+      assert Shape.convert_change(
+               %Shape{root_table: {"public", "table"}, root_table_id: 2},
+               %NewRecord{
+                 relation: {"public", "other_table"},
+                 record: %{"value" => "my value"}
+               }
+             ) == []
 
       assert Shape.convert_change(
-               %Shape{root_table: {"public", "table"}, where: @where},
+               %Shape{
+                 root_table: {"public", "table"},
+                 root_table_id: @relation_id,
+                 where: @where
+               },
                %NewRecord{
                  relation: {"public", "other_table"},
                  record: %{"value" => "my value"}
@@ -30,11 +38,14 @@ defmodule Electric.Shapes.ShapeTest do
         record: %{"value" => "my value"}
       }
 
-      assert Shape.convert_change(%Shape{root_table: {"public", "table"}}, change) == [change]
+      assert Shape.convert_change(
+               %Shape{root_table: {"public", "table"}, root_table_id: 2},
+               change
+             ) == [change]
     end
 
     test "lets INSERTs through only if the row matches the where filter" do
-      shape = %Shape{root_table: {"public", "table"}, where: @where}
+      shape = %Shape{root_table: {"public", "table"}, root_table_id: @relation_id, where: @where}
 
       matching_insert = %NewRecord{
         relation: {"public", "table"},
@@ -51,7 +62,7 @@ defmodule Electric.Shapes.ShapeTest do
     end
 
     test "lets DELETEs through only if the row matches the where filter" do
-      shape = %Shape{root_table: {"public", "table"}, where: @where}
+      shape = %Shape{root_table: {"public", "table"}, root_table_id: @relation_id, where: @where}
 
       matching_delete = %Changes.DeletedRecord{
         relation: {"public", "table"},
@@ -68,7 +79,7 @@ defmodule Electric.Shapes.ShapeTest do
     end
 
     test "lets UPDATEs through as-is only if both old and new versions match the where filter" do
-      shape = %Shape{root_table: {"public", "table"}, where: @where}
+      shape = %Shape{root_table: {"public", "table"}, root_table_id: @relation_id, where: @where}
 
       matching_update = %Changes.UpdatedRecord{
         relation: {"public", "table"},
@@ -80,7 +91,7 @@ defmodule Electric.Shapes.ShapeTest do
     end
 
     test "converts UPDATE to INSERT if only new version matches the where filter" do
-      shape = %Shape{root_table: {"public", "table"}, where: @where}
+      shape = %Shape{root_table: {"public", "table"}, root_table_id: @relation_id, where: @where}
 
       update_to_insert = %Changes.UpdatedRecord{
         relation: {"public", "table"},
@@ -93,7 +104,7 @@ defmodule Electric.Shapes.ShapeTest do
     end
 
     test "converts UPDATE to DELETE if only old version matches the where filter" do
-      shape = %Shape{root_table: {"public", "table"}, where: @where}
+      shape = %Shape{root_table: {"public", "table"}, root_table_id: @relation_id, where: @where}
 
       update_to_delete = %Changes.UpdatedRecord{
         relation: {"public", "table"},
@@ -106,7 +117,7 @@ defmodule Electric.Shapes.ShapeTest do
     end
 
     test "doesn't let the update through if no version of the row matches the where filter" do
-      shape = %Shape{root_table: {"public", "table"}, where: @where}
+      shape = %Shape{root_table: {"public", "table"}, root_table_id: @relation_id, where: @where}
 
       non_matching_update = %Changes.UpdatedRecord{
         relation: {"public", "table"},
@@ -257,11 +268,16 @@ defmodule Electric.Shapes.ShapeTest do
   end
 
   describe "hash/1" do
-    test "should not have same integer value for differnt shape" do
-      assert is_integer(Shape.hash(%Shape{root_table: {"public", "table"}}))
+    test "should not have same integer value for different shape" do
+      assert is_integer(Shape.hash(%Shape{root_table: {"public", "table"}, root_table_id: 2}))
 
-      assert Shape.hash(%Shape{root_table: {"public", "table"}}) !=
-               Shape.hash(%Shape{root_table: {"public", "table2"}})
+      assert Shape.hash(%Shape{root_table: {"public", "table"}, root_table_id: 1}) !=
+               Shape.hash(%Shape{root_table: {"public", "table2"}, root_table_id: 2})
+    end
+
+    test "should not have same integer value for different shape, same table different OID" do
+      assert Shape.hash(%Shape{root_table: {"public", "table"}, root_table_id: 1}) !=
+               Shape.hash(%Shape{root_table: {"public", "table"}, root_table_id: 2})
     end
   end
 
@@ -269,6 +285,7 @@ defmodule Electric.Shapes.ShapeTest do
     test "should serialize shape with complex columns" do
       shape = %Electric.Shapes.Shape{
         root_table: {"public", "foo"},
+        root_table_id: 1,
         table_info: %{
           {"public", "foo"} => %{
             columns: [

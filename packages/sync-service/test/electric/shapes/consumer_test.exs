@@ -2,7 +2,7 @@ defmodule Electric.Shapes.ConsumerTest do
   use ExUnit.Case, async: true
 
   alias Electric.Postgres.Lsn
-  alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.{Transaction, Relation}
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector
@@ -79,8 +79,8 @@ defmodule Electric.Shapes.ConsumerTest do
 
   defp run_with_conn_noop(conn, cb), do: cb.(conn)
 
-  describe "transaction handling" do
-    setup [:with_in_memory_storage, :with_persistent_kv]
+  describe "event handling" do
+    setup [:with_in_memory_storage]
 
     setup(ctx) do
       shapes = Map.get(ctx, :shapes, %{@shape_id1 => @shape1, @shape_id2 => @shape2})
@@ -138,10 +138,11 @@ defmodule Electric.Shapes.ConsumerTest do
                shape_id: shape_id,
                shape: shape,
                electric_instance_id: ctx.electric_instance_id,
+               inspector: {Mock.Inspector, []},
                log_producer: ShapeLogCollector.name(ctx.electric_instance_id),
                registry: registry_name,
                shape_cache: {Mock.ShapeCache, []},
-               shape_status: {Mock.ShapeStatus, ctx.persistent_kv},
+               shape_status: {Mock.ShapeStatus, []},
                storage: storage,
                chunk_bytes_threshold:
                  Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
@@ -384,6 +385,106 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {Support.TestStorage, :append_to_log!, @shape_id1, _}
       assert_receive {^ref, :new_changes, ^last_log_offset}, 1000
     end
+
+    test "does not clean shapes if relation didn't change", ctx do
+      rel = %Relation{
+        # ensure relation OID does not match any of the shapes
+        id: @shape1.root_table_id + @shape2.root_table_id,
+        schema: "ranndom",
+        table: "definitely_different",
+        columns: []
+      }
+
+      ref1 =
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_id1)))
+
+      ref2 =
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_id2)))
+
+      Mock.ShapeStatus
+      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
+
+      assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
+
+      refute_receive {:DOWN, ^ref1, :process, _, _}
+      refute_receive {:DOWN, ^ref2, :process, _, _}
+    end
+
+    test "cleans shapes affected by a relation rename", ctx do
+      {orig_schema, _} = @shape1.root_table
+
+      rel = %Relation{
+        id: @shape1.root_table_id,
+        schema: orig_schema,
+        table: "definitely_different",
+        columns: []
+      }
+
+      ref1 =
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_id1)))
+
+      ref2 =
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_id2)))
+
+      # also cleans up inspector cache and shape status cache
+      Mock.Inspector
+      |> expect(:clean, 1, fn _, _ -> true end)
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> expect(:clean, 0, fn _, _ -> true end)
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
+
+      Mock.ShapeStatus
+      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
+
+      assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
+
+      assert_receive {:DOWN, ^ref1, :process, _, _}
+      refute_receive {:DOWN, ^ref2, :process, _, _}
+    end
+
+    test "cleans shapes affected by a relation change", ctx do
+      {orig_schema, orig_table} = @shape1.root_table
+
+      rel = %Relation{
+        id: @shape1.root_table_id,
+        schema: orig_schema,
+        table: orig_table,
+        columns: [
+          # specify different columns
+          %{name: "id", type_oid: {999, 1}}
+        ]
+      }
+
+      ref1 =
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_id1)))
+
+      ref2 =
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_id2)))
+
+      # also cleans up inspector cache and shape status cache
+      Mock.Inspector
+      |> expect(:clean, 1, fn _, _ -> true end)
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> expect(:clean, 0, fn _, _ -> true end)
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
+
+      Mock.ShapeStatus
+      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
+
+      assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
+
+      assert_receive {:DOWN, ^ref1, :process, _, _}
+      refute_receive {:DOWN, ^ref2, :process, _, _}
+    end
   end
 
   describe "transaction handling with real storage" do
@@ -394,7 +495,6 @@ defmodule Electric.Shapes.ConsumerTest do
     setup [
       {Support.ComponentSetup, :with_registry},
       {Support.ComponentSetup, :with_in_memory_storage},
-      {Support.ComponentSetup, :with_persistent_kv},
       {Support.ComponentSetup, :with_log_chunking},
       {Support.ComponentSetup, :with_shape_log_collector}
     ]
@@ -661,8 +761,7 @@ defmodule Electric.Shapes.ConsumerTest do
       :with_basic_tables,
       :with_publication,
       :with_registry,
-      :with_inspector,
-      :with_persistent_kv
+      :with_inspector
     ]
 
     setup do
@@ -707,7 +806,6 @@ defmodule Electric.Shapes.ConsumerTest do
           shape_meta_table: __MODULE__.ShapeMeta,
           storage: storage,
           db_pool: ctx.pool,
-          persistent_kv: ctx.persistent_kv,
           registry: ctx.registry,
           inspector: ctx.inspector,
           chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
@@ -727,6 +825,7 @@ defmodule Electric.Shapes.ConsumerTest do
       {:ok, _super} =
         Electric.Shapes.Supervisor.start_link(
           electric_instance_id: ctx.electric_instance_id,
+          inspector: ctx.inspector,
           log_collector:
             {ShapeLogCollector,
              electric_instance_id: ctx.electric_instance_id, inspector: ctx.inspector},

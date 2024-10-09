@@ -17,6 +17,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   @shape_id "the-shape-id"
   @shape %Shape{
     root_table: {"public", "items"},
+    root_table_id: 1,
     table_info: %{
       {"public", "items"} => %{
         columns: [%{name: "id", type: :text}, %{name: "value", type: :text}],

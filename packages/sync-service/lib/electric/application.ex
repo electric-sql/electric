@@ -68,7 +68,6 @@ defmodule Electric.Application do
              chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
              log_producer: shape_log_collector,
              consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(electric_instance_id),
-             persistent_kv: persistent_kv,
              registry: Registry.ShapeChanges}
 
           connection_manager_opts = [
