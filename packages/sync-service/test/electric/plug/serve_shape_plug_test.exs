@@ -203,7 +203,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 200
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
-               "max-age=#{max_age}, stale-while-revalidate=#{stale_age}"
+               "public, max-age=#{max_age}, stale-while-revalidate=#{stale_age}"
              ]
     end
 
@@ -381,7 +381,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
-               "max-age=5, stale-while-revalidate=5"
+               "public, max-age=5, stale-while-revalidate=5"
              ]
 
       assert Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset") == [next_offset_str]
@@ -467,7 +467,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "up-to-date"}}]
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
-               "max-age=5, stale-while-revalidate=5"
+               "public, max-age=5, stale-while-revalidate=5"
              ]
 
       assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == [""]
