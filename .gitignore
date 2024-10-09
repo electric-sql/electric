@@ -12,6 +12,7 @@ caching/nginx_cache
 file.jsonl
 integration-tests/lux_logs/
 integration-tests/lux/
+integration-tests/_storage
 json_files
 node_modules
 shape-data.json
