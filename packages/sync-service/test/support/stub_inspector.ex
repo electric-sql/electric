@@ -45,11 +45,5 @@ defmodule Support.StubInspector do
   end
 
   @impl true
-  def clean_column_info(_, _), do: true
-
-  @impl true
-  def clean_relation(_, _), do: true
-
-  @impl true
   def clean(_, _), do: true
 end

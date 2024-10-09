@@ -53,7 +53,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     end
   end
 
-  describe "clean_relation/2" do
+  describe "clean/2" do
     setup [:with_inspector, :with_basic_tables, :with_sql_execute]
 
     setup %{
@@ -111,7 +111,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
 
       # Now clean up the relation
       # and check that it is no longer in the ETS cache
-      assert EtsInspector.clean_relation(relation, opts)
+      assert EtsInspector.clean(relation, opts)
 
       assert :ets.member(pg_relation_table, {relation, :relation_to_table}) == false
       assert :ets.member(pg_info_table, {table1, :table_to_relation}) == false

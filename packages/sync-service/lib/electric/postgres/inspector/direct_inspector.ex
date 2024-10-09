@@ -28,8 +28,6 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
     end
   end
 
-  def clean_relation(_, _), do: true
-
   @doc """
   Load table information (refs) from the database
   """
@@ -66,8 +64,6 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
       {:ok, rows}
     end
   end
-
-  def clean_column_info(_, _), do: true
 
   def clean(_, _), do: true
 end
