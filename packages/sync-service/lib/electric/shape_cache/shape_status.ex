@@ -19,6 +19,9 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
               {:ok, shape_id()} | {:error, term()}
   @callback initialise_shape(ShapeStatus.t(), shape_id(), xmin(), LogOffset.t()) ::
               :ok
+  @callback set_snapshot_xmin(ShapeStatus.t(), shape_id(), xmin()) :: :ok
+  @callback set_latest_offset(ShapeStatus.t(), shape_id(), LogOffset.t()) :: :ok
+  @callback mark_snapshot_started(ShapeStatus.t(), shape_id()) :: :ok
   @callback snapshot_started?(ShapeStatus.t(), shape_id()) :: boolean()
   @callback remove_shape(ShapeStatus.t(), shape_id()) ::
               {:ok, Shape.t()} | {:error, term()}

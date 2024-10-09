@@ -77,8 +77,10 @@ defmodule Electric.Shapes.ConsumerTest do
 
   defp prepare_tables_fn(_pool, _affected_tables), do: :ok
 
+  defp run_with_conn_noop(conn, cb), do: cb.(conn)
+
   describe "transaction handling" do
-    setup :with_in_memory_storage
+    setup [:with_in_memory_storage, :with_persistent_kv]
 
     setup(ctx) do
       shapes = Map.get(ctx, :shapes, %{@shape_id1 => @shape1, @shape_id2 => @shape2})
@@ -115,12 +117,18 @@ defmodule Electric.Shapes.ConsumerTest do
             ])
         )
 
-      Mock.ShapeCache
-      |> stub(:cast, fn _msg, _ -> :ok end)
-
       consumers =
         for {shape_id, shape} <- ctx.shapes do
-          allow(Mock.ShapeCache, self(), fn ->
+          Mock.ShapeStatus
+          |> expect(:initialise_shape, 1, fn _, ^shape_id, _, _ -> :ok end)
+          |> expect(:set_snapshot_xmin, 1, fn _, ^shape_id, _ -> :ok end)
+          |> expect(:mark_snapshot_started, 1, fn _, ^shape_id -> :ok end)
+          |> allow(self(), fn ->
+            Shapes.Consumer.whereis(ctx.electric_instance_id, shape_id)
+          end)
+
+          Mock.ShapeCache
+          |> allow(self(), fn ->
             Shapes.Consumer.whereis(ctx.electric_instance_id, shape_id)
           end)
 
@@ -133,9 +141,11 @@ defmodule Electric.Shapes.ConsumerTest do
                log_producer: ShapeLogCollector.name(ctx.electric_instance_id),
                registry: registry_name,
                shape_cache: {Mock.ShapeCache, []},
+               shape_status: {Mock.ShapeStatus, ctx.persistent_kv},
                storage: storage,
                chunk_bytes_threshold:
                  Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
+               run_with_conn_fn: &run_with_conn_noop/2,
                prepare_tables_fn: &prepare_tables_fn/2},
               id: {Shapes.Consumer.Supervisor, shape_id}
             )
@@ -158,6 +168,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeCache
       |> expect(:update_shape_latest_offset, 2, fn @shape_id1, ^last_log_offset, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
 
       ref = make_ref()
 
@@ -396,6 +407,7 @@ defmodule Electric.Shapes.ConsumerTest do
             inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
           }),
           log_producer: ctx.shape_log_collector,
+          run_with_conn_fn: &run_with_conn_noop/2,
           prepare_tables_fn: fn _, _ -> :ok end,
           create_snapshot_fn: fn parent, shape_id, _shape, _, storage ->
             if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
@@ -648,6 +660,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       shape_cache_opts = [
         server: shape_cache_name,
+        electric_instance_id: ctx.electric_instance_id,
         shape_meta_table: __MODULE__.ShapeMeta
       ]
 
