@@ -109,7 +109,7 @@ HTTP/1.1 200 OK
 date: Thu, 18 Jul 2024 10:49:12 GMT
 content-length: 643
 vary: accept-encoding
-cache-control: max-age=60, stale-while-revalidate=300
+cache-control: public, max-age=60, stale-while-revalidate=300
 x-request-id: F-NJAXyulHAQP2MAAABN
 access-control-allow-origin: *
 access-control-expose-headers: *

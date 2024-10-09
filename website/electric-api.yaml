@@ -127,7 +127,7 @@ paths:
             cache-control:
               schema:
                 type: string
-              example: "max-age=60, stale-while-revalidate=300"
+              example: "public, max-age=60, stale-while-revalidate=300"
               description: |-
                 Cache control header as a string of comma separated directives.
 

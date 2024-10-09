@@ -356,7 +356,7 @@ defmodule Electric.Plug.ServeShapePlug do
       put_resp_header(
         conn,
         "cache-control",
-        "max-age=#{config[:max_age]}, stale-while-revalidate=#{config[:stale_age]}"
+        "public, max-age=#{config[:max_age]}, stale-while-revalidate=#{config[:stale_age]}"
       )
     end
   end
