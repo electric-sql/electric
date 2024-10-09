@@ -1,7 +1,6 @@
 defmodule Electric.ShapeCache.ShapeStatusTest do
   use ExUnit.Case, async: true
 
-  alias Electric.PersistentKV
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes.{Column, Relation}
   alias Electric.ShapeCache.ShapeStatus
@@ -29,11 +28,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
   defp table_name, do: :"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}"
 
-  setup do
-    [persistent_kv: PersistentKV.Memory.new!()]
-  end
-
-  defp new_state(ctx, opts \\ []) do
+  defp new_state(_ctx, opts \\ []) do
     table = Keyword.get(opts, :table, table_name())
 
     Mock.Storage
@@ -41,7 +36,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     {:ok, state} =
       ShapeStatus.initialise(
-        persistent_kv: ctx.persistent_kv,
         storage: {Mock.Storage, []},
         shape_meta_table: table
       )
@@ -215,10 +209,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert :ok = ShapeStatus.store_relation(state, relation)
 
     assert relation == ShapeStatus.get_relation(state, relation_id)
-
-    {:ok, state, []} = new_state(ctx)
-
-    assert relation == ShapeStatus.get_relation(state, relation_id)
   end
 
   test "relation data public api", ctx do
@@ -241,20 +231,14 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert :ok = ShapeStatus.store_relation(state, relation)
 
     assert relation == ShapeStatus.get_relation(table, relation_id)
-
-    table = table_name()
-
-    {:ok, _state, []} = new_state(ctx, table: table)
-
-    assert relation == ShapeStatus.get_relation(table, relation_id)
   end
 
   def load_column_info({"public", "other_table"}, _),
     do:
       {:ok,
        [
-         %{name: "id", type: :int8, pk_position: 0},
-         %{name: "value", type: :text, pk_position: nil}
+         %{name: "id", type: :int8, type_id: {1, 1}, pk_position: 0},
+         %{name: "value", type: :text, type_id: {2, 2}, pk_position: nil}
        ]}
 
   def load_column_info({"public", "table"}, _),

@@ -33,9 +33,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @moduledoc """
   Keeps track of shape state.
 
-  Serializes just enough to some persistent storage to bootstrap the
-  ShapeCache by writing the mapping of `shape_id => %Shape{}` to
-  storage.
+  Can recover basic persisted shape metadata from shape storage to repopulate
+  the in-memory cache.
 
   The shape cache then loads this and starts processes (storage and consumer)
   for each `{shape_id, %Shape{}}` pair. These then use their attached storage
@@ -46,26 +45,23 @@ defmodule Electric.ShapeCache.ShapeStatus do
   to access the data in the ETS from anywhere, so there's an internal api,
   using the full state and an external api using just the table name.
   """
-  alias Electric.PersistentKV
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache.Storage
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes.{Column, Relation}
 
   @schema NimbleOptions.new!(
-            persistent_kv: [type: :any, required: true],
             shape_meta_table: [type: {:or, [:atom, :reference]}, required: true],
             storage: [type: :mod_arg, required: true],
             root: [type: :string, default: "./shape_cache"]
           )
 
-  defstruct [:persistent_kv, :root, :shape_meta_table, :storage]
+  defstruct [:root, :shape_meta_table, :storage]
 
   @type shape_id() :: Electric.ShapeCacheBehaviour.shape_id()
   @type xmin() :: Electric.ShapeCacheBehaviour.xmin()
   @type table() :: atom() | reference()
   @type t() :: %__MODULE__{
-          persistent_kv: PersistentKV.t(),
           root: String.t(),
           storage: Storage.storage(),
           shape_meta_table: table()
@@ -84,22 +80,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec initialise(options()) :: {:ok, t()} | {:error, term()}
   def initialise(opts) do
     with {:ok, config} <- NimbleOptions.validate(opts, @schema),
-         {:ok, kv_backend} <- Access.fetch(config, :persistent_kv),
          {:ok, table_name} = Access.fetch(config, :shape_meta_table),
          {:ok, storage} = Access.fetch(config, :storage) do
-      persistent_kv =
-        PersistentKV.Serialized.new!(
-          backend: kv_backend,
-          decoder: {__MODULE__, :decode_relations, []}
-        )
-
       meta_table = :ets.new(table_name, [:named_table, :public, :ordered_set])
 
       state =
         struct(
           __MODULE__,
           Keyword.merge(config,
-            persistent_kv: persistent_kv,
             shape_meta_table: meta_table,
             storage: storage
           )
@@ -287,10 +275,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  def store_relation(%__MODULE__{shape_meta_table: meta_table} = state, %Relation{} = relation) do
-    with :ok <- store_relation(meta_table, relation) do
-      save(state)
-    end
+  def store_relation(%__MODULE__{shape_meta_table: meta_table} = _state, %Relation{} = relation) do
+    store_relation(meta_table, relation)
   end
 
   def store_relation(meta_table, %Relation{} = relation) do
@@ -298,50 +284,27 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ok
   end
 
-  @doc false
-  def decode_relations(json) do
-    with {:ok, %{"relations" => relations}} <- Jason.decode(json) do
-      {:ok,
-       %{
-         relations:
-           Map.new(relations, fn %{"id" => id} = relation ->
-             {id, relation_from_json(relation)}
-           end)
-       }}
-    end
-  end
-
-  defp relation_from_json(json) do
-    %{"columns" => columns, "id" => id, "schema" => schema, "table" => table} = json
+  defp relation_from_shape(%Shape{
+         root_table: {schema, table},
+         root_table_id: relation_id,
+         table_info: table_info
+       }) do
+    %{columns: columns} = Map.fetch!(table_info, {schema, table})
 
     %Relation{
-      id: id,
+      id: relation_id,
       schema: schema,
       table: table,
-      columns: Enum.map(columns, &relation_column_from_json/1)
+      columns:
+        columns
+        |> Enum.map(fn %{name: name, type_id: {type_oid, _}} ->
+          %Column{name: name, type_oid: type_oid}
+        end)
     }
   end
 
-  defp relation_column_from_json(json) do
-    %{"name" => name, "type_oid" => type_oid} = json
-    %Column{name: name, type_oid: type_oid}
-  end
-
-  defp save(state) do
-    relations = list_relations(state)
-
-    PersistentKV.set(
-      state.persistent_kv,
-      key(state),
-      %{
-        relations: relations
-      }
-    )
-  end
-
   defp load(state) do
-    with {:ok, %{relations: relations}} <- load_relations(state),
-         {:ok, shapes} <- Storage.get_all_stored_shapes(state.storage) do
+    with {:ok, shapes} <- Storage.get_all_stored_shapes(state.storage) do
       :ets.insert(
         state.shape_meta_table,
         Enum.concat([
@@ -350,12 +313,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
             [
               {{@shape_hash_lookup, hash}, shape_id},
-              {{@shape_meta_data, shape_id}, shape, nil, LogOffset.first()}
-            ]
-          end),
-          Enum.flat_map(relations, fn {relation_id, relation} ->
-            [
-              {{@relation_data, relation_id}, relation}
+              {{@shape_meta_data, shape_id}, shape, nil, LogOffset.first()},
+              {{@relation_data, shape.root_table_id}, relation_from_shape(shape)}
             ]
           end)
         ])
@@ -363,33 +322,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
       {:ok, state}
     end
-  end
-
-  defp load_relations(state) do
-    case PersistentKV.get(state.persistent_kv, key(state)) do
-      {:ok, %{relations: _relations} = data} ->
-        {:ok, data}
-
-      {:error, :not_found} ->
-        {:ok, %{shapes: %{}, relations: %{}}}
-
-      error ->
-        error
-    end
-  end
-
-  defp list_relations(%__MODULE__{shape_meta_table: meta_table}) do
-    :ets.select(meta_table, [
-      {
-        {{@relation_data, :"$1"}, :"$2"},
-        [true],
-        [:"$2"]
-      }
-    ])
-  end
-
-  defp key(state) do
-    Path.join(state.root, "shapes.json")
   end
 
   defp turn_raise_into_error(fun) do

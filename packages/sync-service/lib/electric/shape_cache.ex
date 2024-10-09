@@ -246,12 +246,10 @@ defmodule Electric.ShapeCache do
     if !is_nil(old_rel) && old_rel != relation do
       Logger.info("Schema for the table #{old_rel.schema}.#{old_rel.table} changed")
 
-      change = %Changes.RelationChange{old_relation: old_rel, new_relation: relation}
-
       # Fetch all shapes that are affected by the relation change and clean them up
       persistent_state
       |> shape_status.list_shapes()
-      |> Enum.filter(&Shape.is_affected_by_relation_change?(&1, change))
+      |> Enum.filter(&Shape.is_affected_by_relation_change?(&1, relation))
       |> Enum.map(&elem(&1, 0))
       |> Enum.each(fn shape_id -> clean_up_shape(state, shape_id) end)
     end
