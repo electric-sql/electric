@@ -8,14 +8,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Replication.LogOffset
 
   alias Support.Mock
-  import Support.ComponentSetup, only: [with_electric_instance_id: 1]
+  import Support.ComponentSetup, only: [with_electric_instance_id: 1, with_in_memory_storage: 1]
 
   import Mox
 
   @moduletag :capture_log
 
   setup :verify_on_exit!
-  setup :with_electric_instance_id
+  setup [:with_electric_instance_id, :with_in_memory_storage]
 
   setup(ctx) do
     # Start a test Registry
@@ -32,7 +32,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
 
     Mock.ShapeStatus
-    |> expect(:initialise, 1, fn opts -> Electric.ShapeCache.ShapeStatus.initialise(opts) end)
+    |> expect(:initialise, 1, fn _opts -> {:ok, %{}} end)
     |> expect(:list_shapes, 1, fn _ -> [] end)
     # allow the ShapeCache to call this mock
     |> allow(self(), fn -> GenServer.whereis(Electric.ShapeCache) end)

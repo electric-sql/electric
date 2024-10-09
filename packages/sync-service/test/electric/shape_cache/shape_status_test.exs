@@ -8,6 +8,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   alias Electric.Shapes.Shape
   alias Support.StubInspector
 
+  alias Support.Mock
+  import Mox
+
+  setup :verify_on_exit!
+
   defp shape! do
     assert {:ok, %Shape{where: %{query: "value = 'test'"}} = shape} =
              Shape.new("other_table", inspector: {__MODULE__, nil}, where: "value = 'test'")
@@ -25,13 +30,21 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   defp table_name, do: :"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}"
 
   setup do
-    [kv: PersistentKV.Memory.new!()]
+    [persistent_kv: PersistentKV.Memory.new!()]
   end
 
   defp new_state(ctx, opts \\ []) do
     table = Keyword.get(opts, :table, table_name())
 
-    {:ok, state} = ShapeStatus.initialise(persistent_kv: ctx.kv, shape_meta_table: table)
+    Mock.Storage
+    |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, Access.get(opts, :stored_shapes, %{})} end)
+
+    {:ok, state} =
+      ShapeStatus.initialise(
+        persistent_kv: ctx.persistent_kv,
+        storage: {Mock.Storage, []},
+        shape_meta_table: table
+      )
 
     shapes = Keyword.get(opts, :shapes, [])
 
@@ -49,13 +62,25 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert [] = ShapeStatus.list_shapes(state)
   end
 
-  test "can add and retain shapes", ctx do
+  test "can recover shapes from storage", ctx do
     {:ok, state, []} = new_state(ctx)
     shape = shape!()
     assert {:ok, shape_id} = ShapeStatus.add_shape(state, shape)
-    assert [{^shape_id, ^shape}] = ShapeStatus.list_shapes(state)
 
+    {:ok, state, []} =
+      new_state(ctx,
+        stored_shapes: %{
+          shape_id => shape
+        }
+      )
+
+    assert [{^shape_id, ^shape}] = ShapeStatus.list_shapes(state)
+  end
+
+  test "can add shapes", ctx do
     {:ok, state, []} = new_state(ctx)
+    shape = shape!()
+    assert {:ok, shape_id} = ShapeStatus.add_shape(state, shape)
     assert [{^shape_id, ^shape}] = ShapeStatus.list_shapes(state)
   end
 
@@ -73,9 +98,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     assert {:ok, ^shape_1} = ShapeStatus.remove_shape(state, shape_id_1)
     assert [{^shape_id_2, ^shape_2}] = ShapeStatus.list_shapes(state)
-
-    {:ok, state, []} = new_state(ctx)
-    assert [{^shape_id_2, ^shape_2}] = ShapeStatus.list_shapes(state)
   end
 
   test "get_existing_shape/2 with %Shape{}", ctx do
@@ -85,9 +107,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     refute ShapeStatus.get_existing_shape(state, shape)
 
     assert {:ok, shape_id} = ShapeStatus.add_shape(state, shape)
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
-
-    {:ok, state, []} = new_state(ctx)
     assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
 
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_id)
@@ -103,10 +122,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
     assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape_id)
 
-    {:ok, state, []} = new_state(ctx)
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape_id)
-
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_id)
     refute ShapeStatus.get_existing_shape(state, shape)
     refute ShapeStatus.get_existing_shape(state, shape_id)
@@ -116,16 +131,9 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     shape = shape!()
     table = table_name()
 
-    {:ok, _state, [shape_id]} = new_state(ctx, table: table, shapes: [shape])
+    {:ok, state, [shape_id]} = new_state(ctx, table: table, shapes: [shape])
 
     refute ShapeStatus.get_existing_shape(table, "1234")
-
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape)
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape_id)
-
-    table = table_name()
-
-    {:ok, state, []} = new_state(ctx, table: table)
 
     assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape)
     assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape_id)

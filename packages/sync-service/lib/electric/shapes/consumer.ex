@@ -58,6 +58,9 @@ defmodule Electric.Shapes.Consumer do
 
     :ok = ShapeCache.Storage.initialise(storage)
 
+    # Store the shape definition to ensure we can restore it
+    :ok = ShapeCache.Storage.set_shape_definition(config.shape, storage)
+
     {:ok, latest_offset, snapshot_xmin} = ShapeCache.Storage.get_current_position(storage)
 
     :ok =
