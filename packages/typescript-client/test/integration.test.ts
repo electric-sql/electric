@@ -540,7 +540,11 @@ describe(`HTTP Sync`, () => {
     const cacheHeaders = res.headers.get(`cache-control`)
     assert(cacheHeaders !== null, `Response should have cache-control header`)
     const directives = parse(cacheHeaders)
-    expect(directives).toEqual({ 'max-age': 1, 'stale-while-revalidate': 3 })
+    expect(directives).toEqual({
+      public: true,
+      'max-age': 1,
+      'stale-while-revalidate': 3,
+    })
     const etagHeader = res.headers.get(`etag`)
     assert(etagHeader !== null, `Response should have etag header`)
 
