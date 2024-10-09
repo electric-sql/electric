@@ -4,8 +4,6 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   """
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache.ShapeStatus
-  alias Electric.Postgres.LogicalReplication.Messages
-  alias Electric.Replication.Changes.Relation
   alias Electric.Replication.LogOffset
 
   @type shape_id() :: Electric.ShapeCacheBehaviour.shape_id()
@@ -25,8 +23,6 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback snapshot_started?(ShapeStatus.t(), shape_id()) :: boolean()
   @callback remove_shape(ShapeStatus.t(), shape_id()) ::
               {:ok, Shape.t()} | {:error, term()}
-  @callback get_relation(ShapeStatus.t(), Messages.relation_id()) :: Relation.t() | nil
-  @callback store_relation(ShapeStatus.t(), Relation.t()) :: :ok
 end
 
 defmodule Electric.ShapeCache.ShapeStatus do
@@ -48,7 +44,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache.Storage
   alias Electric.Replication.LogOffset
-  alias Electric.Replication.Changes.{Column, Relation}
 
   @schema NimbleOptions.new!(
             shape_meta_table: [type: {:or, [:atom, :reference]}, required: true],
@@ -74,7 +69,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @shape_meta_shape_pos 2
   @shape_meta_xmin_pos 3
   @shape_meta_latest_offset_pos 4
-  @relation_data :relation_data
   @snapshot_started :snapshot_started
 
   @spec initialise(options()) :: {:ok, t()} | {:error, term()}
@@ -264,45 +258,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ok
   end
 
-  def get_relation(%__MODULE__{shape_meta_table: table} = _state, relation_id) do
-    get_relation(table, relation_id)
-  end
-
-  def get_relation(meta_table, relation_id) do
-    case :ets.lookup(meta_table, {@relation_data, relation_id}) do
-      [] -> nil
-      [{{@relation_data, ^relation_id}, relation}] -> relation
-    end
-  end
-
-  def store_relation(%__MODULE__{shape_meta_table: meta_table} = _state, %Relation{} = relation) do
-    store_relation(meta_table, relation)
-  end
-
-  def store_relation(meta_table, %Relation{} = relation) do
-    true = :ets.insert(meta_table, {{@relation_data, relation.id}, relation})
-    :ok
-  end
-
-  defp relation_from_shape(%Shape{
-         root_table: {schema, table},
-         root_table_id: relation_id,
-         table_info: table_info
-       }) do
-    %{columns: columns} = Map.fetch!(table_info, {schema, table})
-
-    %Relation{
-      id: relation_id,
-      schema: schema,
-      table: table,
-      columns:
-        columns
-        |> Enum.map(fn %{name: name, type_id: {type_oid, _}} ->
-          %Column{name: name, type_oid: type_oid}
-        end)
-    }
-  end
-
   defp load(state) do
     with {:ok, shapes} <- Storage.get_all_stored_shapes(state.storage) do
       :ets.insert(
@@ -313,8 +268,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
             [
               {{@shape_hash_lookup, hash}, shape_id},
-              {{@shape_meta_data, shape_id}, shape, nil, LogOffset.first()},
-              {{@relation_data, shape.root_table_id}, relation_from_shape(shape)}
+              {{@shape_meta_data, shape_id}, shape, nil, LogOffset.first()}
             ]
           end)
         ])

@@ -121,12 +121,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     lsn = Lsn.from_string("0/10")
     last_log_offset = LogOffset.new(lsn, 0)
 
-    Mock.Inspector
-    |> expect(:load_column_info, 1, fn {"public", "test_table"}, _ ->
-      {:ok, [%{pk_position: 0, name: "id"}]}
-    end)
-    |> allow(self(), ctx.server)
-
     txn =
       %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
       |> Transaction.prepend_change(%Changes.NewRecord{

@@ -176,17 +176,45 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  # If relation OID matches, then shape is affected
-  def is_affected_by_relation_change?(%__MODULE__{root_table_id: id}, %Changes.Relation{id: id}),
-    do: true
+  # If relation OID matches, but qualified table name does not, then shape is affected
+  def is_affected_by_relation_change?(
+        %__MODULE__{root_table_id: id, root_table: {shape_schema, shape_table}},
+        %Changes.Relation{id: id, schema: schema, table: table}
+      )
+      when shape_schema != schema or shape_table != table,
+      do: true
+
+  def is_affected_by_relation_change?(
+        %__MODULE__{
+          root_table_id: id,
+          root_table: {schema, table} = root_table,
+          table_info: table_info
+        },
+        %Changes.Relation{id: id, schema: schema, table: table, columns: new_columns}
+      ) do
+    shape_columns = Map.get(table_info, root_table, %{})[:columns]
+
+    if length(shape_columns) != length(new_columns) do
+      true
+    else
+      shape_columns
+      |> Enum.map(&{&1.name, elem(&1.type_id, 0)})
+      |> Map.new()
+      |> then(fn shape_col_map ->
+        new_columns
+        |> Enum.any?(fn new_col -> Map.get(shape_col_map, new_col.name) != new_col.type_oid end)
+      end)
+    end
+  end
 
   # If qualified table is the same but OID is different, it affects this shape as
   # it means that its root table has been renamed or deleted
   def is_affected_by_relation_change?(
         %__MODULE__{root_table: {schema, table}, root_table_id: old_id},
         %Changes.Relation{schema: schema, table: table, id: new_id}
-      ),
-      do: old_id !== new_id
+      )
+      when old_id !== new_id,
+      do: true
 
   def is_affected_by_relation_change?(_, _), do: false
 

@@ -19,10 +19,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
   @test_shape %Shape{
     root_table: {"public", "users"},
-    root_table_id: 1,
+    root_table_id: :erlang.phash2({"public", "users"}),
     table_info: %{
       {"public", "users"} => %{
-        columns: [%{name: "id", type: "int8", pk_position: 0, array_dimensions: 0}],
+        columns: [
+          %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0, array_dimensions: 0}
+        ],
         pk: ["id"]
       }
     }

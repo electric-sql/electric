@@ -2,9 +2,7 @@ defmodule Electric.ShapeCacheBehaviour do
   @moduledoc """
   Behaviour defining the ShapeCache functions to be used in mocks
   """
-  alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Shapes.Shape
-  alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
 
   @type shape_id :: String.t()
@@ -18,8 +16,6 @@ defmodule Electric.ShapeCacheBehaviour do
               {shape_id(), current_snapshot_offset :: LogOffset.t()}
   @callback get_or_create_shape_id(shape_def(), opts :: keyword()) ::
               {shape_id(), current_snapshot_offset :: LogOffset.t()}
-
-  @callback get_relation(Messages.relation_id(), opts :: keyword()) :: Changes.Relation.t() | nil
   @callback list_shapes(Electric.ShapeCache.ShapeStatus.t()) :: [{shape_id(), Shape.t()}]
   @callback await_snapshot_start(shape_id(), opts :: keyword()) :: :started | {:error, term()}
   @callback handle_truncate(shape_id(), keyword()) :: :ok
@@ -31,8 +27,6 @@ end
 defmodule Electric.ShapeCache do
   use GenServer
 
-  alias Electric.Postgres.LogicalReplication.Messages
-  alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes
@@ -120,14 +114,6 @@ defmodule Electric.ShapeCache do
   end
 
   @impl Electric.ShapeCacheBehaviour
-  @spec get_relation(Messages.relation_id(), opts :: keyword()) :: Changes.Relation.t() | nil
-  def get_relation(relation_id, opts) do
-    meta_table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
-    shape_status = Access.get(opts, :shape_status, ShapeStatus)
-    shape_status.get_relation(meta_table, relation_id)
-  end
-
-  @impl Electric.ShapeCacheBehaviour
   @spec clean_shape(shape_id(), keyword()) :: :ok
   def clean_shape(shape_id, opts) do
     server = Access.get(opts, :server, __MODULE__)
@@ -210,7 +196,17 @@ defmodule Electric.ShapeCache do
 
     recover_shapes(state)
 
+    # do this after finishing this function so that we're subscribed to the
+    # producer before it starts forwarding its demand
+    send(self(), :consumers_ready)
+
     {:ok, state}
+  end
+
+  @impl GenServer
+  def handle_info(:consumers_ready, state) do
+    :ok = GenStage.demand(state.log_producer, :forward)
+    {:noreply, state}
   end
 
   @impl GenServer

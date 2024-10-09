@@ -11,6 +11,7 @@ defmodule Support.StubInspector do
       column
       |> Map.put_new(:pk_position, nil)
       |> Map.put_new(:type, "text")
+      |> Map.put_new(:type_id, {25, -1})
     end)
     |> then(&{:ok, &1})
   end
@@ -29,12 +30,14 @@ defmodule Support.StubInspector do
     case Regex.run(regex, table, capture: :all_names) do
       ["", table_name] when table_name != "" ->
         table_name = Utils.parse_quoted_name(table_name)
-        {:ok, %{relation: {"public", table_name}, relation_id: 1}}
+        rel = {"public", table_name}
+        {:ok, %{relation: rel, relation_id: :erlang.phash2(rel)}}
 
       [schema_name, table_name] when table_name != "" ->
         schema_name = Utils.parse_quoted_name(schema_name)
         table_name = Utils.parse_quoted_name(table_name)
-        {:ok, %{relation: {schema_name, table_name}, relation_id: 1}}
+        rel = {schema_name, table_name}
+        {:ok, %{relation: rel, relation_id: :erlang.phash2(rel)}}
 
       _ ->
         {:error, "invalid name syntax"}
