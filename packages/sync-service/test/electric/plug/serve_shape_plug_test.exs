@@ -44,7 +44,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
   def conn(method, params, "?" <> _ = query_string) do
     # Pass mock dependencies to the plug
-    config = %{
+    config = [
       shape_cache: {Mock.ShapeCache, []},
       storage: {Mock.Storage, []},
       inspector: {__MODULE__, []},
@@ -52,7 +52,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       long_poll_timeout: 20_000,
       max_age: 60,
       stale_age: 300
-    }
+    ]
 
     Plug.Test.conn(method, "/" <> query_string, params)
     |> assign(:config, config)
