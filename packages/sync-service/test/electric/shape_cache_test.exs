@@ -27,7 +27,10 @@ defmodule Electric.ShapeCacheTest do
     root_table_id: 1,
     table_info: %{
       {"public", "items"} => %{
-        columns: [%{name: "id", type: :text}, %{name: "value", type: :text}],
+        columns: [
+          %{name: "id", type: :text, type_id: {25, 1}},
+          %{name: "value", type: :text, type_id: {25, 1}}
+        ],
         pk: ["id"]
       }
     }
@@ -51,8 +54,8 @@ defmodule Electric.ShapeCacheTest do
   @prepare_tables_noop {__MODULE__, :prepare_tables_noop, []}
 
   @stub_inspector StubInspector.new([
-                    %{name: "id", type: "int8", pk_position: 0},
-                    %{name: "value", type: "text"}
+                    %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0},
+                    %{name: "value", type: "text", type_id: {25, 1}}
                   ])
 
   setup :verify_on_exit!
@@ -65,7 +68,6 @@ defmodule Electric.ShapeCacheTest do
     setup [
       :with_electric_instance_id,
       :with_in_memory_storage,
-      :with_persistent_kv,
       :with_log_chunking,
       :with_no_pool,
       :with_registry,
@@ -96,7 +98,6 @@ defmodule Electric.ShapeCacheTest do
     setup [
       :with_electric_instance_id,
       :with_in_memory_storage,
-      :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector
@@ -204,7 +205,6 @@ defmodule Electric.ShapeCacheTest do
     setup [
       :with_electric_instance_id,
       :with_in_memory_storage,
-      :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
       :with_unique_db,
@@ -370,7 +370,6 @@ defmodule Electric.ShapeCacheTest do
     setup [
       :with_electric_instance_id,
       :with_in_memory_storage,
-      :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector
@@ -443,7 +442,6 @@ defmodule Electric.ShapeCacheTest do
     setup [
       :with_electric_instance_id,
       :with_in_memory_storage,
-      :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector
@@ -486,7 +484,6 @@ defmodule Electric.ShapeCacheTest do
     setup [
       :with_electric_instance_id,
       :with_in_memory_storage,
-      :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector
@@ -650,7 +647,6 @@ defmodule Electric.ShapeCacheTest do
     setup [
       :with_electric_instance_id,
       :with_in_memory_storage,
-      :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector
@@ -704,7 +700,6 @@ defmodule Electric.ShapeCacheTest do
     setup [
       :with_electric_instance_id,
       :with_in_memory_storage,
-      :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector
@@ -800,7 +795,6 @@ defmodule Electric.ShapeCacheTest do
     setup [
       :with_electric_instance_id,
       :with_cub_db_storage,
-      :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
@@ -962,7 +956,6 @@ defmodule Electric.ShapeCacheTest do
     setup [
       :with_electric_instance_id,
       :with_in_memory_storage,
-      :with_persistent_kv,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
@@ -992,18 +985,21 @@ defmodule Electric.ShapeCacheTest do
     defp shapes do
       shape1 =
         Shape.new!("public.test_table",
-          inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+          inspector:
+            StubInspector.new([%{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0}])
         )
 
       shape2 =
         Shape.new!("public.test_table",
-          inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}]),
+          inspector:
+            StubInspector.new([%{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0}]),
           where: "id > 5"
         )
 
       shape3 =
         Shape.new!("public.other_table",
-          inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+          inspector:
+            StubInspector.new([%{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0}])
         )
 
       [shape1, shape2, shape3]
@@ -1062,7 +1058,7 @@ defmodule Electric.ShapeCacheTest do
 
       shape =
         Shape.new!("public.test_table",
-          inspector: StubInspector.new([%{name: "id", type: :int8}])
+          inspector: StubInspector.new([%{name: "id", type: :int8, type_id: {20, 1}}])
         )
 
       {shape_id, _} = shape_cache.get_or_create_shape_id(shape, opts)

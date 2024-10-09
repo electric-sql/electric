@@ -64,8 +64,6 @@ defmodule Electric.ShapeCache do
             inspector: [type: :mod_arg, required: true],
             shape_status: [type: :atom, default: Electric.ShapeCache.ShapeStatus],
             registry: [type: {:or, [:atom, :pid]}, required: true],
-            # NimbleOptions has no "implementation of protocol" type
-            persistent_kv: [type: :any, required: true],
             db_pool: [type: {:or, [:atom, :pid]}, default: Electric.DbPool],
             run_with_conn_fn: [type: {:fun, 2}, default: &DBConnection.run/2],
             prepare_tables_fn: [type: {:or, [:mfa, {:fun, 2}]}, required: true],
@@ -187,7 +185,6 @@ defmodule Electric.ShapeCache do
   def init(opts) do
     {:ok, persistent_state} =
       opts.shape_status.initialise(
-        persistent_kv: opts.persistent_kv,
         shape_meta_table: opts.shape_meta_table,
         storage: opts.storage
       )

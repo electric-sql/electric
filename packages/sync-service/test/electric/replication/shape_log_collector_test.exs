@@ -48,7 +48,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         inspector: {Mock.Inspector, []},
         shape_status: Mock.ShapeStatus,
         shape_meta_table: shape_meta_table,
-        persistent_kv: Electric.PersistentKV.Memory.new!(),
         prepare_tables_fn: fn _, _ -> {:ok, [:ok]} end,
         log_producer: ShapeLogCollector.name(ctx.electric_instance_id),
         electric_instance_id: ctx.electric_instance_id,

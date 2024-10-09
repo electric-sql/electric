@@ -394,7 +394,6 @@ defmodule Electric.Shapes.ConsumerTest do
     setup [
       {Support.ComponentSetup, :with_registry},
       {Support.ComponentSetup, :with_in_memory_storage},
-      {Support.ComponentSetup, :with_persistent_kv},
       {Support.ComponentSetup, :with_log_chunking},
       {Support.ComponentSetup, :with_shape_log_collector}
     ]
@@ -661,8 +660,7 @@ defmodule Electric.Shapes.ConsumerTest do
       :with_basic_tables,
       :with_publication,
       :with_registry,
-      :with_inspector,
-      :with_persistent_kv
+      :with_inspector
     ]
 
     setup do
@@ -707,7 +705,6 @@ defmodule Electric.Shapes.ConsumerTest do
           shape_meta_table: __MODULE__.ShapeMeta,
           storage: storage,
           db_pool: ctx.pool,
-          persistent_kv: ctx.persistent_kv,
           registry: ctx.registry,
           inspector: ctx.inspector,
           chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),

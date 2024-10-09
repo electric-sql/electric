@@ -66,7 +66,6 @@ defmodule Support.ComponentSetup do
         storage: ctx.storage,
         chunk_bytes_threshold: ctx.chunk_bytes_threshold,
         db_pool: ctx.pool,
-        persistent_kv: ctx.persistent_kv,
         registry: ctx.registry,
         log_producer: ctx.shape_log_collector,
         consumer_supervisor: consumer_supervisor
