@@ -11,15 +11,16 @@ outline: deep
 
 | | |
 | ----- | -------- |
-| **Basis** | Full time or contract |
-| **Salary** | €80-100k |
+| **Basis** | Contract or full time |
+| **Salary** | Flexible, depends on basis, full-time ~€80-100k |
 | **Location** | Remote in Europe or eastern US |
+| **Sponsored** | Sponsored and co-funded by [Supabase](https://supabase.com) |
 | **Published** | 1st October 2024 |
 | **Deadline**  | 21st October 2024 |
 
-We're looking for a generalist web and systems engineer to join the core PGlite team, working mainly in Typescript, Rust and C++.
+We're looking for a generalist web and systems engineer to join the core PGlite team at ElectricSQL, working mainly in Typescript, Rust and C++.
 
-PGlite is a [lightweight embeddable/WASM Postgres](https://pglite.dev). It's a fast growing open source project, with 8k GitHub stars and over 100k weekly downloads. It opens up new possibilities for local-first apps and systems built on an embedded, real-time, reactive Postgres, such as [https://postgres.new](https://postgres.new)
+PGlite is a [lightweight embeddable/WASM Postgres](https://pglite.dev). It's a fast growing open source project, with 8k GitHub stars and over 200k weekly downloads. It opens up new possibilities for local-first apps and systems built on an embedded, real-time, reactive Postgres, such as [https://database.build](https://database.build)
 
 <div style="max-width: 452px; margin: 24px 0">
   <div class="embed-container">
@@ -27,11 +28,14 @@ PGlite is a [lightweight embeddable/WASM Postgres](https://pglite.dev). It's a f
   </div>
 </div>
 
-You'll be part of the core PGlite team at [ElectricSQL](https://electric-sql.com/about/team), working closely with [Sam Willis](https://github.com/samwillis) and [Paul Peny](https://github.com/pmp-p). It's a full time or contract role, working remotely in Europe or eastern US. Remuneration depends on how the hiring is structured but would be a ~€80-100k salary for full time (we work a 4 day week).
+You'll work as part of the PGlite team at [ElectricSQL](https://electric-sql.com/about/team), with [Sam Willis](https://github.com/samwillis) and [Paul Peny](https://github.com/pmp-p). We work remote-first, with ~quartely on-sites in Europe. You must be based in Europe or eastern USA. See the [Jobs](/about/jobs/) and [Team](/about/team) pages for more information about working at Electric and to see the team you'll be joining.
 
-See the [Jobs](/about/jobs/) and [Team](/about/team) pages for more information about working at Electric and to see the team you'll be joining.
+> [!TIP] Flexible basis, sponsored by Supabase
+> The role is co-funded by Supabase and provides an opportunity to work in collaboration with members of the Supabase team, including [Greg Richardson](https://github.com/gregnr) (the guy in the video above!), as well as other partners and contributors from the open source community.
+>
+> It's offered on a flexible basis, so could be a short term contract, long term contract or direct employment, full-time or part-time. Renumeration depends on your circumstances and how you prefer to structure the engagement. As a guide, ElectricSQL works a 4-day week, with a full-time salary for 32 hours a week in the €80-100k range.
 
-You will collaborate with partners and contributors like Supabase and the wider open source community. So you need great communication skills and ideally experience of building open source. Technically, you need strong Typescript and systems programming experience, ideally in C++ and Rust. It would be great if (but is not essential that) you're familiar with some aspects of database internals, filesystems and WASM.
+You need great communication skills and ideally experience of building open source. Technically, you need strong Typescript and systems programming experience, ideally in C++ and Rust. It would be great if (but is not essential that) you're familiar with some aspects of database internals, filesystems and WASM.
 
 Current priorities include developing a libpglite version of PGlite that can be embedded in native apps, creating an HTTP/S3 VFS, multi-connection, robustness and stability improvements.  Example tasks that you might pick up include things like:
 
