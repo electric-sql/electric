@@ -33,7 +33,7 @@ You'll work as part of the PGlite team at [ElectricSQL](https://electric-sql.com
 > [!TIP] Flexible basis, sponsored by Supabase
 > The role is co-funded by Supabase and provides an opportunity to work in collaboration with members of the Supabase team, including [Greg Richardson](https://github.com/gregnr) (the guy in the video above!), as well as other partners and contributors from the open source community.
 >
-> It's offered on a flexible basis, so could be a short term contract, long term contract or direct employment, full-time or part-time. Renumeration depends on your circumstances and how you prefer to structure the engagement. As a guide, ElectricSQL works a 4-day week, with a full-time salary for 32 hours a week in the €80-100k range.
+> It's offered on a flexible basis, so could be a short term contract, long term contract or direct employment, full-time or part-time. Remuneration depends on your circumstances and how you prefer to structure the engagement. As a guide, ElectricSQL works a 4-day week, with a full-time salary for 32 hours a week in the €80-100k range.
 
 You need great communication skills and ideally experience of building open source. Technically, you need strong Typescript and systems programming experience, ideally in C++ and Rust. It would be great if (but is not essential that) you're familiar with some aspects of database internals, filesystems and WASM.
 
