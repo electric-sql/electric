@@ -1,0 +1,29 @@
+on:
+  pull_request:
+
+defaults:
+  run:
+    working-directory: packages/sync-service
+
+env:
+  PROJECT_ID: vaxine
+  REGISTRY: europe-docker.pkg.dev/vaxine/electric
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCLOUD_REGISTRY_JSON_KEY }}
+      - uses: google-github-actions/setup-gcloud@v1
+      - name: Use gcloud CLI
+        run: "gcloud info"
+      - name: Docker auth
+        run: gcloud auth configure-docker europe-docker.pkg.dev --quiet
+      - name: Pull latest base image
+        run: docker pull electricsql/electric:canary
+      - name: Build image
+        run: docker build --push --cache-from=electricsql/electric:canary --tag ${{ env.REGISTRY }}/electric:${{ github.event.number }} .
