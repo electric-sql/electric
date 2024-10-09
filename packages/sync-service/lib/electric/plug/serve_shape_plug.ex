@@ -23,6 +23,18 @@ defmodule Electric.Plug.ServeShapePlug do
   @up_to_date [Jason.encode!(%{headers: %{control: "up-to-date"}})]
   @must_refetch Jason.encode!([%{headers: %{control: "must-refetch"}}])
 
+defmodule TimeUtils do
+  def seconds_since_oct9th_2024_next_interval do
+    oct9th2024 = DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
+    now = DateTime.utc_now()
+
+    diff_in_seconds = DateTime.diff(now, oct9th2024, :second)
+    next_interval = ceil(diff_in_seconds / 20) * 20
+
+    next_interval
+  end
+end
+
   defmodule Params do
     use Ecto.Schema
     import Ecto.Changeset
@@ -329,12 +341,17 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
+
   defp put_resp_cache_headers(%Conn{assigns: %{config: config, live: live}} = conn, _) do
     if live do
-      put_resp_header(
-        conn,
+      conn
+      |> put_resp_header(
         "cache-control",
-        "max-age=5, stale-while-revalidate=5"
+        "public, max-age=5, stale-while-revalidate=5"
+      )
+      |> put_resp_header(
+        "electric-next-cursor",
+        TimeUtils.seconds_since_oct9th_2024_next_interval() |> Integer.to_string()
       )
     else
       put_resp_header(

@@ -17,6 +17,7 @@ import {
 } from './fetch'
 import {
   CHUNK_LAST_OFFSET_HEADER,
+  LIVE_NEXT_CURSOR,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
   SHAPE_ID_HEADER,
@@ -143,6 +144,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   >()
 
   #lastOffset: Offset
+  #nextLiveCursor: string // Seconds since our Electric Epoch 😎
   #lastSyncedAt?: number // unix time
   #isUpToDate: boolean = false
   #connected: boolean = false
@@ -153,6 +155,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     validateOptions(options)
     this.options = { subscribe: true, ...options }
     this.#lastOffset = this.options.offset ?? `-1`
+    this.#nextLiveCursor = ``
     this.#shapeId = this.options.shapeId
     this.#messageParser = new MessageParser<T>(options.parser)
 
@@ -197,6 +200,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         if (this.#isUpToDate) {
           fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
+          fetchUrl.searchParams.set(`cursor`, this.#nextLiveCursor)
         }
 
         if (this.#shapeId) {
@@ -246,6 +250,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
         const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
         if (lastOffset) {
           this.#lastOffset = lastOffset as Offset
+        }
+
+        const nextLiveCursor = headers.get(LIVE_NEXT_CURSOR)
+        if (nextLiveCursor) {
+          this.#nextLiveCursor = nextLiveCursor
         }
 
         const getSchema = (): Schema => {
@@ -376,6 +385,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
    */
   #reset(shapeId?: string) {
     this.#lastOffset = `-1`
+    this.#nextLiveCursor = ``
     this.#shapeId = shapeId
     this.#isUpToDate = false
     this.#connected = false

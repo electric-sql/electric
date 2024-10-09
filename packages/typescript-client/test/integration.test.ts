@@ -98,6 +98,7 @@ describe(`HTTP Sync`, () => {
     expect(urlsRequested[0].searchParams.has(`live`)).false
     expect(urlsRequested[1].searchParams.get(`offset`)).not.toBe(`-1`)
     expect(urlsRequested[1].searchParams.has(`live`)).true
+    expect(urlsRequested[1].searchParams.has(`cursor`)).true
 
     // first request comes back immediately and is up to date, second one
     // should hang while waiting for updates
