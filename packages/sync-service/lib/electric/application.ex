@@ -111,7 +111,7 @@ defmodule Electric.Application do
                {Electric.Plug.Router,
                 storage: storage,
                 registry: Registry.ShapeChanges,
-                shape_cache: {Electric.ShapeCache, []},
+                shape_cache: shape_cache,
                 get_service_status: get_service_status,
                 inspector: inspector,
                 long_poll_timeout: 20_000,
