@@ -54,22 +54,23 @@ jobs:
             --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-runner-base \
             --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-${{ github.sha }} \
             .
-      # - name: Trigger a benchmark start
-      #   run: |
-      #     curl -X POST 'http://localhost:4000/api/benchmarks/write_fanout/runs' \
-      #       -H 'Content-Type: application/json' \
-      #       -d '{
-      #         "benchmark_run": {
-      #           "spec_values": {
-      #             "electric_image": ["electricsql/electric:'"$ELECTRIC_VERSION"'"],
-      #             "postgres_image": ["postgres:15-alpine"],
-      #             "row_count": [500],
-      #             "concurrent": [4,36,68,100,132,164,200],
-      #             "tx_row_count": [10,410,810,1210,1610,1910]
-      #           },
-      #           "machine_request": {
-      #             "vcpu": 4,
-      #             "mem_gb": 8
-      #           }
-      #         }
-      #       }'
+      - name: Trigger a benchmark start
+        run: |
+          curl -X POST 'http://benchmarking.electric-sql.com:4000/api/benchmarks/write_fanout/runs' \
+            -u benchmarking:${{ secrets.BENCHMARKING_API_PASSWORD }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "benchmark_run": {
+                "spec_values": {
+                  "electric_image": ["${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-${{ github.sha }}"],
+                  "postgres_image": ["postgres:15-alpine"],
+                  "row_count": [500],
+                  "concurrent": [4,36,68,100,132,164,200],
+                  "tx_row_count": [50]
+                },
+                "machine_request": {
+                  "vcpu": 4,
+                  "mem_gb": 8
+                }
+              }
+            }' | jq
