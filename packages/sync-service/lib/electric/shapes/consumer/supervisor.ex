@@ -9,6 +9,7 @@ defmodule Electric.Shapes.Consumer.Supervisor do
             shape_id: [type: :string, required: true],
             shape: [type: {:struct, Electric.Shapes.Shape}, required: true],
             electric_instance_id: [type: :atom, required: true],
+            inspector: [type: :mod_arg, required: true],
             log_producer: [type: @genserver_name_schema, required: true],
             shape_cache: [type: :mod_arg, required: true],
             registry: [type: :atom, required: true],

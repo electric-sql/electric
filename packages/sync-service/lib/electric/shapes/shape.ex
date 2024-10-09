@@ -8,8 +8,8 @@ defmodule Electric.Shapes.Shape do
   alias Electric.Replication.Eval.Runner
   alias Electric.Replication.Changes
 
-  @enforce_keys [:root_table]
-  defstruct [:root_table, :table_info, :where]
+  @enforce_keys [:root_table, :root_table_id]
+  defstruct [:root_table, :root_table_id, :table_info, :where]
 
   @type table_info() :: %{
           columns: [Inspector.column_info(), ...],
@@ -17,6 +17,7 @@ defmodule Electric.Shapes.Shape do
         }
   @type t() :: %__MODULE__{
           root_table: Electric.relation(),
+          root_table_id: Electric.relation_id(),
           table_info: %{
             Electric.relation() => table_info()
           },
@@ -30,6 +31,7 @@ defmodule Electric.Shapes.Shape do
   @type json_table_list() :: [json_table_info(), ...]
   @type json_safe() :: %{
           root_table: json_relation(),
+          root_table_id: non_neg_integer(),
           where: String.t(),
           table_info: [json_table_list(), ...]
         }
@@ -64,13 +66,14 @@ defmodule Electric.Shapes.Shape do
     opts = NimbleOptions.validate!(opts, @shape_schema)
 
     with inspector <- Access.fetch!(opts, :inspector),
-         {:ok, table} <- validate_table(table, inspector),
+         {:ok, %{relation: table, relation_id: relation_id}} <- validate_table(table, inspector),
          {:ok, column_info, pk_cols} <- load_column_info(table, inspector),
          refs = Inspector.columns_to_expr(column_info),
          {:ok, where} <- maybe_parse_where_clause(Access.get(opts, :where), refs) do
       {:ok,
        %__MODULE__{
          root_table: table,
+         root_table_id: relation_id,
          table_info: %{table => %{pk: pk_cols, columns: column_info}},
          where: where
        }}
@@ -173,31 +176,56 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
+  # If relation OID matches, but qualified table name does not, then shape is affected
   def is_affected_by_relation_change?(
-        shape,
-        %Changes.RelationChange{
-          old_relation: %Changes.Relation{schema: old_schema, table: old_table},
-          new_relation: %Changes.Relation{schema: new_schema, table: new_table}
-        }
+        %__MODULE__{root_table_id: id, root_table: {shape_schema, shape_table}},
+        %Changes.Relation{id: id, schema: schema, table: table}
       )
-      when old_schema != new_schema or old_table != new_table do
-    # The table's qualified name changed
-    # so shapes that match the old schema or table name are affected
-    shape_matches?(shape, old_schema, old_table)
+      when shape_schema != schema or shape_table != table,
+      do: true
+
+  def is_affected_by_relation_change?(
+        %__MODULE__{
+          root_table_id: id,
+          root_table: {schema, table} = root_table,
+          table_info: table_info
+        },
+        %Changes.Relation{id: id, schema: schema, table: table, columns: new_columns}
+      ) do
+    shape_columns = Map.get(table_info, root_table, %{})[:columns]
+
+    if length(shape_columns) != length(new_columns) do
+      true
+    else
+      shape_columns
+      |> Enum.map(&{&1.name, elem(&1.type_id, 0)})
+      |> Map.new()
+      |> then(fn shape_col_map ->
+        new_columns
+        |> Enum.any?(fn new_col -> Map.get(shape_col_map, new_col.name) != new_col.type_oid end)
+      end)
+    end
   end
 
-  def is_affected_by_relation_change?(shape, %Changes.RelationChange{
-        new_relation: %Changes.Relation{schema: schema, table: table}
-      }) do
-    shape_matches?(shape, schema, table)
-  end
+  # If qualified table is the same but OID is different, it affects this shape as
+  # it means that its root table has been renamed or deleted
+  def is_affected_by_relation_change?(
+        %__MODULE__{root_table: {schema, table}, root_table_id: old_id},
+        %Changes.Relation{schema: schema, table: table, id: new_id}
+      )
+      when old_id !== new_id,
+      do: true
 
-  defp shape_matches?({_, %__MODULE__{root_table: {schema, table}}}, schema, table), do: true
-  defp shape_matches?(_, _, _), do: false
+  def is_affected_by_relation_change?(_, _), do: false
 
-  @spec from_json_safe!(t()) :: json_safe()
+  @spec to_json_safe(t()) :: json_safe()
   def to_json_safe(%__MODULE__{} = shape) do
-    %{root_table: {schema, name}, where: where, table_info: table_info} = shape
+    %{
+      root_table: {schema, name},
+      root_table_id: root_table_id,
+      where: where,
+      table_info: table_info
+    } = shape
 
     query =
       case where do
@@ -207,6 +235,7 @@ defmodule Electric.Shapes.Shape do
 
     %{
       root_table: [schema, name],
+      root_table_id: root_table_id,
       where: query,
       table_info:
         if(table_info,
@@ -232,7 +261,12 @@ defmodule Electric.Shapes.Shape do
 
   @spec from_json_safe!(json_safe()) :: t() | no_return()
   def from_json_safe!(map) do
-    %{"root_table" => [schema, name], "where" => where, "table_info" => info} = map
+    %{
+      "root_table" => [schema, name],
+      "root_table_id" => root_table_id,
+      "where" => where,
+      "table_info" => info
+    } = map
 
     table_info =
       Enum.reduce(info, %{}, fn [[schema, name], table_info], info ->
@@ -248,7 +282,12 @@ defmodule Electric.Shapes.Shape do
     refs = Inspector.columns_to_expr(column_info)
     {:ok, where} = maybe_parse_where_clause(where, refs)
 
-    %__MODULE__{root_table: {schema, name}, where: where, table_info: table_info}
+    %__MODULE__{
+      root_table: {schema, name},
+      root_table_id: root_table_id,
+      where: where,
+      table_info: table_info
+    }
   end
 
   defp column_info_from_json({"type_id", [id, mod]}), do: {:type_id, {id, mod}}
@@ -260,11 +299,11 @@ defimpl Inspect, for: Electric.Shapes.Shape do
   import Inspect.Algebra
 
   def inspect(%Electric.Shapes.Shape{} = shape, _opts) do
-    {schema, table} = shape.root_table
+    %{root_table: {schema, table}, root_table_id: root_table_id} = shape
 
     where = if shape.where, do: concat([", where: \"", shape.where.query, "\""]), else: ""
 
-    concat(["Shape.new!(\"", schema, ".", table, "\"", where, ")"])
+    concat(["Shape.new!(\"", schema, ".", table, "\" [OID #{root_table_id}]", where, ")"])
   end
 end
 

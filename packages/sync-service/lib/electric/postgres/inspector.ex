@@ -1,6 +1,7 @@
 defmodule Electric.Postgres.Inspector do
   alias Electric.Replication.Eval.Parser
   @type relation :: Electric.relation()
+  @type relation_id :: Electric.relation_id()
 
   @type column_info :: %{
           name: String.t(),
@@ -14,15 +15,16 @@ defmodule Electric.Postgres.Inspector do
           array_type: String.t()
         }
 
-  @callback load_relation(String.t(), opts :: term()) ::
-              {:ok, relation()} | {:error, String.t()}
+  @type relation_info :: %{
+          relation_id: relation_id(),
+          relation: relation()
+        }
 
-  @callback clean_relation(relation(), opts :: term()) :: true
+  @callback load_relation(String.t(), opts :: term()) ::
+              {:ok, relation_info()} | {:error, String.t()}
 
   @callback load_column_info(relation(), opts :: term()) ::
               {:ok, [column_info()]} | :table_not_found
-
-  @callback clean_column_info(relation(), opts :: term()) :: true
 
   @callback clean(relation(), opts :: term()) :: true
 
@@ -38,16 +40,9 @@ defmodule Electric.Postgres.Inspector do
        `"Users"` would return `{"public", "Users"}`,
        `some_schema.users` would return `{"some_schema", "users"}`.
   """
-  @spec load_relation(String.t(), inspector()) :: {:ok, relation()} | {:error, String.t()}
+  @spec load_relation(String.t(), inspector()) :: {:ok, relation_info()} | {:error, String.t()}
   def load_relation(table, {module, opts}),
     do: module.load_relation(table, opts)
-
-  @doc """
-  Clean up relation information about a given table using a provided inspector.
-  """
-  @spec clean_relation(relation(), inspector()) :: true
-  def clean_relation(rel, {module, opts}),
-    do: module.clean_relation(rel, opts)
 
   @doc """
   Load column information about a given table using a provided inspector.
@@ -56,12 +51,6 @@ defmodule Electric.Postgres.Inspector do
   def load_column_info(relation, {module, opts}) do
     module.load_column_info(relation, opts)
   end
-
-  @doc """
-  Clean up column information about a given table using a provided inspector.
-  """
-  @spec clean_column_info(relation(), inspector()) :: true
-  def clean_column_info(relation, {module, opts}), do: module.clean_column_info(relation, opts)
 
   @doc """
   Clean up all information about a given relation using a provided inspector.

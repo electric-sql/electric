@@ -8,7 +8,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
     # The extra cast from $1 to text is needed because of Postgrex' OID type encoding
     # see: https://github.com/elixir-ecto/postgrex#oid-type-encoding
     query = """
-    SELECT nspname, relname
+    SELECT nspname, relname, pg_class.oid
     FROM pg_class
     JOIN pg_namespace ON relnamespace = pg_namespace.oid
     WHERE
@@ -20,15 +20,13 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
       {:ok, result} ->
         # We expect exactly one row because the query didn't fail
         # so the relation exists since we could cast it to a regclass
-        [[schema, table]] = result.rows
-        {:ok, {schema, table}}
+        [[schema, table, oid]] = result.rows
+        {:ok, %{relation_id: oid, relation: {schema, table}}}
 
       {:error, err} ->
         {:error, Exception.message(err)}
     end
   end
-
-  def clean_relation(_, _), do: true
 
   @doc """
   Load table information (refs) from the database
@@ -66,8 +64,6 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
       {:ok, rows}
     end
   end
-
-  def clean_column_info(_, _), do: true
 
   def clean(_, _), do: true
 end

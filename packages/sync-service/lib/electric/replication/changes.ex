@@ -33,7 +33,7 @@ defmodule Electric.Replication.Changes do
           | Changes.UpdatedRecord.t()
           | Changes.DeletedRecord.t()
 
-  @type change() :: data_change() | Changes.TruncatedRelation.t() | Changes.RelationChange.t()
+  @type change() :: data_change() | Changes.TruncatedRelation.t()
 
   defmodule Transaction do
     alias Electric.Replication.Changes
@@ -181,15 +181,6 @@ defmodule Electric.Replication.Changes do
             schema: Changes.db_identifier(),
             table: Changes.db_identifier(),
             columns: [Column.t()]
-          }
-  end
-
-  defmodule RelationChange do
-    defstruct [:old_relation, :new_relation]
-
-    @type t() :: %__MODULE__{
-            old_relation: Relation.t(),
-            new_relation: Relation.t()
           }
   end
 
