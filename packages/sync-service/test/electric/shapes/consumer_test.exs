@@ -80,7 +80,7 @@ defmodule Electric.Shapes.ConsumerTest do
   defp run_with_conn_noop(conn, cb), do: cb.(conn)
 
   describe "event handling" do
-    setup [:with_in_memory_storage, :with_persistent_kv]
+    setup [:with_in_memory_storage]
 
     setup(ctx) do
       shapes = Map.get(ctx, :shapes, %{@shape_id1 => @shape1, @shape_id2 => @shape2})
@@ -142,7 +142,7 @@ defmodule Electric.Shapes.ConsumerTest do
                log_producer: ShapeLogCollector.name(ctx.electric_instance_id),
                registry: registry_name,
                shape_cache: {Mock.ShapeCache, []},
-               shape_status: {Mock.ShapeStatus, ctx.persistent_kv},
+               shape_status: {Mock.ShapeStatus, []},
                storage: storage,
                chunk_bytes_threshold:
                  Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),

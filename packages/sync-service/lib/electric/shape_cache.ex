@@ -169,7 +169,7 @@ defmodule Electric.ShapeCache do
 
   @impl GenServer
   def init(opts) do
-    {:ok, persistent_state} =
+    {:ok, shape_status_state} =
       opts.shape_status.initialise(
         shape_meta_table: opts.shape_meta_table,
         storage: opts.storage
@@ -184,7 +184,7 @@ defmodule Electric.ShapeCache do
       shape_meta_table: opts.shape_meta_table,
       shape_status: opts.shape_status,
       db_pool: opts.db_pool,
-      persistent_state: persistent_state,
+      shape_status_state: shape_status_state,
       run_with_conn_fn: opts.run_with_conn_fn,
       create_snapshot_fn: opts.create_snapshot_fn,
       prepare_tables_fn: opts.prepare_tables_fn,
@@ -212,10 +212,10 @@ defmodule Electric.ShapeCache do
   @impl GenServer
   def handle_call({:create_or_wait_shape_id, shape}, _from, %{shape_status: shape_status} = state) do
     {{shape_id, latest_offset}, state} =
-      if shape_state = shape_status.get_existing_shape(state.persistent_state, shape) do
+      if shape_state = shape_status.get_existing_shape(state.shape_status_state, shape) do
         {shape_state, state}
       else
-        {:ok, shape_id} = shape_status.add_shape(state.persistent_state, shape)
+        {:ok, shape_id} = shape_status.add_shape(state.shape_status_state, shape)
 
         {:ok, _pid, _snapshot_xmin, latest_offset} = start_shape(shape_id, shape, state)
         {{shape_id, latest_offset}, state}
@@ -227,7 +227,7 @@ defmodule Electric.ShapeCache do
   end
 
   def handle_call({:wait_shape_id, shape_id}, _from, %{shape_status: shape_status} = state) do
-    {:reply, !is_nil(shape_status.get_existing_shape(state.persistent_state, shape_id)), state}
+    {:reply, !is_nil(shape_status.get_existing_shape(state.shape_status_state, shape_id)), state}
   end
 
   def handle_call({:truncate, shape_id}, _from, state) do
@@ -265,7 +265,7 @@ defmodule Electric.ShapeCache do
 
   defp clean_up_all_shapes(state) do
     shape_ids =
-      state.persistent_state |> state.shape_status.list_shapes() |> Enum.map(&elem(&1, 0))
+      state.shape_status_state |> state.shape_status.list_shapes() |> Enum.map(&elem(&1, 0))
 
     for shape_id <- shape_ids do
       clean_up_shape(state, shape_id)
@@ -273,7 +273,7 @@ defmodule Electric.ShapeCache do
   end
 
   defp recover_shapes(state) do
-    state.persistent_state
+    state.shape_status_state
     |> state.shape_status.list_shapes()
     |> Enum.each(fn {shape_id, shape} ->
       {:ok, _pid, _snapshot_xmin, _latest_offset} = start_shape(shape_id, shape, state)
@@ -288,7 +288,7 @@ defmodule Electric.ShapeCache do
              inspector: state.inspector,
              shape_id: shape_id,
              shape: shape,
-             shape_status: {state.shape_status, state.persistent_state},
+             shape_status: {state.shape_status, state.shape_status_state},
              storage: state.storage,
              chunk_bytes_threshold: state.chunk_bytes_threshold,
              log_producer: state.log_producer,
