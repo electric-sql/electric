@@ -23,7 +23,34 @@ jobs:
         run: "gcloud info"
       - name: Docker auth
         run: gcloud auth configure-docker europe-docker.pkg.dev --quiet
-      - name: Pull latest base image
-        run: docker pull electricsql/electric:canary
-      - name: Build image
-        run: docker build --push --cache-from=electricsql/electric:canary --tag ${{ env.REGISTRY }}/electric:${{ github.event.number }} .
+      - name: Pull latest base images
+        run: |
+          docker pull ${{ env.REGISTRY }}/electric:canary-builder || true
+          docker pull ${{ env.REGISTRY }}/electric:canary-runner-base || true
+          docker pull ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-builder || true
+          docker pull ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-runner-base || true
+      - name: Build base images
+        run: >
+          docker build
+            --push
+            --cache-from=${{ env.REGISTRY }}/electric:canary-builder
+            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-builder
+            --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-builder
+            --target builder
+            .
+
+          docker build
+            --push
+            --cache-from=${{ env.REGISTRY }}/electric:canary-runner-base
+            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-runner-base
+            --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-runner-base
+            --target runner_setup
+            .
+      - name: Build actual image
+        run: >
+          docker build
+            --push
+            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-builder
+            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-runner-base
+            --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-${{ github.sha }}
+            .
