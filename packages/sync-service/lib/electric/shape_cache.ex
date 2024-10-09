@@ -29,7 +29,7 @@ defmodule Electric.ShapeCacheBehaviour do
 end
 
 defmodule Electric.ShapeCache do
-  use GenStage
+  use GenServer
 
   alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Replication.Changes
@@ -75,7 +75,7 @@ defmodule Electric.ShapeCache do
 
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
-      GenStage.start_link(__MODULE__, Map.new(opts), name: opts[:name])
+      GenServer.start_link(__MODULE__, Map.new(opts), name: opts[:name])
     end
   end
 
@@ -93,7 +93,7 @@ defmodule Electric.ShapeCache do
       shape_state
     else
       server = Access.get(opts, :server, __MODULE__)
-      GenStage.call(server, {:create_or_wait_shape_id, shape})
+      GenServer.call(server, {:create_or_wait_shape_id, shape})
     end
   end
 
@@ -131,21 +131,21 @@ defmodule Electric.ShapeCache do
   @spec clean_shape(shape_id(), keyword()) :: :ok
   def clean_shape(shape_id, opts) do
     server = Access.get(opts, :server, __MODULE__)
-    GenStage.call(server, {:clean, shape_id})
+    GenServer.call(server, {:clean, shape_id})
   end
 
   @impl Electric.ShapeCacheBehaviour
   @spec clean_all_shapes(keyword()) :: :ok
   def clean_all_shapes(opts) do
     server = Access.get(opts, :server, __MODULE__)
-    GenStage.call(server, {:clean_all})
+    GenServer.call(server, {:clean_all})
   end
 
   @impl Electric.ShapeCacheBehaviour
   @spec handle_truncate(shape_id(), keyword()) :: :ok
   def handle_truncate(shape_id, opts \\ []) do
     server = Access.get(opts, :server, __MODULE__)
-    GenStage.call(server, {:truncate, shape_id})
+    GenServer.call(server, {:truncate, shape_id})
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -177,11 +177,11 @@ defmodule Electric.ShapeCache do
       true
     else
       server = Access.get(opts, :server, __MODULE__)
-      GenStage.call(server, {:wait_shape_id, shape_id})
+      GenServer.call(server, {:wait_shape_id, shape_id})
     end
   end
 
-  @impl GenStage
+  @impl GenServer
   def init(opts) do
     {:ok, persistent_state} =
       opts.shape_status.initialise(
@@ -210,63 +210,10 @@ defmodule Electric.ShapeCache do
 
     recover_shapes(state)
 
-    # do this after finishing this function so that we're subscribed to the
-    # producer before it starts forwarding its demand
-    send(self(), :consumers_ready)
-
-    {:consumer, state,
-     subscribe_to: [
-       {opts.log_producer, max_demand: 1, selector: &is_struct(&1, Changes.Relation)}
-     ]}
+    {:ok, state}
   end
 
-  @impl GenStage
-  def handle_info(:consumers_ready, state) do
-    :ok = GenStage.demand(state.log_producer, :forward)
-    {:noreply, [], state}
-  end
-
-  @impl GenStage
-  def handle_events([relation], _from, state) do
-    %{persistent_state: persistent_state, shape_status: shape_status} = state
-    # NOTE: [@magnetised] this manages cleaning up shapes after a relation
-    # change. it's not doing it in a consistent way, as the shape consumers
-    # could still be receiving txns after a relation message that requires them
-    # to terminate.
-
-    old_rel = shape_status.get_relation(persistent_state, relation.id)
-
-    if is_nil(old_rel) || old_rel != relation do
-      :ok = shape_status.store_relation(persistent_state, relation)
-    end
-
-    if !is_nil(old_rel) && old_rel != relation do
-      Logger.info("Schema for the table #{old_rel.schema}.#{old_rel.table} changed")
-
-      # Fetch all shapes that are affected by the relation change and clean them up
-      persistent_state
-      |> shape_status.list_shapes()
-      |> Enum.filter(&Shape.is_affected_by_relation_change?(&1, relation))
-      |> Enum.map(&elem(&1, 0))
-      |> Enum.each(fn shape_id -> clean_up_shape(state, shape_id) end)
-    end
-
-    if old_rel != relation do
-      # Clean column information from ETS
-      # also when old_rel is nil because column info
-      # may already be loaded into ETS by the initial shape request
-      {inspector, inspector_opts} = state.inspector
-      # if the old relation exists we use that one
-      # because the table name may have changed in the new relation
-      # if there is no old relation, we use the new one
-      rel = old_rel || relation
-      inspector.clean({rel.schema, rel.table}, inspector_opts)
-    end
-
-    {:noreply, [], state}
-  end
-
-  @impl GenStage
+  @impl GenServer
   def handle_call({:create_or_wait_shape_id, shape}, _from, %{shape_status: shape_status} = state) do
     {{shape_id, latest_offset}, state} =
       if shape_state = shape_status.get_existing_shape(state.persistent_state, shape) do
@@ -280,12 +227,11 @@ defmodule Electric.ShapeCache do
 
     Logger.debug("Returning shape id #{shape_id} for shape #{inspect(shape)}")
 
-    {:reply, {shape_id, latest_offset}, [], state}
+    {:reply, {shape_id, latest_offset}, state}
   end
 
   def handle_call({:wait_shape_id, shape_id}, _from, %{shape_status: shape_status} = state) do
-    {:reply, !is_nil(shape_status.get_existing_shape(state.persistent_state, shape_id)), [],
-     state}
+    {:reply, !is_nil(shape_status.get_existing_shape(state.persistent_state, shape_id)), state}
   end
 
   def handle_call({:truncate, shape_id}, _from, state) do
@@ -293,7 +239,7 @@ defmodule Electric.ShapeCache do
       Logger.info("Truncating and rotating shape id, previous shape id #{shape_id} cleaned up")
     end
 
-    {:reply, :ok, [], state}
+    {:reply, :ok, state}
   end
 
   def handle_call({:clean, shape_id}, _from, state) do
@@ -302,13 +248,13 @@ defmodule Electric.ShapeCache do
       Logger.info("Cleaning up shape #{shape_id}")
     end
 
-    {:reply, :ok, [], state}
+    {:reply, :ok, state}
   end
 
   def handle_call({:clean_all}, _from, state) do
     Logger.info("Cleaning up all shapes")
     clean_up_all_shapes(state)
-    {:reply, :ok, [], state}
+    {:reply, :ok, state}
   end
 
   defp clean_up_shape(state, shape_id) do
@@ -343,6 +289,7 @@ defmodule Electric.ShapeCache do
            Electric.Shapes.ConsumerSupervisor.start_shape_consumer(
              state.consumer_supervisor,
              electric_instance_id: state.electric_instance_id,
+             inspector: state.inspector,
              shape_id: shape_id,
              shape: shape,
              shape_status: {state.shape_status, state.persistent_state},
