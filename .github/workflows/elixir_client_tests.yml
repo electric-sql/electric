@@ -19,7 +19,9 @@ jobs:
       MIX_ENV: test
       POSTGRES_VERSION: 140006
       PORT: 3100
+      PG_PORT: 54322
       ELECTRIC_URL: "http://localhost:${PORT}"
+      DATABASE_URL: "postgresql://postgres:password@localhost:${PG_PORT}/electric"
     services:
       postgres:
         image: postgres:14-alpine
@@ -31,7 +33,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 54321:5432
+          - ${PG_PORT}:5432
     steps:
       - uses: actions/checkout@v4
       - name: "Set PG settings"
