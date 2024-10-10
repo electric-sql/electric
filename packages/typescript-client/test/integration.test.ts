@@ -98,6 +98,7 @@ describe(`HTTP Sync`, () => {
     expect(urlsRequested[0].searchParams.has(`live`)).false
     expect(urlsRequested[1].searchParams.get(`offset`)).not.toBe(`-1`)
     expect(urlsRequested[1].searchParams.has(`live`)).true
+    expect(urlsRequested[1].searchParams.has(`cursor`)).true
 
     // first request comes back immediately and is up to date, second one
     // should hang while waiting for updates
@@ -539,7 +540,11 @@ describe(`HTTP Sync`, () => {
     const cacheHeaders = res.headers.get(`cache-control`)
     assert(cacheHeaders !== null, `Response should have cache-control header`)
     const directives = parse(cacheHeaders)
-    expect(directives).toEqual({ 'max-age': 1, 'stale-while-revalidate': 3 })
+    expect(directives).toEqual({
+      public: true,
+      'max-age': 1,
+      'stale-while-revalidate': 3,
+    })
     const etagHeader = res.headers.get(`etag`)
     assert(etagHeader !== null, `Response should have etag header`)
 
