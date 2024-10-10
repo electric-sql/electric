@@ -2,7 +2,18 @@ import Config
 import Dotenvy
 
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
-config :logger, level: :debug
+
+log_level_config =
+  env!("LOG_LEVEL", :string, "debug")
+  |> Electric.Config.parse_log_level()
+
+case log_level_config do
+  {:ok, log_level} ->
+    config :logger, level: log_level
+
+  {:error, message} ->
+    raise message
+end
 
 # uncomment if you need to track process creation and destruction
 # config :logger,
