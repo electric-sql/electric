@@ -5,15 +5,17 @@ defmodule Electric.TimelineTest do
 
   import Mox
 
+  @tenant_id "test_tenant"
+
   describe "load_timeline/1" do
     @moduletag :tmp_dir
 
     setup context do
-      %{kv: Electric.PersistentKV.Filesystem.new!(root: context.tmp_dir)}
+      %{kv: Electric.PersistentKV.Filesystem.new!(root: context.tmp_dir), tenant_id: @tenant_id}
     end
 
-    test "returns nil when no timeline is available", %{kv: kv} do
-      assert Timeline.load_timeline(persistent_kv: kv) == nil
+    test "returns nil when no timeline is available", %{kv: kv, tenant_id: tenant} do
+      assert Timeline.load_timeline(persistent_kv: kv, tenant_id: tenant) == nil
     end
   end
 
@@ -21,7 +23,12 @@ defmodule Electric.TimelineTest do
     @moduletag :tmp_dir
 
     setup context do
-      %{opts: [persistent_kv: Electric.PersistentKV.Filesystem.new!(root: context.tmp_dir)]}
+      %{
+        opts: [
+          persistent_kv: Electric.PersistentKV.Filesystem.new!(root: context.tmp_dir),
+          tenant_id: @tenant_id
+        ]
+      }
     end
 
     test "stores the timeline", %{opts: opts} do
@@ -37,7 +44,7 @@ defmodule Electric.TimelineTest do
     setup context do
       timeline = context[:electric_timeline]
       kv = Electric.PersistentKV.Filesystem.new!(root: context.tmp_dir)
-      opts = [persistent_kv: kv, shape_cache: {ShapeCache, []}]
+      opts = [persistent_kv: kv, shape_cache: {ShapeCache, []}, tenant_id: @tenant_id]
 
       if timeline != nil do
         Timeline.store_timeline(timeline, opts)
