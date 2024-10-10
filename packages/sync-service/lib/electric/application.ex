@@ -2,6 +2,7 @@ defmodule Electric.Application do
   use Application
 
   @process_registry_name Electric.Registry.Processes
+  def process_registry, do: @process_registry_name
 
   @spec process_name(atom(), atom()) :: {:via, atom(), atom()}
   def process_name(electric_instance_id, module) when is_atom(module) do
@@ -48,82 +49,74 @@ defmodule Electric.Application do
     inspector =
       {Electric.Postgres.Inspector.EtsInspector, server: Electric.Postgres.Inspector.EtsInspector}
 
-    core_processes = [
-      {Registry,
-       name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()}
+    electric_instance_id = Application.fetch_env!(:electric, :electric_instance_id)
+    shape_log_collector = Electric.Replication.ShapeLogCollector.name(electric_instance_id)
+
+    shape_cache =
+      {Electric.ShapeCache,
+       electric_instance_id: electric_instance_id,
+       storage: storage,
+       inspector: inspector,
+       prepare_tables_fn: prepare_tables_fn,
+       chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
+       log_producer: shape_log_collector,
+       consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(electric_instance_id),
+       registry: Registry.ShapeChanges}
+
+    connection_manager_opts = [
+      electric_instance_id: electric_instance_id,
+      connection_opts: Application.fetch_env!(:electric, :connection_opts),
+      replication_opts: [
+        publication_name: publication_name,
+        try_creating_publication?: true,
+        slot_name: slot_name,
+        transaction_received:
+          {Electric.Replication.ShapeLogCollector, :store_transaction, [shape_log_collector]},
+        relation_received:
+          {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [shape_log_collector]}
+      ],
+      pool_opts: [
+        name: Electric.DbPool,
+        pool_size: Application.fetch_env!(:electric, :db_pool_size),
+        types: PgInterop.Postgrex.Types
+      ],
+      timeline_opts: [
+        shape_cache: {Electric.ShapeCache, []},
+        persistent_kv: persistent_kv
+      ],
+      log_collector:
+        {Electric.Replication.ShapeLogCollector,
+         electric_instance_id: electric_instance_id, inspector: inspector},
+      shape_cache: shape_cache
     ]
 
-    per_env_processes =
-      if Application.fetch_env!(:electric, :environment) != :test do
-        electric_instance_id = Application.fetch_env!(:electric, :electric_instance_id)
-        shape_log_collector = Electric.Replication.ShapeLogCollector.name(electric_instance_id)
+    children =
+      [
+        Electric.Telemetry,
+        {Registry,
+         name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()},
+        {Registry,
+         name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
+        {Electric.ConnectionManager, connection_manager_opts},
+        {Electric.Postgres.Inspector.EtsInspector, pool: Electric.DbPool},
+        {Bandit,
+         plug:
+           {Electric.Plug.Router,
+            storage: storage,
+            registry: Registry.ShapeChanges,
+            shape_cache: shape_cache,
+            get_service_status: get_service_status,
+            inspector: inspector,
+            long_poll_timeout: 20_000,
+            max_age: Application.fetch_env!(:electric, :cache_max_age),
+            stale_age: Application.fetch_env!(:electric, :cache_stale_age),
+            allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},
+         port: Application.fetch_env!(:electric, :service_port),
+         thousand_island_options: http_listener_options()}
+      ]
+      |> add_prometheus_router(Application.fetch_env!(:electric, :prometheus_port))
 
-        shape_cache =
-          {Electric.ShapeCache,
-           electric_instance_id: electric_instance_id,
-           storage: storage,
-           inspector: inspector,
-           prepare_tables_fn: prepare_tables_fn,
-           chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
-           log_producer: shape_log_collector,
-           consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(electric_instance_id),
-           registry: Registry.ShapeChanges}
-
-        connection_manager_opts = [
-          electric_instance_id: electric_instance_id,
-          connection_opts: Application.fetch_env!(:electric, :connection_opts),
-          replication_opts: [
-            publication_name: publication_name,
-            try_creating_publication?: true,
-            slot_name: slot_name,
-            transaction_received:
-              {Electric.Replication.ShapeLogCollector, :store_transaction, [shape_log_collector]},
-            relation_received:
-              {Electric.Replication.ShapeLogCollector, :handle_relation_msg,
-               [shape_log_collector]}
-          ],
-          pool_opts: [
-            name: Electric.DbPool,
-            pool_size: Application.fetch_env!(:electric, :db_pool_size),
-            types: PgInterop.Postgrex.Types
-          ],
-          timeline_opts: [
-            shape_cache: {Electric.ShapeCache, []},
-            persistent_kv: persistent_kv
-          ],
-          log_collector:
-            {Electric.Replication.ShapeLogCollector,
-             electric_instance_id: electric_instance_id, inspector: inspector},
-          shape_cache: shape_cache
-        ]
-
-        [
-          Electric.Telemetry,
-          {Registry,
-           name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
-          {Electric.ConnectionManager, connection_manager_opts},
-          {Electric.Postgres.Inspector.EtsInspector, pool: Electric.DbPool},
-          {Bandit,
-           plug:
-             {Electric.Plug.Router,
-              storage: storage,
-              registry: Registry.ShapeChanges,
-              shape_cache: shape_cache,
-              get_service_status: get_service_status,
-              inspector: inspector,
-              long_poll_timeout: 20_000,
-              max_age: Application.fetch_env!(:electric, :cache_max_age),
-              stale_age: Application.fetch_env!(:electric, :cache_stale_age),
-              allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},
-           port: Application.fetch_env!(:electric, :service_port),
-           thousand_island_options: http_listener_options()}
-        ]
-        |> add_prometheus_router(Application.fetch_env!(:electric, :prometheus_port))
-      else
-        []
-      end
-
-    Supervisor.start_link(core_processes ++ per_env_processes,
+    Supervisor.start_link(children,
       strategy: :one_for_one,
       name: Electric.Supervisor
     )
