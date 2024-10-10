@@ -1,4 +1,6 @@
 export const SHAPE_ID_HEADER = `electric-shape-id`
+export const LIVE_CACHE_BUSTER_HEADER = `electric-next-cursor`
+export const LIVE_CACHE_BUSTER_QUERY_PARAM = `cursor`
 export const CHUNK_LAST_OFFSET_HEADER = `electric-chunk-last-offset`
 export const CHUNK_UP_TO_DATE_HEADER = `electric-chunk-up-to-date`
 export const SHAPE_SCHEMA_HEADER = `electric-schema`
