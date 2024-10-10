@@ -24,12 +24,13 @@ defmodule Electric.Plug.ServeShapePlug do
   @must_refetch Jason.encode!([%{headers: %{control: "must-refetch"}}])
 
   defmodule TimeUtils do
-    def seconds_since_oct9th_2024_next_interval do
-      oct9th2024 = DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
+    @oct9th2024 DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
+    def seconds_since_oct9th_2024_next_interval(conn) do
+      long_poll_timeout = conn.assigns.config[:long_poll_timeout]
       now = DateTime.utc_now()
 
-      diff_in_seconds = DateTime.diff(now, oct9th2024, :second)
-      next_interval = ceil(diff_in_seconds / 20) * 20
+      diff_in_seconds = DateTime.diff(now, @oct9th2024, :second)
+      next_interval = ceil(diff_in_seconds / long_poll_timeout) * long_poll_timeout
 
       next_interval
     end
@@ -350,7 +351,7 @@ defmodule Electric.Plug.ServeShapePlug do
       )
       |> put_resp_header(
         "electric-next-cursor",
-        TimeUtils.seconds_since_oct9th_2024_next_interval() |> Integer.to_string()
+        TimeUtils.seconds_since_oct9th_2024_next_interval(conn) |> Integer.to_string()
       )
     else
       put_resp_header(
