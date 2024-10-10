@@ -21,7 +21,12 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     shape
   end
 
-  defp table_name, do: :"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}"
+  defp table_name,
+    do:
+      :ets.new(:"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}", [
+        :public,
+        :ordered_set
+      ])
 
   setup do
     [kv: PersistentKV.Memory.new!()]
