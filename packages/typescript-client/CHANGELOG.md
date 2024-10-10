@@ -1,5 +1,14 @@
 # @electric-sql/client
 
+## 0.6.2
+
+### Patch Changes
+
+- c0c9af6: Handle 429 responses with retries.
+- 41845cb: Fix inconsistencies in http proxies for caching live long-polling requests.
+
+  The server now returns a cursor for the client to use in requests to cache-bust any stale caches.
+
 ## 0.6.1
 
 ### Patch Changes
