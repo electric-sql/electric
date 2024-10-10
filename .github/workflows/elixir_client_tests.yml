@@ -18,6 +18,8 @@ jobs:
     env:
       MIX_ENV: test
       POSTGRES_VERSION: 140006
+      PORT: 3100
+      ELECTRIC_URL: "http://localhost:${PORT}"
     services:
       postgres:
         image: postgres:14-alpine
@@ -75,7 +77,7 @@ jobs:
             mix run --no-halt &
 
           wait-on: |
-            http://localhost:3000
+            ${ELECTRIC_URL}
 
           tail: true
           log-output-resume: stderr
