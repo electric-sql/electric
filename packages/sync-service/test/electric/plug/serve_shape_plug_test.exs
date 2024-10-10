@@ -23,7 +23,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
     table_info: %{
       {"public", "users"} => %{
         columns: [
-          %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0, array_dimensions: 0}
+          %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0, array_dimensions: 0},
+          %{name: "value", type: "text", type_id: {28, 1}, pk_position: nil, array_dimensions: 0}
         ],
         pk: ["id"]
       }
@@ -266,7 +267,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> ServeShapePlug.call([])
 
       assert Plug.Conn.get_resp_header(conn, "electric-schema") == [
-               ~s|{"id":{"type":"int8","pk_index":0}}|
+               ~s|{"id":{"type":"int8","pk_index":0},"value":{"type":"text"}}|
              ]
     end
 
@@ -576,6 +577,38 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 400
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
+    end
+
+    test "sends 400 when omitting primary key columns in selection" do
+      conn =
+        conn(
+          :get,
+          %{"root_table" => "public.users", "columns" => "value"},
+          "?offset=-1"
+        )
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "columns" => ["Must include all primary key columns, missing: id"]
+             }
+    end
+
+    test "sends 400 when selecting invalid columns" do
+      conn =
+        conn(
+          :get,
+          %{"root_table" => "public.users", "columns" => "id,invalid"},
+          "?offset=-1"
+        )
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "columns" => ["The following columns could not be found: invalid"]
+             }
     end
   end
 
