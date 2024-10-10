@@ -9,6 +9,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
   alias Support.Mock
 
+  alias TimeUtils
+
   import Mox
 
   setup :verify_on_exit!
@@ -551,11 +553,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
     do: %{conn | assigns: put_in(assigns, [:config, key], value)}
 
   defmodule TimeUtilsTest do
-    use ExUnit.Case, async: true
-
-    # Import the TimeUtils module
-    alias TimeUtils
-
     test "seconds_since_oct9th_2024_next_interval" do
       # Mock the conn struct with assigns
       # 20 seconds
