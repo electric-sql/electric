@@ -84,7 +84,18 @@ defmodule Electric.Shapes.Consumer do
         monitors: []
       })
 
-    {:consumer, state, subscribe_to: [{producer, [max_demand: 1, selector: nil]}]}
+    {:consumer, state,
+     subscribe_to: [{producer, [max_demand: 1, selector: &selector(&1, config.shape)]}]}
+  end
+
+  defp selector(%Transaction{changes: changes}, shape) do
+    changes
+    |> Stream.flat_map(&Shape.convert_change(shape, &1))
+    |> Enum.any?()
+  end
+
+  defp selector(%Changes.Relation{} = relation_change, shape) do
+    Shape.is_affected_by_relation_change?(shape, relation_change)
   end
 
   def handle_call(:initial_state, _from, %{snapshot_xmin: xmin, latest_offset: offset} = state) do
@@ -154,29 +165,25 @@ defmodule Electric.Shapes.Consumer do
 
   # `Shapes.Dispatcher` only works with single-events, so we can safely assert
   # that here
-  def handle_events([%Changes.Relation{} = relation_change], _from, state) do
-    %{shape: %{root_table: root_table} = shape, inspector: {inspector, inspector_opts}} = state
+  def handle_events([%Changes.Relation{}], _from, state) do
+    %{shape: %{root_table: root_table}, inspector: {inspector, inspector_opts}} = state
 
-    if Shape.is_affected_by_relation_change?(shape, relation_change) do
-      Logger.info(
-        "Schema for the table #{Utils.inspect_relation(root_table)} changed - terminating shape #{state.shape_id}"
+    Logger.info(
+      "Schema for the table #{Utils.inspect_relation(root_table)} changed - terminating shape #{state.shape_id}"
+    )
+
+    # We clean up the relation info from ETS as it has changed and we want
+    # to source the fresh info from postgres for the next shape creation
+    inspector.clean(root_table, inspector_opts)
+
+    state =
+      reply_to_snapshot_waiters(
+        {:error, "Shape relation changed before snapshot was ready"},
+        state
       )
 
-      # We clean up the relation info from ETS as it has changed and we want
-      # to source the fresh info from postgres for the next shape creation
-      inspector.clean(root_table, inspector_opts)
-
-      state =
-        reply_to_snapshot_waiters(
-          {:error, "Shape relation changed before snapshot was ready"},
-          state
-        )
-
-      state = cleanup(state)
-      {:stop, :normal, state}
-    else
-      {:noreply, [], state}
-    end
+    state = cleanup(state)
+    {:stop, :normal, state}
   end
 
   # Buffer incoming transactions until we know our xmin
