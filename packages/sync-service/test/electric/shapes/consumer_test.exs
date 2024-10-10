@@ -166,7 +166,8 @@ defmodule Electric.Shapes.ConsumerTest do
 
       ref = make_ref()
 
-      Registry.register(ctx.registry, @shape_id1, ref)
+      tenant_id = Access.fetch!(ctx, :tenant_id)
+      Registry.register(ctx.registry, {tenant_id, @shape_id1}, ref)
 
       txn =
         %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
@@ -206,8 +207,9 @@ defmodule Electric.Shapes.ConsumerTest do
       ref1 = make_ref()
       ref2 = make_ref()
 
-      Registry.register(ctx.registry, @shape_id1, ref1)
-      Registry.register(ctx.registry, @shape_id2, ref2)
+      tenant_id = Access.fetch!(ctx, :tenant_id)
+      Registry.register(ctx.registry, {tenant_id, @shape_id1}, ref1)
+      Registry.register(ctx.registry, {tenant_id, @shape_id2}, ref2)
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -362,7 +364,8 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_id1))
 
       ref = make_ref()
-      Registry.register(ctx.registry, @shape_id1, ref)
+      tenant_id = Access.fetch!(ctx, :tenant_id)
+      Registry.register(ctx.registry, {tenant_id, @shape_id1}, ref)
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -652,6 +655,8 @@ defmodule Electric.Shapes.ConsumerTest do
       shape_cache_name = __MODULE__.ShapeCache
 
       shape_cache_opts = [
+        electric_instance_id: ctx.electric_instance_id,
+        tenant_id: ctx.tenant_id,
         server: shape_cache_name,
         shape_meta_table: __MODULE__.ShapeMeta
       ]
@@ -679,7 +684,6 @@ defmodule Electric.Shapes.ConsumerTest do
           name: shape_cache_name,
           electric_instance_id: ctx.electric_instance_id,
           tenant_id: ctx.tenant_id,
-          shape_meta_table: __MODULE__.ShapeMeta,
           storage: storage,
           db_pool: ctx.pool,
           persistent_kv: ctx.persistent_kv,

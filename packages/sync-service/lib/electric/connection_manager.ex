@@ -197,7 +197,6 @@ defmodule Electric.ConnectionManager do
         {:noreply, state}
 
       {:error, reason} ->
-        dbg(reason)
         handle_connection_error(reason, state, "replication")
     end
   end
