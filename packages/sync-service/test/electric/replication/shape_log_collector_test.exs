@@ -41,17 +41,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       GenServer.whereis(Electric.ShapeCache.name(ctx.electric_instance_id, ctx.tenant_id))
     end)
 
-    # We need a ShapeCache process because it is a GenStage consumer
-    # that handles the Relation events produced by ShapeLogCollector
-    shape_meta_table = :"shape_meta_#{Support.ComponentSetup.full_test_name(ctx)}"
-
     shape_cache_opts =
       [
         storage: {Mock.Storage, []},
         chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
         inspector: {Mock.Inspector, []},
         shape_status: Mock.ShapeStatus,
-        shape_meta_table: shape_meta_table,
         persistent_kv: Electric.PersistentKV.Memory.new!(),
         prepare_tables_fn: fn _, _ -> {:ok, [:ok]} end,
         log_producer: ShapeLogCollector.name(ctx.electric_instance_id, ctx.tenant_id),
