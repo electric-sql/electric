@@ -108,11 +108,25 @@ paths:
             This should be a valid PostgreSQL WHERE clause using SQL syntax.
           examples:
             title_filter:
-              value: "\"title='Electric'\""
+              value: '"title=''Electric''"'
               summary: Only include rows where the title is 'Electric'.
             status_filter:
-              value: "\"status IN ('backlog', 'todo')\""
+              value: '"status IN (''backlog'', ''todo'')"'
               summary: Only include rows whose status is either 'backlog' or 'todo'.
+
+        - name: columns
+          in: query
+          schema:
+            type: string
+          description: |-
+            Optional list of columns to include in the rows from the `root_table`.
+
+            They should always include the primary key columns, and should be formed
+            as a comma separated list of column names exactly as they are on the database schema.
+          examples:
+            select_columns:
+              value: "id,title,status"
+              summary: Only include the id, title, and status columns'.
         # Headers
         - name: If-None-Match
           in: header
@@ -121,7 +135,7 @@ paths:
           # TODO: is this description below correct?
           description: Re-validate the shape if the etag doesn't match.
       responses:
-        '200':
+        "200":
           description: The shape request was successful.
           headers:
             cache-control:
@@ -163,7 +177,7 @@ paths:
             x-electric-schema:
               schema:
                 type: string
-                example: "{\"id\":{\"type\":\"int4\",\"dimensions\":0},\"title\":{\"type\":\"text\",\"dimensions\":0},\"status\":{\"type\":\"text\",\"dimensions\":0,\"max_length\":8}}"
+                example: '{"id":{"type":"int4","dimensions":0},"title":{"type":"text","dimensions":0},"status":{"type":"text","dimensions":0,"max_length":8}}'
                 description: |-
                   A JSON string of an object that maps column names to the corresponding schema object.
                   The schema object contains the type of the column, the number of dimensions, and possibly additional properties.
@@ -206,8 +220,7 @@ paths:
                             - insert
                             - update
                             - delete
-                          description:
-                            The type of operation that is performed on the row of the shape that is identified by the `key`.
+                          description: The type of operation that is performed on the row of the shape that is identified by the `key`.
                     offset:
                       type: string
                       description: |-
@@ -234,10 +247,10 @@ paths:
                         - for inserts it will contain the whole row
                         - for updates it will contain the primary key and the changed values
                         - for deletes it will contain just the primary key
-                        
+
                         The values are strings that are formatted according to Postgres' display settings.
                         Some Postgres types support several display settings, we format values consistently according to the following display settings:
-                        
+
                         - `bytea_output = 'hex'`
                         - `DateStyle = 'ISO, DMY'`
                         - `TimeZone = 'UTC'`
@@ -261,13 +274,13 @@ paths:
                       id: issue-2
                       title: Hello
                       status: backlog
-        '204':
+        "204":
           description: >-
             No content. The `live=true` polling request timed out without
             any new content to process.
-        '400':
+        "400":
           description: Bad request.
-        '409':
+        "409":
           description:
             The requested offset for the given shape no longer exists.
             Client should sync the shape using the relative path from the location header.
@@ -331,11 +344,11 @@ paths:
             Optional, deletes the current shape if it matches the shape_id.
             If not provided, deletes the current shape.
       responses:
-        '202':
+        "202":
           description: |-
             Accepted. The shape has been deleted (or to be more precise: the shape ID
             has been invalidated and the storage will be cleaned up eventually).
-        '400':
+        "400":
           description: Bad request.
-        '404':
+        "404":
           description: Not found (or shape deletion is not enabled).
