@@ -33,7 +33,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 54322:5432
+          - "${PG_PORT}:5432"
     steps:
       - uses: actions/checkout@v4
       - name: "Set PG settings"
