@@ -549,4 +549,41 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
   defp put_in_config(%Plug.Conn{assigns: assigns} = conn, key, value),
     do: %{conn | assigns: put_in(assigns, [:config, key], value)}
+
+  defmodule TimeUtilsTest do
+    use ExUnit.Case, async: true
+
+    # Import the TimeUtils module
+    alias TimeUtils
+
+    test "seconds_since_oct9th_2024_next_interval" do
+      # Mock the conn struct with assigns
+      # 20 seconds
+      conn = %Plug.Conn{assigns: %{config: %{long_poll_timeout: 20000}}}
+
+      # Calculate the expected next interval
+      now = DateTime.utc_now()
+      oct9th2024 = DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
+      diff_in_seconds = DateTime.diff(now, oct9th2024, :second)
+      expected_interval = ceil(diff_in_seconds / 20) * 20
+
+      # Assert that the function returns the expected value
+      assert TimeUtils.seconds_since_oct9th_2024_next_interval(conn) == expected_interval
+    end
+
+    test "seconds_since_oct9th_2024_next_interval with different timeout" do
+      # Mock the conn struct with a different timeout
+      # 30 seconds
+      conn = %Plug.Conn{assigns: %{config: %{long_poll_timeout: 30000}}}
+
+      # Calculate the expected next interval
+      now = DateTime.utc_now()
+      oct9th2024 = DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
+      diff_in_seconds = DateTime.diff(now, oct9th2024, :second)
+      expected_interval = ceil(diff_in_seconds / 30) * 30
+
+      # Assert that the function returns the expected value
+      assert TimeUtils.seconds_since_oct9th_2024_next_interval(conn) == expected_interval
+    end
+  end
 end
