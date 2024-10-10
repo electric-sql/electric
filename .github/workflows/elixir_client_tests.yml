@@ -78,8 +78,7 @@ jobs:
             mix start_dev
             mix run --no-halt &
 
-          wait-on: |
-            ${ELECTRIC_URL}
+          wait-on: "${ELECTRIC_URL}"
 
           tail: true
           log-output-resume: stderr
