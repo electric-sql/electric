@@ -27,7 +27,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     table_base_name = Access.get(opts, :table_base_name, __MODULE__)
     electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
 
-    {:ok, %{table_base_name: table_base_name, electric_instance_id: electric_instance_id}}
+    %{table_base_name: table_base_name, electric_instance_id: electric_instance_id}
   end
 
   def name(electric_instance_id, shape_id) when is_binary(shape_id) do
