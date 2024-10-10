@@ -389,6 +389,52 @@ defmodule Electric.Plug.RouterTest do
       assert key3 != key
     end
 
+    @tag with_sql: [
+           "CREATE TABLE wide_table (id BIGINT PRIMARY KEY, value1 TEXT NOT NULL, value2 TEXT NOT NULL, value3 TEXT NOT NULL)",
+           "INSERT INTO wide_table VALUES (1, 'test value 1', 'test value 1', 'test value 1')"
+         ]
+    test "GET receives only specified columns out of wide table", %{opts: opts, db_conn: db_conn} do
+      conn = conn("GET", "/v1/shape/wide_table?offset=-1&columns=id,value1") |> Router.call(opts)
+      assert %{status: 200} = conn
+      shape_id = get_resp_shape_id(conn)
+
+      assert [
+               %{
+                 "value" => %{"id" => "1", "value1" => "test value 1"},
+                 "key" => key,
+                 "offset" => next_offset
+               },
+               @up_to_date
+             ] = Jason.decode!(conn.resp_body)
+
+      test_pid = self()
+
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape/wide_table?offset=#{next_offset}&columns=id,value1&shape_id=#{shape_id}&live"
+          )
+          |> Router.call(opts)
+          |> then(fn conn ->
+            send(test_pid, :got_response)
+            conn
+          end)
+        end)
+
+      # Ensure updates to not-selected columns do not trigger responses
+      Postgrex.query!(db_conn, "UPDATE wide_table SET value2 = 'test value 2' WHERE id = 1", [])
+      refute_receive :got_response, 1000
+
+      Postgrex.query!(db_conn, "UPDATE wide_table SET value1 = 'test value 3' WHERE id = 1", [])
+
+      assert_receive :got_response
+      assert %{status: 200} = conn = Task.await(task)
+
+      value = %{"id" => "1", "value1" => "test value 3"}
+      assert [%{"key" => ^key, "value" => ^value}, _] = Jason.decode!(conn.resp_body)
+    end
+
     test "GET works when there are changes not related to the shape in the same txn", %{
       opts: opts,
       db_conn: db_conn

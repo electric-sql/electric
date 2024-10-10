@@ -9,7 +9,7 @@ defmodule Electric.Shapes.Shape do
   alias Electric.Replication.Changes
 
   @enforce_keys [:root_table, :root_table_id]
-  defstruct [:root_table, :root_table_id, :table_info, :where]
+  defstruct [:root_table, :root_table_id, :table_info, :where, :selected_columns]
 
   @type table_info() :: %{
           columns: [Inspector.column_info(), ...],
@@ -21,7 +21,8 @@ defmodule Electric.Shapes.Shape do
           table_info: %{
             Electric.relation() => table_info()
           },
-          where: Electric.Replication.Eval.Expr.t() | nil
+          where: Electric.Replication.Eval.Expr.t() | nil,
+          selected_columns: [String.t(), ...] | nil
         }
 
   @type table_with_where_clause() :: {Electric.relation(), String.t() | nil}
@@ -33,6 +34,7 @@ defmodule Electric.Shapes.Shape do
           root_table: json_relation(),
           root_table_id: non_neg_integer(),
           where: String.t(),
+          selected_columns: [String.t(), ...] | nil,
           table_info: [json_table_list(), ...]
         }
 
@@ -46,8 +48,8 @@ defmodule Electric.Shapes.Shape do
   def new!(table, opts \\ []) do
     case new(table, opts) do
       {:ok, shape} -> shape
-      {:error, [message | _]} -> raise message
-      {:error, message} when is_binary(message) -> raise message
+      {:error, {_field, [message | _]}} -> raise message
+      {:error, {_field, message}} when is_binary(message) -> raise message
     end
   end
 
@@ -57,6 +59,7 @@ defmodule Electric.Shapes.Shape do
 
   @shape_schema NimbleOptions.new!(
                   where: [type: {:or, [:string, nil]}],
+                  columns: [type: {:or, [{:list, :string}, nil]}],
                   inspector: [
                     type: :mod_arg,
                     default: {Electric.Postgres.Inspector, Electric.DbPool}
@@ -68,6 +71,8 @@ defmodule Electric.Shapes.Shape do
     with inspector <- Access.fetch!(opts, :inspector),
          {:ok, %{relation: table, relation_id: relation_id}} <- validate_table(table, inspector),
          {:ok, column_info, pk_cols} <- load_column_info(table, inspector),
+         {:ok, selected_columns} <-
+           validate_selected_columns(column_info, pk_cols, Access.get(opts, :columns)),
          refs = Inspector.columns_to_expr(column_info),
          {:ok, where} <- maybe_parse_where_clause(Access.get(opts, :where), refs) do
       {:ok,
@@ -75,20 +80,55 @@ defmodule Electric.Shapes.Shape do
          root_table: table,
          root_table_id: relation_id,
          table_info: %{table => %{pk: pk_cols, columns: column_info}},
-         where: where
+         where: where,
+         selected_columns: selected_columns
        }}
     end
   end
 
   defp maybe_parse_where_clause(nil, _), do: {:ok, nil}
 
-  defp maybe_parse_where_clause(where, info),
-    do: Parser.parse_and_validate_expression(where, info)
+  defp maybe_parse_where_clause(where, info) do
+    case Parser.parse_and_validate_expression(where, info) do
+      {:ok, expr} -> {:ok, expr}
+      {:error, reason} -> {:error, {:where, reason}}
+    end
+  end
+
+  @spec validate_selected_columns([Inspector.column_info()], [String.t()], [String.t()] | nil) ::
+          {:ok, [String.t(), ...]} | {:error, [String.t()]}
+  defp validate_selected_columns(_column_info, _pk_cols, nil) do
+    {:ok, nil}
+  end
+
+  defp validate_selected_columns(column_info, pk_cols, columns_to_select) do
+    missing_pk_cols = pk_cols -- columns_to_select
+    invalid_cols = columns_to_select -- Enum.map(column_info, & &1.name)
+
+    cond do
+      missing_pk_cols != [] ->
+        {:error,
+         {:columns,
+          [
+            "Must include all primary key columns, missing: #{missing_pk_cols |> Enum.join(", ")}"
+          ]}}
+
+      invalid_cols != [] ->
+        {:error,
+         {:columns,
+          [
+            "The following columns could not be found: #{invalid_cols |> Enum.join(", ")}"
+          ]}}
+
+      true ->
+        {:ok, columns_to_select}
+    end
+  end
 
   defp load_column_info(table, inspector) do
     case Inspector.load_column_info(table, inspector) do
       :table_not_found ->
-        {:error, ["table not found"]}
+        {:error, {:root_table, ["table not found"]}}
 
       {:ok, column_info} ->
         # %{["column_name"] => :type}
@@ -106,12 +146,13 @@ defmodule Electric.Shapes.Shape do
         case Regex.run(~r/.+ relation "(?<name>.+)" does not exist/, err, capture: :all_names) do
           [table_name] ->
             {:error,
-             [
-               ~s|Table "#{table_name}" does not exist. If the table name contains capitals or special characters you must quote it.|
-             ]}
+             {:root_table,
+              [
+                ~s|Table "#{table_name}" does not exist. If the table name contains capitals or special characters you must quote it.|
+              ]}}
 
           _ ->
-            {:error, [err]}
+            {:error, {:root_table, [err]}}
         end
 
       {:ok, rel} ->
@@ -142,30 +183,51 @@ defmodule Electric.Shapes.Shape do
       when table != relation,
       do: []
 
-  def convert_change(%__MODULE__{where: nil}, change), do: [change]
-  def convert_change(%__MODULE__{where: _}, %Changes.TruncatedRelation{} = change), do: [change]
+  def convert_change(%__MODULE__{where: nil, selected_columns: nil}, change), do: [change]
 
-  def convert_change(%__MODULE__{where: where}, change)
+  def convert_change(%__MODULE__{}, %Changes.TruncatedRelation{} = change), do: [change]
+
+  def convert_change(%__MODULE__{where: where, selected_columns: selected_columns}, change)
       when is_struct(change, Changes.NewRecord)
       when is_struct(change, Changes.DeletedRecord) do
     record = if is_struct(change, Changes.NewRecord), do: change.record, else: change.old_record
-    if record_in_shape?(where, record), do: [change], else: []
+
+    if record_in_shape?(where, record),
+      do: [filter_change_columns(selected_columns, change)],
+      else: []
   end
 
   def convert_change(
-        %__MODULE__{where: where},
+        %__MODULE__{where: where, selected_columns: selected_columns},
         %Changes.UpdatedRecord{old_record: old_record, record: record} = change
       ) do
-    old_record_in_shape = record_in_shape?(where, old_record)
-    new_record_in_shape = record_in_shape?(where, record)
+    %{old_record: old_filtered_record, record: filtered_record} =
+      filter_change_columns(selected_columns, change)
 
-    case {old_record_in_shape, new_record_in_shape} do
-      {true, true} -> [change]
-      {true, false} -> [Changes.convert_update(change, to: :deleted_record)]
-      {false, true} -> [Changes.convert_update(change, to: :new_record)]
-      {false, false} -> []
+    if old_filtered_record == filtered_record do
+      # after filtering columns, the update might not affect the filtered record
+      []
+    else
+      # if record still affected, check if it has moved in or out of the shape
+      old_record_in_shape = record_in_shape?(where, old_record)
+      new_record_in_shape = record_in_shape?(where, record)
+
+      case {old_record_in_shape, new_record_in_shape} do
+        {true, true} -> [change]
+        {true, false} -> [Changes.convert_update(change, to: :deleted_record)]
+        {false, true} -> [Changes.convert_update(change, to: :new_record)]
+        {false, false} -> []
+      end
     end
   end
+
+  defp filter_change_columns(nil, change), do: change
+
+  defp filter_change_columns(selected_columns, change) do
+    Changes.filter_columns(change, selected_columns)
+  end
+
+  defp record_in_shape?(nil, _record), do: true
 
   defp record_in_shape?(where, record) do
     with {:ok, refs} <- Runner.record_to_ref_values(where.used_refs, record),
@@ -224,6 +286,7 @@ defmodule Electric.Shapes.Shape do
       root_table: {schema, name},
       root_table_id: root_table_id,
       where: where,
+      selected_columns: selected_columns,
       table_info: table_info
     } = shape
 
@@ -237,6 +300,7 @@ defmodule Electric.Shapes.Shape do
       root_table: [schema, name],
       root_table_id: root_table_id,
       where: query,
+      selected_columns: selected_columns,
       table_info:
         if(table_info,
           do:
@@ -265,6 +329,7 @@ defmodule Electric.Shapes.Shape do
       "root_table" => [schema, name],
       "root_table_id" => root_table_id,
       "where" => where,
+      "selected_columns" => selected_columns,
       "table_info" => info
     } = map
 
@@ -286,6 +351,7 @@ defmodule Electric.Shapes.Shape do
       root_table: {schema, name},
       root_table_id: root_table_id,
       where: where,
+      selected_columns: selected_columns,
       table_info: table_info
     }
   end
