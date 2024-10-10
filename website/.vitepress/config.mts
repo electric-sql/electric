@@ -23,6 +23,11 @@ export default defineConfig({
   head: [
     ['link', {
       rel: 'icon',
+      type: 'image/png',
+      href: '/img/brand/favicon.png'
+    }],
+    ['link', {
+      rel: 'icon',
       type: 'image/svg+xml',
       href: '/img/brand/favicon.svg'
     }],
