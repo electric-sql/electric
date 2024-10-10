@@ -201,24 +201,22 @@ defmodule Electric.Shapes.Shape do
         %__MODULE__{where: where, selected_columns: selected_columns},
         %Changes.UpdatedRecord{old_record: old_record, record: record} = change
       ) do
-    %{old_record: old_filtered_record, record: filtered_record} =
-      filter_change_columns(selected_columns, change)
+    old_record_in_shape = record_in_shape?(where, old_record)
+    new_record_in_shape = record_in_shape?(where, record)
 
-    if old_filtered_record == filtered_record do
-      # after filtering columns, the update might not affect the filtered record
-      []
-    else
-      # if record still affected, check if it has moved in or out of the shape
-      old_record_in_shape = record_in_shape?(where, old_record)
-      new_record_in_shape = record_in_shape?(where, record)
-
-      case {old_record_in_shape, new_record_in_shape} do
-        {true, true} -> [change]
-        {true, false} -> [Changes.convert_update(change, to: :deleted_record)]
-        {false, true} -> [Changes.convert_update(change, to: :new_record)]
-        {false, false} -> []
-      end
+    case {old_record_in_shape, new_record_in_shape} do
+      {true, true} -> [change]
+      {true, false} -> [Changes.convert_update(change, to: :deleted_record)]
+      {false, true} -> [Changes.convert_update(change, to: :new_record)]
+      {false, false} -> []
     end
+    |> Enum.map(&filter_change_columns(selected_columns, &1))
+    |> Enum.filter(
+      &case &1 do
+        %Changes.UpdatedRecord{old_record: old_record, record: record} -> old_record != record
+        _ -> true
+      end
+    )
   end
 
   defp filter_change_columns(nil, change), do: change
