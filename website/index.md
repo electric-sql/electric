@@ -1,7 +1,7 @@
 ---
 layout: home
 title: 'ElectricSQL'
-titleTemplate: 'Postgres Sync'
+titleTemplate: 'Postgres sync engine'
 description: 'Sync little subsets of your Postgres data into local apps and services.'
 hero:
   name: "Why fetch when"
