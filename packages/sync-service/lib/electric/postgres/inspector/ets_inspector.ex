@@ -3,10 +3,6 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   use GenServer
   @behaviour Electric.Postgres.Inspector
 
-  # TODO: we should either use a table per tenant,
-  #       or, use one table for all tenants and make the keys unique
-  #       by including the tenant_id in the key
-  #       --> we will need to pass the tenant_id to the functions of the public API
   @default_pg_info_table :pg_info_table
 
   ## Public API
@@ -48,7 +44,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   @impl Electric.Postgres.Inspector
   def clean_column_info(table, opts_or_state) do
-    ets_table = Access.get(opts_or_state, :pg_info_table, @default_pg_info_table)
+    ets_table = get_table(opts_or_state)
 
     :ets.delete(ets_table, {table, :columns})
   end
@@ -57,9 +53,10 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   @impl GenServer
   def init(opts) do
-    pg_info_table = :ets.new(opts.pg_info_table, [:named_table, :public, :set])
-
-    Process.flag(:trap_exit, true)
+    # Each tenant creates its own ETS table.
+    # Name needs to be an atom but we don't want to dynamically create atoms.
+    # Instead, we will use the reference to the table that is returned by `:ets.new`
+    pg_info_table = :ets.new(opts.pg_info_table, [:public, :set])
 
     state = %{
       pg_info_table: pg_info_table,
@@ -90,10 +87,22 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     e -> {:reply, {:error, e, __STACKTRACE__}, state}
   end
 
+  @impl GenServer
+  def handle_call(:get_table, _from, state) do
+    {:reply, state.pg_info_table, state}
+  end
+
   @column_info_position 2
   defp column_info_from_ets(table, opts_or_state) do
-    ets_table = Access.get(opts_or_state, :pg_info_table, @default_pg_info_table)
+    ets_table = get_table(opts_or_state)
 
     :ets.lookup_element(ets_table, {table, :columns}, @column_info_position, :not_found)
   end
+
+  # When called from within the GenServer it is passed the state
+  # which contains the reference to the ETS table.
+  # When called from outside the GenServer it is passed the opts keyword list
+  # which contains a reference to the GenServer.
+  defp get_table(%{pg_info_table: ets_table}), do: ets_table
+  defp get_table(opts), do: GenServer.call(opts[:server], :get_table)
 end
