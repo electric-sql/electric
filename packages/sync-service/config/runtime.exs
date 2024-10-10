@@ -5,7 +5,7 @@ config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 
 log_level_config =
   env!("LOG_LEVEL", :string, "debug")
-  |> Electric.Config.parse_log_level()
+  |> Electric.ConfigParser.parse_log_level()
 
 case log_level_config do
   {:ok, log_level} ->
@@ -94,7 +94,7 @@ connection_opts =
   else
     {:ok, database_url_config} =
       env!("DATABASE_URL", :string)
-      |> Electric.Config.parse_postgresql_uri()
+      |> Electric.ConfigParser.parse_postgresql_uri()
 
     database_ipv6_config =
       env!("DATABASE_USE_IPV6", :boolean, false)

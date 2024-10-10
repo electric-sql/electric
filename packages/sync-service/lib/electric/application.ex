@@ -18,23 +18,9 @@ defmodule Electric.Application do
   def start(_type, _args) do
     :erlang.system_flag(:backtrace_depth, 50)
 
-    {storage_module, storage_opts} = Application.fetch_env!(:electric, :storage)
-    {kv_module, kv_fun, kv_params} = Application.fetch_env!(:electric, :persistent_kv)
+    config = configure()
 
-    persistent_kv = apply(kv_module, kv_fun, [kv_params])
-
-    replication_stream_id = Application.fetch_env!(:electric, :replication_stream_id)
-    publication_name = "electric_publication_#{replication_stream_id}"
-    slot_name = "electric_slot_#{replication_stream_id}"
-
-    storage_opts = storage_module.shared_opts(storage_opts)
-    storage = {storage_module, storage_opts}
-
-    get_pg_version = fn ->
-      Electric.ConnectionManager.get_pg_version(Electric.ConnectionManager)
-    end
-
-    get_service_status = fn ->
+    get_service_status_fn = fn ->
       Electric.ServiceStatus.check(
         get_connection_status: fn ->
           Electric.ConnectionManager.get_status(Electric.ConnectionManager)
@@ -42,34 +28,15 @@ defmodule Electric.Application do
       )
     end
 
-    prepare_tables_fn =
-      {Electric.Postgres.Configuration, :configure_tables_for_replication!,
-       [get_pg_version, publication_name]}
-
-    inspector =
-      {Electric.Postgres.Inspector.EtsInspector, server: Electric.Postgres.Inspector.EtsInspector}
-
-    electric_instance_id = Application.fetch_env!(:electric, :electric_instance_id)
-    shape_log_collector = Electric.Replication.ShapeLogCollector.name(electric_instance_id)
-
-    shape_cache =
-      {Electric.ShapeCache,
-       electric_instance_id: electric_instance_id,
-       storage: storage,
-       inspector: inspector,
-       prepare_tables_fn: prepare_tables_fn,
-       chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
-       log_producer: shape_log_collector,
-       consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(electric_instance_id),
-       registry: Registry.ShapeChanges}
+    shape_log_collector = Electric.Replication.ShapeLogCollector.name(config.electric_instance_id)
 
     connection_manager_opts = [
-      electric_instance_id: electric_instance_id,
-      connection_opts: Application.fetch_env!(:electric, :connection_opts),
+      electric_instance_id: config.electric_instance_id,
+      connection_opts: config.connection_opts,
       replication_opts: [
-        publication_name: publication_name,
+        publication_name: config.replication_opts.publication_name,
         try_creating_publication?: true,
-        slot_name: slot_name,
+        slot_name: config.replication_opts.slot_name,
         transaction_received:
           {Electric.Replication.ShapeLogCollector, :store_transaction, [shape_log_collector]},
         relation_received:
@@ -77,17 +44,17 @@ defmodule Electric.Application do
       ],
       pool_opts: [
         name: Electric.DbPool,
-        pool_size: Application.fetch_env!(:electric, :db_pool_size),
+        pool_size: config.pool_opts.size,
         types: PgInterop.Postgrex.Types
       ],
       timeline_opts: [
         shape_cache: {Electric.ShapeCache, []},
-        persistent_kv: persistent_kv
+        persistent_kv: config.persistent_kv
       ],
       log_collector:
         {Electric.Replication.ShapeLogCollector,
-         electric_instance_id: electric_instance_id, inspector: inspector},
-      shape_cache: shape_cache
+         electric_instance_id: config.electric_instance_id, inspector: config.inspector},
+      shape_cache: config.child_specs.shape_cache
     ]
 
     children =
@@ -102,11 +69,11 @@ defmodule Electric.Application do
         {Bandit,
          plug:
            {Electric.Plug.Router,
-            storage: storage,
+            storage: config.storage,
             registry: Registry.ShapeChanges,
-            shape_cache: shape_cache,
-            get_service_status: get_service_status,
-            inspector: inspector,
+            shape_cache: config.child_specs.shape_cache,
+            get_service_status: get_service_status_fn,
+            inspector: config.inspector,
             long_poll_timeout: 20_000,
             max_age: Application.fetch_env!(:electric, :cache_max_age),
             stale_age: Application.fetch_env!(:electric, :cache_stale_age),
@@ -120,6 +87,64 @@ defmodule Electric.Application do
       strategy: :one_for_one,
       name: Electric.Supervisor
     )
+  end
+
+  defp configure do
+    electric_instance_id = Application.fetch_env!(:electric, :electric_instance_id)
+
+    {storage_module, storage_in_opts} = Application.fetch_env!(:electric, :storage)
+    storage_opts = storage_module.shared_opts(storage_in_opts)
+    storage = {storage_module, storage_opts}
+
+    {kv_module, kv_fun, kv_params} = Application.fetch_env!(:electric, :persistent_kv)
+    persistent_kv = apply(kv_module, kv_fun, [kv_params])
+
+    replication_stream_id = Application.fetch_env!(:electric, :replication_stream_id)
+    publication_name = "electric_publication_#{replication_stream_id}"
+    slot_name = "electric_slot_#{replication_stream_id}"
+
+    get_pg_version_fn = fn ->
+      Electric.ConnectionManager.get_pg_version(Electric.ConnectionManager)
+    end
+
+    prepare_tables_mfa =
+      {Electric.Postgres.Configuration, :configure_tables_for_replication!,
+       [get_pg_version_fn, publication_name]}
+
+    inspector =
+      {Electric.Postgres.Inspector.EtsInspector, server: Electric.Postgres.Inspector.EtsInspector}
+
+    shape_cache_spec =
+      {Electric.ShapeCache,
+       electric_instance_id: electric_instance_id,
+       storage: storage,
+       inspector: inspector,
+       prepare_tables_fn: prepare_tables_mfa,
+       chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
+       log_producer: Electric.Replication.ShapeLogCollector.name(electric_instance_id),
+       consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(electric_instance_id),
+       registry: Registry.ShapeChanges}
+
+    config = %Electric.Application.Configuration{
+      electric_instance_id: electric_instance_id,
+      storage: storage,
+      persistent_kv: persistent_kv,
+      connection_opts: Application.fetch_env!(:electric, :connection_opts),
+      replication_opts: %{
+        stream_id: replication_stream_id,
+        publication_name: publication_name,
+        slot_name: slot_name
+      },
+      pool_opts: %{
+        size: Application.fetch_env!(:electric, :db_pool_size)
+      },
+      inspector: inspector,
+      child_specs: %{
+        shape_cache: shape_cache_spec
+      }
+    }
+
+    Electric.Application.Configuration.save(config)
   end
 
   defp add_prometheus_router(children, nil), do: children
