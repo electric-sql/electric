@@ -17,7 +17,8 @@ import {
 } from './fetch'
 import {
   CHUNK_LAST_OFFSET_HEADER,
-  LIVE_CACHE_BUSTER,
+  LIVE_CACHE_BUSTER_HEADER,
+  LIVE_CACHE_BUSTER_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
   SHAPE_ID_HEADER,
@@ -255,7 +256,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           this.#lastOffset = lastOffset as Offset
         }
 
-        const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER)
+        const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
         if (liveCacheBuster) {
           this.#liveCacheBuster = liveCacheBuster
         }
