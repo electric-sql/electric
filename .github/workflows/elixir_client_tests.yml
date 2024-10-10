@@ -1,0 +1,111 @@
+name: Elixir Client CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test with PostgreSQL 14
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/elixir-client
+    env:
+      MIX_ENV: test
+      POSTGRES_VERSION: 140006
+      PORT: 3100
+      PG_PORT: 54322
+      ELECTRIC_URL: "http://localhost:${PORT}"
+      DATABASE_URL: "postgresql://postgres:password@localhost:${PG_PORT}/electric"
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 54322:5432
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Set PG settings"
+        run: |
+          docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
+          docker restart ${{ job.services.postgres.id }}
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
+      - name: Restore dependencies cache
+        uses: actions/cache@v3
+        with:
+          path: packages/elixir-client/deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('packages/elixir-client/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+      - name: Restore compiled code
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            packages/elixir-client/_build/*/lib
+            !packages/elixir-client/_build/*/lib/electric
+          key: ${{ runner.os }}-build-test-${{ hashFiles('packages/elixir-client/mix.lock') }}
+      - name: Install dependencies
+        run: mix deps.get && mix deps.compile
+      - name: Save compiled code
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            packages/elixir-client/_build/*/lib
+            !packages/elixir-client/_build/*/lib/electric
+          key: ${{ runner.os }}-build-test-${{ hashFiles('packages/elixir-client/mix.lock') }}
+      - name: Compiles without warnings
+        run: mix compile --force --all-warnings --warnings-as-errors
+      - name: Install sync-service dependencies
+        run: mix deps.get && mix deps.compile
+        working-directory: packages/sync-service
+      - uses: JarvusInnovations/background-action@v1
+        name: Bootstrap System Under Test (SUT)
+        with:
+          run: |
+            echo "${ELECTRIC_URL}"
+            mix start_dev
+            mix run --no-halt &
+
+          wait-on: "${ELECTRIC_URL}"
+
+          tail: true
+          log-output-resume: stderr
+          wait-for: 1m
+          log-output: true
+          log-output-if: failure
+          working-directory: packages/sync-service
+      - name: Run tests
+        run: mix test
+  formatting:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/elixir-client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
+      - name: Cache dependencies
+        id: cache-deps
+        uses: actions/cache@v4
+        with:
+          path: packages/elixir-client/deps
+          key: ${{ runner.os }}-mixdeps-${{ hashFiles('packages/elixir-client/mix.lock') }}
+      - run: mix deps.get
+      - run: mix format --check-formatted
