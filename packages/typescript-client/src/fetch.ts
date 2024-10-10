@@ -10,7 +10,7 @@ import { FetchError, FetchBackoffAbortError } from './error'
 
 // Some specific 4xx and 5xx HTTP status codes that we definitely
 // want to retry
-const HTTP_RETRY_STATUS_CODES = [429, 500]
+const HTTP_RETRY_STATUS_CODES = [429]
 
 export interface BackoffOptions {
   /**
