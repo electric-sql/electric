@@ -23,7 +23,6 @@ defmodule Electric.Application do
     shape_log_collector = Electric.Replication.ShapeLogCollector.name(config.electric_instance_id)
 
     connection_manager_opts = [
-      electric_instance_id: config.electric_instance_id,
       connection_opts: config.connection_opts,
       replication_opts: [
         publication_name: config.replication_opts.publication_name,
@@ -42,11 +41,7 @@ defmodule Electric.Application do
       timeline_opts: [
         shape_cache: {Electric.ShapeCache, []},
         persistent_kv: config.persistent_kv
-      ],
-      log_collector:
-        {Electric.Replication.ShapeLogCollector,
-         electric_instance_id: config.electric_instance_id, inspector: config.inspector},
-      shape_cache: config.child_specs.shape_cache
+      ]
     ]
 
     children =
@@ -56,7 +51,7 @@ defmodule Electric.Application do
          name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()},
         {Registry,
          name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
-        {Electric.ConnectionManager, connection_manager_opts},
+        {Electric.Connection.Supervisor, connection_manager_opts},
         {Electric.Postgres.Inspector.EtsInspector, pool: Electric.DbPool},
         {Bandit,
          plug:
