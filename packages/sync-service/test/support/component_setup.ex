@@ -58,7 +58,6 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_cache(ctx, additional_opts \\ []) do
-    shape_meta_table = :"shape_meta_#{full_test_name(ctx)}"
     server = :"shape_cache_#{full_test_name(ctx)}"
     consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
     get_pg_version = fn -> Application.fetch_env!(:electric, :pg_version_for_tests) end
@@ -68,7 +67,6 @@ defmodule Support.ComponentSetup do
         name: server,
         electric_instance_id: ctx.electric_instance_id,
         tenant_id: ctx.tenant_id,
-        shape_meta_table: shape_meta_table,
         inspector: ctx.inspector,
         storage: ctx.storage,
         chunk_bytes_threshold: ctx.chunk_bytes_threshold,
@@ -96,17 +94,22 @@ defmodule Support.ComponentSetup do
 
     {:ok, _pid} = ShapeCache.start_link(start_opts)
 
+    shape_meta_table = GenServer.call(server, :get_shape_meta_table)
+
     shape_cache_opts = [
+      electric_instance_id: ctx.electric_instance_id,
+      tenant_id: ctx.tenant_id,
       server: server,
-      shape_meta_table: shape_meta_table,
-      storage: ctx.storage
+      storage: ctx.storage,
+      shape_meta_table: shape_meta_table
     ]
 
     %{
       shape_cache_opts: shape_cache_opts,
       shape_cache: {ShapeCache, shape_cache_opts},
       shape_cache_server: server,
-      consumer_supervisor: consumer_supervisor
+      consumer_supervisor: consumer_supervisor,
+      shape_meta_table: shape_meta_table
     }
   end
 

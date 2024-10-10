@@ -205,7 +205,7 @@ defmodule Electric.ShapeCacheTest do
           prepare_tables_fn: @prepare_tables_noop
         )
 
-      shape_meta_table = Access.get(opts, :shape_meta_table)
+      shape_meta_table = Access.fetch!(opts, :shape_meta_table)
 
       log =
         capture_log(fn ->
@@ -414,7 +414,7 @@ defmodule Electric.ShapeCacheTest do
           prepare_tables_fn: @prepare_tables_noop
         )
 
-      meta_table = Keyword.fetch!(opts, :shape_meta_table)
+      meta_table = Access.fetch!(opts, :shape_meta_table)
 
       assert ShapeCache.list_shapes(%{shape_meta_table: meta_table}) == []
     end
@@ -432,7 +432,7 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_id, _} = ShapeCache.get_or_create_shape_id(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_id, opts)
-      meta_table = Keyword.fetch!(opts, :shape_meta_table)
+      meta_table = Access.fetch!(opts, :shape_meta_table)
       assert [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
       assert {:ok, 10} = ShapeStatus.snapshot_xmin(meta_table, shape_id)
     end
@@ -458,7 +458,7 @@ defmodule Electric.ShapeCacheTest do
       # Wait until we get to the waiting point in the snapshot
       assert_receive {:waiting_point, ref, pid}
 
-      meta_table = Keyword.fetch!(opts, :shape_meta_table)
+      meta_table = Access.fetch!(opts, :shape_meta_table)
       assert [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
 
       send(pid, {:continue, ref})
@@ -863,9 +863,10 @@ defmodule Electric.ShapeCacheTest do
       [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
       {:ok, @snapshot_xmin} = ShapeStatus.snapshot_xmin(meta_table, shape_id)
 
-      restart_shape_cache(context)
+      %{shape_cache_opts: opts} = restart_shape_cache(context)
       :started = ShapeCache.await_snapshot_start(shape_id, opts)
 
+      meta_table = Keyword.fetch!(opts, :shape_meta_table)
       assert [{^shape_id, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
       {:ok, @snapshot_xmin} = ShapeStatus.snapshot_xmin(meta_table, shape_id)
     end
