@@ -8,6 +8,10 @@ import {
 } from './constants'
 import { FetchError, FetchBackoffAbortError } from './error'
 
+// Some specific 4xx and 5xx HTTP status codes that we definitely
+// want to retry
+const HTTP_RETRY_STATUS_CODES = [429, 500]
+
 export interface BackoffOptions {
   /**
    * Initial delay before retrying in milliseconds
@@ -63,6 +67,7 @@ export function createFetchWithBackoff(
           throw new FetchBackoffAbortError()
         } else if (
           e instanceof FetchError &&
+          !HTTP_RETRY_STATUS_CODES.includes(e.status) &&
           e.status >= 400 &&
           e.status < 500
         ) {
