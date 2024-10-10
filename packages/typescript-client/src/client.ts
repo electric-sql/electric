@@ -200,7 +200,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         if (this.#isUpToDate) {
           fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
-          fetchUrl.searchParams.set(`cursor`, this.#nextLiveCursor)
+          fetchUrl.searchParams.set(LIVE_NEXT_CURSOR_QUERY_PARAM, this.#nextLiveCursor)
         }
 
         if (this.#shapeId) {
