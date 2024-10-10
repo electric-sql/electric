@@ -10,8 +10,6 @@ defmodule Electric.Timeline do
   @type timeline_id :: integer()
   @type timeline :: {pg_id(), timeline_id()} | nil
 
-  @timeline_key "timeline_id"
-
   @doc """
   Checks that we're connected to the same Postgres DB as before and on the same timeline.
   TO this end, it checks the provided `pg_id` against the persisted PG ID.
@@ -62,7 +60,7 @@ defmodule Electric.Timeline do
   def load_timeline(opts) do
     kv = make_serialized_kv(opts)
 
-    case PersistentKV.get(kv, @timeline_key) do
+    case PersistentKV.get(kv, timeline_key(opts)) do
       {:ok, [pg_id, timeline_id]} ->
         {pg_id, timeline_id}
 
@@ -77,7 +75,7 @@ defmodule Electric.Timeline do
 
   def store_timeline({pg_id, timeline_id}, opts) do
     kv = make_serialized_kv(opts)
-    :ok = PersistentKV.set(kv, @timeline_key, [pg_id, timeline_id])
+    :ok = PersistentKV.set(kv, timeline_key(opts), [pg_id, timeline_id])
   end
 
   defp make_serialized_kv(opts) do
@@ -92,5 +90,10 @@ defmodule Electric.Timeline do
     {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
     shape_cache.clean_all_shapes(opts)
     :ok
+  end
+
+  defp timeline_key(opts) do
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    "timeline_id_#{tenant_id}"
   end
 end

@@ -89,6 +89,7 @@ defmodule Electric.Tenant.Supervisor do
               types: PgInterop.Postgrex.Types
             ],
             timeline_opts: [
+              tenant_id: tenant_id,
               shape_cache:
                 {Electric.ShapeCache,
                  electric_instance_id: electric_instance_id,
