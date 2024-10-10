@@ -27,7 +27,8 @@ import { ShapeStream } from '@electric-sql/client'
 
 // Passes subscribers rows as they're inserted, updated, or deleted
 const stream = new ShapeStream({
-  url: `http://localhost:3000/v1/shape/foo`,
+  url: `http://localhost:3000/v1/shape`,
+  table: `foo`,
 })
 
 stream.subscribe(messages => {
@@ -51,7 +52,8 @@ For example, we can extend the [default parser](https://github.com/electric-sql/
 
 ```ts
 const stream = new ShapeStream({
-  url: `http://localhost:3000/v1/shape/foo`,
+  url: `http://localhost:3000/v1/shape`,
+  table: `foo`,
   parser: {
     bool: (value: string) => value === `true` ? 1 : 0
   }
@@ -64,7 +66,8 @@ const stream = new ShapeStream({
 import { ShapeStream, Shape } from '@electric-sql/client'
 
 const stream = new ShapeStream({
-  url: `http://localhost:3000/v1/shape/foo`,
+  url: `http://localhost:3000/v1/shape`,
+  table: `foo`,
 })
 const shape = new Shape(stream)
 

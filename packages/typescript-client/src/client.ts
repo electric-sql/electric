@@ -23,6 +23,7 @@ import {
   SHAPE_ID_QUERY_PARAM,
   SHAPE_SCHEMA_HEADER,
   WHERE_QUERY_PARAM,
+  TABLE_QUERY_PARAM,
 } from './constants'
 
 /**
@@ -30,10 +31,16 @@ import {
  */
 export interface ShapeStreamOptions<T = never> {
   /**
-   * The full URL to where the Shape is hosted. This can either be the Electric server
-   * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape/foo`
+   * The full URL to where the Shape is served. This can either be the Electric server
+   * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape`
    */
   url: string
+
+  /**
+   * The root table for the shape.
+   */
+  table: string
+
   /**
    * where clauses for the shape.
    */
@@ -184,7 +191,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   async start() {
     this.#isUpToDate = false
 
-    const { url, where, signal } = this.options
+    const { url, table, where, signal } = this.options
 
     try {
       while (
@@ -192,6 +199,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.options.subscribe
       ) {
         const fetchUrl = new URL(url)
+        fetchUrl.searchParams.set(TABLE_QUERY_PARAM, table)
         if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
         fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
 
@@ -385,7 +393,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
 function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (!options.url) {
-    throw new Error(`Invalid shape option. It must provide the url`)
+    throw new Error(`Invalid shape options. It must provide the url`)
+  }
+  if (!options.table) {
+    throw new Error(`Invalid shape options. It must provide the table`)
   }
   if (options.signal && !(options.signal instanceof AbortSignal)) {
     throw new Error(
