@@ -149,8 +149,6 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :end_telemetry_span
 
   defp validate_tenant_id(%Conn{} = conn, _) do
-    dbg(conn.query_params)
-
     case Map.get(conn.query_params, "database_id", :not_found) do
       :not_found ->
         conn

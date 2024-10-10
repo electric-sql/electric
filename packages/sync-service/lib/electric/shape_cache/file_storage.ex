@@ -36,8 +36,6 @@ defmodule Electric.ShapeCache.FileStorage do
         electric_instance_id: electric_instance_id
       }) do
     %FS{
-      # TODO: also add tenant_id to cubdb_dir and snapshot_dir
-      #       such that data from different tenants can't clash
       base_path: base_path,
       shape_id: shape_id,
       db: name(electric_instance_id, tenant_id, shape_id),
