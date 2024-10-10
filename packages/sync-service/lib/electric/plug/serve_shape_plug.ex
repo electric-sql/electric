@@ -149,7 +149,9 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :end_telemetry_span
 
   defp validate_tenant_id(%Conn{} = conn, _) do
-    case Map.get(conn.query_params, :database_id, :not_found) do
+    dbg(conn.query_params)
+
+    case Map.get(conn.query_params, "database_id", :not_found) do
       :not_found ->
         conn
 
@@ -158,13 +160,13 @@ defmodule Electric.Plug.ServeShapePlug do
 
       _ ->
         conn
-        |> send_resp(400, Jason.encode_to_iodata!("DATABASE_URL should be a connection string"))
+        |> send_resp(400, Jason.encode_to_iodata!("database_id should be a connection string"))
         |> halt()
     end
   end
 
   defp load_tenant(%Conn{assigns: %{database_id: tenant_id}} = conn, _) do
-    tenant_config = TenantManager.get_tenant(tenant_id, conn.assigns.config)
+    {:ok, tenant_config} = TenantManager.get_tenant(tenant_id, conn.assigns.config)
     assign_tenant(conn, tenant_config)
   end
 
@@ -181,12 +183,12 @@ defmodule Electric.Plug.ServeShapePlug do
         |> send_resp(400, Jason.encode_to_iodata!("No database found"))
         |> halt()
 
-      {:error, :multiple_tenants} ->
+      {:error, :several_tenants} ->
         conn
         |> send_resp(
           400,
           Jason.encode_to_iodata!(
-            "Database ID was not provided and there are multiple databases. Please specify a database ID using the `DATABASE_URL` parameter in the body."
+            "Database ID was not provided and there are multiple databases. Please specify a database ID using the `database_id` query parameter."
           )
         )
         |> halt()

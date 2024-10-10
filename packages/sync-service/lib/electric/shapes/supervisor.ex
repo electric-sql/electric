@@ -3,8 +3,18 @@ defmodule Electric.Shapes.Supervisor do
 
   require Logger
 
+  def name(electric_instance_id, tenant_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  end
+
+  def name(opts) do
+    electric_instance_id = Access.fetch!(opts, :electric_instance_id)
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    name(electric_instance_id, tenant_id)
+  end
+
   def start_link(opts) do
-    name = Access.get(opts, :name, __MODULE__)
+    name = Access.get(opts, :name, name(opts))
 
     Supervisor.start_link(__MODULE__, opts, name: name)
   end

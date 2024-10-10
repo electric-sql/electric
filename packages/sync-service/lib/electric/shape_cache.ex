@@ -42,8 +42,6 @@ defmodule Electric.ShapeCache do
 
   @type shape_id :: Electric.ShapeCacheBehaviour.shape_id()
 
-  @default_shape_meta_table :shape_meta_table
-
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   @schema NimbleOptions.new!(
@@ -53,10 +51,6 @@ defmodule Electric.ShapeCache do
             ],
             electric_instance_id: [type: :atom, required: true],
             tenant_id: [type: :string, required: true],
-            shape_meta_table: [
-              type: :atom,
-              default: @default_shape_meta_table
-            ],
             log_producer: [type: @genserver_name_schema, required: true],
             consumer_supervisor: [type: @genserver_name_schema, required: true],
             storage: [type: :mod_arg, required: true],
@@ -117,7 +111,7 @@ defmodule Electric.ShapeCache do
 
   @impl Electric.ShapeCacheBehaviour
   def get_shape(shape, opts \\ []) do
-    table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
+    table = get_shape_meta_table(opts)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
     shape_status.get_existing_shape(table, shape)
   end
@@ -137,7 +131,7 @@ defmodule Electric.ShapeCache do
   @spec update_shape_latest_offset(shape_id(), LogOffset.t(), opts :: keyword()) ::
           :ok | {:error, term()}
   def update_shape_latest_offset(shape_id, latest_offset, opts) do
-    meta_table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
+    meta_table = get_shape_meta_table(opts)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
     if shape_status.set_latest_offset(meta_table, shape_id, latest_offset) do
@@ -158,7 +152,7 @@ defmodule Electric.ShapeCache do
   @impl Electric.ShapeCacheBehaviour
   @spec get_relation(Messages.relation_id(), opts :: keyword()) :: Changes.Relation.t() | nil
   def get_relation(relation_id, opts) do
-    meta_table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
+    meta_table = get_shape_meta_table(opts)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
     shape_status.get_relation(meta_table, relation_id)
   end
@@ -187,7 +181,7 @@ defmodule Electric.ShapeCache do
   @impl Electric.ShapeCacheBehaviour
   @spec await_snapshot_start(shape_id(), keyword()) :: :started | {:error, term()}
   def await_snapshot_start(shape_id, opts \\ []) when is_binary(shape_id) do
-    table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
+    table = get_shape_meta_table(opts)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
     if shape_status.snapshot_started?(table, shape_id) do
@@ -200,7 +194,7 @@ defmodule Electric.ShapeCache do
 
   @impl Electric.ShapeCacheBehaviour
   def has_shape?(shape_id, opts \\ []) do
-    table = Access.get(opts, :shape_meta_table, @default_shape_meta_table)
+    table = get_shape_meta_table(opts)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
     if shape_status.get_existing_shape(table, shape_id) do
@@ -213,10 +207,16 @@ defmodule Electric.ShapeCache do
 
   @impl GenStage
   def init(opts) do
+    # Each tenant creates its own ETS table for storing shape meta data.
+    # We don't use a named table to avoid creating atoms dynamically for each tenant.
+    # Instead, we use the reference to the table that is returned by `:ets.new`.
+    # This requires storing the reference in the GenServer and exposing it through a `get_shape_meta_table` method.
+    meta_table = :ets.new(:shape_meta_table, [:public, :ordered_set])
+
     {:ok, persistent_state} =
       opts.shape_status.initialise(
         persistent_kv: opts.persistent_kv,
-        shape_meta_table: opts.shape_meta_table
+        shape_meta_table: meta_table
       )
 
     state = %{
@@ -226,7 +226,7 @@ defmodule Electric.ShapeCache do
       storage: opts.storage,
       chunk_bytes_threshold: opts.chunk_bytes_threshold,
       inspector: opts.inspector,
-      shape_meta_table: opts.shape_meta_table,
+      shape_meta_table: meta_table,
       shape_status: opts.shape_status,
       awaiting_snapshot_start: %{},
       db_pool: opts.db_pool,
@@ -361,6 +361,11 @@ defmodule Electric.ShapeCache do
     {:reply, :ok, [], state}
   end
 
+  # Returns a reference to the ETS table that stores shape meta data for this tenant
+  def handle_call(:get_shape_meta_table, _from, %{shape_meta_table: table} = state) do
+    {:reply, table, [], state}
+  end
+
   @impl GenStage
   def handle_cast({:snapshot_xmin_known, shape_id, xmin}, %{shape_status: shape_status} = state) do
     unless shape_status.set_snapshot_xmin(state.persistent_state, shape_id, xmin) do
@@ -477,5 +482,10 @@ defmodule Electric.ShapeCache do
 
       {:ok, pid, snapshot_xmin, latest_offset}
     end
+  end
+
+  defp get_shape_meta_table(opts) do
+    server = Access.get(opts, :server, name(opts))
+    GenStage.call(server, :get_shape_meta_table)
   end
 end

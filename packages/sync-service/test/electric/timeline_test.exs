@@ -81,8 +81,6 @@ defmodule Electric.TimelineTest do
       assert ^pg_timeline = Timeline.load_timeline(opts)
     end
 
-    # TODO: add log output checks
-
     @tag electric_timeline: {1, 3}
     test "cleans all shapes when Postgres DB changed", %{timeline: timeline, opts: opts} do
       expect(ShapeCache, :clean_all_shapes, 1, fn _ -> :ok end)

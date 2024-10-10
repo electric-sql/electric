@@ -79,14 +79,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def initialise(opts) do
     with {:ok, config} <- NimbleOptions.validate(opts, @schema),
          {:ok, kv_backend} <- Access.fetch(config, :persistent_kv),
-         {:ok, table_name} = Access.fetch(config, :shape_meta_table) do
+         {:ok, meta_table} = Access.fetch(config, :shape_meta_table) do
       persistent_kv =
         PersistentKV.Serialized.new!(
           backend: kv_backend,
           decoder: {__MODULE__, :decode_shapes, []}
         )
-
-      meta_table = :ets.new(table_name, [:named_table, :public, :ordered_set])
 
       state =
         struct(
