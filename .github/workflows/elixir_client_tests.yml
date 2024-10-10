@@ -75,6 +75,7 @@ jobs:
         name: Bootstrap System Under Test (SUT)
         with:
           run: |
+            echo "${ELECTRIC_URL}"
             mix start_dev
             mix run --no-halt &
 
