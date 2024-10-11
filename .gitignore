@@ -19,3 +19,4 @@ shape-data.json
 test-dbs
 tsconfig.tsbuildinfo
 wal
+.env.prod
