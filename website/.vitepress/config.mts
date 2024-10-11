@@ -147,8 +147,8 @@ export default defineConfig({
           items: [
             { text: 'Auth', link: '/docs/guides/auth' },
             { text: 'Shapes', link: '/docs/guides/shapes' },
-            { text: 'Deployment', link: '/docs/guides/deployment' },
             { text: 'Installation', link: '/docs/guides/installation' },
+            { text: 'Deployment', link: '/docs/guides/deployment' },
             { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
             { text: 'Writing your own client', link: '/docs/guides/writing-your-own-client' },
           ]
