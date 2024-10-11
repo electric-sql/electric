@@ -211,21 +211,18 @@ defmodule Electric.ConnectionManager do
     handle_continue(step, state)
   end
 
-  # When either the replication client or the connection pool shuts down, let the OTP
-  # supervisor restart the connection manager to initiate a new connection procedure from a clean
-  # slate. That is, unless the error that caused the shutdown is unrecoverable and requires
-  # manual resolution in Postgres. In that case, we crash the whole server.
+  # When any of the connection processes exits, we assume that the database is down (likely
+  # temporarily) and shut the connection manager itself down to let its supervisor restart
+  # everything back to the initial state.
   def handle_info({:EXIT, pid, reason}, state) do
     halt_if_fatal_error!(reason)
 
-    tag =
-      cond do
-        pid == state.lock_connection_pid -> :lock_connection
-        pid == state.replication_client_pid -> :replication_connection
-        pid == state.pool_pid -> :database_pool
-      end
+    Logger.warning(
+      "#{inspect(__MODULE__)} is restarting after it has encountered an error in process #{inspect(pid)}:\n" <>
+        inspect(reason, pretty: true) <> "\n\n" <> inspect(state, pretty: true)
+    )
 
-    {:stop, {tag, reason}, state}
+    {:stop, {:shutdown, reason}, state}
   end
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, %{shape_log_collector_pid: pid} = state) do
