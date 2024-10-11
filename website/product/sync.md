@@ -86,7 +86,7 @@ You can sync data into:
 
 The Electric sync engine is an [Elixir](https://elixir-lang.org) application, developed at [electric-sql/electric/tree/main/packages/sync-service](https://github.com/electric-sql/electric/tree/main/packages/sync-service).
 
-It connects to your Postgres using a `DATABASE_URL`, consumes the logical replication stream and fans out data into [Shapes](/docs/guides/shapes), which [Clients](/docs/api/clients/typescript) then consume and sync.
+It connects to your Postgres using a [`DATABASE_URL`](/docs/api/config#database-url), consumes the logical replication stream and fans out data into [Shapes](/docs/guides/shapes), which [Clients](/docs/api/clients/typescript) then consume and sync.
 
 <figure>
   <a href="/img/api/shape-log.jpg">

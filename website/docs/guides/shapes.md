@@ -85,8 +85,7 @@ You can use logical operators like `AND` and `OR` to group multiple conditions, 
 
 Local clients establish shape subscriptions, typically using [client libraries](/docs/api/clients/typescript). These sync data from the [Electric sync service](/product/sync) into the client using the [HTTP API](/docs/api/http).
 
-The sync service maintains shape subscriptions and streams any new data and data changes to the local
-client. In the client, shapes can be held as objects in memory, for example using a [`useShape`](/docs/api/integrations/react) hook, or in a normalised store or database like [PGlite](/product/pglite).
+The sync service maintains shape subscriptions and streams any new data and data changes to the local client. In the client, shapes can be held as objects in memory, for example using a [`useShape`](/docs/integrations/react) hook, or in a normalised store or database like [PGlite](/product/pglite).
 
 ### HTTP
 

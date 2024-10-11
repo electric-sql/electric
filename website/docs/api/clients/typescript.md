@@ -105,4 +105,4 @@ shape.subscribe(({ rows }) => {
 })
 ```
 
-See the [Examples](https://github.com/electric-sql/electric/tree/main/examples) and [integrations](/docs/api/integrations/react) for more usage examples.
+See the [Examples](https://github.com/electric-sql/electric/tree/main/examples) and [integrations](/docs/integrations/react) for more usage examples.
