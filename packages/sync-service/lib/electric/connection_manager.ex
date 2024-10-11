@@ -158,7 +158,7 @@ defmodule Electric.ConnectionManager do
   end
 
   @impl true
-  def handle_continue(:start_lock_connection, state) do
+  def handle_continue(:start_lock_connection, %State{lock_connection_pid: nil} = state) do
     case Electric.Postgres.LockConnection.start_link(
            connection_opts: state.connection_opts,
            connection_manager: self(),
@@ -173,11 +173,26 @@ defmodule Electric.ConnectionManager do
     end
   end
 
-  def handle_continue(:start_replication_client, state) do
+  def handle_continue(:start_replication_client, %State{replication_client_pid: nil} = state) do
     case start_replication_client(state.connection_opts, state.replication_opts) do
       {:ok, pid, connection_opts} ->
         state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
-        {:noreply, state, {:continue, :start_connection_pool}}
+
+        if is_nil(state.pool_pid) do
+          # This is the case where ConnectionManager starts connections from the initial state.
+          # Replication connection is opened after the lock connection has acquired the
+          # exclusive lock. After it, we start the connection pool.
+          false = is_nil(state.lock_connection_pid)
+          {:noreply, state, {:continue, :start_connection_pool}}
+        else
+          # The replication client process exited while the other connection processes were
+          # already running. Now that it's been restarted, we can transition it into the
+          # logical replication mode immediately since all the other connection process and the
+          # shapes supervisor are already up.
+          false = is_nil(state.lock_connection_pid)
+          Electric.Postgres.ReplicationClient.start_streaming(pid)
+          {:noreply, state}
+        end
 
       {:error, reason} ->
         handle_connection_error(reason, state, "replication")
@@ -218,26 +233,47 @@ defmodule Electric.ConnectionManager do
     handle_continue(step, state)
   end
 
-  # When either the replication client or the connection pool shuts down, let the OTP
-  # supervisor restart the connection manager to initiate a new connection procedure from a clean
-  # slate. That is, unless the error that caused the shutdown is unrecoverable and requires
-  # manual resolution in Postgres. In that case, we crash the whole server.
-  def handle_info({:EXIT, pid, reason}, state) do
+  # When the replication client exits on its own, it can be restarted independently of the lock
+  # connection and the DB pool. If any of the latter two shut down, ConnectionManager will
+  # itself terminate to be restarted by its supervisor in a clean state.
+  def handle_info({:EXIT, pid, reason}, %State{replication_client_pid: pid} = state) do
     halt_if_fatal_error!(reason)
-
-    tag =
-      cond do
-        pid == state.lock_connection_pid -> :lock_connection
-        pid == state.replication_client_pid -> :replication_connection
-        pid == state.pool_pid -> :database_pool
-      end
-
-    {:stop, {tag, reason}, state}
+    {:noreply, %{state | replication_client_pid: nil}, {:continue, :start_replication_client}}
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, reason}, %{shape_log_collector_pid: pid} = state) do
-    Logger.warning("ShapeLogCollector down: #{inspect(reason)}")
-    Electric.Postgres.ReplicationClient.stop(state.replication_client_pid)
+  # The most likely reason for the lock connection or the DB pool to exit is the database
+  # server going offline or shutting down. Stop ConnectionManager to allow its supervisor to
+  # restart it in the initial state.
+  def handle_info({:EXIT, pid, reason}, state) do
+    Logger.warning(
+      "#{inspect(__MODULE__)} is restarting after it has encountered an error in process #{inspect(pid)}:\n" <>
+        inspect(reason, pretty: true) <> "\n\n" <> inspect(state, pretty: true)
+    )
+
+    {:stop, {:shutdown, reason}, state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, %{shape_log_collector_pid: pid} = state) do
+    # The replication client would normally exit together with the shape log collector when it
+    # is blocked on a call to either `ShapeLogCollector.handle_relation_msg/2` or
+    # `ShapeLogCollector.store_transaction/2` and the log collector encounters a storage error.
+    #
+    # Just to make sure that we restart the replication client when the shape log collector
+    # crashes for any other reason, we explicitly stop the client here. It will be
+    # automatically restarted by ConnectionManager upon the reception of the `{:EXIT, ...}` message.
+    #
+    # Note, though, that if the replication client process has already exited because the shape
+    # log collector had exited, the below call to `stop()` will also exit (with same exit reason or
+    # due to a timeout in `:gen_statem.call()`). Hence the wrapping of the function call in a
+    # try-catch block.
+    try do
+      _ = Electric.Postgres.ReplicationClient.stop(state.replication_client_pid)
+    catch
+      :exit, _reason ->
+        # The replication client has already exited, so nothing else to do here.
+        state
+    end
+
     {:noreply, %{state | shape_log_collector_pid: nil}}
   end
 
