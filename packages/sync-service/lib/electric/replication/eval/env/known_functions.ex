@@ -15,6 +15,7 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres("numeric(text) -> numeric", delegate: &Casting.parse_float8/1)
   defpostgres("bool(text) -> bool", delegate: &Casting.parse_bool/1)
   defpostgres("uuid(text) -> uuid", delegate: &Casting.parse_uuid/1)
+  defpostgres("text(text) -> text", delegate: &BasicTypes.noop/1)
   defpostgres("date(text) -> date", delegate: &Casting.parse_date/1)
   defpostgres("time(text) -> time", delegate: &Casting.parse_time/1)
   defpostgres("timestamp(text) -> timestamp", delegate: &Casting.parse_timestamp/1)

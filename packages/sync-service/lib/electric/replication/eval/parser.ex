@@ -19,7 +19,7 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   defmodule Func do
-    defstruct [:args, :type, :implementation, :name, strict?: true, immutable?: true, location: 0]
+    defstruct [:args, :type, :implementation, :name, strict?: true, immutable?: true, applied_to_array?: false, location: 0]
   end
 
   @valid_types (Electric.Postgres.supported_types() ++
@@ -74,7 +74,7 @@ defmodule Electric.Replication.Eval.Parser do
       |> Enum.find(fn {_, value} -> value != [] end)
 
     if is_nil(extra_suffixes) do
-      case do_parse_and_validate_tree(stmt.where_clause, refs, env) do
+      case do_parse_and_validate_tree(stmt.where_clause |> dbg, refs, env) do
         {:error, {loc, reason}} -> {:error, {max(loc - @prefix_length, 0), reason}}
         {:ok, %UnknownConst{} = unknown} -> {:ok, infer_unknown(unknown)}
         value -> value
@@ -303,8 +303,11 @@ defmodule Electric.Replication.Eval.Parser do
        {Map.get(node, :location, 0),
         "#{type_module |> Module.split() |> List.last()} is not supported in this context"}}
 
-  defp get_type_from_pg_name(%PgQuery.TypeName{names: _, array_bounds: [_ | _]} = cast),
-    do: {:error, {cast.location, "Electric currently doesn't support array types"}}
+  defp get_type_from_pg_name(%PgQuery.TypeName{array_bounds: [_ | _]} = cast) do
+    with {:ok, type} <- get_type_from_pg_name(%{cast | array_bounds: []}) do
+      {:ok, {:array, type}}
+    end
+  end
 
   defp get_type_from_pg_name(%PgQuery.TypeName{names: names, location: loc}) do
     case Enum.map(names, &unwrap_node_string/1) do
@@ -475,7 +478,7 @@ defmodule Electric.Replication.Eval.Parser do
         {:error, _} ->
           {:error,
            {const.location,
-            "could not cast value #{inspect(value)} from #{type} to #{target_type}"}}
+            "could not cast value #{inspect(value)} from #{readable(type)} to #{readable(target_type)}"}}
       end
     end
   end
@@ -516,6 +519,13 @@ defmodule Electric.Replication.Eval.Parser do
         case {from_type, to_type} do
           {:unknown, _} -> {:ok, {__MODULE__, :cast_null}}
           {_, :unknown} -> {:ok, {__MODULE__, :cast_null}}
+          {{:array, t1}, {:array, t2}} ->
+            case find_cast_function(env, t1, t2) do
+              {:ok, :as_is} -> {:ok, :as_is}
+              {:ok, impl} -> {:ok, :array_cast, impl}
+              :error -> :error
+            end
+
           {:text, to_type} -> find_cast_in_function(env, to_type)
           {from_type, :text} -> find_cast_out_function(env, from_type)
           {from_type, to_type} -> find_explicit_cast(env, from_type, to_type)
@@ -524,6 +534,13 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   def cast_null(nil), do: nil
+
+  defp find_cast_in_function(env, {:array, to_type}) do
+    with {:ok, [%{args: [:text], implementation: impl}]} <-
+           Map.fetch(env.funcs, {"#{to_type}", 1}) do
+      {:ok, &PgInterop.Array.parse(&1, impl)}
+    end
+  end
 
   defp find_cast_in_function(env, to_type) do
     case Map.fetch(env.funcs, {"#{to_type}", 1}) do
@@ -549,6 +566,17 @@ defmodule Electric.Replication.Eval.Parser do
       {:ok, :as_is} ->
         {:ok, %{arg | type: target_type}}
 
+      {:ok, :array_cast, impl} ->
+        {:ok,
+         %Func{
+           location: loc,
+           type: target_type,
+           args: [arg],
+           implementation: impl,
+           applied_to_array?: true,
+           name: "#{readable(type)}_to_#{readable(target_type)}"
+         }}
+
       {:ok, impl} ->
         {:ok,
          %Func{
@@ -556,13 +584,17 @@ defmodule Electric.Replication.Eval.Parser do
            type: target_type,
            args: [arg],
            implementation: impl,
-           name: "#{type}_to_#{target_type}"
+           name: "#{readable(type)}_to_#{readable(target_type)}"
          }}
 
       :error ->
-        {:error, {loc, "unknown cast from type #{type} to type #{target_type}"}}
+        {:error, {loc, "unknown cast from type #{readable(type)} to type #{readable(target_type)}"}}
     end
   end
+
+  defp readable(:unknown), do: "unknown"
+  defp readable({:array, type}), do: "array of #{readable(type)}"
+  defp readable(type), do: to_string(type)
 
   defp cast_implicit(processed_args, arg_list, env) do
     {:ok,
@@ -687,11 +719,13 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp try_applying(%Func{args: args, implementation: impl} = func) do
+  defp try_applying(%Func{args: args, implementation: impl, applied_to_array?: applied_to_array?} = func) do
     value =
-      case impl do
-        {module, function} -> apply(module, function, args)
-        function -> apply(function, args)
+      case {impl, applied_to_array?} do
+        {{module, function}, false} -> apply(module, function, args)
+        {function, false} -> apply(function, args)
+        {{module, function}, true} -> Utils.deep_map(hd(args), &apply(module, function, [&1]))
+        {function, true} -> Utils.deep_map(hd(args), &apply(function, [&1]))
       end
 
     {:ok, %Const{value: value, type: func.type, location: func.location}}

@@ -459,6 +459,34 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:error, "At location 2: argument of IS TRUE must be bool, not int4"} =
                Parser.parse_and_validate_expression(~S|1 IS TRUE|, %{}, env)
     end
+
+    test "should parse array constants" do
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|'{1,2,{"3"}}'::int[]|)
+
+      assert %Const{value: [1, 2, [3]], type: {:array, :int4}} = result
+    end
+
+    test "should recast a nested array" do
+      # as-is recast
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|('{1,2,{"3"}}'::int[])::bigint[]|)
+
+      assert %Const{value: [1, 2, [3]], type: {:array, :int8}} = result
+
+      # with a cast function
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|('{1,2,{"3"}}'::text[])::bigint[]|)
+
+      assert %Const{value: [1, 2, [3]], type: {:array, :int8}} = result
+    end
+
+    test "should work with array access" do
+      assert {:ok, %Expr{eval: result}} =
+        Parser.parse_and_validate_expression(~S|('{1,2,3}'::int[])[1:2]|)
+
+      assert %Const{value: 2, type: {:array, :int8}} = result
+    end
   end
 
   describe "parse_and_validate_expression/3 default env" do

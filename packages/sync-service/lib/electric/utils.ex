@@ -93,6 +93,20 @@ defmodule Electric.Utils do
   end
 
   @doc """
+  Apply a function to each element of an enumerable, recursively if the element is an enumerable itself.
+
+  ## Examples
+
+      iex> deep_map([1, [2, [3]], 4], &(&1 * 2))
+      [2, [4, [6]], 8]
+  """
+  @spec deep_map(Enumerable.t(elem), (elem -> result)) :: list(result)
+        when elem: var, result: var
+  def deep_map(enum, fun) when is_function(fun, 1) do
+    Enum.map(enum, &if(Enumerable.impl_for(&1), do: deep_map(&1, fun), else: fun.(&1)))
+  end
+
+  @doc """
   Return a list of values from `enum` that are the maximal elements as calculated
   by the given `fun`.
 
