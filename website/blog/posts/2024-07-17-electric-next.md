@@ -27,7 +27,7 @@ Electric Next was a clean rebuild of the Electric sync engine that now forms the
 
 We created a new repo and started by porting the absolute minimum code necessary from the [previous repo](https://github.com/electric-sql/electric-old). Once we were confident that Electric Next was the way forward, we froze the old system and moved the new code into our main repo at [https://github.com/electric-sql/electric](https://github.com/electric-sql/electric).
 
-The new approach provides an [HTTP API](/docs/api/http) for syncing [Shapes](/docs/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/docs/api/clients/typescript) and [integrations](/docs/api/integrations/react). It's also simple to write your own client in any language.
+The new approach provides an [HTTP API](/docs/api/http) for syncing [Shapes](/docs/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](/docs/api/clients/typescript) and [integrations](/docs/integrations/react). It's also simple to write your own client in any language.
 
 ## Why build a new system?
 
@@ -273,7 +273,7 @@ At the time of writing this document, we are early in the development of Electri
 However, even just with the first release of Electric Next you can already sync partial subsets of data from a Postgres database into a wide variety of clients and environments, for example:
 
 - syncing data into local apps using the [TypeScript](/docs/api/clients/typescript) and [Elixir](/docs/api/clients/elixir) clients
-- replacing hot-path data fetching and database queries in apps using [React](/docs/api/integrations/react), [MobX](/docs/api/integrations/react) and [TanStack](/docs/api/integrations/tanstack)
+- replacing hot-path data fetching and database queries in apps using [React](/docs/integrations/react), [MobX](/docs/integrations/react) and [TanStack](/docs/api/integrations/tanstack)
 - maintain live caches with automatic invalidation, as per [our Redis example](https://github.com/electric-sql/electric/blob/main/examples/redis-sync/src/index.ts)
 
 ### Roadmap
