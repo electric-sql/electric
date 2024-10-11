@@ -166,15 +166,21 @@ export default defineConfig({
               ],
               collapsed: false
             },
+            { text: 'Config', link: '/docs/api/config' }
+          ]
+        },
+        {
+          text: 'Integrations',
+          collapsed: true,
+          items: [
             {
-              text: 'Integrations',
+              text: 'Frameworks',
               items: [
-                // { text: 'MobX', link: '/docs/api/integrations/mobx' },
-                { text: 'React', link: '/docs/api/integrations/react' },
-                // { text: 'Redis', link: '/docs/api/integrations/redis' },
-                // { text: 'TanStack', link: '/docs/api/integrations/tanstack' },
+                // { text: 'MobX', link: '/docs/integrations/mobx' },
+                { text: 'React', link: '/docs/integrations/react' },
+                // { text: 'Redis', link: '/docs/integrations/redis' },
+                // { text: 'TanStack', link: '/docs/integrations/tanstack' },
               ],
-              collapsed: false
             }
           ]
         },
