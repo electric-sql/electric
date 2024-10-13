@@ -51,13 +51,22 @@ defmodule Electric.Replication.Eval.Runner do
   defp do_execute(%Const{value: value}, _), do: value
   defp do_execute(%Ref{path: path}, refs), do: Map.fetch!(refs, path)
 
-  defp do_execute(%Func{} = func, refs) do
+  defp do_execute(%Func{variadic_arg: vararg_position} = func, refs) do
     {args, has_nils?} =
-      Enum.map_reduce(func.args, false, fn val, has_nils? ->
-        case do_execute(val, refs) do
-          nil -> {nil, true}
-          val -> {val, has_nils?}
-        end
+      Enum.map_reduce(Enum.with_index(func.args), false, fn
+        {val, ^vararg_position}, has_nils? ->
+          Enum.map_reduce(val, has_nils?, fn val, has_nils? ->
+            case do_execute(val, refs) do
+              nil -> {nil, true}
+              val -> {val, has_nils?}
+            end
+          end)
+
+        {val, _}, has_nils? ->
+          case do_execute(val, refs) do
+            nil -> {nil, true}
+            val -> {val, has_nils?}
+          end
       end)
 
     # Strict functions don't get applied to nils, so if it's strict and any of the arguments is nil
@@ -68,10 +77,12 @@ defmodule Electric.Replication.Eval.Runner do
     end
   end
 
-  defp try_apply(%Func{implementation: impl} = func, args) do
-    case impl do
-      {module, fun} -> apply(module, fun, args)
-      fun -> apply(fun, args)
+  defp try_apply(%Func{implementation: impl, applied_to_array?: applied_to_array?} = func, args) do
+    case {impl, applied_to_array?} do
+      {{module, fun}, false} -> apply(module, fun, args)
+      {fun, false} -> apply(fun, args)
+      {{module, fun}, true} -> Utils.deep_map(hd(args), &apply(module, fun, [&1]))
+      {fun, true} -> Utils.deep_map(hd(args), &apply(fun, [&1]))
     end
   rescue
     _ ->

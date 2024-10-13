@@ -11,6 +11,9 @@ defmodule PgInterop.Array do
       iex> ~S|{"(\"2023-06-15 11:18:05.372698+00\",)","(\"2023-06-15 11:18:05.372698+00\",)"}| |> parse()
       [~s|("2023-06-15 11:18:05.372698+00",)|, ~s|("2023-06-15 11:18:05.372698+00",)|]
 
+      iex> ~S|{hello, world, null, "null"}| |> parse()
+      ["hello", "world", nil, "null"]
+
       iex> ~S|{"2023-06-15 11:18:05.372698+00",2023-06-15 11:18:05.372698+00}| |> parse(fn x -> {:ok, n, _} = DateTime.from_iso8601(x); n end)
       [~U[2023-06-15 11:18:05.372698Z], ~U[2023-06-15 11:18:05.372698Z]]
 
@@ -62,7 +65,8 @@ defmodule PgInterop.Array do
   defp parse_pg_array_elem(str, casting_fun) do
     {elem, rest} = scan_until_comma_or_end(str, "")
     {result, rest} = parse_with_tail(rest, casting_fun)
-    {[casting_fun.(elem) | result], rest}
+    value = if(String.downcase(elem) == "null", do: nil, else: casting_fun.(elem))
+    {[value | result], rest}
   end
 
   # closing quote, return
@@ -127,4 +131,91 @@ defmodule PgInterop.Array do
   defp enclose(str, left, right \\ nil) do
     left <> str <> (right || left)
   end
+
+  @doc """
+  Access a slice or index of a postgres array.
+
+  ## Examples
+
+      iex> ~S|{1,2,3,4,5}| |> parse(&String.to_integer/1) |> slice_access([{:slice, nil, 3}])
+      [1, 2, 3]
+
+      iex> ~S|{1,2,3,4,5}| |> parse(&String.to_integer/1) |> slice_access([{:slice, 3, nil}])
+      [3, 4, 5]
+
+      iex> ~S|{1,2,3,4,5}| |> parse(&String.to_integer/1) |> slice_access([{:slice, 3, 4}])
+      [3, 4]
+
+      iex> ~S|{{1,2},{3,4}}| |> parse(&String.to_integer/1) |> slice_access([{:slice, nil, nil}, {:index, 2}])
+      [[1, 2], [3, 4]]
+
+      iex> ~S|{{1,2},{3,4}}| |> parse(&String.to_integer/1) |> slice_access([{:slice, nil, nil}, {:slice, 2, 2}])
+      [[2], [4]]
+
+      iex> ~S|{{1,2},{3,4}}| |> parse(&String.to_integer/1) |> slice_access([{:slice, nil, nil}, {:slice, -1, 1}])
+      [[1], [3]]
+
+      iex> ~S|{{1,2},{3,4}}| |> parse(&String.to_integer/1) |> slice_access([{:slice, nil, nil}, {:slice, 1, -1}])
+      []
+  """
+  @spec slice_access(
+          list(),
+          list({:slice, nil | integer(), nil | integer()} | {:index, integer()})
+        ) :: list()
+  def slice_access(array, instructions) do
+    do_slice_access(array, instructions |> dbg)
+  catch
+    :out_of_bounds -> []
+  end
+
+  defp do_slice_access(elem, [_ | _]) when not is_list(elem), do: throw(:out_of_bounds)
+  defp do_slice_access(array, []), do: array
+
+  defp do_slice_access(array, [{:slice, nil, nil} | rest]),
+    do: Enum.map(array, &do_slice_access(&1, rest))
+
+  defp do_slice_access(_array, [{:slice, lower_idx, upper_idx} | _])
+       when is_integer(lower_idx) and is_integer(upper_idx) and
+              (lower_idx > upper_idx or upper_idx < 1),
+       do: throw(:out_of_bounds)
+
+  defp do_slice_access(array, [{:slice, lower_idx, upper_idx} | rest]),
+    do:
+      array
+      |> Enum.slice((normalize_idx(lower_idx) || 0)..(normalize_idx(upper_idx) || -1)//1)
+      |> Enum.map(&do_slice_access(&1, rest))
+
+  defp do_slice_access(array, [{:index, idx} | rest]),
+    do: do_slice_access(array, [{:slice, 1, idx} | rest])
+
+  @doc """
+  Access an index of a postgres array. If the index is out of bounds or array has more dimensions than the indices provided, returns `nil`.
+
+  ## Examples
+
+      iex> ~S|{1,2,3,4,5}| |> parse(&String.to_integer/1) |> index_access([{:index, 3}])
+      3
+
+      iex> ~S|{{1,2},{3,4}}| |> parse(&String.to_integer/1) |> index_access([{:index, 2}, {:index, 1}])
+      3
+
+      iex> ~S|{{1,2},{3,4}}| |> parse(&String.to_integer/1) |> index_access([{:index, 3}])
+      nil
+  """
+  @spec index_access(list(), list({:index, integer()})) :: list()
+  def index_access(array, list_of_indices) do
+    Enum.reduce_while(list_of_indices, array, fn
+      _, nil -> {:halt, nil}
+      {:index, idx}, _acc when idx < 1 -> {:halt, nil}
+      {:index, idx}, acc -> {:cont, Enum.at(acc, idx - 1)}
+    end)
+    |> case do
+      [] -> nil
+      result -> result
+    end
+  end
+
+  defp normalize_idx(nil), do: nil
+  defp normalize_idx(pg_index) when pg_index < 1, do: 0
+  defp normalize_idx(pg_index), do: pg_index - 1
 end

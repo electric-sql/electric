@@ -61,5 +61,12 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Parser.parse_and_validate_expression!(%{["test"] => :int4})
                |> Runner.execute(%{["test"] => "test"})
     end
+
+    test "should work with array types" do
+      assert {:ok, [[1, 2], [3, 4]]} =
+               ~S|ARRAY[ARRAY[1, x], ARRAY['3', 2 + 2]]|
+               |> Parser.parse_and_validate_expression!(%{["x"] => :int4})
+               |> Runner.execute(%{["x"] => 2})
+    end
   end
 end

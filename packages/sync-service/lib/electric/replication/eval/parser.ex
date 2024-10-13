@@ -19,7 +19,17 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   defmodule Func do
-    defstruct [:args, :type, :implementation, :name, strict?: true, immutable?: true, applied_to_array?: false, location: 0]
+    defstruct [
+      :args,
+      :type,
+      :implementation,
+      :name,
+      strict?: true,
+      immutable?: true,
+      applied_to_array?: false,
+      variadic_arg: nil,
+      location: 0
+    ]
   end
 
   @valid_types (Electric.Postgres.supported_types() ++
@@ -84,6 +94,11 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
+  defp maybe_parse_and_validate_tree(nil, _, _), do: nil
+
+  defp maybe_parse_and_validate_tree(node, refs, env),
+    do: do_parse_and_validate_tree(node, refs, env)
+
   @spec do_parse_and_validate_tree(struct(), map(), map()) ::
           {:ok, %UnknownConst{} | tree_part()}
           | {:error, {non_neg_integer(), String.t()}}
@@ -98,6 +113,108 @@ defmodule Electric.Replication.Eval.Parser do
 
   defp do_parse_and_validate_tree(%PgQuery.A_Const{val: {kind, struct}, location: loc}, _, _),
     do: make_const(kind, Map.fetch!(struct, kind), loc)
+
+  defp do_parse_and_validate_tree(
+         %PgQuery.A_ArrayExpr{elements: elements, location: loc},
+         refs,
+         env
+       ) do
+    element_len = length(elements)
+
+    with {:ok, elements} <-
+           Utils.map_while_ok(elements, &do_parse_and_validate_tree(&1, refs, env)) do
+      case Lookups.pick_union_type(elements, env) do
+        {:ok, type} ->
+          with {:ok, elements} <-
+                 cast_unknowns(elements, List.duplicate(type, element_len), env),
+               {:ok, elements} <-
+                 try_cast_implicit(elements, List.duplicate(type, element_len), env) do
+            maybe_reduce(%Func{
+              args: [elements],
+              type: {:array, maybe_array_type(type)},
+              location: loc,
+              name: "build_array",
+              implementation: & &1,
+              strict?: false,
+              variadic_arg: 0
+            })
+          end
+
+        {:error, type, candidate} ->
+          {:error,
+           {loc, "ARRAY types #{readable(type)} and #{readable(candidate)} cannot be matched"}}
+      end
+    end
+  end
+
+  defp do_parse_and_validate_tree(
+         %PgQuery.A_Indirection{arg: arg, indirection: indirection},
+         refs,
+         env
+       ) do
+    with {:ok, %{type: {:array, inner_type} = array_type} = arg} <-
+           do_parse_and_validate_tree(arg, refs, env),
+         {:ok, indirections} <-
+           Utils.map_while_ok(indirection, &do_parse_and_validate_tree(&1, refs, env)) do
+      # If any of the indirections are slices, every access is treated as a slice access
+      # (e.g. `a[1:2][3]` is treated by PG as `a[1:2][1:3]` implicitly).
+      if Enum.any?(indirections, &(&1.type == {:internal, :slice})) do
+        maybe_reduce(%Func{
+          location: arg.location,
+          args: [arg, indirections],
+          type: array_type,
+          name: "slice_access",
+          implementation: &PgInterop.Array.slice_access/2,
+          variadic_arg: 1
+        })
+      else
+        maybe_reduce(%Func{
+          location: arg.location,
+          args: [arg, indirections],
+          type: inner_type,
+          name: "index_access",
+          implementation: &PgInterop.Array.index_access/2,
+          variadic_arg: 1
+        })
+      end
+    end
+  end
+
+  defp do_parse_and_validate_tree(
+         %PgQuery.A_Indices{is_slice: is_slice, lidx: lower_idx, uidx: upper_idx},
+         refs,
+         env
+       ) do
+    with {:ok, lower_idx} <-
+           maybe_parse_and_validate_tree(lower_idx, refs, env) ||
+             {:ok, %Const{value: :unspecified, type: {:internal, :slice_boundary}, location: 0}},
+         {:ok, upper_idx} <-
+           maybe_parse_and_validate_tree(upper_idx, refs, env) ||
+             {:ok, %Const{value: :unspecified, type: {:internal, :slice_boundary}, location: 0}},
+         {:ok, [lower_idx, upper_idx]} <-
+           cast_unknowns([lower_idx, upper_idx], List.duplicate(:int8, 2), env),
+         {:ok, [lower_idx, upper_idx]} <- round_numerics([lower_idx, upper_idx]),
+         {:ok, [lower_idx, upper_idx]} <-
+           try_cast_implicit([lower_idx, upper_idx], List.duplicate(:int8, 2), env) do
+      if is_slice do
+        maybe_reduce(%Func{
+          location: upper_idx.location,
+          args: [lower_idx, upper_idx],
+          type: {:internal, :slice},
+          name: "internal_slice",
+          implementation: &build_slice_structure/2
+        })
+      else
+        maybe_reduce(%Func{
+          location: upper_idx.location,
+          args: [upper_idx],
+          type: {:internal, :index},
+          name: "internal_index",
+          implementation: &build_index_structure/1
+        })
+      end
+    end
+  end
 
   defp do_parse_and_validate_tree(%PgQuery.ColumnRef{fields: fields, location: loc}, refs, _) do
     ref = Enum.map(fields, &unwrap_node_string/1)
@@ -517,8 +634,12 @@ defmodule Electric.Replication.Eval.Parser do
 
       :error ->
         case {from_type, to_type} do
-          {:unknown, _} -> {:ok, {__MODULE__, :cast_null}}
-          {_, :unknown} -> {:ok, {__MODULE__, :cast_null}}
+          {:unknown, _} ->
+            {:ok, {__MODULE__, :cast_null}}
+
+          {_, :unknown} ->
+            {:ok, {__MODULE__, :cast_null}}
+
           {{:array, t1}, {:array, t2}} ->
             case find_cast_function(env, t1, t2) do
               {:ok, :as_is} -> {:ok, :as_is}
@@ -526,9 +647,14 @@ defmodule Electric.Replication.Eval.Parser do
               :error -> :error
             end
 
-          {:text, to_type} -> find_cast_in_function(env, to_type)
-          {from_type, :text} -> find_cast_out_function(env, from_type)
-          {from_type, to_type} -> find_explicit_cast(env, from_type, to_type)
+          {:text, to_type} ->
+            find_cast_in_function(env, to_type)
+
+          {from_type, :text} ->
+            find_cast_out_function(env, from_type)
+
+          {from_type, to_type} ->
+            find_explicit_cast(env, from_type, to_type)
         end
     end
   end
@@ -588,13 +714,54 @@ defmodule Electric.Replication.Eval.Parser do
          }}
 
       :error ->
-        {:error, {loc, "unknown cast from type #{readable(type)} to type #{readable(target_type)}"}}
+        {:error,
+         {loc, "unknown cast from type #{readable(type)} to type #{readable(target_type)}"}}
     end
   end
 
   defp readable(:unknown), do: "unknown"
-  defp readable({:array, type}), do: "array of #{readable(type)}"
+  defp readable({:array, type}), do: "#{readable(type)}[]"
+  defp readable({:internal, type}), do: "internal type #{readable(type)}"
   defp readable(type), do: to_string(type)
+
+  defp try_cast_implicit(processed_args, arg_list, env) do
+    {:ok,
+     Enum.zip_with(processed_args, arg_list, fn
+       %{type: type} = arg, type ->
+         arg
+
+       %{type: {:internal, _}} = arg, _ ->
+         arg
+
+       %{type: from_type} = arg, to_type ->
+         case Map.fetch(env.implicit_casts, {from_type, to_type}) do
+           {:ok, :as_is} ->
+             arg
+
+           {:ok, impl} ->
+             %Func{
+               location: arg.location,
+               type: to_type,
+               args: [arg],
+               implementation: impl,
+               name: "#{from_type}_to_#{to_type}"
+             }
+             |> maybe_reduce()
+             |> case do
+               {:ok, val} -> val
+               error -> throw(error)
+             end
+
+           :error ->
+             throw(
+               {:error,
+                {arg.location, "#{readable(from_type)} cannot be matched to #{readable(to_type)}"}}
+             )
+         end
+     end)}
+  catch
+    {:error, {_loc, _message}} = error -> error
+  end
 
   defp cast_implicit(processed_args, arg_list, env) do
     {:ok,
@@ -660,7 +827,7 @@ defmodule Electric.Replication.Eval.Parser do
         {:ok, %Const{type: :int8, value: value, location: loc}}
 
       {:fval, value} ->
-        {:ok, %Const{type: :numeric, value: value, location: loc}}
+        {:ok, %Const{type: :numeric, value: Decimal.new(value), location: loc}}
 
       {:boolval, value} ->
         {:ok, %Const{type: :bool, value: value, location: loc}}
@@ -696,12 +863,26 @@ defmodule Electric.Replication.Eval.Parser do
           {:ok, %Func{} | %Const{}} | {:error, {non_neg_integer(), String.t()}}
   defp maybe_reduce(%Func{immutable?: false} = func), do: {:ok, func}
 
-  defp maybe_reduce(%Func{args: args} = func) do
+  defp maybe_reduce(%Func{args: args, variadic_arg: position} = func) do
     {args, {any_nils?, all_const?}} =
-      Enum.map_reduce(args, {false, true}, fn
-        %Const{value: nil}, {_any_nils?, all_const?} -> {nil, {true, all_const?}}
-        %Const{value: value}, {any_nils?, all_const?} -> {value, {any_nils?, all_const?}}
-        _, {any_nils?, _all_const?} -> {:not_used, {any_nils?, false}}
+      args
+      |> Enum.with_index()
+      |> Enum.map_reduce({false, true}, fn
+        {arg, ^position}, {any_nils?, all_const?} ->
+          Enum.map_reduce(arg, {any_nils?, all_const?}, fn
+            %Const{value: nil}, {_any_nils?, all_const?} -> {nil, {true, all_const?}}
+            %Const{value: value}, {any_nils?, all_const?} -> {value, {any_nils?, all_const?}}
+            _, {any_nils?, _all_const?} -> {:not_used, {any_nils?, false}}
+          end)
+
+        {%Const{value: nil}, _}, {_any_nils?, all_const?} ->
+          {nil, {true, all_const?}}
+
+        {%Const{value: value}, _}, {any_nils?, all_const?} ->
+          {value, {any_nils?, all_const?}}
+
+        _, {any_nils?, _all_const?} ->
+          {:not_used, {any_nils?, false}}
       end)
 
     cond do
@@ -719,7 +900,9 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp try_applying(%Func{args: args, implementation: impl, applied_to_array?: applied_to_array?} = func) do
+  defp try_applying(
+         %Func{args: args, implementation: impl, applied_to_array?: applied_to_array?} = func
+       ) do
     value =
       case {impl, applied_to_array?} do
         {{module, function}, false} -> apply(module, function, args)
@@ -764,7 +947,16 @@ defmodule Electric.Replication.Eval.Parser do
   defp find_refs(tree, acc \\ %{})
   defp find_refs(%Const{}, acc), do: acc
   defp find_refs(%Ref{path: path, type: type}, acc), do: Map.put_new(acc, path, type)
-  defp find_refs(%Func{args: args}, acc), do: Enum.reduce(args, acc, &find_refs/2)
+
+  defp find_refs(%Func{args: args, variadic_arg: nil}, acc),
+    do: Enum.reduce(args, acc, &find_refs/2)
+
+  defp find_refs(%Func{args: args, variadic_arg: position}, acc),
+    do:
+      Enum.reduce(Enum.with_index(args), acc, fn
+        {arg, ^position}, acc -> Enum.reduce(arg, acc, &find_refs/2)
+        {arg, _}, acc -> find_refs(arg, acc)
+      end)
 
   defp unsnake(string) when is_binary(string), do: :binary.replace(string, "_", " ", [:global])
 
@@ -781,5 +973,32 @@ defmodule Electric.Replication.Eval.Parser do
       args: [tree_part],
       location: tree_part.location
     })
+  end
+
+  defp maybe_array_type({:array, type}), do: type
+  defp maybe_array_type(type), do: type
+
+  defp build_index_structure(index) do
+    {:index, index}
+  end
+
+  defp build_slice_structure(lower_idx, upper_idx) do
+    {:slice, lower_idx, upper_idx}
+  end
+
+  defp round_numerics(args) do
+    Utils.map_while_ok(args, fn
+      %{type: x} = arg when x in [:numeric, :float4, :float8] ->
+        maybe_reduce(%Func{
+          location: arg.location,
+          type: :int8,
+          args: [arg],
+          implementation: &Decimal.to_integer(Decimal.round(&1)),
+          name: "round"
+        })
+
+      arg ->
+        {:ok, arg}
+    end)
   end
 end

@@ -461,10 +461,17 @@ defmodule Electric.Replication.Eval.ParserTest do
     end
 
     test "should parse array constants" do
+      # TODO: Does not support arbitrary bounds input syntax yet,
+      #       e.g. '[1:1][-2:-1][3:5]={{{1,2,3},{4,5,6}}}'::int[]
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(~S|'{1,2,{"3"}}'::int[]|)
 
       assert %Const{value: [1, 2, [3]], type: {:array, :int4}} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|ARRAY[ARRAY[1, 2], ARRAY['3', 2 + 2]]|)
+
+      assert %Const{value: [[1, 2], [3, 4]], type: {:array, :int4}} = result
     end
 
     test "should recast a nested array" do
@@ -482,10 +489,33 @@ defmodule Electric.Replication.Eval.ParserTest do
     end
 
     test "should work with array access" do
+      # Including mixed notation, float constants, and text castable to ints
       assert {:ok, %Expr{eval: result}} =
-        Parser.parse_and_validate_expression(~S|('{1,2,3}'::int[])[1:2]|)
+               Parser.parse_and_validate_expression(~S|('{1,2,3}'::int[])[1][1:'2'][2.2:2.3][:]|)
 
-      assert %Const{value: 2, type: {:array, :int8}} = result
+      assert %Const{value: [], type: {:array, :int4}} = result
+
+      # Returns NULL if any of indices are NULL
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|('{1,2,3}'::int[])[1][1:'2'][2.2:2.3][:][NULL:NULL]|
+               )
+
+      assert %Const{value: nil, type: {:array, :int4}} = result
+
+      # Also works when there are no slices
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|('{{{1}},{{2}},{{3}}}'::int[])[1]['1'][1.4]|
+               )
+
+      assert %Const{value: 1, type: :int4} = result
+
+      # And correctly works with expressions as indices
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|('{{1},{2},{3}}'::int[])[2][2 - 1]|)
+
+      assert %Const{value: 2, type: :int4} = result
     end
   end
 
