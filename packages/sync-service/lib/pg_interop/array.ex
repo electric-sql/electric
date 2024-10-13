@@ -163,7 +163,7 @@ defmodule PgInterop.Array do
           list({:slice, nil | integer(), nil | integer()} | {:index, integer()})
         ) :: list()
   def slice_access(array, instructions) do
-    do_slice_access(array, instructions |> dbg)
+    do_slice_access(array, instructions)
   catch
     :out_of_bounds -> []
   end
@@ -218,4 +218,42 @@ defmodule PgInterop.Array do
   defp normalize_idx(nil), do: nil
   defp normalize_idx(pg_index) when pg_index < 1, do: 0
   defp normalize_idx(pg_index), do: pg_index - 1
+
+  def concat_arrays(arr1, []), do: arr1
+  def concat_arrays([], arr2), do: arr2
+
+  def concat_arrays(arr1, arr2) do
+    case {get_array_dim(arr1), get_array_dim(arr2)} do
+      {d1, d1} -> arr1 ++ arr2
+      {d1, d2} when d2 - d1 == 1 -> [arr1 | arr2]
+      {d1, d2} when d1 - d2 == 1 -> arr1 ++ [arr2]
+      {d1, d2} -> raise "Incompatible array dimensions: #{d1} and #{d2}"
+    end
+  end
+
+  @doc """
+  Get the dimension of a postgres array.
+
+  ## Examples
+
+      iex> ~S|{}| |> parse() |> get_array_dim()
+      nil
+
+      iex> ~S|{1,2,3,4,5}| |> parse() |> get_array_dim()
+      1
+
+      iex> ~S|{{1,2},{3,4}}| |> parse() |> get_array_dim()
+      2
+  """
+  @spec get_array_dim(list()) :: non_neg_integer()
+  def get_array_dim(arr, dim \\ 0)
+  def get_array_dim([], _), do: nil
+  def get_array_dim([hd | _], dim), do: get_array_dim(hd, dim + 1)
+  def get_array_dim(_, dim), do: dim
+
+  def array_prepend(elem, []), do: [elem]
+  def array_prepend(elem, [hd | tl]) when not is_list(hd), do: [elem, hd | tl]
+
+  def array_append([], elem), do: [elem]
+  def array_append([hd | _] = list, elem) when not is_list(hd), do: list ++ [elem]
 end

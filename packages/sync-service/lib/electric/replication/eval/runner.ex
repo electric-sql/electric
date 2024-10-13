@@ -1,5 +1,6 @@
 defmodule Electric.Replication.Eval.Runner do
   require Logger
+  alias Electric.Utils
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.Eval.Env
   alias Electric.Replication.Eval.Parser.{Const, Func, Ref}
@@ -81,8 +82,8 @@ defmodule Electric.Replication.Eval.Runner do
     case {impl, applied_to_array?} do
       {{module, fun}, false} -> apply(module, fun, args)
       {fun, false} -> apply(fun, args)
-      {{module, fun}, true} -> Utils.deep_map(hd(args), &apply(module, fun, [&1]))
-      {fun, true} -> Utils.deep_map(hd(args), &apply(fun, [&1]))
+      {{module, fun}, true} -> Utils.deep_map(hd(args), &apply(module, fun, tl(args) ++ [&1]))
+      {fun, true} -> Utils.deep_map(hd(args), &apply(fun, tl(args) ++ [&1]))
     end
   rescue
     _ ->

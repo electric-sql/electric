@@ -23,7 +23,7 @@ defmodule Electric.Replication.Eval.Lookups do
   def pick_union_type(args, env) do
     Enum.reduce_while(args, {:ok, :unknown}, fn
       # Skip unknowns
-      x, state when is_map_key(x, :type) and x.type == :unknown or not is_map_key(x, :type) ->
+      x, state when (is_map_key(x, :type) and x.type == :unknown) or not is_map_key(x, :type) ->
         {:cont, state}
 
       # Take the first non-unknown type
@@ -169,7 +169,12 @@ defmodule Electric.Replication.Eval.Lookups do
   end
 
   defp filter_overloads_on_implicit_conversion(choices, args, _, env) do
-    Enum.filter(choices, &Env.can_implicitly_coerce_types?(env, args, &1.args))
+    Enum.reduce(choices, [], fn choice, acc ->
+      case Env.get_unified_coercion_targets(env, args, choice.args, choice.returns) do
+        {:ok, {targets, return}} -> [%{choice | args: targets, returns: return} | acc]
+        :error -> acc
+      end
+    end)
   end
 
   # "Most exact" here is defined as "how many arguments of the function do match exactly with provided"

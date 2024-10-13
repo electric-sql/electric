@@ -84,7 +84,7 @@ defmodule Electric.Replication.Eval.Parser do
       |> Enum.find(fn {_, value} -> value != [] end)
 
     if is_nil(extra_suffixes) do
-      case do_parse_and_validate_tree(stmt.where_clause |> dbg, refs, env) do
+      case do_parse_and_validate_tree(stmt.where_clause, refs, env) do
         {:error, {loc, reason}} -> {:error, {max(loc - @prefix_length, 0), reason}}
         {:ok, %UnknownConst{} = unknown} -> {:ok, infer_unknown(unknown)}
         value -> value
@@ -334,19 +334,50 @@ defmodule Electric.Replication.Eval.Parser do
   # They all treat lexpr and rexpr differently, so we're just deferring to a concrete function implementation here for clarity.
   defp do_parse_and_validate_tree(%PgQuery.A_Expr{kind: kind, location: loc} = expr, refs, env) do
     case {kind, expr.lexpr} do
-      {:AEXPR_OP, nil} -> handle_unary_operator(expr, refs, env)
-      {:AEXPR_OP, _} -> handle_binary_operator(expr, refs, env)
+      {:AEXPR_OP, nil} ->
+        handle_unary_operator(expr, refs, env)
+
+      {:AEXPR_OP, _} ->
+        handle_binary_operator(expr, refs, env)
+
       # LIKE and ILIKE are expressed plainly as operators by the parser
-      {:AEXPR_LIKE, _} -> handle_binary_operator(expr, refs, env)
-      {:AEXPR_ILIKE, _} -> handle_binary_operator(expr, refs, env)
-      {:AEXPR_DISTINCT, _} -> handle_distinct(expr, refs, env)
-      {:AEXPR_NOT_DISTINCT, _} -> handle_distinct(expr, refs, env)
-      {:AEXPR_IN, _} -> handle_in(expr, refs, env)
-      {:AEXPR_BETWEEN, _} -> handle_between(expr, refs, env)
-      {:AEXPR_BETWEEN_SYM, _} -> handle_between(expr, refs, env)
-      {:AEXPR_NOT_BETWEEN, _} -> handle_between(expr, refs, env)
-      {:AEXPR_NOT_BETWEEN_SYM, _} -> handle_between(expr, refs, env)
-      _ -> {:error, {loc, "expression #{identifier(expr.name)} is not currently supported"}}
+      {:AEXPR_LIKE, _} ->
+        handle_binary_operator(expr, refs, env)
+
+      {:AEXPR_ILIKE, _} ->
+        handle_binary_operator(expr, refs, env)
+
+      {:AEXPR_DISTINCT, _} ->
+        handle_distinct(expr, refs, env)
+
+      {:AEXPR_NOT_DISTINCT, _} ->
+        handle_distinct(expr, refs, env)
+
+      {:AEXPR_IN, _} ->
+        handle_in(expr, refs, env)
+
+      {:AEXPR_BETWEEN, _} ->
+        handle_between(expr, refs, env)
+
+      {:AEXPR_BETWEEN_SYM, _} ->
+        handle_between(expr, refs, env)
+
+      {:AEXPR_NOT_BETWEEN, _} ->
+        handle_between(expr, refs, env)
+
+      {:AEXPR_NOT_BETWEEN_SYM, _} ->
+        handle_between(expr, refs, env)
+
+      {:AEXPR_OP_ANY, _} ->
+        handle_any_or_all(expr, refs, env)
+
+      {:AEXPR_OP_ALL, _} ->
+        handle_any_or_all(expr, refs, env)
+
+      _ ->
+        {:error,
+         {loc,
+          "expression #{identifier(expr.name)} of #{inspect(kind)} is not currently supported"}}
     end
   end
 
@@ -500,6 +531,48 @@ defmodule Electric.Replication.Eval.Parser do
         else: negate(reduced)
     end
   end
+
+  defp handle_any_or_all(%PgQuery.A_Expr{} = expr, refs, env) do
+    with {:ok, lexpr} <- do_parse_and_validate_tree(expr.lexpr, refs, env),
+         {:ok, rexpr} <- do_parse_and_validate_tree(expr.rexpr, refs, env),
+         {:ok, fake_rexpr} <- get_fake_array_elem(rexpr),
+         {:ok, choices} <- find_available_operators(expr.name, 2, expr.location, env),
+         # Get a fake element type for the array, if possible, to pick correct operator overload
+         {:ok, %{args: [lexpr_type, rexpr_type], returns: :bool} = concrete} <-
+           Lookups.pick_concrete_operator_overload(choices, [lexpr, fake_rexpr], env),
+         {:ok, args} <- cast_unknowns([lexpr, rexpr], [lexpr_type, {:array, rexpr_type}], env),
+         {:ok, [lexpr, rexpr]} <- cast_implicit(args, [lexpr_type, {:array, rexpr_type}], env),
+         {:ok, bool_array} <-
+           concrete
+           |> from_concrete([rexpr, lexpr])
+           |> Map.put(:applied_to_array?, true)
+           |> maybe_reduce() do
+      {name, impl} =
+        case expr.kind do
+          :AEXPR_OP_ANY -> {"any", &Enum.any?/1}
+          :AEXPR_OP_ALL -> {"all", &Enum.all?/1}
+        end
+
+      maybe_reduce(%Func{
+        implementation: impl,
+        name: name,
+        type: :bool,
+        args: [bool_array]
+      })
+    else
+      {:error, {_loc, _msg}} = error -> error
+      :error -> {:error, {expr.location, "Could not select an operator overload"}}
+      {:ok, _} -> {:error, {expr.location, "ANY/ALL requires operator that returns bool"}}
+    end
+  end
+
+  defp get_fake_array_elem(%UnknownConst{} = unknown), do: {:ok, unknown}
+
+  defp get_fake_array_elem(%{type: {:array, inner_type}} = expr),
+    do: {:ok, %{expr | type: inner_type}}
+
+  defp get_fake_array_elem(other),
+    do: {:error, {other.location, "argument of ANY must be an array"}}
 
   defp handle_between(%PgQuery.A_Expr{} = expr, refs, env) do
     # It can only be a list here because that's how PG parses SQL. It it's a subquery, then it
@@ -696,7 +769,7 @@ defmodule Electric.Replication.Eval.Parser do
         {:ok,
          %Func{
            location: loc,
-           type: target_type,
+           type: maybe_array_type(target_type),
            args: [arg],
            implementation: impl,
            applied_to_array?: true,
@@ -769,6 +842,27 @@ defmodule Electric.Replication.Eval.Parser do
        %{type: type} = arg, type ->
          arg
 
+       %{type: {:array, from_type}} = arg, {:array, to_type} ->
+         case Map.fetch!(env.implicit_casts, {from_type, to_type}) do
+           :as_is ->
+             arg
+
+           impl ->
+             %Func{
+               location: arg.location,
+               type: to_type,
+               args: [arg],
+               implementation: impl,
+               name: "#{from_type}_to_#{to_type}",
+               applied_to_array?: true
+             }
+             |> maybe_reduce()
+             |> case do
+               {:ok, val} -> val
+               error -> throw(error)
+             end
+         end
+
        %{type: from_type} = arg, to_type ->
          case Map.fetch!(env.implicit_casts, {from_type, to_type}) do
            :as_is ->
@@ -802,7 +896,7 @@ defmodule Electric.Replication.Eval.Parser do
        %UnknownConst{value: value, location: loc}, type ->
          case Env.parse_const(env, value, type) do
            {:ok, value} -> %Const{type: type, location: loc, value: value}
-           :error -> throw({:error, {loc, "invalid syntax for type #{type}: #{value}"}})
+           :error -> throw({:error, {loc, "invalid syntax for type #{readable(type)}: #{value}"}})
          end
 
        arg, _ ->
@@ -827,7 +921,7 @@ defmodule Electric.Replication.Eval.Parser do
         {:ok, %Const{type: :int8, value: value, location: loc}}
 
       {:fval, value} ->
-        {:ok, %Const{type: :numeric, value: Decimal.new(value), location: loc}}
+        {:ok, %Const{type: :numeric, value: String.to_float(value), location: loc}}
 
       {:boolval, value} ->
         {:ok, %Const{type: :bool, value: value, location: loc}}
@@ -905,13 +999,25 @@ defmodule Electric.Replication.Eval.Parser do
        ) do
     value =
       case {impl, applied_to_array?} do
-        {{module, function}, false} -> apply(module, function, args)
-        {function, false} -> apply(function, args)
-        {{module, function}, true} -> Utils.deep_map(hd(args), &apply(module, function, [&1]))
-        {function, true} -> Utils.deep_map(hd(args), &apply(function, [&1]))
+        {{module, function}, false} ->
+          apply(module, function, args)
+
+        {function, false} ->
+          apply(function, args)
+
+        {{module, function}, true} ->
+          Utils.deep_map(hd(args), &apply(module, function, tl(args) ++ [&1]))
+
+        {function, true} ->
+          Utils.deep_map(hd(args), &apply(function, tl(args) ++ [&1]))
       end
 
-    {:ok, %Const{value: value, type: func.type, location: func.location}}
+    {:ok,
+     %Const{
+       value: value,
+       type: if(applied_to_array?, do: {:array, func.type}, else: func.type),
+       location: func.location
+     }}
   rescue
     e ->
       IO.puts(Exception.format(:error, e, __STACKTRACE__))
@@ -993,7 +1099,7 @@ defmodule Electric.Replication.Eval.Parser do
           location: arg.location,
           type: :int8,
           args: [arg],
-          implementation: &Decimal.to_integer(Decimal.round(&1)),
+          implementation: &Kernel.round/1,
           name: "round"
         })
 

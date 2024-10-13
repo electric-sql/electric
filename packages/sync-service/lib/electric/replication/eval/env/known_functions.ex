@@ -141,4 +141,55 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
     def naive_from_timestamptz(tz, datetime),
       do: datetime |> DateTime.shift_zone!(tz) |> DateTime.to_naive()
   end
+
+  ## Array functions
+  defpostgres("anyarray = anyarray -> bool", delegate: &Kernel.==/2)
+  defpostgres("anyarray <> anyarray -> bool", delegate: &Kernel.!=/2)
+
+  defpostgres("anycompatiblearray || anycompatiblearray -> anycompatiblearray",
+    delegate: &PgInterop.Array.concat_arrays/2
+  )
+
+  defpostgres("array_cat(anycompatiblearray, anycompatiblearray) -> anycompatiblearray",
+    delegate: &PgInterop.Array.concat_arrays/2
+  )
+
+  defpostgres("anycompatible || anycompatiblearray -> anycompatiblearray",
+    delegate: &PgInterop.Array.array_prepend/2
+  )
+
+  defpostgres("array_prepend(anycompatible, anycompatiblearray) -> anycompatiblearray",
+    delegate: &PgInterop.Array.array_prepend/2
+  )
+
+  defpostgres("anycompatiblearray || anycompatible -> anycompatiblearray",
+    delegate: &PgInterop.Array.array_append/2
+  )
+
+  defpostgres("array_append(anycompatiblearray, anycompatible) -> anycompatiblearray",
+    delegate: &PgInterop.Array.array_append/2
+  )
+
+  defpostgres("array_ndims(anyarray) -> int4", delegate: &PgInterop.Array.get_array_dim/1)
+
+  defpostgres "anyarray @> anyarray -> bool" do
+    def left_array_contains_right?(left, right) do
+      MapSet.subset?(MapSet.new(right), MapSet.new(left))
+    end
+  end
+
+  defpostgres "anyarray <@ anyarray -> bool" do
+    def right_array_contains_left?(left, right) do
+      MapSet.subset?(MapSet.new(left), MapSet.new(right))
+    end
+  end
+
+  defpostgres "anyarray && anyarray -> bool" do
+    def arrays_overlap?(left, right) when left == [] or right == [], do: false
+
+    def arrays_overlap?(left, right) do
+      left_mapset = MapSet.new(left)
+      Enum.any?(right, &MapSet.member?(left_mapset, &1))
+    end
+  end
 end
