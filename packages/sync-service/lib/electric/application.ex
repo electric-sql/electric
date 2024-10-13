@@ -44,31 +44,43 @@ defmodule Electric.Application do
       ]
     ]
 
+    # The root application supervisor starts the core global processes, including the HTTP
+    # server and the database connection manager. The latter is responsible for establishing
+    # all needed connections to the database (acquiring the exclusive access lock, opening a
+    # replication connection, starting a connection pool).
+    #
+    # Once there is a DB connection pool running, ConnectionManager will start the singleton
+    # `Electric.Shapes.Supervisor` which is responsible for starting the shape log collector
+    # and individual shape consumer process trees.
+    #
+    # See the moduledoc in `Electric.Connection.Supervisor` for more info.
     children =
-      [
-        Electric.Telemetry,
-        {Registry,
-         name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()},
-        {Registry,
-         name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
-        {Electric.Postgres.Inspector.EtsInspector, pool: Electric.DbPool},
-        {Bandit,
-         plug:
-           {Electric.Plug.Router,
-            storage: config.storage,
-            registry: Registry.ShapeChanges,
-            shape_cache: config.child_specs.shape_cache,
-            get_service_status: &Electric.ServiceStatus.check/0,
-            inspector: config.inspector,
-            long_poll_timeout: 20_000,
-            max_age: Application.fetch_env!(:electric, :cache_max_age),
-            stale_age: Application.fetch_env!(:electric, :cache_stale_age),
-            allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},
-         port: Application.fetch_env!(:electric, :service_port),
-         thousand_island_options: http_listener_options()},
-        {Electric.Connection.Supervisor, connection_manager_opts}
-      ]
-      |> add_prometheus_router(Application.fetch_env!(:electric, :prometheus_port))
+      Enum.concat([
+        [
+          Electric.Telemetry,
+          {Registry,
+           name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()},
+          {Registry,
+           name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
+          {Electric.Postgres.Inspector.EtsInspector, pool: Electric.DbPool},
+          {Bandit,
+           plug:
+             {Electric.Plug.Router,
+              storage: config.storage,
+              registry: Registry.ShapeChanges,
+              shape_cache: config.child_specs.shape_cache,
+              get_service_status: &Electric.ServiceStatus.check/0,
+              inspector: config.inspector,
+              long_poll_timeout: 20_000,
+              max_age: Application.fetch_env!(:electric, :cache_max_age),
+              stale_age: Application.fetch_env!(:electric, :cache_stale_age),
+              allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},
+           port: Application.fetch_env!(:electric, :service_port),
+           thousand_island_options: http_listener_options()}
+        ],
+        prometheus_endpoint(Application.fetch_env!(:electric, :prometheus_port)),
+        [{Electric.Connection.Supervisor, connection_manager_opts}]
+      ])
 
     Supervisor.start_link(children,
       strategy: :one_for_one,
@@ -134,18 +146,17 @@ defmodule Electric.Application do
     Electric.Application.Configuration.save(config)
   end
 
-  defp add_prometheus_router(children, nil), do: children
+  defp prometheus_endpoint(nil), do: []
 
-  defp add_prometheus_router(children, port) do
-    children ++
-      [
-        {
-          Bandit,
-          plug: {Electric.Plug.UtilityRouter, []},
-          port: port,
-          thousand_island_options: http_listener_options()
-        }
-      ]
+  defp prometheus_endpoint(port) do
+    [
+      {
+        Bandit,
+        plug: {Electric.Plug.UtilityRouter, []},
+        port: port,
+        thousand_island_options: http_listener_options()
+      }
+    ]
   end
 
   defp http_listener_options do
