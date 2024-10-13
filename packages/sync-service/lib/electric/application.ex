@@ -20,14 +20,6 @@ defmodule Electric.Application do
 
     config = configure()
 
-    get_service_status_fn = fn ->
-      Electric.ServiceStatus.check(
-        get_connection_status: fn ->
-          Electric.ConnectionManager.get_status(Electric.ConnectionManager)
-        end
-      )
-    end
-
     shape_log_collector = Electric.Replication.ShapeLogCollector.name(config.electric_instance_id)
 
     connection_manager_opts = [
@@ -72,7 +64,7 @@ defmodule Electric.Application do
             storage: config.storage,
             registry: Registry.ShapeChanges,
             shape_cache: config.child_specs.shape_cache,
-            get_service_status: get_service_status_fn,
+            get_service_status: &Electric.ServiceStatus.check/0,
             inspector: config.inspector,
             long_poll_timeout: 20_000,
             max_age: Application.fetch_env!(:electric, :cache_max_age),
