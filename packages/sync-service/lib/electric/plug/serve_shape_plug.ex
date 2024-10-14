@@ -26,13 +26,18 @@ defmodule Electric.Plug.ServeShapePlug do
   defmodule TimeUtils do
     @oct9th2024 DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
     def seconds_since_oct9th_2024_next_interval(conn) do
-      long_poll_timeout = floor(conn.assigns.config[:long_poll_timeout] / 1000)
-      now = DateTime.utc_now()
+      case div(conn.assigns.config[:long_poll_timeout], 1000) do
+        0 ->
+          0
 
-      diff_in_seconds = DateTime.diff(now, @oct9th2024, :second)
-      next_interval = ceil(diff_in_seconds / long_poll_timeout) * long_poll_timeout
+        long_poll_timeout_sec ->
+          now = DateTime.utc_now()
 
-      next_interval
+          diff_in_seconds = DateTime.diff(now, @oct9th2024, :second)
+          next_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
+
+          next_interval
+      end
     end
   end
 
