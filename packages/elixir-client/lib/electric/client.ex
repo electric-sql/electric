@@ -162,6 +162,7 @@ defmodule Electric.Client do
                  )
 
   @type shape_id :: String.t()
+  @type cursor :: integer()
   @type update_mode :: :modified | :full
   @type column :: %{
           required(:type) => String.t(),
@@ -274,7 +275,8 @@ defmodule Electric.Client do
       update_mode: update_mode,
       live: live?,
       shape_id: shape_id,
-      offset: %Offset{} = offset
+      offset: %Offset{} = offset,
+      next_cursor: cursor
     } = request
 
     %{offset: Offset.to_string(offset)}
@@ -282,6 +284,7 @@ defmodule Electric.Client do
     |> Util.map_put_if(:shape_id, shape_id, is_binary(shape_id))
     |> Util.map_put_if(:live, "true", live?)
     |> Util.map_put_if(:where, where, is_binary(where))
+    |> Util.map_put_if(:cursor, cursor, !is_nil(cursor))
   end
 
   @doc """

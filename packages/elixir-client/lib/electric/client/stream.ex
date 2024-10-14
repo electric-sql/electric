@@ -19,6 +19,7 @@ defmodule Electric.Client.Stream do
     update_mode: :modified,
     offset: Offset.before_all(),
     shape_id: nil,
+    next_cursor: nil,
     state: :init,
     opts: %{}
   ]
@@ -151,15 +152,16 @@ defmodule Electric.Client.Stream do
     start_offset = stream.offset
     shape_id = shape_id!(resp)
     final_offset = last_offset(resp, stream.offset)
+    next_cursor = resp.next_cursor
 
     %{value_mapper_fun: value_mapper_fun} =
-      stream = handle_schema(resp, %{stream | shape_id: shape_id})
+      stream = handle_schema(resp, %{stream | shape_id: shape_id, next_cursor: next_cursor})
 
     resp.body
     |> List.wrap()
     |> Enum.flat_map(&Message.parse(&1, final_offset, value_mapper_fun))
     |> Enum.reduce_while({start_offset, stream}, &handle_msg/2)
-    # don't set the offset until we're done processing the messages. this keeps
+    # don't set the offset until we're done processing the messages. ehis keeps
     # the previous offset reached alive in the stream state
     |> then(fn {_offset, state} -> %{state | offset: final_offset} end)
     |> dispatch()
@@ -240,7 +242,8 @@ defmodule Electric.Client.Stream do
       up_to_date?: up_to_date?,
       update_mode: update_mode,
       shape_id: shape_id,
-      offset: offset
+      offset: offset,
+      next_cursor: cursor
     } = stream
 
     Client.request(client,
@@ -248,6 +251,7 @@ defmodule Electric.Client.Stream do
       shape_id: shape_id,
       update_mode: update_mode,
       live: up_to_date?,
+      next_cursor: cursor,
       shape: shape
     )
   end

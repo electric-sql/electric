@@ -253,6 +253,7 @@ defmodule Electric.ClientTest do
     |> put_optional_header("electric-shape-id", opts[:shape_id])
     |> put_optional_header("electric-chunk-last-offset", opts[:last_offset])
     |> put_optional_header("electric-schema", opts[:schema])
+    |> put_optional_header("electric-next-cursor", opts[:cursor])
     |> Plug.Conn.resp(status, body)
   end
 
@@ -343,6 +344,83 @@ defmodule Electric.ClientTest do
       assert_receive {:offset, "-1"}
       assert_receive {:offset, "1_0"}
       assert_receive {:offset, "1_0"}
+    end
+
+    test "live requests pass cursor parameter", ctx do
+      body1 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1111"}
+          },
+          %{"headers" => %{"control" => "up-to-date"}}
+        ])
+
+      body2 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "2_0",
+            "value" => %{"id" => "2222"}
+          },
+          %{"headers" => %{"control" => "up-to-date"}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      {:ok, responses} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               "-1" => [
+                 &bypass_resp(&1, body1,
+                   shape_id: "my-shape",
+                   last_offset: "1_0",
+                   cursor: "299292",
+                   schema: schema
+                 )
+               ],
+               "1_0" => [
+                 fn %{query_params: %{"cursor" => "299292"}} = conn ->
+                   bypass_resp(conn, body2,
+                     shape_id: "my-shape",
+                     last_offset: "2_0"
+                   )
+                 end
+               ]
+             }
+           end}
+        )
+
+      parent = self()
+
+      Bypass.expect(ctx.bypass, fn
+        %{request_path: "/v1/shape/my_table", query_params: %{"offset" => offset}} = conn ->
+          fun =
+            Agent.get_and_update(responses, fn resps ->
+              Map.get_and_update(resps, offset, fn [fun | rest] -> {fun, rest} end)
+            end)
+
+          send(parent, {:offset, offset})
+          fun.(conn)
+      end)
+
+      assert [
+               %ChangeMessage{
+                 headers: @insert,
+                 offset: offset(1, 0),
+                 value: %{"id" => "1111"}
+               },
+               up_to_date(1, 0),
+               %ChangeMessage{
+                 headers: @insert,
+                 offset: offset(2, 0),
+                 value: %{"id" => "2222"}
+               },
+               up_to_date(2, 0)
+             ] = stream(ctx, 4)
     end
 
     test "client is resilient to server errors", ctx do

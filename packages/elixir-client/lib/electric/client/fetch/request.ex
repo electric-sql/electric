@@ -12,6 +12,7 @@ defmodule Electric.Client.Fetch.Request do
     :shape_id,
     :live,
     :shape,
+    :next_cursor,
     update_mode: :modified,
     method: :get,
     offset: Offset.before_all()
@@ -24,6 +25,7 @@ defmodule Electric.Client.Fetch.Request do
           shape_id: Electric.Client.shape_id() | nil,
           update_mode: Electric.Client.update_mode(),
           live: boolean(),
+          next_cursor: Electric.Client.cursor(),
           shape: ShapeDefinition.t()
         }
 

@@ -347,7 +347,7 @@ if Code.ensure_loaded?(Ecto) do
 
     # defp quote_qualified_name(name, sources, ix) do
     #   {_, source, _} = elem(sources, ix)
-    #   [source, ?. | quote_name(name)] |> dbg
+    #   [source, ?. | quote_name(name)]
     # end
 
     defp quote_name(name) when is_atom(name) do
