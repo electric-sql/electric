@@ -23,7 +23,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
     - Adding dynamic attributes to the current span, after it has already started. See
       `add_span_attributes/2`.
 
-    - Recording an error or an exception as a span event. See `record_exception/3`.
+    - Recording an error or an exception as a span event. See `record_exception/4`.
 
   [1]: https://opentelemetry.io/docs/what-is-opentelemetry/
   [2]: https://github.com/open-telemetry/opentelemetry-erlang
@@ -35,12 +35,6 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @typep span_name :: String.t()
   @typep span_attrs :: :opentelemetry.attributes_map()
   @typep span_ctx :: :opentelemetry.span_ctx()
-
-  defguardp is_exception?(term)
-            when is_map(term) and :erlang.is_map_key(:__struct__, term) and
-                   is_atom(:erlang.map_get(:__struct__, term)) and
-                   :erlang.is_map_key(:__exception__, term) and
-                   :erlang.map_get(:__exception__, term) == true
 
   @doc """
   Create a span that starts at the current point in time and ends when `fun` returns.
@@ -104,14 +98,23 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @doc """
   Add an error event to the current span.
   """
-  def record_exception(error, stacktrace \\ nil, attributes \\ []) do
-    {type, message} =
-      if is_exception?(error) do
-        {to_string(error.__struct__), Exception.message(error)}
+  def record_exception(error_str, attributes \\ []) when is_binary(error_str) do
+    add_exception_event("error", error_str, nil, attributes)
+  end
+
+  def record_exception(kind, error, stacktrace, attributes \\ []) when is_atom(kind) do
+    type =
+      if is_struct(error) do
+        to_string(error.__struct__)
       else
-        {"error", to_string(error)}
+        "error"
       end
 
+    message = Exception.format(kind, error)
+    add_exception_event(type, message, stacktrace, attributes)
+  end
+
+  defp add_exception_event(type, message, stacktrace, attributes) do
     semantic_attributes = [
       {OpenTelemetry.SemanticConventions.Trace.exception_type(), type},
       {OpenTelemetry.SemanticConventions.Trace.exception_message(), message},
