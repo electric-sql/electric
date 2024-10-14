@@ -179,4 +179,16 @@ defmodule Electric.Config do
   defp parse_database(nil, username), do: username
   defp parse_database("/", username), do: username
   defp parse_database("/" <> dbname, _username), do: dbname
+
+  @log_levels ~w[emergency alert critical error warning warn notice info debug]
+  @public_log_levels ~w[error warning info debug]
+
+  @spec parse_log_level(binary) :: {:ok, Logger.level()} | {:error, binary}
+  def parse_log_level(str) when str in @log_levels do
+    {:ok, String.to_existing_atom(str)}
+  end
+
+  def parse_log_level(str) do
+    {:error, "has invalid value: #{inspect(str)}. Must be one of #{inspect(@public_log_levels)}"}
+  end
 end
