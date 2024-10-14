@@ -54,10 +54,14 @@ defmodule Electric.TenantManager do
     end
 
     inspector =
-      {Electric.Postgres.Inspector.EtsInspector,
-       electric_instance_id: electric_instance_id,
-       tenant_id: tenant_id,
-       server: Electric.Postgres.Inspector.EtsInspector.name(electric_instance_id, tenant_id)}
+      Access.get(
+        opts,
+        :inspector,
+        {Electric.Postgres.Inspector.EtsInspector,
+         electric_instance_id: electric_instance_id,
+         tenant_id: tenant_id,
+         server: Electric.Postgres.Inspector.EtsInspector.name(electric_instance_id, tenant_id)}
+      )
 
     {:ok, _} =
       Electric.TenantSupervisor.start_tenant(

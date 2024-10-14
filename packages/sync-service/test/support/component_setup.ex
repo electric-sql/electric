@@ -15,6 +15,30 @@ defmodule Support.ComponentSetup do
     %{tenant_id: "test_tenant"}
   end
 
+  def with_tenant_manager(_ctx) do
+    %{tenant_manager: Electric.TenantManager}
+  end
+
+  def with_tenant(ctx) do
+    tenant = [
+      electric_instance_id: ctx.electric_instance_id,
+      tenant_id: ctx.tenant_id,
+      pg_id: "12345",
+      shape_cache: ctx.shape_cache,
+      storage: ctx.storage,
+      inspector: ctx.inspector,
+      registry: ctx.registry,
+      long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
+      max_age: Access.get(ctx, :max_age, 60),
+      stale_age: Access.get(ctx, :stale_age, 300)
+    ]
+
+    Electric.TenantManager.delete_tenant(ctx.tenant_id)
+    :ok = Electric.TenantManager.store_tenant(tenant, tenant_manager: Electric.TenantManager)
+
+    %{tenant: tenant}
+  end
+
   def with_registry(ctx) do
     registry_name = Module.concat(Registry, ctx.electric_instance_id)
     start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
@@ -161,14 +185,15 @@ defmodule Support.ComponentSetup do
       Keyword.get(opts, :storage, &with_cub_db_storage/1),
       Keyword.get(opts, :log_collector, &with_shape_log_collector/1),
       Keyword.get(opts, :shape_cache, &with_shape_cache/1),
-      Keyword.get(opts, :replication_client, &with_replication_client/1)
+      Keyword.get(opts, :replication_client, &with_replication_client/1),
+      Keyword.get(opts, :tenant_manager, &with_tenant_manager/1),
+      Keyword.get(opts, :tenant_manager, &with_tenant/1)
     ]
     |> Enum.reduce(ctx, &Map.merge(&2, apply(&1, [&2])))
   end
 
   def build_router_opts(ctx, overrides \\ []) do
     [
-      # TODO: make a with_tenant_manager function and add it in with_complete_stack
       tenant_manager: ctx.tenant_manager,
       storage: ctx.storage,
       registry: ctx.registry,
