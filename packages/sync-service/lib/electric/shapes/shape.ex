@@ -95,8 +95,12 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  @spec validate_selected_columns([Inspector.column_info()], [String.t()], [String.t()] | nil) ::
-          {:ok, [String.t(), ...]} | {:error, [String.t()]}
+  @spec validate_selected_columns(
+          [Inspector.column_info()],
+          [String.t()],
+          [String.t(), ...] | nil
+        ) ::
+          {:ok, [String.t(), ...]} | {:error, {:columns, [String.t()]}}
   defp validate_selected_columns(_column_info, _pk_cols, nil) do
     {:ok, nil}
   end
