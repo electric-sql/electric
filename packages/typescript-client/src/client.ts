@@ -205,7 +205,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       ) {
         const fetchUrl = new URL(url)
         if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
-        if (columns)
+        if (columns && columns.length > 0)
           fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, columns.join(`,`))
         fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
 
