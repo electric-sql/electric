@@ -120,6 +120,26 @@ paths:
             status_filter:
               value: '"status IN (''backlog'', ''todo'')"'
               summary: Only include rows whose status is either 'backlog' or 'todo'.
+
+        - name: columns
+          in: query
+          schema:
+            type: string
+          description: |-
+            Optional list of columns to include in the rows from the `root_table`.
+
+            They should always include the primary key columns, and should be formed
+            as a comma separated list of column names exactly as they are in the database schema.
+
+            If the identifier was defined as case sensitive and/or with special characters, then\
+            you must quote it in the `columns` parameter as well.
+          examples:
+            select_columns:
+              value: "id,title,status"
+              summary: Only include the id, title, and status columns.
+            select_columns_special:
+              value: 'id,"Status-Check"'
+              summary: Only include id and Status-Check columns, quoting the identifiers where necessary.
         # Headers
         - name: If-None-Match
           in: header

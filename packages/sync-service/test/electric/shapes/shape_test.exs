@@ -1,7 +1,7 @@
 defmodule Electric.Shapes.ShapeTest do
   use ExUnit.Case, async: true
 
-  alias Electric.Replication.Changes.NewRecord
+  alias Electric.Replication.Changes.{NewRecord, DeletedRecord, UpdatedRecord}
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Changes
   alias Electric.Shapes.Shape
@@ -64,12 +64,12 @@ defmodule Electric.Shapes.ShapeTest do
     test "lets DELETEs through only if the row matches the where filter" do
       shape = %Shape{root_table: {"public", "table"}, root_table_id: @relation_id, where: @where}
 
-      matching_delete = %Changes.DeletedRecord{
+      matching_delete = %DeletedRecord{
         relation: {"public", "table"},
         old_record: %{"id" => 1, "value" => "matches filter"}
       }
 
-      non_matching_delete = %Changes.DeletedRecord{
+      non_matching_delete = %DeletedRecord{
         relation: {"public", "table"},
         old_record: %{"id" => 2, "value" => "doesn't match filter"}
       }
@@ -81,7 +81,7 @@ defmodule Electric.Shapes.ShapeTest do
     test "lets UPDATEs through as-is only if both old and new versions match the where filter" do
       shape = %Shape{root_table: {"public", "table"}, root_table_id: @relation_id, where: @where}
 
-      matching_update = %Changes.UpdatedRecord{
+      matching_update = %UpdatedRecord{
         relation: {"public", "table"},
         old_record: %{"id" => 1, "value" => "old matches"},
         record: %{"id" => 1, "value" => "new matches"}
@@ -93,7 +93,7 @@ defmodule Electric.Shapes.ShapeTest do
     test "converts UPDATE to INSERT if only new version matches the where filter" do
       shape = %Shape{root_table: {"public", "table"}, root_table_id: @relation_id, where: @where}
 
-      update_to_insert = %Changes.UpdatedRecord{
+      update_to_insert = %UpdatedRecord{
         relation: {"public", "table"},
         old_record: %{"id" => 1, "value" => "old doesn't match"},
         record: %{"id" => 1, "value" => "new matches"}
@@ -106,7 +106,7 @@ defmodule Electric.Shapes.ShapeTest do
     test "converts UPDATE to DELETE if only old version matches the where filter" do
       shape = %Shape{root_table: {"public", "table"}, root_table_id: @relation_id, where: @where}
 
-      update_to_delete = %Changes.UpdatedRecord{
+      update_to_delete = %UpdatedRecord{
         relation: {"public", "table"},
         old_record: %{"id" => 1, "value" => "old matches"},
         record: %{"id" => 1, "value" => "new doesn't match"}
@@ -119,10 +119,66 @@ defmodule Electric.Shapes.ShapeTest do
     test "doesn't let the update through if no version of the row matches the where filter" do
       shape = %Shape{root_table: {"public", "table"}, root_table_id: @relation_id, where: @where}
 
-      non_matching_update = %Changes.UpdatedRecord{
+      non_matching_update = %UpdatedRecord{
         relation: {"public", "table"},
         old_record: %{"id" => 1, "value" => "old doesn't match"},
         record: %{"id" => 1, "value" => "new doesn't match either"}
+      }
+
+      assert Shape.convert_change(shape, non_matching_update) == []
+    end
+
+    test "filters INSERTs to allow only selected columns" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        selected_columns: ["id", "value"]
+      }
+
+      insert = %NewRecord{
+        relation: {"public", "table"},
+        record: %{"id" => 1, "value" => "foo", "other_value" => "bar"}
+      }
+
+      assert Shape.convert_change(shape, insert) == [
+               %NewRecord{
+                 relation: {"public", "table"},
+                 record: %{"id" => 1, "value" => "foo"}
+               }
+             ]
+    end
+
+    test "filters DELETEs to allow only selected columns" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        selected_columns: ["id", "value"]
+      }
+
+      delete = %DeletedRecord{
+        relation: {"public", "table"},
+        old_record: %{"id" => 1, "value" => "foo", "other_value" => "bar"}
+      }
+
+      assert Shape.convert_change(shape, delete) == [
+               %DeletedRecord{
+                 relation: {"public", "table"},
+                 old_record: %{"id" => 1, "value" => "foo"}
+               }
+             ]
+    end
+
+    test "doesn't let the update through if filtered columns have not changed" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        selected_columns: ["id", "value"]
+      }
+
+      non_matching_update = %UpdatedRecord{
+        relation: {"public", "table"},
+        old_record: %{"id" => 1, "value" => "same", "other_value" => "old"},
+        record: %{"id" => 1, "value" => "same", "other_value" => "new"}
       }
 
       assert Shape.convert_change(shape, non_matching_update) == []
@@ -205,15 +261,18 @@ defmodule Electric.Shapes.ShapeTest do
     end
 
     test "errors on empty table name", %{inspector: inspector} do
-      {:error, ["ERROR 42602 (invalid_name) invalid name syntax"]} =
+      {:error, {:root_table, ["ERROR 42602 (invalid_name) invalid name syntax"]}} =
         Shape.new("", inspector: inspector)
     end
 
     test "errors when the table doesn't exist", %{inspector: inspector} do
       {:error,
-       [
-         ~S|Table "nonexistent" does not exist. If the table name contains capitals or special characters you must quote it.|
-       ]} =
+       {
+         :root_table,
+         [
+           ~S|Table "nonexistent" does not exist. If the table name contains capitals or special characters you must quote it.|
+         ]
+       }} =
         Shape.new("nonexistent", inspector: inspector)
     end
 
@@ -229,8 +288,32 @@ defmodule Electric.Shapes.ShapeTest do
            "CREATE TABLE IF NOT EXISTS other_table (value TEXT PRIMARY KEY)"
          ]
     test "validates a where clause based on inspected columns", %{inspector: inspector} do
-      assert {:error, "At location 6" <> _} =
+      assert {:error, {:where, "At location 6" <> _}} =
                Shape.new("other_table", inspector: inspector, where: "value + 1 > 10")
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
+         ]
+    test "builds a shape with selected columns", %{inspector: inspector} do
+      assert {:ok, %Shape{selected_columns: ["id", "value2"]}} =
+               Shape.new("col_table", inspector: inspector, columns: ["id", "value2"])
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
+         ]
+    test "validates selected columns for invalid columns", %{inspector: inspector} do
+      assert {:error, {:columns, ["The following columns could not be found: invalid"]}} =
+               Shape.new("col_table", inspector: inspector, columns: ["id", "invalid"])
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
+         ]
+    test "validates selected columns for missing PK columns", %{inspector: inspector} do
+      assert {:error, {:columns, ["Must include all primary key columns, missing: id"]}} =
+               Shape.new("col_table", inspector: inspector, columns: ["value1"])
     end
   end
 

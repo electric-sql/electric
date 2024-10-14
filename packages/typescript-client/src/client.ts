@@ -19,6 +19,7 @@ import {
   CHUNK_LAST_OFFSET_HEADER,
   LIVE_CACHE_BUSTER_HEADER,
   LIVE_CACHE_BUSTER_QUERY_PARAM,
+  COLUMNS_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
   SHAPE_ID_HEADER,
@@ -37,9 +38,16 @@ export interface ShapeStreamOptions<T = never> {
    */
   url: string
   /**
-   * where clauses for the shape.
+   * The where clauses for the shape.
    */
   where?: string
+
+  /**
+   * The columns to include in the shape.
+   * Must include primary keys, and can only inlude valid columns.
+   */
+  columns?: string[]
+
   /**
    * The "offset" on the shape log. This is typically not set as the ShapeStream
    * will handle this automatically. A common scenario where you might pass an offset
@@ -188,7 +196,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   async start() {
     this.#isUpToDate = false
 
-    const { url, where, signal } = this.options
+    const { url, where, columns, signal } = this.options
 
     try {
       while (
@@ -197,6 +205,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       ) {
         const fetchUrl = new URL(url)
         if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
+        if (columns && columns.length > 0)
+          fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, columns.join(`,`))
         fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
 
         if (this.#isUpToDate) {
