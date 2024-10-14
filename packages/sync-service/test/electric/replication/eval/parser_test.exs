@@ -464,9 +464,9 @@ defmodule Electric.Replication.Eval.ParserTest do
       # TODO: Does not support arbitrary bounds input syntax yet,
       #       e.g. '[1:1][-2:-1][3:5]={{{1,2,3},{4,5,6}}}'::int[]
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|'{1,2,{"3"}}'::int[]|)
+               Parser.parse_and_validate_expression(~S|'{{1   },{2},{"3"}}'::int[]|)
 
-      assert %Const{value: [1, 2, [3]], type: {:array, :int4}} = result
+      assert %Const{value: [[1], [2], [3]], type: {:array, :int4}} = result
 
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(~S|ARRAY[ARRAY[1, 2], ARRAY['3', 2 + 2]]|)

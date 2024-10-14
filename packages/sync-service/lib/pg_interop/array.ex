@@ -95,7 +95,7 @@ defmodule PgInterop.Array do
         raise "Unexpected end of input"
 
       "{" <> _ = rest ->
-        parse_all_nested_arrays(rest, fun, [], 0, %{dim_info | cur_dim: dim + 1})
+        parse_all_nested_arrays(rest, fun, [], 0, dim_info)
 
       _ ->
         # If we know max dimension but see a non-array element, before that, we know it's inconsistent
@@ -105,6 +105,8 @@ defmodule PgInterop.Array do
 
         {result, rest, dim_size} = parse_all_elements(rest, fun)
 
+        # If we've been at this depth, validate that new array is consistent with the previous ones,
+        # if not, save it
         case Map.fetch(dim_info, dim) do
           {:ok, ^dim_size} ->
             {result, rest, dim_info}
@@ -121,28 +123,30 @@ defmodule PgInterop.Array do
   defp parse_nested_arrays(_, _, _), do: raise("Unexpected array element")
 
   defp parse_all_nested_arrays(str, fun, acc, dim_size, %{cur_dim: dim} = dim_info) do
-    {result, rest, dim_info} = parse_nested_arrays(str, fun, dim_info)
+    {result, rest, dim_info} = parse_nested_arrays(str, fun, %{dim_info | cur_dim: dim + 1})
+    dim_info = %{dim_info | cur_dim: dim}
 
     # First time we reach this branch is when we followed all open braces at the start
     # of the string, so we know the maximum dimension of the array
-    dim_info = Map.put_new(dim_info, :max_dim, dim)
+    dim_info = Map.put_new(dim_info, :max_dim, dim + 1)
 
     case scan_until_next_boundary(rest) do
       # If next boundary is a comma, we're at the same depth, so keep parsing
       {?,, rest} ->
         parse_all_nested_arrays(rest, fun, [result | acc], dim_size + 1, dim_info)
 
-      # If next boundary is a closing brace, we're done with this depth, so update what we can
+      # If next boundary is a closing brace, we're done with this array, so update what we can
       {?}, rest} ->
         dim_size = dim_size + 1
-        dim_info = %{dim_info | cur_dim: dim - 1}
 
-        case Map.fetch(dim_info, dim - 1) do
+        # If we've been at this depth, validate that new array is consistent with the previous ones,
+        # if not, save it
+        case Map.fetch(dim_info, dim) do
           {:ok, ^dim_size} ->
             {Enum.reverse([result | acc]), rest, dim_info}
 
           :error ->
-            {Enum.reverse([result | acc]), rest, Map.put(dim_info, dim - 1, dim_size)}
+            {Enum.reverse([result | acc]), rest, Map.put(dim_info, dim, dim_size)}
 
           {:ok, _} ->
             raise "Inconsistent array dimensions"
