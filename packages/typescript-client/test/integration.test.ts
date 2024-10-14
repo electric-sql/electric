@@ -662,6 +662,51 @@ describe(`HTTP Sync`, () => {
     )
   })
 
+  mit(
+    `should correctly select columns for initial sync and updates`,
+    async ({ dbClient, aborter, tableSql, tableUrl }) => {
+      await dbClient.query(
+        `INSERT INTO ${tableSql} (txt, i2, i4, i8) VALUES ($1, $2, $3, $4)`,
+        [`test1`, 1, 10, 100]
+      )
+
+      // Get initial data
+      const shapeData = new Map()
+      const issueStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape/${tableUrl}`,
+        columns: [`txt`, `i2`, `i4`],
+        signal: aborter.signal,
+      })
+      await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
+        if (!isChangeMessage(msg)) return
+        shapeData.set(msg.key, msg.value)
+        console.log(msg)
+
+        if (nth === 0) {
+          expect(msg.value).toStrictEqual({
+            txt: `test1`,
+            i2: 1,
+            i4: 10,
+          })
+          await dbClient.query(
+            `UPDATE ${tableSql} SET txt = $1, i4 = $2, i8 = $3 WHERE i2 = $4`,
+            [`test2`, 20, 200, 1]
+          )
+        } else if (nth === 1) {
+          res()
+        }
+      })
+
+      expect([...shapeData.values()]).toStrictEqual([
+        {
+          txt: `test2`,
+          i2: 1,
+          i4: 20,
+        },
+      ])
+    }
+  )
+
   it(`should chunk a large log with reasonably sized chunks`, async ({
     insertIssues,
     issuesTableUrl,

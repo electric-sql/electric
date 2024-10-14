@@ -53,6 +53,7 @@ defmodule Electric.Plug.ServeShapePlug do
       field(:shape_id, :string)
       field(:live, :boolean, default: false)
       field(:where, :string)
+      field(:columns, :string)
       field(:shape_definition, :string)
     end
 
@@ -63,6 +64,7 @@ defmodule Electric.Plug.ServeShapePlug do
       )
       |> validate_required([:root_table, :offset])
       |> cast_offset()
+      |> cast_columns()
       |> validate_shape_id_with_offset()
       |> validate_live_with_offset()
       |> cast_root_table(opts)
@@ -95,6 +97,21 @@ defmodule Electric.Plug.ServeShapePlug do
       end
     end
 
+    def cast_columns(%Ecto.Changeset{valid?: false} = changeset), do: changeset
+
+    def cast_columns(%Ecto.Changeset{} = changeset) do
+      case fetch_field!(changeset, :columns) do
+        nil ->
+          changeset
+
+        columns ->
+          case Electric.Plug.Utils.parse_columns_param(columns) do
+            {:ok, parsed_cols} -> put_change(changeset, :columns, parsed_cols)
+            {:error, reason} -> add_error(changeset, :columns, reason)
+          end
+      end
+    end
+
     def validate_shape_id_with_offset(%Ecto.Changeset{valid?: false} = changeset), do: changeset
 
     def validate_shape_id_with_offset(%Ecto.Changeset{} = changeset) do
@@ -122,18 +139,19 @@ defmodule Electric.Plug.ServeShapePlug do
     def cast_root_table(%Ecto.Changeset{} = changeset, opts) do
       table = fetch_change!(changeset, :root_table)
       where = fetch_field!(changeset, :where)
+      columns = get_change(changeset, :columns, nil)
 
-      case Shapes.Shape.new(table, opts ++ [where: where]) do
+      case Shapes.Shape.new(table, opts ++ [where: where, columns: columns]) do
         {:ok, result} ->
           put_change(changeset, :shape_definition, result)
 
-        {:error, reasons} ->
+        {:error, {field, reasons}} ->
           Enum.reduce(List.wrap(reasons), changeset, fn
             {message, keys}, changeset ->
-              add_error(changeset, :root_table, message, keys)
+              add_error(changeset, field, message, keys)
 
             message, changeset when is_binary(message) ->
-              add_error(changeset, :root_table, message)
+              add_error(changeset, field, message)
           end)
       end
     end
