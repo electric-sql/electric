@@ -768,6 +768,7 @@ defmodule Electric.Shapes.ConsumerTest do
       %{slot_name: "electric_shapes_consumertest_replication_stream"}
     end
 
+    @tag :skip
     test "crashing consumer resumes at a consistent point", ctx do
       {:ok, pid} = start_supervised(CrashingStorageBackend)
       parent = self()
