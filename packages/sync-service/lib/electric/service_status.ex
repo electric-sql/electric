@@ -6,7 +6,7 @@ defmodule Electric.ServiceStatus do
     # Match the connection status ot a service status - currently
     # they are one and the same but keeping this decoupled for future
     # additions to conditions that determine service status
-    case Electric.ConnectionManager.get_status(Electric.ConnectionManager) do
+    case Electric.Connection.Manager.get_status(Electric.Connection.Manager) do
       :waiting -> :waiting
       :starting -> :starting
       :active -> :active

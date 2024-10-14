@@ -6,7 +6,7 @@ defmodule Electric.Postgres.LockConnection do
 
   The connection attempts to grab the lock and waits on it until it acquires it.
   When it does, it fires off an :exclusive_connection_lock_acquired message to the specified
-  `Electric.ConnectionManager` such that the required setup can acquired now that
+  `Electric.Connection.Manager` such that the required setup can acquired now that
   the service is sure to be the only one operating on this replication stream.
   """
   require Logger
@@ -87,7 +87,7 @@ defmodule Electric.Postgres.LockConnection do
   end
 
   defp notify_lock_acquired(%State{connection_manager: connection_manager} = _state) do
-    Electric.ConnectionManager.exclusive_connection_lock_acquired(connection_manager)
+    Electric.Connection.Manager.exclusive_connection_lock_acquired(connection_manager)
   end
 
   defp lock_query(%State{lock_name: name} = _state) do
