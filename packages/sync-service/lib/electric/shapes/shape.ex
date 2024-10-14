@@ -100,7 +100,7 @@ defmodule Electric.Shapes.Shape do
           [String.t()],
           [String.t(), ...] | nil
         ) ::
-          {:ok, [String.t(), ...]} | {:error, {:columns, [String.t()]}}
+          {:ok, [String.t(), ...] | nil} | {:error, {:columns, [String.t()]}}
   defp validate_selected_columns(_column_info, _pk_cols, nil) do
     {:ok, nil}
   end
