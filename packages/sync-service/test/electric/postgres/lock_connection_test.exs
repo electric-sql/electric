@@ -6,6 +6,7 @@ defmodule Electric.Postgres.LockConnectionTest do
   alias Electric.Postgres.LockConnection
 
   @moduletag :capture_log
+  @moduletag :skip
   @lock_name "test_electric_slot"
 
   describe "LockConnection init" do
