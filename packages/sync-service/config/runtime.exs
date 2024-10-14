@@ -81,9 +81,9 @@ otel_simple_processor =
 config :opentelemetry,
   processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1)
 
-if Config.config_env() == :test do
-  config :electric,
-    connection_opts: [
+connection_opts =
+  if Config.config_env() == :test do
+    [
       hostname: "localhost",
       port: 54321,
       username: "postgres",
@@ -91,20 +91,18 @@ if Config.config_env() == :test do
       database: "postgres",
       sslmode: :disable
     ]
-else
-  {:ok, database_url_config} =
-    env!("DATABASE_URL", :string)
-    |> Electric.Config.parse_postgresql_uri()
+  else
+    {:ok, database_url_config} =
+      env!("DATABASE_URL", :string)
+      |> Electric.Config.parse_postgresql_uri()
 
-  database_ipv6_config =
-    env!("DATABASE_USE_IPV6", :boolean, false)
+    database_ipv6_config =
+      env!("DATABASE_USE_IPV6", :boolean, false)
 
-  connection_opts = [ipv6: database_ipv6_config] ++ database_url_config
+    database_url_config ++ [ipv6: database_ipv6_config]
+  end
 
-  config :electric, connection_opts: connection_opts, electric_instance_id: electric_instance_id
-end
-
-config :electric, listen_on_ipv6?: env!("LISTEN_ON_IPV6", :boolean, false)
+config :electric, connection_opts: Electric.Utils.obfuscate_password(connection_opts)
 
 enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)
 cache_max_age = env!("CACHE_MAX_AGE", :integer, 60)
@@ -173,10 +171,12 @@ config :electric,
   # Used in telemetry
   environment: config_env(),
   instance_id: instance_id,
+  electric_instance_id: electric_instance_id,
   telemetry_statsd_host: statsd_host,
   db_pool_size: env!("DB_POOL_SIZE", :integer, 50),
   replication_stream_id: env!("REPLICATION_STREAM_ID", :string, "default"),
   service_port: env!("PORT", :integer, 3000),
   prometheus_port: prometheus_port,
   storage: storage,
-  persistent_kv: persistent_kv
+  persistent_kv: persistent_kv,
+  listen_on_ipv6?: env!("LISTEN_ON_IPV6", :boolean, false)

@@ -36,7 +36,8 @@ defmodule Electric.Postgres.LockConnection do
     Postgrex.SimpleConnection.start_link(
       __MODULE__,
       init_opts,
-      connection_opts ++ [timeout: :infinity, auto_reconnect: false]
+      [timeout: :infinity, auto_reconnect: false] ++
+        Electric.Utils.deobfuscate_password(connection_opts)
     )
   end
 
