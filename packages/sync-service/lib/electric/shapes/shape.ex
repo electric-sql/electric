@@ -218,12 +218,7 @@ defmodule Electric.Shapes.Shape do
 
     converted_changes
     |> Enum.map(&filter_change_columns(selected_columns, &1))
-    |> Enum.filter(
-      &case &1 do
-        %Changes.UpdatedRecord{old_record: old_record, record: record} -> old_record != record
-        _ -> true
-      end
-    )
+    |> Enum.filter(&filtered_columns_changed/1)
   end
 
   defp filter_change_columns(nil, change), do: change
@@ -231,6 +226,11 @@ defmodule Electric.Shapes.Shape do
   defp filter_change_columns(selected_columns, change) do
     Changes.filter_columns(change, selected_columns)
   end
+
+  defp filtered_columns_changed(%Changes.UpdatedRecord{old_record: record, record: record}),
+    do: false
+
+  defp filtered_columns_changed(_), do: true
 
   defp record_in_shape?(nil, _record), do: true
 
