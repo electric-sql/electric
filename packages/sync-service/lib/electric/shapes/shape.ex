@@ -208,12 +208,15 @@ defmodule Electric.Shapes.Shape do
     old_record_in_shape = record_in_shape?(where, old_record)
     new_record_in_shape = record_in_shape?(where, record)
 
-    case {old_record_in_shape, new_record_in_shape} do
-      {true, true} -> [change]
-      {true, false} -> [Changes.convert_update(change, to: :deleted_record)]
-      {false, true} -> [Changes.convert_update(change, to: :new_record)]
-      {false, false} -> []
-    end
+    converted_changes =
+      case {old_record_in_shape, new_record_in_shape} do
+        {true, true} -> [change]
+        {true, false} -> [Changes.convert_update(change, to: :deleted_record)]
+        {false, true} -> [Changes.convert_update(change, to: :new_record)]
+        {false, false} -> []
+      end
+
+    converted_changes
     |> Enum.map(&filter_change_columns(selected_columns, &1))
     |> Enum.filter(
       &case &1 do
