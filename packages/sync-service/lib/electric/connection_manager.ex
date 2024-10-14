@@ -196,10 +196,7 @@ defmodule Electric.ConnectionManager do
 
         # Now that we have a ShapeCache process running under Shapes.Supervisor, we can run the
         # timeline check.
-        Electric.Timeline.check(
-          {get_pg_id(pool_pid), get_pg_timeline(pool_pid)},
-          state.timeline_opts
-        )
+        Electric.Timeline.check(get_pg_timeline(pool_pid), state.timeline_opts)
 
         # Everything is ready to start accepting and processing logical messages from Postgres.
         Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
@@ -450,16 +447,19 @@ defmodule Electric.ConnectionManager do
     Keyword.put(connection_opts, :socket_options, tcp_opts)
   end
 
-  defp get_pg_id(conn) do
-    case Postgrex.query!(conn, "SELECT system_identifier FROM pg_control_system()", []) do
-      %Postgrex.Result{rows: [[system_identifier]]} -> system_identifier
-    end
-  end
-
   defp get_pg_timeline(conn) do
-    case Postgrex.query!(conn, "SELECT timeline_id FROM pg_control_checkpoint()", []) do
-      %Postgrex.Result{rows: [[timeline_id]]} -> timeline_id
-    end
+    %Postgrex.Result{rows: [[system_identifier, timeline_id]]} =
+      Postgrex.query!(
+        conn,
+        """
+        SELECT
+          (pg_control_system()).system_identifier,
+          (pg_control_checkpoint()).timeline_id
+        """,
+        []
+      )
+
+    {system_identifier, timeline_id}
   end
 
   defp lookup_log_collector_pid(shapes_supervisor) do
