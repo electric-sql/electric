@@ -30,8 +30,11 @@ defmodule Electric.Connection.Supervisor do
     Supervisor.init([{Electric.ConnectionManager, opts}], strategy: :rest_for_one)
   end
 
-  def start_shapes_supervisor do
+  def start_shapes_supervisor(opts) do
     app_config = Electric.Application.Configuration.get()
+
+    shape_cache_opts = app_config.shape_cache_opts ++ Keyword.take(opts, [:purge_all_shapes?])
+    shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
     shape_log_collector_spec =
       {Electric.Replication.ShapeLogCollector,
@@ -42,7 +45,7 @@ defmodule Electric.Connection.Supervisor do
         {
           Electric.Shapes.Supervisor,
           electric_instance_id: app_config.electric_instance_id,
-          shape_cache: app_config.child_specs.shape_cache,
+          shape_cache: shape_cache_spec,
           log_collector: shape_log_collector_spec
         },
         restart: :temporary

@@ -20,7 +20,7 @@ defmodule Electric.Timeline do
   If the timelines differ, that indicates that a Point In Time Recovery (PITR) has occurred and all shapes must be cleaned.
   If we fail to fetch timeline information, we also clean all shapes for safety as we can't be sure that Postgres and Electric are on the same timeline.
   """
-  @spec check(timeline(), keyword()) :: :ok
+  @spec check(timeline(), keyword()) :: :ok | :timeline_changed
   def check(pg_timeline, opts) do
     electric_timeline = load_timeline(opts)
     verify_timeline(pg_timeline, electric_timeline, opts)
@@ -41,20 +41,17 @@ defmodule Electric.Timeline do
   defp verify_timeline({pg_id, _} = timeline, {electric_pg_id, _}, opts)
        when pg_id != electric_pg_id do
     Logger.warning(
-      "Detected different Postgres DB, with ID: #{pg_id}. Old Postgres DB had ID #{electric_pg_id}. Cleaning all shapes."
+      "Detected different Postgres DB, with ID: #{pg_id}. Old Postgres DB had ID #{electric_pg_id}. Will purge all shapes."
     )
 
-    clean_all_shapes_and_store_timeline(timeline, opts)
+    :ok = store_timeline(timeline, opts)
+    :timeline_changed
   end
 
   defp verify_timeline({_, timeline_id} = timeline, _, opts) do
-    Logger.warning("Detected PITR to timeline #{timeline_id}; cleaning all shapes.")
-    clean_all_shapes_and_store_timeline(timeline, opts)
-  end
-
-  defp clean_all_shapes_and_store_timeline(timeline, opts) do
-    clean_all_shapes(opts)
-    store_timeline(timeline, opts)
+    Logger.warning("Detected PITR to timeline #{timeline_id}; will purge all shapes.")
+    :ok = store_timeline(timeline, opts)
+    :timeline_changed
   end
 
   # Loads the PG ID and timeline ID from persistent storage
@@ -84,13 +81,5 @@ defmodule Electric.Timeline do
     kv_backend = Keyword.fetch!(opts, :persistent_kv)
     # defaults to using Jason encoder and decoder
     PersistentKV.Serialized.new!(backend: kv_backend)
-  end
-
-  # Clean up all data (meta data and shape log + snapshot) associated with all shapes
-  @spec clean_all_shapes(keyword()) :: :ok
-  defp clean_all_shapes(opts) do
-    {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
-    shape_cache.clean_all_shapes(opts)
-    :ok
   end
 end
