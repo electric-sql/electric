@@ -73,10 +73,15 @@ defmodule Electric.ConnectionManager do
 
   @lock_status_logging_interval 10_000
 
+  @spec start_link(options) :: GenServer.on_start()
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: @name)
+  end
+
   @doc """
   Returns the version of the PostgreSQL server.
   """
-  @spec get_pg_version(GenServer.server()) :: float()
+  @spec get_pg_version(GenServer.server()) :: integer()
   def get_pg_version(server) do
     GenServer.call(server, :get_pg_version)
   end
@@ -89,9 +94,12 @@ defmodule Electric.ConnectionManager do
     GenServer.call(server, :get_status)
   end
 
-  @spec start_link(options) :: GenServer.on_start()
-  def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: @name)
+  def exclusive_connection_lock_acquired(server) do
+    GenServer.cast(server, :exclusive_connection_lock_acquired)
+  end
+
+  def pg_version_looked_up(server, pg_version) do
+    GenServer.cast(server, {:pg_version_looked_up, pg_version})
   end
 
   @impl true
@@ -111,6 +119,7 @@ defmodule Electric.ConnectionManager do
       opts
       |> Keyword.fetch!(:replication_opts)
       |> Keyword.put(:start_streaming?, false)
+      |> Keyword.put(:connection_manager, self())
 
     pool_opts = Keyword.fetch!(opts, :pool_opts)
 
@@ -293,15 +302,15 @@ defmodule Electric.ConnectionManager do
   end
 
   @impl true
-  def handle_cast({:pg_version, pg_version}, state) do
-    {:noreply, %{state | pg_version: pg_version}}
-  end
-
-  def handle_cast(:lock_connection_acquired, %{pg_lock_acquired: false} = state) do
+  def handle_cast(:exclusive_connection_lock_acquired, %{pg_lock_acquired: false} = state) do
     # As soon as we acquire the connection lock, we try to start the replication connection
     # first because it requires additional privileges compared to regular "pooled" connections,
     # so failure to open a replication connection should be reported ASAP.
     {:noreply, %{state | pg_lock_acquired: true}, {:continue, :start_replication_client}}
+  end
+
+  def handle_cast({:pg_version_looked_up, pg_version}, state) do
+    {:noreply, %{state | pg_version: pg_version}}
   end
 
   defp start_replication_client(electric_instance_id, connection_opts, replication_opts) do

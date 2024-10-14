@@ -119,7 +119,8 @@ defmodule Support.ComponentSetup do
       transaction_received:
         {Electric.Replication.ShapeLogCollector, :store_transaction, [ctx.shape_log_collector]},
       relation_received:
-        {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [ctx.shape_log_collector]}
+        {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [ctx.shape_log_collector]},
+      connection_manager: self()
     ]
 
     {:ok, pid} =
