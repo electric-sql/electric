@@ -37,8 +37,6 @@ defmodule Electric.ConnectionManager do
       :persistent_kv,
       # PID of the replication client.
       :replication_client_pid,
-      # PID of the Postgres connection lock.
-      :lock_connection_pid,
       # PID of the database connection pool (a `Postgrex` process).
       :pool_pid,
       # PID of the shape log collector
@@ -103,6 +101,10 @@ defmodule Electric.ConnectionManager do
     GenServer.cast(server, {:pg_info_looked_up, pg_info})
   end
 
+  def replication_client_ready(server) do
+    GenServer.cast(server, :replication_client_ready)
+  end
+
   @impl true
   def init(opts) do
     # Because child processes are started via `start_link()` functions and due to how Postgrex
@@ -136,10 +138,12 @@ defmodule Electric.ConnectionManager do
         backoff: {:backoff.init(1000, 10_000), nil}
       }
 
+    Process.send_after(self(), :log_lock_connection_status, @lock_status_logging_interval)
+
     # Try to acquire the connection lock on the replication slot
     # before starting shape and replication processes, to ensure
     # a single active sync service is connected to Postgres per slot.
-    {:ok, state, {:continue, :start_lock_connection}}
+    {:ok, state, {:continue, :start_replication_client}}
   end
 
   @impl true
@@ -167,26 +171,14 @@ defmodule Electric.ConnectionManager do
   end
 
   @impl true
-  def handle_continue(:start_lock_connection, state) do
-    case Electric.Postgres.LockConnection.start_link(
-           connection_opts: state.connection_opts,
-           connection_manager: self(),
-           lock_name: Keyword.fetch!(state.replication_opts, :slot_name)
-         ) do
-      {:ok, lock_connection_pid} ->
-        Process.send_after(self(), :log_lock_connection_status, @lock_status_logging_interval)
-        {:noreply, %{state | lock_connection_pid: lock_connection_pid}}
-
-      {:error, reason} ->
-        handle_connection_error(reason, state, "lock_connection")
-    end
-  end
-
   def handle_continue(:start_replication_client, state) do
     case start_replication_client(state.connection_opts, state.replication_opts) do
       {:ok, pid, connection_opts} ->
+        # The replication client process is up but we need to wait for it to report back on its
+        # success in acquiring the exclusive connection lock, fetching PG info and getting
+        # ready to start streaming from Postgres.
         state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
-        {:noreply, state, {:continue, :start_connection_pool}}
+        {:noreply, state}
 
       {:error, reason} ->
         handle_connection_error(reason, state, "replication")
@@ -266,7 +258,7 @@ defmodule Electric.ConnectionManager do
     # As soon as we acquire the connection lock, we try to start the replication connection
     # first because it requires additional privileges compared to regular "pooled" connections,
     # so failure to open a replication connection should be reported ASAP.
-    {:noreply, %{state | pg_lock_acquired: true}, {:continue, :start_replication_client}}
+    {:noreply, %{state | pg_lock_acquired: true}}
   end
 
   def handle_cast({:pg_info_looked_up, {server_version, system_identifier, timeline_id}}, state) do
@@ -277,6 +269,10 @@ defmodule Electric.ConnectionManager do
          pg_system_identifier: system_identifier,
          pg_timeline_id: timeline_id
      }}
+  end
+
+  def handle_cast(:replication_client_ready, state) do
+    {:noreply, state, {:continue, :start_connection_pool}}
   end
 
   defp start_replication_client(connection_opts, replication_opts) do
@@ -345,7 +341,6 @@ defmodule Electric.ConnectionManager do
 
     step =
       cond do
-        is_nil(state.lock_connection_pid) -> :start_lock_connection
         is_nil(state.replication_client_pid) -> :start_replication_client
         is_nil(state.pool_pid) -> :start_connection_pool
       end

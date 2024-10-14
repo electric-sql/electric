@@ -16,6 +16,7 @@ defmodule Electric.Postgres.ReplicationClient do
   @type step ::
           :disconnected
           | :connected
+          | :acquire_lock
           | :query_pg_info
           | :create_publication
           | :create_slot
@@ -82,8 +83,6 @@ defmodule Electric.Postgres.ReplicationClient do
     end
   end
 
-  # @type state :: State.t()
-
   @repl_msg_x_log_data ?w
   @repl_msg_primary_keepalive ?k
   @repl_msg_standby_status_update ?r
@@ -93,7 +92,8 @@ defmodule Electric.Postgres.ReplicationClient do
     # the connection error. Without this, we may observe undesirable restarts in tests between
     # one test process exiting and the next one starting.
     connection_opts =
-      [auto_reconnect: false] ++ Electric.Utils.deobfuscate_password(connection_opts)
+      [auto_reconnect: false, sync_connect: false] ++
+        Electric.Utils.deobfuscate_password(connection_opts)
 
     Postgrex.ReplicationConnection.start_link(__MODULE__, replication_opts, connection_opts)
   end

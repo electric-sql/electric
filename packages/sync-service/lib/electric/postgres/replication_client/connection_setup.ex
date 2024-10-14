@@ -23,8 +23,10 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   # `{:query, ...}` tuple for it.
   @spec start(state) :: callback_return
   def start(%{step: :connected} = state) do
-    next_step = next_step(state)
-    query_for_step(next_step, %{state | step: next_step})
+    state
+    |> next_step()
+    |> log_step()
+    |> query_for_step()
   end
 
   # Process the result of executing the query, pick the next step and return the `{:query, ...}`
@@ -32,18 +34,33 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   @spec process_query_result(query_result, state) :: callback_return
   def process_query_result(result, %{step: step} = state) do
     state = dispatch_query_result(step, result, state)
-    next_step = next_step(state)
-    query_for_step(next_step, %{state | step: next_step})
+
+    state
+    |> next_step()
+    |> log_step()
+    |> query_for_step()
   end
 
   # Instruct `Postgrex.ReplicationConnection` to switch the connection into the logical
   # streaming mode.
   @spec start_streaming(state) :: callback_return
   def start_streaming(%{step: :ready_to_stream} = state) do
-    query_for_step(:streaming, %{state | step: :streaming})
+    query_for_step(%{state | step: :streaming})
   end
 
   ###
+
+  # TODO: add description of the locking design from LockConnection
+  defp acquire_lock_query(state) do
+    query = "SELECT pg_advisory_lock(hashtext('#{state.slot_name}'))"
+    {:query, query, state}
+  end
+
+  defp acquire_lock_result([%Postgrex.Result{columns: ["pg_advisory_lock"]}], state) do
+    Logger.info("Lock acquired from postgres with name #{state.slot_name}")
+    Electric.ConnectionManager.exclusive_connection_lock_acquired(state.connection_manager)
+    state
+  end
 
   defp pg_info_query(state) do
     query = """
@@ -165,6 +182,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   #
   # The other terminal state is implemented in `start_replication_slot_query/1`.
   defp ready_to_stream(state) do
+    Electric.ConnectionManager.replication_client_ready(state.connection_manager)
     {:noreply, state}
   end
 
@@ -188,51 +206,73 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   # step leads to which next one.
   #
   # This is how we order the queries to be executed prior to switching into the logical streaming mode.
-  @spec next_step(state) :: step
+  @spec next_step(state) :: state
+  defp next_step(state) do
+    %{state | step: pick_next_step(state)}
+  end
 
-  defp next_step(%{step: :connected}),
+  @spec pick_next_step(state) :: state
+
+  defp pick_next_step(%{step: :connected}),
+    do: :acquire_lock
+
+  defp pick_next_step(%{step: :acquire_lock}),
     do: :query_pg_info
 
-  defp next_step(%{step: :query_pg_info, try_creating_publication?: true}),
+  defp pick_next_step(%{step: :query_pg_info, try_creating_publication?: true}),
     do: :create_publication
 
-  defp next_step(%{step: :query_pg_info}),
+  defp pick_next_step(%{step: :query_pg_info}),
     do: :create_slot
 
-  defp next_step(%{step: :create_publication}),
+  defp pick_next_step(%{step: :create_publication}),
     do: :create_slot
 
-  defp next_step(%{step: :create_slot}),
+  defp pick_next_step(%{step: :create_slot}),
     do: :set_display_setting
 
-  defp next_step(%{step: :set_display_setting, display_settings: queries}) when queries != [],
-    do: :set_display_setting
+  defp pick_next_step(%{step: :set_display_setting, display_settings: queries})
+       when queries != [],
+       do: :set_display_setting
 
-  defp next_step(%{step: :set_display_setting, start_streaming?: true}),
+  defp pick_next_step(%{step: :set_display_setting, start_streaming?: true}),
     do: :streaming
 
-  defp next_step(%{step: :set_display_setting}),
+  defp pick_next_step(%{step: :set_display_setting}),
     do: :ready_to_stream
+
+  @spec log_step(state) :: state
+
+  defp log_step(%{step: :acquire_lock} = state) do
+    Logger.info("Acquiring lock from postgres with name #{state.slot_name}")
+    state
+  end
+
+  defp log_step(state), do: state
 
   ###
 
   # Helper function that dispatches each step to a function specific to it. This is done so
   # that query and result processing functions for the same step can be grouped together in
   # this module.
-  @spec query_for_step(step, state) :: callback_return
+  @spec query_for_step(state) :: callback_return
 
-  defp query_for_step(:query_pg_info, state), do: pg_info_query(state)
-  defp query_for_step(:create_publication, state), do: create_publication_query(state)
-  defp query_for_step(:create_slot, state), do: create_slot_query(state)
-  defp query_for_step(:set_display_setting, state), do: set_display_setting_query(state)
-  defp query_for_step(:ready_to_stream, state), do: ready_to_stream(state)
-  defp query_for_step(:streaming, state), do: start_replication_slot_query(state)
+  defp query_for_step(%{step: :acquire_lock} = state), do: acquire_lock_query(state)
+  defp query_for_step(%{step: :query_pg_info} = state), do: pg_info_query(state)
+  defp query_for_step(%{step: :create_publication} = state), do: create_publication_query(state)
+  defp query_for_step(%{step: :create_slot} = state), do: create_slot_query(state)
+  defp query_for_step(%{step: :set_display_setting} = state), do: set_display_setting_query(state)
+  defp query_for_step(%{step: :ready_to_stream} = state), do: ready_to_stream(state)
+  defp query_for_step(%{step: :streaming} = state), do: start_replication_slot_query(state)
 
   ###
 
   # Helper function that dispatches processing of a query result to a function specific to
   # that query's step. This is again done to facilitate grouping functions for the same step.
   @spec dispatch_query_result(step, query_result, state) :: state | no_return
+
+  defp dispatch_query_result(:acquire_lock, result, state),
+    do: acquire_lock_result(result, state)
 
   defp dispatch_query_result(:query_pg_info, result, state),
     do: pg_info_result(result, state)
