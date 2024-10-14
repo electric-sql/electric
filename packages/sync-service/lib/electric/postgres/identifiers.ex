@@ -3,6 +3,72 @@ defmodule Electric.Postgres.Identifiers do
   @ascii_downcase ?a - ?A
 
   @doc """
+  Parse a PostgreSQL identifier, removing quotes if present and escaping internal ones
+  and downcasing the identifier otherwise.
+
+  ## Examples
+
+      iex> Electric.Postgres.Identifiers.parse("FooBar")
+      {:ok, "foobar"}
+      iex> Electric.Postgres.Identifiers.parse(~S|"FooBar"|)
+      {:ok, "FooBar"}
+      iex> Electric.Postgres.Identifiers.parse(~S|Foo"Bar"|)
+      {:error, ~S|Invalid unquoted identifier contains special characters: Foo"Bar"|}
+      iex> Electric.Postgres.Identifiers.parse(~S| |)
+      {:error, ~S|Invalid unquoted identifier contains special characters:  |}
+      iex> Electric.Postgres.Identifiers.parse("foob@r")
+      {:error, ~S|Invalid unquoted identifier contains special characters: foob@r|}
+      iex> Electric.Postgres.Identifiers.parse(~S|"Foo"Bar"|)
+      {:error, ~S|Invalid identifier with unescaped quote: Foo"Bar|}
+      iex> Electric.Postgres.Identifiers.parse(~S|""|)
+      {:error, "Invalid zero-length delimited identifier"}
+      iex> Electric.Postgres.Identifiers.parse("")
+      {:error, "Invalid zero-length delimited identifier"}
+      iex> Electric.Postgres.Identifiers.parse(~S|" "|)
+      {:ok, " "}
+      iex> Electric.Postgres.Identifiers.parse(~S|"Foo""Bar"|)
+      {:ok, ~S|Foo"Bar|}
+  """
+  @spec parse(binary(), boolean(), boolean()) :: {:ok, binary()} | {:error, term()}
+  def parse(ident, truncate \\ false, single_byte_encoding \\ false) when is_binary(ident) do
+    if String.starts_with?(ident, ~S|"|) and String.ends_with?(ident, ~S|"|) do
+      ident_unquoted = String.slice(ident, 1..-2//1)
+      parse_quoted_identifier(ident_unquoted)
+    else
+      parse_unquoted_identifier(ident, truncate, single_byte_encoding)
+    end
+  end
+
+  defp parse_quoted_identifier(""), do: {:error, "Invalid zero-length delimited identifier"}
+
+  defp parse_quoted_identifier(ident) do
+    if contains_unescaped_quote?(ident),
+      do: {:error, "Invalid identifier with unescaped quote: #{ident}"},
+      else: {:ok, unescape_quotes(ident)}
+  end
+
+  defp parse_unquoted_identifier("", _, _), do: parse_quoted_identifier("")
+
+  defp parse_unquoted_identifier(ident, truncate, single_byte_encoding) do
+    unless valid_unquoted_identifier?(ident),
+      do: {:error, "Invalid unquoted identifier contains special characters: #{ident}"},
+      else: {:ok, downcase(ident, truncate, single_byte_encoding)}
+  end
+
+  defp contains_unescaped_quote?(string) do
+    Regex.match?(~r/(?<!")"(?!")/, string)
+  end
+
+  defp unescape_quotes(string) do
+    string
+    |> String.replace(~r/""/, "\"")
+  end
+
+  defp valid_unquoted_identifier?(identifier) do
+    Regex.match?(~r/^[a-zA-Z_][a-zA-Z0-9_]*$/, identifier)
+  end
+
+  @doc """
   Downcase the identifier and truncate if necessary, using
   PostgreSQL's algorithm for downcasing.
 

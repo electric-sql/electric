@@ -10,9 +10,9 @@ defmodule Electric.Plug.Utils do
 
   ## Examples
       iex> Electric.Plug.Utils.parse_columns_param("")
-      {:error, "Must specify at least one column"}
+      {:error, "Invalid zero-length delimited identifier"}
       iex> Electric.Plug.Utils.parse_columns_param("foo,")
-      {:error, "Invalid empty column provided"}
+      {:error, "Invalid zero-length delimited identifier"}
       iex> Electric.Plug.Utils.parse_columns_param("id")
       {:ok, ["id"]}
       iex> Electric.Plug.Utils.parse_columns_param("beta,alpha")
@@ -24,29 +24,18 @@ defmodule Electric.Plug.Utils do
       iex> Electric.Plug.Utils.parse_columns_param(~S|\"fo\"\"o\",bar|)
       {:ok, ["bar", ~S|fo"o|]}
       iex> Electric.Plug.Utils.parse_columns_param(~S|"id,"name"|)
-      {:error, ~S|Invalid column, unmatched quote: "id|}
+      {:error, ~S|Invalid unquoted identifier contains special characters: "id|}
   """
   @spec parse_columns_param(binary()) :: {:ok, [String.t(), ...]} | {:error, term()}
-  def parse_columns_param("") do
-    {:error, "Must specify at least one column"}
-  end
 
   def parse_columns_param(columns) when is_binary(columns) do
     columns
     # Split by commas that are not inside quotes
     |> String.split(~r/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
     |> Enum.reduce_while([], fn column, acc ->
-      casted_column = maybe_cast_quoted_identifier(column)
-
-      cond do
-        contains_unescaped_quote?(casted_column) ->
-          {:halt, {:error, "Invalid column, unmatched quote: #{casted_column}"}}
-
-        String.trim(casted_column) == "" ->
-          {:halt, {:error, "Invalid empty column provided"}}
-
-        true ->
-          {:cont, [unescape_quotes(casted_column) | acc]}
+      case Electric.Postgres.Identifiers.parse(column) do
+        {:ok, casted_column} -> {:cont, [casted_column | acc]}
+        {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
     |> then(fn result ->
@@ -57,21 +46,5 @@ defmodule Electric.Plug.Utils do
         {:error, reason} -> {:error, reason}
       end
     end)
-  end
-
-  defp contains_unescaped_quote?(string) do
-    Regex.match?(~r/(?<!")"(?!")/, string)
-  end
-
-  defp maybe_cast_quoted_identifier(string) do
-    if Regex.match?(~r/^"(.*)"$/, string),
-      do: String.replace(string, ~r/^"(.*)"$/, "\\1"),
-      # if identifier is not quoted, downcase it like Postgres would
-      else: Electric.Postgres.Identifiers.downcase(string)
-  end
-
-  defp unescape_quotes(string) do
-    string
-    |> String.replace(~r/""/, "\"")
   end
 end
