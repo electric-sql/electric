@@ -10,24 +10,24 @@ defmodule Electric.Plug.Utils do
 
   ## Examples
       iex> Electric.Plug.Utils.parse_columns_param("")
-      {:ok, MapSet.new([""])}
+      {:error, "Must specify at least one column"}
       iex> Electric.Plug.Utils.parse_columns_param("id")
-      {:ok, MapSet.new(["id"])}
+      {:ok, ["id"]}
       iex> Electric.Plug.Utils.parse_columns_param("beta,alpha")
-      {:ok, MapSet.new(["alpha", "beta"])}
+      {:ok, ["alpha", "beta"]}
       iex> Electric.Plug.Utils.parse_columns_param(~S|"PoTaTo,sunday",foo|)
-      {:ok, MapSet.new(["PoTaTo,sunday", "foo"])}
+      {:ok, ["PoTaTo,sunday", "foo"]}
       iex> Electric.Plug.Utils.parse_columns_param(~S|\"fo\"\"o\",bar|)
-      {:ok, MapSet.new(["bar", ~S|fo"o|])}
+      {:ok, ["bar", ~S|fo"o|]}
       iex> Electric.Plug.Utils.parse_columns_param(~S|"id,"name"|)
       {:error, ~S|Invalid column, unmatched quote: "id|}
   """
-  @spec parse_columns_param(binary()) :: {:ok, MapSet.t(String.t())} | {:error, term()}
+  @spec parse_columns_param(binary()) :: {:ok, [String.t(), ...]} | {:error, term()}
   def parse_columns_param(columns) when is_binary(columns) do
     columns
     # Split by commas that are not inside quotes
     |> String.split(~r/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
-    |> Enum.reduce_while(MapSet.new([]), fn column, acc ->
+    |> Enum.reduce_while([], fn column, acc ->
       casted_column = remove_surrounding_quotes(column)
 
       if contains_unescaped_quote?(casted_column) do
@@ -38,7 +38,10 @@ defmodule Electric.Plug.Utils do
     end)
     |> then(fn result ->
       case result do
-        parsed_cols when is_map(parsed_cols) -> {:ok, parsed_cols}
+        [] -> {:error, "Must specify at least one column"}
+        # sort to keep selected columns identical
+        # TODO: convert output to MapSet?
+        parsed_cols when is_list(parsed_cols) -> {:ok, Enum.sort(parsed_cols)}
         {:error, reason} -> {:error, reason}
       end
     end)
