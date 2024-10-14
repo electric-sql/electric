@@ -21,7 +21,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
   setup do
     # Spawn a dummy process to serve as the black hole for the messages that
-    # ReplicationClient normally sends to ConnectionManager.
+    # ReplicationClient normally sends to Connection.Manager.
     pid =
       spawn_link(fn ->
         receive do
