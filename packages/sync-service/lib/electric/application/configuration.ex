@@ -7,7 +7,7 @@ defmodule Electric.Application.Configuration do
     replication_opts
     pool_opts
     inspector
-    child_specs
+    shape_cache_opts
   ]a
 
   @type t :: %__MODULE__{}
