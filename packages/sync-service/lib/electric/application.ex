@@ -38,9 +38,7 @@ defmodule Electric.Application do
         pool_size: config.pool_opts.size,
         types: PgInterop.Postgrex.Types
       ],
-      timeline_opts: [
-        persistent_kv: config.persistent_kv
-      ]
+      persistent_kv: config.persistent_kv
     ]
 
     # The root application supervisor starts the core global processes, including the HTTP

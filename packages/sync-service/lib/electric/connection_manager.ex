@@ -33,8 +33,8 @@ defmodule Electric.ConnectionManager do
       :replication_opts,
       # Database connection pool options.
       :pool_opts,
-      # Options specific to `Electric.Timeline`.
-      :timeline_opts,
+      # Application's persistent key-value storage reference.
+      :persistent_kv,
       # PID of the replication client.
       :replication_client_pid,
       # PID of the Postgres connection lock.
@@ -66,7 +66,7 @@ defmodule Electric.ConnectionManager do
           {:connection_opts, Keyword.t()}
           | {:replication_opts, Keyword.t()}
           | {:pool_opts, Keyword.t()}
-          | {:timeline_opts, Keyword.t()}
+          | {:persistent_kv, map()}
 
   @type options :: [option]
 
@@ -124,14 +124,14 @@ defmodule Electric.ConnectionManager do
 
     pool_opts = Keyword.fetch!(opts, :pool_opts)
 
-    timeline_opts = Keyword.fetch!(opts, :timeline_opts)
+    persistent_kv = Keyword.fetch!(opts, :persistent_kv)
 
     state =
       %State{
         connection_opts: connection_opts,
         replication_opts: replication_opts,
         pool_opts: pool_opts,
-        timeline_opts: timeline_opts,
+        persistent_kv: persistent_kv,
         pg_lock_acquired: false,
         backoff: {:backoff.init(1000, 10_000), nil}
       }
@@ -200,7 +200,7 @@ defmodule Electric.ConnectionManager do
         check_result =
           Electric.Timeline.check(
             {state.pg_system_identifier, state.pg_timeline_id},
-            state.timeline_opts
+            state.persistent_kv
           )
 
         {:ok, shapes_sup_pid} =
