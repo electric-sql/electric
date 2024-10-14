@@ -16,7 +16,7 @@ defmodule Electric.Postgres.ReplicationClient do
   @type step ::
           :disconnected
           | :connected
-          | :query_pg_version
+          | :query_pg_info
           | :create_publication
           | :create_slot
           | :set_display_setting
