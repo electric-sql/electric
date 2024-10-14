@@ -101,8 +101,14 @@ defmodule Electric.Plug.ServeShapePlug do
 
     def cast_columns(%Ecto.Changeset{} = changeset) do
       case fetch_field!(changeset, :columns) do
-        nil -> changeset
-        columns -> put_change(changeset, :columns, String.split(columns, ","))
+        nil ->
+          changeset
+
+        columns ->
+          case Electric.Plug.Utils.parse_columns_param(columns) do
+            {:ok, parsed_cols} -> put_change(changeset, :columns, parsed_cols)
+            {:error, reason} -> add_error(changeset, :columns, reason)
+          end
       end
     end
 
