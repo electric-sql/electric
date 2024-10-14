@@ -48,7 +48,11 @@ defmodule Electric.ConnectionManager do
       # Flag indicating whether the lock on the replication has been acquired.
       :pg_lock_acquired,
       # PostgreSQL server version
-      :pg_version
+      :pg_version,
+      # PostgreSQL system identifier
+      :pg_system_identifier,
+      # PostgreSQL timeline ID
+      :pg_timeline_id
     ]
   end
 
@@ -95,8 +99,8 @@ defmodule Electric.ConnectionManager do
     GenServer.cast(server, :exclusive_connection_lock_acquired)
   end
 
-  def pg_version_looked_up(server, pg_version) do
-    GenServer.cast(server, {:pg_version_looked_up, pg_version})
+  def pg_info_looked_up(server, pg_info) do
+    GenServer.cast(server, {:pg_info_looked_up, pg_info})
   end
 
   @impl true
@@ -196,7 +200,10 @@ defmodule Electric.ConnectionManager do
 
         # Now that we have a ShapeCache process running under Shapes.Supervisor, we can run the
         # timeline check.
-        Electric.Timeline.check(get_pg_timeline(pool_pid), state.timeline_opts)
+        Electric.Timeline.check(
+          {state.pg_system_identifier, state.pg_timeline_id},
+          state.timeline_opts
+        )
 
         # Everything is ready to start accepting and processing logical messages from Postgres.
         Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
@@ -259,8 +266,14 @@ defmodule Electric.ConnectionManager do
     {:noreply, %{state | pg_lock_acquired: true}, {:continue, :start_replication_client}}
   end
 
-  def handle_cast({:pg_version_looked_up, pg_version}, state) do
-    {:noreply, %{state | pg_version: pg_version}}
+  def handle_cast({:pg_info_looked_up, {server_version, system_identifier, timeline_id}}, state) do
+    {:noreply,
+     %{
+       state
+       | pg_version: server_version,
+         pg_system_identifier: system_identifier,
+         pg_timeline_id: timeline_id
+     }}
   end
 
   defp start_replication_client(connection_opts, replication_opts) do
@@ -445,21 +458,6 @@ defmodule Electric.ConnectionManager do
       end
 
     Keyword.put(connection_opts, :socket_options, tcp_opts)
-  end
-
-  defp get_pg_timeline(conn) do
-    %Postgrex.Result{rows: [[system_identifier, timeline_id]]} =
-      Postgrex.query!(
-        conn,
-        """
-        SELECT
-          (pg_control_system()).system_identifier,
-          (pg_control_checkpoint()).timeline_id
-        """,
-        []
-      )
-
-    {system_identifier, timeline_id}
   end
 
   defp lookup_log_collector_pid(shapes_supervisor) do
