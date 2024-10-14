@@ -125,7 +125,7 @@ defmodule Electric.Shapes.Shape do
           ]}}
 
       true ->
-        {:ok, columns_to_select}
+        {:ok, Enum.sort(columns_to_select)}
     end
   end
 

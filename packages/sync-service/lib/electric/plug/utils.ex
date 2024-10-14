@@ -15,14 +15,14 @@ defmodule Electric.Plug.Utils do
       {:error, "Invalid zero-length delimited identifier"}
       iex> Electric.Plug.Utils.parse_columns_param("id")
       {:ok, ["id"]}
-      iex> Electric.Plug.Utils.parse_columns_param("beta,alpha")
-      {:ok, ["alpha", "beta"]}
+      iex> Electric.Plug.Utils.parse_columns_param("id,name")
+      {:ok, ["id", "name"]}
       iex> Electric.Plug.Utils.parse_columns_param(~S|"PoT@To",PoTaTo|)
       {:ok, ["PoT@To", "potato"]}
       iex> Electric.Plug.Utils.parse_columns_param(~S|"PoTaTo,sunday",foo|)
       {:ok, ["PoTaTo,sunday", "foo"]}
-      iex> Electric.Plug.Utils.parse_columns_param(~S|\"fo\"\"o\",bar|)
-      {:ok, ["bar", ~S|fo"o|]}
+      iex> Electric.Plug.Utils.parse_columns_param(~S|"fo""o",bar|)
+      {:ok, [~S|fo"o|, "bar"]}
       iex> Electric.Plug.Utils.parse_columns_param(~S|"id,"name"|)
       {:error, ~S|Invalid unquoted identifier contains special characters: "id|}
   """
@@ -40,9 +40,8 @@ defmodule Electric.Plug.Utils do
     end)
     |> then(fn result ->
       case result do
-        # sort to keep selected columns identical
         # TODO: convert output to MapSet?
-        parsed_cols when is_list(parsed_cols) -> {:ok, Enum.sort(parsed_cols)}
+        parsed_cols when is_list(parsed_cols) -> {:ok, Enum.reverse(parsed_cols)}
         {:error, reason} -> {:error, reason}
       end
     end)

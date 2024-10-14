@@ -61,7 +61,7 @@ defmodule Electric.Postgres.Identifiers do
 
   defp unescape_quotes(string) do
     string
-    |> String.replace(~r/""/, "\"")
+    |> String.replace(~r/""/, ~S|"|)
   end
 
   defp valid_unquoted_identifier?(identifier) do
@@ -104,8 +104,7 @@ defmodule Electric.Postgres.Identifiers do
 
     truncated_ident =
       if String.length(ident) >= @namedatalen do
-        result = String.slice(downcased_ident, 0, @namedatalen)
-        result
+        String.slice(downcased_ident, 0, @namedatalen)
       else
         downcased_ident
       end
