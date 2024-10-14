@@ -1,9 +1,7 @@
 defmodule Electric.TimelineTest do
   use ExUnit.Case, async: true
-  alias Electric.Timeline
-  alias Support.Mock.ShapeCache
 
-  import Mox
+  alias Electric.Timeline
 
   describe "load_timeline/1" do
     @moduletag :tmp_dir
@@ -13,7 +11,7 @@ defmodule Electric.TimelineTest do
     end
 
     test "returns nil when no timeline is available", %{kv: kv} do
-      assert Timeline.load_timeline(persistent_kv: kv) == nil
+      assert Timeline.load_timeline(kv) == nil
     end
   end
 
@@ -21,13 +19,13 @@ defmodule Electric.TimelineTest do
     @moduletag :tmp_dir
 
     setup context do
-      %{opts: [persistent_kv: Electric.PersistentKV.Filesystem.new!(root: context.tmp_dir)]}
+      %{persistent_kv: Electric.PersistentKV.Filesystem.new!(root: context.tmp_dir)}
     end
 
-    test "stores the timeline", %{opts: opts} do
+    test "stores the timeline", %{persistent_kv: persistent_kv} do
       timeline = {1, 2}
-      Timeline.store_timeline(timeline, opts)
-      assert ^timeline = Timeline.load_timeline(opts)
+      Timeline.store_timeline(timeline, persistent_kv)
+      assert ^timeline = Timeline.load_timeline(persistent_kv)
     end
   end
 
@@ -37,60 +35,59 @@ defmodule Electric.TimelineTest do
     setup context do
       timeline = context[:electric_timeline]
       kv = Electric.PersistentKV.Filesystem.new!(root: context.tmp_dir)
-      opts = [persistent_kv: kv, shape_cache: {ShapeCache, []}]
 
       if timeline != nil do
-        Timeline.store_timeline(timeline, opts)
+        Timeline.store_timeline(timeline, kv)
       end
 
-      {:ok, [timeline: timeline, opts: opts]}
+      {:ok, [timeline: timeline, persistent_kv: kv]}
     end
 
     @tag electric_timeline: nil
-    test "stores the timeline if Electric has no timeline yet", %{opts: opts} do
-      assert Timeline.load_timeline(opts) == nil
+    test "stores the timeline if Electric has no timeline yet", %{persistent_kv: kv} do
+      assert Timeline.load_timeline(kv) == nil
 
       timeline = {2, 5}
 
-      assert :ok = Timeline.check(timeline, opts)
-      assert ^timeline = Timeline.load_timeline(opts)
+      assert :ok = Timeline.check(timeline, kv)
+      assert ^timeline = Timeline.load_timeline(kv)
     end
 
     @tag electric_timeline: {1, 2}
     test "proceeds without changes if Postgres' timeline matches Electric's timeline", %{
       timeline: timeline,
-      opts: opts
+      persistent_kv: kv
     } do
-      expect(ShapeCache, :clean_all_shapes, 0, fn _ -> :ok end)
-      assert ^timeline = Timeline.load_timeline(opts)
-      assert :ok = Timeline.check(timeline, opts)
-      assert ^timeline = Timeline.load_timeline(opts)
+      assert ^timeline = Timeline.load_timeline(kv)
+      assert :ok = Timeline.check(timeline, kv)
+      assert ^timeline = Timeline.load_timeline(kv)
     end
 
     @tag electric_timeline: {1, 3}
-    test "cleans all shapes on Point In Time Recovery (PITR)", %{
+    test "returns :timeline_changed on Point In Time Recovery (PITR)", %{
       timeline: timeline,
-      opts: opts
+      persistent_kv: kv
     } do
-      expect(ShapeCache, :clean_all_shapes, 1, fn _ -> :ok end)
-      assert ^timeline = Timeline.load_timeline(opts)
+      assert ^timeline = Timeline.load_timeline(kv)
 
       pg_timeline = {1, 2}
-      assert :ok = Timeline.check(pg_timeline, opts)
+      assert :timeline_changed = Timeline.check(pg_timeline, kv)
 
-      assert ^pg_timeline = Timeline.load_timeline(opts)
+      assert ^pg_timeline = Timeline.load_timeline(kv)
     end
 
     # TODO: add log output checks
 
     @tag electric_timeline: {1, 3}
-    test "cleans all shapes when Postgres DB changed", %{timeline: timeline, opts: opts} do
-      expect(ShapeCache, :clean_all_shapes, 1, fn _ -> :ok end)
-      assert ^timeline = Timeline.load_timeline(opts)
+    test "returns :timeline_changed when Postgres DB changed", %{
+      timeline: timeline,
+      persistent_kv: kv
+    } do
+      assert ^timeline = Timeline.load_timeline(kv)
 
       pg_timeline = {2, 3}
-      assert :ok = Timeline.check(pg_timeline, opts)
-      assert ^pg_timeline = Timeline.load_timeline(opts)
+      assert :timeline_changed = Timeline.check(pg_timeline, kv)
+      assert ^pg_timeline = Timeline.load_timeline(kv)
     end
   end
 end
