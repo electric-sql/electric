@@ -78,12 +78,31 @@ defmodule Electric.Replication.Eval.Runner do
     end
   end
 
-  defp try_apply(%Func{implementation: impl, applied_to_array?: applied_to_array?} = func, args) do
-    case {impl, applied_to_array?} do
-      {{module, fun}, false} -> apply(module, fun, args)
-      {fun, false} -> apply(fun, args)
-      {{module, fun}, true} -> Utils.deep_map(hd(args), &apply(module, fun, tl(args) ++ [&1]))
-      {fun, true} -> Utils.deep_map(hd(args), &apply(fun, tl(args) ++ [&1]))
+  defp try_apply(
+         %Func{implementation: impl, map_over_array_in_pos: map_over_array_in_pos} = func,
+         args
+       ) do
+    case {impl, map_over_array_in_pos} do
+      {{module, fun}, nil} ->
+        apply(module, fun, args)
+
+      {fun, nil} ->
+        apply(fun, args)
+
+      {{module, function}, 0} ->
+        Utils.deep_map(hd(args), &apply(module, function, [&1 | tl(args)]))
+
+      {function, 0} ->
+        Utils.deep_map(hd(args), &apply(function, [&1 | tl(args)]))
+
+      {{module, function}, pos} ->
+        Utils.deep_map(
+          Enum.at(args, pos),
+          &apply(module, function, List.replace_at(args, pos, &1))
+        )
+
+      {function, pos} ->
+        Utils.deep_map(Enum.at(args, pos), &apply(function, List.replace_at(args, pos, &1)))
     end
   rescue
     _ ->

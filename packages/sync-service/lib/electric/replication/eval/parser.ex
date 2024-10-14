@@ -26,7 +26,10 @@ defmodule Electric.Replication.Eval.Parser do
       :name,
       strict?: true,
       immutable?: true,
-      applied_to_array?: false,
+      # So this parameter is (1) internal for now, i.e. `defpostgres` in known functions cannot set it,
+      # and (2) is a bit of a hack. This allows us to specify that this function should be applied to each element of an array,
+      # without supporting essentially anonymous functions in our AST for an equivalent of `Enum.map/2`.
+      map_over_array_in_pos: nil,
       variadic_arg: nil,
       location: 0
     ]
@@ -544,8 +547,8 @@ defmodule Electric.Replication.Eval.Parser do
          {:ok, [lexpr, rexpr]} <- cast_implicit(args, [lexpr_type, {:array, rexpr_type}], env),
          {:ok, bool_array} <-
            concrete
-           |> from_concrete([rexpr, lexpr])
-           |> Map.put(:applied_to_array?, true)
+           |> from_concrete([lexpr, rexpr])
+           |> Map.put(:map_over_array_in_pos, 1)
            |> maybe_reduce() do
       {name, impl} =
         case expr.kind do
@@ -772,7 +775,7 @@ defmodule Electric.Replication.Eval.Parser do
            type: maybe_array_type(target_type),
            args: [arg],
            implementation: impl,
-           applied_to_array?: true,
+           map_over_array_in_pos: 0,
            name: "#{readable(type)}_to_#{readable(target_type)}"
          }}
 
@@ -854,7 +857,7 @@ defmodule Electric.Replication.Eval.Parser do
                args: [arg],
                implementation: impl,
                name: "#{from_type}_to_#{to_type}",
-               applied_to_array?: true
+               map_over_array_in_pos: 0
              }
              |> maybe_reduce()
              |> case do
@@ -995,27 +998,37 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   defp try_applying(
-         %Func{args: args, implementation: impl, applied_to_array?: applied_to_array?} = func
+         %Func{args: args, implementation: impl, map_over_array_in_pos: map_over_array_in_pos} =
+           func
        ) do
     value =
-      case {impl, applied_to_array?} do
-        {{module, function}, false} ->
+      case {impl, map_over_array_in_pos} do
+        {{module, function}, nil} ->
           apply(module, function, args)
 
-        {function, false} ->
+        {function, nil} ->
           apply(function, args)
 
-        {{module, function}, true} ->
-          Utils.deep_map(hd(args), &apply(module, function, tl(args) ++ [&1]))
+        {{module, function}, 0} ->
+          Utils.deep_map(hd(args), &apply(module, function, [&1 | tl(args)]))
 
-        {function, true} ->
-          Utils.deep_map(hd(args), &apply(function, tl(args) ++ [&1]))
+        {function, 0} ->
+          Utils.deep_map(hd(args), &apply(function, [&1 | tl(args)]))
+
+        {{module, function}, pos} ->
+          Utils.deep_map(
+            Enum.at(args, pos),
+            &apply(module, function, List.replace_at(args, pos, &1))
+          )
+
+        {function, pos} ->
+          Utils.deep_map(Enum.at(args, pos), &apply(function, List.replace_at(args, pos, &1)))
       end
 
     {:ok,
      %Const{
        value: value,
-       type: if(applied_to_array?, do: {:array, func.type}, else: func.type),
+       type: if(not is_nil(map_over_array_in_pos), do: {:array, func.type}, else: func.type),
        location: func.location
      }}
   rescue
