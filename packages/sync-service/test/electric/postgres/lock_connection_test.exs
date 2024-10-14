@@ -74,10 +74,10 @@ defmodule Electric.Postgres.LockConnectionTest do
   end
 
   defp assert_lock_acquired do
-    assert_receive {_, :lock_connection_acquired}
+    assert_receive {_, :exclusive_connection_lock_acquired}
   end
 
   defp refute_lock_acquired do
-    refute_receive {_, :lock_connection_acquired}, 1000
+    refute_receive {_, :exclusive_connection_lock_acquired}, 1000
   end
 end

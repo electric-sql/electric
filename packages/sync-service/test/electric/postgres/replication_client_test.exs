@@ -18,19 +18,34 @@ defmodule Electric.Postgres.ReplicationClientTest do
   @publication_name "test_electric_publication"
   @slot_name "test_electric_slot"
 
+  setup do
+    # Spawn a dummy process to serve as the black hole for the messages that
+    # ReplicationClient normally sends to ConnectionManager.
+    pid =
+      spawn_link(fn ->
+        receive do
+          _ -> :ok
+        end
+      end)
+
+    %{dummy_pid: pid}
+  end
+
   describe "ReplicationClient init" do
     setup [:with_unique_db, :with_basic_tables]
 
     test "creates an empty publication on startup if requested", %{
       db_config: config,
-      db_conn: conn
+      db_conn: conn,
+      dummy_pid: dummy_pid
     } do
       replication_opts = [
         publication_name: @publication_name,
         try_creating_publication?: true,
         slot_name: @slot_name,
         transaction_received: nil,
-        relation_received: nil
+        relation_received: nil,
+        connection_manager: dummy_pid
       ]
 
       assert {:ok, _} = ReplicationClient.start_link(config, replication_opts)
@@ -321,7 +336,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
     end
   end
 
-  test "correctly responds to a status update request message from PG" do
+  test "correctly responds to a status update request message from PG", ctx do
     pg_wal = lsn_to_wal("0/10")
 
     state =
@@ -330,7 +345,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
         relation_received: nil,
         publication_name: "",
         try_creating_publication?: false,
-        slot_name: ""
+        slot_name: "",
+        connection_manager: ctx.dummy_pid
       )
 
     # All offsets are 0+1 until we've processed a transaction and bumped `state.applied_wal`.
@@ -352,14 +368,15 @@ defmodule Electric.Postgres.ReplicationClientTest do
     :ok
   end
 
-  defp with_replication_opts(_) do
+  defp with_replication_opts(ctx) do
     %{
       replication_opts: [
         publication_name: @publication_name,
         try_creating_publication?: false,
         slot_name: @slot_name,
         transaction_received: {__MODULE__, :test_transaction_received, [self()]},
-        relation_received: {__MODULE__, :test_relation_received, [self()]}
+        relation_received: {__MODULE__, :test_relation_received, [self()]},
+        connection_manager: ctx.dummy_pid
       ]
     }
   end
