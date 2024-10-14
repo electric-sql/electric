@@ -17,6 +17,8 @@ defmodule Electric.Plug.Utils do
       {:ok, ["id"]}
       iex> Electric.Plug.Utils.parse_columns_param("beta,alpha")
       {:ok, ["alpha", "beta"]}
+      iex> Electric.Plug.Utils.parse_columns_param(~S|"PoT@To",PoTaTo|)
+      {:ok, ["PoT@To", "potato"]}
       iex> Electric.Plug.Utils.parse_columns_param(~S|"PoTaTo,sunday",foo|)
       {:ok, ["PoTaTo,sunday", "foo"]}
       iex> Electric.Plug.Utils.parse_columns_param(~S|\"fo\"\"o\",bar|)
@@ -34,7 +36,7 @@ defmodule Electric.Plug.Utils do
     # Split by commas that are not inside quotes
     |> String.split(~r/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
     |> Enum.reduce_while([], fn column, acc ->
-      casted_column = remove_surrounding_quotes(column)
+      casted_column = maybe_cast_quoted_identifier(column)
 
       cond do
         contains_unescaped_quote?(casted_column) ->
@@ -61,9 +63,11 @@ defmodule Electric.Plug.Utils do
     Regex.match?(~r/(?<!")"(?!")/, string)
   end
 
-  defp remove_surrounding_quotes(string) do
-    string
-    |> String.replace(~r/^"(.*)"$/, "\\1")
+  defp maybe_cast_quoted_identifier(string) do
+    if Regex.match?(~r/^"(.*)"$/, string),
+      do: String.replace(string, ~r/^"(.*)"$/, "\\1"),
+      # if identifier is not quoted, downcase it like Postgres would
+      else: Electric.Postgres.Identifiers.downcase(string)
   end
 
   defp unescape_quotes(string) do
