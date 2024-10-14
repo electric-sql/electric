@@ -1,7 +1,13 @@
 defmodule PgInterop.Array do
+  defguardp is_space(c) when c in [?\s, ?\t, ?\n, ?\r, ?\v, ?\f]
+
   @doc ~S"""
   Parse a Postgres string-serialized array into a list of strings, unwrapping the escapes. Parses nested arrays.
   If a casting function is provided, it will be applied to each element.
+
+  Parsing follows the same rules as the postgres parser, in particular:
+  1. at most 6 nesting levels are allowed,
+  2. arrays must be of uniform dimension, i.e. all sub-arrays must have the same number of elements if at the same depth.
 
   ## Examples
 
@@ -17,92 +23,183 @@ defmodule PgInterop.Array do
       iex> ~S|{"2023-06-15 11:18:05.372698+00",2023-06-15 11:18:05.372698+00}| |> parse(fn x -> {:ok, n, _} = DateTime.from_iso8601(x); n end)
       [~U[2023-06-15 11:18:05.372698Z], ~U[2023-06-15 11:18:05.372698Z]]
 
-      iex> ~s|{'foo', 'bar{}', "tableName",'{baz,quux}', '}},,,{{',id, ",,\\"{}"}| |> parse()
-      ["'foo'", "'bar{}'", "tableName", "'{baz,quux}'", "'}},,,{{'", "id", ",,\"{}"]
+      iex> ~s|{ "1" , 3  ,   "2" ,    3 3  }| |> parse()
+      ["1", "3", "2", "3 3"]
 
-      iex> ~s|{{1},{2},{3}}| |> parse(&String.to_integer/1)
-      [[1], [2], [3]]
+      iex> ~s|{ {{1, 1}, { "2"   , 2 }} ,{{"3", 3}, {4, 4} }, {  {5, 5},{6, 6}  }}| |> parse(&String.to_integer/1)
+      [[[1, 1], [2, 2]], [[3, 3], [4, 4]], [[5, 5], [6, 6]]]
 
-      iex> ~s|{1,2,{3}}| |> parse(&String.to_integer/1)
-      ** (RuntimeError) Invalid array syntax at "{3}}"
+      iex> ~s|{ "1" ,   "2" ,    3 3   , , 4}| |> parse()
+      ** (RuntimeError) Unexpected ',' character
 
-      iex> ~S|{"(\"2023-06-15 11:18:05.372698+00\",)"}}| |> parse()
-      ** (RuntimeError) Invalid array syntax at "}"
+      iex> ~s|{ "1" , 3,  "2" ,    3 3   , }| |> parse()
+      ** (RuntimeError) Unexpected '}' character
+
+      iex> ~s|{ {1} ,{   2 }, {3  }}  }| |> parse()
+      ** (RuntimeError) Invalid array syntax
+
+      iex> ~s|{{{1} ,{   2 }, {3  }} | |> parse()
+      ** (RuntimeError) Unexpected end of input
+
+      iex> ~s|{"}| |> parse()
+      ** (RuntimeError) Unexpected end of input
+
+      iex> ~s|{{1},2,{3}}| |> parse(&String.to_integer/1)
+      ** (RuntimeError) Unexpected array element
+
+      iex> ~s|{{{{{{{1}}}}}}}| |> parse()
+      ** (RuntimeError) number of dimensions (7) exceeds maximum of 6
+
+      iex> ~s|{ {1} ,{   {2} }, {3  }}| |> parse()
+      ** (RuntimeError) Inconsistent array dimensions
+
+      iex> ~s|{ {{1}} ,{2}, {3  }}| |> parse()
+      ** (RuntimeError) Inconsistent array dimensions
   """
-  def parse(string, casting_fun \\ & &1) do
-    case parse_with_tail(string, casting_fun) do
-      {result, ""} -> result
-      {_, rest} -> raise("Invalid array syntax at #{inspect(rest)}")
+  def parse(str, casting_fun \\ & &1)
+
+  def parse("{}", _), do: []
+
+  def parse(str, casting_fun) do
+    case parse_nested_arrays(str, casting_fun, %{cur_dim: 1}) do
+      {result, "", _} ->
+        result
+
+      {result, rest, _} ->
+        if String.match?(rest, ~r/^\s$/) do
+          result
+        else
+          raise "Invalid array syntax"
+        end
     end
   end
 
-  defp parse_with_tail("{}" <> str, _), do: {[], str}
-  defp parse_with_tail("{" <> str, casting_fun), do: parse_pg_array_elem(str, casting_fun)
-  defp parse_with_tail("," <> str, casting_fun), do: parse_pg_array_elem(str, casting_fun)
-  defp parse_with_tail("}" <> str, _), do: {[], str}
-  defp parse_with_tail(str, _), do: {[], str}
+  defp parse_nested_arrays(<<c>> <> rest, fun, dim_info) when is_space(c),
+    do: parse_nested_arrays(rest, fun, dim_info)
 
-  # skip whitespace
-  defp parse_pg_array_elem(<<space>> <> str, casting_fun) when space in [?\s, ?\t, ?\n] do
-    parse_pg_array_elem(str, casting_fun)
+  defp parse_nested_arrays(_, _, %{cur_dim: dim}) when dim > 6,
+    do: raise("number of dimensions (#{dim}) exceeds maximum of 6")
+
+  defp parse_nested_arrays(_, _, %{cur_dim: dim, max_dim: max_dim}) when dim > max_dim,
+    do: raise("Inconsistent array dimensions")
+
+  defp parse_nested_arrays("{" <> rest, fun, %{cur_dim: dim} = dim_info) do
+    # we're in an array, need to parse all the elements at this level
+    case String.trim_leading(rest) do
+      "" ->
+        raise "Unexpected end of input"
+
+      "{" <> _ = rest ->
+        parse_all_nested_arrays(rest, fun, [], 0, %{dim_info | cur_dim: dim + 1})
+
+      _ ->
+        # If we know max dimension but see a non-array element, before that, we know it's inconsistent
+        if is_map_key(dim_info, :max_dim) and dim_info.max_dim > dim do
+          raise "Inconsistent array dimensions"
+        end
+
+        {result, rest, dim_size} = parse_all_elements(rest, fun)
+
+        case Map.fetch(dim_info, dim) do
+          {:ok, ^dim_size} ->
+            {result, rest, dim_info}
+
+          :error ->
+            {result, rest, Map.put(dim_info, dim, dim_size)}
+
+          {:ok, _} ->
+            raise "Inconsistent array dimensions"
+        end
+    end
   end
 
-  # quoted element, scan until the next non-escaped quote
-  defp parse_pg_array_elem(<<q>> <> str, casting_fun) when q in [?", ?'] do
-    {elem, rest} = scan_until_quote(str, q, put_single_quote("", q))
-    {result, rest} = parse_with_tail(rest, casting_fun)
-    {[casting_fun.(elem) | result], rest}
+  defp parse_nested_arrays(_, _, _), do: raise("Unexpected array element")
+
+  defp parse_all_nested_arrays(str, fun, acc, dim_size, %{cur_dim: dim} = dim_info) do
+    {result, rest, dim_info} = parse_nested_arrays(str, fun, dim_info)
+
+    # First time we reach this branch is when we followed all open braces at the start
+    # of the string, so we know the maximum dimension of the array
+    dim_info = Map.put_new(dim_info, :max_dim, dim)
+
+    case scan_until_next_boundary(rest) do
+      # If next boundary is a comma, we're at the same depth, so keep parsing
+      {?,, rest} ->
+        parse_all_nested_arrays(rest, fun, [result | acc], dim_size + 1, dim_info)
+
+      # If next boundary is a closing brace, we're done with this depth, so update what we can
+      {?}, rest} ->
+        dim_size = dim_size + 1
+        dim_info = %{dim_info | cur_dim: dim - 1}
+
+        case Map.fetch(dim_info, dim - 1) do
+          {:ok, ^dim_size} ->
+            {Enum.reverse([result | acc]), rest, dim_info}
+
+          :error ->
+            {Enum.reverse([result | acc]), rest, Map.put(dim_info, dim - 1, dim_size)}
+
+          {:ok, _} ->
+            raise "Inconsistent array dimensions"
+        end
+    end
   end
 
-  # a nested array, parse that
-  defp parse_pg_array_elem(<<q>> <> str, casting_fun) when q in [?{] do
-    {elem, rest} = parse_with_tail(<<q>> <> str, casting_fun)
-    {result, rest} = parse_with_tail(rest, casting_fun)
-    {[elem | result], rest}
+  defp parse_all_elements(str, fun, acc \\ [], dim \\ 0)
+  defp parse_all_elements("", _, _, _), do: raise("Unexpected end of input")
+
+  defp parse_all_elements(<<c>> <> rest, fun, acc, dim) when is_space(c),
+    do: parse_all_elements(rest, fun, acc, dim)
+
+  defp parse_all_elements(str, fun, acc, dim) do
+    {type, {elem, rest}} = scan_next_element(str)
+
+    case scan_until_next_boundary(rest) do
+      {?,, rest} -> parse_all_elements(rest, fun, [apply_fun(type, elem, fun) | acc], dim + 1)
+      {?}, rest} -> {Enum.reverse([apply_fun(type, elem, fun) | acc]), rest, dim + 1}
+    end
   end
 
-  # regular identifier, parse it whole until the next comma or end of the array
-  defp parse_pg_array_elem(str, casting_fun) do
-    {elem, rest} = scan_until_comma_or_end(str, "")
-    {result, rest} = parse_with_tail(rest, casting_fun)
-    value = if(String.downcase(elem) == "null", do: nil, else: casting_fun.(elem))
-    {[value | result], rest}
-  end
+  defp scan_next_element(<<?{>> <> _), do: raise("Unexpected '{' character")
+  defp scan_next_element(<<?">> <> rest), do: {:quoted, scan_until_quote(rest, "")}
+  defp scan_next_element(rest), do: {:unquoted, scan_until_comma_or_end(rest, "", "")}
 
-  # closing quote, return
-  defp scan_until_quote(<<q>> <> rest, q, acc) do
-    {put_single_quote(acc, q), rest}
-  end
+  defp scan_until_quote("", _), do: raise("Unexpected end of input")
+  defp scan_until_quote(<<?">> <> rest, acc), do: {acc, rest}
+  defp scan_until_quote(~S'\"' <> str, acc), do: scan_until_quote(str, acc <> ~S'"')
+  defp scan_until_quote(~S'\\' <> str, acc), do: scan_until_quote(str, acc <> ~S'\\')
+  defp scan_until_quote(<<c>> <> str, acc), do: scan_until_quote(str, acc <> <<c>>)
 
-  # escaped quote, keep going
-  defp scan_until_quote(<<?\\, q>> <> str, q, acc) do
-    scan_until_quote(str, q, acc <> <<q>>)
-  end
+  defp scan_until_comma_or_end("", _, _), do: raise("Unexpected end of input")
 
-  # escaped backslash, keep going
-  defp scan_until_quote(<<?\\, ?\\>> <> str, q, acc) do
-    scan_until_quote(str, q, acc <> <<?\\>>)
-  end
+  defp scan_until_comma_or_end(<<c>> <> _, "", _) when c in [?,, ?}],
+    do: raise("Unexpected '#{[c]}' character")
 
-  # regular character, keep going
-  defp scan_until_quote(<<c>> <> str, q, acc) do
-    scan_until_quote(str, q, acc <> <<c>>)
-  end
+  defp scan_until_comma_or_end("}" <> _ = rest, acc, _acc_whitespace), do: {acc, rest}
+  defp scan_until_comma_or_end(<<?,>> <> _ = str, acc, _acc_whitespace), do: {acc, str}
 
-  defp scan_until_comma_or_end("}" <> _ = rest, acc) do
-    {acc, rest}
-  end
+  defp scan_until_comma_or_end(<<c>> <> str, "", "") when is_space(c),
+    do: scan_until_comma_or_end(str, "", "")
 
-  defp scan_until_comma_or_end(<<?,>> <> _ = str, acc) do
-    {acc, str}
-  end
+  defp scan_until_comma_or_end(<<c>> <> str, acc, acc_whitespace) when is_space(c),
+    do: scan_until_comma_or_end(str, acc, acc_whitespace <> <<c>>)
 
-  defp scan_until_comma_or_end(<<c>> <> str, acc) do
-    scan_until_comma_or_end(str, acc <> <<c>>)
-  end
+  defp scan_until_comma_or_end(<<c>> <> str, acc, acc_whitespace),
+    do: scan_until_comma_or_end(str, acc <> acc_whitespace <> <<c>>, "")
 
-  defp put_single_quote(str, ?"), do: str
-  defp put_single_quote(str, ?'), do: str <> <<?'>>
+  defp scan_until_next_boundary(""), do: raise("Unexpected end of input")
+  defp scan_until_next_boundary(<<c>> <> rest) when c in [?,, ?}], do: {c, rest}
+
+  defp scan_until_next_boundary(<<c>> <> rest) when is_space(c),
+    do: scan_until_next_boundary(rest)
+
+  defp scan_until_next_boundary(<<c>> <> _), do: raise("Unexpected '#{[c]}' character")
+
+  defp apply_fun(:quoted, elem, fun), do: fun.(elem)
+
+  defp apply_fun(:unquoted, elem, fun) do
+    if String.downcase(elem) == "null", do: nil, else: fun.(elem)
+  end
 
   @doc ~S"""
   Serialize a list of strings into a postgres string-serialized array into a list of strings, wrapping the contents
