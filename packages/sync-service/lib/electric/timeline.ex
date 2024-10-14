@@ -20,44 +20,44 @@ defmodule Electric.Timeline do
   If the timelines differ, that indicates that a Point In Time Recovery (PITR) has occurred and all shapes must be cleaned.
   If we fail to fetch timeline information, we also clean all shapes for safety as we can't be sure that Postgres and Electric are on the same timeline.
   """
-  @spec check(timeline(), keyword()) :: :ok | :timeline_changed
-  def check(pg_timeline, opts) do
-    electric_timeline = load_timeline(opts)
-    verify_timeline(pg_timeline, electric_timeline, opts)
+  @spec check(timeline(), map()) :: :ok | :timeline_changed
+  def check(pg_timeline, persistent_kv) do
+    electric_timeline = load_timeline(persistent_kv)
+    verify_timeline(pg_timeline, electric_timeline, persistent_kv)
   end
 
-  @spec verify_timeline(timeline(), timeline(), keyword()) :: :ok
+  @spec verify_timeline(timeline(), timeline(), map()) :: :ok
   defp verify_timeline({pg_id, timeline_id} = timeline, timeline, _) do
     Logger.info("Connected to Postgres #{pg_id} and timeline #{timeline_id}")
     :ok
   end
 
-  defp verify_timeline({pg_id, timeline_id} = timeline, nil, opts) do
+  defp verify_timeline({pg_id, timeline_id} = timeline, nil, persistent_kv) do
     Logger.info("No previous timeline detected.")
     Logger.info("Connected to Postgres #{pg_id} and timeline #{timeline_id}")
-    store_timeline(timeline, opts)
+    store_timeline(timeline, persistent_kv)
   end
 
-  defp verify_timeline({pg_id, _} = timeline, {electric_pg_id, _}, opts)
+  defp verify_timeline({pg_id, _} = timeline, {electric_pg_id, _}, persistent_kv)
        when pg_id != electric_pg_id do
     Logger.warning(
       "Detected different Postgres DB, with ID: #{pg_id}. Old Postgres DB had ID #{electric_pg_id}. Will purge all shapes."
     )
 
-    :ok = store_timeline(timeline, opts)
+    :ok = store_timeline(timeline, persistent_kv)
     :timeline_changed
   end
 
-  defp verify_timeline({_, timeline_id} = timeline, _, opts) do
+  defp verify_timeline({_, timeline_id} = timeline, _, persistent_kv) do
     Logger.warning("Detected PITR to timeline #{timeline_id}; will purge all shapes.")
-    :ok = store_timeline(timeline, opts)
+    :ok = store_timeline(timeline, persistent_kv)
     :timeline_changed
   end
 
   # Loads the PG ID and timeline ID from persistent storage
-  @spec load_timeline(keyword()) :: timeline()
-  def load_timeline(opts) do
-    kv = make_serialized_kv(opts)
+  @spec load_timeline(map()) :: timeline()
+  def load_timeline(persistent_kv) do
+    kv = make_serialized_kv(persistent_kv)
 
     case PersistentKV.get(kv, @timeline_key) do
       {:ok, [pg_id, timeline_id]} ->
@@ -72,14 +72,13 @@ defmodule Electric.Timeline do
     end
   end
 
-  def store_timeline({pg_id, timeline_id}, opts) do
-    kv = make_serialized_kv(opts)
+  def store_timeline({pg_id, timeline_id}, persistent_kv) do
+    kv = make_serialized_kv(persistent_kv)
     :ok = PersistentKV.set(kv, @timeline_key, [pg_id, timeline_id])
   end
 
-  defp make_serialized_kv(opts) do
-    kv_backend = Keyword.fetch!(opts, :persistent_kv)
+  defp make_serialized_kv(persistent_kv) do
     # defaults to using Jason encoder and decoder
-    PersistentKV.Serialized.new!(backend: kv_backend)
+    PersistentKV.Serialized.new!(backend: persistent_kv)
   end
 end
