@@ -33,10 +33,8 @@ defmodule Electric.TenantManager do
   Creates a new tenant for the provided database URL.
   """
   @spec create_tenant(String.t(), Keyword.t(), Keyword.t()) ::
-          :ok | {:error, String.t()}
+          :ok | {:error, atom()}
   def create_tenant(tenant_id, connection_opts, opts \\ []) do
-    server = Keyword.get(opts, :tenant_manager, __MODULE__)
-
     # {:ok, database_url_config} = Electric.Config.parse_postgresql_uri(db_url)
     # connection_opts = [ipv6: db_use_ipv6] ++ database_url_config
 
@@ -102,10 +100,37 @@ defmodule Electric.TenantManager do
     ]
 
     # Store the tenant in the tenant manager
+    store_tenant(tenant, opts)
+  end
+
+  @doc """
+  Stores the provided tenant in the tenant manager.
+  """
+  @spec store_tenant(Keyword.t(), Keyword.t()) :: :ok | {:error, atom()}
+  def store_tenant(tenant, opts \\ []) do
+    server = Keyword.get(opts, :tenant_manager, __MODULE__)
+
     case GenServer.call(server, {:store_tenant, tenant}) do
       :tenant_already_exists -> {:error, :tenant_already_exists}
       :db_already_in_use -> {:error, :db_already_in_use}
       :ok -> :ok
+    end
+  end
+
+  @doc """
+  Deletes a tenant by its ID.
+  """
+  @spec delete_tenant(String.t(), Keyword.t()) :: :ok
+  def delete_tenant(tenant_id, opts \\ []) do
+    server = Keyword.get(opts, :tenant_manager, __MODULE__)
+
+    case GenServer.call(server, {:get_tenant, tenant_id}) do
+      {:ok, tenant} ->
+        pg_id = Access.fetch!(tenant, :pg_id)
+        GenServer.call(server, {:delete_tenant, tenant_id, pg_id})
+
+      {:error, :not_found} ->
+        :ok
     end
   end
 
@@ -161,5 +186,10 @@ defmodule Electric.TenantManager do
     else
       {:reply, {:error, :not_found}, state}
     end
+  end
+
+  @impl GenServer
+  def handle_call({:delete_tenant, tenant_id, pg_id}, _from, %{tenants: tenants, dbs: dbs}) do
+    {:reply, :ok, %{tenants: Map.delete(tenants, tenant_id), dbs: MapSet.delete(dbs, pg_id)}}
   end
 end
