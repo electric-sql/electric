@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 0.6.3
+
+### Patch Changes
+
+- 25c437f: Implement `columns` query parameter for `GET v1/shapes` API to allow filtering rows for a subset of table columns.
+
 ## 0.6.2
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 0.7.3
+
+### Patch Changes
+
+- b9db6ca: Add LOG_LEVEL configuration option.
+- 25c437f: Implement `columns` query parameter for `GET v1/shapes` API to allow filtering rows for a subset of table columns.
+- 2bf933c: Obfuscate database password in the process memory to prevent it from accidentally getting logged in cleartext.
+
 ## 0.7.2
 
 ### Patch Changes
