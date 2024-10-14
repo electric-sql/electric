@@ -71,9 +71,8 @@ defmodule Electric.Shapes.Querying do
     |> Enum.map(& &1.name)
   end
 
-  defp get_column_names(table_info, root_table, selected_columns) do
-    get_column_names(table_info, root_table, nil)
-    |> Enum.filter(&(&1 in selected_columns))
+  defp get_column_names(_table_info, _root_table, selected_columns) do
+    selected_columns
   end
 
   defp build_headers_part(root_table) do
