@@ -11,6 +11,8 @@ defmodule Electric.Plug.Utils do
   ## Examples
       iex> Electric.Plug.Utils.parse_columns_param("")
       {:error, "Must specify at least one column"}
+      iex> Electric.Plug.Utils.parse_columns_param("foo,")
+      {:error, "Invalid empty column provided"}
       iex> Electric.Plug.Utils.parse_columns_param("id")
       {:ok, ["id"]}
       iex> Electric.Plug.Utils.parse_columns_param("beta,alpha")
@@ -23,6 +25,10 @@ defmodule Electric.Plug.Utils do
       {:error, ~S|Invalid column, unmatched quote: "id|}
   """
   @spec parse_columns_param(binary()) :: {:ok, [String.t(), ...]} | {:error, term()}
+  def parse_columns_param("") do
+    {:error, "Must specify at least one column"}
+  end
+
   def parse_columns_param(columns) when is_binary(columns) do
     columns
     # Split by commas that are not inside quotes
@@ -30,15 +36,19 @@ defmodule Electric.Plug.Utils do
     |> Enum.reduce_while([], fn column, acc ->
       casted_column = remove_surrounding_quotes(column)
 
-      if contains_unescaped_quote?(casted_column) do
-        {:halt, {:error, "Invalid column, unmatched quote: #{casted_column}"}}
-      else
-        {:cont, acc |> MapSet.put(unescape_quotes(casted_column))}
+      cond do
+        contains_unescaped_quote?(casted_column) ->
+          {:halt, {:error, "Invalid column, unmatched quote: #{casted_column}"}}
+
+        String.trim(casted_column) == "" ->
+          {:halt, {:error, "Invalid empty column provided"}}
+
+        true ->
+          {:cont, [unescape_quotes(casted_column) | acc]}
       end
     end)
     |> then(fn result ->
       case result do
-        [] -> {:error, "Must specify at least one column"}
         # sort to keep selected columns identical
         # TODO: convert output to MapSet?
         parsed_cols when is_list(parsed_cols) -> {:ok, Enum.sort(parsed_cols)}
