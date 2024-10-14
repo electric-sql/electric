@@ -314,7 +314,8 @@ defmodule Electric.ConnectionManager do
     #
     # See https://github.com/electric-sql/electric/issues/1554
     Postgrex.start_link(
-      [backoff_type: :exp, max_restarts: 3, max_seconds: 5] ++ pool_opts ++ connection_opts
+      [backoff_type: :exp, max_restarts: 3, max_seconds: 5] ++
+        pool_opts ++ Electric.Utils.deobfuscate_password(connection_opts)
     )
   end
 
