@@ -173,7 +173,7 @@ defmodule Electric.Client do
         }
   @type schema :: %{String.t() => column()}
   @type message :: ControlMessage.t() | ChangeMessage.t()
-  @type param :: :offset | :update_mode | :shape_id | :live | :where
+  @type param :: :offset | :update_mode | :shape_id | :live | :where | :cursor
   @type params :: %{param() => String.t()}
   @type table_name :: String.t()
   @type client_option :: unquote(NimbleOptions.option_typespec(@client_schema))
