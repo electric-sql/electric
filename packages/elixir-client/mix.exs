@@ -66,7 +66,8 @@ defmodule Electric.Client.MixProject do
       links: %{
         "Electric SQL" => "https://electric-sql.com"
       },
-      licenses: ["Apache-2.0"]
+      licenses: ["Apache-2.0"],
+      files: ~w(lib .formatter.exs mix.exs README.md LICENSE package.json)
     ]
   end
 
