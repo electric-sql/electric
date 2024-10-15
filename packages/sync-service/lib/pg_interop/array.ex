@@ -5,7 +5,7 @@ defmodule PgInterop.Array do
   Parse a Postgres string-serialized array into a list of strings, unwrapping the escapes. Parses nested arrays.
   If a casting function is provided, it will be applied to each element.
 
-  Parsing follows SOME ofthe same rules as the postgres parser, in particular:
+  Parsing follows SOME of the same rules as the postgres parser, in particular:
   1. at most 6 nesting levels are allowed,
   2. arrays must be of uniform dimension, i.e. all sub-arrays must have the same number of elements if at the same depth.
 
