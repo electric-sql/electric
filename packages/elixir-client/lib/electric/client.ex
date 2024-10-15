@@ -173,7 +173,8 @@ defmodule Electric.Client do
           optional(:length) => non_neg_integer()
         }
   @type schema :: %{String.t() => column()}
-  @type message :: Message.ControlMessage.t() | Message.ChangeMessage.t()
+  @type message ::
+          Message.ControlMessage.t() | Message.ChangeMessage.t() | Message.ResumeMessage.t()
   @type param :: :offset | :update_mode | :shape_id | :live | :where | :cursor
   @type params :: %{param() => String.t()}
   @type table_name :: String.t()
