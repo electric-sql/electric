@@ -9,13 +9,11 @@ defmodule Electric.Client.ValueMapper do
   of the `foo` table from the [Electric
   Quickstart](https://electric-sql.com/docs/quickstart) is
 
-  ``` elixir
-  %{
-    id: %{type: "int4", pk_index: 0, not_null: true},
-    name: %{type: "varchar", max_length: 255},
-    value: %{type: "float8"}
-  }
-  ```
+      %{
+        id: %{type: "int4", pk_index: 0, not_null: true},
+        name: %{type: "varchar", max_length: 255},
+        value: %{type: "float8"}
+      }
 
   The `for_schema/2` function receives this schema as the first argument and it
   must return a 1-arity function that will map the value structs received from
@@ -23,33 +21,31 @@ defmodule Electric.Client.ValueMapper do
 
   E.g
 
-  ```elixir
-  # the schema for the `foo` table
-  schema = %{
-    id: %{type: "int4", pk_index: 0, not_null: true},
-    name: %{type: "varchar", max_length: 255},
-    value: %{type: "float8"}
-  }
+      # the schema for the `foo` table
+      schema = %{
+        id: %{type: "int4", pk_index: 0, not_null: true},
+        name: %{type: "varchar", max_length: 255},
+        value: %{type: "float8"}
+      }
 
-  # get the mapper function for this schema
-  mapper_fun = Electric.Client.ValueMapper.for_schema(schema, opts = [])
+      # get the mapper function for this schema
+      mapper_fun = Electric.Client.ValueMapper.for_schema(schema, opts = [])
 
-  value = %{
-    "id" => "1",
-    "name" => "James",
-    "value" => "45.6"
-  }
+      value = %{
+        "id" => "1",
+        "name" => "James",
+        "value" => "45.6"
+      }
 
-  mapper_fun.(value)
+      mapper_fun.(value)
 
-  # the mapping parses the integer and float values to their respective
-  # Elixir/Erlang types.
-  %{
-    "id" => 1,
-    "name" => "James",
-    "value" => 45.6
-  }
-  ```
+      # the mapping parses the integer and float values to their respective
+      # Elixir/Erlang types.
+      %{
+        "id" => 1,
+        "name" => "James",
+        "value" => 45.6
+      }
 
   The current implementation only handles integer and float values. Every other
   column is left as a binary.

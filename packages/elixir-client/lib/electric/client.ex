@@ -18,65 +18,55 @@ defmodule Electric.Client do
 
   Create a simple script that will subscribe to events from the `foo` table you created as part of the [Quickstart](#quickstart).
 
-  ``` elixir
-  # electric.ex
-  Mix.install([
-    :electric_client
-  ])
+      # electric.ex
+      Mix.install([
+        :electric_client
+      ])
 
-  {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
-  # You can create a stream from a table name or a Shape defined using
-  # `ShapeDefinition.new/2`
-  stream = Electric.Client.stream(client, "foo")
+      {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
+      # You can create a stream from a table name or a Shape defined using
+      # `ShapeDefinition.new/2`
+      stream = Electric.Client.stream(client, "foo")
 
-  for msg <- stream do
-    IO.inspect(msg, pretty: true, syntax_colors: IO.ANSI.syntax_colors())
-  end
-  ```
+      for msg <- stream do
+        IO.inspect(msg, pretty: true, syntax_colors: IO.ANSI.syntax_colors())
+      end
 
   Then run it:
 
-  ```sh
-  elixir electric.ex
-  ```
+      elixir electric.ex
 
   In a separate terminal window, connect to the Postgres database:
 
-  ```sh
-  psql "postgresql://postgres:password@localhost:54321/electric"
-  ```
+      psql "postgresql://postgres:password@localhost:54321/electric"
 
   Now any modifications you make to the data in the `foo` table will appear
   as messages in the elixir process.
 
-  ```sql
-  INSERT INTO foo (name, value) VALUES
-      ('josevalim', 4545),
-      ('eksperimental', 966),
-      ('lexmag', 677),
-      ('whatyouhide', 598),
-      ('ericmj', 583),
-      ('alco', 377);
+      INSERT INTO foo (name, value) VALUES
+          ('josevalim', 4545),
+          ('eksperimental', 966),
+          ('lexmag', 677),
+          ('whatyouhide', 598),
+          ('ericmj', 583),
+          ('alco', 377);
 
-  UPDATE foo SET value = value + 1;
-  ```
+      UPDATE foo SET value = value + 1;
 
   ### Filtering Using WHERE clauses
 
   You can subscribe to subsets of the data in your table using [`where` clauses](https://electric-sql.com/docs/guides/shapes#where-clause).
 
 
-  ``` elixir
-  {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
+      {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
 
-  shape = Electric.Client.ShapeDefinition.new("foo", where: "name ILIKE 'a%'")
+      shape = Electric.Client.ShapeDefinition.new("foo", where: "name ILIKE 'a%'")
 
-  stream = Electric.Client.stream(client, shape)
+      stream = Electric.Client.stream(client, shape)
 
-  for msg <- stream do
-    # you will now only receive events for database rows matching the `where` clause
-  end
-  ```
+      for msg <- stream do
+        # you will now only receive events for database rows matching the `where` clause
+      end
 
   ## Configuration
 
@@ -87,44 +77,42 @@ defmodule Electric.Client do
 
   If you have [Ecto](https://hexdocs.pm/ecto) installed then you can define you Shapes using Ecto queries:
 
-  ``` elixir
-  # ecto.ex
-  Mix.install([
-    :ecto_sql,
-    :electric_client
-  ])
+      # ecto.ex
+      Mix.install([
+        :ecto_sql,
+        :electric_client
+      ])
 
-  import Ecto.Query, only: [from: 2]
-  import Ecto.Query.API, only: [ilike: 2]
+      import Ecto.Query, only: [from: 2]
+      import Ecto.Query.API, only: [ilike: 2]
 
-  defmodule Foo do
-    use Ecto.Schema
+      defmodule Foo do
+        use Ecto.Schema
 
-    schema "foo" do
-      field :name, :string
-      field :value, :float
-    end
-  end
+        schema "foo" do
+          field :name, :string
+          field :value, :float
+        end
+      end
 
-  {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
+      {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
 
-  # Replace the table or `ShapeDefinition` with an `Ecto` query and set
-  # `update_mode` to `:full` to receive full rows for update messages.
-  #
-  # The normal `update_mode: :modified` setting will only send the changed
-  # columns, so we'd end up with partial `%Foo{}` instances.
-  stream =
-    Electric.Client.stream(
-      client,
-      from(f in Foo, where: ilike(f.name, "a%")),
-      update_mode: :full
-    )
+      # Replace the table or `ShapeDefinition` with an `Ecto` query and set
+      # `update_mode` to `:full` to receive full rows for update messages.
+      #
+      # The normal `update_mode: :modified` setting will only send the changed
+      # columns, so we'd end up with partial `%Foo{}` instances.
+      stream =
+        Electric.Client.stream(
+          client,
+          from(f in Foo, where: ilike(f.name, "a%")),
+          update_mode: :full
+        )
 
-  for %{headers: %{operation: operation}, value: value} <- stream do
-    # The message `value` will now be a `%Foo{}` struct 
-    IO.inspect([{operation, value}], pretty: true, syntax_colors: IO.ANSI.syntax_colors())
-  end
-  ```
+      for %{headers: %{operation: operation}, value: value} <- stream do
+        # The message `value` will now be a `%Foo{}` struct 
+        IO.inspect([{operation, value}], pretty: true, syntax_colors: IO.ANSI.syntax_colors())
+      end
 
   ## Custom Values
 
