@@ -3,6 +3,67 @@ defmodule Electric.Replication.Eval.Lookups do
   alias Electric.Replication.Eval.Env
 
   @doc """
+  Given a list of types, get a candidate type that best represents the union of all types.
+
+  Algorithm implements Postgres type resolution for `UNION`, `CASE`, and related constructs, like
+  `ARRAY[]` constructor syntax. They are outlined in
+  [documentation](https://www.postgresql.org/docs/current/typeconv-union-case.html).
+
+  1. If all inputs are of the same type, and it is not unknown, resolve as that type.
+  2. If any input is of a domain type, treat it as being of the domain's base type for all subsequent steps.
+  3. If all inputs are of type unknown, resolve as type text (the preferred type of the string category).
+     Otherwise, unknown inputs are ignored for the purposes of the remaining rules.
+  4. If the non-unknown inputs are not all of the same type category, fail.
+  5. Select the first non-unknown input type as the candidate type, then consider each other non-unknown input type, left to right.
+     If the candidate type can be implicitly converted to the other type but not vice-versa, select the other type as the new
+     candidate type. Then continue considering the remaining inputs.
+     If, at any stage of this process, a preferred type is selected, stop considering additional inputs.
+  6. Convert all inputs to the final candidate type. Fail if there is not an implicit conversion from a given input type to the candidate type.
+  """
+  def pick_union_type(args, env) do
+    Enum.reduce_while(args, {:ok, :unknown}, fn
+      # Skip unknowns
+      x, state when (is_map_key(x, :type) and x.type == :unknown) or not is_map_key(x, :type) ->
+        {:cont, state}
+
+      # Take the first non-unknown type
+      %{type: type}, {:ok, :unknown} ->
+        {:cont, {:ok, type}}
+
+      # Skip duplicates
+      %{type: type}, {:ok, candidate} when type == candidate ->
+        {:cont, {:ok, candidate}}
+
+      %{type: type}, {:ok, candidate} ->
+        cond do
+          # Fail if categories differ
+          Env.get_type_category(env, type) != Env.get_type_category(env, candidate) ->
+            {:halt, {:error, type, candidate}}
+
+          # Preferred type wins, but keep going to check for errors
+          Env.is_preferred?(env, type) ->
+            {:cont, {:ok, type}}
+
+          # Preferred type wins, but keep going to check for errors
+          Env.is_preferred?(env, candidate) ->
+            {:cont, {:ok, candidate}}
+
+          # If implicit coercion is possible in one direction, pick that type
+          Env.can_implicitly_coerce_types?(env, [candidate], [type]) and
+              not Env.can_implicitly_coerce_types?(env, [type], [candidate]) ->
+            {:cont, {:ok, type}}
+
+          true ->
+            {:cont, {:ok, type}}
+        end
+    end)
+    |> case do
+      {:ok, :unknown} -> {:ok, :text}
+      result -> result
+    end
+  end
+
+  @doc """
   Given multiple possible operator overloads (same name and arity), try to
   find a concrete implementation that matches the argument types.
 
@@ -108,7 +169,12 @@ defmodule Electric.Replication.Eval.Lookups do
   end
 
   defp filter_overloads_on_implicit_conversion(choices, args, _, env) do
-    Enum.filter(choices, &Env.can_implicitly_coerce_types?(env, args, &1.args))
+    Enum.reduce(choices, [], fn choice, acc ->
+      case Env.get_unified_coercion_targets(env, args, choice.args, choice.returns) do
+        {:ok, {targets, return}} -> [%{choice | args: targets, returns: return} | acc]
+        :error -> acc
+      end
+    end)
   end
 
   # "Most exact" here is defined as "how many arguments of the function do match exactly with provided"

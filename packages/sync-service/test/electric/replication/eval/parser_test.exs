@@ -459,6 +459,88 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:error, "At location 2: argument of IS TRUE must be bool, not int4"} =
                Parser.parse_and_validate_expression(~S|1 IS TRUE|, %{}, env)
     end
+
+    test "should parse array constants" do
+      # TODO: Does not support arbitrary bounds input syntax yet,
+      #       e.g. '[1:1][-2:-1][3:5]={{{1,2,3},{4,5,6}}}'::int[]
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|'{{1   },{2},{"3"}}'::int[]|)
+
+      assert %Const{value: [[1], [2], [3]], type: {:array, :int4}} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|ARRAY[ARRAY[1, 2], ARRAY['3', 2 + 2]]|)
+
+      assert %Const{value: [[1, 2], [3, 4]], type: {:array, :int4}} = result
+
+      assert {:error, _} =
+               Parser.parse_and_validate_expression(~S|ARRAY[1, ARRAY['3', 2 + 2]]|)
+    end
+
+    test "should recast a nested array" do
+      # as-is recast
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|('{{1},{2},{"3"}}'::int[])::bigint[]|)
+
+      assert %Const{value: [[1], [2], [3]], type: {:array, :int8}} = result
+
+      # with a cast function
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|('{{1},{2},{"3"}}'::text[])::bigint[]|)
+
+      assert %Const{value: [[1], [2], [3]], type: {:array, :int8}} = result
+    end
+
+    test "should work with array access" do
+      # Including mixed notation, float constants, and text castable to ints
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|('{1,2,3}'::int[])[1][1:'2'][2.2:2.3][:]|)
+
+      assert %Const{value: [], type: {:array, :int4}} = result
+
+      # Returns NULL if any of indices are NULL
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|('{1,2,3}'::int[])[1][1:'2'][2.2:2.3][:][NULL:NULL]|
+               )
+
+      assert %Const{value: nil, type: {:array, :int4}} = result
+
+      # Also works when there are no slices
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|('{{{1}},{{2}},{{3}}}'::int[])[1]['1'][1.4]|
+               )
+
+      assert %Const{value: 1, type: :int4} = result
+
+      # And correctly works with expressions as indices
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|('{{1},{2},{3}}'::int[])[2][2 - 1]|)
+
+      assert %Const{value: 2, type: :int4} = result
+    end
+
+    test "should support array ANY/ALL" do
+      assert {:error, "At location 9: argument of ANY must be an array"} =
+               Parser.parse_and_validate_expression(~S|3 > ANY (3)|)
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|3 > ANY ('{1, 2, 3}')|)
+
+      assert %Const{value: true, type: :bool} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|1::bigint = ANY ('{1,2}'::int[])|)
+
+      assert %Const{value: true, type: :bool} = result
+
+      # Including implicit casts and nested arrays
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|4.1 > ALL ('{{1}, {2}, {3}}'::int[])|)
+
+      assert %Const{value: true, type: :bool} = result
+    end
   end
 
   describe "parse_and_validate_expression/3 default env" do
@@ -470,6 +552,49 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, _} = Parser.parse_and_validate_expression(~S|id >= 1|, %{["id"] => :int8})
       assert {:ok, _} = Parser.parse_and_validate_expression(~S|id <= 1|, %{["id"] => :int8})
       assert {:ok, _} = Parser.parse_and_validate_expression(~S|id = 1|, %{["id"] => :int8})
+    end
+
+    test "implements common array operators: @>, <@, &&, ||" do
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|'{1,2,3}'::int[] @> '{2,1,2}'|)
+
+      assert %Const{value: true, type: :bool} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|'{1,2,3}'::int[] <@ '{1,2,2}'::int[]|)
+
+      assert %Const{value: false, type: :bool} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|'{1,2,1}'::int[] && '{2,3,4}'::int[]|)
+
+      assert %Const{value: true, type: :bool} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S"'{1,2,1}'::int[] || '{2,3,4}'")
+
+      assert %Const{value: [1, 2, 1, 2, 3, 4], type: {:array, :int4}} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S"('1'::bigint || '{2,3,4}'::int[]) || 5")
+
+      assert %Const{value: [1, 2, 3, 4, 5], type: {:array, :int8}} = result
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S"array_ndims('{{1,2,3},{4,5,6}}')")
+
+      assert %Const{value: 2, type: :int4} = result
+    end
+
+    test "does correct operator inference for array polymorphic types" do
+      assert {:error, "At location 17: Could not select an operator overload"} =
+               Parser.parse_and_validate_expression(~S|'{1,2,3}'::int[] @> '{2,1,2}'::bigint[]|)
+
+      assert {:error, "At location 17: Could not select an operator overload"} =
+               Parser.parse_and_validate_expression(~S|'{1,2,3}'::int[] @> '{2,1,2}'::text|)
+
+      assert {:error, "At location 17: Could not select an operator overload"} =
+               Parser.parse_and_validate_expression(~S/'{1,2,3}'::int[] || '{2,1,2}'::text[]/)
     end
   end
 end
