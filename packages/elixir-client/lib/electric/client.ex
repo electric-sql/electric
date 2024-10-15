@@ -139,6 +139,7 @@ defmodule Electric.Client do
   alias Electric.Client.Offset
   alias Electric.Client.ShapeDefinition
   alias Electric.Client.Util
+  alias Electric.Client.Message
 
   alias __MODULE__
 
@@ -172,7 +173,7 @@ defmodule Electric.Client do
           optional(:length) => non_neg_integer()
         }
   @type schema :: %{String.t() => column()}
-  @type message :: ControlMessage.t() | ChangeMessage.t()
+  @type message :: Message.ControlMessage.t() | Message.ChangeMessage.t()
   @type param :: :offset | :update_mode | :shape_id | :live | :where | :cursor
   @type params :: %{param() => String.t()}
   @type table_name :: String.t()
@@ -194,7 +195,7 @@ defmodule Electric.Client do
 
   #{NimbleOptions.docs(@client_schema)}
   """
-  @spec new(client_options()) :: {:ok, t()}
+  @spec new(client_options()) :: {:ok, t()} | {:error, term()}
   def new(opts) do
     with {:ok, attrs} <- NimbleOptions.validate(opts, @client_schema) do
       {:ok, struct(__MODULE__, attrs)}
