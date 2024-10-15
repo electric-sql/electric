@@ -317,11 +317,11 @@ defmodule Electric.Shapes.ShapeTest do
     end
 
     @tag with_sql: [
-           "CREATE TABLE IF NOT EXISTS other_table (value TEXT PRIMARY KEY, data int[] NOT NULL)"
+           "CREATE TABLE IF NOT EXISTS arr_table (value TEXT PRIMARY KEY, data int[] NOT NULL)"
          ]
     test "validates a where clause based on array columns", %{inspector: inspector} do
       assert {:ok, %Shape{where: %{query: "data @> '{1,2}'"}}} =
-               Shape.new("other_table", inspector: inspector, where: "data @> '{1,2}'")
+               Shape.new("arr_table", inspector: inspector, where: "data @> '{1,2}'")
     end
 
     @tag with_sql: [
