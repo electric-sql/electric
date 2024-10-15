@@ -81,6 +81,9 @@ defmodule Electric.Application do
     )
   end
 
+  # This function is called once in the application's start() callback. It reads configuration
+  # from the OTP application env, runs some pre-processing functions and stores the processed
+  # configuration as a single map using `:persistent_term`.
   defp configure do
     electric_instance_id = Application.fetch_env!(:electric, :electric_instance_id)
 
