@@ -4,7 +4,7 @@ defmodule Electric.Client.MixProject do
   def project do
     [
       app: :electric_client,
-      version: "0.1.0",
+      version: version(),
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -71,5 +71,27 @@ defmodule Electric.Client.MixProject do
 
   defp description do
     "Elixir client for ElectricSQL"
+  end
+
+  defp version do
+    with :error <- version_from_env(),
+         :error <- version_from_package_json() do
+      "0.0.0"
+    end
+  end
+
+  defp version_from_env do
+    with {:ok, version} <- System.fetch_env("ELECTRIC_CLIENT_VERSION"),
+         trimmed = String.trim(version),
+         {:ok, _} <- Version.parse(trimmed) do
+      trimmed
+    end
+  end
+
+  defp version_from_package_json do
+    case File.read("./package.json") do
+      {:ok, binary} -> binary |> :json.decode() |> Map.fetch!("version")
+      {:error, _} -> :error
+    end
   end
 end
