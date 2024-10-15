@@ -174,22 +174,27 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
 
   defpostgres "anyarray @> anyarray -> bool" do
     def left_array_contains_right?(left, right) do
-      MapSet.subset?(MapSet.new(right), MapSet.new(left))
+      MapSet.subset?(MapSet.new(List.flatten(right)), MapSet.new(List.flatten(left)))
     end
   end
 
   defpostgres "anyarray <@ anyarray -> bool" do
     def right_array_contains_left?(left, right) do
-      MapSet.subset?(MapSet.new(left), MapSet.new(right))
+      MapSet.subset?(MapSet.new(List.flatten(left)), MapSet.new(List.flatten(right)))
     end
   end
 
   defpostgres "anyarray && anyarray -> bool" do
     def arrays_overlap?(left, right) when left == [] or right == [], do: false
 
-    def arrays_overlap?(left, right) do
-      left_mapset = MapSet.new(left)
-      Enum.any?(right, &MapSet.member?(left_mapset, &1))
+    def arrays_overlap?(left, right) when is_list(left) and is_list(right),
+      do: arrays_overlap?(MapSet.new(List.flatten(left)), MapSet.new(List.flatten(right)))
+
+    def arrays_overlap?(%MapSet{} = left, right) do
+      Enum.any?(right, fn
+        elem when is_list(elem) -> arrays_overlap?(left, elem)
+        elem -> MapSet.member?(left, elem)
+      end)
     end
   end
 end

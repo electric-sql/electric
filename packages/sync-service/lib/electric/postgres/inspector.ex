@@ -80,7 +80,13 @@ defmodule Electric.Postgres.Inspector do
   """
   @spec columns_to_expr([column_info(), ...]) :: Parser.refs_map()
   def columns_to_expr(columns) when is_list(columns) do
-    Map.new(columns, fn %{name: name, type: type} -> {[name], atom_type(type)} end)
+    Map.new(columns, fn
+      %{name: name, array_type: arr_type} when not is_nil(arr_type) ->
+        {[name], {:array, atom_type(arr_type)}}
+
+      %{name: name, type: type} ->
+        {[name], atom_type(type)}
+    end)
   end
 
   defp atom_type(type) when is_binary(type), do: String.to_atom(type)
