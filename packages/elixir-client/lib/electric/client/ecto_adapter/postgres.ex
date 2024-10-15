@@ -13,6 +13,8 @@ if Code.ensure_loaded?(Ecto) do
     #
     # Assuming, that is, that the original doesn't change much...
 
+    @dialyzer :no_improper_lists
+
     binary_ops = [
       ==: " = ",
       !=: " != ",
@@ -102,9 +104,9 @@ if Code.ensure_loaded?(Ecto) do
       [expr(left, sources, query), " = ANY($", Integer.to_string(ix + 1), ?)]
     end
 
-    defp expr({:in, _, [left, %Ecto.SubQuery{} = subquery]}, sources, query) do
-      [expr(left, sources, query), " IN ", expr(subquery, sources, query)]
-    end
+    # defp expr({:in, _, [left, %Ecto.SubQuery{} = subquery]}, sources, query) do
+    #   [expr(left, sources, query), " IN ", expr(subquery, sources, query)]
+    # end
 
     defp expr({:in, _, [left, right]}, sources, query) do
       [expr(left, sources, query), " = ANY(", expr(right, sources, query), ?)]
