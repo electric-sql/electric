@@ -90,7 +90,7 @@ defmodule Electric.Client do
   ``` elixir
   # ecto.ex
   Mix.install([
-    :ecto,
+    :ecto_sql,
     :electric_client
   ])
 
