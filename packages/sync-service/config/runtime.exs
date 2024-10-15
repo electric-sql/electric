@@ -3,8 +3,12 @@ import Dotenvy
 
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 
+if config_env() in [:dev, :test] do
+  source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
+end
+
 log_level_config =
-  env!("LOG_LEVEL", :string, "debug")
+  env!("LOG_LEVEL", :string, "info")
   |> Electric.Config.parse_log_level()
 
 case log_level_config do
@@ -23,10 +27,6 @@ end
 if config_env() == :test do
   config(:logger, level: :info)
   config(:electric, pg_version_for_tests: env!("POSTGRES_VERSION", :integer, 150_001))
-end
-
-if config_env() in [:dev, :test] do
-  source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
 
 electric_instance_id = :default
