@@ -7,6 +7,9 @@ defmodule Electric.Shapes.ShapeTest do
   alias Electric.Shapes.Shape
 
   @where Parser.parse_and_validate_expression!("value ILIKE '%matches%'", %{["value"] => :text})
+  @where_array Parser.parse_and_validate_expression!("data && '{1,2}'", %{
+                 ["data"] => {:array, :int4}
+               })
   @relation_id 1
 
   describe "convert_change/2" do
@@ -55,6 +58,27 @@ defmodule Electric.Shapes.ShapeTest do
       non_matching_insert = %NewRecord{
         relation: {"public", "table"},
         record: %{"id" => 2, "value" => "doesn't match filter"}
+      }
+
+      assert Shape.convert_change(shape, matching_insert) == [matching_insert]
+      assert Shape.convert_change(shape, non_matching_insert) == []
+    end
+
+    test "lets INSERTs through only if the row matches the where filter with arrays" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        where: @where_array
+      }
+
+      matching_insert = %NewRecord{
+        relation: {"public", "table"},
+        record: %{"id" => 1, "data" => "{{1}}"}
+      }
+
+      non_matching_insert = %NewRecord{
+        relation: {"public", "table"},
+        record: %{"id" => 2, "data" => "{{3},{4}}"}
       }
 
       assert Shape.convert_change(shape, matching_insert) == [matching_insert]
@@ -290,6 +314,14 @@ defmodule Electric.Shapes.ShapeTest do
     test "validates a where clause based on inspected columns", %{inspector: inspector} do
       assert {:error, {:where, "At location 6" <> _}} =
                Shape.new("other_table", inspector: inspector, where: "value + 1 > 10")
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS arr_table (value TEXT PRIMARY KEY, data int[] NOT NULL)"
+         ]
+    test "validates a where clause based on array columns", %{inspector: inspector} do
+      assert {:ok, %Shape{where: %{query: "data @> '{1,2}'"}}} =
+               Shape.new("arr_table", inspector: inspector, where: "data @> '{1,2}'")
     end
 
     @tag with_sql: [
