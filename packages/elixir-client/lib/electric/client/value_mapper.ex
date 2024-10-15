@@ -63,7 +63,7 @@ defmodule Electric.Client.ValueMapper do
 
   @doc """
   Given the schema information passed from the electric server should return a
-  1-arity function that takess a values map, which is a map of column names to
+  1-arity function that takes a values map, which is a map of column names to
   string values, and returns a version with the values cast to some appropriate
   Elixir type.
   """
