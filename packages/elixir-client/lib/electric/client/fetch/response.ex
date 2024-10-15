@@ -14,9 +14,9 @@ defmodule Electric.Client.Fetch.Response do
   @type t :: %__MODULE__{
           status: non_neg_integer(),
           body: [map()],
-          headers: %{String.t() => String.t()},
+          headers: %{String.t() => [String.t()]},
           last_offset: nil | Client.Offset.t(),
-          shape_id: nil | String.t(),
+          shape_id: nil | Client.shape_id(),
           schema: nil | Client.schema(),
           next_cursor: nil | Client.cursor()
         }
@@ -25,13 +25,17 @@ defmodule Electric.Client.Fetch.Response do
   def decode!(status, headers, body) when is_integer(status) and is_map(headers) do
     %__MODULE__{
       status: status,
-      headers: headers,
+      headers: decode_headers(headers),
       body: body,
       shape_id: decode_shape_id(headers),
       last_offset: decode_offset(headers),
       schema: decode_schema(headers),
       next_cursor: decode_next_cursor(headers)
     }
+  end
+
+  defp decode_headers(headers) do
+    Map.new(headers, fn {k, v} -> {k, List.wrap(v)} end)
   end
 
   defp decode_shape_id(%{"electric-shape-id" => shape_id}) do

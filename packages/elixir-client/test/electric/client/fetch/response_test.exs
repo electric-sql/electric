@@ -13,9 +13,12 @@ defmodule Electric.Client.Fetch.ResponseTest do
       "electric-next-cursor" => "2394829387"
     }
 
+    # headers are normalised lists of values
+    expected_headers = Map.new(headers, fn {k, v} -> {k, [v]} end)
+
     assert %{
              status: 200,
-             headers: ^headers,
+             headers: ^expected_headers,
              shape_id: "1234987-2349827349",
              last_offset: %Electric.Client.Offset{tx: 29827, op: 3},
              schema: ^schema,
