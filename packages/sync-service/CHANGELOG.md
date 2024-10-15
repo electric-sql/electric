@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 0.7.4
+
+### Patch Changes
+
+- b093b79: Reduce the default `DB_POOL_SIZE` to `20`.
+- 3ab27a6: Implement support for array columns and operations over those in where clauses
+
 ## 0.7.3
 
 ### Patch Changes
