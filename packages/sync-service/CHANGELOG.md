@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.7.5
+
+### Patch Changes
+
+- a1d332f: fix: make sure array column types are correctly passed around & that array comparison functions work on nested arrays
+
 ## 0.7.4
 
 ### Patch Changes
