@@ -1,4 +1,9 @@
 defmodule Electric.Application.Configuration do
+  @moduledoc """
+  A simple interface to `:persistent_term` that is designed for storing and retrieving the
+  global application configuration (stored as a single map).
+  """
+
   defstruct ~w[
     electric_instance_id
     storage
@@ -16,8 +21,15 @@ defmodule Electric.Application.Configuration do
 
   @spec save(t) :: t
   def save(config) do
-    :ok = :persistent_term.put(@persistent_key, config)
-    config
+    # Make sure the application configuration is only stored once.
+    try do
+      _ = :persistent_term.get(@persistent_key)
+      raise "Trying to overwrite previously stored application configuration"
+    rescue
+      ArgumentError ->
+        :ok = :persistent_term.put(@persistent_key, config)
+        config
+    end
   end
 
   @spec get :: t
