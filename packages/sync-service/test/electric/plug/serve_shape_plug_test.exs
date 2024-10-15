@@ -71,7 +71,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "seconds_since_oct9th_2024_next_interval" do
       # Mock the conn struct with assigns
       # 20 seconds
-      conn = %Plug.Conn{assigns: %{config: %{long_poll_timeout: 20000}}}
+      conn = %Plug.Conn{
+        assigns: %{config: %{long_poll_timeout: 20000}},
+        query_params: %{"cursor" => nil}
+      }
 
       # Calculate the expected next interval
       now = DateTime.utc_now()
@@ -87,7 +90,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "seconds_since_oct9th_2024_next_interval with different timeout" do
       # Mock the conn struct with a different timeout
       # 30 seconds
-      conn = %Plug.Conn{assigns: %{config: %{long_poll_timeout: 30000}}}
+      conn = %Plug.Conn{
+        assigns: %{config: %{long_poll_timeout: 30000}},
+        query_params: %{"cursor" => nil}
+      }
 
       # Calculate the expected next interval
       now = DateTime.utc_now()
