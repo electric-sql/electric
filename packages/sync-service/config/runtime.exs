@@ -151,6 +151,14 @@ chunk_bytes_threshold =
           {Electric.ShapeCache.FileStorage,
            storage_dir: shape_path, electric_instance_id: electric_instance_id}
 
+        "crashing_file" ->
+          num_calls_until_crash = env!("CRASHING_FILE_STORAGE__NUM_CALLS_UNTIL_CRASH", :integer)
+
+          {Electric.ShapeCache.CrashingFileStorage,
+           storage_dir: shape_path,
+           electric_instance_id: electric_instance_id,
+           num_calls_until_crash: num_calls_until_crash}
+
         _ ->
           raise Dotenvy.Error, message: "storage must be one of: MEMORY, FILE"
       end
