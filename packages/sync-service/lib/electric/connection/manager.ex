@@ -182,6 +182,22 @@ defmodule Electric.Connection.Manager do
         Process.send_after(self(), :log_lock_connection_status, @lock_status_logging_interval)
         {:noreply, %{state | lock_connection_pid: lock_connection_pid}}
 
+      {:error, %Postgrex.Error{message: "ssl not available"}} = error ->
+        if connection_opts[:sslmode] == :require do
+          error
+        else
+          if connection_opts[:sslmode] do
+            # Only log a warning when there's an explicit sslmode parameter in the database
+            # config, meaning the user has requested a certain sslmode.
+            Logger.warning(
+              "Failed to connect to the database using SSL. Trying again, using an unencrypted connection."
+            )
+          end
+
+          connection_opts = Keyword.put(connection_opts, :ssl, false)
+          start_replication_client(electric_instance_id, connection_opts, replication_opts)
+        end
+
       {:error, reason} ->
         handle_connection_error(reason, state, "lock_connection")
     end
@@ -335,22 +351,6 @@ defmodule Electric.Connection.Manager do
          ) do
       {:ok, pid} ->
         {:ok, pid, connection_opts}
-
-      {:error, %Postgrex.Error{message: "ssl not available"}} = error ->
-        if connection_opts[:sslmode] == :require do
-          error
-        else
-          if connection_opts[:sslmode] do
-            # Only log a warning when there's an explicit sslmode parameter in the database
-            # config, meaning the user has requested a certain sslmode.
-            Logger.warning(
-              "Failed to connect to the database using SSL. Trying again, using an unencrypted connection."
-            )
-          end
-
-          connection_opts = Keyword.put(connection_opts, :ssl, false)
-          start_replication_client(electric_instance_id, connection_opts, replication_opts)
-        end
 
       error ->
         error
