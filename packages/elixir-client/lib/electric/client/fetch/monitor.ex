@@ -58,9 +58,10 @@ defmodule Electric.Client.Fetch.Monitor do
   def handle_call({:register, listener_pid}, _from, state) do
     ref = Process.monitor(listener_pid)
 
-    Logger.debug(fn ->
-      [message: "Registering listener pid #{inspect(listener_pid)}", request_id: state.request_id]
-    end)
+    Logger.debug(
+      fn -> "Registering listener pid #{inspect(listener_pid)}" end,
+      request_id: state.request_id
+    )
 
     state = Map.update!(state, :subscribers, &[{listener_pid, ref} | &1])
 
