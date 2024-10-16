@@ -9,9 +9,10 @@ defmodule Electric.Client.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      name: "Electric Client",
+      description: description(),
       docs: docs(),
       package: package(),
-      description: description(),
       source_url: "https://github.com/electric-sql/electric/tree/main/packages/elixir-client",
       homepage_url: "https://electric-sql.com"
     ]
