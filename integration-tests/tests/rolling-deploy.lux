@@ -10,7 +10,7 @@
 [invoke setup_pg "" ""]
 
 ## Start the first sync service.
-[invoke setup_electric_shell "electric_1" "3000"]
+[invoke setup_electric_shell "electric_1" "3000" ""]
 
 [shell electric_1]
   ??[info] Acquiring lock from postgres with name electric_slot_default
@@ -23,7 +23,7 @@
   ??{"status":"active"}
 
 ## Start the second sync service.
-[invoke setup_electric_shell "electric_2" "3001"]
+[invoke setup_electric_shell "electric_2" "3001" ""]
 
 ## Assert that the lock is not acquired and replication does not start
 ## in the second electric
