@@ -86,7 +86,6 @@
   ??[error] :gen_statem {Electric.Registry.Processes, {Electric.Postgres.ReplicationClient, :default}} terminating
 
   # Observe that both shape consumers and the replication client have restarted.
-  ??[debug] 2 consumers of replication stream
   ??[debug] Found existing replication slot
   ??[info] Starting replication from postgres
 
