@@ -168,9 +168,6 @@ replication_stream_id =
         |> String.trim(~S|"|)
         |> Electric.Postgres.Identifiers.parse()
 
-      IO.puts(replication_stream_id)
-      IO.puts(parsed_id)
-
       parsed_id
     end,
     "default"
