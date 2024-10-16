@@ -81,7 +81,7 @@ to syncing into a local embedded
     />
   </div>
   <div class="action">
-    <VPButton href="https://github.com/electric-sql"
+    <VPButton href="https://github.com/electric-sql/electric"
         target="_blank"
         text="Star on GitHub"
         theme="alt"
