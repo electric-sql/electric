@@ -505,7 +505,7 @@ describe(`HTTP Sync`, () => {
         `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`
       )
       const body = (await res.json()) as Message[]
-      expect(body).toHaveLength(13)
+      expect(body).toHaveLength(12)
     })
 
     let catchupOpsCount = 0
@@ -542,8 +542,9 @@ describe(`HTTP Sync`, () => {
     const directives = parse(cacheHeaders)
     expect(directives).toEqual({
       public: true,
-      'max-age': 1,
-      'stale-while-revalidate': 3,
+      'max-age': 604800,
+      's-maxage': 3600,
+      'stale-while-revalidate': 2629746,
     })
     const etagHeader = res.headers.get(`etag`)
     assert(etagHeader !== null, `Response should have etag header`)
@@ -582,7 +583,7 @@ describe(`HTTP Sync`, () => {
       {}
     )
     const messages = (await res.json()) as Message[]
-    expect(messages.length).toEqual(10) // 9 inserts + up-to-date
+    expect(messages.length).toEqual(9) // 9 inserts
     const midMessage = messages.slice(-6)[0]
     assert(`offset` in midMessage)
     const midOffset = midMessage.offset
