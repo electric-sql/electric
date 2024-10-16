@@ -325,11 +325,16 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp determine_up_to_date(
          %Conn{
-           assigns: %{chunk_end_offset: chunk_end_offset, last_offset: last_offset}
+           assigns: %{chunk_end_offset: chunk_end_offset, last_offset: last_offset},
+           query_params: %{"offset" => offset}
          } = conn,
          _
        ) do
-    if LogOffset.compare(chunk_end_offset, last_offset) == :lt do
+
+    # The log can't be up to date if the last_offset is not the actual end.
+    # Also if client is requesting the start of the log, we don't set `up-to-date`
+    # here either as we want to set a long max-age on the cache-control.
+    if LogOffset.compare(chunk_end_offset, last_offset) == :lt or offset == "-1" do
       conn
       |> assign(:up_to_date, [])
       # header might have been added on first pass but no longer valid
@@ -429,6 +434,7 @@ defmodule Electric.Plug.ServeShapePlug do
          %Conn{
            assigns: %{
              chunk_end_offset: chunk_end_offset,
+             up_to_date: maybe_up_to_date,
              active_shape_id: shape_id
            }
          } = conn
@@ -441,7 +447,7 @@ defmodule Electric.Plug.ServeShapePlug do
             up_to: chunk_end_offset
           )
 
-        [snapshot, log]
+        [snapshot, log, maybe_up_to_date]
         |> Stream.concat()
         |> to_json_stream()
         |> Stream.chunk_every(500)
