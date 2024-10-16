@@ -8,7 +8,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Replication.LogOffset
 
   alias Support.Mock
-  import Support.ComponentSetup, only: [with_electric_instance_id: 1, with_in_memory_storage: 1]
+  import Support.ComponentSetup, only: [with_in_memory_storage: 1]
+  import Support.TestUtils, only: [with_electric_instance_id: 1, full_test_name: 1]
 
   import Mox
 
@@ -39,7 +40,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     # We need a ShapeCache process because it is a GenStage consumer
     # that handles the Relation events produced by ShapeLogCollector
-    shape_meta_table = :"shape_meta_#{Support.ComponentSetup.full_test_name(ctx)}"
+    shape_meta_table = :"shape_meta_#{full_test_name(ctx)}"
 
     shape_cache_opts =
       [
