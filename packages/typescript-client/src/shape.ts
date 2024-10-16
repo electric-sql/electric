@@ -20,7 +20,7 @@ export type ShapeChangedCallback<T extends Row<unknown> = Row> = (
  * @param {ShapeStream<T extends Row>} - the underlying shape stream
  * @example
  * ```
- * const shapeStream = new ShapeStream<{ foo: number }>(url: 'http://localhost:3000/v1/shape/foo'})
+ * const shapeStream = new ShapeStream<{ foo: number }>(url: `http://localhost:3000/v1/shape`, table: `foo`})
  * const shape = new Shape(shapeStream)
  * ```
  *

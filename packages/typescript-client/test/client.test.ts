@@ -10,7 +10,8 @@ describe(`Shape`, () => {
   it(`should sync an empty shape`, async ({ issuesTableUrl }) => {
     const start = Date.now()
     const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
     })
     const shape = new Shape(shapeStream)
     const map = await shape.value
@@ -31,7 +32,8 @@ describe(`Shape`, () => {
 
     const start = Date.now()
     const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       signal: aborter.signal,
     })
     const shape = new Shape(shapeStream)
@@ -65,7 +67,8 @@ describe(`Shape`, () => {
 
     const start = Date.now()
     const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       signal: aborter.signal,
     })
     const shape = new Shape(shapeStream)
@@ -158,7 +161,8 @@ describe(`Shape`, () => {
     }
 
     const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       signal: aborter.signal,
       fetchClient: fetchWrapper,
     })
@@ -195,7 +199,8 @@ describe(`Shape`, () => {
 
     const start = Date.now()
     const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       signal: aborter.signal,
     })
     const shape = new Shape(shapeStream)
@@ -228,7 +233,8 @@ describe(`Shape`, () => {
 
   it(`should support unsubscribe`, async ({ issuesTableUrl }) => {
     const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
     })
     const shape = new Shape(shapeStream)
 
@@ -244,7 +250,8 @@ describe(`Shape`, () => {
   it(`should expose connection status`, async ({ issuesTableUrl }) => {
     const aborter = new AbortController()
     const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       signal: aborter.signal,
     })
 
@@ -268,7 +275,8 @@ describe(`Shape`, () => {
   }) => {
     let fetchShouldFail = false
     const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       fetchClient: async (_input, _init) => {
         if (fetchShouldFail)
           throw new FetchError(
@@ -303,7 +311,8 @@ describe(`Shape`, () => {
     issuesTableUrl,
   }) => {
     const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       subscribe: false,
     })
 
@@ -316,7 +325,8 @@ describe(`Shape`, () => {
 
   it(`should expose isLoading status`, async ({ issuesTableUrl }) => {
     const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       fetchClient: async (input, init) => {
         await sleep(20)
         return fetch(input, init)

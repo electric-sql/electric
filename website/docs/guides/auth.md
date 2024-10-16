@@ -88,7 +88,10 @@ export async function GET(
   const { table } = params
 
   // Construct the upstream URL
-  const originUrl = new URL(`http://localhost:3000/v1/shape/${table}`)
+  const originUrl = new URL(`http://localhost:3000/v1/shape`)
+
+  // Set the table.
+  originUrl.searchParams.set(`table`, table)
 
   // Copy over the shape_id & offset query params that the
   // Electric client adds so we return the right part of the Shape log.
