@@ -1,6 +1,6 @@
 [doc Verify handling of an Electric crash recovery]
 
-[include macros.luxinc]
+[include _macros.luxinc]
 
 [global pg_container_name=crash-recovery__pg]
 

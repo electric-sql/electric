@@ -1,6 +1,6 @@
 [doc Verify handling of invalidated replication slot while Electric is running]
 
-[include macros.luxinc]
+[include _macros.luxinc]
 
 [global pg_container_name=replication-slot-invalidated-while-running__pg]
 
