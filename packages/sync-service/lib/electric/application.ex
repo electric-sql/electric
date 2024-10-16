@@ -42,11 +42,7 @@ defmodule Electric.Application do
       timeline_opts: [
         shape_cache: {Electric.ShapeCache, []},
         persistent_kv: config.persistent_kv
-      ],
-      log_collector:
-        {Electric.Replication.ShapeLogCollector,
-         electric_instance_id: config.electric_instance_id, inspector: config.inspector},
-      shape_cache: config.child_specs.shape_cache
+      ]
     ]
 
     children =
@@ -56,7 +52,6 @@ defmodule Electric.Application do
          name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()},
         {Registry,
          name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
-        {Electric.ConnectionManager, connection_manager_opts},
         {Electric.Postgres.Inspector.EtsInspector, pool: Electric.DbPool},
         {Bandit,
          plug:
@@ -71,7 +66,8 @@ defmodule Electric.Application do
             stale_age: Application.fetch_env!(:electric, :cache_stale_age),
             allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},
          port: Application.fetch_env!(:electric, :service_port),
-         thousand_island_options: http_listener_options()}
+         thousand_island_options: http_listener_options()},
+        {Electric.Connection.Supervisor, connection_manager_opts}
       ]
       |> add_prometheus_router(Application.fetch_env!(:electric, :prometheus_port))
 

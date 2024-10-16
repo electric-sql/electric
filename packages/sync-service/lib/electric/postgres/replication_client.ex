@@ -78,60 +78,28 @@ defmodule Electric.Postgres.ReplicationClient do
     end
   end
 
-  def child_spec(opts) do
-    connection_opts = Keyword.fetch!(opts, :connection_opts)
-    replication_opts = Keyword.fetch!(opts, :replication_opts)
-    connection_manager = Keyword.fetch!(opts, :connection_manager)
-
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [connection_opts, replication_opts, connection_manager]},
-      restart: :permanent
-    }
-  end
-
   # @type state :: State.t()
 
   @repl_msg_x_log_data ?w
   @repl_msg_primary_keepalive ?k
   @repl_msg_standby_status_update ?r
 
-  def start_link(connection_opts, replication_opts, connection_manager \\ nil) do
+  def start_link(connection_opts, replication_opts) do
     # Disable the reconnection logic in Postgex.ReplicationConnection to force it to exit with
     # the connection error. Without this, we may observe undesirable restarts in tests between
     # one test process exiting and the next one starting.
-    connect_opts = [auto_reconnect: false] ++ Electric.Utils.deobfuscate_password(connection_opts)
+    connection_opts =
+      [auto_reconnect: false] ++ Electric.Utils.deobfuscate_password(connection_opts)
 
-    case Postgrex.ReplicationConnection.start_link(__MODULE__, replication_opts, connect_opts) do
-      {:ok, pid} ->
-        if is_pid(connection_manager),
-          do: GenServer.cast(connection_manager, {:connection_opts, pid, connection_opts})
-
-        {:ok, pid}
-
-      {:error, %Postgrex.Error{message: "ssl not available"}} = error ->
-        if connection_opts[:sslmode] == :require do
-          error
-        else
-          if connection_opts[:sslmode] do
-            # Only log a warning when there's an explicit sslmode parameter in the database
-            # config, meaning the user has requested a certain sslmode.
-            Logger.warning(
-              "Failed to connect to the database using SSL. Trying again, using an unencrypted connection."
-            )
-          end
-
-          connection_opts = Keyword.put(connection_opts, :ssl, false)
-          start_link(connection_opts, replication_opts, connection_manager)
-        end
-
-      error ->
-        error
-    end
+    Postgrex.ReplicationConnection.start_link(__MODULE__, replication_opts, connection_opts)
   end
 
   def start_streaming(client) do
     send(client, :start_streaming)
+  end
+
+  def stop(client) do
+    Postgrex.ReplicationConnection.call(client, :stop)
   end
 
   # The `Postgrex.ReplicationConnection` behaviour does not adhere to gen server conventions and
@@ -172,6 +140,11 @@ defmodule Electric.Postgres.ReplicationClient do
   @impl true
   def handle_result(result_list_or_error, state) do
     ConnectionSetup.process_query_result(result_list_or_error, state)
+  end
+
+  @impl true
+  def handle_call(:stop, from, _state) do
+    {:disconnect, "Requested by another process: #{inspect(from)}"}
   end
 
   @impl true

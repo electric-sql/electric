@@ -2,26 +2,25 @@ defmodule Electric.ConnectionManager do
   @moduledoc """
   Custom initialisation and reconnection logic for database connections.
 
-  This module is esentially a supervisor for database connections. But unlike an OTP process
-  supervisor, it includes additional functionality:
+  This module is esentially a supervisor for database connections, implemented as a GenServer.
+  Unlike an OTP process supervisor, it includes additional functionality:
 
     - adjusting connection options based on the response from the database
     - monitoring connections and initiating a reconnection procedure
     - custom reconnection logic with exponential backoff
-    - starting the shape consumer supervisor tree once a replication connection
-      has been established
+    - starting the shape consumer supervisor tree once a database connection pool
+      has been initialized
 
   Your OTP application should start a singleton connection manager under its main supervision tree:
 
       children = [
         ...,
         {Electric.ConnectionManager,
+         electric_instance_id: ...,
          connection_opts: [...],
          replication_opts: [...],
          pool_opts: [...],
-         log_collector: {LogCollector, [...]},
-         shape_cache: {ShapeCache, [...]}}
-        ...
+         timeline_opts: [...]}
       ]
 
       Supervisor.start_link(children, strategy: :one_for_one)
@@ -37,16 +36,14 @@ defmodule Electric.ConnectionManager do
       :pool_opts,
       # Options specific to `Electric.Timeline`.
       :timeline_opts,
-      # Configuration for the log collector
-      :log_collector,
-      # Configuration for the shape cache that implements `Electric.ShapeCacheBehaviour`
-      :shape_cache,
       # PID of the replication client.
       :replication_client_pid,
       # PID of the Postgres connection lock.
       :lock_connection_pid,
       # PID of the database connection pool (a `Postgrex` process).
       :pool_pid,
+      # PID of the shape log collector
+      :shape_log_collector_pid,
       # Backoff term used for reconnection with exponential back-off.
       :backoff,
       # Flag indicating whether the lock on the replication has been acquired.
@@ -64,12 +61,11 @@ defmodule Electric.ConnectionManager do
   @type status :: :waiting | :starting | :active
 
   @type option ::
-          {:connection_opts, Keyword.t()}
+          {:electric_instance_id, atom | String.t()}
+          | {:connection_opts, Keyword.t()}
           | {:replication_opts, Keyword.t()}
           | {:pool_opts, Keyword.t()}
           | {:timeline_opts, Keyword.t()}
-          | {:log_collector, {module(), Keyword.t()}}
-          | {:shape_cache, {module(), Keyword.t()}}
 
   @type options :: [option]
 
@@ -126,8 +122,6 @@ defmodule Electric.ConnectionManager do
         replication_opts: replication_opts,
         pool_opts: pool_opts,
         timeline_opts: timeline_opts,
-        log_collector: Keyword.fetch!(opts, :log_collector),
-        shape_cache: Keyword.fetch!(opts, :shape_cache),
         pg_lock_acquired: false,
         backoff: {:backoff.init(1000, 10_000), nil},
         electric_instance_id: Keyword.fetch!(opts, :electric_instance_id)
@@ -163,6 +157,7 @@ defmodule Electric.ConnectionManager do
     {:reply, status, state}
   end
 
+  @impl true
   def handle_continue(:start_lock_connection, state) do
     case Electric.Postgres.LockConnection.start_link(
            connection_opts: state.connection_opts,
@@ -178,43 +173,38 @@ defmodule Electric.ConnectionManager do
     end
   end
 
-  @impl true
   def handle_continue(:start_replication_client, state) do
-    case start_replication_client(state) do
-      {:ok, _pid} ->
-        # we wait for the working connection_opts to come back from the replication client
-        # see `handle_call({:connection_opts, pid, connection_opts}, _, _)`
-        {:noreply, state}
+    case start_replication_client(state.connection_opts, state.replication_opts) do
+      {:ok, pid, connection_opts} ->
+        state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
+        {:noreply, state, {:continue, :start_connection_pool}}
 
       {:error, reason} ->
         handle_connection_error(reason, state, "replication")
     end
   end
 
-  # if the replication client is brought down by an error in one of the shape
-  # consumers it will reconnect and re-send this message, so we just ignore
-  # attempts to start the connection pool when it's already running
-  def handle_continue(:start_connection_pool, %{pool_pid: pool_pid} = state)
-      when is_pid(pool_pid) do
-    if Process.alive?(pool_pid) do
-      {:noreply, state}
-    else
-      # unlikely since the pool is linked to this process... but why not
-      Logger.debug(fn -> "Restarting connection pool" end)
-      {:noreply, %{state | pool_pid: nil}, {:continue, :start_connection_pool}}
-    end
-  end
-
   def handle_continue(:start_connection_pool, state) do
     case start_connection_pool(state.connection_opts, state.pool_opts) do
-      {:ok, pid} ->
-        Electric.Timeline.check({get_pg_id(pid), get_pg_timeline(pid)}, state.timeline_opts)
+      {:ok, pool_pid} ->
+        {:ok, shapes_sup_pid} = Electric.Connection.Supervisor.start_shapes_supervisor()
 
-        # Now we have everything ready to start accepting and processing logical messages from
-        # Postgres.
+        # Now that we have a ShapeCache process running under Shapes.Supervisor, we can run the
+        # timeline check.
+        Electric.Timeline.check(
+          {get_pg_id(pool_pid), get_pg_timeline(pool_pid)},
+          state.timeline_opts
+        )
+
+        # Everything is ready to start accepting and processing logical messages from Postgres.
         Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
 
-        state = %{state | pool_pid: pid}
+        # Remember the shape log collector pid for later because we want to tie the replication
+        # client's lifetime to it.
+        log_collector_pid = lookup_log_collector_pid(shapes_sup_pid)
+        Process.monitor(log_collector_pid)
+
+        state = %{state | pool_pid: pool_pid, shape_log_collector_pid: log_collector_pid}
         {:noreply, state}
 
       {:error, reason} ->
@@ -245,12 +235,10 @@ defmodule Electric.ConnectionManager do
     {:stop, {tag, reason}, state}
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, reason}, %{replication_client_pid: pid} = state) do
-    halt_if_fatal_error!(reason)
-
-    # The replication client will be restarted automatically by the
-    # Electric.Shapes.Supervisor so we can just carry on here.
-    {:noreply, %{state | replication_client_pid: nil}}
+  def handle_info({:DOWN, _ref, :process, pid, reason}, %{shape_log_collector_pid: pid} = state) do
+    Logger.warning("ShapeLogCollector down: #{inspect(reason)}")
+    Electric.Postgres.ReplicationClient.stop(state.replication_client_pid)
+    {:noreply, %{state | shape_log_collector_pid: nil}}
   end
 
   # Periodically log the status of the lock connection until it is acquired for
@@ -265,22 +253,6 @@ defmodule Electric.ConnectionManager do
   end
 
   @impl true
-  def handle_cast({:connection_opts, pid, connection_opts}, state) do
-    Process.monitor(pid)
-    state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
-
-    case state do
-      %{pool_pid: nil} ->
-        {:noreply, state, {:continue, :start_connection_pool}}
-
-      %{pool_pid: pool_pid} when is_pid(pool_pid) ->
-        # The replication client has crashed and been restarted. Since we have
-        # a db pool already start the replication stream.
-        Electric.Postgres.ReplicationClient.start_streaming(pid)
-        {:noreply, state}
-    end
-  end
-
   def handle_cast({:pg_version, pg_version}, state) do
     {:noreply, %{state | pg_version: pg_version}}
   end
@@ -292,18 +264,30 @@ defmodule Electric.ConnectionManager do
     {:noreply, %{state | pg_lock_acquired: true}, {:continue, :start_replication_client}}
   end
 
-  defp start_replication_client(state) do
-    Electric.Shapes.Supervisor.start_link(
-      electric_instance_id: state.electric_instance_id,
-      replication_client: {
-        Electric.Postgres.ReplicationClient,
-        connection_opts: state.connection_opts,
-        replication_opts: state.replication_opts,
-        connection_manager: self()
-      },
-      shape_cache: state.shape_cache,
-      log_collector: state.log_collector
-    )
+  defp start_replication_client(connection_opts, replication_opts) do
+    case Electric.Postgres.ReplicationClient.start_link(connection_opts, replication_opts) do
+      {:ok, pid} ->
+        {:ok, pid, connection_opts}
+
+      {:error, %Postgrex.Error{message: "ssl not available"}} = error ->
+        if connection_opts[:sslmode] == :require do
+          error
+        else
+          if connection_opts[:sslmode] do
+            # Only log a warning when there's an explicit sslmode parameter in the database
+            # config, meaning the user has requested a certain sslmode.
+            Logger.warning(
+              "Failed to connect to the database using SSL. Trying again, using an unencrypted connection."
+            )
+          end
+
+          connection_opts = Keyword.put(connection_opts, :ssl, false)
+          start_replication_client(connection_opts, replication_opts)
+        end
+
+      error ->
+        error
+    end
   end
 
   defp start_connection_pool(connection_opts, pool_opts) do
@@ -474,5 +458,14 @@ defmodule Electric.ConnectionManager do
     case Postgrex.query!(conn, "SELECT timeline_id FROM pg_control_checkpoint()", []) do
       %Postgrex.Result{rows: [[timeline_id]]} -> timeline_id
     end
+  end
+
+  defp lookup_log_collector_pid(shapes_supervisor) do
+    {Electric.Replication.ShapeLogCollector, log_collector_pid, :worker, _modules} =
+      shapes_supervisor
+      |> Supervisor.which_children()
+      |> List.keyfind(Electric.Replication.ShapeLogCollector, 0)
+
+    log_collector_pid
   end
 end
