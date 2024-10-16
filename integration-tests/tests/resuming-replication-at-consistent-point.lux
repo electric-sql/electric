@@ -1,6 +1,6 @@
 [doc Verify that the replication stream resumes at a consistent point after a simulated storage error]
 
-[include macros.luxinc]
+[include _macros.luxinc]
 
 [global pg_container_name=resuming-replication-at-consistent-point__pg]
 
