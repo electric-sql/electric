@@ -51,6 +51,27 @@ describe(`createFetchWithBackoff`, () => {
     expect(result.ok).toBe(true)
   })
 
+  it(`should retry the request on a 429 response and succeed after a retry`, async () => {
+    const mockErrorResponse = new Response(null, { status: 429 })
+    const mockSuccessResponse = new Response(null, {
+      status: 200,
+      statusText: `OK`,
+    })
+    mockFetchClient
+      .mockResolvedValueOnce(mockErrorResponse)
+      .mockResolvedValueOnce(mockSuccessResponse)
+
+    const fetchWithBackoff = createFetchWithBackoff(mockFetchClient, {
+      ...BackoffDefaults,
+      initialDelay,
+    })
+
+    const result = await fetchWithBackoff(`https://example.com`)
+
+    expect(mockFetchClient).toHaveBeenCalledTimes(2)
+    expect(result.ok).toBe(true)
+  })
+
   it(`should apply exponential backoff and retry until maxDelay is reached`, async () => {
     const mockErrorResponse = new Response(null, { status: 500 })
     const mockSuccessResponse = new Response(null, {

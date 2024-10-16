@@ -1,5 +1,27 @@
 # @electric-sql/client
 
+## 0.6.3
+
+### Patch Changes
+
+- 25c437f: Implement `columns` query parameter for `GET v1/shapes` API to allow filtering rows for a subset of table columns.
+
+## 0.6.2
+
+### Patch Changes
+
+- c0c9af6: Handle 429 responses with retries.
+- 41845cb: Fix inconsistencies in http proxies for caching live long-polling requests.
+
+  The server now returns a cursor for the client to use in requests to cache-bust any stale caches.
+
+## 0.6.1
+
+### Patch Changes
+
+- cfb7955: Implement utility `headers` option on `ShapeStream` to pass headers to attach to all requests, like authorization.
+- c980a76: Make parser generic such that it can be parameterized with additional types supported by custom parsers.
+
 ## 0.6.0
 
 ### Minor Changes

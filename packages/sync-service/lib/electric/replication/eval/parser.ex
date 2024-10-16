@@ -19,7 +19,20 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   defmodule Func do
-    defstruct [:args, :type, :implementation, :name, strict?: true, immutable?: true, location: 0]
+    defstruct [
+      :args,
+      :type,
+      :implementation,
+      :name,
+      strict?: true,
+      immutable?: true,
+      # So this parameter is (1) internal for now, i.e. `defpostgres` in known functions cannot set it,
+      # and (2) is a bit of a hack. This allows us to specify that this function should be applied to each element of an array,
+      # without supporting essentially anonymous functions in our AST for an equivalent of `Enum.map/2`.
+      map_over_array_in_pos: nil,
+      variadic_arg: nil,
+      location: 0
+    ]
   end
 
   @valid_types (Electric.Postgres.supported_types() ++
@@ -84,6 +97,11 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
+  defp maybe_parse_and_validate_tree(nil, _, _), do: nil
+
+  defp maybe_parse_and_validate_tree(node, refs, env),
+    do: do_parse_and_validate_tree(node, refs, env)
+
   @spec do_parse_and_validate_tree(struct(), map(), map()) ::
           {:ok, %UnknownConst{} | tree_part()}
           | {:error, {non_neg_integer(), String.t()}}
@@ -98,6 +116,108 @@ defmodule Electric.Replication.Eval.Parser do
 
   defp do_parse_and_validate_tree(%PgQuery.A_Const{val: {kind, struct}, location: loc}, _, _),
     do: make_const(kind, Map.fetch!(struct, kind), loc)
+
+  defp do_parse_and_validate_tree(
+         %PgQuery.A_ArrayExpr{elements: elements, location: loc},
+         refs,
+         env
+       ) do
+    element_len = length(elements)
+
+    with {:ok, elements} <-
+           Utils.map_while_ok(elements, &do_parse_and_validate_tree(&1, refs, env)) do
+      case Lookups.pick_union_type(elements, env) do
+        {:ok, type} ->
+          with {:ok, elements} <-
+                 cast_unknowns(elements, List.duplicate(type, element_len), env),
+               {:ok, elements} <-
+                 try_cast_implicit(elements, List.duplicate(type, element_len), env) do
+            maybe_reduce(%Func{
+              args: [elements],
+              type: {:array, maybe_array_type(type)},
+              location: loc,
+              name: "build_array",
+              implementation: & &1,
+              strict?: false,
+              variadic_arg: 0
+            })
+          end
+
+        {:error, type, candidate} ->
+          {:error,
+           {loc, "ARRAY types #{readable(type)} and #{readable(candidate)} cannot be matched"}}
+      end
+    end
+  end
+
+  defp do_parse_and_validate_tree(
+         %PgQuery.A_Indirection{arg: arg, indirection: indirection},
+         refs,
+         env
+       ) do
+    with {:ok, %{type: {:array, inner_type} = array_type} = arg} <-
+           do_parse_and_validate_tree(arg, refs, env),
+         {:ok, indirections} <-
+           Utils.map_while_ok(indirection, &do_parse_and_validate_tree(&1, refs, env)) do
+      # If any of the indirections are slices, every access is treated as a slice access
+      # (e.g. `a[1:2][3]` is treated by PG as `a[1:2][1:3]` implicitly).
+      if Enum.any?(indirections, &(&1.type == {:internal, :slice})) do
+        maybe_reduce(%Func{
+          location: arg.location,
+          args: [arg, indirections],
+          type: array_type,
+          name: "slice_access",
+          implementation: &PgInterop.Array.slice_access/2,
+          variadic_arg: 1
+        })
+      else
+        maybe_reduce(%Func{
+          location: arg.location,
+          args: [arg, indirections],
+          type: inner_type,
+          name: "index_access",
+          implementation: &PgInterop.Array.index_access/2,
+          variadic_arg: 1
+        })
+      end
+    end
+  end
+
+  defp do_parse_and_validate_tree(
+         %PgQuery.A_Indices{is_slice: is_slice, lidx: lower_idx, uidx: upper_idx},
+         refs,
+         env
+       ) do
+    with {:ok, lower_idx} <-
+           maybe_parse_and_validate_tree(lower_idx, refs, env) ||
+             {:ok, %Const{value: :unspecified, type: {:internal, :slice_boundary}, location: 0}},
+         {:ok, upper_idx} <-
+           maybe_parse_and_validate_tree(upper_idx, refs, env) ||
+             {:ok, %Const{value: :unspecified, type: {:internal, :slice_boundary}, location: 0}},
+         {:ok, [lower_idx, upper_idx]} <-
+           cast_unknowns([lower_idx, upper_idx], List.duplicate(:int8, 2), env),
+         {:ok, [lower_idx, upper_idx]} <- round_numerics([lower_idx, upper_idx]),
+         {:ok, [lower_idx, upper_idx]} <-
+           try_cast_implicit([lower_idx, upper_idx], List.duplicate(:int8, 2), env) do
+      if is_slice do
+        maybe_reduce(%Func{
+          location: upper_idx.location,
+          args: [lower_idx, upper_idx],
+          type: {:internal, :slice},
+          name: "internal_slice",
+          implementation: &build_slice_structure/2
+        })
+      else
+        maybe_reduce(%Func{
+          location: upper_idx.location,
+          args: [upper_idx],
+          type: {:internal, :index},
+          name: "internal_index",
+          implementation: &build_index_structure/1
+        })
+      end
+    end
+  end
 
   defp do_parse_and_validate_tree(%PgQuery.ColumnRef{fields: fields, location: loc}, refs, _) do
     ref = Enum.map(fields, &unwrap_node_string/1)
@@ -217,19 +337,50 @@ defmodule Electric.Replication.Eval.Parser do
   # They all treat lexpr and rexpr differently, so we're just deferring to a concrete function implementation here for clarity.
   defp do_parse_and_validate_tree(%PgQuery.A_Expr{kind: kind, location: loc} = expr, refs, env) do
     case {kind, expr.lexpr} do
-      {:AEXPR_OP, nil} -> handle_unary_operator(expr, refs, env)
-      {:AEXPR_OP, _} -> handle_binary_operator(expr, refs, env)
+      {:AEXPR_OP, nil} ->
+        handle_unary_operator(expr, refs, env)
+
+      {:AEXPR_OP, _} ->
+        handle_binary_operator(expr, refs, env)
+
       # LIKE and ILIKE are expressed plainly as operators by the parser
-      {:AEXPR_LIKE, _} -> handle_binary_operator(expr, refs, env)
-      {:AEXPR_ILIKE, _} -> handle_binary_operator(expr, refs, env)
-      {:AEXPR_DISTINCT, _} -> handle_distinct(expr, refs, env)
-      {:AEXPR_NOT_DISTINCT, _} -> handle_distinct(expr, refs, env)
-      {:AEXPR_IN, _} -> handle_in(expr, refs, env)
-      {:AEXPR_BETWEEN, _} -> handle_between(expr, refs, env)
-      {:AEXPR_BETWEEN_SYM, _} -> handle_between(expr, refs, env)
-      {:AEXPR_NOT_BETWEEN, _} -> handle_between(expr, refs, env)
-      {:AEXPR_NOT_BETWEEN_SYM, _} -> handle_between(expr, refs, env)
-      _ -> {:error, {loc, "expression #{identifier(expr.name)} is not currently supported"}}
+      {:AEXPR_LIKE, _} ->
+        handle_binary_operator(expr, refs, env)
+
+      {:AEXPR_ILIKE, _} ->
+        handle_binary_operator(expr, refs, env)
+
+      {:AEXPR_DISTINCT, _} ->
+        handle_distinct(expr, refs, env)
+
+      {:AEXPR_NOT_DISTINCT, _} ->
+        handle_distinct(expr, refs, env)
+
+      {:AEXPR_IN, _} ->
+        handle_in(expr, refs, env)
+
+      {:AEXPR_BETWEEN, _} ->
+        handle_between(expr, refs, env)
+
+      {:AEXPR_BETWEEN_SYM, _} ->
+        handle_between(expr, refs, env)
+
+      {:AEXPR_NOT_BETWEEN, _} ->
+        handle_between(expr, refs, env)
+
+      {:AEXPR_NOT_BETWEEN_SYM, _} ->
+        handle_between(expr, refs, env)
+
+      {:AEXPR_OP_ANY, _} ->
+        handle_any_or_all(expr, refs, env)
+
+      {:AEXPR_OP_ALL, _} ->
+        handle_any_or_all(expr, refs, env)
+
+      _ ->
+        {:error,
+         {loc,
+          "expression #{identifier(expr.name)} of #{inspect(kind)} is not currently supported"}}
     end
   end
 
@@ -303,8 +454,11 @@ defmodule Electric.Replication.Eval.Parser do
        {Map.get(node, :location, 0),
         "#{type_module |> Module.split() |> List.last()} is not supported in this context"}}
 
-  defp get_type_from_pg_name(%PgQuery.TypeName{names: _, array_bounds: [_ | _]} = cast),
-    do: {:error, {cast.location, "Electric currently doesn't support array types"}}
+  defp get_type_from_pg_name(%PgQuery.TypeName{array_bounds: [_ | _]} = cast) do
+    with {:ok, type} <- get_type_from_pg_name(%{cast | array_bounds: []}) do
+      {:ok, {:array, type}}
+    end
+  end
 
   defp get_type_from_pg_name(%PgQuery.TypeName{names: names, location: loc}) do
     case Enum.map(names, &unwrap_node_string/1) do
@@ -380,6 +534,48 @@ defmodule Electric.Replication.Eval.Parser do
         else: negate(reduced)
     end
   end
+
+  defp handle_any_or_all(%PgQuery.A_Expr{} = expr, refs, env) do
+    with {:ok, lexpr} <- do_parse_and_validate_tree(expr.lexpr, refs, env),
+         {:ok, rexpr} <- do_parse_and_validate_tree(expr.rexpr, refs, env),
+         {:ok, fake_rexpr} <- get_fake_array_elem(rexpr),
+         {:ok, choices} <- find_available_operators(expr.name, 2, expr.location, env),
+         # Get a fake element type for the array, if possible, to pick correct operator overload
+         {:ok, %{args: [lexpr_type, rexpr_type], returns: :bool} = concrete} <-
+           Lookups.pick_concrete_operator_overload(choices, [lexpr, fake_rexpr], env),
+         {:ok, args} <- cast_unknowns([lexpr, rexpr], [lexpr_type, {:array, rexpr_type}], env),
+         {:ok, [lexpr, rexpr]} <- cast_implicit(args, [lexpr_type, {:array, rexpr_type}], env),
+         {:ok, bool_array} <-
+           concrete
+           |> from_concrete([lexpr, rexpr])
+           |> Map.put(:map_over_array_in_pos, 1)
+           |> maybe_reduce() do
+      {name, impl} =
+        case expr.kind do
+          :AEXPR_OP_ANY -> {"any", &Enum.any?/1}
+          :AEXPR_OP_ALL -> {"all", &Enum.all?/1}
+        end
+
+      maybe_reduce(%Func{
+        implementation: impl,
+        name: name,
+        type: :bool,
+        args: [bool_array]
+      })
+    else
+      {:error, {_loc, _msg}} = error -> error
+      :error -> {:error, {expr.location, "Could not select an operator overload"}}
+      {:ok, _} -> {:error, {expr.location, "ANY/ALL requires operator that returns bool"}}
+    end
+  end
+
+  defp get_fake_array_elem(%UnknownConst{} = unknown), do: {:ok, unknown}
+
+  defp get_fake_array_elem(%{type: {:array, inner_type}} = expr),
+    do: {:ok, %{expr | type: inner_type}}
+
+  defp get_fake_array_elem(other),
+    do: {:error, {other.location, "argument of ANY must be an array"}}
 
   defp handle_between(%PgQuery.A_Expr{} = expr, refs, env) do
     # It can only be a list here because that's how PG parses SQL. It it's a subquery, then it
@@ -475,7 +671,7 @@ defmodule Electric.Replication.Eval.Parser do
         {:error, _} ->
           {:error,
            {const.location,
-            "could not cast value #{inspect(value)} from #{type} to #{target_type}"}}
+            "could not cast value #{inspect(value)} from #{readable(type)} to #{readable(target_type)}"}}
       end
     end
   end
@@ -514,16 +710,39 @@ defmodule Electric.Replication.Eval.Parser do
 
       :error ->
         case {from_type, to_type} do
-          {:unknown, _} -> {:ok, {__MODULE__, :cast_null}}
-          {_, :unknown} -> {:ok, {__MODULE__, :cast_null}}
-          {:text, to_type} -> find_cast_in_function(env, to_type)
-          {from_type, :text} -> find_cast_out_function(env, from_type)
-          {from_type, to_type} -> find_explicit_cast(env, from_type, to_type)
+          {:unknown, _} ->
+            {:ok, {__MODULE__, :cast_null}}
+
+          {_, :unknown} ->
+            {:ok, {__MODULE__, :cast_null}}
+
+          {{:array, t1}, {:array, t2}} ->
+            case find_cast_function(env, t1, t2) do
+              {:ok, :as_is} -> {:ok, :as_is}
+              {:ok, impl} -> {:ok, :array_cast, impl}
+              :error -> :error
+            end
+
+          {:text, to_type} ->
+            find_cast_in_function(env, to_type)
+
+          {from_type, :text} ->
+            find_cast_out_function(env, from_type)
+
+          {from_type, to_type} ->
+            find_explicit_cast(env, from_type, to_type)
         end
     end
   end
 
   def cast_null(nil), do: nil
+
+  defp find_cast_in_function(env, {:array, to_type}) do
+    with {:ok, [%{args: [:text], implementation: impl}]} <-
+           Map.fetch(env.funcs, {"#{to_type}", 1}) do
+      {:ok, &PgInterop.Array.parse(&1, impl)}
+    end
+  end
 
   defp find_cast_in_function(env, to_type) do
     case Map.fetch(env.funcs, {"#{to_type}", 1}) do
@@ -549,6 +768,17 @@ defmodule Electric.Replication.Eval.Parser do
       {:ok, :as_is} ->
         {:ok, %{arg | type: target_type}}
 
+      {:ok, :array_cast, impl} ->
+        {:ok,
+         %Func{
+           location: loc,
+           type: maybe_array_type(target_type),
+           args: [arg],
+           implementation: impl,
+           map_over_array_in_pos: 0,
+           name: "#{readable(type)}_to_#{readable(target_type)}"
+         }}
+
       {:ok, impl} ->
         {:ok,
          %Func{
@@ -556,12 +786,57 @@ defmodule Electric.Replication.Eval.Parser do
            type: target_type,
            args: [arg],
            implementation: impl,
-           name: "#{type}_to_#{target_type}"
+           name: "#{readable(type)}_to_#{readable(target_type)}"
          }}
 
       :error ->
-        {:error, {loc, "unknown cast from type #{type} to type #{target_type}"}}
+        {:error,
+         {loc, "unknown cast from type #{readable(type)} to type #{readable(target_type)}"}}
     end
+  end
+
+  defp readable(:unknown), do: "unknown"
+  defp readable({:array, type}), do: "#{readable(type)}[]"
+  defp readable({:internal, type}), do: "internal type #{readable(type)}"
+  defp readable(type), do: to_string(type)
+
+  defp try_cast_implicit(processed_args, arg_list, env) do
+    {:ok,
+     Enum.zip_with(processed_args, arg_list, fn
+       %{type: type} = arg, type ->
+         arg
+
+       %{type: {:internal, _}} = arg, _ ->
+         arg
+
+       %{type: from_type} = arg, to_type ->
+         case Map.fetch(env.implicit_casts, {from_type, to_type}) do
+           {:ok, :as_is} ->
+             arg
+
+           {:ok, impl} ->
+             %Func{
+               location: arg.location,
+               type: to_type,
+               args: [arg],
+               implementation: impl,
+               name: "#{from_type}_to_#{to_type}"
+             }
+             |> maybe_reduce()
+             |> case do
+               {:ok, val} -> val
+               error -> throw(error)
+             end
+
+           :error ->
+             throw(
+               {:error,
+                {arg.location, "#{readable(from_type)} cannot be matched to #{readable(to_type)}"}}
+             )
+         end
+     end)}
+  catch
+    {:error, {_loc, _message}} = error -> error
   end
 
   defp cast_implicit(processed_args, arg_list, env) do
@@ -569,6 +844,27 @@ defmodule Electric.Replication.Eval.Parser do
      Enum.zip_with(processed_args, arg_list, fn
        %{type: type} = arg, type ->
          arg
+
+       %{type: {:array, from_type}} = arg, {:array, to_type} ->
+         case Map.fetch!(env.implicit_casts, {from_type, to_type}) do
+           :as_is ->
+             arg
+
+           impl ->
+             %Func{
+               location: arg.location,
+               type: to_type,
+               args: [arg],
+               implementation: impl,
+               name: "#{from_type}_to_#{to_type}",
+               map_over_array_in_pos: 0
+             }
+             |> maybe_reduce()
+             |> case do
+               {:ok, val} -> val
+               error -> throw(error)
+             end
+         end
 
        %{type: from_type} = arg, to_type ->
          case Map.fetch!(env.implicit_casts, {from_type, to_type}) do
@@ -603,7 +899,7 @@ defmodule Electric.Replication.Eval.Parser do
        %UnknownConst{value: value, location: loc}, type ->
          case Env.parse_const(env, value, type) do
            {:ok, value} -> %Const{type: type, location: loc, value: value}
-           :error -> throw({:error, {loc, "invalid syntax for type #{type}: #{value}"}})
+           :error -> throw({:error, {loc, "invalid syntax for type #{readable(type)}: #{value}"}})
          end
 
        arg, _ ->
@@ -628,7 +924,7 @@ defmodule Electric.Replication.Eval.Parser do
         {:ok, %Const{type: :int8, value: value, location: loc}}
 
       {:fval, value} ->
-        {:ok, %Const{type: :numeric, value: value, location: loc}}
+        {:ok, %Const{type: :numeric, value: String.to_float(value), location: loc}}
 
       {:boolval, value} ->
         {:ok, %Const{type: :bool, value: value, location: loc}}
@@ -664,12 +960,26 @@ defmodule Electric.Replication.Eval.Parser do
           {:ok, %Func{} | %Const{}} | {:error, {non_neg_integer(), String.t()}}
   defp maybe_reduce(%Func{immutable?: false} = func), do: {:ok, func}
 
-  defp maybe_reduce(%Func{args: args} = func) do
+  defp maybe_reduce(%Func{args: args, variadic_arg: position} = func) do
     {args, {any_nils?, all_const?}} =
-      Enum.map_reduce(args, {false, true}, fn
-        %Const{value: nil}, {_any_nils?, all_const?} -> {nil, {true, all_const?}}
-        %Const{value: value}, {any_nils?, all_const?} -> {value, {any_nils?, all_const?}}
-        _, {any_nils?, _all_const?} -> {:not_used, {any_nils?, false}}
+      args
+      |> Enum.with_index()
+      |> Enum.map_reduce({false, true}, fn
+        {arg, ^position}, {any_nils?, all_const?} ->
+          Enum.map_reduce(arg, {any_nils?, all_const?}, fn
+            %Const{value: nil}, {_any_nils?, all_const?} -> {nil, {true, all_const?}}
+            %Const{value: value}, {any_nils?, all_const?} -> {value, {any_nils?, all_const?}}
+            _, {any_nils?, _all_const?} -> {:not_used, {any_nils?, false}}
+          end)
+
+        {%Const{value: nil}, _}, {_any_nils?, all_const?} ->
+          {nil, {true, all_const?}}
+
+        {%Const{value: value}, _}, {any_nils?, all_const?} ->
+          {value, {any_nils?, all_const?}}
+
+        _, {any_nils?, _all_const?} ->
+          {:not_used, {any_nils?, false}}
       end)
 
     cond do
@@ -687,14 +997,40 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp try_applying(%Func{args: args, implementation: impl} = func) do
+  defp try_applying(
+         %Func{args: args, implementation: impl, map_over_array_in_pos: map_over_array_in_pos} =
+           func
+       ) do
     value =
-      case impl do
-        {module, function} -> apply(module, function, args)
-        function -> apply(function, args)
+      case {impl, map_over_array_in_pos} do
+        {{module, function}, nil} ->
+          apply(module, function, args)
+
+        {function, nil} ->
+          apply(function, args)
+
+        {{module, function}, 0} ->
+          Utils.deep_map(hd(args), &apply(module, function, [&1 | tl(args)]))
+
+        {function, 0} ->
+          Utils.deep_map(hd(args), &apply(function, [&1 | tl(args)]))
+
+        {{module, function}, pos} ->
+          Utils.deep_map(
+            Enum.at(args, pos),
+            &apply(module, function, List.replace_at(args, pos, &1))
+          )
+
+        {function, pos} ->
+          Utils.deep_map(Enum.at(args, pos), &apply(function, List.replace_at(args, pos, &1)))
       end
 
-    {:ok, %Const{value: value, type: func.type, location: func.location}}
+    {:ok,
+     %Const{
+       value: value,
+       type: if(not is_nil(map_over_array_in_pos), do: {:array, func.type}, else: func.type),
+       location: func.location
+     }}
   rescue
     e ->
       IO.puts(Exception.format(:error, e, __STACKTRACE__))
@@ -730,7 +1066,16 @@ defmodule Electric.Replication.Eval.Parser do
   defp find_refs(tree, acc \\ %{})
   defp find_refs(%Const{}, acc), do: acc
   defp find_refs(%Ref{path: path, type: type}, acc), do: Map.put_new(acc, path, type)
-  defp find_refs(%Func{args: args}, acc), do: Enum.reduce(args, acc, &find_refs/2)
+
+  defp find_refs(%Func{args: args, variadic_arg: nil}, acc),
+    do: Enum.reduce(args, acc, &find_refs/2)
+
+  defp find_refs(%Func{args: args, variadic_arg: position}, acc),
+    do:
+      Enum.reduce(Enum.with_index(args), acc, fn
+        {arg, ^position}, acc -> Enum.reduce(arg, acc, &find_refs/2)
+        {arg, _}, acc -> find_refs(arg, acc)
+      end)
 
   defp unsnake(string) when is_binary(string), do: :binary.replace(string, "_", " ", [:global])
 
@@ -747,5 +1092,32 @@ defmodule Electric.Replication.Eval.Parser do
       args: [tree_part],
       location: tree_part.location
     })
+  end
+
+  defp maybe_array_type({:array, type}), do: type
+  defp maybe_array_type(type), do: type
+
+  defp build_index_structure(index) do
+    {:index, index}
+  end
+
+  defp build_slice_structure(lower_idx, upper_idx) do
+    {:slice, lower_idx, upper_idx}
+  end
+
+  defp round_numerics(args) do
+    Utils.map_while_ok(args, fn
+      %{type: x} = arg when x in [:numeric, :float4, :float8] ->
+        maybe_reduce(%Func{
+          location: arg.location,
+          type: :int8,
+          args: [arg],
+          implementation: &Kernel.round/1,
+          name: "round"
+        })
+
+      arg ->
+        {:ok, arg}
+    end)
   end
 end

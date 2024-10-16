@@ -17,7 +17,7 @@ import { ChangeMessage, ControlMessage, Message, Row } from './types'
  * }
  * ```
  */
-export function isChangeMessage<T extends Row = Row>(
+export function isChangeMessage<T extends Row<unknown> = Row>(
   message: Message<T>
 ): message is ChangeMessage<T> {
   return `key` in message
@@ -40,13 +40,13 @@ export function isChangeMessage<T extends Row = Row>(
  * }
  * ```
  */
-export function isControlMessage<T extends Row = Row>(
+export function isControlMessage<T extends Row<unknown> = Row>(
   message: Message<T>
 ): message is ControlMessage {
   return !isChangeMessage(message)
 }
 
-export function isUpToDateMessage<T extends Row = Row>(
+export function isUpToDateMessage<T extends Row<unknown> = Row>(
   message: Message<T>
 ): message is ControlMessage & { up_to_date: true } {
   return isControlMessage(message) && message.headers.control === `up-to-date`

@@ -23,7 +23,7 @@ services:
   backend:
     image: electricsql/electric:canary
     environment:
-      DATABASE_URL: postgresql://postgres:password@postgres:5432/electric
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/electric?sslmode=disable
     ports:
       - 3000:3000
     build:

@@ -80,11 +80,13 @@
   [shell $shell_name]
     -$fail_pattern
   
-    !DATABASE_URL=$database_url PORT=$port ../electric_dev.sh
+    !DATABASE_URL=$database_url PORT=$port ../scripts/electric_dev.sh
 [endmacro]
 
 [macro teardown]
   -$fail_pattern
-
   !docker rm -f -v $pg_container_name
+  ?$PS1
+  !../scripts/clean_up.sh
+  ?$PS1
 [endmacro]

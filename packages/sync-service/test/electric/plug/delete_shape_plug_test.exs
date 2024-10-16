@@ -16,9 +16,10 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
   @test_shape %Shape{
     root_table: {"public", "users"},
+    root_table_id: :erlang.phash2({"public", "users"}),
     table_info: %{
       {"public", "users"} => %{
-        columns: [%{name: "id", type: "int8", pk_position: 0}],
+        columns: [%{name: "id", type: "int8", pk_position: 0, type_id: {20, -1}}],
         pk: ["id"]
       }
     }
@@ -27,6 +28,9 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
   def load_column_info({"public", "users"}, _),
     do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
+
+  def load_relation(tbl, _),
+    do: Support.StubInspector.load_relation(tbl, nil)
 
   setup do
     start_link_supervised!({Registry, keys: :duplicate, name: @registry})
@@ -70,7 +74,9 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "root_table" => ["table name does not match expected format"]
+               "root_table" => [
+                 "invalid name syntax"
+               ]
              }
     end
 

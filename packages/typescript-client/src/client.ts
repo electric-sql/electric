@@ -1,4 +1,11 @@
-import { Message, Offset, Schema, Row, MaybePromise } from './types'
+import {
+  Message,
+  Offset,
+  Schema,
+  Row,
+  MaybePromise,
+  GetExtensions,
+} from './types'
 import { MessageParser, Parser } from './parser'
 import { isUpToDateMessage } from './helpers'
 import { FetchError, FetchBackoffAbortError } from './error'
@@ -10,6 +17,9 @@ import {
 } from './fetch'
 import {
   CHUNK_LAST_OFFSET_HEADER,
+  LIVE_CACHE_BUSTER_HEADER,
+  LIVE_CACHE_BUSTER_QUERY_PARAM,
+  COLUMNS_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
   SHAPE_ID_HEADER,
@@ -22,7 +32,7 @@ import {
 /**
  * Options for constructing a ShapeStream.
  */
-export interface ShapeStreamOptions {
+export interface ShapeStreamOptions<T = never> {
   /**
    * The full URL to where the Shape is served. This can either be the Electric server
    * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape`
@@ -35,9 +45,16 @@ export interface ShapeStreamOptions {
   table: string
 
   /**
-   * where clauses for the shape.
+   * The where clauses for the shape.
    */
   where?: string
+
+  /**
+   * The columns to include in the shape.
+   * Must include primary keys, and can only inlude valid columns.
+   */
+  columns?: string[]
+
   /**
    * The "offset" on the shape log. This is typically not set as the ShapeStream
    * will handle this automatically. A common scenario where you might pass an offset
@@ -53,6 +70,13 @@ export interface ShapeStreamOptions {
    */
   shapeId?: string
   backoffOptions?: BackoffOptions
+
+  /**
+   * HTTP headers to attach to requests made by the client.
+   * Can be used for adding authentication headers.
+   */
+  headers?: Record<string, string>
+
   /**
    * Automatically fetch updates to the Shape. If you just want to sync the current
    * shape and stop, pass false.
@@ -60,10 +84,10 @@ export interface ShapeStreamOptions {
   subscribe?: boolean
   signal?: AbortSignal
   fetchClient?: typeof fetch
-  parser?: Parser
+  parser?: Parser<T>
 }
 
-export interface ShapeStreamInterface<T extends Row = Row> {
+export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   subscribe(
     callback: (messages: Message<T>[]) => MaybePromise<void>,
     onError?: (error: FetchError | Error) => void
@@ -115,10 +139,10 @@ export interface ShapeStreamInterface<T extends Row = Row> {
  * ```
  */
 
-export class ShapeStream<T extends Row = Row>
+export class ShapeStream<T extends Row<unknown> = Row>
   implements ShapeStreamInterface<T>
 {
-  readonly options: ShapeStreamOptions
+  readonly options: ShapeStreamOptions<GetExtensions<T>>
 
   readonly #fetchClient: typeof fetch
   readonly #messageParser: MessageParser<T>
@@ -136,16 +160,18 @@ export class ShapeStream<T extends Row = Row>
   >()
 
   #lastOffset: Offset
+  #liveCacheBuster: string // Seconds since our Electric Epoch 😎
   #lastSyncedAt?: number // unix time
   #isUpToDate: boolean = false
   #connected: boolean = false
   #shapeId?: string
   #schema?: Schema
 
-  constructor(options: ShapeStreamOptions) {
+  constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     validateOptions(options)
     this.options = { subscribe: true, ...options }
     this.#lastOffset = this.options.offset ?? `-1`
+    this.#liveCacheBuster = ``
     this.#shapeId = this.options.shapeId
     this.#messageParser = new MessageParser<T>(options.parser)
 
@@ -178,6 +204,7 @@ export class ShapeStream<T extends Row = Row>
     this.#isUpToDate = false
 
     const { url, table, where, signal } = this.options
+    const { url, where, table, columns, signal } = this.options
 
     try {
       while (
@@ -187,10 +214,16 @@ export class ShapeStream<T extends Row = Row>
         const fetchUrl = new URL(url)
         fetchUrl.searchParams.set(TABLE_QUERY_PARAM, table)
         if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
+        if (columns && columns.length > 0)
+          fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, columns.join(`,`))
         fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
 
         if (this.#isUpToDate) {
           fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
+          fetchUrl.searchParams.set(
+            LIVE_CACHE_BUSTER_QUERY_PARAM,
+            this.#liveCacheBuster
+          )
         }
 
         if (this.#shapeId) {
@@ -200,7 +233,10 @@ export class ShapeStream<T extends Row = Row>
 
         let response!: Response
         try {
-          response = await this.#fetchClient(fetchUrl.toString(), { signal })
+          response = await this.#fetchClient(fetchUrl.toString(), {
+            signal,
+            headers: this.options.headers,
+          })
           this.#connected = true
         } catch (e) {
           if (e instanceof FetchBackoffAbortError) break // interrupted
@@ -237,6 +273,11 @@ export class ShapeStream<T extends Row = Row>
         const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
         if (lastOffset) {
           this.#lastOffset = lastOffset as Offset
+        }
+
+        const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
+        if (liveCacheBuster) {
+          this.#liveCacheBuster = liveCacheBuster
         }
 
         const getSchema = (): Schema => {
@@ -367,6 +408,7 @@ export class ShapeStream<T extends Row = Row>
    */
   #reset(shapeId?: string) {
     this.#lastOffset = `-1`
+    this.#liveCacheBuster = ``
     this.#shapeId = shapeId
     this.#isUpToDate = false
     this.#connected = false
@@ -374,7 +416,7 @@ export class ShapeStream<T extends Row = Row>
   }
 }
 
-function validateOptions(options: Partial<ShapeStreamOptions>): void {
+function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (!options.url) {
     throw new Error(`Invalid shape options. It must provide the url`)
   }

@@ -8,14 +8,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Replication.LogOffset
 
   alias Support.Mock
-  import Support.ComponentSetup, only: [with_electric_instance_id: 1]
+  import Support.ComponentSetup, only: [with_electric_instance_id: 1, with_in_memory_storage: 1]
 
   import Mox
 
   @moduletag :capture_log
 
   setup :verify_on_exit!
-  setup :with_electric_instance_id
+  setup [:with_electric_instance_id, :with_in_memory_storage]
 
   setup(ctx) do
     # Start a test Registry
@@ -32,7 +32,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
 
     Mock.ShapeStatus
-    |> expect(:initialise, 1, fn opts -> Electric.ShapeCache.ShapeStatus.initialise(opts) end)
+    |> expect(:initialise, 1, fn _opts -> {:ok, %{}} end)
     |> expect(:list_shapes, 1, fn _ -> [] end)
     # allow the ShapeCache to call this mock
     |> allow(self(), fn -> GenServer.whereis(Electric.ShapeCache) end)
@@ -48,7 +48,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         inspector: {Mock.Inspector, []},
         shape_status: Mock.ShapeStatus,
         shape_meta_table: shape_meta_table,
-        persistent_kv: Electric.PersistentKV.Memory.new!(),
         prepare_tables_fn: fn _, _ -> {:ok, [:ok]} end,
         log_producer: ShapeLogCollector.name(ctx.electric_instance_id),
         electric_instance_id: ctx.electric_instance_id,
@@ -121,12 +120,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     xmin = 100
     lsn = Lsn.from_string("0/10")
     last_log_offset = LogOffset.new(lsn, 0)
-
-    Mock.Inspector
-    |> expect(:load_column_info, 1, fn {"public", "test_table"}, _ ->
-      {:ok, [%{pk_position: 0, name: "id"}]}
-    end)
-    |> allow(self(), ctx.server)
 
     txn =
       %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}

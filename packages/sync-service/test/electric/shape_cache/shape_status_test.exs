@@ -1,11 +1,15 @@
 defmodule Electric.ShapeCache.ShapeStatusTest do
   use ExUnit.Case, async: true
 
-  alias Electric.PersistentKV
   alias Electric.Replication.LogOffset
-  alias Electric.Replication.Changes.{Column, Relation}
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
+  alias Support.StubInspector
+
+  alias Support.Mock
+  import Mox
+
+  setup :verify_on_exit!
 
   defp shape! do
     assert {:ok, %Shape{where: %{query: "value = 'test'"}} = shape} =
@@ -23,14 +27,17 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
   defp table_name, do: :"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}"
 
-  setup do
-    [kv: PersistentKV.Memory.new!()]
-  end
-
-  defp new_state(ctx, opts \\ []) do
+  defp new_state(_ctx, opts \\ []) do
     table = Keyword.get(opts, :table, table_name())
 
-    {:ok, state} = ShapeStatus.initialise(persistent_kv: ctx.kv, shape_meta_table: table)
+    Mock.Storage
+    |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, Access.get(opts, :stored_shapes, %{})} end)
+
+    {:ok, state} =
+      ShapeStatus.initialise(
+        storage: {Mock.Storage, []},
+        shape_meta_table: table
+      )
 
     shapes = Keyword.get(opts, :shapes, [])
 
@@ -48,13 +55,25 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert [] = ShapeStatus.list_shapes(state)
   end
 
-  test "can add and retain shapes", ctx do
+  test "can recover shapes from storage", ctx do
     {:ok, state, []} = new_state(ctx)
     shape = shape!()
     assert {:ok, shape_id} = ShapeStatus.add_shape(state, shape)
-    assert [{^shape_id, ^shape}] = ShapeStatus.list_shapes(state)
 
+    {:ok, state, []} =
+      new_state(ctx,
+        stored_shapes: %{
+          shape_id => shape
+        }
+      )
+
+    assert [{^shape_id, ^shape}] = ShapeStatus.list_shapes(state)
+  end
+
+  test "can add shapes", ctx do
     {:ok, state, []} = new_state(ctx)
+    shape = shape!()
+    assert {:ok, shape_id} = ShapeStatus.add_shape(state, shape)
     assert [{^shape_id, ^shape}] = ShapeStatus.list_shapes(state)
   end
 
@@ -72,9 +91,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     assert {:ok, ^shape_1} = ShapeStatus.remove_shape(state, shape_id_1)
     assert [{^shape_id_2, ^shape_2}] = ShapeStatus.list_shapes(state)
-
-    {:ok, state, []} = new_state(ctx)
-    assert [{^shape_id_2, ^shape_2}] = ShapeStatus.list_shapes(state)
   end
 
   test "get_existing_shape/2 with %Shape{}", ctx do
@@ -84,9 +100,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     refute ShapeStatus.get_existing_shape(state, shape)
 
     assert {:ok, shape_id} = ShapeStatus.add_shape(state, shape)
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
-
-    {:ok, state, []} = new_state(ctx)
     assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
 
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_id)
@@ -102,10 +115,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
     assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape_id)
 
-    {:ok, state, []} = new_state(ctx)
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape)
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(state, shape_id)
-
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_id)
     refute ShapeStatus.get_existing_shape(state, shape)
     refute ShapeStatus.get_existing_shape(state, shape_id)
@@ -115,16 +124,9 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     shape = shape!()
     table = table_name()
 
-    {:ok, _state, [shape_id]} = new_state(ctx, table: table, shapes: [shape])
+    {:ok, state, [shape_id]} = new_state(ctx, table: table, shapes: [shape])
 
     refute ShapeStatus.get_existing_shape(table, "1234")
-
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape)
-    assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape_id)
-
-    table = table_name()
-
-    {:ok, state, []} = new_state(ctx, table: table)
 
     assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape)
     assert {^shape_id, _} = ShapeStatus.get_existing_shape(table, shape_id)
@@ -187,67 +189,17 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert ShapeStatus.snapshot_started?(state.shape_meta_table, shape_id)
   end
 
-  test "relation data", ctx do
-    relation_id = "relation_1"
-
-    relation = %Relation{
-      id: relation_id,
-      schema: "public",
-      table: "test_table",
-      columns: [
-        %Column{name: "id", type_oid: 1234},
-        %Column{name: "name", type_oid: 2222}
-      ]
-    }
-
-    {:ok, state, []} = new_state(ctx)
-
-    refute ShapeStatus.get_relation(state, relation_id)
-    assert :ok = ShapeStatus.store_relation(state, relation)
-
-    assert relation == ShapeStatus.get_relation(state, relation_id)
-
-    {:ok, state, []} = new_state(ctx)
-
-    assert relation == ShapeStatus.get_relation(state, relation_id)
-  end
-
-  test "relation data public api", ctx do
-    table = table_name()
-    relation_id = "relation_1"
-
-    relation = %Relation{
-      id: relation_id,
-      schema: "public",
-      table: "test_table",
-      columns: [
-        %Column{name: "id", type_oid: 1234},
-        %Column{name: "name", type_oid: 2222}
-      ]
-    }
-
-    {:ok, state, []} = new_state(ctx, table: table)
-
-    refute ShapeStatus.get_relation(table, relation_id)
-    assert :ok = ShapeStatus.store_relation(state, relation)
-
-    assert relation == ShapeStatus.get_relation(table, relation_id)
-
-    table = table_name()
-
-    {:ok, _state, []} = new_state(ctx, table: table)
-
-    assert relation == ShapeStatus.get_relation(table, relation_id)
-  end
-
   def load_column_info({"public", "other_table"}, _),
     do:
       {:ok,
        [
-         %{name: "id", type: :int8, pk_position: 0},
-         %{name: "value", type: :text, pk_position: nil}
+         %{name: "id", type: :int8, type_id: {1, 1}, pk_position: 0},
+         %{name: "value", type: :text, type_id: {2, 2}, pk_position: nil}
        ]}
 
   def load_column_info({"public", "table"}, _),
     do: {:ok, [%{name: "id", type: :int8, pk_position: 0}]}
+
+  def load_relation(tbl, _),
+    do: StubInspector.load_relation(tbl, nil)
 end

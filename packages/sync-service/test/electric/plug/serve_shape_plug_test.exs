@@ -19,9 +19,13 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
   @test_shape %Shape{
     root_table: {"public", "users"},
+    root_table_id: :erlang.phash2({"public", "users"}),
     table_info: %{
       {"public", "users"} => %{
-        columns: [%{name: "id", type: "int8", pk_position: 0, array_dimensions: 0}],
+        columns: [
+          %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0, array_dimensions: 0},
+          %{name: "value", type: "text", type_id: {28, 1}, pk_position: nil, array_dimensions: 0}
+        ],
         pk: ["id"]
       }
     }
@@ -35,6 +39,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
   def load_column_info({"public", "users"}, _),
     do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
+
+  def load_column_info(_, _),
+    do: :table_not_found
+
+  def load_relation(tbl, _),
+    do: Support.StubInspector.load_relation(tbl, nil)
 
   setup do
     start_link_supervised!({Registry, keys: :duplicate, name: @registry})
@@ -58,6 +68,38 @@ defmodule Electric.Plug.ServeShapePlugTest do
   end
 
   describe "ServeShapePlug" do
+    test "seconds_since_oct9th_2024_next_interval" do
+      # Mock the conn struct with assigns
+      # 20 seconds
+      conn = %Plug.Conn{assigns: %{config: %{long_poll_timeout: 20000}}}
+
+      # Calculate the expected next interval
+      now = DateTime.utc_now()
+      oct9th2024 = DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
+      diff_in_seconds = DateTime.diff(now, oct9th2024, :second)
+      expected_interval = ceil(diff_in_seconds / 20) * 20
+
+      # Assert that the function returns the expected value
+      assert Electric.Plug.ServeShapePlug.TimeUtils.seconds_since_oct9th_2024_next_interval(conn) ==
+               expected_interval
+    end
+
+    test "seconds_since_oct9th_2024_next_interval with different timeout" do
+      # Mock the conn struct with a different timeout
+      # 30 seconds
+      conn = %Plug.Conn{assigns: %{config: %{long_poll_timeout: 30000}}}
+
+      # Calculate the expected next interval
+      now = DateTime.utc_now()
+      oct9th2024 = DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
+      diff_in_seconds = DateTime.diff(now, oct9th2024, :second)
+      expected_interval = ceil(diff_in_seconds / 30) * 30
+
+      # Assert that the function returns the expected value
+      assert Electric.Plug.ServeShapePlug.TimeUtils.seconds_since_oct9th_2024_next_interval(conn) ==
+               expected_interval
+    end
+
     test "returns 400 for invalid params" do
       conn =
         conn(:get, %{"root_table" => ".invalid_shape"}, "?offset=invalid")
@@ -67,7 +109,23 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == %{
                "offset" => ["has invalid format"],
-               "root_table" => ["table name does not match expected format"]
+               "root_table" => [
+                 "invalid name syntax"
+               ]
+             }
+    end
+
+    test "returns 400 when table does not exist" do
+      # this will pass table name validation
+      # but will fail to find the table
+      conn =
+        conn(:get, %{"root_table" => "_val1d_schëmaΦ$.Φtàble"}, "?offset=-1")
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "root_table" => ["table not found"]
              }
     end
 
@@ -178,7 +236,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 200
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
-               "max-age=#{max_age}, stale-while-revalidate=#{stale_age}"
+               "public, max-age=#{max_age}, stale-while-revalidate=#{stale_age}"
              ]
     end
 
@@ -209,7 +267,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> ServeShapePlug.call([])
 
       assert Plug.Conn.get_resp_header(conn, "electric-schema") == [
-               ~s|{"id":{"type":"int8","pk_index":0}}|
+               ~s|{"id":{"type":"int8","pk_index":0},"value":{"type":"text"}}|
              ]
     end
 
@@ -356,7 +414,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
-               "max-age=5, stale-while-revalidate=5"
+               "public, max-age=5, stale-while-revalidate=5"
              ]
 
       assert Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset") == [next_offset_str]
@@ -442,7 +500,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "up-to-date"}}]
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
-               "max-age=5, stale-while-revalidate=5"
+               "public, max-age=5, stale-while-revalidate=5"
              ]
 
       assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == [""]
@@ -519,6 +577,38 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 400
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
+    end
+
+    test "sends 400 when omitting primary key columns in selection" do
+      conn =
+        conn(
+          :get,
+          %{"root_table" => "public.users", "columns" => "value"},
+          "?offset=-1"
+        )
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "columns" => ["Must include all primary key columns, missing: id"]
+             }
+    end
+
+    test "sends 400 when selecting invalid columns" do
+      conn =
+        conn(
+          :get,
+          %{"root_table" => "public.users", "columns" => "id,invalid"},
+          "?offset=-1"
+        )
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "columns" => ["The following columns could not be found: invalid"]
+             }
     end
   end
 

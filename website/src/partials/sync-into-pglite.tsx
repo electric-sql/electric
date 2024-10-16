@@ -6,7 +6,7 @@ import { useLiveQuery } from '@electric-sql/pglite-react'
 // Create a persistent local PGlite database
 const pg = await PGlite.create({
   dataDir: 'idb://my-database',
-  extensions: {,
+  extensions: {
     electric: electricSync(),
     live
   }

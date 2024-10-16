@@ -61,5 +61,50 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Parser.parse_and_validate_expression!(%{["test"] => :int4})
                |> Runner.execute(%{["test"] => "test"})
     end
+
+    test "should work with array types" do
+      assert {:ok, [[1, 2], [3, 4]]} =
+               ~S|ARRAY[ARRAY[1, x], ARRAY['3', 2 + 2]]|
+               |> Parser.parse_and_validate_expression!(%{["x"] => :int4})
+               |> Runner.execute(%{["x"] => 2})
+
+      assert {:ok, true} =
+               ~S|x @> ARRAY[y]|
+               |> Parser.parse_and_validate_expression!(%{
+                 ["x"] => {:array, :int4},
+                 ["y"] => :int4
+               })
+               |> Runner.execute(%{["y"] => 1, ["x"] => [1, 2]})
+
+      assert {:ok, true} =
+               ~S|x::float[] = y::int4[]::float[]|
+               |> Parser.parse_and_validate_expression!(%{
+                 ["x"] => {:array, :int4},
+                 ["y"] => :text
+               })
+               |> Runner.execute(%{["y"] => "{1,2}", ["x"] => [1, 2]})
+
+      assert {:ok, true} =
+               ~S|y = ANY (x)|
+               |> Parser.parse_and_validate_expression!(%{
+                 ["x"] => {:array, :int4},
+                 ["y"] => :int8
+               })
+               |> Runner.execute(%{["y"] => 1, ["x"] => [1, 2]})
+
+      assert {:ok, [[1, 2], [3, 4]]} =
+               ~S/(ARRAY[1] || ARRAY[2]) || x/
+               |> Parser.parse_and_validate_expression!(%{
+                 ["x"] => {:array, :float8}
+               })
+               |> Runner.execute(%{["x"] => [[3, 4]]})
+
+      assert {:error, _} =
+               ~S/(ARRAY[1] || ARRAY[2]) || x/
+               |> Parser.parse_and_validate_expression!(%{
+                 ["x"] => {:array, :int4}
+               })
+               |> Runner.execute(%{["x"] => [[[3, 4]]]})
+    end
   end
 end

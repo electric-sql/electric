@@ -2,7 +2,22 @@ import Config
 import Dotenvy
 
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
-config :logger, level: :debug
+
+if config_env() in [:dev, :test] do
+  source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
+end
+
+log_level_config =
+  env!("LOG_LEVEL", :string, "info")
+  |> Electric.Config.parse_log_level()
+
+case log_level_config do
+  {:ok, log_level} ->
+    config :logger, level: log_level
+
+  {:error, message} ->
+    raise message
+end
 
 # uncomment if you need to track process creation and destruction
 # config :logger,
@@ -12,10 +27,6 @@ config :logger, level: :debug
 if config_env() == :test do
   config(:logger, level: :info)
   config(:electric, pg_version_for_tests: env!("POSTGRES_VERSION", :integer, 150_001))
-end
-
-if config_env() in [:dev, :test] do
-  source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
 
 electric_instance_id = :default
@@ -29,49 +40,50 @@ config :opentelemetry,
   resource_detectors: [:otel_resource_env_var, :otel_resource_app_env],
   resource: %{service: %{name: service_name, version: version}, instance: %{id: instance_id}}
 
-otel_export = env!("OTEL_EXPORT", :string, nil)
-prometheus_port = env!("PROMETHEUS_PORT", :integer, nil)
+otlp_endpoint = env!("OTLP_ENDPOINT", :string, nil)
+otel_debug = env!("OTEL_DEBUG", :boolean, false)
 
-case otel_export do
-  "otlp" ->
-    if endpoint = env!("OTLP_ENDPOINT", :string, nil) do
-      # Shortcut config for Honeycomb.io:
-      # users may set the optional HNY_API_KEY and HNY_DATASET environment variables
-      # and specify the Honeycomb URL in OTLP_ENDPOINT to export traces directly to
-      # Honeycomb, without the need to run an OpenTelemetry Collector.
-      honeycomb_api_key = env!("HNY_API_KEY", :string, nil)
-      honeycomb_dataset = env!("HNY_DATASET", :string, nil)
+if otlp_endpoint do
+  # Shortcut config for Honeycomb.io:
+  # users may set the optional HNY_API_KEY and HNY_DATASET environment variables
+  # and specify the Honeycomb URL in OTLP_ENDPOINT to export traces directly to
+  # Honeycomb, without the need to run an OpenTelemetry Collector.
+  honeycomb_api_key = env!("HNY_API_KEY", :string, nil)
+  honeycomb_dataset = env!("HNY_DATASET", :string, nil)
 
-      headers =
-        Enum.reject(
-          [
-            {"x-honeycomb-team", honeycomb_api_key},
-            {"x-honeycomb-dataset", honeycomb_dataset}
-          ],
-          fn {_, val} -> is_nil(val) end
-        )
+  headers =
+    Enum.reject(
+      [
+        {"x-honeycomb-team", honeycomb_api_key},
+        {"x-honeycomb-dataset", honeycomb_dataset}
+      ],
+      fn {_, val} -> is_nil(val) end
+    )
 
-      config :opentelemetry_exporter,
-        otlp_protocol: :http_protobuf,
-        otlp_endpoint: endpoint,
-        otlp_headers: headers,
-        otlp_compression: :gzip
-    end
-
-  "debug" ->
-    # In this mode, each span is printed to stdout as soon as it ends, without batching.
-    config :opentelemetry, :processors,
-      otel_simple_processor: %{exporter: {:otel_exporter_stdout, []}}
-
-  _ ->
-    config :opentelemetry,
-      processors: [],
-      traces_exporter: :none
+  config :opentelemetry_exporter,
+    otlp_protocol: :http_protobuf,
+    otlp_endpoint: otlp_endpoint,
+    otlp_headers: headers,
+    otlp_compression: :gzip
 end
 
-if Config.config_env() == :test do
-  config :electric,
-    connection_opts: [
+otel_batch_processor =
+  if otlp_endpoint do
+    {:otel_batch_processor, %{}}
+  end
+
+otel_simple_processor =
+  if otel_debug do
+    # In this mode, each span is printed to stdout as soon as it ends, without batching.
+    {:otel_simple_processor, %{exporter: {:otel_exporter_stdout, []}}}
+  end
+
+config :opentelemetry,
+  processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1)
+
+connection_opts =
+  if Config.config_env() == :test do
+    [
       hostname: "localhost",
       port: 54321,
       username: "postgres",
@@ -79,20 +91,18 @@ if Config.config_env() == :test do
       database: "postgres",
       sslmode: :disable
     ]
-else
-  {:ok, database_url_config} =
-    env!("DATABASE_URL", :string)
-    |> Electric.Config.parse_postgresql_uri()
+  else
+    {:ok, database_url_config} =
+      env!("DATABASE_URL", :string)
+      |> Electric.Config.parse_postgresql_uri()
 
-  database_ipv6_config =
-    env!("DATABASE_USE_IPV6", :boolean, false)
+    database_ipv6_config =
+      env!("DATABASE_USE_IPV6", :boolean, false)
 
-  connection_opts = [ipv6: database_ipv6_config] ++ database_url_config
+    database_url_config ++ [ipv6: database_ipv6_config]
+  end
 
-  config :electric, connection_opts: connection_opts, electric_instance_id: electric_instance_id
-end
-
-config :electric, listen_on_ipv6?: env!("LISTEN_ON_IPV6", :boolean, false)
+config :electric, connection_opts: Electric.Utils.obfuscate_password(connection_opts)
 
 enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)
 cache_max_age = env!("CACHE_MAX_AGE", :integer, 60)
@@ -151,6 +161,8 @@ chunk_bytes_threshold =
 
 storage = {storage_mod, storage_opts}
 
+prometheus_port = env!("PROMETHEUS_PORT", :integer, nil)
+
 config :electric,
   allow_shape_deletion: enable_integration_testing,
   cache_max_age: cache_max_age,
@@ -159,10 +171,12 @@ config :electric,
   # Used in telemetry
   environment: config_env(),
   instance_id: instance_id,
+  electric_instance_id: electric_instance_id,
   telemetry_statsd_host: statsd_host,
-  db_pool_size: env!("DB_POOL_SIZE", :integer, 50),
+  db_pool_size: env!("DB_POOL_SIZE", :integer, 20),
   replication_stream_id: env!("REPLICATION_STREAM_ID", :string, "default"),
   service_port: env!("PORT", :integer, 3000),
   prometheus_port: prometheus_port,
   storage: storage,
-  persistent_kv: persistent_kv
+  persistent_kv: persistent_kv,
+  listen_on_ipv6?: env!("LISTEN_ON_IPV6", :boolean, false)

@@ -93,6 +93,20 @@ defmodule Electric.Utils do
   end
 
   @doc """
+  Apply a function to each element of an enumerable, recursively if the element is an enumerable itself.
+
+  ## Examples
+
+      iex> deep_map([1, [2, [3]], 4], &(&1 * 2))
+      [2, [4, [6]], 8]
+  """
+  @spec deep_map(Enumerable.t(elem), (elem -> result)) :: list(result)
+        when elem: var, result: var
+  def deep_map(enum, fun) when is_function(fun, 1) do
+    Enum.map(enum, &if(Enumerable.impl_for(&1), do: deep_map(&1, fun), else: fun.(&1)))
+  end
+
+  @doc """
   Return a list of values from `enum` that are the maximal elements as calculated
   by the given `fun`.
 
@@ -214,6 +228,7 @@ defmodule Electric.Utils do
 
   @doc """
   Parses quoted names.
+  Lowercases unquoted names to match Postgres' case insensitivity.
 
   ## Examples
       iex> parse_quoted_name("foo")
@@ -224,6 +239,12 @@ defmodule Electric.Utils do
 
       iex> parse_quoted_name(~S|"fo""o"|)
       ~S|fo"o|
+
+      iex> parse_quoted_name(~S|"FooBar"|)
+      ~S|FooBar|
+
+      iex> parse_quoted_name(~S|FooBar|)
+      ~S|FooBar|
   """
   def parse_quoted_name(str) do
     if String.first(str) == ~s(") && String.last(str) == ~s(") do
@@ -253,4 +274,32 @@ defmodule Electric.Utils do
   def apply_fn_or_mfa({mod, fun, args}, more_args)
       when is_atom(mod) and is_atom(fun) and is_list(args) and is_list(more_args),
       do: apply(mod, fun, more_args ++ args)
+
+  @doc """
+  Given a keyword list of database connection options, obfuscate the password by wrapping it in
+  a zero-arity function.
+
+  This should be done as early as possible when parsing connection options from the OS env. The
+  aim of this obfuscation is to avoid accidentally leaking the password when inspecting connection
+  opts or logging them as part of a process state (which is done automatically by OTP when a
+  process that implements an OTP behaviour crashes).
+  """
+  @spec obfuscate_password(Keyword.t()) :: Keyword.t()
+  def obfuscate_password(connection_opts) do
+    Keyword.update!(connection_opts, :password, &wrap_in_fun/1)
+  end
+
+  @doc """
+  Undo the obfuscation applied by `obfuscate_password/1`.
+
+  This function should be called just before passing connection options to one of
+  `Postgrex` functions. Never store deobfuscated password in any of our process
+  states.
+  """
+  @spec deobfuscate_password(Keyword.t()) :: Keyword.t()
+  def deobfuscate_password(connection_opts) do
+    Keyword.update!(connection_opts, :password, fn passw -> passw.() end)
+  end
+
+  defp wrap_in_fun(val), do: fn -> val end
 end

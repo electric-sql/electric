@@ -33,7 +33,7 @@ defmodule Electric.Replication.Changes do
           | Changes.UpdatedRecord.t()
           | Changes.DeletedRecord.t()
 
-  @type change() :: data_change() | Changes.TruncatedRelation.t() | Changes.RelationChange.t()
+  @type change() :: data_change() | Changes.TruncatedRelation.t()
 
   defmodule Transaction do
     alias Electric.Replication.Changes
@@ -184,15 +184,6 @@ defmodule Electric.Replication.Changes do
           }
   end
 
-  defmodule RelationChange do
-    defstruct [:old_relation, :new_relation]
-
-    @type t() :: %__MODULE__{
-            old_relation: Relation.t(),
-            new_relation: Relation.t()
-          }
-  end
-
   @doc """
   Build a unique key for a given record based on it's relation and PK.
 
@@ -294,4 +285,49 @@ defmodule Electric.Replication.Changes do
   end
 
   def convert_update(%UpdatedRecord{} = change, to: :updated_record), do: change
+
+  @doc """
+  Filter the columns of a change to include only those provided in `columns_to_keep`.
+
+  ## Examples
+
+      iex> filter_columns(%NewRecord{record: %{"a" => "b", "c" => "d"}}, ["a"])
+      %NewRecord{record: %{"a" => "b"}}
+
+      iex> filter_columns(UpdatedRecord.new(
+      ...>  record: %{"a" => "b", "c" => "d"},
+      ...>  old_record: %{"a" => "d", "c" => "f"}
+      ...>  ), ["a"])
+      UpdatedRecord.new(record: %{"a" => "b"}, old_record: %{"a" => "d"})
+
+      iex> filter_columns(%DeletedRecord{old_record: %{"a" => "b", "c" => "d"}}, ["c"])
+      %DeletedRecord{old_record: %{"c" => "d"}}
+  """
+  @spec filter_columns(change(), [String.t()]) :: change()
+  def filter_columns(%NewRecord{} = change, columns_to_keep) do
+    %NewRecord{
+      change
+      | record: change.record |> Map.take(columns_to_keep)
+    }
+  end
+
+  def filter_columns(%UpdatedRecord{} = change, columns_to_keep) do
+    %UpdatedRecord{
+      change
+      | old_record: change.old_record |> Map.take(columns_to_keep),
+        record: change.record |> Map.take(columns_to_keep),
+        changed_columns:
+          change.changed_columns
+          |> MapSet.reject(fn col -> col not in columns_to_keep end)
+    }
+  end
+
+  def filter_columns(%DeletedRecord{} = change, columns_to_keep) do
+    %DeletedRecord{
+      change
+      | old_record: change.old_record |> Map.take(columns_to_keep)
+    }
+  end
+
+  def filter_columns(change, _), do: change
 end

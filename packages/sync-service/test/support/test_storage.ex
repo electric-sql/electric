@@ -65,6 +65,18 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def set_shape_definition(shape, {parent, shape_id, _, storage}) do
+    send(parent, {__MODULE__, :set_shape_definition, shape_id, shape})
+    Storage.set_shape_definition(shape, storage)
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def get_all_stored_shapes({parent, _init, storage}) do
+    send(parent, {__MODULE__, :get_all_stored_shapes})
+    Storage.get_all_stored_shapes(storage)
+  end
+
+  @impl Electric.ShapeCache.Storage
   def get_current_position({parent, shape_id, _, storage}) do
     send(parent, {__MODULE__, :get_current_position, shape_id})
     Storage.get_current_position(storage)

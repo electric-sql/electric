@@ -14,7 +14,7 @@ export function makePgClient(overrides: ClientConfig = {}) {
   })
 }
 
-export function forEachMessage<T extends Row>(
+export function forEachMessage<T extends Row<unknown>>(
   stream: ShapeStreamInterface<T>,
   controller: AbortController,
   handler: (

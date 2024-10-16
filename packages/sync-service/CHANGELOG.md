@@ -1,5 +1,57 @@
 # @core/sync-service
 
+## 0.7.5
+
+### Patch Changes
+
+- a1d332f: fix: make sure array column types are correctly passed around & that array comparison functions work on nested arrays
+
+## 0.7.4
+
+### Patch Changes
+
+- b093b79: Reduce the default `DB_POOL_SIZE` to `20`.
+- 3ab27a6: Implement support for array columns and operations over those in where clauses
+
+## 0.7.3
+
+### Patch Changes
+
+- b9db6ca: Add LOG_LEVEL configuration option.
+- 25c437f: Implement `columns` query parameter for `GET v1/shapes` API to allow filtering rows for a subset of table columns.
+- 2bf933c: Obfuscate database password in the process memory to prevent it from accidentally getting logged in cleartext.
+
+## 0.7.2
+
+### Patch Changes
+
+- 8ad40e7: Make relation OID part of shape definition, removing the need for persisting relations and simplifying relation change handling.
+- 41845cb: Fix inconsistencies in http proxies for caching live long-polling requests.
+
+  The server now returns a cursor for the client to use in requests to cache-bust any stale caches.
+
+- 14681cc: Store shape definitions along with shape data and use that to restore them instead of persisted cached metadata. This removes the unified serilization and persistence of all shape metadata and allows better scaling of speed of shape creation.
+
+## 0.7.1
+
+### Patch Changes
+
+- e499c05: Add the OTEL_DEBUG environment variable which is a flag to print Open Telemetry spans to stdout.
+
+## 0.7.0
+
+### Minor Changes
+
+- 9ed9511: Lets Postgres validate user-provided table identifier.
+  This means identifiers are now case insensitive unless you explitictly quote them.
+
+## 0.6.3
+
+### Patch Changes
+
+- c886f86: Query Postgres server version as early as possible so that it is available throughout the whole connection initialization process.
+- 841922d: Cover the processing of GET /shape with OpenTelemetry spans for improved observability.
+
 ## 0.6.2
 
 ### Patch Changes

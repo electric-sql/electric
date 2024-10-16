@@ -23,6 +23,24 @@ defmodule Electric.Plug.ServeShapePlug do
   @up_to_date [Jason.encode!(%{headers: %{control: "up-to-date"}})]
   @must_refetch Jason.encode!([%{headers: %{control: "must-refetch"}}])
 
+  defmodule TimeUtils do
+    @oct9th2024 DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
+    def seconds_since_oct9th_2024_next_interval(conn) do
+      case div(conn.assigns.config[:long_poll_timeout], 1000) do
+        0 ->
+          0
+
+        long_poll_timeout_sec ->
+          now = DateTime.utc_now()
+
+          diff_in_seconds = DateTime.diff(now, @oct9th2024, :second)
+          next_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
+
+          next_interval
+      end
+    end
+  end
+
   defmodule Params do
     use Ecto.Schema
     import Ecto.Changeset
@@ -35,6 +53,7 @@ defmodule Electric.Plug.ServeShapePlug do
       field(:shape_id, :string)
       field(:live, :boolean, default: false)
       field(:where, :string)
+      field(:columns, :string)
       field(:shape_definition, :string)
     end
 
@@ -45,6 +64,7 @@ defmodule Electric.Plug.ServeShapePlug do
       )
       |> validate_required([:root_table, :offset])
       |> cast_offset()
+      |> cast_columns()
       |> validate_shape_id_with_offset()
       |> validate_live_with_offset()
       |> cast_root_table(opts)
@@ -77,6 +97,21 @@ defmodule Electric.Plug.ServeShapePlug do
       end
     end
 
+    def cast_columns(%Ecto.Changeset{valid?: false} = changeset), do: changeset
+
+    def cast_columns(%Ecto.Changeset{} = changeset) do
+      case fetch_field!(changeset, :columns) do
+        nil ->
+          changeset
+
+        columns ->
+          case Electric.Plug.Utils.parse_columns_param(columns) do
+            {:ok, parsed_cols} -> put_change(changeset, :columns, parsed_cols)
+            {:error, reason} -> add_error(changeset, :columns, reason)
+          end
+      end
+    end
+
     def validate_shape_id_with_offset(%Ecto.Changeset{valid?: false} = changeset), do: changeset
 
     def validate_shape_id_with_offset(%Ecto.Changeset{} = changeset) do
@@ -104,18 +139,19 @@ defmodule Electric.Plug.ServeShapePlug do
     def cast_root_table(%Ecto.Changeset{} = changeset, opts) do
       table = fetch_change!(changeset, :root_table)
       where = fetch_field!(changeset, :where)
+      columns = get_change(changeset, :columns, nil)
 
-      case Shapes.Shape.new(table, opts ++ [where: where]) do
+      case Shapes.Shape.new(table, opts ++ [where: where, columns: columns]) do
         {:ok, result} ->
           put_change(changeset, :shape_definition, result)
 
-        {:error, reasons} ->
+        {:error, {field, reasons}} ->
           Enum.reduce(List.wrap(reasons), changeset, fn
             {message, keys}, changeset ->
-              add_error(changeset, :root_table, message, keys)
+              add_error(changeset, field, message, keys)
 
             message, changeset when is_binary(message) ->
-              add_error(changeset, :root_table, message)
+              add_error(changeset, field, message)
           end)
       end
     end
@@ -331,16 +367,20 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp put_resp_cache_headers(%Conn{assigns: %{config: config, live: live}} = conn, _) do
     if live do
-      put_resp_header(
-        conn,
+      conn
+      |> put_resp_header(
         "cache-control",
-        "max-age=5, stale-while-revalidate=5"
+        "public, max-age=5, stale-while-revalidate=5"
+      )
+      |> put_resp_header(
+        "electric-next-cursor",
+        TimeUtils.seconds_since_oct9th_2024_next_interval(conn) |> Integer.to_string()
       )
     else
       put_resp_header(
         conn,
         "cache-control",
-        "max-age=#{config[:max_age]}, stale-while-revalidate=#{config[:stale_age]}"
+        "public, max-age=#{config[:max_age]}, stale-while-revalidate=#{config[:stale_age]}"
       )
     end
   end
@@ -391,10 +431,15 @@ defmodule Electric.Plug.ServeShapePlug do
         Logger.warning(error_msg)
         OpenTelemetry.record_exception(error_msg)
 
+        {status_code, message} =
+          if match?(%DBConnection.ConnectionError{reason: :queue_timeout}, reason),
+            do: {429, "Could not establish connection to database - try again later"},
+            else: {500, "Failed creating or fetching the snapshot"}
+
         send_resp(
           conn,
-          500,
-          Jason.encode_to_iodata!(%{error: "Failed creating or fetching the snapshot"})
+          status_code,
+          Jason.encode_to_iodata!(%{error: message})
         )
     end
   end
@@ -643,7 +688,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   @impl Plug.ErrorHandler
   def handle_errors(conn, error) do
-    OpenTelemetry.record_exception(error.reason, error.stack)
+    OpenTelemetry.record_exception(error.kind, error.reason, error.stack)
 
     error_str = Exception.format(error.kind, error.reason)
 

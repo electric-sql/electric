@@ -3,15 +3,19 @@ import {
   ShapeStream,
   ShapeStreamOptions,
   Row,
+  GetExtensions,
 } from '@electric-sql/client'
 import React from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
 
-const streamCache = new Map<string, ShapeStream>()
-const shapeCache = new Map<ShapeStream, Shape>()
+type UnknownShape = Shape<Row<unknown>>
+type UnknownShapeStream = ShapeStream<Row<unknown>>
 
-export async function preloadShape<T extends Row = Row>(
-  options: ShapeStreamOptions
+const streamCache = new Map<string, UnknownShapeStream>()
+const shapeCache = new Map<UnknownShapeStream, UnknownShape>()
+
+export async function preloadShape<T extends Row<unknown> = Row>(
+  options: ShapeStreamOptions<GetExtensions<T>>
 ): Promise<Shape<T>> {
   const shapeStream = getShapeStream<T>(options)
   const shape = getShape<T>(shapeStream)
@@ -19,12 +23,12 @@ export async function preloadShape<T extends Row = Row>(
   return shape
 }
 
-export function sortedOptionsHash(options: ShapeStreamOptions): string {
+export function sortedOptionsHash<T>(options: ShapeStreamOptions<T>): string {
   return JSON.stringify(options, Object.keys(options).sort())
 }
 
-export function getShapeStream<T extends Row = Row>(
-  options: ShapeStreamOptions
+export function getShapeStream<T extends Row<unknown>>(
+  options: ShapeStreamOptions<GetExtensions<T>>
 ): ShapeStream<T> {
   const shapeHash = sortedOptionsHash(options)
 
@@ -42,7 +46,9 @@ export function getShapeStream<T extends Row = Row>(
   }
 }
 
-export function getShape<T extends Row>(shapeStream: ShapeStream<T>): Shape<T> {
+export function getShape<T extends Row<unknown>>(
+  shapeStream: ShapeStream<T>
+): Shape<T> {
   // If the stream is already cached, return
   if (shapeCache.has(shapeStream)) {
     // Return the ShapeStream
@@ -57,7 +63,7 @@ export function getShape<T extends Row>(shapeStream: ShapeStream<T>): Shape<T> {
   }
 }
 
-export interface UseShapeResult<T extends Row = Row> {
+export interface UseShapeResult<T extends Row<unknown> = Row> {
   /**
    * The array of rows that make up the Shape.
    * @type {T[]}
@@ -76,14 +82,19 @@ export interface UseShapeResult<T extends Row = Row> {
   isError: boolean
 }
 
-function shapeSubscribe<T extends Row>(shape: Shape<T>, callback: () => void) {
+function shapeSubscribe<T extends Row<unknown>>(
+  shape: Shape<T>,
+  callback: () => void
+) {
   const unsubscribe = shape.subscribe(callback)
   return () => {
     unsubscribe()
   }
 }
 
-function parseShapeData<T extends Row>(shape: Shape<T>): UseShapeResult<T> {
+function parseShapeData<T extends Row<unknown>>(
+  shape: Shape<T>
+): UseShapeResult<T> {
   return {
     data: [...shape.valueSync.values()],
     isLoading: shape.isLoading(),
@@ -98,19 +109,21 @@ function identity<T>(arg: T): T {
   return arg
 }
 
-interface UseShapeOptions<SourceData extends Row, Selection>
-  extends ShapeStreamOptions {
+interface UseShapeOptions<SourceData extends Row<unknown>, Selection>
+  extends ShapeStreamOptions<GetExtensions<SourceData>> {
   selector?: (value: UseShapeResult<SourceData>) => Selection
 }
 
 export function useShape<
-  SourceData extends Row = Row,
+  SourceData extends Row<unknown> = Row,
   Selection = UseShapeResult<SourceData>,
 >({
   selector = identity as (arg: UseShapeResult<SourceData>) => Selection,
   ...options
 }: UseShapeOptions<SourceData, Selection>): Selection {
-  const shapeStream = getShapeStream<SourceData>(options as ShapeStreamOptions)
+  const shapeStream = getShapeStream<SourceData>(
+    options as ShapeStreamOptions<GetExtensions<SourceData>>
+  )
   const shape = getShape<SourceData>(shapeStream)
 
   const useShapeData = React.useMemo(() => {

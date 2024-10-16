@@ -100,6 +100,7 @@ describe(`HTTP Sync`, () => {
     expect(urlsRequested[0].searchParams.has(`live`)).false
     expect(urlsRequested[1].searchParams.get(`offset`)).not.toBe(`-1`)
     expect(urlsRequested[1].searchParams.has(`live`)).true
+    expect(urlsRequested[1].searchParams.has(`cursor`)).true
 
     // first request comes back immediately and is up to date, second one
     // should hang while waiting for updates
@@ -551,7 +552,11 @@ describe(`HTTP Sync`, () => {
     const cacheHeaders = res.headers.get(`cache-control`)
     assert(cacheHeaders !== null, `Response should have cache-control header`)
     const directives = parse(cacheHeaders)
-    expect(directives).toEqual({ 'max-age': 1, 'stale-while-revalidate': 3 })
+    expect(directives).toEqual({
+      public: true,
+      'max-age': 1,
+      'stale-while-revalidate': 3,
+    })
     const etagHeader = res.headers.get(`etag`)
     assert(etagHeader !== null, `Response should have etag header`)
 
@@ -669,6 +674,51 @@ describe(`HTTP Sync`, () => {
       new Map([[`${issuesTableKey}/"${id1}"`, { id: id1, title: `foo1` }]])
     )
   })
+
+  mit(
+    `should correctly select columns for initial sync and updates`,
+    async ({ dbClient, aborter, tableSql, tableUrl }) => {
+      await dbClient.query(
+        `INSERT INTO ${tableSql} (txt, i2, i4, i8) VALUES ($1, $2, $3, $4)`,
+        [`test1`, 1, 10, 100]
+      )
+
+      // Get initial data
+      const shapeData = new Map()
+      const issueStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape/${tableUrl}`,
+        columns: [`txt`, `i2`, `i4`],
+        signal: aborter.signal,
+      })
+      await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
+        if (!isChangeMessage(msg)) return
+        shapeData.set(msg.key, msg.value)
+        console.log(msg)
+
+        if (nth === 0) {
+          expect(msg.value).toStrictEqual({
+            txt: `test1`,
+            i2: 1,
+            i4: 10,
+          })
+          await dbClient.query(
+            `UPDATE ${tableSql} SET txt = $1, i4 = $2, i8 = $3 WHERE i2 = $4`,
+            [`test2`, 20, 200, 1]
+          )
+        } else if (nth === 1) {
+          res()
+        }
+      })
+
+      expect([...shapeData.values()]).toStrictEqual([
+        {
+          txt: `test2`,
+          i2: 1,
+          i4: 20,
+        },
+      ])
+    }
+  )
 
   it(`should chunk a large log with reasonably sized chunks`, async ({
     insertIssues,
