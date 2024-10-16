@@ -174,7 +174,11 @@ defmodule Electric.ConnectionManager do
   end
 
   def handle_continue(:start_replication_client, %State{replication_client_pid: nil} = state) do
-    case start_replication_client(state.connection_opts, state.replication_opts) do
+    case start_replication_client(
+           state.electric_instance_id,
+           state.connection_opts,
+           state.replication_opts
+         ) do
       {:ok, pid, connection_opts} ->
         state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
 
@@ -300,8 +304,12 @@ defmodule Electric.ConnectionManager do
     {:noreply, %{state | pg_lock_acquired: true}, {:continue, :start_replication_client}}
   end
 
-  defp start_replication_client(connection_opts, replication_opts) do
-    case Electric.Postgres.ReplicationClient.start_link(connection_opts, replication_opts) do
+  defp start_replication_client(electric_instance_id, connection_opts, replication_opts) do
+    case Electric.Postgres.ReplicationClient.start_link(
+           electric_instance_id,
+           connection_opts,
+           replication_opts
+         ) do
       {:ok, pid} ->
         {:ok, pid, connection_opts}
 
@@ -318,7 +326,7 @@ defmodule Electric.ConnectionManager do
           end
 
           connection_opts = Keyword.put(connection_opts, :ssl, false)
-          start_replication_client(connection_opts, replication_opts)
+          start_replication_client(electric_instance_id, connection_opts, replication_opts)
         end
 
       error ->

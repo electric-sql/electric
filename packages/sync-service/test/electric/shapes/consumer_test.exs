@@ -18,6 +18,7 @@ defmodule Electric.Shapes.ConsumerTest do
   import Support.ComponentSetup
   import Support.DbSetup
   import Support.DbStructureSetup
+  import Support.TestUtils, only: [with_electric_instance_id: 1]
 
   import Mox
 

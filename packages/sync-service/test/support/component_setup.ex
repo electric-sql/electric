@@ -1,15 +1,13 @@
 defmodule Support.ComponentSetup do
   import ExUnit.Callbacks
+  import Support.TestUtils, only: [full_test_name: 1]
+
   alias Electric.Postgres.ReplicationClient
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
   alias Electric.ShapeCache.FileStorage
   alias Electric.ShapeCache.InMemoryStorage
   alias Electric.Postgres.Inspector.EtsInspector
-
-  def with_electric_instance_id(ctx) do
-    %{electric_instance_id: String.to_atom(full_test_name(ctx))}
-  end
 
   def with_registry(ctx) do
     registry_name = Module.concat(Registry, ctx.electric_instance_id)
@@ -124,7 +122,9 @@ defmodule Support.ComponentSetup do
         {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [ctx.shape_log_collector]}
     ]
 
-    {:ok, pid} = ReplicationClient.start_link(ctx.db_config, replication_opts)
+    {:ok, pid} =
+      ReplicationClient.start_link(ctx.electric_instance_id, ctx.db_config, replication_opts)
+
     %{replication_client: pid}
   end
 
@@ -152,7 +152,7 @@ defmodule Support.ComponentSetup do
 
   def with_complete_stack(ctx, opts \\ []) do
     [
-      Keyword.get(opts, :electric_instance_id, &with_electric_instance_id/1),
+      Keyword.get(opts, :electric_instance_id, &Support.TestUtils.with_electric_instance_id/1),
       Keyword.get(opts, :registry, &with_registry/1),
       Keyword.get(opts, :inspector, &with_inspector/1),
       Keyword.get(opts, :persistent_kv, &with_persistent_kv/1),
@@ -180,9 +180,5 @@ defmodule Support.ComponentSetup do
       allow_shape_deletion: Access.get(overrides, :allow_shape_deletion, true)
     ]
     |> Keyword.merge(overrides)
-  end
-
-  def full_test_name(ctx) do
-    "#{ctx.module} #{ctx.test}"
   end
 end
