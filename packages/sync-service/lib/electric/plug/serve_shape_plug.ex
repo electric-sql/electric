@@ -36,6 +36,18 @@ defmodule Electric.Plug.ServeShapePlug do
           diff_in_seconds = DateTime.diff(now, @oct9th2024, :second)
           next_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
 
+          # Check if the generated cursor is the same as what's passed in.
+          cursor = conn.query_params["cursor"]
+
+          next_interval =
+            if cursor && "#{next_interval}" == cursor do
+              # Generate a random integer between 0 and 99999
+              random_integer = :rand.uniform(100_000)
+              next_interval + random_integer
+            else
+              next_interval
+            end
+
           next_interval
       end
     end

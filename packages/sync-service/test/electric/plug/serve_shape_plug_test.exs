@@ -71,7 +71,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "seconds_since_oct9th_2024_next_interval" do
       # Mock the conn struct with assigns
       # 20 seconds
-      conn = %Plug.Conn{assigns: %{config: %{long_poll_timeout: 20000}}}
+      conn = %Plug.Conn{
+        assigns: %{config: %{long_poll_timeout: 20000}},
+        query_params: %{"cursor" => nil}
+      }
 
       # Calculate the expected next interval
       now = DateTime.utc_now()
@@ -87,7 +90,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "seconds_since_oct9th_2024_next_interval with different timeout" do
       # Mock the conn struct with a different timeout
       # 30 seconds
-      conn = %Plug.Conn{assigns: %{config: %{long_poll_timeout: 30000}}}
+      conn = %Plug.Conn{
+        assigns: %{config: %{long_poll_timeout: 30000}},
+        query_params: %{"cursor" => nil}
+      }
 
       # Calculate the expected next interval
       now = DateTime.utc_now()
@@ -97,6 +103,27 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       # Assert that the function returns the expected value
       assert Electric.Plug.ServeShapePlug.TimeUtils.seconds_since_oct9th_2024_next_interval(conn) ==
+               expected_interval
+    end
+
+    test "seconds_since_oct9th_2024_next_interval with different timeout and cursor collision" do
+      # Mock the conn struct with a different timeout (30 seconds)
+      conn = %Plug.Conn{
+        assigns: %{config: %{long_poll_timeout: 30000}},
+        query_params: %{"cursor" => nil}
+      }
+
+      # Calculate the expected next interval
+      now = DateTime.utc_now()
+      oct9th2024 = DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
+      diff_in_seconds = DateTime.diff(now, oct9th2024, :second)
+      expected_interval = ceil(diff_in_seconds / 30) * 30
+
+      # Simulate a cursor collision
+      conn = %{conn | query_params: %{"cursor" => "#{expected_interval}"}}
+
+      # Assert that the function returns a DIFFERENT value due to collision
+      assert Electric.Plug.ServeShapePlug.TimeUtils.seconds_since_oct9th_2024_next_interval(conn) !=
                expected_interval
     end
 
