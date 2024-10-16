@@ -19,7 +19,7 @@ hero:
       text: >-
         Star on GitHub
       target: '_blank'
-      link: https://github.com/electric-sql
+      link: https://github.com/electric-sql/electric
 features:
   - title: Sync
     details: >-
