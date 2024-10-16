@@ -1,0 +1,76 @@
+on:
+  pull_request:
+
+defaults:
+  run:
+    working-directory: packages/sync-service
+
+env:
+  PROJECT_ID: vaxine
+  REGISTRY: europe-docker.pkg.dev/vaxine/electric
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCLOUD_REGISTRY_JSON_KEY }}
+      - uses: google-github-actions/setup-gcloud@v1
+      - name: Use gcloud CLI
+        run: "gcloud info"
+      - name: Docker auth
+        run: gcloud auth configure-docker europe-docker.pkg.dev --quiet
+      - name: Pull latest base images
+        run: |
+          docker pull ${{ env.REGISTRY }}/electric:canary-builder || true
+          docker pull ${{ env.REGISTRY }}/electric:canary-runner-base || true
+          docker pull ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-builder || true
+          docker pull ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-runner-base || true
+      - name: Build base images
+        run: >
+          docker build \
+            --push \
+            --cache-from ${{ env.REGISTRY }}/electric:canary-builder \
+            --cache-from ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-builder \
+            --tag ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-builder \
+            --target builder \
+            .
+
+          docker build \
+            --push \
+            --cache-from ${{ env.REGISTRY }}/electric:canary-runner-base \
+            --cache-from ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-runner-base \
+            --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-runner-base \
+            --target runner_setup \
+            .
+      - name: Build actual image
+        run: >
+          docker build \
+            --push \
+            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-builder \
+            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-runner-base \
+            --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-${{ github.sha }} \
+            .
+      - name: Trigger a benchmark start
+        run: |
+          curl -X POST 'http://benchmarking.electric-sql.com:4000/api/benchmarks/write_fanout/runs' \
+            -u benchmarking:${{ secrets.BENCHMARKING_API_PASSWORD }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "benchmark_run": {
+                "spec_values": {
+                  "electric_image": ["${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-${{ github.sha }}"],
+                  "postgres_image": ["postgres:15-alpine"],
+                  "row_count": [500],
+                  "concurrent": [4,36,68,100,132,164,200],
+                  "tx_row_count": [50]
+                },
+                "machine_request": {
+                  "vcpu": 4,
+                  "mem_gb": 8
+                }
+              }
+            }' | jq
