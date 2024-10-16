@@ -330,7 +330,6 @@ defmodule Electric.Plug.ServeShapePlug do
          } = conn,
          _
        ) do
-
     # The log can't be up to date if the last_offset is not the actual end.
     # Also if client is requesting the start of the log, we don't set `up-to-date`
     # here either as we want to set a long max-age on the cache-control.
@@ -390,7 +389,7 @@ defmodule Electric.Plug.ServeShapePlug do
       conn
       |> put_resp_header(
         "cache-control",
-        "public, max-age=604800, s-maxage=3600 stale-while-revalidate=2629746"
+        "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746"
       )
     else
       if live do
@@ -434,8 +433,8 @@ defmodule Electric.Plug.ServeShapePlug do
          %Conn{
            assigns: %{
              chunk_end_offset: chunk_end_offset,
-             up_to_date: maybe_up_to_date,
-             active_shape_id: shape_id
+             active_shape_id: shape_id,
+             up_to_date: maybe_up_to_date
            }
          } = conn
        ) do

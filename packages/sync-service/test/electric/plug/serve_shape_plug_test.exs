@@ -263,7 +263,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 200
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
-               "public, max-age=#{max_age}, stale-while-revalidate=#{stale_age}"
+               "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746"
              ]
     end
 
