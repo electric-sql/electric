@@ -15,7 +15,6 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /docs/api/generator             /docs/intro
 /docs/integrations/deployment   /docs/guides/deployment
 /docs/integrations/deployment/* /docs/guides/deployment
-/docs/integrations/*            /docs/api/integrations/react
 /docs/overview                  /docs/intro
 /docs/overview/examples         https://github.com/electric-sql/electric/tree/main/examples
 /docs/overview/faqs             /docs/intro
@@ -83,3 +82,4 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 # Renamed pages on new site
 /product/ddn                    /product/cloud
 /product/electric               /product/sync
+/docs/api/integrations/react    /docs/integrations/react
