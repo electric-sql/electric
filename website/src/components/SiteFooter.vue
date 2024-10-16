@@ -109,7 +109,7 @@
             Legal</a>&nbsp;
           <a href="https://pglite.dev">
             PGlite ↗</a>&nbsp;
-          <a href="https://github.com/electric-sql">
+          <a href="https://github.com/electric-sql/electric">
             <span class="vpi-social-github"></span></a>
           <a href="https://discord.electric-sql.com">
             <span class="vpi-social-discord"></span></a>
