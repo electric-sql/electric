@@ -159,6 +159,19 @@ chunk_bytes_threshold =
      storage_dir: shape_path, electric_instance_id: electric_instance_id}
   )
 
+replication_stream_id =
+  env!(
+    "REPLICATION_STREAM_ID",
+    fn replication_stream_id ->
+      {:ok, parsed_id} =
+        replication_stream_id
+        |> Electric.Postgres.Identifiers.parse_unquoted_identifier()
+
+      parsed_id
+    end,
+    "default"
+  )
+
 storage = {storage_mod, storage_opts}
 
 prometheus_port = env!("PROMETHEUS_PORT", :integer, nil)
@@ -174,7 +187,7 @@ config :electric,
   electric_instance_id: electric_instance_id,
   telemetry_statsd_host: statsd_host,
   db_pool_size: env!("DB_POOL_SIZE", :integer, 20),
-  replication_stream_id: env!("REPLICATION_STREAM_ID", :string, "default"),
+  replication_stream_id: replication_stream_id,
   service_port: env!("PORT", :integer, 3000),
   prometheus_port: prometheus_port,
   storage: storage,
