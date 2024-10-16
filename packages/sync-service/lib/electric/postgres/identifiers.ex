@@ -47,9 +47,9 @@ defmodule Electric.Postgres.Identifiers do
       else: {:ok, unescape_quotes(ident)}
   end
 
-  defp parse_unquoted_identifier("", _, _), do: parse_quoted_identifier("")
+  def parse_unquoted_identifier("", _, _), do: parse_quoted_identifier("")
 
-  defp parse_unquoted_identifier(ident, truncate, single_byte_encoding) do
+  def parse_unquoted_identifier(ident, truncate, single_byte_encoding) do
     unless valid_unquoted_identifier?(ident),
       do: {:error, "Invalid unquoted identifier contains special characters: #{ident}"},
       else: {:ok, downcase(ident, truncate, single_byte_encoding)}

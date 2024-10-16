@@ -165,8 +165,7 @@ replication_stream_id =
     fn replication_stream_id ->
       {:ok, parsed_id} =
         replication_stream_id
-        |> String.trim(~S|"|)
-        |> Electric.Postgres.Identifiers.parse()
+        |> Electric.Postgres.Identifiers.parse_unquoted_identifier()
 
       parsed_id
     end,
