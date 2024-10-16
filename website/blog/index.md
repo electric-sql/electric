@@ -17,7 +17,7 @@ import BlogPostListing from '../src/components/BlogPostListing.vue'
 onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {
     const githubLinks = document.querySelectorAll(
-      '.actions a[href="https://github.com/electric-sql"]'
+      '.actions a[href="https://github.com/electric-sql/electric"]'
     )
 
     let icon = document.querySelector('.actions .vpi-social-github')
@@ -135,14 +135,14 @@ onMounted(async () => {
             />
           </div>
           <div class="action hidden-sm">
-            <VPButton href="https://github.com/electric-sql"
+            <VPButton href="https://github.com/electric-sql/electric"
                 target="_blank"
                 text="Star on GitHub"
                 theme="alt"
             />
           </div>
           <div class="action inline-sm">
-            <VPButton href="https://github.com/electric-sql"
+            <VPButton href="https://github.com/electric-sql/electric"
                 target="_blank"
                 text="GitHub"
                 theme="alt"

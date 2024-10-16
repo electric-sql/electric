@@ -19,7 +19,7 @@ hero:
       text: >-
         Star on GitHub
       target: '_blank'
-      link: https://github.com/electric-sql
+      link: https://github.com/electric-sql/electric
 features:
   - title: Sync
     details: >-
@@ -126,7 +126,7 @@ const renderStarCount = async (repoName, initialStarCount) => {
 onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {
     const githubLinks = document.querySelectorAll(
-      '.actions a[href="https://github.com/electric-sql"]'
+      '.actions a[href="https://github.com/electric-sql/electric"]'
     )
 
     let icon = document.querySelector('.actions .vpi-social-github')
