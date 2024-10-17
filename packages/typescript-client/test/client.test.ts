@@ -142,7 +142,7 @@ describe(`Shape`, () => {
     let rotationTime: number = Infinity
     const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
       // clear the shape and modify the data after the initial request
-      if (requestsMade === 1) {
+      if (requestsMade === 2) {
         // new shape data should have just second issue and not first
         await deleteIssue({ id: id1, title: `foo1` })
         await insertIssues({ id: id2, title: `foo2` })

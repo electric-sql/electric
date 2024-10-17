@@ -325,11 +325,18 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp determine_up_to_date(
          %Conn{
-           assigns: %{chunk_end_offset: chunk_end_offset, last_offset: last_offset}
+           assigns: %{
+             offset: offset,
+             chunk_end_offset: chunk_end_offset,
+             last_offset: last_offset
+           }
          } = conn,
          _
        ) do
-    if LogOffset.compare(chunk_end_offset, last_offset) == :lt do
+    # The log can't be up to date if the last_offset is not the actual end.
+    # Also if client is requesting the start of the log, we don't set `up-to-date`
+    # here either as we want to set a long max-age on the cache-control.
+    if LogOffset.compare(chunk_end_offset, last_offset) == :lt or offset == @before_all_offset do
       conn
       |> assign(:up_to_date, [])
       # header might have been added on first pass but no longer valid
@@ -377,8 +384,20 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  defp put_resp_cache_headers(%Conn{assigns: %{config: config, live: live}} = conn, _) do
-    if live do
+  # If the offset is -1, set a 1 week max-age, 1 hour s-maxage (shared cache) and 1 month stale-while-revalidate
+  # We want private caches to cache the initial offset for a long time but for shared caches to frequently revalidate
+  # so they're serving a fairly fresh copy of the initials shape log.
+  defp put_resp_cache_headers(%Conn{assigns: %{offset: @before_all_offset}} = conn, _),
+    do:
+      conn
+      |> put_resp_header(
+        "cache-control",
+        "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746"
+      )
+
+  # For live requests we want shorrt cache lifetimes and to update the live cursor
+  defp put_resp_cache_headers(%Conn{assigns: %{live: true}} = conn, _),
+    do:
       conn
       |> put_resp_header(
         "cache-control",
@@ -388,14 +407,15 @@ defmodule Electric.Plug.ServeShapePlug do
         "electric-next-cursor",
         TimeUtils.seconds_since_oct9th_2024_next_interval(conn) |> Integer.to_string()
       )
-    else
-      put_resp_header(
-        conn,
+
+  # For all other requests use the configured cache lifetimes
+  defp put_resp_cache_headers(%Conn{assigns: %{config: config, live: false}} = conn, _),
+    do:
+      conn
+      |> put_resp_header(
         "cache-control",
         "public, max-age=#{config[:max_age]}, stale-while-revalidate=#{config[:stale_age]}"
       )
-    end
-  end
 
   def cors(conn, _opts) do
     conn

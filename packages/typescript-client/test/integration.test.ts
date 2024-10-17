@@ -93,12 +93,12 @@ describe(`HTTP Sync`, () => {
     })
 
     // first request was -1, second should be something else
-    expect(urlsRequested).toHaveLength(2)
+    expect(urlsRequested).toHaveLength(3)
     expect(urlsRequested[0].searchParams.get(`offset`)).toBe(`-1`)
     expect(urlsRequested[0].searchParams.has(`live`)).false
-    expect(urlsRequested[1].searchParams.get(`offset`)).not.toBe(`-1`)
-    expect(urlsRequested[1].searchParams.has(`live`)).true
-    expect(urlsRequested[1].searchParams.has(`cursor`)).true
+    expect(urlsRequested[2].searchParams.get(`offset`)).not.toBe(`-1`)
+    expect(urlsRequested[2].searchParams.has(`live`)).true
+    expect(urlsRequested[2].searchParams.has(`cursor`)).true
 
     // first request comes back immediately and is up to date, second one
     // should hang while waiting for updates
@@ -295,7 +295,7 @@ describe(`HTTP Sync`, () => {
       await vi.waitFor(async () => {
         const res = await fetch(`${BASE_URL}/v1/shape/${tableUrl}?offset=-1`)
         const body = (await res.json()) as Message[]
-        expect(body.length).greaterThan(2)
+        expect(body.length).greaterThan(1)
       })
       const updatedData = client.valueSync
 
@@ -505,7 +505,7 @@ describe(`HTTP Sync`, () => {
         `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`
       )
       const body = (await res.json()) as Message[]
-      expect(body).toHaveLength(13)
+      expect(body).toHaveLength(12)
     })
 
     let catchupOpsCount = 0
@@ -542,8 +542,9 @@ describe(`HTTP Sync`, () => {
     const directives = parse(cacheHeaders)
     expect(directives).toEqual({
       public: true,
-      'max-age': 1,
-      'stale-while-revalidate': 3,
+      'max-age': 604800,
+      's-maxage': 3600,
+      'stale-while-revalidate': 2629746,
     })
     const etagHeader = res.headers.get(`etag`)
     assert(etagHeader !== null, `Response should have etag header`)
@@ -582,7 +583,7 @@ describe(`HTTP Sync`, () => {
       {}
     )
     const messages = (await res.json()) as Message[]
-    expect(messages.length).toEqual(10) // 9 inserts + up-to-date
+    expect(messages.length).toEqual(9) // 9 inserts
     const midMessage = messages.slice(-6)[0]
     assert(`offset` in midMessage)
     const midOffset = midMessage.offset
@@ -680,7 +681,6 @@ describe(`HTTP Sync`, () => {
       await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
         if (!isChangeMessage(msg)) return
         shapeData.set(msg.key, msg.value)
-        console.log(msg)
 
         if (nth === 0) {
           expect(msg.value).toStrictEqual({
@@ -817,7 +817,7 @@ describe(`HTTP Sync`, () => {
     const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
       // before any subsequent requests after the initial one, ensure
       // that the existing shape is deleted and some more data is inserted
-      if (numRequests === 1) {
+      if (numRequests === 2) {
         await insertIssues({ id: secondRowId, title: `foo2` })
         await clearIssuesShape(issueStream.shapeId)
       }
@@ -839,7 +839,7 @@ describe(`HTTP Sync`, () => {
       fetchClient: fetchWrapper,
     })
 
-    expect.assertions(11)
+    expect.assertions(12)
 
     let originalShapeId: string | undefined
     let upToDateReachedCount = 0
@@ -850,15 +850,16 @@ describe(`HTTP Sync`, () => {
         if (upToDateReachedCount === 1) {
           // upon reaching up to date initially, we have one
           // response with the initial data
-          expect(statusCodesReceived).toHaveLength(1)
+          expect(statusCodesReceived).toHaveLength(2)
           expect(statusCodesReceived[0]).toBe(200)
+          expect(statusCodesReceived[1]).toBe(200)
         } else if (upToDateReachedCount === 2) {
           // the next up to date message should have had
           // a 409 interleaved before it that instructed the
           // client to go and fetch data from scratch
-          expect(statusCodesReceived).toHaveLength(3)
-          expect(statusCodesReceived[1]).toBe(409)
-          expect(statusCodesReceived[2]).toBe(200)
+          expect(statusCodesReceived).toHaveLength(5)
+          expect(statusCodesReceived[2]).toBe(409)
+          expect(statusCodesReceived[3]).toBe(200)
           return res()
         }
         return

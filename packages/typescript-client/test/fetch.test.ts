@@ -271,6 +271,41 @@ describe(`createFetchWithChunkBuffer`, () => {
     )
   })
 
+  it(`should stop prefetching as soon as responses are not advancing`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
+    const initialResponse = new Response(`initial chunk`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_ID_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+      }),
+    })
+
+    const nextResponse = new Response(`next chunk`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_ID_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+      }),
+    })
+
+    mockFetch.mockResolvedValueOnce(initialResponse)
+    mockFetch.mockResolvedValueOnce(nextResponse)
+    // mockFetch.mockResolvedValueOnce(nextResponse)
+
+    const result = await fetchWrapper(baseUrl)
+    expect(result).toBe(initialResponse)
+
+    // fetch the next chunk as well
+    const nextUrl = `${baseUrl}?shape_id=123&offset=456`
+    const nextResult = await fetchWrapper(nextUrl)
+    expect(nextResult).toBe(nextResponse)
+
+    expect(mockFetch).toHaveBeenNthCalledWith(1, baseUrl)
+    expect(mockFetch).toHaveBeenNthCalledWith(2, nextUrl, expect.anything())
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
   it(`should not prefetch if response is not ok`, async () => {
     const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
     const mockErrorResponse = new Response(`error`, {

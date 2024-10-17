@@ -154,7 +154,7 @@ class PrefetchQueue {
     [Promise<Response>, AbortController]
   >()
   #queueHeadUrl: string | void
-  #queueTailUrl: string
+  #queueTailUrl: string | void
 
   constructor(options: {
     url: Parameters<typeof fetch>[0]
@@ -190,7 +190,10 @@ class PrefetchQueue {
       .then((response) => {
         const nextUrl = getNextChunkUrl(url, response)
         this.#queueHeadUrl = nextUrl
-        if (!this.#prefetchQueue.has(this.#queueTailUrl)) {
+        if (
+          this.#queueTailUrl &&
+          !this.#prefetchQueue.has(this.#queueTailUrl)
+        ) {
           this.#prefetch(this.#queueTailUrl, args[1])
         }
       })
@@ -223,7 +226,10 @@ class PrefetchQueue {
           const nextUrl = getNextChunkUrl(url, response)
 
           // only prefetch when there is a next URL
-          if (!nextUrl || nextUrl === url) return
+          if (!nextUrl || nextUrl === url) {
+            this.#queueTailUrl = undefined
+            return
+          }
 
           this.#queueTailUrl = nextUrl
           return this.#prefetch(nextUrl, args[1])
