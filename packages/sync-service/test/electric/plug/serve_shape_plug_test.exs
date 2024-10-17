@@ -9,6 +9,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
   alias Electric.TenantManager
 
   import Support.ComponentSetup
+  import Support.TestUtils, only: [with_electric_instance_id: 1]
 
   alias Support.Mock
 
@@ -145,8 +146,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
   end
 
   describe "serving shape" do
-    setup :with_electric_instance_id
-    setup :with_tenant_id
+    setup [:with_electric_instance_id, :with_tenant_id]
 
     test "returns 400 for invalid params", ctx do
       conn =
@@ -647,13 +647,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
     end
 
-    test "sends 400 when omitting primary key columns in selection" do
+    test "sends 400 when omitting primary key columns in selection", ctx do
       conn =
-        conn(
-          :get,
-          %{"root_table" => "public.users", "columns" => "value"},
-          "?offset=-1"
-        )
+        ctx
+        |> conn(:get, %{"root_table" => "public.users", "columns" => "value"}, "?offset=-1")
         |> ServeShapePlug.call([])
 
       assert conn.status == 400
@@ -663,13 +660,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
              }
     end
 
-    test "sends 400 when selecting invalid columns" do
+    test "sends 400 when selecting invalid columns", ctx do
       conn =
-        conn(
-          :get,
-          %{"root_table" => "public.users", "columns" => "id,invalid"},
-          "?offset=-1"
-        )
+        ctx
+        |> conn(:get, %{"root_table" => "public.users", "columns" => "id,invalid"}, "?offset=-1")
         |> ServeShapePlug.call([])
 
       assert conn.status == 400
