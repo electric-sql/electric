@@ -18,7 +18,8 @@
       -p $pg_host_port:5432 \
       postgres:14-alpine \
         -c wal_level=logical ${config_opts}
-  
+
+    ??PostgreSQL init process complete; ready for start up.
     ??database system is ready to accept connections
   
     # Reset the failure pattern to avoid false failures when Electric tries to create an already
@@ -73,14 +74,18 @@
 [endmacro]
 
 [macro setup_electric]
-  [invoke setup_electric_shell "electric" "3000"]
+  [invoke setup_electric_with_env ""]
 [endmacro]
 
-[macro setup_electric_shell shell_name port]
+[macro setup_electric_with_env env]
+  [invoke setup_electric_shell "electric" "3000" $env]
+[endmacro]
+
+[macro setup_electric_shell shell_name port env]
   [shell $shell_name]
     -$fail_pattern
   
-    !DATABASE_URL=$database_url PORT=$port ../scripts/electric_dev.sh
+    !DATABASE_URL=$database_url PORT=$port $env ../scripts/electric_dev.sh
 [endmacro]
 
 [macro teardown]

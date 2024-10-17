@@ -25,6 +25,8 @@ defmodule Electric.ShapeCache.FileStorage do
     :cubdb_dir,
     :shape_definition_dir,
     :snapshot_dir,
+    :electric_instance_id,
+    :extra_opts,
     version: @version
   ]
 
@@ -41,18 +43,23 @@ defmodule Electric.ShapeCache.FileStorage do
     opts
   end
 
-  def for_shape(shape_id, %{base_path: base_path, electric_instance_id: electric_instance_id}) do
+  def for_shape(
+        shape_id,
+        %{base_path: base_path, electric_instance_id: electric_instance_id} = opts
+      ) do
     %FS{
       base_path: base_path,
       shape_id: shape_id,
       db: name(electric_instance_id, shape_id),
       cubdb_dir: Path.join([base_path, shape_id, "cubdb"]),
       snapshot_dir: Path.join([base_path, shape_id, "snapshots"]),
-      shape_definition_dir: Path.join([base_path, shape_id])
+      shape_definition_dir: Path.join([base_path, shape_id]),
+      electric_instance_id: electric_instance_id,
+      extra_opts: Map.get(opts, :extra_opts, %{})
     }
   end
 
-  defp name(electric_instance_id, shape_id) do
+  def name(electric_instance_id, shape_id) do
     Electric.Application.process_name(electric_instance_id, __MODULE__, shape_id)
   end
 

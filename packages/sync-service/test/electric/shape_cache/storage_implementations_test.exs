@@ -10,7 +10,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   alias Electric.Utils
 
   import Support.TestUtils
-  import Support.ComponentSetup, only: [with_electric_instance_id: 1]
 
   @moduletag :tmp_dir
 

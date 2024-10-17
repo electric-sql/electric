@@ -1,0 +1,125 @@
+[doc Verify that the replication stream resumes at a consistent point after a simulated storage error]
+
+[include macros.luxinc]
+
+[global pg_container_name=resuming-replication-at-consistent-point__pg]
+
+###
+
+## Start a new Postgres cluster and define a basic schema
+[invoke setup_pg "" ""]
+[invoke start_psql]
+
+[shell psql]
+  !CREATE TABLE roots (id BIGSERIAL PRIMARY KEY, text TEXT);
+  ??CREATE TABLE
+  !INSERT INTO roots (text) VALUES ('1'), ('2'), ('3');
+  ??INSERT 0 3
+
+  !CREATE TABLE leaves (id BIGSERIAL PRIMARY KEY, text TEXT);
+  ??CREATE TABLE
+  !INSERT INTO leaves (text) VALUES ('-1'), ('-2');
+  ??INSERT 0 2
+
+## Start the sync service with the CrashingFileStorage storage backend.
+[invoke setup_electric_with_env "STORAGE=crashing_file CRASHING_FILE_STORAGE__NUM_CALLS_UNTIL_CRASH=2"]
+
+[shell electric]
+ ??[info] Starting replication from postgres
+
+## Initialize a couple of shapes so that Electric starts processing transactions from Postgres
+[shell client]
+  !curl -i http://localhost:3000/v1/shape/roots?offset=-1
+  ??200 OK
+
+  !curl -i http://localhost:3000/v1/shape/leaves?offset=-1
+  ??200 OK
+
+## Commit enough new transactions for shape storage to hit the simulated failure.
+[shell psql]
+  !INSERT INTO roots (text) VALUES ('4');
+  ??INSERT 0 1
+  !INSERT INTO roots (text) VALUES ('5');
+  ??INSERT 0 1
+
+  !INSERT INTO leaves (text) VALUES ('-3'), ('-4');
+  ??INSERT 0 2
+  !INSERT INTO leaves (text) VALUES ('-5');
+  ??INSERT 0 1
+
+  """!
+  BEGIN;
+  INSERT INTO roots (text) VALUES ('---');
+  INSERT INTO leaves (text) VALUES ('___');
+  COMMIT;
+  """
+  ??COMMIT
+
+## Observe the simulated storage failure and how Electric recovers from it by replaying
+## transactions that haven't yet been stored by shape consumers.
+[shell electric]
+  # Reset the failure pattern because we'll be matching on an error.
+  -
+
+  # The last transaction touches two tables, so it is delivered to both shape consumers.
+  ?Txn received in ShapeLogCollector: %Electric.Replication.Changes.Transaction{xid: (\d+).+\
+     changes: \[\
+      %Electric.Replication.Changes.NewRecord{\
+        relation: {"public", "roots"}, \
+        record: %{"id" => "6", "text" => "---"}, .+\
+       %Electric.Replication.Changes.NewRecord{\
+         relation: {"public", "leaves"}, \
+         record: %{"id" => "6", "text" => "___"}
+  [local xid=$1]
+  ?Txn received in Shapes.Consumer: %Electric.Replication.Changes.Transaction{xid: $xid
+  ?Txn received in Shapes.Consumer: %Electric.Replication.Changes.Transaction{xid: $xid
+
+  # Both consumers hit their call limit and exit with simulated storage failures.
+  ?\[error\] GenServer {Electric\.Registry\.Processes, {Electric\.Shapes\.Consumer, :default, "[0-9-]+"}} terminating
+  ??Simulated storage failure
+  ?\[error\] GenServer {Electric\.Registry\.Processes, {Electric\.Shapes\.Consumer, :default, "[0-9-]+"}} terminating
+  ??Simulated storage failure
+
+  # The log collector process and the replication client both exit, as their lifetimes are tied
+  # together by the supervision tree design.
+  ??[error] GenServer {Electric.Registry.Processes, {Electric.Replication.ShapeLogCollector, :default}} terminating
+  ??[error] :gen_statem {Electric.Registry.Processes, {Electric.Postgres.ReplicationClient, :default}} terminating
+
+  # Observe that both shape consumers and the replication client have restarted.
+  ??[debug] Found existing replication slot
+  ??[info] Starting replication from postgres
+
+  # Reinstate the failure pattern.
+  -$fail_pattern
+
+  # The unprocessed transactions are replayed and this time get written to the storage without issues.
+  ??[debug] Txn received in ShapeLogCollector: %Electric.Replication.Changes.Transaction{xid: $xid
+  ??[debug] Txn received in Shapes.Consumer: %Electric.Replication.Changes.Transaction{xid: $xid
+  ??[debug] Txn received in Shapes.Consumer: %Electric.Replication.Changes.Transaction{xid: $xid
+
+## Perform one more write in Postgres to verify that replication is working in Electric
+## regardless of previous errors.
+[shell psql]
+  """!
+  BEGIN;
+  INSERT INTO roots (text) VALUES ('7');
+  INSERT INTO leaves (text) VALUES ('-7');
+  COMMIT;
+  """
+  ??COMMIT
+
+[shell electric]
+  ?Txn received in ShapeLogCollector: %Electric.Replication.Changes.Transaction{xid: (\d+).+\
+     changes: \[\
+      %Electric.Replication.Changes.NewRecord{\
+        relation: {"public", "roots"}, \
+        record: %{"id" => "7", "text" => "7"}, .+\
+       %Electric.Replication.Changes.NewRecord{\
+         relation: {"public", "leaves"}, \
+         record: %{"id" => "7", "text" => "-7"}
+  [local xid=$1]
+  ?Txn received in Shapes.Consumer: %Electric.Replication.Changes.Transaction{xid: $xid
+  ?Txn received in Shapes.Consumer: %Electric.Replication.Changes.Transaction{xid: $xid
+
+[cleanup]
+  [invoke teardown]
