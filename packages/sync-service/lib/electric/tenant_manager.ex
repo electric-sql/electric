@@ -52,12 +52,21 @@ defmodule Electric.TenantManager do
            )}
       )
 
+    {storage_module, storage_in_opts} = Application.fetch_env!(:electric, :storage)
+
+    storage_opts =
+      storage_module.shared_opts(storage_in_opts |> Keyword.put(:tenant_id, tenant_id))
+
+    storage = {storage_module, storage_opts}
+
     {:ok, _} =
       Electric.TenantSupervisor.start_tenant(
         app_config: app_config,
+        electric_instance_id: electric_instance_id,
         tenant_id: tenant_id,
-        connection_opts: app_config.connection_opts,
-        inspector: inspector
+        connection_opts: connection_opts,
+        inspector: inspector,
+        storage: storage
       )
 
     # Can't load pg_id here because the connection manager may still be busy
@@ -66,13 +75,6 @@ defmodule Electric.TenantManager do
     hostname = Access.fetch!(connection_opts, :hostname)
     port = Access.fetch!(connection_opts, :port)
     pg_id = hostname <> ":" <> to_string(port)
-
-    {storage_module, storage_in_opts} = Application.fetch_env!(:electric, :storage)
-
-    storage_opts =
-      storage_module.shared_opts(storage_in_opts |> Keyword.put(:tenant_id, tenant_id))
-
-    storage = {storage_module, storage_opts}
 
     tenant = [
       electric_instance_id: electric_instance_id,
