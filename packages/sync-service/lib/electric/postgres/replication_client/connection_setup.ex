@@ -45,6 +45,34 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   ###
 
+  defp pg_info_query(state) do
+    query = """
+    SELECT
+      current_setting('server_version_num') server_version_num,
+      (pg_control_system()).system_identifier,
+      (pg_control_checkpoint()).timeline_id
+    """
+
+    {:query, query, state}
+  end
+
+  defp pg_info_result([%Postgrex.Result{} = result], state) do
+    %{rows: [[version_str, system_identifier, timeline_id]]} = result
+
+    Logger.info(
+      "Postgres server version = #{version_str}, " <>
+        "system identifier = #{system_identifier}, " <>
+        "timeline_id = #{timeline_id}"
+    )
+
+    Electric.ConnectionManager.pg_info_looked_up(
+      state.connection_manager,
+      {String.to_integer(version_str), system_identifier, timeline_id}
+    )
+
+    state
+  end
+
   defp create_publication_query(state) do
     # We're creating an "empty" publication because first snapshot creation should add the table
     query = "CREATE PUBLICATION #{Utils.quote_name(state.publication_name)}"
@@ -162,16 +190,29 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   # This is how we order the queries to be executed prior to switching into the logical streaming mode.
   @spec next_step(state) :: step
 
-  defp next_step(%{step: :connected, try_creating_publication?: true}), do: :create_publication
-  defp next_step(%{step: :connected}), do: :create_slot
-  defp next_step(%{step: :create_publication}), do: :create_slot
-  defp next_step(%{step: :create_slot}), do: :set_display_setting
+  defp next_step(%{step: :connected}),
+    do: :query_pg_info
+
+  defp next_step(%{step: :query_pg_info, try_creating_publication?: true}),
+    do: :create_publication
+
+  defp next_step(%{step: :query_pg_info}),
+    do: :create_slot
+
+  defp next_step(%{step: :create_publication}),
+    do: :create_slot
+
+  defp next_step(%{step: :create_slot}),
+    do: :set_display_setting
 
   defp next_step(%{step: :set_display_setting, display_settings: queries}) when queries != [],
     do: :set_display_setting
 
-  defp next_step(%{step: :set_display_setting, start_streaming?: true}), do: :streaming
-  defp next_step(%{step: :set_display_setting}), do: :ready_to_stream
+  defp next_step(%{step: :set_display_setting, start_streaming?: true}),
+    do: :streaming
+
+  defp next_step(%{step: :set_display_setting}),
+    do: :ready_to_stream
 
   ###
 
@@ -180,6 +221,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   # this module.
   @spec query_for_step(step, state) :: callback_return
 
+  defp query_for_step(:query_pg_info, state), do: pg_info_query(state)
   defp query_for_step(:create_publication, state), do: create_publication_query(state)
   defp query_for_step(:create_slot, state), do: create_slot_query(state)
   defp query_for_step(:set_display_setting, state), do: set_display_setting_query(state)
@@ -191,6 +233,9 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   # Helper function that dispatches processing of a query result to a function specific to
   # that query's step. This is again done to facilitate grouping functions for the same step.
   @spec dispatch_query_result(step, query_result, state) :: state | no_return
+
+  defp dispatch_query_result(:query_pg_info, result, state),
+    do: pg_info_result(result, state)
 
   defp dispatch_query_result(:create_publication, result, state),
     do: create_publication_result(result, state)
