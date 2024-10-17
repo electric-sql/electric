@@ -64,6 +64,8 @@ jobs:
     defaults:
       run:
         working-directory: ${{ matrix.package_dir }}
+    env:
+      TENANT_ID: ci_test_tenant
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
