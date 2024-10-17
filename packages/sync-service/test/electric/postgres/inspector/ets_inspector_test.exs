@@ -57,15 +57,13 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     setup [:with_inspector, :with_basic_tables, :with_sql_execute]
 
     setup %{
-      inspector: {EtsInspector, opts},
-      pg_info_table: pg_info_table,
-      pg_relation_table: pg_relation_table
+      inspector: {EtsInspector, opts}
     } do
       {:ok,
        %{
          opts: opts,
-         pg_info_table: pg_info_table,
-         pg_relation_table: pg_relation_table,
+         pg_info_table: GenServer.call(opts[:server], :get_column_info_table),
+         pg_relation_table: GenServer.call(opts[:server], :get_relation_table),
          table: {"public", "items"}
        }}
     end
