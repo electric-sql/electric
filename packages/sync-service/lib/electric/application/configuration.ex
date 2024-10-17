@@ -6,7 +6,6 @@ defmodule Electric.Application.Configuration do
 
   defstruct ~w[
     electric_instance_id
-    storage
     persistent_kv
     connection_opts
     replication_opts

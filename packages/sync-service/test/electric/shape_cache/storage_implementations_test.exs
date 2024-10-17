@@ -545,7 +545,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       snapshot_ets_table: String.to_atom("snapshot_ets_table_#{Utils.uuid4()}"),
       log_ets_table: String.to_atom("log_ets_table_#{Utils.uuid4()}"),
       chunk_checkpoint_ets_table: String.to_atom("chunk_checkpoint_ets_table_#{Utils.uuid4()}"),
-      electric_instance_id: electric_instance_id
+      electric_instance_id: electric_instance_id,
+      tenant_id: @tenant_id
     ]
   end
 
@@ -553,7 +554,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     [
       db: String.to_atom("shape_mixed_disk_#{Utils.uuid4()}"),
       storage_dir: tmp_dir,
-      electric_instance_id: electric_instance_id
+      electric_instance_id: electric_instance_id,
+      tenant_id: @tenant_id
     ]
   end
 end

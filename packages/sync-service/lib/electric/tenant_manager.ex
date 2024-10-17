@@ -67,12 +67,19 @@ defmodule Electric.TenantManager do
     port = Access.fetch!(connection_opts, :port)
     pg_id = hostname <> ":" <> to_string(port)
 
+    {storage_module, storage_in_opts} = Application.fetch_env!(:electric, :storage)
+
+    storage_opts =
+      storage_module.shared_opts(storage_in_opts |> Keyword.put(:tenant_id, tenant_id))
+
+    storage = {storage_module, storage_opts}
+
     tenant = [
       electric_instance_id: electric_instance_id,
       tenant_id: tenant_id,
       pg_id: pg_id,
       registry: Registry.ShapeChanges,
-      storage: app_config.storage,
+      storage: storage,
       shape_cache:
         {Electric.ShapeCache,
          electric_instance_id: electric_instance_id,
