@@ -159,7 +159,12 @@ defmodule Support.ComponentSetup do
     ]
 
     {:ok, pid} =
-      ReplicationClient.start_link(ctx.electric_instance_id, ctx.db_config, replication_opts)
+      ReplicationClient.start_link(
+        electric_instance_id: ctx.electric_instance_id,
+        tenant_id: ctx.tenant_id,
+        connection_opts: ctx.db_config,
+        replication_opts: replication_opts
+      )
 
     %{replication_client: pid}
   end
@@ -199,7 +204,7 @@ defmodule Support.ComponentSetup do
       Keyword.get(opts, :shape_cache, &with_shape_cache/1),
       Keyword.get(opts, :replication_client, &with_replication_client/1),
       Keyword.get(opts, :tenant_manager, &with_tenant_manager/1),
-      Keyword.get(opts, :tenant_manager, &with_tenant/1)
+      Keyword.get(opts, :tenant, &with_tenant/1)
     ]
     |> Enum.reduce(ctx, &Map.merge(&2, apply(&1, [&2])))
   end
