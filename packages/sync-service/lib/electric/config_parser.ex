@@ -1,4 +1,4 @@
-defmodule Electric.Config do
+defmodule Electric.ConfigParser do
   @doc ~S"""
   Parse a PostgreSQL URI into a keyword list.
 

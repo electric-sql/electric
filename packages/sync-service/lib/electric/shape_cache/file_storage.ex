@@ -33,7 +33,7 @@ defmodule Electric.ShapeCache.FileStorage do
     storage_dir = Keyword.get(opts, :storage_dir, "./shapes")
     electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
 
-    {:ok, %{base_path: storage_dir, electric_instance_id: electric_instance_id}}
+    %{base_path: storage_dir, electric_instance_id: electric_instance_id}
   end
 
   @impl Electric.ShapeCache.Storage

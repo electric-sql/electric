@@ -19,7 +19,7 @@ defmodule Support.ComponentSetup do
   end
 
   def with_in_memory_storage(ctx) do
-    {:ok, storage_opts} =
+    storage_opts =
       InMemoryStorage.shared_opts(
         table_base_name: :"in_memory_storage_#{full_test_name(ctx)}",
         electric_instance_id: ctx.electric_instance_id
@@ -33,7 +33,7 @@ defmodule Support.ComponentSetup do
   end
 
   def with_cub_db_storage(ctx) do
-    {:ok, storage_opts} =
+    storage_opts =
       FileStorage.shared_opts(
         storage_dir: ctx.tmp_dir,
         electric_instance_id: ctx.electric_instance_id
