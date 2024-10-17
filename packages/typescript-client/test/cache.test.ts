@@ -3,6 +3,7 @@ import { describe, expect, assert, inject } from 'vitest'
 import { exec } from 'child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable } from './support/test-context'
+import { CHUNK_LAST_OFFSET_HEADER, SHAPE_ID_HEADER } from '../src/constants'
 
 // FIXME: pull from environment?
 const maxAge = 1 // seconds
@@ -130,20 +131,22 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     proxyCacheBaseUrl,
     issuesTableUrl,
   }) => {
-    // Make a first request such that response is cached
     const originalRes = await fetch(
       `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
+    const lastOffset = originalRes.headers.get(CHUNK_LAST_OFFSET_HEADER)
+    const shapeId = originalRes.headers.get(SHAPE_ID_HEADER)
+    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_id=${shapeId}`
 
-    expect(originalRes.status).toBe(200)
-    expect(getCacheStatus(originalRes)).toBe(CacheStatus.MISS)
+    // Make a first request such that response is cached
+    const originalUpToDateRes = await fetch(urlToTest, {})
+
+    expect(originalUpToDateRes.status).toBe(200)
+    expect(getCacheStatus(originalUpToDateRes)).toBe(CacheStatus.MISS)
 
     // Second request gets cached response
-    const cachedRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
-      {}
-    )
+    const cachedRes = await fetch(urlToTest, {})
     expect(cachedRes.status).toBe(200)
 
     expect(getCacheStatus(cachedRes)).toBe(CacheStatus.HIT)
@@ -152,10 +155,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     await sleep(maxAge * 1000 + ((staleAge - maxAge) / 2) * 1000)
 
     // Third request gets cached response
-    const staleRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
-      {}
-    )
+    const staleRes = await fetch(urlToTest, {})
 
     expect(staleRes.status).toBe(200)
     expect(getCacheStatus(staleRes)).toBe(CacheStatus.STALE)
@@ -165,20 +165,22 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     proxyCacheBaseUrl,
     issuesTableUrl,
   }) => {
-    // Make a first request such that response is cached
     const originalRes = await fetch(
       `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
+    const lastOffset = originalRes.headers.get(CHUNK_LAST_OFFSET_HEADER)
+    const shapeId = originalRes.headers.get(SHAPE_ID_HEADER)
+    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_id=${shapeId}`
 
-    expect(originalRes.status).toBe(200)
-    expect(getCacheStatus(originalRes)).toBe(CacheStatus.MISS)
+    // Make a first request such that response is cached
+    const originalUpToDateRes = await fetch(urlToTest, {})
+
+    expect(originalUpToDateRes.status).toBe(200)
+    expect(getCacheStatus(originalUpToDateRes)).toBe(CacheStatus.MISS)
 
     // Second request gets cached response
-    const cachedRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
-      {}
-    )
+    const cachedRes = await fetch(urlToTest, {})
     expect(cachedRes.status).toBe(200)
 
     expect(getCacheStatus(cachedRes)).toBe(CacheStatus.HIT)
@@ -187,10 +189,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     await sleep(staleAge * 1000 + 2000)
 
     // Third request gets cached response
-    const staleRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
-      {}
-    )
+    const staleRes = await fetch(urlToTest, {})
 
     expect(staleRes.status).toBe(200)
     expect(getCacheStatus(staleRes)).toBe(CacheStatus.REVALIDATED)

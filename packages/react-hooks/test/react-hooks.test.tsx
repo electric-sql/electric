@@ -262,7 +262,7 @@ describe(`useShape`, () => {
         `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`
       )
       const body = (await res.json()) as Message[]
-      expect(body).toMatchObject([{}, { value: { id: newId } }, {}])
+      expect(body).toMatchObject([{}, { value: { id: newId } }])
     })
 
     await sleep(50)

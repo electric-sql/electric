@@ -182,10 +182,13 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   @impl Electric.ShapeCache.Storage
   def get_chunk_end_log_offset(offset, %MS{} = opts) do
-    get_offset_indexed_stream(offset, offset, opts.chunk_checkpoint_table)
-    |> Stream.map(fn {_, pos} -> LogOffset.new(pos) end)
-    |> Enum.take(1)
-    |> Enum.at(0)
+    case :ets.next_lookup(opts.chunk_checkpoint_table, storage_offset(offset)) do
+      :"$end_of_table" ->
+        nil
+
+      {chunk_offset, _} ->
+        LogOffset.new(chunk_offset)
+    end
   end
 
   @impl Electric.ShapeCache.Storage
