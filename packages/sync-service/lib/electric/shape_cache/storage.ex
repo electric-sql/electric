@@ -22,7 +22,7 @@ defmodule Electric.ShapeCache.Storage do
   @type row :: list()
 
   @doc "Validate and initialise storage base configuration from application configuration"
-  @callback shared_opts(Keyword.t()) :: {:ok, compiled_opts()} | {:error, term()}
+  @callback shared_opts(Keyword.t()) :: compiled_opts()
 
   @doc "Initialise shape-specific opts from the shared, global, configuration"
   @callback for_shape(shape_id(), compiled_opts()) :: shape_opts()
@@ -109,9 +109,7 @@ defmodule Electric.ShapeCache.Storage do
 
   @impl __MODULE__
   def shared_opts({module, opts}) do
-    with {:ok, compiled_opts} <- module.shared_opts(opts) do
-      {:ok, {module, compiled_opts}}
-    end
+    {module, module.shared_opts(opts)}
   end
 
   @impl __MODULE__
