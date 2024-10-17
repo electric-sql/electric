@@ -56,7 +56,7 @@ defmodule Electric.Postgres.Inspector do
   Clean up all information about a given relation using a provided inspector.
   """
   @spec clean(relation(), inspector()) :: true
-  def clean(relation, {module, opts}), do: module.clean_column_info(relation, opts)
+  def clean(relation, {module, opts}), do: module.clean(relation, opts)
 
   @doc """
   Get columns that should be considered a PK for table. If the table
