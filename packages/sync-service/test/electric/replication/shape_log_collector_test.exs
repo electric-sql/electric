@@ -9,14 +9,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
   alias Support.Mock
   import Support.ComponentSetup, only: [with_in_memory_storage: 1, with_tenant_id: 1]
-  import Support.TestUtils, only: [with_electric_instance_id: 1, full_test_name: 1]
+  import Support.TestUtils, only: [with_electric_instance_id: 1]
 
   import Mox
 
   @moduletag :capture_log
 
   setup :verify_on_exit!
-  setup [:with_electric_instance_id, :with_in_memory_storage, :with_tenant_id]
+  setup [:with_electric_instance_id, :with_tenant_id, :with_in_memory_storage]
 
   setup(ctx) do
     # Start a test Registry

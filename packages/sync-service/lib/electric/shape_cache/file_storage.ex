@@ -124,12 +124,16 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def get_all_stored_shapes(%{base_path: base_path}) do
-    case File.ls(base_path) do
+  def get_all_stored_shapes(opts) do
+    shapes_dir = Path.join([opts.base_path, opts.tenant_id])
+
+    case File.ls(shapes_dir) do
       {:ok, shape_ids} ->
         Enum.reduce(shape_ids, %{}, fn shape_id, acc ->
           shape_def_path =
-            shape_definition_path(%{shape_definition_dir: Path.join(base_path, shape_id)})
+            shape_definition_path(%{
+              shape_definition_dir: Path.join([opts.base_path, opts.tenant_id, shape_id])
+            })
 
           with {:ok, shape_def_encoded} <- File.read(shape_def_path),
                {:ok, shape_def_json} <- Jason.decode(shape_def_encoded),
