@@ -16,6 +16,7 @@ defmodule Electric.Postgres.ReplicationClient do
   @type step ::
           :disconnected
           | :connected
+          | :query_pg_info
           | :create_publication
           | :create_slot
           | :set_display_setting
@@ -25,6 +26,7 @@ defmodule Electric.Postgres.ReplicationClient do
   defmodule State do
     @enforce_keys [:transaction_received, :relation_received, :publication_name]
     defstruct [
+      :connection_manager,
       :transaction_received,
       :relation_received,
       :publication_name,
@@ -47,6 +49,7 @@ defmodule Electric.Postgres.ReplicationClient do
     ]
 
     @type t() :: %__MODULE__{
+            connection_manager: pid(),
             transaction_received: {module(), atom(), [term()]},
             relation_received: {module(), atom(), [term()]},
             publication_name: String.t(),
@@ -61,6 +64,7 @@ defmodule Electric.Postgres.ReplicationClient do
           }
 
     @opts_schema NimbleOptions.new!(
+                   connection_manager: [required: true, type: :pid],
                    transaction_received: [required: true, type: :mfa],
                    relation_received: [required: true, type: :mfa],
                    publication_name: [required: true, type: :string],
