@@ -19,7 +19,7 @@ defmodule Electric.Application do
   def start(_type, _args) do
     :erlang.system_flag(:backtrace_depth, 50)
 
-    config = configure()
+    configure()
 
     # The root application supervisor starts the core global processes, including the HTTP
     # server and the database connection manager. The latter is responsible for establishing
@@ -42,9 +42,7 @@ defmodule Electric.Application do
           Electric.TenantSupervisor,
           Electric.TenantManager,
           {Bandit,
-           plug:
-             {Electric.Plug.Router,
-              storage: config.storage, tenant_manager: Electric.TenantManager},
+           plug: {Electric.Plug.Router, tenant_manager: Electric.TenantManager},
            port: Application.fetch_env!(:electric, :service_port),
            thousand_island_options: http_listener_options()}
           # {Bandit,
@@ -97,7 +95,6 @@ defmodule Electric.Application do
     config = %Electric.Application.Configuration{
       electric_instance_id: electric_instance_id,
       persistent_kv: persistent_kv,
-      connection_opts: Application.fetch_env!(:electric, :connection_opts),
       replication_opts: %{
         stream_id: replication_stream_id,
         publication_name: publication_name,
