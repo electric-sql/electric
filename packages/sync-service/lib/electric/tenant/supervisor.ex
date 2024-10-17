@@ -19,12 +19,12 @@ defmodule Electric.Tenant.Supervisor do
   @impl true
   def init(%{
         app_config: app_config,
+        electric_instance_id: electric_instance_id,
         tenant_id: tenant_id,
         connection_opts: connection_opts,
-        inspector: inspector
+        inspector: inspector,
+        storage: storage
       }) do
-    %{electric_instance_id: electric_instance_id} = app_config
-
     get_pg_version_fn = fn ->
       server = Electric.Connection.Manager.name(electric_instance_id, tenant_id)
       Electric.Connection.Manager.get_pg_version(server)
@@ -43,7 +43,7 @@ defmodule Electric.Tenant.Supervisor do
     shape_cache_opts = [
       electric_instance_id: electric_instance_id,
       tenant_id: tenant_id,
-      storage: app_config.storage,
+      storage: storage,
       inspector: inspector,
       prepare_tables_fn: prepare_tables_mfa,
       # TODO: move this to config
