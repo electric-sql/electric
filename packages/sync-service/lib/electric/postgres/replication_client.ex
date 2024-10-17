@@ -113,16 +113,18 @@ defmodule Electric.Postgres.ReplicationClient do
     Postgrex.ReplicationConnection.call(client, :stop)
   end
 
-  # The `Postgrex.ReplicationConnection` behaviour does not adhere to gen server conventions and
-  # establishes its own. Unless the `sync_connect: false` option is passed to `start_link()`, the
+  # The `Postgrex.ReplicationConnection` behaviour does not follow the gen server conventions and
+  # establishes its own instead. Unless the `sync_connect: false` option is passed to `start_link()`, the
   # connection process will try opening a replication connection to Postgres before returning
   # from its `init()` callback.
   #
   # The callbacks `init()`, `handle_connect()` and `handle_result()` defined in this module
   # below are all invoked inside the connection process' `init()` callback. Once any of our
-  # callbacks returns `{:stream, ...}`, the connection process finishes its initialization and
+  # callbacks return `{:stream, ...}`, the connection process finishes its initialization and
   # switches into the logical streaming mode to start receiving logical messages from Postgres,
   # invoking the `handle_data()` callback for each one.
+  #
+  # TODO(alco): this needs additional info about :noreply and :query return tuples.
   @impl true
   def init(replication_opts) do
     {:ok, State.new(replication_opts)}

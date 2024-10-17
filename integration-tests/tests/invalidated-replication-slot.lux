@@ -1,12 +1,12 @@
 [doc Verify handling of invalidated replication slot while Electric is running]
 
-[include macros.luxinc]
+[include _macros.luxinc]
 
 [global pg_container_name=replication-slot-invalidated-while-running__pg]
 
 [my invalidated_slot_error=
   """
-  [error] GenServer Electric.ConnectionManager terminating
+  [error] GenServer Electric.Connection.Manager terminating
   ** (Postgrex.Error) ERROR 55000 (object_not_in_prerequisite_state) cannot read from logical replication slot "electric_slot_default"
 
   This slot has been invalidated because it exceeded the maximum reserved size.

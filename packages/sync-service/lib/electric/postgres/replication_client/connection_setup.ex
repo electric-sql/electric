@@ -65,7 +65,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
         "timeline_id = #{timeline_id}"
     )
 
-    Electric.ConnectionManager.pg_info_looked_up(
+    Electric.Connection.Manager.pg_info_looked_up(
       state.connection_manager,
       {String.to_integer(version_str), system_identifier, timeline_id}
     )
