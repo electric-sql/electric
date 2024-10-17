@@ -75,15 +75,15 @@
   ?Txn received in Shapes.Consumer: %Electric.Replication.Changes.Transaction{xid: $xid
 
   # Both consumers hit their call limit and exit with simulated storage failures.
-  ?\[error\] GenServer {Electric\.Registry\.Processes, {Electric\.Shapes\.Consumer, :default, "[0-9-]+"}} terminating
+  ?\[error\] GenServer {Electric\.Registry\.Processes, {Electric\.Shapes\.Consumer, :default, "integration_test_tenant", "[0-9-]+"}} terminating
   ??Simulated storage failure
-  ?\[error\] GenServer {Electric\.Registry\.Processes, {Electric\.Shapes\.Consumer, :default, "[0-9-]+"}} terminating
+  ?\[error\] GenServer {Electric\.Registry\.Processes, {Electric\.Shapes\.Consumer, :default, "integration_test_tenant", "[0-9-]+"}} terminating
   ??Simulated storage failure
 
   # The log collector process and the replication client both exit, as their lifetimes are tied
   # together by the supervision tree design.
-  ??[error] GenServer {Electric.Registry.Processes, {Electric.Replication.ShapeLogCollector, :default}} terminating
-  ??[error] :gen_statem {Electric.Registry.Processes, {Electric.Postgres.ReplicationClient, :default}} terminating
+  ??[error] GenServer {Electric.Registry.Processes, {Electric.Replication.ShapeLogCollector, :default, "integration_test_tenant"}} terminating
+  ??[error] :gen_statem {Electric.Registry.Processes, {Electric.Postgres.ReplicationClient, :default, "integration_test_tenant"}} terminating
 
   # Observe that both shape consumers and the replication client have restarted.
   ??[debug] Found existing replication slot
