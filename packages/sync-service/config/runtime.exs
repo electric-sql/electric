@@ -25,17 +25,13 @@ end
 #   handle_sasl_reports: true
 
 if config_env() == :test do
-  config(:logger, level: :info)
-  config(:electric, test_mode: true)
-  config(:electric, pg_version_for_tests: env!("POSTGRES_VERSION", :integer, 150_001))
+  config :electric, pg_version_for_tests: env!("POSTGRES_VERSION", :integer, 150_001)
 end
 
 electric_instance_id = :default
 service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
 instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
 version = Electric.version()
-
-test_tenant = "test_tenant"
 
 config :telemetry_poller, :default, period: 500
 
@@ -84,20 +80,19 @@ otel_simple_processor =
 config :opentelemetry,
   processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1)
 
-if Config.config_env() == :test do
-  config :electric,
-    connection_opts:
-      [
-        hostname: "localhost",
-        port: 54321,
-        username: "postgres",
-        password: "password",
-        database: "postgres",
-        sslmode: :disable
-      ]
-      |> Electric.Utils.obfuscate_password()
+{:ok, database_url_config} =
+  env!("DATABASE_URL", :string)
+  |> Electric.ConfigParser.parse_postgresql_uri()
 
-  config :electric, test_tenant: test_tenant
+database_ipv6_config =
+  env!("DATABASE_USE_IPV6", :boolean, false)
+
+connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
+
+config :electric, default_connection_opts: Electric.Utils.obfuscate_password(connection_opts)
+
+if default_tenant = env!("TENANT_ID", :string, nil) do
+  config :electric, default_tenant: default_tenant
 end
 
 enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)
