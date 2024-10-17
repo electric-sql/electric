@@ -25,7 +25,13 @@ defmodule Electric.Application do
 
     router_opts =
       Enum.concat([
-        [tanent_manager: Electric.TenantManager],
+        [
+          tanent_manager: Electric.TenantManager,
+          long_poll_timeout: 20_000,
+          max_age: Application.fetch_env!(:electric, :cache_max_age),
+          stale_age: Application.fetch_env!(:electric, :cache_stale_age),
+          allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)
+        ],
         get_service_status_option(config.electric_instance_id, tenant_id)
       ])
 
@@ -53,20 +59,6 @@ defmodule Electric.Application do
            plug: {Electric.Plug.Router, router_opts},
            port: Application.fetch_env!(:electric, :service_port),
            thousand_island_options: http_listener_options()}
-          # {Bandit,
-          #  plug:
-          #    {Electric.Plug.Router,
-          #     storage: config.storage,
-          #     registry: Registry.ShapeChanges,
-          #     shape_cache: {Electric.ShapeCache, config.shape_cache_opts},
-          #     get_service_status: &Electric.ServiceStatus.check/0,
-          #     inspector: config.inspector,
-          #     long_poll_timeout: 20_000,
-          #     max_age: Application.fetch_env!(:electric, :cache_max_age),
-          #     stale_age: Application.fetch_env!(:electric, :cache_stale_age),
-          #     allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},
-          #  port: Application.fetch_env!(:electric, :service_port),
-          #  thousand_island_options: http_listener_options()}
         ],
         prometheus_endpoint(Application.fetch_env!(:electric, :prometheus_port))
       ])
