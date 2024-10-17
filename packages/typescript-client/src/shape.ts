@@ -167,6 +167,7 @@ export class Shape<T extends Row<unknown> = Row> {
           case `must-refetch`:
             this.#data.clear()
             this.#error = false
+            this.#hasNotifiedSubscribersUpToDate = false
             isUpToDate = false
             newlyUpToDate = false
             break
