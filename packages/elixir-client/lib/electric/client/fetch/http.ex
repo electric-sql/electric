@@ -2,27 +2,17 @@ defmodule Electric.Client.Fetch.HTTP do
   @moduledoc false
 
   alias Electric.Client.Fetch
-  alias Electric.Client.ShapeDefinition
 
   @behaviour Electric.Client.Fetch
 
-  def fetch(%Fetch.Request{} = request, opts) do
+  def fetch(%Fetch.Request{authenticated: true} = request, opts) do
     request_opts = Keyword.get(opts, :request, [])
     {connect_options, request_opts} = Keyword.pop(request_opts, :connect_options, [])
 
-    %{
-      method: method,
-      base_url: base_url,
-      shape: %ShapeDefinition{} = shape
-    } = request
-
-    params = Electric.Client.params(request)
-
     [
-      method: method,
-      base_url: base_url,
-      url: "/v1/shape/#{ShapeDefinition.url_table_name(shape)}",
-      params: params,
+      method: request.method,
+      url: Fetch.Request.url(request),
+      headers: request.headers,
       retry_delay: &retry_delay/1,
       max_retries: 6,
       # finch: Electric.Client.Finch,

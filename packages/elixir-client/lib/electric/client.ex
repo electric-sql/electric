@@ -60,7 +60,7 @@ defmodule Electric.Client do
 
       {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
 
-      shape = Electric.Client.ShapeDefinition.new("foo", where: "name ILIKE 'a%'")
+      {:ok, shape} = Electric.Client.ShapeDefinition.new("foo", where: "name ILIKE 'a%'")
 
       stream = Electric.Client.stream(client, shape)
 
@@ -124,9 +124,7 @@ defmodule Electric.Client do
   """
 
   alias Electric.Client.Fetch
-  alias Electric.Client.Offset
   alias Electric.Client.ShapeDefinition
-  alias Electric.Client.Util
   alias Electric.Client.Message
 
   alias __MODULE__
@@ -137,7 +135,8 @@ defmodule Electric.Client do
 
   defstruct [
     :base_url,
-    :fetch
+    :fetch,
+    :authenticator
   ]
 
   @client_schema NimbleOptions.new!(
@@ -147,7 +146,12 @@ defmodule Electric.Client do
                      doc:
                        "The URL of the electric server, e.g. for local development this would be `http://localhost:3000`."
                    ],
-                   fetch: [type: :mod_arg, default: {Client.Fetch.HTTP, []}, doc: false]
+                   fetch: [type: :mod_arg, default: {Client.Fetch.HTTP, []}, doc: false],
+                   authenticator: [
+                     type: :mod_arg,
+                     default: {Client.Authenticator.Unauthenticated, []},
+                     doc: false
+                   ]
                  )
 
   @type shape_id :: String.t()
@@ -163,8 +167,6 @@ defmodule Electric.Client do
   @type schema :: %{String.t() => column()}
   @type message ::
           Message.ControlMessage.t() | Message.ChangeMessage.t() | Message.ResumeMessage.t()
-  @type param :: :offset | :update_mode | :shape_id | :live | :where | :cursor
-  @type params :: %{param() => String.t()}
   @type table_name :: String.t()
   @type client_option :: unquote(NimbleOptions.option_typespec(@client_schema))
   @type client_options :: [client_option()]
@@ -173,7 +175,7 @@ defmodule Electric.Client do
   @type shape_options :: [shape_option()]
 
   @type t :: %__MODULE__{
-          base_url: String.t(),
+          base_url: URI.t(),
           fetch: {module(), term()}
         }
 
@@ -186,8 +188,9 @@ defmodule Electric.Client do
   """
   @spec new(client_options()) :: {:ok, t()} | {:error, term()}
   def new(opts) do
-    with {:ok, attrs} <- NimbleOptions.validate(opts, @client_schema) do
-      {:ok, struct(__MODULE__, attrs)}
+    with {:ok, attrs} <- NimbleOptions.validate(Map.new(opts), @client_schema),
+         {:ok, uri} <- URI.new(attrs[:base_url]) do
+      {:ok, struct(__MODULE__, Map.put(attrs, :base_url, uri))}
     end
   end
 
@@ -206,11 +209,22 @@ defmodule Electric.Client do
   @doc """
   A shortcut to `ShapeDefinition.new/2`.
   """
-  @spec shape(String.t(), ShapeDefinition.options()) :: ShapeDefinition.t()
+  @spec shape(String.t(), ShapeDefinition.options()) ::
+          {:ok, ShapeDefinition.t()} | {:error, term()}
   def shape(table_name, opts \\ [])
 
   def shape(table_name, opts) do
     ShapeDefinition.new(table_name, opts)
+  end
+
+  @doc """
+  A shortcut to `ShapeDefinition.new!/2`.
+  """
+  @spec shape!(String.t(), ShapeDefinition.options()) :: ShapeDefinition.t() | no_return()
+  def shape!(table_name, opts \\ [])
+
+  def shape!(table_name, opts) do
+    ShapeDefinition.new!(table_name, opts)
   end
 
   @doc """
@@ -244,37 +258,44 @@ defmodule Electric.Client do
   end
 
   def stream(%Client{} = client, table_name, opts) when is_binary(table_name) do
-    stream(client, ShapeDefinition.new(table_name), opts)
+    stream(client, ShapeDefinition.new!(table_name), opts)
   end
 
   def stream(%Client{} = client, %ShapeDefinition{} = shape, opts) do
     Client.Stream.new(client, shape, opts)
   end
 
+  @doc """
+  Return an authenticated URL for the given request attributes.
+  """
+  @spec url(t(), Fetch.Request.attrs()) :: binary()
+  def url(%Client{} = client, opts) do
+    request = request(client, opts)
+    authenticated_request = authenticate_request(client, request)
+
+    Fetch.Request.url(authenticated_request)
+  end
+
   @doc false
-  @spec request(t(), Keyword.t()) :: Fetch.Request.t()
+  @spec request(t(), Fetch.Request.attrs()) :: Fetch.Request.t()
   def request(%Client{} = client, opts) do
     struct(%Fetch.Request{base_url: client.base_url}, opts)
   end
 
-  @doc false
-  @spec params(Fetch.Request.t()) :: params()
-  def params(%Fetch.Request{} = request) do
-    %{
-      shape: %ShapeDefinition{where: where},
-      update_mode: update_mode,
-      live: live?,
-      shape_id: shape_id,
-      offset: %Offset{} = offset,
-      next_cursor: cursor
-    } = request
+  @doc """
+  Authenticate the given request using the `authenticator` configured in the `Client`.
+  """
+  @spec authenticate_request(t(), Fetch.Request.t()) :: Fetch.Request.authenticated()
+  def authenticate_request(%Client{authenticator: {module, config}}, %Fetch.Request{} = request) do
+    module.authenticate_request(request, config)
+  end
 
-    %{offset: Offset.to_string(offset)}
-    |> Util.map_put_if(:update_mode, to_string(update_mode), update_mode != :modified)
-    |> Util.map_put_if(:shape_id, shape_id, is_binary(shape_id))
-    |> Util.map_put_if(:live, "true", live?)
-    |> Util.map_put_if(:where, where, is_binary(where))
-    |> Util.map_put_if(:cursor, cursor, !is_nil(cursor))
+  @doc """
+  Get authentication query parameters for the given `#{ShapeDefinition}`.
+  """
+  @spec authenticate_shape(t(), ShapeDefinition.t()) :: Client.Authenticator.params()
+  def authenticate_shape(%Client{authenticator: {module, config}}, %ShapeDefinition{} = shape) do
+    module.authenticate_shape(shape, config)
   end
 
   @doc """
@@ -284,6 +305,6 @@ defmodule Electric.Client do
   """
   def delete_shape(%Client{} = client, %ShapeDefinition{} = shape) do
     request = request(client, method: :delete, shape: shape)
-    Electric.Client.Fetch.Request.request(request, client.fetch)
+    Electric.Client.Fetch.Request.request(client, request)
   end
 end

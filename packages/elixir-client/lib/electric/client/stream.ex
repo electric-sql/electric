@@ -263,9 +263,7 @@ defmodule Electric.Client.Stream do
   end
 
   defp make_request(request, stream) do
-    %{client: %{fetch: {_module, _opts} = fetcher}} = stream
-
-    Electric.Client.Fetch.Request.request(request, fetcher)
+    Fetch.Request.request(stream.client, request)
   end
 
   defp reset(stream, shape_id) do

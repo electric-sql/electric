@@ -28,7 +28,7 @@ defmodule Electric.Client.ValueMapperTest do
       {:ok, client} =
         Client.new(base_url: Application.fetch_env!(:electric_client, :electric_url))
 
-      shape = ShapeDefinition.new(ctx.tablename)
+      shape = ShapeDefinition.new!(ctx.tablename)
 
       [client: client, shape: shape]
     end

@@ -17,7 +17,7 @@ if Code.ensure_loaded?(Ecto) do
 
       where = where_clause(query)
 
-      {ShapeDefinition.new(table_name, namespace: namespace, where: where), {__MODULE__, struct}}
+      {ShapeDefinition.new!(table_name, namespace: namespace, where: where), {__MODULE__, struct}}
     end
 
     defp table_name(%{from: %{prefix: prefix, source: {table_name, struct}}}) do
