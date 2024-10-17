@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 0.6.4
+
+### Patch Changes
+
+- 7f86b47: Fix prefetch logic to stop prefetching as soon as responses stop advancing.
+
 ## 0.6.3
 
 ### Patch Changes
