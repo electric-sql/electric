@@ -86,10 +86,6 @@ defmodule Electric.Application do
   defp configure do
     electric_instance_id = Application.fetch_env!(:electric, :electric_instance_id)
 
-    {storage_module, storage_in_opts} = Application.fetch_env!(:electric, :storage)
-    storage_opts = storage_module.shared_opts(storage_in_opts)
-    storage = {storage_module, storage_opts}
-
     {kv_module, kv_fun, kv_params} = Application.fetch_env!(:electric, :persistent_kv)
     persistent_kv = apply(kv_module, kv_fun, [kv_params])
 
@@ -99,7 +95,6 @@ defmodule Electric.Application do
 
     config = %Electric.Application.Configuration{
       electric_instance_id: electric_instance_id,
-      storage: storage,
       persistent_kv: persistent_kv,
       connection_opts: Application.fetch_env!(:electric, :connection_opts),
       replication_opts: %{
