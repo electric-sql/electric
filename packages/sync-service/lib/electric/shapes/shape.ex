@@ -9,8 +9,16 @@ defmodule Electric.Shapes.Shape do
   alias Electric.Replication.Changes
 
   @enforce_keys [:root_table, :root_table_id]
-  defstruct [:root_table, :root_table_id, :table_info, :where, :selected_columns]
+  defstruct [
+    :root_table,
+    :root_table_id,
+    :table_info,
+    :where,
+    :selected_columns,
+    update_mode: :modified
+  ]
 
+  @type update_mode() :: :full | :modified
   @type table_info() :: %{
           columns: [Inspector.column_info(), ...],
           pk: [String.t(), ...]
@@ -22,7 +30,8 @@ defmodule Electric.Shapes.Shape do
             Electric.relation() => table_info()
           },
           where: Electric.Replication.Eval.Expr.t() | nil,
-          selected_columns: [String.t(), ...] | nil
+          selected_columns: [String.t(), ...] | nil,
+          update_mode: update_mode()
         }
 
   @type table_with_where_clause() :: {Electric.relation(), String.t() | nil}
@@ -60,15 +69,18 @@ defmodule Electric.Shapes.Shape do
   @shape_schema NimbleOptions.new!(
                   where: [type: {:or, [:string, nil]}],
                   columns: [type: {:or, [{:list, :string}, nil]}],
+                  update_mode: [
+                    type: {:custom, __MODULE__, :verify_update_mode, []},
+                    default: :modified
+                  ],
                   inspector: [
                     type: :mod_arg,
                     default: {Electric.Postgres.Inspector, Electric.DbPool}
                   ]
                 )
   def new(table, opts) do
-    opts = NimbleOptions.validate!(opts, @shape_schema)
-
-    with inspector <- Access.fetch!(opts, :inspector),
+    with {:ok, opts} <- NimbleOptions.validate(opts, @shape_schema),
+         inspector <- Access.fetch!(opts, :inspector),
          {:ok, %{relation: table, relation_id: relation_id}} <- validate_table(table, inspector),
          {:ok, column_info, pk_cols} <- load_column_info(table, inspector),
          {:ok, selected_columns} <-
@@ -81,7 +93,8 @@ defmodule Electric.Shapes.Shape do
          root_table_id: relation_id,
          table_info: %{table => %{pk: pk_cols, columns: column_info}},
          where: where,
-         selected_columns: selected_columns
+         selected_columns: selected_columns,
+         update_mode: Access.get(opts, :update_mode, :modified)
        }}
     end
   end
@@ -163,6 +176,14 @@ defmodule Electric.Shapes.Shape do
         {:ok, rel}
     end
   end
+
+  def verify_update_mode(mode) when mode in [:full, "full"], do: {:ok, :full}
+  def verify_update_mode(mode) when mode in [:modified, "modified"], do: {:ok, :modified}
+
+  def verify_update_mode(invalid),
+    do:
+      {:error,
+       "Invalid value for update_mode: #{inspect(invalid)}. Expecting one of `full` or `modified`"}
 
   @doc """
   List tables that are a part of this shape.
