@@ -20,7 +20,7 @@ defmodule Electric.ConnectionManager do
          connection_opts: [...],
          replication_opts: [...],
          pool_opts: [...],
-         timeline_opts: [...]}
+         persistent_kv: ...}
       ]
 
       Supervisor.start_link(children, strategy: :one_for_one)
@@ -34,8 +34,8 @@ defmodule Electric.ConnectionManager do
       :replication_opts,
       # Database connection pool options
       :pool_opts,
-      # Options specific to `Electric.Timeline`
-      :timeline_opts,
+      # Application's persistent key-value storage reference
+      :persistent_kv,
       # PID of the replication client
       :replication_client_pid,
       # PID of the Postgres connection lock
@@ -70,7 +70,7 @@ defmodule Electric.ConnectionManager do
           | {:connection_opts, Keyword.t()}
           | {:replication_opts, Keyword.t()}
           | {:pool_opts, Keyword.t()}
-          | {:timeline_opts, Keyword.t()}
+          | {:persistent_kv, map()}
 
   @type options :: [option]
 
@@ -128,14 +128,14 @@ defmodule Electric.ConnectionManager do
 
     pool_opts = Keyword.fetch!(opts, :pool_opts)
 
-    timeline_opts = Keyword.fetch!(opts, :timeline_opts)
+    persistent_kv = Keyword.fetch!(opts, :persistent_kv)
 
     state =
       %State{
         connection_opts: connection_opts,
         replication_opts: replication_opts,
         pool_opts: pool_opts,
-        timeline_opts: timeline_opts,
+        persistent_kv: persistent_kv,
         pg_lock_acquired: false,
         backoff: {:backoff.init(1000, 10_000), nil},
         electric_instance_id: Keyword.fetch!(opts, :electric_instance_id)
@@ -220,14 +220,17 @@ defmodule Electric.ConnectionManager do
   def handle_continue(:start_connection_pool, state) do
     case start_connection_pool(state.connection_opts, state.pool_opts) do
       {:ok, pool_pid} ->
-        {:ok, shapes_sup_pid} = Electric.Connection.Supervisor.start_shapes_supervisor()
+        # Checking the timeline continuity to see if we need to purge all shapes persisted so far.
+        check_result =
+          Electric.Timeline.check(
+            {state.pg_system_identifier, state.pg_timeline_id},
+            state.persistent_kv
+          )
 
-        # Now that we have a ShapeCache process running under Shapes.Supervisor, we can run the
-        # timeline check.
-        Electric.Timeline.check(
-          {state.pg_system_identifier, state.pg_timeline_id},
-          state.timeline_opts
-        )
+        {:ok, shapes_sup_pid} =
+          Electric.Connection.Supervisor.start_shapes_supervisor(
+            purge_all_shapes?: check_result == :timeline_changed
+          )
 
         # Everything is ready to start accepting and processing logical messages from Postgres.
         Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)

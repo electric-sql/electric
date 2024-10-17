@@ -64,7 +64,8 @@ defmodule Electric.ShapeCache do
             create_snapshot_fn: [
               type: {:fun, 5},
               default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/5
-            ]
+            ],
+            purge_all_shapes?: [type: :boolean, required: false]
           )
 
   def start_link(opts) do
@@ -194,7 +195,11 @@ defmodule Electric.ShapeCache do
       subscription: nil
     }
 
-    recover_shapes(state)
+    if opts[:purge_all_shapes?] do
+      clean_up_all_shapes(state)
+    else
+      recover_shapes(state)
+    end
 
     # do this after finishing this function so that we're subscribed to the
     # producer before it starts forwarding its demand

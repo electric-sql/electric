@@ -39,10 +39,7 @@ defmodule Electric.Application do
         pool_size: config.pool_opts.size,
         types: PgInterop.Postgrex.Types
       ],
-      timeline_opts: [
-        shape_cache: {Electric.ShapeCache, []},
-        persistent_kv: config.persistent_kv
-      ]
+      persistent_kv: config.persistent_kv
     ]
 
     # The root application supervisor starts the core global processes, including the HTTP
@@ -69,7 +66,7 @@ defmodule Electric.Application do
              {Electric.Plug.Router,
               storage: config.storage,
               registry: Registry.ShapeChanges,
-              shape_cache: config.child_specs.shape_cache,
+              shape_cache: {Electric.ShapeCache, config.shape_cache_opts},
               get_service_status: &Electric.ServiceStatus.check/0,
               inspector: config.inspector,
               long_poll_timeout: 20_000,
@@ -117,16 +114,16 @@ defmodule Electric.Application do
     inspector =
       {Electric.Postgres.Inspector.EtsInspector, server: Electric.Postgres.Inspector.EtsInspector}
 
-    shape_cache_spec =
-      {Electric.ShapeCache,
-       electric_instance_id: electric_instance_id,
-       storage: storage,
-       inspector: inspector,
-       prepare_tables_fn: prepare_tables_mfa,
-       chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
-       log_producer: Electric.Replication.ShapeLogCollector.name(electric_instance_id),
-       consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(electric_instance_id),
-       registry: Registry.ShapeChanges}
+    shape_cache_opts = [
+      electric_instance_id: electric_instance_id,
+      storage: storage,
+      inspector: inspector,
+      prepare_tables_fn: prepare_tables_mfa,
+      chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
+      log_producer: Electric.Replication.ShapeLogCollector.name(electric_instance_id),
+      consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(electric_instance_id),
+      registry: Registry.ShapeChanges
+    ]
 
     config = %Electric.Application.Configuration{
       electric_instance_id: electric_instance_id,
@@ -142,9 +139,7 @@ defmodule Electric.Application do
         size: Application.fetch_env!(:electric, :db_pool_size)
       },
       inspector: inspector,
-      child_specs: %{
-        shape_cache: shape_cache_spec
-      }
+      shape_cache_opts: shape_cache_opts
     }
 
     Electric.Application.Configuration.save(config)
