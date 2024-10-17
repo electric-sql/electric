@@ -10,6 +10,8 @@ defmodule Electric.Timeline do
   @type timeline_id :: integer()
   @type timeline :: {pg_id(), timeline_id()} | nil
 
+  @type check_result :: :ok | :timeline_changed
+
   @timeline_key "timeline_id"
 
   @doc """
@@ -20,47 +22,49 @@ defmodule Electric.Timeline do
   If the timelines differ, that indicates that a Point In Time Recovery (PITR) has occurred and all shapes must be cleaned.
   If we fail to fetch timeline information, we also clean all shapes for safety as we can't be sure that Postgres and Electric are on the same timeline.
   """
-  @spec check(timeline(), keyword()) :: :ok
-  def check(pg_timeline, opts) do
-    electric_timeline = load_timeline(opts)
-    verify_timeline(pg_timeline, electric_timeline, opts)
+  @spec check(timeline(), map()) :: check_result()
+  def check(pg_timeline, persistent_kv) do
+    electric_timeline = load_timeline(persistent_kv)
+
+    # In any situation where the newly fetched timeline is different from the one we had
+    # stored previously, overwrite the old one with the new one in our persistent KV store.
+    if pg_timeline != electric_timeline do
+      :ok = store_timeline(pg_timeline, persistent_kv)
+    end
+
+    # Now check for specific differences between the two timelines.
+    verify_timeline(pg_timeline, electric_timeline)
   end
 
-  @spec verify_timeline(timeline(), timeline(), keyword()) :: :ok
-  defp verify_timeline({pg_id, timeline_id} = timeline, timeline, _) do
+  @spec verify_timeline(timeline(), timeline()) :: check_result()
+  defp verify_timeline({pg_id, timeline_id} = timeline, timeline) do
     Logger.info("Connected to Postgres #{pg_id} and timeline #{timeline_id}")
     :ok
   end
 
-  defp verify_timeline({pg_id, timeline_id} = timeline, nil, opts) do
+  defp verify_timeline({pg_id, timeline_id}, nil) do
     Logger.info("No previous timeline detected.")
     Logger.info("Connected to Postgres #{pg_id} and timeline #{timeline_id}")
-    store_timeline(timeline, opts)
+    :ok
   end
 
-  defp verify_timeline({pg_id, _} = timeline, {electric_pg_id, _}, opts)
-       when pg_id != electric_pg_id do
+  defp verify_timeline({pg_id, _}, {electric_pg_id, _}) when pg_id != electric_pg_id do
     Logger.warning(
-      "Detected different Postgres DB, with ID: #{pg_id}. Old Postgres DB had ID #{electric_pg_id}. Cleaning all shapes."
+      "Detected different Postgres DB, with ID: #{pg_id}. Old Postgres DB had ID #{electric_pg_id}. Will purge all shapes."
     )
 
-    clean_all_shapes_and_store_timeline(timeline, opts)
+    :timeline_changed
   end
 
-  defp verify_timeline({_, timeline_id} = timeline, _, opts) do
-    Logger.warning("Detected PITR to timeline #{timeline_id}; cleaning all shapes.")
-    clean_all_shapes_and_store_timeline(timeline, opts)
-  end
-
-  defp clean_all_shapes_and_store_timeline(timeline, opts) do
-    clean_all_shapes(opts)
-    store_timeline(timeline, opts)
+  defp verify_timeline({_, timeline_id}, _) do
+    Logger.warning("Detected PITR to timeline #{timeline_id}; will purge all shapes.")
+    :timeline_changed
   end
 
   # Loads the PG ID and timeline ID from persistent storage
-  @spec load_timeline(keyword()) :: timeline()
-  def load_timeline(opts) do
-    kv = make_serialized_kv(opts)
+  @spec load_timeline(map()) :: timeline()
+  def load_timeline(persistent_kv) do
+    kv = make_serialized_kv(persistent_kv)
 
     case PersistentKV.get(kv, @timeline_key) do
       {:ok, [pg_id, timeline_id]} ->
@@ -75,22 +79,13 @@ defmodule Electric.Timeline do
     end
   end
 
-  def store_timeline({pg_id, timeline_id}, opts) do
-    kv = make_serialized_kv(opts)
+  def store_timeline({pg_id, timeline_id}, persistent_kv) do
+    kv = make_serialized_kv(persistent_kv)
     :ok = PersistentKV.set(kv, @timeline_key, [pg_id, timeline_id])
   end
 
-  defp make_serialized_kv(opts) do
-    kv_backend = Keyword.fetch!(opts, :persistent_kv)
+  defp make_serialized_kv(persistent_kv) do
     # defaults to using Jason encoder and decoder
-    PersistentKV.Serialized.new!(backend: kv_backend)
-  end
-
-  # Clean up all data (meta data and shape log + snapshot) associated with all shapes
-  @spec clean_all_shapes(keyword()) :: :ok
-  defp clean_all_shapes(opts) do
-    {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
-    shape_cache.clean_all_shapes(opts)
-    :ok
+    PersistentKV.Serialized.new!(backend: persistent_kv)
   end
 end
