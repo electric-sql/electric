@@ -7,7 +7,6 @@ defmodule Electric.Application.Configuration do
   defstruct ~w[
     electric_instance_id
     persistent_kv
-    connection_opts
     replication_opts
     pool_opts
   ]a

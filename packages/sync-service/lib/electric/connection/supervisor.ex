@@ -32,6 +32,7 @@ defmodule Electric.Connection.Supervisor do
 
   def start_shapes_supervisor(opts) do
     electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+    tenant_id = Keyword.fetch!(opts, :tenant_id)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
     inspector = Keyword.fetch!(shape_cache_opts, :inspector)
 
@@ -39,14 +40,14 @@ defmodule Electric.Connection.Supervisor do
 
     shape_log_collector_spec =
       {Electric.Replication.ShapeLogCollector,
-       electric_instance_id: electric_instance_id, inspector: inspector}
+       electric_instance_id: electric_instance_id, tenant_id: tenant_id, inspector: inspector}
 
     child_spec =
       Supervisor.child_spec(
         {
           Electric.Shapes.Supervisor,
           electric_instance_id: electric_instance_id,
-          tenant_id: Keyword.fetch!(opts, :tenant_id),
+          tenant_id: tenant_id,
           shape_cache: shape_cache_spec,
           log_collector: shape_log_collector_spec
         },
