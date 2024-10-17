@@ -26,6 +26,7 @@ defmodule Electric.ShapeCache.FileStorage do
     :shape_definition_dir,
     :snapshot_dir,
     :electric_instance_id,
+    :tenant_id,
     :extra_opts,
     version: @version
   ]
@@ -34,8 +35,9 @@ defmodule Electric.ShapeCache.FileStorage do
   def shared_opts(opts) do
     storage_dir = Keyword.get(opts, :storage_dir, "./shapes")
     electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+    tenant_id = Keyword.fetch!(opts, :tenant_id)
 
-    %{base_path: storage_dir, electric_instance_id: electric_instance_id}
+    %{base_path: storage_dir, electric_instance_id: electric_instance_id, tenant_id: tenant_id}
   end
 
   @impl Electric.ShapeCache.Storage
@@ -56,6 +58,7 @@ defmodule Electric.ShapeCache.FileStorage do
       snapshot_dir: Path.join([base_path, tenant_id, shape_id, "snapshots"]),
       shape_definition_dir: Path.join([base_path, tenant_id, shape_id]),
       electric_instance_id: electric_instance_id,
+      tenant_id: tenant_id,
       extra_opts: Map.get(opts, :extra_opts, %{})
     }
   end
