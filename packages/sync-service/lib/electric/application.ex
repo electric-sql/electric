@@ -19,7 +19,15 @@ defmodule Electric.Application do
   def start(_type, _args) do
     :erlang.system_flag(:backtrace_depth, 50)
 
-    configure()
+    config = configure()
+
+    tenant_id = Application.get_env(:electric, :default_tenant)
+
+    router_opts =
+      Enum.concat([
+        [tanent_manager: Electric.TenantManager],
+        get_service_status_option(config.electric_instance_id, tenant_id)
+      ])
 
     # The root application supervisor starts the core global processes, including the HTTP
     # server and the database connection manager. The latter is responsible for establishing
@@ -42,7 +50,7 @@ defmodule Electric.Application do
           Electric.TenantSupervisor,
           Electric.TenantManager,
           {Bandit,
-           plug: {Electric.Plug.Router, tenant_manager: Electric.TenantManager},
+           plug: {Electric.Plug.Router, router_opts},
            port: Application.fetch_env!(:electric, :service_port),
            thousand_island_options: http_listener_options()}
           # {Bandit,
@@ -69,10 +77,9 @@ defmodule Electric.Application do
         name: Electric.Supervisor
       )
 
-    if Application.get_env(:electric, :test_mode, false) do
-      test_tenant = Application.fetch_env!(:electric, :test_tenant)
-      connection_opts = Application.fetch_env!(:electric, :connection_opts)
-      Electric.TenantManager.create_tenant(test_tenant, connection_opts)
+    if tenant_id do
+      connection_opts = Application.fetch_env!(:electric, :default_connection_opts)
+      Electric.TenantManager.create_tenant(tenant_id, connection_opts)
     end
 
     {:ok, sup_pid}
@@ -129,4 +136,11 @@ defmodule Electric.Application do
       []
     end
   end
+
+  defp get_service_status_option(_, nil), do: []
+
+  defp get_service_status_option(electric_instance_id, tenant_id),
+    do: [
+      get_service_status: fn -> Electric.ServiceStatus.check(electric_instance_id, tenant_id) end
+    ]
 end
