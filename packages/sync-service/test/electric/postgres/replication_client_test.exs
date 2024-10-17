@@ -1,6 +1,7 @@
 defmodule Electric.Postgres.ReplicationClientTest do
   use ExUnit.Case, async: true
 
+  import Support.ComponentSetup, only: [with_tenant_id: 1]
   import Support.DbSetup, except: [with_publication: 1]
   import Support.DbStructureSetup
   import Support.TestUtils, only: [with_electric_instance_id: 1]
@@ -32,7 +33,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
     %{dummy_pid: pid}
   end
 
-  setup :with_electric_instance_id
+  setup [:with_electric_instance_id, :with_tenant_id]
 
   describe "ReplicationClient init" do
     setup [:with_unique_db, :with_basic_tables]
@@ -430,6 +431,11 @@ defmodule Electric.Postgres.ReplicationClientTest do
     ctx = Enum.into(overrides, ctx)
 
     {:ok, _pid} =
-      ReplicationClient.start_link(ctx.electric_instance_id, ctx.db_config, ctx.replication_opts)
+      ReplicationClient.start_link(
+        electric_instance_id: ctx.electric_instance_id,
+        tenant_id: ctx.tenant_id,
+        connection_opts: ctx.db_config,
+        replication_opts: ctx.replication_opts
+      )
   end
 end
