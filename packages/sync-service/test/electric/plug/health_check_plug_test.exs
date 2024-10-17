@@ -37,21 +37,21 @@ defmodule Electric.Plug.HealthCheckPlugTest do
              ]
     end
 
-    test "returns 200 when in waiting mode" do
+    test "returns 503 when in waiting mode" do
       conn =
         conn(%{connection_status: :waiting})
         |> HealthCheckPlug.call([])
 
-      assert conn.status == 200
+      assert conn.status == 503
       assert Jason.decode!(conn.resp_body) == %{"status" => "waiting"}
     end
 
-    test "returns 200 when in starting mode" do
+    test "returns 503 when in starting mode" do
       conn =
         conn(%{connection_status: :starting})
         |> HealthCheckPlug.call([])
 
-      assert conn.status == 200
+      assert conn.status == 503
       assert Jason.decode!(conn.resp_body) == %{"status" => "starting"}
     end
 
