@@ -107,7 +107,7 @@ jobs:
             mix run --no-halt &
 
           wait-on: |
-            http://localhost:3000
+            http-get://localhost:3000/v1/health
 
           tail: true
           log-output-resume: stderr
