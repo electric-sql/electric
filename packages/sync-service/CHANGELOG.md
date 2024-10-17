@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 0.7.6
+
+### Patch Changes
+
+- 9860f5c: Increase max-age for the initial -1 offset request to 1 week (from 60 seconds) so browsers/CDNs keep the initial segment of the shape log in their cache
+- 7f86b47: Fix in-memory storage chunking boundaries recovery to actually respect stored boundaries
+- bdbfd46: Parse and validate `REPLICATION_STREAM_ID` as it cannot include special characters
+
 ## 0.7.5
 
 ### Patch Changes
