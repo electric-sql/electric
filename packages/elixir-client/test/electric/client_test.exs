@@ -54,7 +54,7 @@ defmodule Electric.ClientTest do
              ]}
         )
 
-      shape = ShapeDefinition.new(ctx.tablename)
+      shape = ShapeDefinition.new!(ctx.tablename)
 
       on_exit(fn ->
         Client.delete_shape(client, shape)
@@ -227,7 +227,7 @@ defmodule Electric.ClientTest do
 
   defp shape_definition(ctx) do
     table_name = Map.get(ctx, :table_name, "my_table")
-    shape = ShapeDefinition.new(table_name)
+    shape = ShapeDefinition.new!(table_name)
     [shape: shape, table_name: table_name]
   end
 

@@ -9,7 +9,7 @@ defmodule Electric.Client.MockTest do
   alias Electric.Client.ShapeDefinition
 
   setup do
-    [shape: ShapeDefinition.new("my_table")]
+    [shape: ShapeDefinition.new!("my_table")]
   end
 
   test "allows for us to push arbitrary messages into the pipeline", ctx do

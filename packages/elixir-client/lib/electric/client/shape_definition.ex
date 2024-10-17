@@ -3,12 +3,14 @@ defmodule Electric.Client.ShapeDefinition do
   Struct for defining a shape.
 
       iex> ShapeDefinition.new("items", where: "something = true")
-      %ShapeDefinition{table: "items", where: "something = true"}
+      {:ok, %ShapeDefinition{table: "items", where: "something = true"}}
   """
+
+  alias Electric.Client.Util
 
   @enforce_keys [:table]
 
-  defstruct [:namespace, :table, :where]
+  defstruct [:namespace, :table, :columns, :where]
 
   @schema NimbleOptions.new!(
             where: [
@@ -29,6 +31,7 @@ defmodule Electric.Client.ShapeDefinition do
   @type t :: %__MODULE__{
           namespace: String.t() | nil,
           table: String.t(),
+          columns: [String.t(), ...] | nil,
           where: nil | String.t()
         }
 
@@ -37,7 +40,7 @@ defmodule Electric.Client.ShapeDefinition do
 
   @quot "%22"
 
-  @spec new(String.t(), options()) :: t()
+  @spec new(String.t(), options()) :: {:ok, t()} | {:error, term()}
   @doc """
   Create a `ShapeDefinition` for the given `table_name`.
 
@@ -46,25 +49,34 @@ defmodule Electric.Client.ShapeDefinition do
   #{NimbleOptions.docs(@schema)}
   """
   def new(table_name, opts \\ []) do
-    opts = NimbleOptions.validate!(opts, @schema)
+    with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
+      {:ok,
+       %__MODULE__{
+         table: table_name,
+         where: Access.get(opts, :where),
+         namespace: Access.get(opts, :namespace)
+       }}
+    end
+  end
 
-    %__MODULE__{
-      table: table_name,
-      where: Keyword.get(opts, :where),
-      namespace: Keyword.get(opts, :namespace)
-    }
+  @spec new!(String.t(), options()) :: t() | no_return()
+  def new!(table_name, opts \\ []) do
+    case new(table_name, opts) do
+      {:ok, shape} -> shape
+      {:error, %NimbleOptions.ValidationError{} = error} -> raise error
+    end
   end
 
   @doc """
   Return a string representation of the shape's table, quoted for use in API URLs.
 
-      iex> ShapeDefinition.url_table_name(ShapeDefinition.new("my_table"))
+      iex> ShapeDefinition.url_table_name(ShapeDefinition.new!("my_table"))
       "my_table"
 
-      iex> ShapeDefinition.url_table_name(ShapeDefinition.new("my_table", namespace: "my_app"))
+      iex> ShapeDefinition.url_table_name(ShapeDefinition.new!("my_table", namespace: "my_app"))
       "my_app.my_table"
 
-      iex> ShapeDefinition.url_table_name(ShapeDefinition.new("my table", namespace: "my app"))
+      iex> ShapeDefinition.url_table_name(ShapeDefinition.new!("my table", namespace: "my app"))
       "%22my app%22.%22my table%22"
 
   """
@@ -91,5 +103,13 @@ defmodule Electric.Client.ShapeDefinition do
       :binary.replace(name, ~s["], ~s[#{@quot}#{@quot}], [:global]),
       @quot
     ])
+  end
+
+  @doc false
+  @spec params(t()) :: Electric.Client.Fetch.Request.params()
+  def params(%__MODULE__{} = shape) do
+    %{where: where} = shape
+
+    Util.map_put_if(%{}, "where", where, is_binary(where))
   end
 end
