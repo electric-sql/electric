@@ -1,4 +1,4 @@
-defmodule Electric.ConnectionManager do
+defmodule Electric.Connection.Manager do
   @moduledoc """
   Custom initialisation and reconnection logic for database connections.
 
@@ -15,7 +15,7 @@ defmodule Electric.ConnectionManager do
 
       children = [
         ...,
-        {Electric.ConnectionManager,
+        {Electric.Connection.Manager,
          electric_instance_id: ...,
          connection_opts: [...],
          replication_opts: [...],
@@ -197,7 +197,7 @@ defmodule Electric.ConnectionManager do
         state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
 
         if is_nil(state.pool_pid) do
-          # This is the case where ConnectionManager starts connections from the initial state.
+          # This is the case where Connection.Manager starts connections from the initial state.
           # Replication connection is opened after the lock connection has acquired the
           # exclusive lock. After it, we start the connection pool.
           false = is_nil(state.lock_connection_pid)
@@ -255,7 +255,7 @@ defmodule Electric.ConnectionManager do
   end
 
   # When the replication client exits on its own, it can be restarted independently of the lock
-  # connection and the DB pool. If any of the latter two shut down, ConnectionManager will
+  # connection and the DB pool. If any of the latter two shut down, Connection.Manager will
   # itself terminate to be restarted by its supervisor in a clean state.
   def handle_info({:EXIT, pid, reason}, %State{replication_client_pid: pid} = state) do
     halt_if_fatal_error!(reason)
@@ -263,7 +263,7 @@ defmodule Electric.ConnectionManager do
   end
 
   # The most likely reason for the lock connection or the DB pool to exit is the database
-  # server going offline or shutting down. Stop ConnectionManager to allow its supervisor to
+  # server going offline or shutting down. Stop Connection.Manager to allow its supervisor to
   # restart it in the initial state.
   def handle_info({:EXIT, pid, reason}, state) do
     Logger.warning(
@@ -281,7 +281,7 @@ defmodule Electric.ConnectionManager do
     #
     # Just to make sure that we restart the replication client when the shape log collector
     # crashes for any other reason, we explicitly stop the client here. It will be
-    # automatically restarted by ConnectionManager upon the reception of the `{:EXIT, ...}` message.
+    # automatically restarted by Connection.Manager upon the reception of the `{:EXIT, ...}` message.
     #
     # Note, though, that if the replication client process has already exited because the shape
     # log collector had exited, the below call to `stop()` will also exit (with same exit reason or

@@ -47,7 +47,7 @@ defmodule Electric.Application do
     # all needed connections to the database (acquiring the exclusive access lock, opening a
     # replication connection, starting a connection pool).
     #
-    # Once there is a DB connection pool running, ConnectionManager will start the singleton
+    # Once there is a DB connection pool running, Connection.Manager will start the singleton
     # `Electric.Shapes.Supervisor` which is responsible for starting the shape log collector
     # and individual shape consumer process trees.
     #
@@ -104,7 +104,7 @@ defmodule Electric.Application do
     slot_name = "electric_slot_#{replication_stream_id}"
 
     get_pg_version_fn = fn ->
-      Electric.ConnectionManager.get_pg_version(Electric.ConnectionManager)
+      Electric.Connection.Manager.get_pg_version(Electric.Connection.Manager)
     end
 
     prepare_tables_mfa =
