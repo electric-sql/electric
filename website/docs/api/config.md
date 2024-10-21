@@ -64,7 +64,7 @@ These are passed into the application via [config/runtime.exs](https://github.co
 
 <EnvVarConfig
     name="DB_POOL_SIZE"
-    defaultValue="50"
+    defaultValue="20"
     example="10">
   How many connections Electric opens as a pool for handling shape queries.
 </EnvVarConfig>
