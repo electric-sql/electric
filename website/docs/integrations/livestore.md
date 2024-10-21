@@ -8,8 +8,12 @@ image: /img/integrations/electric-livestore.jpg
 
 # LiveStore
 
-[LiveStore](https://github.com/livestorejs) is a reactive SQLite-based state management library focused on high-performance client-side reactivity and high-quality DX. Originally based on [Riffle](https://riffle.systems), LiveStore is under active development by [Johannes Schickling](https://x.com/schickling).
+[LiveStore](https://github.com/livestorejs) is a reactive SQLite-based state management library focused on high-performance client-side reactivity, originally based on [Riffle](https://riffle.systems).
 
-ElectricSQL are sponsoring LiveStore development and building a first-class sync integration. This will be released when LiveStore is released (as public open-source code).
+LiveStore is under active development by [Johannes Schickling](https://x.com/schickling).
 
-If you're interested in building with LiveStore now, [get in touch with us](/about/contact) or with Johannes directly.
+ElectricSQL are sponsoring LiveStore development and building a sync integration. This will be released when LiveStore is released (as public open-source code).
+
+## Early access
+
+If you're interested in using LiveStore now, [get in touch](/about/contact) or contact Johannes directly.
