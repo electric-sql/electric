@@ -861,7 +861,7 @@ defmodule Electric.Plug.RouterTest do
         |> Enum.map(&String.trim/1)
         |> MapSet.new()
 
-      assert allowed_methods == MapSet.new(["GET", "OPTIONS", "DELETE"])
+      assert allowed_methods == MapSet.new(["GET", "HEAD", "OPTIONS", "DELETE"])
     end
   end
 

@@ -2,17 +2,12 @@ defmodule Electric.Plug.OptionsShapePlug do
   require Logger
   use Plug.Builder
 
-  plug :add_allowed_methods_header
   plug :add_cache_max_age_header
   plug :filter_cors_headers
-  plug :add_allow_origin_header
   plug :add_keep_alive
   plug :send_options_response
 
   @allowed_headers ["if-none-match"]
-
-  defp add_allowed_methods_header(conn, _),
-    do: Plug.Conn.put_resp_header(conn, "access-control-allow-methods", "GET, OPTIONS, DELETE")
 
   defp add_cache_max_age_header(conn, _) do
     conn
@@ -36,14 +31,6 @@ defmodule Electric.Plug.OptionsShapePlug do
           "" -> conn
           _ -> Plug.Conn.put_resp_header(conn, "access-control-allow-headers", supported_headers)
         end
-    end
-  end
-
-  # Electric currently allows any origin to access the API
-  defp add_allow_origin_header(conn, _) do
-    case Plug.Conn.get_req_header(conn, "origin") do
-      [origin] -> Plug.Conn.put_resp_header(conn, "access-control-allow-origin", origin)
-      _ -> conn
     end
   end
 
