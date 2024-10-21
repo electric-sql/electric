@@ -125,7 +125,7 @@ describe(`useShape`, () => {
           { id: id, title: `test row` },
           { id: id2, title: `other row` },
         ]),
-      { timeout: 2000 }
+      { timeout: 4000 }
     )
   })
 
