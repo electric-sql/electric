@@ -100,7 +100,7 @@ jobs:
                 },
                 "metadata": {
                   "pr": ${{ github.event.issue.number }},
-                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}"
+                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}",
                   "callback": {
                     "method": "POST",
                     "headers": [
