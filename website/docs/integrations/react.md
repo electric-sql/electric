@@ -1,8 +1,12 @@
 ---
 outline: deep
+title: React - Integrations
+image: /img/integrations/electric-react.jpg
 ---
 
-# React integration
+<img src="/img/integrations/react.svg" class="product-icon" />
+
+# React
 
 To use Electric with React, we maintain a React provider and hook to simplify reading shape data in components.
 

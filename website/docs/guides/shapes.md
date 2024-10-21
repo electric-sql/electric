@@ -138,7 +138,7 @@ shape.subscribe(shapeData => {
 })
 ```
 
-Or you can use framework integrations like the [`useShape`](/docs/api/integrations/react) hook to automatically bind materialised shapes to your components.
+Or you can use framework integrations like the [`useShape`](/docs/integrations/react) hook to automatically bind materialised shapes to your components.
 
 See the [Quickstart](/docs/quickstart) and [HTTP API](/docs/api/http) docs for more information.
 
