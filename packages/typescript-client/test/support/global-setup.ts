@@ -27,18 +27,22 @@ function waitForElectric(url: string): Promise<void> {
       () => reject(`Timed out waiting for Electric to be active`),
       10000
     )
-    return fetch(`${url}/v1/health`)
-      .then(async (res): Promise<void> => {
-        if (!res.ok) return waitForElectric(url)
-        const { status } = (await res.json()) as { status: string }
-        if (status !== `active`) return waitForElectric(url)
-        clearTimeout(timeout)
-        resolve()
-      })
-      .catch((err) => {
-        clearTimeout(timeout)
-        reject(err)
-      })
+
+    const tryHealth = async () =>
+      fetch(`${url}/v1/health`)
+        .then(async (res): Promise<void> => {
+          if (!res.ok) return tryHealth()
+          const { status } = (await res.json()) as { status: string }
+          if (status !== `active`) return tryHealth()
+          clearTimeout(timeout)
+          resolve()
+        })
+        .catch((err) => {
+          clearTimeout(timeout)
+          reject(err)
+        })
+
+    return tryHealth()
   })
 }
 
