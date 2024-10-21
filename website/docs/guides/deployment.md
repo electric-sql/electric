@@ -19,7 +19,9 @@ How to deploy the [Electric sync engine](/product/sync), with links to integrati
 
 ## The ingredients of a successful deployment
 
-An Electric deployment has three main components. Your Postgres database, the Electric sync service and your app. Electric connects to your Postgres using a `DATABASE_URL`. Your app connects to Electric [over HTTP](/docs/api/http), usually using a [Client library](/docs/api/clients/typescript).
+An Electric deployment has three main components. Your Postgres database, the Electric sync service and your app.
+
+Electric connects to your Postgres using a `DATABASE_URL`. Your app connects to Electric [over HTTP](/docs/api/http), usually using a [Client library](/docs/api/clients/typescript).
 
 <figure>
   <a href="/img/deployment/components.jpg">
@@ -35,9 +37,9 @@ An Electric deployment has three main components. Your Postgres database, the El
 
 As a result, there are three ingredients to a successful Electric deployment:
 
-1. you need to be [running a Postgres database](#running-postgres)
-2. you need to [run and connect the Electric sync service](#running-electric)
-3. you need your app/client to [connect to Electric over HTTP](#connecting-your-app)
+1. you need to be [running a Postgres database](#_1-running-postgres)
+2. you need to [run and connect the Electric sync service](#_2-running-electric)
+3. you need your app/client to [connect to Electric over HTTP](#_3-connecting-your-app)
 
 ## 1. Running Postgres
 
@@ -64,20 +66,25 @@ Electric will work as a drop on to any existing data model. There are no limitat
 
 You connect to Postgres using a [`DATABASE_URL`](/docs/api/config#database-url) env var. This connection string contains your user credentials and an `sslmode` parameter.
 
+Make sure you're connecting directly to Postgres and not via a PGBouncer-style connection pool. This is because Electric uses logical replication and connection poolers don't usually support it.
+
 > [!Tip] Troubleshooting common errors
 > If you get a TCP connection error saying `non-existing domain - :nxdomain` or `network is unreachable - :enetunreach` then you may need to connect using IPv6. You can enable this by setting [`DATABASE_USE_IPV6=true`](/docs/api/config#database-use-ipv6).
 >
-> If you get a TCP connection `timeout` error then make sure you're connecting directly to Postgres and not via a PGBouncer style connection pool. (For example, when using [Supabase](/docs/integrations/supabase) you need to untick their "Use connection pooling" option on the database settings page).
+> If you get a TCP connection `timeout` error then make sure you're connecting directly to Postgres and not via a connection pool. For example, when using [Supabase](/docs/integrations/supabase) you need to untick their "Use connection pooling" option on the database settings page.
 >
 > If you're using IPv6 with Docker, then assuming the machine you're running Electric on has IPv6 connectivity, you may also need to enable IPv6 for the Docker daemon. You can do this by [defining an IpV6-capable network](https://docs.docker.com/engine/daemon/ipv6/#create-an-ipv6-network)) in your Compose file and then adding the `networks` key to the Electric service definition.
 
 ### Database resources
 
-Electric creates a logical replication [publication](https://www.postgresql.org/docs/current/logical-replication-publication.html) and [replication slot](https://www.postgresql.org/docs/current/logical-replication-subscription.html#LOGICAL-REPLICATION-SUBSCRIPTION-SLOT) inside Postgres. By default these are called `electric_publication_default` and `electric_slot_default`. (You can configure the suffix using the [`REPLICATION_STREAM_ID`](/docs/api/config#replication-stream-id) env var).
+Electric creates a logical replication [publication](https://www.postgresql.org/docs/current/logical-replication-publication.html) and [replication slot](https://www.postgresql.org/docs/current/logical-replication-subscription.html#LOGICAL-REPLICATION-SUBSCRIPTION-SLOT) inside Postgres. These are called `electric_publication_default` and `electric_slot_default` by default. You can configure the name suffix using the [`REPLICATION_STREAM_ID`](/docs/api/config#replication-stream-id) env var.
 
-When running, Electric also keeps a pool of active database connections open. The size of this pool can be configured using [`DB_POOL_SIZE`](/docs/api/config#db-pool-size).
+When running, Electric also keeps a pool of active database connections open. The size of this pool defaults to `20` and can be configured using [`DB_POOL_SIZE`](/docs/api/config#db-pool-size).
 
-If you decide to stop using Electric with a given Postgres database or switch to a different database but keep the old one around, make sure to clean up both the publication and the replication slot. See this [troubleshooting advice](./troubleshooting#wal-growth-mdash-why-is-my-postgres-database-storage-filling-up) for details.
+> [!Tip] Cleaning up resources
+> If you decide to stop using Electric with a given Postgres database or switch to a different database but keep the old one around, make sure to clean up both the publication and the replication slot.
+>
+> See this [troubleshooting advice](./troubleshooting#wal-growth-mdash-why-is-my-postgres-database-storage-filling-up) for details.
 
 ## 2. Running Electric
 
@@ -101,17 +108,27 @@ Electric caches [Shape logs](/docs/api/http#shape-log) and metadata on the files
 
 The path to Electric's persistent storage can be configured via the [`ELECTRIC_STORAGE_DIR`](/docs/api/config#electric-storage-dir) environment variable, e.g. `ELECTRIC_STORAGE_DIR=/var/lib/electric/persistent`. Electric will create the directory at that path if it doesn't exist yet. However, you need to make sure that the OS user that Electric is running as has the necessary permissions in the parent directory.
 
+<<<<<<< HEAD
 Naturally, the file system location configured via `ELECTRIC_STORAGE_DIR` and the data Electric stores there must survive sync service's restarts. For example, when using Kubernetes, you'll want to create a persistent volume and attach it to your Electric deployment.
 
 > [!Tip] Evaluating storage need
 > Electric trades storage for low memory use and fast sync. How much storage you need is highly application dependent. We encourage you to test with your own workload.
+=======
+> [!Tip] Persistent disk
+> The file system and the data Electric stores there must survive sync service's restarts.
+>>>>>>> 6e712113 (docs: flesh out the deployment guide)
 >
-> We plan to implement [compaction](https://github.com/electric-sql/electric/issues/1582) and other features to limit and optimise storage use, such as [garbage collecting LRU shapes](https://github.com/electric-sql/electric/issues/1529). This is not yet implemented though.
+> For example, when using Kubernetes, you'll want to create a [Persistent Volume](https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage) and attach it to your Electric deployment.
 
 > [!Tip] Clear one, clear the other
 > The persistent state that Electric maintains in Postgres (via the logical replication publication and replication slot) **must** stay in sync with the shape data cached on disk by Electric.
 >
 > If you change the value of `ELECTRIC_STORAGE_DIR` or switch to a different `DATABASE_URL` at any point, you **must** clean up the other location by hand, whether it's removing a directory tree on disk or dropping the replication slot and publication in Postgres.
+
+> [!Tip] How much storage space?
+> Electric trades storage for low memory use and fast sync. How much storage you need is highly application dependent. We encourage you to test with your own workload.
+>
+> We plan to implement [compaction](https://github.com/electric-sql/electric/issues/1582) and other features to limit and optimise storage use, such as [garbage collecting LRU shapes](https://github.com/electric-sql/electric/issues/1529).
 
 ### HTTP port
 
@@ -121,7 +138,7 @@ Electric provides an HTTP API exposed on a configurable [`PORT`](/docs/api/confi
 
 Electric is designed to run behind a caching proxy, such as [Nginx](https://nginx.org/en), [Caddy](https://caddyserver.com), [Varnish](https://varnish-cache.org) or a CDN like [Cloudflare](https://www.cloudflare.com/en-gb/application-services/products/cdn) or [Fastly](https://www.fastly.com/products/cdn). You don't *have* to run a proxy in front of Electric but you will benefit from radically better performance if you do.
 
-You can see an example Nginx config at [packages/sync-service/dev/nginx.conf](https://github.com/electric-sql/electric/blob/main/packages/sync-service/dev/nginx.conf).
+See the [Caching section](/docs/api/http#caching) of the HTTP API docs for more information.
 
 ## 3. Connecting your app
 
@@ -134,12 +151,4 @@ const stream = new ShapeStream({
 const shape = new Shape(stream)
 ```
 
-You can use Electric from any language and any environment that speaks HTTP. So your app could be:
-
-- a web app deployed to a platform like [Netlify](/docs/integrations/netlify)
-- a mobile app deployed to an app store or a platform like [Expo](/docs/integrations/expo)
-- an edge worker deployed on a platform like [Supabase](/docs/integrations/supabase) or [Cloudflare](/docs/integrations/cloudflare)
-- a backend application, like a Rails or [Phoenix LiveView app](/docs/integrations/phoenix)
-- a [Redis cache](/use-cases/state-transfer) or a [local AI app](/use-cases/local-ai)
-
-It's just HTTP, so it works from anywhere.
+You can connect to Electric from any language/environment that speaks HTTP. See the [HTTP API](/docs/api/http) and [Client docs](/docs/api/clients/typescript) for more information.
