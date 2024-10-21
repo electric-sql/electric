@@ -1,3 +1,5 @@
+name: Benchmark a PR
+
 on:
   issue_comment:
     types: [created]
