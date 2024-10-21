@@ -1,0 +1,116 @@
+name: Benchmark a PR
+
+on:
+  issue_comment:
+    types: [created]
+
+defaults:
+  run:
+    working-directory: packages/sync-service
+
+env:
+  PROJECT_ID: vaxine
+  REGISTRY: europe-docker.pkg.dev/vaxine/electric
+
+jobs:
+  build:
+    permissions:
+      pull-requests: write
+      contents: read
+    name: Build and test on PR comment
+    if: ${{ github.event.issue.pull_request && (startsWith(github.event.comment.body, "benchmark this") || startsWith(github.event.comment.body, "Benchmark this"))}}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        id: get-pr
+        with:
+          script: |
+            const request = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            }
+            core.info(`Getting PR #${request.pull_number} from ${request.owner}/${request.repo}`)
+
+            const result = await github.rest.pulls.get(request)
+            core.info(`GOT ${JSON.stringify(result)}`)
+            return result.data
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ fromJSON(steps.get-pr.outputs.result).head.sha }}
+      - uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCLOUD_REGISTRY_JSON_KEY }}
+      - uses: google-github-actions/setup-gcloud@v1
+      - name: Use gcloud CLI
+        run: "gcloud info"
+      - name: Docker auth
+        run: gcloud auth configure-docker europe-docker.pkg.dev --quiet
+      - name: Set outputs
+        run: echo "SHORT_SHA=$(git rev-parse --short=5 HEAD)" >> $GITHUB_ENV
+      - name: Pull latest base images
+        run: |
+          docker pull ${{ env.REGISTRY }}/electric:canary-builder || true
+          docker pull ${{ env.REGISTRY }}/electric:canary-runner-base || true
+          docker pull ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-builder || true
+          docker pull ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-runner-base || true
+      - name: Build base images
+        run: >
+          docker build \
+            --push \
+            --cache-from ${{ env.REGISTRY }}/electric:canary-builder \
+            --cache-from ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-builder \
+            --tag ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-builder \
+            --target builder \
+            .
+
+          docker build \
+            --push \
+            --cache-from ${{ env.REGISTRY }}/electric:canary-runner-base \
+            --cache-from ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-runner-base \
+            --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-runner-base \
+            --target runner_setup \
+            .
+      - name: Build actual image
+        run: >
+          docker build \
+            --push \
+            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-builder \
+            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-runner-base \
+            --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-${{ env.SHORT_SHA }} \
+            .
+      - name: Write fanout benchmark
+        run: |
+          curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/write_fanout/runs' \
+            -u benchmarking:${{ secrets.BENCHMARKING_API_PASSWORD }} \
+            -H 'Content-Type: application/json' \
+            --fail \
+            -d '{
+              "benchmark_run": {
+                "spec_values": {
+                  "electric_image": ["${{ env.REGISTRY }}/electric:pr-${{ github.event.number }}-${{ env.SHORT_SHA }}"],
+                  "postgres_image": ["postgres:15-alpine"],
+                  "row_count": [500],
+                  "concurrent": [5, 105, 205, 305, 405, 505, 605, 705, 805, 905, 1005],
+                  "tx_row_count": [50]
+                },
+                "machine_request": {
+                  "vcpu": 4,
+                  "mem_gb": 8
+                },
+                "metadata": {
+                  "pr": ${{ github.event.number }},
+                  "short_version": "pr-${{ github.event.number }}-${{ env.SHORT_SHA }}"
+                  "callback": {
+                    "method": "POST",
+                    "headers": [
+                      ["Accept","application/vnd.github+json"],
+                      ["Authorization","Bearer ${{ secrets.CROSSREPO_PAT }}"],
+                      ["X-GitHub-Api-Version","2022-11-28"]]
+                    ],
+                    "url":"https://api.github.com/repos/electric-sql/electric/actions/workflows/leave_benchmark_comment.yml/dispatches",
+                    "body": "{\"ref\":\"main\",\"inputs\":{\"pr\":\"${{ github.event.number }}\",\"benchmark_info\":#{benchmark_info},\"original_commit\":\"${{ env.SHORT_SHA }}\"}}"
+                  }
+                }
+              }
+            }'
