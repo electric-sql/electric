@@ -285,7 +285,7 @@ defmodule Electric.Shapes.ShapeTest do
     end
 
     test "errors on empty table name", %{inspector: inspector} do
-      {:error, {:root_table, ["ERROR 42602 (invalid_name) invalid name syntax"]}} =
+      {:error, {:root_table, ["Invalid zero-length delimited identifier"]}} =
         Shape.new("", inspector: inspector)
     end
 
