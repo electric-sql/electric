@@ -46,6 +46,7 @@ export default defineConfig({
       'css',
       'javascript',
       'jsx',
+      'nginx',
       'shellscript',
       'sql',
       'tsx',
