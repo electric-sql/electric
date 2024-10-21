@@ -865,6 +865,26 @@ defmodule Electric.Plug.RouterTest do
     end
   end
 
+  describe "404" do
+    test "GET on invalid path returns 404", _ do
+      conn =
+        conn("GET", "/invalidpath")
+        |> Router.call([])
+
+      assert %{status: 404} = conn
+
+      allowed_methods =
+        conn
+        |> Plug.Conn.get_resp_header("access-control-allow-methods")
+        |> List.first("")
+        |> String.split(",")
+        |> Enum.map(&String.trim/1)
+        |> MapSet.new()
+
+      assert allowed_methods == MapSet.new(["GET", "HEAD"])
+    end
+  end
+
   defp get_resp_shape_id(conn), do: get_resp_header(conn, "electric-shape-id")
   defp get_resp_last_offset(conn), do: get_resp_header(conn, "electric-chunk-last-offset")
 

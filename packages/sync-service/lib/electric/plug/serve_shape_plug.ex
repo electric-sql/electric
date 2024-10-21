@@ -173,8 +173,6 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # start_telemetry_span needs to always be the first plug after fetching query params.
   plug :start_telemetry_span
-
-  plug :cors
   plug :put_resp_content_type, "application/json"
   plug :validate_query_params
   plug :load_shape_info
@@ -416,13 +414,6 @@ defmodule Electric.Plug.ServeShapePlug do
         "cache-control",
         "public, max-age=#{config[:max_age]}, stale-while-revalidate=#{config[:stale_age]}"
       )
-
-  def cors(conn, _opts) do
-    conn
-    |> put_resp_header("access-control-allow-origin", "*")
-    |> put_resp_header("access-control-expose-headers", "*")
-    |> put_resp_header("access-control-allow-methods", "GET, POST, OPTIONS")
-  end
 
   # If offset is -1, we're serving a snapshot
   defp serve_log_or_snapshot(%Conn{assigns: %{offset: @before_all_offset}} = conn, _) do

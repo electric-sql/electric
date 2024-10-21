@@ -46,4 +46,20 @@ defmodule Electric.Plug.Utils do
       end
     end)
   end
+
+  defmodule CORSHeaderPlug do
+    @behaviour Plug
+    import Plug.Conn
+    def init(opts), do: opts
+
+    def call(conn, opts),
+      do:
+        conn
+        |> put_resp_header("access-control-allow-origin", Access.get(opts, :origin, "*"))
+        |> put_resp_header("access-control-expose-headers", "*")
+        |> put_resp_header(
+          "access-control-allow-methods",
+          Access.get(opts, :methods, []) |> Enum.join(", ")
+        )
+  end
 end
