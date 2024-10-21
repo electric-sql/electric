@@ -37,7 +37,7 @@ jobs:
 
             const comments = await github.rest.issues.listComments({owner, repo, issue_number})
             const prefix = `Benchmark results, triggered for ${context.payload.inputs.original_commit}`
-            const this_graph = `\n\n- ${info.readable_name} ${info.status}\n\n[${info.readable_name} results](https://benchmarking.electric-sql.com/public_api/graphs/${info.name}/${info.id}/against_latest.svg)`
+            const this_graph = `\n\n- ${info.readable_name} ${info.status}\n\n![${info.readable_name} results](https://benchmarking.electric-sql.com/public_api/graphs/${info.name}/${info.id}/against_latest.svg)`
             const existing = comments.data.find(x => x.body?.startsWith(prefix))
 
             if (existing) {

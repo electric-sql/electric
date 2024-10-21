@@ -18,7 +18,7 @@ jobs:
       pull-requests: write
       contents: read
     name: Build and test on PR comment
-    if: ${{ github.event.issue.pull_request && (startsWith(github.event.comment.body, 'benchmark this') || startsWith(github.event.comment.body, 'Benchmark this'))}}
+    if: ${{ github.event.issue.pull_request && (github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'OWNER') && (startsWith(github.event.comment.body, 'benchmark this') || startsWith(github.event.comment.body, 'Benchmark this'))}}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v7
@@ -55,11 +55,14 @@ jobs:
           docker pull ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder || true
           docker pull ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base || true
       - name: Build base images
+        env:
+          DOCKER_BUILDKIT: "1"
         run: >
           docker build \
             --push \
             --cache-from ${{ env.REGISTRY }}/electric:canary-builder \
             --cache-from ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
             --tag ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
             --target builder \
             .
@@ -68,10 +71,13 @@ jobs:
             --push \
             --cache-from ${{ env.REGISTRY }}/electric:canary-runner-base \
             --cache-from ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
             --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base \
             --target runner_setup \
             .
       - name: Build actual image
+        env:
+          DOCKER_BUILDKIT: "1"
         run: >
           docker build \
             --push \
@@ -84,14 +90,153 @@ jobs:
           curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/write_fanout/runs' \
             -u benchmarking:${{ secrets.BENCHMARKING_API_PASSWORD }} \
             -H 'Content-Type: application/json' \
-            --fail \
+            --fail-with-body \
             -d '{
               "benchmark_run": {
                 "spec_values": {
                   "electric_image": ["${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}"],
-                  "postgres_image": ["postgres:15-alpine"],
+                  "postgres_image": ["postgres:16-alpine"],
                   "row_count": [500],
                   "concurrent": [5, 105, 205, 305, 405, 505, 605, 705, 805, 905, 1005],
+                  "tx_row_count": [50]
+                },
+                "machine_request": {
+                  "vcpu": 4,
+                  "mem_gb": 8
+                },
+                "metadata": {
+                  "pr": ${{ github.event.issue.number }},
+                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}",
+                  "callback": {
+                    "method": "POST",
+                    "headers": [
+                      ["Accept","application/vnd.github+json"],
+                      ["Authorization","Bearer ${{ secrets.CROSSREPO_PAT }}"],
+                      ["X-GitHub-Api-Version","2022-11-28"]
+                    ],
+                    "url":"https://api.github.com/repos/electric-sql/electric/actions/workflows/leave_benchmark_comment.yml/dispatches",
+                    "body": "{\"ref\":\"main\",\"inputs\":{\"pr\":\"${{ github.event.issue.number }}\",\"benchmark_info\":#{benchmark_info},\"original_commit\":\"${{ env.SHORT_SHA }}\"}}"
+                  }
+                }
+              }
+            }'
+      - name: unrelated_shapes_one_client_latency benchmark
+        run: |
+          curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/unrelated_shapes_one_client_latency/runs' \
+            -u benchmarking:${{ secrets.BENCHMARKING_API_PASSWORD }} \
+            -H 'Content-Type: application/json' \
+            --fail-with-body \
+            -d '{
+              "benchmark_run": {
+                "spec_values": {
+                  "electric_image": ["${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}"],
+                  "postgres_image": ["postgres:16-alpine"],
+                  "row_count": [500],
+                  "shape_count": [100,300,500,700,900,1100,1300,1500,1700,1900,2100,2300,2500,2700,2900,3100],
+                  "tx_row_count": [50]
+                },
+                "machine_request": {
+                  "vcpu": 4,
+                  "mem_gb": 8
+                },
+                "metadata": {
+                  "pr": ${{ github.event.issue.number }},
+                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}",
+                  "callback": {
+                    "method": "POST",
+                    "headers": [
+                      ["Accept","application/vnd.github+json"],
+                      ["Authorization","Bearer ${{ secrets.CROSSREPO_PAT }}"],
+                      ["X-GitHub-Api-Version","2022-11-28"]
+                    ],
+                    "url":"https://api.github.com/repos/electric-sql/electric/actions/workflows/leave_benchmark_comment.yml/dispatches",
+                    "body": "{\"ref\":\"main\",\"inputs\":{\"pr\":\"${{ github.event.issue.number }}\",\"benchmark_info\":#{benchmark_info},\"original_commit\":\"${{ env.SHORT_SHA }}\"}}"
+                  }
+                }
+              }
+            }'
+      - name: many_shapes_one_client_latency benchmark
+        run: |
+          curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/many_shapes_one_client_latency/runs' \
+            -u benchmarking:${{ secrets.BENCHMARKING_API_PASSWORD }} \
+            -H 'Content-Type: application/json' \
+            --fail-with-body \
+            -d '{
+              "benchmark_run": {
+                "spec_values": {
+                  "electric_image": ["${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}"],
+                  "postgres_image": ["postgres:16-alpine"],
+                  "row_count": [500],
+                  "shape_count": [100,300,500,700,900,1100,1300,1500,1700,1900,2100,2300,2500,2700,2900,3100],
+                  "tx_row_count": [50]
+                },
+                "machine_request": {
+                  "vcpu": 4,
+                  "mem_gb": 8
+                },
+                "metadata": {
+                  "pr": ${{ github.event.issue.number }},
+                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}",
+                  "callback": {
+                    "method": "POST",
+                    "headers": [
+                      ["Accept","application/vnd.github+json"],
+                      ["Authorization","Bearer ${{ secrets.CROSSREPO_PAT }}"],
+                      ["X-GitHub-Api-Version","2022-11-28"]
+                    ],
+                    "url":"https://api.github.com/repos/electric-sql/electric/actions/workflows/leave_benchmark_comment.yml/dispatches",
+                    "body": "{\"ref\":\"main\",\"inputs\":{\"pr\":\"${{ github.event.issue.number }}\",\"benchmark_info\":#{benchmark_info},\"original_commit\":\"${{ env.SHORT_SHA }}\"}}"
+                  }
+                }
+              }
+            }'
+      - name: concurrent_shape_creation benchmark
+        run: |
+          curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/concurrent_shape_creation/runs' \
+            -u benchmarking:${{ secrets.BENCHMARKING_API_PASSWORD }} \
+            -H 'Content-Type: application/json' \
+            --fail-with-body \
+            -d '{
+              "benchmark_run": {
+                "spec_values": {
+                  "electric_image": ["${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}"],
+                  "postgres_image": ["postgres:16-alpine"],
+                  "row_count": [500],
+                  "concurrent": [50, 450, 850, 1250, 1650, 2050, 2450, 2850, 3250, 3650]
+                },
+                "machine_request": {
+                  "vcpu": 4,
+                  "mem_gb": 8
+                },
+                "metadata": {
+                  "pr": ${{ github.event.issue.number }},
+                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}",
+                  "callback": {
+                    "method": "POST",
+                    "headers": [
+                      ["Accept","application/vnd.github+json"],
+                      ["Authorization","Bearer ${{ secrets.CROSSREPO_PAT }}"],
+                      ["X-GitHub-Api-Version","2022-11-28"]
+                    ],
+                    "url":"https://api.github.com/repos/electric-sql/electric/actions/workflows/leave_benchmark_comment.yml/dispatches",
+                    "body": "{\"ref\":\"main\",\"inputs\":{\"pr\":\"${{ github.event.issue.number }}\",\"benchmark_info\":#{benchmark_info},\"original_commit\":\"${{ env.SHORT_SHA }}\"}}"
+                  }
+                }
+              }
+            }'
+      - name: diverse_shape_fanout benchmark
+        run: |
+          curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/diverse_shape_fanout/runs' \
+            -u benchmarking:${{ secrets.BENCHMARKING_API_PASSWORD }} \
+            -H 'Content-Type: application/json' \
+            --fail-with-body \
+            -d '{
+              "benchmark_run": {
+                "spec_values": {
+                  "electric_image": ["${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}"],
+                  "postgres_image": ["postgres:16-alpine"],
+                  "row_count": [500],
+                  "concurrent": [50, 450, 850, 1250, 1650, 2050, 2450, 2850, 3250, 3650],
                   "tx_row_count": [50]
                 },
                 "machine_request": {
