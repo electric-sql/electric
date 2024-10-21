@@ -46,7 +46,7 @@ See the documentation at [hexdocs.pm/electric_client](https://hexdocs.pm/electri
 
 Electric also provides an [`Electric.Phoenix`](https://hex.pm/packages/electric_phoenix) integration allows you to:
 
-- sync data into a [front-end app](/docs/integrations/phoenix#frontend-client-applications) from a Postgres-backed Phoenix application; and
-- add real-time streaming from Postgres into Phoenix LiveView via [Phoenix.Streams](/docs/integrations/phoenix#phoenix-streams)
+- sync data into a [front-end app](/docs/integrations/phoenix#front-end-sync) from a Postgres-backed Phoenix application; and
+- add real-time streaming from Postgres into Phoenix LiveView via [Phoenix.Streams](/docs/integrations/phoenix#liveview-sync)
 
 See the [Phoenix framework integration page](/docs/integrations/phoenix) for more details.
