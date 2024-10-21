@@ -177,11 +177,30 @@ export default defineConfig({
             {
               text: 'Frameworks',
               items: [
-                // { text: 'MobX', link: '/docs/integrations/mobx' },
+                { text: 'LiveStore', link: '/docs/integrations/livestore' },
+                { text: 'MobX', link: '/docs/integrations/mobx' },
+                { text: 'Next.js', link: '/docs/integrations/next' },
+                { text: 'Phoenix', link: '/docs/integrations/phoenix' },
                 { text: 'React', link: '/docs/integrations/react' },
-                // { text: 'Redis', link: '/docs/integrations/redis' },
-                // { text: 'TanStack', link: '/docs/integrations/tanstack' },
+                { text: 'Redis', link: '/docs/integrations/redis' },
+                { text: 'TanStack', link: '/docs/integrations/tanstack' },
               ],
+            },
+            {
+              text: 'Platforms',
+              items: [
+                { text: 'AWS', link: '/docs/integrations/aws' },
+                { text: 'Cloudflare', link: '/docs/integrations/cloudflare' },
+                { text: 'Digital Ocean', link: '/docs/integrations/digital-ocean' },
+                { text: 'Expo', link: '/docs/integrations/expo' },
+                { text: 'Fly.io', link: '/docs/integrations/fly' },
+                { text: 'GCP', link: '/docs/integrations/gcp' },
+                { text: 'Neon', link: '/docs/integrations/neon' },
+                { text: 'Neon', link: '/docs/integrations/neon' },
+                { text: 'Netlify', link: '/docs/integrations/netlify' },
+                { text: 'Render', link: '/docs/integrations/render' },
+                { text: 'Supabase', link: '/docs/integrations/supabase' }
+              ]
             }
           ]
         },
