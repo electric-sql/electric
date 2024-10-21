@@ -1,0 +1,47 @@
+name: Benchmark comments
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        type: number
+        required: true
+        description: "PR for which the benchmark ran"
+      benchmark_info:
+        type: string
+        required: true
+        description: JSON-serialized info about completed benchmark allowing the job to pull the info
+      original_commit:
+        type: string
+        required: true
+        description: sha of the commit that these benchmarks are valid for
+
+jobs:
+  leave_comment:
+    permissions:
+      pull-requests: write
+      contents: read
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      - uses: actions/github-script@v7
+        id: get-pr
+        with:
+          script: |
+            const owner = context.repo.owner
+            const repo = context.repo.repo
+            const issue_number = context.payload.inputs.pr
+            const info = JSON.parse(context.payload.inputs.benchmark_info)
+
+            const comments = await github.rest.issues.listComments({owner, repo, issue_number})
+            const prefix = `Benchmark results, triggered for ${context.payload.inputs.original_commit}`
+            const this_graph = `\n\n- ${info.readable_name} ${info.status}\n\n[${info.readable_name} results](https://benchmarking.electric-sql.com/public_api/graphs/${info.name}/${info.id}/against_latest.svg)`
+            const existing = comments.data.find(x => x.body?.startsWith(prefix))
+
+            if (existing) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body: existing.body + this_graph})
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number, body: prefix + this_graph})
+            }
