@@ -1,0 +1,146 @@
+name: Benchmark a PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        type: string
+        required: true
+        description: "Must be a tag of electricsql/electric image on DockerHub"
+
+defaults:
+  run:
+    working-directory: packages/sync-service
+
+env:
+  REGISTRY: electricsql
+
+jobs:
+  build:
+    name: Build and test on PR comment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write fanout benchmark
+        run: |
+          curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/write_fanout/runs' \
+            -u benchmarking:${{ secrets.BENCHMARKING_API_PASSWORD }} \
+            -H 'Content-Type: application/json' \
+            --fail-with-body \
+            -d '{
+              "benchmark_run": {
+                "spec_values": {
+                  "electric_image": ["${{ env.REGISTRY }}/electric:${{ inputs.tag }}"],
+                  "postgres_image": ["postgres:16-alpine"],
+                  "row_count": [500],
+                  "concurrent": [5, 105, 205, 305, 405, 505, 605, 705, 805, 905, 1005],
+                  "tx_row_count": [50]
+                },
+                "machine_request": {
+                  "vcpu": 4,
+                  "mem_gb": 8
+                },
+                "metadata": {
+                  "is_release_version": true,
+                  "version_for_comparison": "${{ inputs.tag }}"
+                }
+              }
+            }'
+      - name: unrelated_shapes_one_client_latency benchmark
+        run: |
+          curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/unrelated_shapes_one_client_latency/runs' \
+            -u benchmarking:${{ secrets.BENCHMARKING_API_PASSWORD }} \
+            -H 'Content-Type: application/json' \
+            --fail-with-body \
+            -d '{
+              "benchmark_run": {
+                "spec_values": {
+                  "electric_image": ["${{ env.REGISTRY }}/electric:${{ inputs.tag }}"],
+                  "postgres_image": ["postgres:16-alpine"],
+                  "row_count": [500],
+                  "shape_count": [100,300,500,700,900,1100,1300,1500,1700,1900,2100,2300,2500,2700,2900,3100],
+                  "tx_row_count": [50]
+                },
+                "machine_request": {
+                  "vcpu": 4,
+                  "mem_gb": 8
+                },
+                "metadata": {
+                  "is_release_version": true,
+                  "version_for_comparison": "${{ inputs.tag }}"
+                }
+              }
+            }'
+      - name: many_shapes_one_client_latency benchmark
+        run: |
+          curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/many_shapes_one_client_latency/runs' \
+            -u benchmarking:${{ secrets.BENCHMARKING_API_PASSWORD }} \
+            -H 'Content-Type: application/json' \
+            --fail-with-body \
+            -d '{
+              "benchmark_run": {
+                "spec_values": {
+                  "electric_image": ["${{ env.REGISTRY }}/electric:${{ inputs.tag }}"],
+                  "postgres_image": ["postgres:16-alpine"],
+                  "row_count": [500],
+                  "shape_count": [100,300,500,700,900,1100,1300,1500,1700,1900,2100,2300,2500,2700,2900,3100],
+                  "tx_row_count": [50]
+                },
+                "machine_request": {
+                  "vcpu": 4,
+                  "mem_gb": 8
+                },
+                "metadata": {
+                  "is_release_version": true,
+                  "version_for_comparison": "${{ inputs.tag }}"
+                }
+              }
+            }'
+      - name: concurrent_shape_creation benchmark
+        run: |
+          curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/concurrent_shape_creation/runs' \
+            -u benchmarking:${{ secrets.BENCHMARKING_API_PASSWORD }} \
+            -H 'Content-Type: application/json' \
+            --fail-with-body \
+            -d '{
+              "benchmark_run": {
+                "spec_values": {
+                  "electric_image": ["${{ env.REGISTRY }}/electric:${{ inputs.tag }}"],
+                  "postgres_image": ["postgres:16-alpine"],
+                  "row_count": [500],
+                  "concurrent": [50, 450, 850, 1250, 1650, 2050, 2450, 2850, 3250, 3650]
+                },
+                "machine_request": {
+                  "vcpu": 4,
+                  "mem_gb": 8
+                },
+                "metadata": {
+                  "is_release_version": true,
+                  "version_for_comparison": "${{ inputs.tag }}"
+                }
+              }
+            }'
+      - name: diverse_shape_fanout benchmark
+        run: |
+          curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/diverse_shape_fanout/runs' \
+            -u benchmarking:${{ secrets.BENCHMARKING_API_PASSWORD }} \
+            -H 'Content-Type: application/json' \
+            --fail-with-body \
+            -d '{
+              "benchmark_run": {
+                "spec_values": {
+                  "electric_image": ["${{ env.REGISTRY }}/electric:${{ inputs.tag }}"],
+                  "postgres_image": ["postgres:16-alpine"],
+                  "row_count": [500],
+                  "concurrent": [50, 450, 850, 1250, 1650, 2050, 2450, 2850, 3250, 3650],
+                  "tx_row_count": [50]
+                },
+                "machine_request": {
+                  "vcpu": 4,
+                  "mem_gb": 8
+                },
+                "metadata": {
+                  "is_release_version": true,
+                  "version_for_comparison": "${{ inputs.tag }}"
+                }
+              }
+            }'
