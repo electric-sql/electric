@@ -26,7 +26,7 @@ defmodule Electric.Application do
     router_opts =
       Enum.concat([
         [
-          tanent_manager: Electric.TenantManager,
+          tenant_manager: Electric.TenantManager,
           long_poll_timeout: 20_000,
           max_age: Application.fetch_env!(:electric, :cache_max_age),
           stale_age: Application.fetch_env!(:electric, :cache_stale_age),
