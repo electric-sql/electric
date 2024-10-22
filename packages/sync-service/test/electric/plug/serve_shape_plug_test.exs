@@ -603,7 +603,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> ServeShapePlug.call([])
 
       assert conn.status == 400
-      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "message" =>
+                 "The specified shape definition and ID do not match." <>
+                   " Please ensure the shape definition is correct or omit the shape ID from the request to obtain a new one."
+             }
     end
 
     test "sends 400 when omitting primary key columns in selection" do
