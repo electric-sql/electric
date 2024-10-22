@@ -1,5 +1,5 @@
 ---
-outline: deep
+outline: [2, 4]
 ---
 
 # TypeScript client
@@ -18,9 +18,30 @@ npm i @electric-sql/client
 
 ## How to use
 
-The client exports a `ShapeStream` class for getting updates to shapes on a row-by-row basis as well as a `Shape` class for getting updates to the entire shape.
+The client exports:
 
-### `ShapeStream`
+- a [`ShapeStream`](#shapestream) class for consuming a [Shape Log](../http#shape-log); and
+- a [`Shape`](#shape) class for materialising the log stream into a shape object
+
+These compose together, e.g.:
+
+```ts
+import { ShapeStream } from '@electric-sql/client'
+
+const stream = new ShapeStream({
+  url: `http://localhost:3000/v1/shape/items`,
+})
+const shape = new Shape(stream)
+
+// The callback runs every time the Shape data changes.
+shape.subscribe(data => console.log(data))
+```
+
+### ShapeStream
+
+The [`ShapeStream`](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/client.ts#L135) is a low-level primitive for consuming a [Shape Log](../http#shape-log).
+
+Construct with a shape definition and options and then either subscribe to the shape log messages directly or pass into a [`Shape`](#shape) to materialise the stream into an object.
 
 ```tsx
 import { ShapeStream } from '@electric-sql/client'
@@ -38,9 +59,90 @@ stream.subscribe(messages => {
 })
 ```
 
-#### Custom parsing
+#### Options
 
-By default, `ShapeStream` parses the following Postgres types into native JavaScript values:
+The `ShapeStream` constructor takes [the following options](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/client.ts#L34):
+
+```ts
+/**
+ * Options for constructing a ShapeStream.
+ */
+export interface ShapeStreamOptions<T = never> {
+  /**
+   * The full URL to where the Shape is hosted. This can either be the Electric
+   * server directly or a proxy. E.g. for a local Electric instance, you might
+   * set `http://localhost:3000/v1/shape/items`
+   */
+  url: string
+
+  /**
+   * The where clauses for the shape.
+   */
+  where?: string
+
+  /**
+   * The columns to include in the shape.
+   * Must include primary keys, and can only inlude valid columns.
+   */
+  columns?: string[]
+
+  /**
+   * The "offset" on the shape log. This is typically not set as the ShapeStream
+   * will handle this automatically. A common scenario where you might pass an offset
+   * is if you're maintaining a local cache of the log. If you've gone offline
+   * and are re-starting a ShapeStream to catch-up to the latest state of the Shape,
+   * you'd pass in the last offset and shapeId you'd seen from the Electric server
+   * so it knows at what point in the shape to catch you up from.
+   */
+  offset?: Offset
+
+  /**
+   * Similar to `offset`, this isn't typically used unless you're maintaining
+   * a cache of the shape log.
+   */
+  shapeId?: string
+
+  /**
+   * HTTP headers to attach to requests made by the client.
+   * Can be used for adding authentication headers.
+   */
+  headers?: Record<string, string>
+
+  /**
+   * Alternatively you can override the fetch function.
+   */
+  fetchClient?: typeof fetch
+
+  /**
+   * Automatically fetch updates to the Shape. If you just want to sync the current
+   * shape and stop, pass false.
+   */
+  subscribe?: boolean
+
+  backoffOptions?: BackoffOptions
+  parser?: Parser<T>
+  signal?: AbortSignal
+}
+```
+
+#### Messages
+
+A `ShapeStream` consumes and emits a stream of messages. These messages can either be a `ChangeMessage` representing a change to the shape data:
+
+```ts
+export type ChangeMessage<T extends Row<unknown> = Row> = {
+  key: string
+  value: T
+  headers: Header & { operation: `insert` | `update` | `delete` }
+  offset: Offset
+}
+````
+
+Or a `ControlMessage`, representing an instruction to the client, as [documented here](../http#control-messages).
+
+#### Parsing
+
+By default, when constructing a `ChangeMessage.value`, `ShapeStream` parses the following Postgres types into native JavaScript values:
 
 - `int2`, `int4`, `float4`, and `float8` are parsed into JavaScript `Number`
 - `int8` is parsed into a JavaScript `BigInt`
@@ -50,8 +152,9 @@ By default, `ShapeStream` parses the following Postgres types into native JavaSc
 
 All other types aren't parsed and are left in the string format as they were served by the HTTP endpoint.
 
-The `ShapeStream` can be configured with a custom parser that is an object mapping Postgres types to parsing functions for those types.
-For example, we can extend the [default parser](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/parser.ts#L14-L22) to parse booleans into `1` or `0` instead of `true` or `false`:
+##### Custom parsing
+
+You can extend this behaviour by configuring a custom parser. This is an object mapping Postgres types to parsing functions for those types. For example, we can extend the [default parser](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/parser.ts#L14-L22) to parse booleans into `1` or `0` instead of `true` or `false`:
 
 ```ts
 const stream = new ShapeStream({
@@ -63,11 +166,15 @@ const stream = new ShapeStream({
 })
 ```
 
-#### `Replica`
+#### Replica full
 
-By default Electric only sends the modified columns in an update message, not
-the complete row. If your use case requires the receipt of the full row, not just
-the modified columns, then set the `replica` of your `ShapeStream` to `full`:
+By default Electric sends the modified columns in an update message, not the complete row. To be specific:
+
+- an `insert` operation contains the full row
+- an `update` operation contains the primary key column(s) and the changed columns
+- a `delete` operation contains just the primary key column(s)
+
+If you'd like to recieve the full row value for updates and deletes, you can set the `replica` option of your `ShapeStream` to `full`:
 
 ```tsx
 import { ShapeStream } from "@electric-sql/client"
@@ -79,13 +186,13 @@ const stream = new ShapeStream({
 })
 ```
 
-This is less efficient and will use much more bandwidth for the same shape,
-especially for tables with large static column values.
+This is less efficient and will use more bandwidth for the same shape (especially for tables with large static column values). Note also that shapes with different `replica` settings are distinct, even for the same table and where clause combination.
 
-Shapes with differing `replica` settings are distinct, even for the same table
-and where clause combination.
+### Shape
 
-### `Shape`
+The [`Shape`](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/shape.ts) is the main primitive for working with synced data.
+
+It takes a [`ShapeStream`](#shapestream), consumes the stream, materialises it into a Shape object and notifies you when this changes.
 
 ```tsx
 import { ShapeStream, Shape } from '@electric-sql/client'
