@@ -2,6 +2,36 @@ defmodule Electric.Postgres.Identifiers do
   @namedatalen 63
   @ascii_downcase ?a - ?A
 
+  defmodule StringSplitter do
+    @moduledoc """
+    Utility module for splitting strings on a schema delimiter
+    """
+
+    @doc """
+    Split a string on a schema delimiter, only if the delimiter is not
+    inside quotes, returning a list of strings
+    """
+    @spec split_outside_quotes(binary()) :: [binary(), ...]
+    def split_outside_quotes(string) do
+      split_outside_quotes(string, "", [], false)
+    end
+
+    # Return the accumulated parts
+    defp split_outside_quotes("", current, acc, _in_quotes), do: acc ++ [current]
+
+    # If we hit a period and we're not in quotes, split here
+    defp split_outside_quotes(<<".", rest::binary>>, current, acc, false),
+      do: split_outside_quotes(rest, "", acc ++ [current], false)
+
+    # Toggle the in_quotes flag when encountering a quote
+    defp split_outside_quotes(<<"\"", rest::binary>>, current, acc, in_quotes),
+      do: split_outside_quotes(rest, current <> "\"", acc, !in_quotes)
+
+    # Continue processing, accumulating characters
+    defp split_outside_quotes(<<char, rest::binary>>, current, acc, in_quotes),
+      do: split_outside_quotes(rest, current <> <<char>>, acc, in_quotes)
+  end
+
   @doc """
   Parse a PostgreSQL identifier, removing quotes if present and escaping internal ones
   and downcasing the identifier otherwise.
@@ -10,22 +40,31 @@ defmodule Electric.Postgres.Identifiers do
 
       iex> Electric.Postgres.Identifiers.parse("FooBar")
       {:ok, "foobar"}
+
       iex> Electric.Postgres.Identifiers.parse(~S|"FooBar"|)
       {:ok, "FooBar"}
+
       iex> Electric.Postgres.Identifiers.parse(~S|Foo"Bar"|)
       {:error, ~S|Invalid unquoted identifier contains special characters: Foo"Bar"|}
+
       iex> Electric.Postgres.Identifiers.parse(~S| |)
       {:error, ~S|Invalid unquoted identifier contains special characters:  |}
+
       iex> Electric.Postgres.Identifiers.parse("foob@r")
       {:error, ~S|Invalid unquoted identifier contains special characters: foob@r|}
+
       iex> Electric.Postgres.Identifiers.parse(~S|"Foo"Bar"|)
       {:error, ~S|Invalid identifier with unescaped quote: Foo"Bar|}
+
       iex> Electric.Postgres.Identifiers.parse(~S|""|)
       {:error, "Invalid zero-length delimited identifier"}
+
       iex> Electric.Postgres.Identifiers.parse("")
       {:error, "Invalid zero-length delimited identifier"}
+
       iex> Electric.Postgres.Identifiers.parse(~S|" "|)
       {:ok, " "}
+
       iex> Electric.Postgres.Identifiers.parse(~S|"Foo""Bar"|)
       {:ok, ~S|Foo"Bar|}
   """
@@ -65,7 +104,53 @@ defmodule Electric.Postgres.Identifiers do
   end
 
   defp valid_unquoted_identifier?(identifier) do
-    Regex.match?(~r/^[a-zA-Z_][a-zA-Z0-9_]*$/, identifier)
+    Regex.match?(~r/^[\pL_][\pL\pM_0-9$]*$]*$/u, identifier)
+  end
+
+  @doc """
+  Parse a PostgreSQL relation identifier
+
+  ## Examples
+
+      iex> Electric.Postgres.Identifiers.parse_relation("foo")
+      {:ok, {"public", "foo"}}
+
+      iex> Electric.Postgres.Identifiers.parse_relation("foo.bar")
+      {:ok, {"foo", "bar"}}
+
+      iex> Electric.Postgres.Identifiers.parse_relation(~S|"foo"."bar"|)
+      {:ok, {"foo", "bar"}}
+
+      iex> Electric.Postgres.Identifiers.parse_relation(~S|"foo.woah"."bar"|)
+      {:ok, {"foo.woah", "bar"}}
+
+      iex> Electric.Postgres.Identifiers.parse_relation(~S|"foo".bar|)
+      {:ok, {"foo", "bar"}}
+
+      iex> Electric.Postgres.Identifiers.parse_relation(~S|"foo"."bar|)
+      {:error, ~S|Invalid unquoted identifier contains special characters: "bar|}
+
+      iex> Electric.Postgres.Identifiers.parse_relation("foo.bar.baz")
+      {:error, "Invalid relation identifier, too many delimiters: foo.bar.baz"}
+  """
+  @spec parse_relation(binary()) :: {:ok, Electric.relation()} | {:error, term()}
+  def parse_relation(ident) do
+    case StringSplitter.split_outside_quotes(ident) do
+      [table] ->
+        case parse(table) do
+          {:ok, parsed} -> {:ok, {"public", parsed}}
+          {:error, reason} -> {:error, reason}
+        end
+
+      [schema, table] ->
+        with {:ok, schema} <- parse(schema),
+             {:ok, table} <- parse(table) do
+          {:ok, {schema, table}}
+        end
+
+      _ ->
+        {:error, "Invalid relation identifier, too many delimiters: #{ident}"}
+    end
   end
 
   @doc """

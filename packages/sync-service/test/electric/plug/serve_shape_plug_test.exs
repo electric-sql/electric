@@ -137,7 +137,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Jason.decode!(conn.resp_body) == %{
                "offset" => ["has invalid format"],
                "root_table" => [
-                 "invalid name syntax"
+                 "Invalid zero-length delimited identifier"
                ]
              }
     end
