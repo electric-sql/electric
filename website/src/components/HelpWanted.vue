@@ -1,12 +1,7 @@
 <script setup>
-  const { contribute, issue } = defineProps(['contribute', 'issue'])
-
-  console.log(issue)
-  console.log(contribute)
+  const { issue } = defineProps(['issue'])
 
   const issueUrl = `https://github.com/electric-sql/electric/issues/${issue}`
-
-  console.log(issueUrl)
 </script>
 
 <template>
@@ -18,15 +13,19 @@
     </a>
   </h2>
   <p>
-    We have an
+    We have
     <a :href="issueUrl">
-      open GitHub issue</a>
-    tracking this if you'd like to contribute {{ contribute }}.
+      <slot name="thing">an open GitHub issue</slot></a>
+    <slot name="doing">
+      tracking this
+    </slot>
+    if you'd like to contribute
+    <slot></slot>
   </p>
   <p>
     Please
     <a :href="issueUrl">
-      leave a comment</a>
+      <slot name="engage">leave a comment</slot></a>
     or
     <a href="https://discord.electric-sql.com">
       ask on Discord</a>

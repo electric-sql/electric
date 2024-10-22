@@ -78,4 +78,6 @@ This makes your LiveView applications real-time. In fact, it allows you to build
 
 For more details and full documentation see [hexdocs.pm/electric_phoenix](https://hexdocs.pm/electric_phoenix).
 
-<HelpWanted issue="1878" contribute="an equivalent integration for other server-side frameworks, such as Rails, Laravel, Django, etc." />
+<HelpWanted issue="1878">
+  an equivalent integration for other server-side frameworks, such as Rails, Laravel, Django, etc.
+</HelpWanted>

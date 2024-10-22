@@ -26,4 +26,12 @@ Next.js supports SSR. We are currently [experimenting with patterns](https://git
 
 [ElectroDrizzle](https://github.com/LeonAlvarez/ElectroDrizzle) is an example Next.js application using ElectricSQL and PGLite.
 
-<HelpWanted issue="1596" contribute="to improving our Next.js documentation, patterns and framework integrations" />
+<HelpWanted issue="1596">
+  <template v-slot:thing>
+    a pull request
+  </template>
+  <template v-slot:doing>
+    open
+  </template>
+  to improving our Next.js documentation, patterns and framework integrations.
+</HelpWanted>
