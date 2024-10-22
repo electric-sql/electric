@@ -18,7 +18,7 @@ Electric has first-class support for React. We maintain a [react-hooks](https://
 
 ### Install
 
-The package is published on NPM as [`@electric-sql/react`](). Install using e.g.:
+The package is published on NPM as [`@electric-sql/react`](https://www.npmjs.com/package/@electric-sql/react). Install using e.g.:
 
 ```shell
 npm i @electricsql/react
