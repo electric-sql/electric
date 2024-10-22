@@ -16,4 +16,6 @@ image: /img/integrations/electric-mobx.jpg
 
 Electric can be integrated with MobX by syncing data into a [Shape](/docs/api/clients/typescript#shape) and then [making the shape observable](https://mobx.js.org/observable-state.html).
 
-<HelpWanted issue="1477" contribute="an example or library integrating Electric and MobX" />
+<HelpWanted issue="1477">
+  an example or library integrating Electric and MobX.
+</HelpWanted>
