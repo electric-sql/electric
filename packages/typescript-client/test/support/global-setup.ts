@@ -1,5 +1,4 @@
 import type { GlobalSetupContext } from 'vitest/node'
-import { FetchError } from '../../src/error'
 import { makePgClient } from './test-helpers'
 
 const url = process.env.ELECTRIC_URL ?? `http://localhost:3000`
@@ -22,13 +21,37 @@ declare module 'vitest' {
   }
 }
 
+function waitForElectric(url: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(`Timed out waiting for Electric to be active`),
+      10000
+    )
+
+    const tryHealth = async () =>
+      fetch(`${url}/v1/health`)
+        .then(async (res): Promise<void> => {
+          if (!res.ok) return tryHealth()
+          const { status } = (await res.json()) as { status: string }
+          if (status !== `active`) return tryHealth()
+          clearTimeout(timeout)
+          resolve()
+        })
+        .catch((err) => {
+          clearTimeout(timeout)
+          reject(err)
+        })
+
+    return tryHealth()
+  })
+}
+
 /**
  * Global setup for the test suite. Validates that our server is running, and creates and tears down a
  * special schema in Postgres to ensure clean slate between runs.
  */
 export default async function ({ provide }: GlobalSetupContext) {
-  const response = await fetch(url)
-  if (!response.ok) throw FetchError.fromResponse(response, url)
+  await waitForElectric(url)
 
   const client = makePgClient()
   await client.connect()

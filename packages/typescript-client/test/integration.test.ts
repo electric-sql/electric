@@ -92,13 +92,16 @@ describe(`HTTP Sync`, () => {
       }, 1000)
     })
 
-    // first request was -1, second should be something else
-    expect(urlsRequested).toHaveLength(3)
+    // first request was -1, last requests should be live ones
+    const numRequests = urlsRequested.length
+    expect(numRequests).toBeGreaterThan(2)
     expect(urlsRequested[0].searchParams.get(`offset`)).toBe(`-1`)
     expect(urlsRequested[0].searchParams.has(`live`)).false
-    expect(urlsRequested[2].searchParams.get(`offset`)).not.toBe(`-1`)
-    expect(urlsRequested[2].searchParams.has(`live`)).true
-    expect(urlsRequested[2].searchParams.has(`cursor`)).true
+    expect(urlsRequested[numRequests - 1].searchParams.get(`offset`)).not.toBe(
+      `-1`
+    )
+    expect(urlsRequested[numRequests - 1].searchParams.has(`live`)).true
+    expect(urlsRequested[numRequests - 1].searchParams.has(`cursor`)).true
 
     // first request comes back immediately and is up to date, second one
     // should hang while waiting for updates

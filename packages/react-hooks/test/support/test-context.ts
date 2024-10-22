@@ -66,7 +66,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
   clearIssuesShape: ClearIssuesShapeFn
 }>({
   issuesTableSql: async ({ dbClient, task }, use) => {
-    const tableName = `"issues for ${task.id}"`
+    const tableName = `"issues for ${task.id}_${Math.random().toString(16)}"`
     await dbClient.query(`
     DROP TABLE IF EXISTS ${tableName};
     CREATE TABLE ${tableName} (

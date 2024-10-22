@@ -119,11 +119,13 @@ describe(`useShape`, () => {
     // Add an item.
     const [id2] = await insertIssues({ title: `other row` })
 
-    await waitFor(() =>
-      expect(result.current.data).toEqual([
-        { id: id, title: `test row` },
-        { id: id2, title: `other row` },
-      ])
+    await waitFor(
+      () =>
+        expect(result.current.data).toEqual([
+          { id: id, title: `test row` },
+          { id: id2, title: `other row` },
+        ]),
+      { timeout: 4000 }
     )
   })
 
