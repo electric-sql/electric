@@ -145,7 +145,11 @@ defmodule Electric.Shapes.Shape do
   end
 
   defp validate_table(table, inspector) when is_binary(table) do
-    case Inspector.load_relation(table, inspector) do
+    # Parse identifier locally first to avoid hitting PG for invalid tables
+    with {:ok, _} <- Electric.Postgres.Identifiers.parse_relation(table),
+         {:ok, rel} <- Inspector.load_relation(table, inspector) do
+      {:ok, rel}
+    else
       {:error, err} ->
         case Regex.run(~r/.+ relation "(?<name>.+)" does not exist/, err, capture: :all_names) do
           [table_name] ->
@@ -158,9 +162,6 @@ defmodule Electric.Shapes.Shape do
           _ ->
             {:error, {:root_table, [err]}}
         end
-
-      {:ok, rel} ->
-        {:ok, rel}
     end
   end
 
