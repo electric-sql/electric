@@ -861,7 +861,27 @@ defmodule Electric.Plug.RouterTest do
         |> Enum.map(&String.trim/1)
         |> MapSet.new()
 
-      assert allowed_methods == MapSet.new(["GET", "OPTIONS", "DELETE"])
+      assert allowed_methods == MapSet.new(["GET", "HEAD", "OPTIONS", "DELETE"])
+    end
+  end
+
+  describe "404" do
+    test "GET on invalid path returns 404", _ do
+      conn =
+        conn("GET", "/invalidpath")
+        |> Router.call([])
+
+      assert %{status: 404} = conn
+
+      allowed_methods =
+        conn
+        |> Plug.Conn.get_resp_header("access-control-allow-methods")
+        |> List.first("")
+        |> String.split(",")
+        |> Enum.map(&String.trim/1)
+        |> MapSet.new()
+
+      assert allowed_methods == MapSet.new(["GET", "HEAD"])
     end
   end
 
