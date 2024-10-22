@@ -12,7 +12,10 @@
 <template>
   <h2>
     Help wanted
-    <Badge type="tip" text="Good first issue" />
+    <a href="https://github.com/electric-sql/electric/labels/good%20first%20issue"
+        class="no-visual">
+      <Badge type="tip" text="Good first issue" />
+    </a>
   </h2>
   <p>
     We have an

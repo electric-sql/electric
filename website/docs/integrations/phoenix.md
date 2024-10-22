@@ -4,6 +4,10 @@ title: Phoenix - Integrations
 image: /img/integrations/electric-phoenix.jpg
 ---
 
+<script setup>
+  import HelpWanted from '/src/components/HelpWanted.vue'
+</script>
+
 <img src="/img/integrations/phoenix.svg" class="product-icon" />
 
 # Phoenix
@@ -68,8 +72,10 @@ def mount(_params, _session, socket) do
 end
 ```
 
-This makes your LiveView applications real-time. In fact, it allows you to build interactive, real-time multi-user applications without writing any JavaScript at all 🤯
+This makes your LiveView applications real-time. In fact, it allows you to build interactive, real-time multi-user applications straight out of your existing Ecto schema, without writing any JavaScript at all 🤯
 
 ### More details
 
 For more details and full documentation see [hexdocs.pm/electric_phoenix](https://hexdocs.pm/electric_phoenix).
+
+<HelpWanted issue="1878" contribute="an equivalent integration for other server-side frameworks, such as Rails, Laravel, Django, etc." />
