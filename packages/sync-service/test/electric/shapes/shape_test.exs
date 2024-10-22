@@ -347,6 +347,16 @@ defmodule Electric.Shapes.ShapeTest do
       assert {:error, {:columns, ["Must include all primary key columns, missing: id"]}} =
                Shape.new("col_table", inspector: inspector, columns: ["value1"])
     end
+
+    test "assigns the correct update_mode value", %{inspector: inspector} do
+      assert {:ok, %Shape{update_mode: :modified}} =
+               Shape.new("other_table", inspector: inspector, update_mode: :modified)
+
+      assert {:ok, %Shape{update_mode: :full}} =
+               Shape.new("other_table", inspector: inspector, update_mode: :full)
+
+      assert {:error, _} = Shape.new("other_table", inspector: inspector, update_mode: :teapot)
+    end
   end
 
   describe "new!/2" do
@@ -393,6 +403,21 @@ defmodule Electric.Shapes.ShapeTest do
     test "should not have same integer value for different shape, same table different OID" do
       assert Shape.hash(%Shape{root_table: {"public", "table"}, root_table_id: 1}) !=
                Shape.hash(%Shape{root_table: {"public", "table"}, root_table_id: 2})
+    end
+
+    test "different values of `send_delta` produce differing ids" do
+      refute Shape.hash(%Shape{
+               root_table: {"public", "table2"},
+               root_table_id: 1001,
+               where: "something = true",
+               update_mode: :modified
+             }) ==
+               Shape.hash(%Shape{
+                 root_table: {"public", "table2"},
+                 root_table_id: 1001,
+                 where: "something = true",
+                 update_mode: :full
+               })
     end
   end
 
