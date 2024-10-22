@@ -6,6 +6,12 @@ defmodule Electric.Postgres.Identifiers do
     @moduledoc """
     Utility module for splitting strings on a schema delimiter
     """
+
+    @doc """
+    Split a string on a schema delimiter, only if the delimiter is not
+    inside quotes, returning a list of strings
+    """
+    @spec split_outside_quotes(binary()) :: [binary(), ...]
     def split_outside_quotes(string) do
       split_outside_quotes(string, "", [], false)
     end
@@ -121,6 +127,9 @@ defmodule Electric.Postgres.Identifiers do
       iex> Electric.Postgres.Identifiers.parse_relation(~S|"foo".bar|)
       {:ok, {"foo", "bar"}}
 
+      iex> Electric.Postgres.Identifiers.parse_relation(~S|"foo"."bar|)
+      {:error, ~S|Invalid unquoted identifier contains special characters: "bar|}
+
       iex> Electric.Postgres.Identifiers.parse_relation("foo.bar.baz")
       {:error, "Invalid relation identifier, too many delimiters: foo.bar.baz"}
   """
@@ -133,13 +142,11 @@ defmodule Electric.Postgres.Identifiers do
           {:error, reason} -> {:error, reason}
         end
 
-      [_, _] = idents ->
-        Enum.reduce_while(idents, {:ok, {}}, fn ident, {:ok, schema} ->
-          case parse(ident) do
-            {:ok, parsed} -> {:cont, {:ok, schema |> Tuple.append(parsed)}}
-            {:error, reason} -> {:halt, {:error, reason}}
-          end
-        end)
+      [schema, table] ->
+        with {:ok, schema} <- parse(schema),
+             {:ok, table} <- parse(table) do
+          {:ok, {schema, table}}
+        end
 
       _ ->
         {:error, "Invalid relation identifier, too many delimiters: #{ident}"}
