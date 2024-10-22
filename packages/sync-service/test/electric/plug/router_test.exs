@@ -771,7 +771,12 @@ defmodule Electric.Plug.RouterTest do
         |> Router.call(opts)
 
       assert %{status: 400} = conn
-      assert conn.resp_body == Jason.encode!([%{headers: %{control: "must-refetch"}}])
+
+      assert conn.resp_body ==
+               Jason.encode!(%{
+                 message:
+                   "The specified shape definition and ID do not match. Please ensure the shape definition is correct or omit the shape ID from the request to obtain a new one."
+               })
     end
 
     test "GET receives 409 to a newly created shape when shape ID is not found and no shape matches the shape definition",
