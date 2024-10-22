@@ -51,7 +51,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_relation_msg(%Changes.Relation{} = rel, server) do
-    GenServer.call(server, {:relation_msg, rel})
+    ot_span_ctx = OpenTelemetry.get_current_context()
+    GenServer.call(server, {:relation_msg, rel, ot_span_ctx}, :infinity)
   end
 
   def init(opts) do
@@ -126,10 +127,15 @@ defmodule Electric.Replication.ShapeLogCollector do
     end)
   end
 
-  def handle_call({:relation_msg, %Relation{} = rel}, from, %{producer: nil} = state) do
-    Logger.info("Received Relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
-    Logger.debug(fn -> "Relation received: #{inspect(rel)}" end)
-    {:noreply, [rel], %{state | producer: from}}
+  def handle_call({:relation_msg, %Relation{} = rel, ot_span_ctx}, from, state) do
+    OpenTelemetry.set_current_context(ot_span_ctx)
+
+    Logger.info("Received relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
+    Logger.debug(fn -> "Relation received in ShapeLogCollector: #{inspect(rel)}" end)
+
+    OpenTelemetry.with_span("shape_write.log_collector.handle_relation", [], fn ->
+      handle_relation(rel, from, state)
+    end)
   end
 
   # If no-one is listening to the replication stream, then just return without
@@ -164,6 +170,21 @@ defmodule Electric.Replication.ShapeLogCollector do
     # we don't reply to this call. we only reply when we receive demand from
     # the consumers, signifying that every one has processed this txn
     {:noreply, [txn], %{state | producer: from}}
+  end
+
+  defp handle_relation(rel, _from, %{subscriptions: {0, _}} = state) do
+    Logger.debug(fn ->
+      "Dropping relation message for #{inspect(rel.schema)}.#{inspect(rel.table)}: no active consumers"
+    end)
+
+    OpenTelemetry.add_span_attributes("rel.is_dropped": true)
+
+    {:reply, :ok, [], state}
+  end
+
+  defp handle_relation(rel, from, state) do
+    OpenTelemetry.add_span_attributes("rel.is_dropped": false)
+    {:noreply, [rel], %{state | producer: from}}
   end
 
   defp remove_subscription(from, %{subscriptions: {count, set}} = state) do
