@@ -1,7 +1,7 @@
 defmodule Support.TransactionConsumer do
   use GenStage
 
-  alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.{Transaction, Relation}
 
   import ExUnit.Assertions
 
@@ -9,16 +9,22 @@ defmodule Support.TransactionConsumer do
     GenStage.start_link(__MODULE__, opts)
   end
 
-  def assert_consume(consumers, txns) do
+  def assert_consume(consumers, evts) do
     for consumer <- consumers, into: MapSet.new() do
-      assert_receive {Support.TransactionConsumer, ^consumer, received_txns}
+      assert_receive {Support.TransactionConsumer, ^consumer, received_evts}
 
-      txns
-      |> Enum.zip(received_txns)
-      |> Enum.map(fn {%Transaction{} = expected, %Transaction{} = received} ->
-        assert expected.xid == received.xid
+      evts
+      |> Enum.zip(received_evts)
+      |> Enum.map(fn {expected, received} ->
+        case expected do
+          %Transaction{} = expected ->
+            assert expected.xid == received.xid
+            received.xid
 
-        received.xid
+          %Relation{} = expected ->
+            assert expected.id == received.id
+            received.id
+        end
       end)
     end
     |> Enum.to_list()

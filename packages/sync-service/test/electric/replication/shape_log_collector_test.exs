@@ -3,7 +3,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
   alias Electric.Postgres.Lsn
   alias Electric.Replication.ShapeLogCollector
-  alias Electric.Replication.Changes.{Transaction}
+  alias Electric.Replication.Changes.{Transaction, Relation}
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
 
@@ -114,6 +114,34 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       xids = Support.TransactionConsumer.assert_consume(ctx.consumers, [txn2])
 
       assert xids == [xid]
+    end
+  end
+
+  describe "handle_relation_msg/2" do
+    setup ctx do
+      parent = self()
+
+      consumers =
+        Enum.map(1..3, fn id ->
+          {:ok, consumer} =
+            Support.TransactionConsumer.start_link(id: id, parent: parent, producer: ctx.server)
+
+          {id, consumer}
+        end)
+
+      %{consumers: consumers}
+    end
+
+    test "should handle new relations", ctx do
+      relation1 = %Relation{id: 1, table: "test_table", schema: "public"}
+
+      assert :ok = ShapeLogCollector.handle_relation_msg(relation1, ctx.server)
+
+      relation2 = %Relation{id: 2, table: "bar", schema: "public"}
+
+      assert :ok = ShapeLogCollector.handle_relation_msg(relation2, ctx.server)
+
+      Support.TransactionConsumer.assert_consume(ctx.consumers, [relation1, relation2])
     end
   end
 
