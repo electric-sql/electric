@@ -25,7 +25,12 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     shape
   end
 
-  defp table_name, do: :"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}"
+  defp table_name,
+    do:
+      :ets.new(:"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}", [
+        :public,
+        :ordered_set
+      ])
 
   defp new_state(_ctx, opts \\ []) do
     table = Keyword.get(opts, :table, table_name())
