@@ -23,12 +23,12 @@ paths:
       description: |-
         Load the initial data for a shape and poll for real-time updates.
 
-        Define your shape using the `root_table` and `where` parameters.
+        Define your shape using the `table` and `where` parameters.
         Use `offset` to fetch data from a specific position in the shape
         log and the `live` parameter to consume real-time updates.
       parameters:
         # Query parameters
-        - name: root_table
+        - name: table
           in: query
           schema:
             type: string
@@ -109,7 +109,7 @@ paths:
           schema:
             type: string
           description: |-
-            Optional where clause to filter rows in the `root_table`.
+            Optional where clause to filter rows in the `table`.
 
             This should be a valid PostgreSQL WHERE clause using SQL syntax.
           examples:
@@ -125,7 +125,7 @@ paths:
           schema:
             type: string
           description: |-
-            Optional list of columns to include in the rows from the `root_table`.
+            Optional list of columns to include in the rows from the `table`.
 
             They should always include the primary key columns, and should be formed
             as a comma separated list of column names exactly as they are in the database schema.
@@ -344,9 +344,9 @@ paths:
 
         **NOTE** Delete shape only works if Electric is configured to `allow_shape_deletion`.
       parameters:
-        # Path parameters
-        - name: root_table
-          in: path
+        # Query parameters
+        - name: table
+          in: query
           schema:
             type: string
           examples:
@@ -361,7 +361,6 @@ paths:
             The name of the table for which to delete the shape.
 
             Can be qualified by the schema name.
-        # Query parameters
         - name: shape_id
           in: query
           schema:

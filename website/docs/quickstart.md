@@ -60,7 +60,7 @@ access-control-expose-headers: *
 access-control-allow-methods: GET, POST, OPTIONS
 content-type: application/json; charset=utf-8
 
-{"root_table":["table not found"]}
+{"table":["table not found"]}
 ```
 
 So it didn't work! Which makes sense... as it's an empty database without any tables or data. Let's fix that.
