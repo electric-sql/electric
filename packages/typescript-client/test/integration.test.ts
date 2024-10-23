@@ -2,7 +2,7 @@ import { parse } from 'cache-control-parser'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
 import { assert, describe, expect, inject, vi } from 'vitest'
-import { Shape, ShapeStream } from '../src'
+import { FetchError, Shape, ShapeStream } from '../src'
 import { Message, Offset } from '../src/types'
 import { isChangeMessage, isUpToDateMessage } from '../src/helpers'
 import {
@@ -800,6 +800,42 @@ describe(`HTTP Sync`, () => {
         expect(responseSize).toBeLessThan(11 * 1e3)
       }
     }
+  })
+
+  it(`should handle invalid requests by terminating stream`, async ({
+    expect,
+    issuesTableUrl,
+    aborter,
+  }) => {
+    const issueStream = new ShapeStream<IssueRow>({
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      subscribe: true,
+      signal: aborter.signal,
+    })
+
+    await h.forEachMessage(issueStream, aborter, (res, msg) => {
+      if (isUpToDateMessage(msg)) res()
+    })
+
+    const invalidIssueStream = new ShapeStream<IssueRow>({
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      subscribe: true,
+      shapeId: issueStream.shapeId,
+      where: `1=1`,
+    })
+
+    const errorSubscriberPromise = new Promise((_, reject) =>
+      invalidIssueStream.subscribe(() => {}, reject)
+    )
+    const errorUpToDateSubscriberPromise = new Promise((_, reject) =>
+      invalidIssueStream.subscribeOnceToUpToDate(() => {}, reject)
+    )
+
+    await expect(errorSubscriberPromise).rejects.toThrow(FetchError)
+    await expect(errorUpToDateSubscriberPromise).rejects.toThrow(FetchError)
+    expect(invalidIssueStream.error).instanceOf(FetchError)
+    expect((invalidIssueStream.error! as FetchError).status).toBe(400)
+    expect(invalidIssueStream.isConnected()).false
   })
 
   it(`should detect shape deprecation and restart syncing`, async ({
