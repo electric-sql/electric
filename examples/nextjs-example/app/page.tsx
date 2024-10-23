@@ -9,12 +9,13 @@ import { matchStream } from "./match-stream"
 const itemShape = () => {
   if (typeof window !== `undefined`) {
     return {
-      url: new URL(`/shape-proxy/items`, window?.location.origin).href,
+      url: new URL(`/shape-proxy`, window?.location.origin).href,
+      table: `items`,
     }
   } else {
     return {
-      url: new URL(`https://not-sure-how-this-works.com/shape-proxy/items`)
-        .href,
+      url: new URL(`https://not-sure-how-this-works.com/shape-proxy`).href,
+      table: `items`,
     }
   }
 }
