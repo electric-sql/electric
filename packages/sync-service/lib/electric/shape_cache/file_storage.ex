@@ -122,15 +122,15 @@ defmodule Electric.ShapeCache.FileStorage do
   @impl Electric.ShapeCache.Storage
   def get_all_stored_shapes(%{base_path: base_path}) do
     case File.ls(base_path) do
-      {:ok, shape_ids} ->
-        Enum.reduce(shape_ids, %{}, fn shape_id, acc ->
+      {:ok, shape_handles} ->
+        Enum.reduce(shape_handles, %{}, fn shape_handle, acc ->
           shape_def_path =
-            shape_definition_path(%{shape_definition_dir: Path.join(base_path, shape_id)})
+            shape_definition_path(%{shape_definition_dir: Path.join(base_path, shape_handle)})
 
           with {:ok, shape_def_encoded} <- File.read(shape_def_path),
                {:ok, shape_def_json} <- Jason.decode(shape_def_encoded),
                shape = Electric.Shapes.Shape.from_json_safe!(shape_def_json) do
-            Map.put(acc, shape_id, shape)
+            Map.put(acc, shape_handle, shape)
           else
             # if the shape definition file cannot be read/decoded, just ignore it
             {:error, _reason} -> acc

@@ -9,7 +9,7 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
 
   @num_calls_until_crash_key :num_calls_until_crash
 
-  defdelegate for_shape(shape_id, opts), to: FileStorage
+  defdelegate for_shape(shape_handle, opts), to: FileStorage
   defdelegate start_link(opts), to: FileStorage
   defdelegate set_shape_definition(shape, opts), to: FileStorage
   defdelegate get_all_stored_shapes(opts), to: FileStorage

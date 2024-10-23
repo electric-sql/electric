@@ -526,7 +526,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.initialise(opts)
         storage.set_shape_definition(@shape, opts)
 
-        assert {:ok, %{@shape_id => @shape}} =
+        assert {:ok, %{@shape_handle => @shape}} =
                  Electric.ShapeCache.Storage.get_all_stored_shapes({storage, opts})
       end
     end

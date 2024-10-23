@@ -35,7 +35,7 @@ defmodule Electric.Shapes.ConsumerSupervisor do
       pid when is_pid(pid) ->
         Consumer.Supervisor.clean_and_stop(%{
           electric_instance_id: electric_instance_id,
-          shape_id: shape_id
+          shape_handle: shape_handle
         })
 
         :ok
