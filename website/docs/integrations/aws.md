@@ -8,7 +8,7 @@ image: /img/integrations/electric-aws.jpg
 
 # Amazon Web Services (AWS)
 
-AWS is a major cloud infrastructure platform.
+AWS is a cloud infrastructure platform.
 
 ## Electric on AWS
 
