@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 0.6.5
+
+### Patch Changes
+
+- 7de9f1d: Handle 400 errors as unrecoverable rather than `must-refetch` cases
+
 ## 0.6.4
 
 ### Patch Changes
