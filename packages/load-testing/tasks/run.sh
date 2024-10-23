@@ -16,7 +16,7 @@
 
 
 LOCUST="/usr/local/bin/locust"
-LOCUS_OPTS="-f /long-polling.py --host=$TARGET_HOST"
+LOCUS_OPTS="-f tasks/long-polling.py --host=$TARGET_HOST"
 LOCUST_MODE=${LOCUST_MODE:-standalone}
 
 if [[ "$LOCUST_MODE" = "master" ]]; then

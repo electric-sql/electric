@@ -55,7 +55,7 @@ def on_test_start(environment, **kwargs):
     else:
         connection = get_pg_connection()
         cursor = connection.cursor()
-        cursor.execute(open("./long-polling.sql", "r").read())
+        cursor.execute(open("/tasks/long-polling.sql", "r").read())
         connection.commit()
         connection.close()
 
@@ -163,8 +163,6 @@ def on_report_to_master(client_id, data):
 
 @events.worker_report.add_listener
 def on_worker_report(client_id, data):
-    if 'writes' in data:
-        logging.info(f'Writes: {data["writes"]}')
     if 'time_buckets' in data:
         for bucket, count in data['time_buckets'].items():
             if bucket not in master_time_buckets:

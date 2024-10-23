@@ -29,7 +29,7 @@ pip3 install locust
 You're ready! 
 Here is an example command to generate some load against Electric.
 ```
-locust -H http://localhost:3000 -f long-polling.py -u 1000 -r 10 --processes -1  --autostart
+locust -H http://localhost:3000 -f tasks/long-polling.py -u 1000 -r 10 --processes -1  --autostart
 ```
 
 - `-H` is the endpoint you want to access Electric from
