@@ -26,7 +26,7 @@ defmodule Electric.Plug.DeleteShapePlug do
   defp validate_query_params(%Plug.Conn{} = conn, _) do
     all_params =
       Map.merge(conn.query_params, conn.path_params)
-      |> Map.take(["root_table", "shape_id"])
+      |> Map.take(["table", "shape_id"])
       |> Map.put("offset", "-1")
 
     case Params.validate(all_params, inspector: conn.assigns.config[:inspector]) do

@@ -27,7 +27,7 @@ defmodule Electric.Plug.Router do
   def server_header(conn, version),
     do: conn |> Plug.Conn.put_resp_header("server", "ElectricSQL/#{version}")
 
-  def put_cors_headers(%Plug.Conn{path_info: ["v1", "shape", _ | _]} = conn, _opts),
+  def put_cors_headers(%Plug.Conn{path_info: ["v1", "shape" | _]} = conn, _opts),
     do: CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD", "DELETE", "OPTIONS"]})
 
   def put_cors_headers(conn, _opts),
