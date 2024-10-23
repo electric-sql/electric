@@ -7,7 +7,8 @@ import { matchStream } from "../match-stream"
 
 const itemShape = () => {
   return {
-    url: new URL(`/shape-proxy/items`, window.location.origin).href,
+    url: new URL(`/shape-proxy`, window.location.origin).href,
+    table: `items`,
   }
 }
 

@@ -4,7 +4,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   const url = new URL(request.url)
   const { table } = params
   const originUrl = new URL(`http://localhost:3000/v1/shape`)
-  originUrl.searchParams.set(`table`, table)
+  originUrl.searchParams.set(`table`, table!)
   url.searchParams.forEach((value, key) => {
     originUrl.searchParams.set(key, value)
   })
