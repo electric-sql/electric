@@ -393,7 +393,7 @@ defmodule Electric.Plug.RouterTest do
     test "GET receives only specified columns out of wide table", %{opts: opts, db_conn: db_conn} do
       conn = conn("GET", "/v1/shape/wide_table?offset=-1&columns=id,value1") |> Router.call(opts)
       assert %{status: 200} = conn
-      shape_id = get_resp_shape_id(conn)
+      shape_handle = get_resp_shape_handle(conn)
 
       assert [
                %{
@@ -409,7 +409,7 @@ defmodule Electric.Plug.RouterTest do
         Task.async(fn ->
           conn(
             "GET",
-            "/v1/shape/wide_table?offset=#{next_offset}&columns=id,value1&shape_id=#{shape_id}&live"
+            "/v1/shape/wide_table?offset=#{next_offset}&columns=id,value1&shape_handle=#{shape_handle}&live"
           )
           |> Router.call(opts)
           |> then(fn conn ->
@@ -495,7 +495,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 200} = conn
 
-      shape_handle = get_resp_shape_id(conn)
+      shape_handle = get_resp_shape_handle(conn)
       assert [op] = Jason.decode!(conn.resp_body)
 
       assert op == %{
@@ -603,7 +603,7 @@ defmodule Electric.Plug.RouterTest do
         |> Router.call(opts)
 
       assert %{status: 200} = conn
-      shape_handle = get_resp_shape_id(conn)
+      shape_handle = get_resp_shape_handle(conn)
       assert [op1, op2] = Jason.decode!(conn.resp_body)
 
       assert [op1, op2] == [

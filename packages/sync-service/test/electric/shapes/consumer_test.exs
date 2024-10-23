@@ -150,7 +150,7 @@ defmodule Electric.Shapes.ConsumerTest do
               id: {Shapes.Consumer.Supervisor, shape_handle}
             )
 
-          assert_receive {Support.TestStorage, :set_shape_definition, ^shape_id, ^shape}
+          assert_receive {Support.TestStorage, :set_shape_definition, ^shape_handle, ^shape}
 
           consumer
         end
@@ -170,7 +170,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeCache
       |> expect(:update_shape_latest_offset, 2, fn @shape_handle1, ^last_log_offset, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_handle1))
 
       ref = make_ref()
 
@@ -395,16 +395,16 @@ defmodule Electric.Shapes.ConsumerTest do
       }
 
       ref1 =
-        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_id1)))
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle1)))
 
       ref2 =
-        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_id2)))
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle2)))
 
       Mock.ShapeStatus
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_handle1))
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_handle2))
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
 
@@ -423,23 +423,23 @@ defmodule Electric.Shapes.ConsumerTest do
       }
 
       ref1 =
-        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_id1)))
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle1)))
 
       ref2 =
-        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_id2)))
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle2)))
 
       # also cleans up inspector cache and shape status cache
       Mock.Inspector
       |> expect(:clean, 1, fn _, _ -> true end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_handle1))
       |> expect(:clean, 0, fn _, _ -> true end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_handle2))
 
       Mock.ShapeStatus
       |> expect(:remove_shape, 1, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_handle1))
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_handle2))
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
 
@@ -461,23 +461,23 @@ defmodule Electric.Shapes.ConsumerTest do
       }
 
       ref1 =
-        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_id1)))
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle1)))
 
       ref2 =
-        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_id2)))
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle2)))
 
       # also cleans up inspector cache and shape status cache
       Mock.Inspector
       |> expect(:clean, 1, fn _, _ -> true end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_handle1))
       |> expect(:clean, 0, fn _, _ -> true end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_handle2))
 
       Mock.ShapeStatus
       |> expect(:remove_shape, 1, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id1))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_handle1))
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_id2))
+      |> allow(self(), Consumer.name(ctx.electric_instance_id, @shape_handle2))
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
 

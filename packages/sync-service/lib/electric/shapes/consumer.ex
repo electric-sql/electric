@@ -67,7 +67,7 @@ defmodule Electric.Shapes.Consumer do
     :ok =
       shape_status.initialise_shape(
         shape_status_state,
-        config.shape_id,
+        config.shape_handle,
         snapshot_xmin,
         latest_offset
       )
@@ -159,7 +159,7 @@ defmodule Electric.Shapes.Consumer do
     {:stop, :normal, state}
   end
 
-  def handle_cast({:snapshot_exists, shape_handle}, %{shape_id: shape_handle} = state) do
+  def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
     state = set_snapshot_xmin(state.snapshot_xmin, state)
     state = set_snapshot_started(state)
     {:noreply, [], state}
@@ -304,13 +304,13 @@ defmodule Electric.Shapes.Consumer do
     set_snapshot_xmin(xmin, %{state | snapshot_xmin: xmin})
   end
 
-  defp set_snapshot_xmin(xmin, %{snapshot_xmin: xmin, shape_id: shape_id} = state) do
+  defp set_snapshot_xmin(xmin, %{snapshot_xmin: xmin, shape_handle: shape_handle} = state) do
     %{shape_status: {shape_status, shape_status_state}} = state
 
-    unless shape_status.set_snapshot_xmin(shape_status_state, shape_id, xmin),
+    unless shape_status.set_snapshot_xmin(shape_status_state, shape_handle, xmin),
       do:
         Logger.warning(
-          "Got snapshot information for a #{shape_id}, that shape id is no longer valid. Ignoring."
+          "Got snapshot information for a #{shape_handle}, that shape id is no longer valid. Ignoring."
         )
 
     state
@@ -321,15 +321,15 @@ defmodule Electric.Shapes.Consumer do
     set_snapshot_started(%{state | snapshot_started: true})
   end
 
-  defp set_snapshot_started(%{shape_id: shape_id} = state) do
+  defp set_snapshot_started(%{shape_handle: shape_handle} = state) do
     %{shape_status: {shape_status, shape_status_state}} = state
-    :ok = shape_status.mark_snapshot_started(shape_status_state, shape_id)
+    :ok = shape_status.mark_snapshot_started(shape_status_state, shape_handle)
     reply_to_snapshot_waiters(:started, state)
   end
 
   defp cleanup(state) do
     %{shape_status: {shape_status, shape_status_state}} = state
-    shape_status.remove_shape(shape_status_state, state.shape_id)
+    shape_status.remove_shape(shape_status_state, state.shape_handle)
     ShapeCache.Storage.cleanup!(state.storage)
     state
   end

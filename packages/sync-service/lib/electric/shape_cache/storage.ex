@@ -38,7 +38,7 @@ defmodule Electric.ShapeCache.Storage do
 
   @doc "Retrieve all stored shapes"
   @callback get_all_stored_shapes(compiled_opts()) ::
-              {:ok, %{shape_id() => Shape.t()}} | {:error, term()}
+              {:ok, %{shape_handle() => Shape.t()}} | {:error, term()}
 
   @doc """
   Get the current xmin and offset for the shape storage.

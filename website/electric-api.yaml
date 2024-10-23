@@ -178,7 +178,7 @@ paths:
                 you have provided. This header simplifies client development by
                 avoiding the need to parse the last offset out of the stream of
                 log entries.
-            electric-shape-id:
+            electric-shape-handle:
               schema:
                 type: string
               example: "3833821-1721812114261"

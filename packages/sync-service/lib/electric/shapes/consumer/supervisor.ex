@@ -40,10 +40,10 @@ defmodule Electric.Shapes.Consumer.Supervisor do
     end
   end
 
-  def clean_and_stop(%{electric_instance_id: electric_instance_id, shape_id: shape_id}) do
+  def clean_and_stop(%{electric_instance_id: electric_instance_id, shape_handle: shape_handle}) do
     # if consumer is present, terminate it gracefully, otherwise terminate supervisor
-    case GenServer.whereis(Electric.Shapes.Consumer.name(electric_instance_id, shape_id)) do
-      nil -> Supervisor.stop(name(electric_instance_id, shape_id))
+    case GenServer.whereis(Electric.Shapes.Consumer.name(electric_instance_id, shape_handle)) do
+      nil -> Supervisor.stop(name(electric_instance_id, shape_handle))
       consumer_pid when is_pid(consumer_pid) -> GenServer.call(consumer_pid, :clean_and_stop)
     end
   end

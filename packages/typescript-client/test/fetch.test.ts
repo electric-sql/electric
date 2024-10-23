@@ -276,7 +276,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     const initialResponse = new Response(`initial chunk`, {
       status: 200,
       headers: responseHeaders({
-        [SHAPE_ID_HEADER]: `123`,
+        [SHAPE_HANDLE_HEADER]: `123`,
         [CHUNK_LAST_OFFSET_HEADER]: `456`,
       }),
     })
@@ -284,7 +284,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     const nextResponse = new Response(`next chunk`, {
       status: 200,
       headers: responseHeaders({
-        [SHAPE_ID_HEADER]: `123`,
+        [SHAPE_HANDLE_HEADER]: `123`,
         [CHUNK_LAST_OFFSET_HEADER]: `456`,
       }),
     })
@@ -297,7 +297,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(result).toBe(initialResponse)
 
     // fetch the next chunk as well
-    const nextUrl = `${baseUrl}?shape_id=123&offset=456`
+    const nextUrl = `${baseUrl}?shape_handle=123&offset=456`
     const nextResult = await fetchWrapper(nextUrl)
     expect(nextResult).toBe(nextResponse)
 

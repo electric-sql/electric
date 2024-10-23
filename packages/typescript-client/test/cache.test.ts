@@ -3,7 +3,7 @@ import { describe, expect, assert, inject } from 'vitest'
 import { exec } from 'child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable } from './support/test-context'
-import { CHUNK_LAST_OFFSET_HEADER, SHAPE_ID_HEADER } from '../src/constants'
+import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
 
 // FIXME: pull from environment?
 const maxAge = 1 // seconds
@@ -136,8 +136,8 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
       {}
     )
     const lastOffset = originalRes.headers.get(CHUNK_LAST_OFFSET_HEADER)
-    const shapeId = originalRes.headers.get(SHAPE_ID_HEADER)
-    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_id=${shapeId}`
+    const shapeId = originalRes.headers.get(SHAPE_HANDLE_HEADER)
+    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_handle=${shapeId}`
 
     // Make a first request such that response is cached
     const originalUpToDateRes = await fetch(urlToTest, {})
@@ -170,8 +170,8 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
       {}
     )
     const lastOffset = originalRes.headers.get(CHUNK_LAST_OFFSET_HEADER)
-    const shapeId = originalRes.headers.get(SHAPE_ID_HEADER)
-    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_id=${shapeId}`
+    const shapeId = originalRes.headers.get(SHAPE_HANDLE_HEADER)
+    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_handle=${shapeId}`
 
     // Make a first request such that response is cached
     const originalUpToDateRes = await fetch(urlToTest, {})

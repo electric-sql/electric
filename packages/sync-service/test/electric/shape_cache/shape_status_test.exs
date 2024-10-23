@@ -64,11 +64,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     {:ok, state, []} =
       new_state(ctx,
         stored_shapes: %{
-          shape_id => shape
+          shape_handle => shape
         }
       )
 
-    assert [{^shape_id, ^shape}] = ShapeStatus.list_shapes(state)
+    assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
   end
 
   test "can add shapes", ctx do
