@@ -22,7 +22,7 @@ await pg.exec(`
 // Establish a persistent shape subscription
 await pg.electric.syncShapeToTable({
   // TODO update this when the sync plugin is updated.
-  url: `${BASE_URL}/v1/shape/items`,
+  url: `${BASE_URL}/v1/shape`,
   table: 'items',
   primaryKey: ['id'],
 })
