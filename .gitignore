@@ -20,3 +20,4 @@ test-dbs
 tsconfig.tsbuildinfo
 wal
 shapes
+.sst

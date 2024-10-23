@@ -82,18 +82,13 @@ Then for the `/api/shapes/users` route:
 ```tsx
 export async function GET(
   request: Request,
-  { params }: { params: { table: string } }
 ) {
   const url = new URL(request.url)
-  const { table } = params
 
   // Construct the upstream URL
   const originUrl = new URL(`http://localhost:3000/v1/shape`)
 
-  // Set the table.
-  originUrl.searchParams.set(`table`, table)
-
-  // Copy over the shape_id & offset query params that the
+  // Copy over the table, shape_id, and offset query params that the
   // Electric client adds so we return the right part of the Shape log.
   url.searchParams.forEach((value, key) => {
     if ([`shape_id`, `offset`].includes(key)) {
