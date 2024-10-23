@@ -38,13 +38,13 @@ A client can choose to sync one shape, or lots of shapes. Many clients can sync 
 
 Shapes are defined by:
 
-- a `root_table`, such as `projects`
+- a `table`, such as `projects`
 - a `where` clause, used to filter the rows in that table, such as `status='active'`
 
 > [!IMPORTANT] Limitations
 > Shapes are currently single table, whole row only. You can sync all the rows in a table, or a subset of the rows in that table. You can't yet [select columns](#whole-rows) or sync an [include tree](#single-table) without filtering or joining in the client.
 
-### `root_table`
+### `table`
 
 This is the root table of the shape. It must match a table in your Postgres database.
 
@@ -52,7 +52,7 @@ The value can be just a tablename like `projects`, or can be a qualified tablena
 
 ### `where` clause
 
-Optional where clause to filter rows in the `root_table`.
+Optional where clause to filter rows in the `table`.
 
 This must be a valid [PostgreSQL WHERE clause](https://www.postgresql.org/docs/current/queries-table-expressions.html#QUERIES-WHERE) using SQL syntax, e.g.:
 
@@ -91,7 +91,7 @@ client. In the client, shapes can be held as objects in memory, for example usin
 ### HTTP
 
 You can sync shapes manually using the
-<a href="/openapi.html#/paths/~1v1~1shape~1%7Broot_table%7D/get"
+<a href="/openapi.html#/paths/~1v1~1shape~1%7Btable%7D/get"
     target="_blank">
   <code>GET /v1/shape</code></a> endpoint. First make an initial sync request to get the current data for the Shape, such as:
 
