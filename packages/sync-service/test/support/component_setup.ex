@@ -13,15 +13,17 @@ defmodule Support.ComponentSetup do
     %{tenant_id: "test_tenant"}
   end
 
-  def with_tenant_manager(_ctx) do
-    %{tenant_manager: Electric.TenantManager}
+  def with_tenant_manager(ctx) do
+    opts = [electric_instance_id: ctx.electric_instance_id]
+    {:ok, _pid} = Electric.TenantManager.start_link(opts)
+    %{tenant_manager: Electric.TenantManager.name(opts)}
   end
 
   def with_tenant(ctx) do
     tenant = [
       electric_instance_id: ctx.electric_instance_id,
       tenant_id: ctx.tenant_id,
-      pg_id: "12345",
+      pg_id: Map.get(ctx, :pg_id, "12345"),
       shape_cache: ctx.shape_cache,
       storage: ctx.storage,
       inspector: ctx.inspector,
@@ -31,8 +33,8 @@ defmodule Support.ComponentSetup do
       stale_age: Access.get(ctx, :stale_age, 300)
     ]
 
-    Electric.TenantManager.delete_tenant(ctx.tenant_id)
-    :ok = Electric.TenantManager.store_tenant(tenant, tenant_manager: Electric.TenantManager)
+    Electric.TenantManager.delete_tenant(ctx.tenant_id, tenant_manager: ctx.tenant_manager)
+    :ok = Electric.TenantManager.store_tenant(tenant, tenant_manager: ctx.tenant_manager)
 
     %{tenant: tenant}
   end
@@ -191,6 +193,23 @@ defmodule Support.ComponentSetup do
     }
   end
 
+  def with_app_config(ctx) do
+    %{
+      app_config: %Electric.Application.Configuration{
+        electric_instance_id: ctx.electric_instance_id,
+        persistent_kv: ctx.persistent_kv,
+        replication_opts: %{
+          stream_id: ctx.stream_id,
+          publication_name: ctx.publication_name,
+          slot_name: ctx.slot_name
+        },
+        pool_opts: %{
+          size: 20
+        }
+      }
+    }
+  end
+
   def with_complete_stack(ctx, opts \\ []) do
     [
       Keyword.get(opts, :electric_instance_id, &Support.TestUtils.with_electric_instance_id/1),
@@ -205,6 +224,23 @@ defmodule Support.ComponentSetup do
       Keyword.get(opts, :replication_client, &with_replication_client/1),
       Keyword.get(opts, :tenant_manager, &with_tenant_manager/1),
       Keyword.get(opts, :tenant, &with_tenant/1)
+    ]
+    |> Enum.reduce(ctx, &Map.merge(&2, apply(&1, [&2])))
+  end
+
+  def with_complete_stack_but_no_tenant(ctx, opts \\ []) do
+    [
+      Keyword.get(opts, :electric_instance_id, &Support.TestUtils.with_electric_instance_id/1),
+      Keyword.get(opts, :tenant_id, &with_tenant_id/1),
+      Keyword.get(opts, :registry, &with_registry/1),
+      Keyword.get(opts, :inspector, &with_inspector/1),
+      Keyword.get(opts, :persistent_kv, &with_persistent_kv/1),
+      Keyword.get(opts, :log_chunking, &with_log_chunking/1),
+      Keyword.get(opts, :storage, &with_cub_db_storage/1),
+      Keyword.get(opts, :log_collector, &with_shape_log_collector/1),
+      Keyword.get(opts, :shape_cache, &with_shape_cache/1),
+      Keyword.get(opts, :replication_client, &with_replication_client/1),
+      Keyword.get(opts, :tenant_manager, &with_tenant_manager/1)
     ]
     |> Enum.reduce(ctx, &Map.merge(&2, apply(&1, [&2])))
   end
