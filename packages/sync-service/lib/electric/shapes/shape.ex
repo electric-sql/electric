@@ -132,7 +132,7 @@ defmodule Electric.Shapes.Shape do
   defp load_column_info(table, inspector) do
     case Inspector.load_column_info(table, inspector) do
       :table_not_found ->
-        {:error, {:root_table, ["table not found"]}}
+        {:error, {:table, ["table not found"]}}
 
       {:ok, column_info} ->
         # %{["column_name"] => :type}
@@ -154,13 +154,13 @@ defmodule Electric.Shapes.Shape do
         case Regex.run(~r/.+ relation "(?<name>.+)" does not exist/, err, capture: :all_names) do
           [table_name] ->
             {:error,
-             {:root_table,
+             {:table,
               [
                 ~s|Table "#{table_name}" does not exist. If the table name contains capitals or special characters you must quote it.|
               ]}}
 
           _ ->
-            {:error, {:root_table, [err]}}
+            {:error, {:table, [err]}}
         end
     end
   end

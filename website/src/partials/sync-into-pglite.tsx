@@ -21,7 +21,8 @@ await pg.exec(`
 
 // Establish a persistent shape subscription
 await pg.electric.syncShapeToTable({
-  url: `${BASE_URL}/v1/shape/items`,
+  // TODO update this when the sync plugin is updated.
+  url: `${BASE_URL}/v1/shape`,
   table: 'items',
   primaryKey: ['id'],
 })
@@ -34,6 +35,6 @@ const Component = () => {
   )
 
   return (
-    <pre>{ JSON.stringify(items) }<pre>
-  )
+    <pre>{JSON.stringify(items)}<pre>
+      )
 }

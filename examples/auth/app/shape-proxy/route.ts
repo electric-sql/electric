@@ -1,12 +1,8 @@
-export async function GET(
-  request: Request,
-  { params }: { params: { table: string } }
-) {
+export async function GET(request: Request) {
   const url = new URL(request.url)
-  const { table } = params
 
   // Constuct the upstream URL
-  const originUrl = new URL(`http://localhost:3000/v1/shape/${table}`)
+  const originUrl = new URL(`http://localhost:3000/v1/shape`)
   url.searchParams.forEach((value, key) => {
     originUrl.searchParams.set(key, value)
   })
