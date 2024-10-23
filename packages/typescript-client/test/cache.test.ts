@@ -82,13 +82,14 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     // add some data and follow with live request
     await insertIssues({ title: `foo` })
     const searchParams = new URLSearchParams({
+      table: issuesTableUrl,
       offset: initialRes.headers.get(`electric-chunk-last-offset`)!,
       shape_id: initialRes.headers.get(`electric-shape-id`)!,
       live: `true`,
     })
 
     const liveRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}?${searchParams.toString()}`,
+      `${proxyCacheBaseUrl}/v1/shape?${searchParams.toString()}`,
       {}
     )
     expect(liveRes.status).toBe(200)
@@ -96,7 +97,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
 
     // Second request gets a cached response
     const cachedRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}?${searchParams.toString()}`,
+      `${proxyCacheBaseUrl}/v1/shape?${searchParams.toString()}`,
       {}
     )
     expect(cachedRes.status).toBe(200)
@@ -137,7 +138,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     )
     const lastOffset = originalRes.headers.get(CHUNK_LAST_OFFSET_HEADER)
     const shapeId = originalRes.headers.get(SHAPE_ID_HEADER)
-    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/?table=${issuesTableUrl}&offset=${lastOffset}&shape_id=${shapeId}`
+    const urlToTest = `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=${lastOffset}&shape_id=${shapeId}`
 
     // Make a first request such that response is cached
     const originalUpToDateRes = await fetch(urlToTest, {})
@@ -171,7 +172,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     )
     const lastOffset = originalRes.headers.get(CHUNK_LAST_OFFSET_HEADER)
     const shapeId = originalRes.headers.get(SHAPE_ID_HEADER)
-    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/?table=${issuesTableUrl}&offset=${lastOffset}&shape_id=${shapeId}`
+    const urlToTest = `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=${lastOffset}&shape_id=${shapeId}`
 
     // Make a first request such that response is cached
     const originalUpToDateRes = await fetch(urlToTest, {})
