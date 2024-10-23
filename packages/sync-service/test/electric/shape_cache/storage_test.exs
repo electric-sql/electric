@@ -11,17 +11,17 @@ defmodule Electric.ShapeCache.StorageTest do
 
   test "should pass through the calls to the storage module" do
     storage = {Mock.Storage, :opts}
-    shape_id = "test"
+    shape_handle = "test"
 
     Mock.Storage
-    |> Mox.stub(:for_shape, fn ^shape_id, :opts -> {shape_id, :opts} end)
-    |> Mox.expect(:make_new_snapshot!, fn _, {^shape_id, :opts} -> :ok end)
-    |> Mox.expect(:snapshot_started?, fn {^shape_id, :opts} -> true end)
-    |> Mox.expect(:get_snapshot, fn {^shape_id, :opts} -> {1, []} end)
-    |> Mox.expect(:append_to_log!, fn _, {^shape_id, :opts} -> :ok end)
-    |> Mox.expect(:get_log_stream, fn _, _, {^shape_id, :opts} -> [] end)
+    |> Mox.stub(:for_shape, fn ^shape_handle, :opts -> {shape_handle, :opts} end)
+    |> Mox.expect(:make_new_snapshot!, fn _, {^shape_handle, :opts} -> :ok end)
+    |> Mox.expect(:snapshot_started?, fn {^shape_handle, :opts} -> true end)
+    |> Mox.expect(:get_snapshot, fn {^shape_handle, :opts} -> {1, []} end)
+    |> Mox.expect(:append_to_log!, fn _, {^shape_handle, :opts} -> :ok end)
+    |> Mox.expect(:get_log_stream, fn _, _, {^shape_handle, :opts} -> [] end)
 
-    shape_storage = Storage.for_shape(shape_id, storage)
+    shape_storage = Storage.for_shape(shape_handle, storage)
 
     Storage.make_new_snapshot!([], shape_storage)
     Storage.snapshot_started?(shape_storage)
@@ -34,8 +34,8 @@ defmodule Electric.ShapeCache.StorageTest do
     storage = {Mock.Storage, :opts}
 
     Mock.Storage
-    |> Mox.stub(:for_shape, fn shape_id, :opts -> {shape_id, :opts} end)
-    |> Mox.expect(:get_log_stream, fn _, _, {_shape_id, :opts} -> [] end)
+    |> Mox.stub(:for_shape, fn shape_handle, :opts -> {shape_handle, :opts} end)
+    |> Mox.expect(:get_log_stream, fn _, _, {_shape_handle, :opts} -> [] end)
 
     l1 = LogOffset.new(26_877_408, 10)
     l2 = LogOffset.new(26_877_648, 0)

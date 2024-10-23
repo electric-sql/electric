@@ -3,7 +3,7 @@ import { describe, expect, assert, inject } from 'vitest'
 import { exec } from 'child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable } from './support/test-context'
-import { CHUNK_LAST_OFFSET_HEADER, SHAPE_ID_HEADER } from '../src/constants'
+import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
 
 // FIXME: pull from environment?
 const maxAge = 1 // seconds
@@ -83,7 +83,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     await insertIssues({ title: `foo` })
     const searchParams = new URLSearchParams({
       offset: initialRes.headers.get(`electric-chunk-last-offset`)!,
-      shape_id: initialRes.headers.get(`electric-shape-id`)!,
+      shape_handle: initialRes.headers.get(`electric-shape-handle`)!,
       live: `true`,
     })
 
@@ -136,8 +136,8 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
       {}
     )
     const lastOffset = originalRes.headers.get(CHUNK_LAST_OFFSET_HEADER)
-    const shapeId = originalRes.headers.get(SHAPE_ID_HEADER)
-    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_id=${shapeId}`
+    const shapeId = originalRes.headers.get(SHAPE_HANDLE_HEADER)
+    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_handle=${shapeId}`
 
     // Make a first request such that response is cached
     const originalUpToDateRes = await fetch(urlToTest, {})
@@ -170,8 +170,8 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
       {}
     )
     const lastOffset = originalRes.headers.get(CHUNK_LAST_OFFSET_HEADER)
-    const shapeId = originalRes.headers.get(SHAPE_ID_HEADER)
-    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_id=${shapeId}`
+    const shapeId = originalRes.headers.get(SHAPE_HANDLE_HEADER)
+    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_handle=${shapeId}`
 
     // Make a first request such that response is cached
     const originalUpToDateRes = await fetch(urlToTest, {})
@@ -213,9 +213,9 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
       {}
     )
     expect(client1Res.status).toBe(200)
-    const originalShapeId =
-      client1Res.headers.get(`electric-shape-id`) ?? undefined
-    assert(originalShapeId, `Should have shape ID`)
+    const originalHandleId =
+      client1Res.headers.get(`electric-shape-handle`) ?? undefined
+    assert(originalHandleId, `Should have shape handle`)
     expect(getCacheStatus(client1Res)).toBe(CacheStatus.MISS)
     //const messages = client1Res.status === 204 ? [] : await client1Res.json()
 
@@ -226,12 +226,13 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
       {}
     )
     expect(client2Res.status).toBe(200)
-    const shapeId2 = client2Res.headers.get(`electric-shape-id`) ?? undefined
+    const shapeHandle2 =
+      client2Res.headers.get(`electric-shape-handle`) ?? undefined
 
     expect(
-      originalShapeId,
-      `Shape ID changed but expected it to stay the same`
-    ).toBe(shapeId2)
+      originalHandleId,
+      `Shape handle changed but expected it to stay the same`
+    ).toBe(shapeHandle2)
 
     expect(getCacheStatus(client2Res)).toBe(CacheStatus.HIT)
 
@@ -239,13 +240,13 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
     assert(latestOffset, `latestOffset should be defined`)
 
     // Now GC the shape
-    await clearIssuesShape(originalShapeId)
+    await clearIssuesShape(originalHandleId)
 
     // Now try to go live
     // should tell you to go back to initial sync
     // because the shape is out of scope
     const liveRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${latestOffset}&shape_id=${originalShapeId}&live`,
+      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${latestOffset}&shape_handle=${originalHandleId}&live`,
       {}
     )
     expect(liveRes.status).toBe(409)
@@ -259,22 +260,24 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
 
     expect(newCacheIgnoredSyncRes.status).toBe(200)
     expect(getCacheStatus(newCacheIgnoredSyncRes)).toBe(CacheStatus.MISS)
-    const cacheBustedShapeId =
-      newCacheIgnoredSyncRes.headers.get(`electric-shape-id`)
-    assert(cacheBustedShapeId)
-    expect(cacheBustedShapeId).not.toBe(originalShapeId)
+    const cacheBustedShapeHandle = newCacheIgnoredSyncRes.headers.get(
+      `electric-shape-handle`
+    )
+    assert(cacheBustedShapeHandle)
+    expect(cacheBustedShapeHandle).not.toBe(originalHandleId)
 
-    // Then try do that and check that we get new shape id
+    // Then try do that and check that we get new shape handle
     const newInitialSyncRes = await fetch(
       `${proxyCacheBaseUrl}${redirectLocation}`,
       {}
     )
-    const cachedShapeId =
-      newInitialSyncRes.headers.get(`electric-shape-id`) ?? undefined
+    const cachedShapeHandle =
+      newInitialSyncRes.headers.get(`electric-shape-handle`) ?? undefined
     expect(newInitialSyncRes.status).toBe(200)
     expect(getCacheStatus(newInitialSyncRes)).toBe(CacheStatus.HIT)
-    expect(cachedShapeId, `Got old shape id that is out of scope`).not.toBe(
-      originalShapeId
-    )
+    expect(
+      cachedShapeHandle,
+      `Got old shape handle that is out of scope`
+    ).not.toBe(originalHandleId)
   })
 })
