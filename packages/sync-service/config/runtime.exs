@@ -89,6 +89,9 @@ database_ipv6_config =
 
 connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
 
+# TODO: make DATABASE_URL optional
+#       then only assign this config if it is provided
+#       then in applicaton.ex only create a tenant if these opts are provided
 config :electric, default_connection_opts: Electric.Utils.obfuscate_password(connection_opts)
 
 if default_tenant = env!("TENANT_ID", :string, nil) do
