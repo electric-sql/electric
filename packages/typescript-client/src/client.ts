@@ -159,6 +159,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #connected: boolean = false
   #shapeId?: string
   #schema?: Schema
+  #error?: unknown
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     validateOptions(options)
@@ -191,6 +192,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   get isUpToDate() {
     return this.#isUpToDate
+  }
+
+  get error() {
+    return this.#error
   }
 
   async start() {
@@ -232,13 +237,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         } catch (e) {
           if (e instanceof FetchBackoffAbortError) break // interrupted
           if (!(e instanceof FetchError)) throw e // should never happen
-          if (e.status == 400) {
-            // The request is invalid, most likely because the shape has been deleted.
-            // We should start from scratch, this will force the shape to be recreated.
-            this.#reset()
-            await this.#publish(e.json as Message<T>[])
-            continue
-          } else if (e.status == 409) {
+          if (e.status == 409) {
             // Upon receiving a 409, we should start from scratch
             // with the newly provided shape ID
             const newShapeId = e.headers[SHAPE_ID_HEADER]
@@ -250,7 +249,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
             this.#sendErrorToUpToDateSubscribers(e)
             this.#sendErrorToSubscribers(e)
 
-            // 400 errors are not actionable without additional user input, so we're throwing them.
+            // 400 errors are not actionable without additional user input,
+            // so we exit the loop
             throw e
           }
         }
@@ -301,6 +301,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
           }
         }
       }
+    } catch (err) {
+      this.#error = err
     } finally {
       this.#connected = false
     }

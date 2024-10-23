@@ -22,6 +22,11 @@ defmodule Electric.Plug.ServeShapePlug do
   # Control messages
   @up_to_date [Jason.encode!(%{headers: %{control: "up-to-date"}})]
   @must_refetch Jason.encode!([%{headers: %{control: "must-refetch"}}])
+  @shape_definition_mismatch Jason.encode!(%{
+                               message:
+                                 "The specified shape definition and ID do not match. " <>
+                                   "Please ensure the shape definition is correct or omit the shape ID from the request to obtain a new one."
+                             })
 
   defmodule TimeUtils do
     @oct9th2024 DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
@@ -236,7 +241,7 @@ defmodule Electric.Plug.ServeShapePlug do
       # thus the shape ID does not match the shape definition
       # and we return a 400 bad request status code
       conn
-      |> send_resp(400, @must_refetch)
+      |> send_resp(400, @shape_definition_mismatch)
       |> halt()
     else
       # The shape ID does not exist or no longer exists
@@ -269,10 +274,8 @@ defmodule Electric.Plug.ServeShapePlug do
     if Shapes.has_shape?(config, shape_id) do
       # The shape with the provided ID exists but does not match the shape definition
       # otherwise we would have found it and it would have matched the previous function clause
-      IO.puts("400 - SHAPE ID NOT FOUND")
-
       conn
-      |> send_resp(400, @must_refetch)
+      |> send_resp(400, @shape_definition_mismatch)
       |> halt()
     else
       # The requested shape_id is not found, returns 409 along with a location redirect for clients to
