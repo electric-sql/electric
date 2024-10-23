@@ -26,8 +26,8 @@ defmodule Electric.Client.Stream do
 
   @external_options [
     parser: [
-      type: :mod_arg,
-      default: {Electric.Client.ValueMapper, []},
+      type: {:or, [nil, :mod_arg]},
+      default: nil,
       doc: """
       A `{module, args}` tuple specifying the `Electric.Client.ValueMapper`
       implementation to use for mapping values from the sync stream into Elixir
@@ -87,7 +87,7 @@ defmodule Electric.Client.Stream do
           shape: Client.ShapeDefinition.t(),
           schema: Client.schema(),
           value_mapper_fun: Client.ValueMapper.mapper_fun(),
-          parser: {module(), term()},
+          parser: nil | {module(), term()},
           buffer: :queue.queue(),
           up_to_date?: boolean(),
           offset: Offset.t(),
@@ -313,7 +313,9 @@ defmodule Electric.Client.Stream do
   end
 
   defp generate_value_mapper(schema, stream) do
-    %{parser: {parser_module, parser_opts}} = stream
+    # by default the parser is defined in the shape definition, but we can
+    # override that in the stream config
+    {parser_module, parser_opts} = stream.parser || stream.shape.parser
 
     value_mapper_fun = parser_module.for_schema(schema, parser_opts)
 

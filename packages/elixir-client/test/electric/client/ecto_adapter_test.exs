@@ -73,34 +73,31 @@ defmodule Electric.Client.EctoAdapterTest do
     test "schema module" do
       query = TestTable
 
-      assert {%Electric.Client.ShapeDefinition{
-                table: @table_name,
-                where: nil
-              },
-              {EctoAdapter, TestTable}} =
-               EctoAdapter.shape_from_query!(query)
+      assert %Electric.Client.ShapeDefinition{
+               table: @table_name,
+               where: nil,
+               parser: {EctoAdapter, TestTable}
+             } = EctoAdapter.shape_from_query!(query)
     end
 
     test "full table" do
       query = from(t in TestTable)
 
-      assert {%Electric.Client.ShapeDefinition{
-                table: @table_name,
-                where: nil
-              },
-              {EctoAdapter, TestTable}} =
-               EctoAdapter.shape_from_query!(query)
+      assert %Electric.Client.ShapeDefinition{
+               table: @table_name,
+               where: nil,
+               parser: {EctoAdapter, TestTable}
+             } = EctoAdapter.shape_from_query!(query)
     end
 
     test "with where clause" do
       query = from(t in TestTable, where: t.price < 2.0 and t.amount > 3, select: t)
 
-      assert {%Electric.Client.ShapeDefinition{
-                table: @table_name,
-                where: ~s[(("cost" < 2.0) AND ("amount" > 3))]
-              },
-              {EctoAdapter, TestTable}} =
-               EctoAdapter.shape_from_query!(query)
+      assert %Electric.Client.ShapeDefinition{
+               table: @table_name,
+               where: ~s[(("cost" < 2.0) AND ("amount" > 3))],
+               parser: {EctoAdapter, TestTable}
+             } = EctoAdapter.shape_from_query!(query)
     end
 
     test "JOIN queries return an error" do
@@ -118,13 +115,12 @@ defmodule Electric.Client.EctoAdapterTest do
     end
 
     test "table namespaces" do
-      assert {%Electric.Client.ShapeDefinition{
-                namespace: "myapp",
-                table: "my_table",
-                where: nil
-              },
-              {EctoAdapter, NamespacedTable}} =
-               EctoAdapter.shape_from_query!(NamespacedTable)
+      assert %Electric.Client.ShapeDefinition{
+               namespace: "myapp",
+               table: "my_table",
+               where: nil,
+               parser: {EctoAdapter, NamespacedTable}
+             } = EctoAdapter.shape_from_query!(NamespacedTable)
     end
   end
 

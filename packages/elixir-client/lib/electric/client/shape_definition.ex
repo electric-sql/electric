@@ -10,7 +10,7 @@ defmodule Electric.Client.ShapeDefinition do
 
   @enforce_keys [:table]
 
-  defstruct [:namespace, :table, :columns, :where]
+  defstruct [:namespace, :table, :columns, :where, parser: {Electric.Client.ValueMapper, []}]
 
   @schema NimbleOptions.new!(
             where: [
@@ -25,6 +25,15 @@ defmodule Electric.Client.ShapeDefinition do
               default: nil,
               doc:
                 "The namespace the table belongs to. If `nil` then Postgres will use whatever schema is the default (usually `public`)."
+            ],
+            parser: [
+              type: :mod_arg,
+              default: {Electric.Client.ValueMapper, []},
+              doc: """
+              A `{module, args}` tuple specifying the `Electric.Client.ValueMapper`
+              implementation to use for mapping values from the sync stream into Elixir
+              terms.
+              """
             ]
           )
 
@@ -54,7 +63,8 @@ defmodule Electric.Client.ShapeDefinition do
        %__MODULE__{
          table: table_name,
          where: Access.get(opts, :where),
-         namespace: Access.get(opts, :namespace)
+         namespace: Access.get(opts, :namespace),
+         parser: Access.get(opts, :parser)
        }}
     end
   end

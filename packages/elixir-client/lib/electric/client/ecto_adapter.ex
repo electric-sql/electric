@@ -7,7 +7,7 @@ if Code.ensure_loaded?(Ecto) do
     @behaviour Electric.Client.ValueMapper
 
     @doc false
-    @spec shape_from_query!(Ecto.Queryable.t()) :: {ShapeDefinition.t(), {module(), module()}}
+    @spec shape_from_query!(Ecto.Queryable.t()) :: ShapeDefinition.t()
     def shape_from_query!(queryable) do
       query = Ecto.Queryable.to_query(queryable)
 
@@ -17,7 +17,11 @@ if Code.ensure_loaded?(Ecto) do
 
       where = where_clause(query)
 
-      {ShapeDefinition.new!(table_name, namespace: namespace, where: where), {__MODULE__, struct}}
+      ShapeDefinition.new!(table_name,
+        namespace: namespace,
+        where: where,
+        parser: {__MODULE__, struct}
+      )
     end
 
     defp table_name(%{from: %{prefix: prefix, source: {table_name, struct}}}) do
@@ -27,14 +31,18 @@ if Code.ensure_loaded?(Ecto) do
     defp where_clause(query) do
       %{from: %{source: {table_name, struct}}} = query
 
-      {query, [], _key} =
+      {query, bindings, _key} =
         Ecto.Query.Planner.plan(query, :all, Ecto.Adapters.Postgres)
 
+      dbg(bindings)
       {query, _} = Ecto.Query.Planner.normalize(query, :all, Ecto.Adapters.Postgres, 1)
+
+      dbg(query)
 
       query
       |> Electric.Client.EctoAdapter.Postgres.where(
-        {{quote_table(table_name), quote_table(table_name), struct}, []}
+        {{quote_table(table_name), quote_table(table_name), struct}, []},
+        bindings
       )
       |> case do
         [] -> nil
