@@ -24,6 +24,11 @@ If you already run a Managed Postgres in Digital Ocean, then it's a great idea t
 
 Digital Ocean provides [Managed Postgres](https://docs.digitalocean.com/products/databases/postgresql/). This has logical replication enabled and works with Electric out of the box.
 
+> [!Tip] Use <code>doadmin</code> for older Postgres versions
+> If you're using Postgres version 15 or lower, you will need to connect to Digital Ocean Managed Postgres as the default `doadmin` user, in order for Electric to establish a logical replication connection.
+>
+> (With later Postgres versions its fine to use the `doadmin` role to create other users and grant them `REPLICATION`).
+
 ### Deploy Electric
 
 Digital Ocean has a number of different ways to deploy web services. We recommend using a [Docker Droplet](https://marketplace.digitalocean.com/apps/docker).
