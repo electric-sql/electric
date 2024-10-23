@@ -78,8 +78,9 @@ if Code.ensure_loaded?(Ecto) do
     end
 
     defp expr({:^, [], [ix]}, sources, query, bindings) do
-      {value, _} = Enum.at(bindings, ix - 1)
-      expr(value, sources, query, bindings)
+      bindings
+      |> bound_value(ix)
+      |> expr(sources, query, bindings)
     end
 
     defp expr({{:., _, [{:&, _, [_idx]}, field]}, _, []}, _sources, _query, _bindings)
@@ -147,17 +148,14 @@ if Code.ensure_loaded?(Ecto) do
       |> parens_for_select
     end
 
-    defp expr({:values, _, [types, idx, num_rows]}, _, _query, _bindings) do
-      [?(, values_list(types, idx + 1, num_rows), ?)]
-    end
-
     defp expr({:literal, _, [literal]}, _sources, _query, _bindings) do
       quote_name(literal)
     end
 
-    defp expr({:splice, _, [{:^, _, [idx, length]}]}, _sources, _query, bindings) do
-      raise "handle splice"
-      Enum.map_join(1..length, ",", &"$#{idx + &1}")
+    defp expr({:splice, _, [{:^, _, [idx, length]}]}, sources, query, bindings) do
+      bindings
+      |> Enum.slice(idx - 1, length)
+      |> Enum.map_join(",", &expr(bound_value(&1), sources, query, bindings))
     end
 
     defp expr({:selected_as, _, [name]}, _sources, _query, _bindings) do
@@ -196,11 +194,6 @@ if Code.ensure_loaded?(Ecto) do
       aggregate = expr(agg, sources, query, bindings)
       [aggregate, " OVER " | quote_name(name)]
     end
-
-    # defp expr({:over, _, [agg, kw]}, sources, query) do
-    #   aggregate = expr(agg, sources, query)
-    #   [aggregate, " OVER ", window_exprs(kw, sources, query)]
-    # end
 
     defp expr({:{}, _, elems}, sources, query, bindings) do
       [?(, Enum.map_intersperse(elems, ?,, &expr(&1, sources, query, bindings)), ?)]
@@ -273,7 +266,7 @@ if Code.ensure_loaded?(Ecto) do
       ["ARRAY[", Enum.map_intersperse(list, ?,, &expr(&1, sources, query, bindings)), ?]]
     end
 
-    defp expr(%Decimal{} = decimal, _sources, _query, bindings) do
+    defp expr(%Decimal{} = decimal, _sources, _query, _bindings) do
       Decimal.to_string(decimal, :normal)
     end
 
@@ -307,6 +300,22 @@ if Code.ensure_loaded?(Ecto) do
       [Float.to_string(literal) | "::float"]
     end
 
+    defp expr(%NaiveDateTime{} = datetime, _sources, _query, _bindings) do
+      [?\', NaiveDateTime.to_iso8601(datetime), ?\' | "::timestamp"]
+    end
+
+    defp expr(%DateTime{utc_offset: 0, std_offset: 0} = datetime, _sources, _query, _bindings) do
+      [?\', DateTime.to_iso8601(datetime), ?\' | "::timestamptz"]
+    end
+
+    defp expr(%DateTime{} = datetime, _sources, query, _bindings) do
+      error!(query, "#{inspect(datetime)} is not in UTC")
+    end
+
+    defp expr(%Date{} = date, _sources, _query, _bindings) do
+      [?\', Date.to_iso8601(date), ?\' | "::date"]
+    end
+
     defp expr(expr, _sources, query, _bindings) do
       error!(query, "unsupported expression: #{inspect(expr)}")
     end
@@ -318,25 +327,6 @@ if Code.ensure_loaded?(Ecto) do
     defp json_extract_path(expr, path, sources, query, bindings) do
       path = Enum.map_intersperse(path, ?,, &escape_json/1)
       [?(, expr(expr, sources, query, bindings), "#>'{", path, "}')"]
-    end
-
-    defp values_list(types, idx, num_rows) do
-      rows = Enum.to_list(1..num_rows)
-
-      [
-        "VALUES ",
-        intersperse_reduce(rows, ?,, idx, fn _, idx ->
-          {value, idx} = values_expr(types, idx)
-          {[?(, value, ?)], idx}
-        end)
-        |> elem(0)
-      ]
-    end
-
-    defp values_expr(types, idx) do
-      intersperse_reduce(types, ?,, idx, fn {_field, type}, idx ->
-        {[?$, Integer.to_string(idx), ?:, ?: | tagged_to_db(type)], idx + 1}
-      end)
     end
 
     defp type_unless_typed(%Ecto.Query.Tagged{}, _type), do: []
@@ -400,21 +390,6 @@ if Code.ensure_loaded?(Ecto) do
       [?b, ?', val |> Integer.to_string(2) |> String.pad_leading(size, ["0"]), ?']
     end
 
-    defp intersperse_reduce(list, separator, user_acc, reducer, acc \\ [])
-
-    defp intersperse_reduce([], _separator, user_acc, _reducer, acc),
-      do: {acc, user_acc}
-
-    defp intersperse_reduce([elem], _separator, user_acc, reducer, acc) do
-      {elem, user_acc} = reducer.(elem, user_acc)
-      {[acc | elem], user_acc}
-    end
-
-    defp intersperse_reduce([elem | rest], separator, user_acc, reducer, acc) do
-      {elem, user_acc} = reducer.(elem, user_acc)
-      intersperse_reduce(rest, separator, user_acc, reducer, [acc, elem, separator])
-    end
-
     defp escape_string(value) when is_binary(value) do
       :binary.replace(value, "'", "''", [:global])
     end
@@ -466,6 +441,16 @@ if Code.ensure_loaded?(Ecto) do
 
     defp error!(query, message) do
       raise Ecto.QueryError, query: query, message: message
+    end
+
+    def bound_value({value, _cast}) do
+      value
+    end
+
+    def bound_value(bindings, idx) do
+      bindings
+      |> Enum.at(idx - 1)
+      |> bound_value()
     end
   end
 end

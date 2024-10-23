@@ -15,7 +15,7 @@ if Code.ensure_loaded?(Ecto) do
 
       {table_name, namespace, struct} = table_name(query)
 
-      where = where_clause(query)
+      where = where(query)
 
       ShapeDefinition.new!(table_name,
         namespace: namespace,
@@ -28,16 +28,14 @@ if Code.ensure_loaded?(Ecto) do
       {table_name, prefix, struct}
     end
 
-    defp where_clause(query) do
+    @doc false
+    def where(query) do
       %{from: %{source: {table_name, struct}}} = query
 
       {query, bindings, _key} =
         Ecto.Query.Planner.plan(query, :all, Ecto.Adapters.Postgres)
 
-      dbg(bindings)
       {query, _} = Ecto.Query.Planner.normalize(query, :all, Ecto.Adapters.Postgres, 1)
-
-      dbg(query)
 
       query
       |> Electric.Client.EctoAdapter.Postgres.where(
