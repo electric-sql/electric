@@ -3,8 +3,24 @@ defmodule Electric.TenantManager do
 
   # Public API
 
+  def name(electric_instance_id)
+      when is_binary(electric_instance_id) or is_atom(electric_instance_id) do
+    Electric.Application.process_name(electric_instance_id, "no tenant", __MODULE__)
+  end
+
+  def name([]) do
+    __MODULE__
+  end
+
+  def name(opts) do
+    Access.get(opts, :electric_instance_id, [])
+    |> name()
+  end
+
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: Access.get(opts, :name, __MODULE__))
+    GenServer.start_link(__MODULE__, opts,
+      name: Keyword.get_lazy(opts, :name, fn -> name(opts) end)
+    )
   end
 
   @doc """
@@ -16,7 +32,7 @@ defmodule Electric.TenantManager do
   @spec get_only_tenant(Keyword.t()) ::
           {:ok, Keyword.t()} | {:error, :not_found} | {:error, :several_tenants}
   def get_only_tenant(opts \\ []) do
-    server = Keyword.get(opts, :tenant_manager, __MODULE__)
+    server = Keyword.get(opts, :tenant_manager, name(opts))
     GenServer.call(server, :get_only_tenant)
   end
 
@@ -25,7 +41,7 @@ defmodule Electric.TenantManager do
   """
   @spec get_tenant(String.t(), Keyword.t()) :: {:ok, Keyword.t()} | {:error, :not_found}
   def get_tenant(tenant_id, opts \\ []) do
-    server = Keyword.get(opts, :tenant_manager, __MODULE__)
+    server = Keyword.get(opts, :tenant_manager, name(opts))
     GenServer.call(server, {:get_tenant, tenant_id})
   end
 
@@ -36,7 +52,8 @@ defmodule Electric.TenantManager do
           :ok | {:error, atom()}
   def create_tenant(tenant_id, connection_opts, opts \\ []) do
     app_config =
-      %{electric_instance_id: electric_instance_id} = Electric.Application.Configuration.get()
+      %{electric_instance_id: electric_instance_id} =
+      Keyword.get_lazy(opts, :app_config, fn -> Electric.Application.Configuration.get() end)
 
     inspector =
       Access.get(
@@ -59,22 +76,13 @@ defmodule Electric.TenantManager do
 
     storage = {storage_module, storage_opts}
 
-    {:ok, _} =
-      Electric.TenantSupervisor.start_tenant(
-        app_config: app_config,
-        electric_instance_id: electric_instance_id,
-        tenant_id: tenant_id,
-        connection_opts: connection_opts,
-        inspector: inspector,
-        storage: storage
-      )
-
     # Can't load pg_id here because the connection manager may still be busy
     # connecting to the DB so it might not be known yet
     # {pg_id, _} = Electric.Timeline.load_timeline(persistent_kv: persistent_kv)
     hostname = Access.fetch!(connection_opts, :hostname)
     port = Access.fetch!(connection_opts, :port)
-    pg_id = hostname <> ":" <> to_string(port)
+    database = Access.fetch!(connection_opts, :database)
+    pg_id = hostname <> ":" <> to_string(port) <> "/" <> database
 
     tenant = [
       electric_instance_id: electric_instance_id,
@@ -87,7 +95,9 @@ defmodule Electric.TenantManager do
          electric_instance_id: electric_instance_id,
          tenant_id: tenant_id,
          server: Electric.ShapeCache.name(electric_instance_id, tenant_id)},
-      get_service_status: fn -> Electric.ServiceStatus.check(electric_instance_id, tenant_id) end,
+      get_service_status: fn ->
+        Electric.ServiceStatus.check(electric_instance_id, tenant_id)
+      end,
       inspector: inspector,
       long_poll_timeout: 20_000,
       max_age: Application.fetch_env!(:electric, :cache_max_age),
@@ -96,7 +106,23 @@ defmodule Electric.TenantManager do
     ]
 
     # Store the tenant in the tenant manager
-    store_tenant(tenant, opts)
+    case store_tenant(tenant, opts) do
+      {:error, reason} ->
+        {:error, reason}
+
+      :ok ->
+        case Electric.TenantSupervisor.start_tenant(
+               app_config: app_config,
+               electric_instance_id: electric_instance_id,
+               tenant_id: tenant_id,
+               connection_opts: connection_opts,
+               inspector: inspector,
+               storage: storage
+             ) do
+          {:ok, _} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+    end
   end
 
   @doc """
@@ -104,7 +130,7 @@ defmodule Electric.TenantManager do
   """
   @spec store_tenant(Keyword.t(), Keyword.t()) :: :ok | {:error, atom()}
   def store_tenant(tenant, opts \\ []) do
-    server = Keyword.get(opts, :tenant_manager, __MODULE__)
+    server = Keyword.get(opts, :tenant_manager, name(opts))
 
     case GenServer.call(server, {:store_tenant, tenant}) do
       :tenant_already_exists -> {:error, :tenant_already_exists}
@@ -118,7 +144,7 @@ defmodule Electric.TenantManager do
   """
   @spec delete_tenant(String.t(), Keyword.t()) :: :ok
   def delete_tenant(tenant_id, opts \\ []) do
-    server = Keyword.get(opts, :tenant_manager, __MODULE__)
+    server = Keyword.get(opts, :tenant_manager, name(opts))
 
     case GenServer.call(server, {:get_tenant, tenant_id}) do
       {:ok, tenant} ->
