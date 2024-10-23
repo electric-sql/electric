@@ -20,10 +20,18 @@ defmodule Electric.Connection.Supervisor do
 
   use Supervisor
 
-  @name __MODULE__
+  def name(electric_instance_id, tenant_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  end
+
+  def name(opts) do
+    electric_instance_id = Access.fetch!(opts, :electric_instance_id)
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    name(electric_instance_id, tenant_id)
+  end
 
   def start_link(opts) do
-    Supervisor.start_link(__MODULE__, opts, name: @name)
+    Supervisor.start_link(__MODULE__, opts, name: name(opts))
   end
 
   def init(opts) do
@@ -54,6 +62,6 @@ defmodule Electric.Connection.Supervisor do
         restart: :temporary
       )
 
-    Supervisor.start_child(@name, child_spec)
+    Supervisor.start_child(name(opts), child_spec)
   end
 end
