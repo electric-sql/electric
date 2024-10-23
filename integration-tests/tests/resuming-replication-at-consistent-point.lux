@@ -29,10 +29,10 @@
 
 ## Initialize a couple of shapes so that Electric starts processing transactions from Postgres
 [shell client]
-  !curl -i http://localhost:3000/v1/shape/roots?offset=-1
+  !curl -i "http://localhost:3000/v1/shape?table=roots&offset=-1"
   ??200 OK
 
-  !curl -i http://localhost:3000/v1/shape/leaves?offset=-1
+  !curl -i "http://localhost:3000/v1/shape?table=leaves&offset=-1"
   ??200 OK
 
 ## Commit enough new transactions for shape storage to hit the simulated failure.
