@@ -136,7 +136,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == %{
                "offset" => ["has invalid format"],
-               "root_table" => [
+               "table" => [
                  "Invalid zero-length delimited identifier"
                ]
              }
@@ -152,7 +152,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "root_table" => ["table not found"]
+               "table" => ["table not found"]
              }
     end
 

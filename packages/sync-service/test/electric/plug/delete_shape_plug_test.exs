@@ -74,7 +74,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "root_table" => [
+               "table" => [
                  "Invalid zero-length delimited identifier"
                ]
              }
