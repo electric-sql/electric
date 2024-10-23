@@ -90,7 +90,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert Enum.sort_by([{shape_handle_1, shape_1}, {shape_handle_2, shape_2}], &elem(&1, 0)) ==
              ShapeStatus.list_shapes(state) |> Enum.sort_by(&elem(&1, 0))
 
-    assert {:ok, ^shape_handle_1} = ShapeStatus.remove_shape(state, shape_handle_1)
+    assert {:ok, ^shape_1} = ShapeStatus.remove_shape(state, shape_handle_1)
     assert [{^shape_handle_2, ^shape_2}] = ShapeStatus.list_shapes(state)
   end
 

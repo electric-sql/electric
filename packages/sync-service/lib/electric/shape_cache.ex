@@ -224,10 +224,10 @@ defmodule Electric.ShapeCache do
         %{shape_status: shape_status} = state
       ) do
     {{shape_handle, latest_offset}, state} =
-      if shape_state = shape_status.get_existing_shape(state.persistent_state, shape) do
+      if shape_state = shape_status.get_existing_shape(state.shape_status_state, shape) do
         {shape_state, state}
       else
-        {:ok, shape_handle} = shape_status.add_shape(state.persistent_state, shape)
+        {:ok, shape_handle} = shape_status.add_shape(state.shape_status_state, shape)
 
         {:ok, _pid, _snapshot_xmin, latest_offset} = start_shape(shape_handle, shape, state)
         {{shape_handle, latest_offset}, state}
@@ -249,7 +249,7 @@ defmodule Electric.ShapeCache do
   def handle_call({:truncate, shape_handle}, _from, state) do
     with :ok <- clean_up_shape(state, shape_handle) do
       Logger.info(
-        "Truncating and rotating shape id, previous shape id #{shape_handle} cleaned up"
+        "Truncating and rotating shape handle, previous shape handle #{shape_handle} cleaned up"
       )
     end
 

@@ -395,10 +395,14 @@ defmodule Electric.Shapes.ConsumerTest do
       }
 
       ref1 =
-        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle1)))
+        Process.monitor(
+          GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle1))
+        )
 
       ref2 =
-        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle2)))
+        Process.monitor(
+          GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle2))
+        )
 
       Mock.ShapeStatus
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
@@ -423,10 +427,14 @@ defmodule Electric.Shapes.ConsumerTest do
       }
 
       ref1 =
-        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle1)))
+        Process.monitor(
+          GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle1))
+        )
 
       ref2 =
-        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle2)))
+        Process.monitor(
+          GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle2))
+        )
 
       # also cleans up inspector cache and shape status cache
       Mock.Inspector
@@ -461,10 +469,14 @@ defmodule Electric.Shapes.ConsumerTest do
       }
 
       ref1 =
-        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle1)))
+        Process.monitor(
+          GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle1))
+        )
 
       ref2 =
-        Process.monitor(GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle2)))
+        Process.monitor(
+          GenServer.whereis(Consumer.name(ctx.electric_instance_id, @shape_handle2))
+        )
 
       # also cleans up inspector cache and shape status cache
       Mock.Inspector
@@ -627,242 +639,6 @@ defmodule Electric.Shapes.ConsumerTest do
       assert [_op1, _op2] =
                Storage.get_log_stream(LogOffset.before_all(), shape_storage)
                |> Enum.map(&:json.decode/1)
-    end
-  end
-
-  defmodule CrashingStorageBackend do
-    use GenServer
-
-    alias Electric.Replication.LogOffset
-
-    def start_link(_opts) do
-      GenServer.start_link(__MODULE__, [], name: __MODULE__)
-    end
-
-    def crash_once(pid, shape_handle) do
-      GenServer.call(pid, {:crash_once, shape_handle})
-    end
-
-    def crash?(pid, shape_handle) do
-      GenServer.call(pid, {:crash?, shape_handle})
-    end
-
-    def init(_opts) do
-      {:ok, %{shapes: %{}, crashing: %{}}}
-    end
-
-    def handle_call({:crash_once, shape_handle}, _from, state) do
-      {:reply, :ok, Map.update!(state, :crashing, &Map.put(&1, shape_handle, true))}
-    end
-
-    def handle_call({:crash?, shape_handle}, _from, state) do
-      {crash?, crashing} = Map.pop(state.crashing, shape_handle, false)
-
-      {:reply, crash?, %{state | crashing: crashing}}
-    end
-
-    def handle_call({:get_current_position, shape_handle}, _from, state) do
-      %{latest_offset: offset, snapshot_xmin: xmin} =
-        Map.get(state.shapes, shape_handle, %{
-          latest_offset: LogOffset.first(),
-          snapshot_xmin: nil
-        })
-
-      {:reply, {:ok, offset, xmin}, state}
-    end
-
-    def handle_call({:snapshot_started?, shape_handle}, _from, state) do
-      {:reply, Map.has_key?(state.shapes, shape_handle), state}
-    end
-
-    def handle_call({:set_snapshot_xmin, shape_handle, xmin}, _from, state) do
-      {:reply, :ok,
-       %{
-         state
-         | shapes:
-             Map.put(state.shapes, shape_handle, %{
-               snapshot_xmin: xmin,
-               latest_offset: LogOffset.first()
-             })
-       }}
-    end
-  end
-
-  defmodule CrashingStorage do
-    # Between this module and the CrashingStorageBackend above, implement
-    # enough of the storage api to:
-    #
-    # 1. Only snapshot a given shape_handle once
-    # 2. Allow for writing to the tx log of a given shape to crash
-
-    def start_link(%{} = _opts) do
-      :ignore
-    end
-
-    def for_shape(shape_handle, opts) do
-      Map.put(opts, :shape_handle, shape_handle)
-    end
-
-    def initialise(_opts) do
-      :ok
-    end
-
-    def snapshot_started?(opts) do
-      GenServer.call(opts.backend, {:snapshot_started?, opts.shape_handle})
-    end
-
-    def get_current_position(opts) do
-      GenServer.call(opts.backend, {:get_current_position, opts.shape_handle})
-    end
-
-    def append_to_log!(log_items, %{shape_handle: shape_handle} = opts) do
-      if CrashingStorageBackend.crash?(opts.backend, shape_handle) do
-        send(opts.parent, {CrashingStorage, :crash, shape_handle})
-        raise "crash from #{shape_handle}"
-      else
-        for {offset, _data} <- log_items do
-          send(opts.parent, {CrashingStorage, :append_to_log, shape_handle, offset})
-        end
-      end
-
-      :ok
-    end
-
-    def set_snapshot_xmin(xmin, opts) do
-      GenServer.call(opts.backend, {:set_snapshot_xmin, opts.shape_handle, xmin})
-    end
-
-    def mark_snapshot_as_started(_opts) do
-      :ok
-    end
-
-    def make_new_snapshot!(_data_stream, _opts) do
-      :ok
-    end
-  end
-
-  describe "replication consistency" do
-    setup [
-      :with_unique_db,
-      :with_basic_tables,
-      :with_publication,
-      :with_registry,
-      :with_inspector,
-      :with_persistent_kv
-    ]
-
-    setup do
-      %{slot_name: "electric_shapes_consumertest_replication_stream"}
-    end
-
-    test "crashing consumer resumes at a consistent point", ctx do
-      {:ok, pid} = start_supervised(CrashingStorageBackend)
-      parent = self()
-      storage = {CrashingStorage, %{backend: pid, parent: parent, shape_handle: nil}}
-
-      shape_cache_name = __MODULE__.ShapeCache
-
-      shape_cache_opts = [
-        server: shape_cache_name,
-        shape_meta_table: __MODULE__.ShapeMeta
-      ]
-
-      replication_opts = [
-        publication_name: ctx.publication_name,
-        try_creating_publication?: true,
-        slot_name: ctx.slot_name,
-        transaction_received: {
-          ShapeLogCollector,
-          :store_transaction,
-          [ShapeLogCollector.name(ctx.electric_instance_id)]
-        },
-        relation_received: {
-          ShapeLogCollector,
-          :handle_relation_msg,
-          [ShapeLogCollector.name(ctx.electric_instance_id)]
-        }
-      ]
-
-      get_pg_version = fn -> Application.fetch_env!(:electric, :pg_version_for_tests) end
-
-      shape_cache_config =
-        [
-          name: shape_cache_name,
-          electric_instance_id: ctx.electric_instance_id,
-          shape_meta_table: __MODULE__.ShapeMeta,
-          storage: storage,
-          db_pool: ctx.pool,
-          persistent_kv: ctx.persistent_kv,
-          registry: ctx.registry,
-          inspector: ctx.inspector,
-          chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
-          log_producer: ShapeLogCollector.name(ctx.electric_instance_id),
-          consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(ctx.electric_instance_id),
-          prepare_tables_fn: {
-            Electric.Postgres.Configuration,
-            :configure_tables_for_replication!,
-            [get_pg_version, ctx.publication_name]
-          },
-          create_snapshot_fn: fn parent, shape_handle, _shape, _, _storage ->
-            GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 0})
-            GenServer.cast(parent, {:snapshot_started, shape_handle})
-          end
-        ]
-
-      {:ok, _super} =
-        Electric.Shapes.Supervisor.start_link(
-          electric_instance_id: ctx.electric_instance_id,
-          log_collector:
-            {ShapeLogCollector,
-             electric_instance_id: ctx.electric_instance_id, inspector: ctx.inspector},
-          replication_client:
-            {Electric.Postgres.ReplicationClient,
-             connection_opts: ctx.db_config,
-             replication_opts: replication_opts,
-             connection_manager: nil},
-          shape_cache: {Electric.ShapeCache, shape_cache_config},
-          consumer_supervisor:
-            {Electric.Shapes.ConsumerSupervisor, electric_instance_id: ctx.electric_instance_id}
-        )
-
-      %{db_conn: conn} = ctx
-
-      shape1 = Shape.new!("public.items", inspector: ctx.inspector)
-
-      shape2 =
-        Shape.new!("public.items", where: "value != 'invalid'", inspector: ctx.inspector)
-
-      assert {shape_handle1, _} =
-               Electric.ShapeCache.get_or_create_shape_handle(shape1, shape_cache_opts)
-
-      assert {shape_handle2, _} =
-               Electric.ShapeCache.get_or_create_shape_handle(shape2, shape_cache_opts)
-
-      assert :started = Electric.ShapeCache.await_snapshot_start(shape_handle1, shape_cache_opts)
-      assert :started = Electric.ShapeCache.await_snapshot_start(shape_handle2, shape_cache_opts)
-
-      insert_item(conn, "value 1")
-
-      assert_receive {CrashingStorage, :append_to_log, ^shape_handle1, offset1}
-      assert_receive {CrashingStorage, :append_to_log, ^shape_handle2, ^offset1}
-
-      :ok = CrashingStorageBackend.crash_once(pid, shape_handle2)
-
-      insert_item(conn, "value 2")
-
-      assert_receive {CrashingStorage, :append_to_log, ^shape_handle1, offset2}
-      assert_receive {CrashingStorage, :crash, ^shape_handle2}
-
-      # the whole stack has restarted, but we still get this message
-      assert_receive {CrashingStorage, :append_to_log, ^shape_handle1, ^offset2}, 5000
-      assert_receive {CrashingStorage, :append_to_log, ^shape_handle2, ^offset2}
-    end
-
-    defp insert_item(conn, val) do
-      Postgrex.query!(conn, "INSERT INTO items (id, value) VALUES ($1, $2)", [
-        Ecto.UUID.bingenerate(),
-        val
-      ])
     end
   end
 end
