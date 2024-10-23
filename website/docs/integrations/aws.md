@@ -26,7 +26,7 @@ AWS provides Postgres hosting via RDS and Aurora. Electric works with either. Yo
 
 The default `wal_level` is `minimal` for RDS and `replica` for Aurora. It can be changed to `logical` by creating a [custom parameter group](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithParamGroups.html) for the RDS instance (or the Aurora DB cluster) and setting the value of the `rds.logical_replication` parameter to `1` and rebooting the instance.
 
-The default `postgres` user has `REPLICATION` priviledge. If you need to add to a user you can grant the `rds_replication` role, for example:
+The default `postgres` user has the `REPLICATION` role. If you need to add it to another user you can do so by granting the `rds_replication` role, e.g.:
 
 ```sql
 GRANT rds_replication TO someuser;
