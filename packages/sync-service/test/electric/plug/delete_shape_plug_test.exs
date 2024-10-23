@@ -56,7 +56,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   describe "DeleteShapePlug" do
     test "returns 404 if shape deletion is not allowed" do
       conn =
-        conn("DELETE", "?root_table=.invalid_shape", false)
+        conn("DELETE", "?table=.invalid_shape", false)
         |> DeleteShapePlug.call([])
 
       assert conn.status == 404
@@ -68,7 +68,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
     test "returns 400 for invalid params" do
       conn =
-        conn("DELETE", "?root_table=.invalid_shape")
+        conn("DELETE", "?table=.invalid_shape")
         |> DeleteShapePlug.call([])
 
       assert conn.status == 400
@@ -86,7 +86,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       |> expect(:clean_shape, fn @test_shape_id, _ -> :ok end)
 
       conn =
-        conn(:delete, "?root_table=public.users")
+        conn(:delete, "?table=public.users")
         |> DeleteShapePlug.call([])
 
       assert conn.status == 202
@@ -97,7 +97,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       |> expect(:clean_shape, fn @test_shape_id, _ -> :ok end)
 
       conn =
-        conn(:delete, "?root_table=public.users&shape_id=#{@test_shape_id}")
+        conn(:delete, "?table=public.users&shape_id=#{@test_shape_id}")
         |> DeleteShapePlug.call([])
 
       assert conn.status == 202

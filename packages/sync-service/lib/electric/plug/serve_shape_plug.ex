@@ -65,7 +65,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
     @primary_key false
     embedded_schema do
-      field(:root_table, :string)
+      field(:table, :string)
       field(:offset, :string)
       field(:shape_id, :string)
       field(:live, :boolean, default: false)
@@ -79,7 +79,7 @@ defmodule Electric.Plug.ServeShapePlug do
       |> cast(params, __schema__(:fields) -- [:shape_definition],
         message: fn _, _ -> "must be %{type}" end
       )
-      |> validate_required([:root_table, :offset])
+      |> validate_required([:table, :offset])
       |> cast_offset()
       |> cast_columns()
       |> validate_shape_id_with_offset()
@@ -154,7 +154,7 @@ defmodule Electric.Plug.ServeShapePlug do
     end
 
     def cast_root_table(%Ecto.Changeset{} = changeset, opts) do
-      table = fetch_change!(changeset, :root_table)
+      table = fetch_change!(changeset, :table)
       where = fetch_field!(changeset, :where)
       columns = get_change(changeset, :columns, nil)
 
@@ -268,7 +268,7 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp handle_shape_info(
-         %Conn{assigns: %{shape_id: shape_id, config: config}} = conn,
+         %Conn{assigns: %{shape_id: shape_id, table: table, config: config}} = conn,
          {active_shape_id, _}
        ) do
     if Shapes.has_shape?(config, shape_id) do
@@ -288,7 +288,7 @@ defmodule Electric.Plug.ServeShapePlug do
       |> put_resp_header("electric-shape-id", active_shape_id)
       |> put_resp_header(
         "location",
-        "#{conn.request_path}?shape_id=#{active_shape_id}&offset=-1"
+        "#{conn.request_path}?table=#{table}&shape_id=#{active_shape_id}&offset=-1"
       )
       |> send_resp(409, @must_refetch)
       |> halt()
@@ -610,7 +610,7 @@ defmodule Electric.Plug.ServeShapePlug do
     %{
       "shape.id" => shape_id,
       "shape.where" => assigns[:where],
-      "shape.root_table" => assigns[:root_table],
+      "shape.root_table" => assigns[:table],
       "shape.definition" => assigns[:shape_definition],
       "shape_req.is_live" => assigns[:live],
       "shape_req.offset" => assigns[:offset],

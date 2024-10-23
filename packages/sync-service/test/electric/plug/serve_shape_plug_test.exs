@@ -129,7 +129,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "returns 400 for invalid params" do
       conn =
-        conn(:get, %{"root_table" => ".invalid_shape"}, "?offset=invalid")
+        conn(:get, %{"table" => ".invalid_shape"}, "?offset=invalid")
         |> ServeShapePlug.call([])
 
       assert conn.status == 400
@@ -146,7 +146,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       # this will pass table name validation
       # but will fail to find the table
       conn =
-        conn(:get, %{"root_table" => "_val1d_schëmaΦ$.Φtàble"}, "?offset=-1")
+        conn(:get, %{"table" => "_val1d_schëmaΦ$.Φtàble"}, "?offset=-1")
         |> ServeShapePlug.call([])
 
       assert conn.status == 400
@@ -158,7 +158,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "returns 400 for missing shape_id when offset != -1" do
       conn =
-        conn(:get, %{"root_table" => "public.users"}, "?offset=#{LogOffset.first()}")
+        conn(:get, %{"table" => "public.users"}, "?offset=#{LogOffset.first()}")
         |> ServeShapePlug.call([])
 
       assert conn.status == 400
@@ -172,7 +172,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn =
         conn(
           :get,
-          %{"root_table" => "public.users"},
+          %{"table" => "public.users"},
           "?offset=#{LogOffset.before_all()}&live=true"
         )
         |> ServeShapePlug.call([])
@@ -207,7 +207,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end)
 
       conn =
-        conn(:get, %{"root_table" => "public.users"}, "?offset=-1")
+        conn(:get, %{"table" => "public.users"}, "?offset=-1")
         |> ServeShapePlug.call([])
 
       assert conn.status == 200
@@ -255,7 +255,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       stale_age = 312
 
       conn =
-        conn(:get, %{"root_table" => "public.users"}, "?offset=-1")
+        conn(:get, %{"table" => "public.users"}, "?offset=-1")
         |> put_in_config(:max_age, max_age)
         |> put_in_config(:stale_age, stale_age)
         |> ServeShapePlug.call([])
@@ -290,7 +290,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end)
 
       conn =
-        conn(:get, %{"root_table" => "public.users"}, "?offset=-1")
+        conn(:get, %{"table" => "public.users"}, "?offset=-1")
         |> ServeShapePlug.call([])
 
       assert Plug.Conn.get_resp_header(conn, "electric-schema") == [
@@ -323,7 +323,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn =
         conn(
           :get,
-          %{"root_table" => "public.users"},
+          %{"table" => "public.users"},
           "?offset=#{@start_offset_50}&shape_id=#{@test_shape_id}"
         )
         |> ServeShapePlug.call([])
@@ -374,7 +374,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn =
         conn(
           :get,
-          %{"root_table" => "public.users"},
+          %{"table" => "public.users"},
           "?offset=#{@start_offset_50}&shape_id=#{@test_shape_id}"
         )
         |> put_req_header(
@@ -415,7 +415,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         Task.async(fn ->
           conn(
             :get,
-            %{"root_table" => "public.users"},
+            %{"table" => "public.users"},
             "?offset=#{@test_offset}&shape_id=#{@test_shape_id}&live=true"
           )
           |> ServeShapePlug.call([])
@@ -472,7 +472,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         Task.async(fn ->
           conn(
             :get,
-            %{"root_table" => "public.users"},
+            %{"table" => "public.users"},
             "?offset=#{@test_offset}&shape_id=#{@test_shape_id}&live=true"
           )
           |> ServeShapePlug.call([])
@@ -516,7 +516,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn =
         conn(
           :get,
-          %{"root_table" => "public.users"},
+          %{"table" => "public.users"},
           "?offset=#{@test_offset}&shape_id=#{@test_shape_id}&live=true"
         )
         |> put_in_config(:long_poll_timeout, 100)
@@ -546,7 +546,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn =
         conn(
           :get,
-          %{"root_table" => "public.users"},
+          %{"table" => "public.users"},
           "?offset=#{"50_12"}&shape_id=foo"
         )
         |> ServeShapePlug.call([])
@@ -555,7 +555,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
       assert get_resp_header(conn, "electric-shape-id") == [@test_shape_id]
-      assert get_resp_header(conn, "location") == ["/?shape_id=#{@test_shape_id}&offset=-1"]
+
+      assert get_resp_header(conn, "location") == [
+               "/?table=public.users&shape_id=#{@test_shape_id}&offset=-1"
+             ]
     end
 
     test "creates a new shape when shape ID does not exist and sends a 409 redirecting to the newly created shape" do
@@ -574,7 +577,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn =
         conn(
           :get,
-          %{"root_table" => "public.users"},
+          %{"table" => "public.users"},
           "?offset=#{"50_12"}&shape_id=#{@test_shape_id}"
         )
         |> ServeShapePlug.call([])
@@ -583,7 +586,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
       assert get_resp_header(conn, "electric-shape-id") == [new_shape_id]
-      assert get_resp_header(conn, "location") == ["/?shape_id=#{new_shape_id}&offset=-1"]
+
+      assert get_resp_header(conn, "location") == [
+               "/?table=public.users&shape_id=#{new_shape_id}&offset=-1"
+             ]
     end
 
     test "sends 400 when shape ID does not match shape definition" do
@@ -597,7 +603,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn =
         conn(
           :get,
-          %{"root_table" => "public.users"},
+          %{"table" => "public.users"},
           "?offset=#{"50_12"}&shape_id=#{@test_shape_id}"
         )
         |> ServeShapePlug.call([])
@@ -615,7 +621,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn =
         conn(
           :get,
-          %{"root_table" => "public.users", "columns" => "value"},
+          %{"table" => "public.users", "columns" => "value"},
           "?offset=-1"
         )
         |> ServeShapePlug.call([])
@@ -631,7 +637,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn =
         conn(
           :get,
-          %{"root_table" => "public.users", "columns" => "id,invalid"},
+          %{"table" => "public.users", "columns" => "id,invalid"},
           "?offset=-1"
         )
         |> ServeShapePlug.call([])
