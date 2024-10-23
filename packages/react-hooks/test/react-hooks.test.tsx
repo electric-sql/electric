@@ -122,6 +122,7 @@ describe(`useShape`, () => {
     )
 
     await waitFor(() => expect(result.current.data).not.toEqual([]))
+    await sleep(100) // TODO: remove later, just testing if this improves flakes
 
     // Add an item.
     const [id2] = await insertIssues({ title: `other row` })
