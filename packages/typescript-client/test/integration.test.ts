@@ -820,7 +820,7 @@ describe(`HTTP Sync`, () => {
     const invalidIssueStream = new ShapeStream<IssueRow>({
       url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
       subscribe: true,
-      shapeId: issueStream.shapeId,
+      shapeHandle: issueStream.shapeHandle,
       where: `1=1`,
     })
 
