@@ -302,7 +302,7 @@ defmodule Electric.Client do
   @doc """
   Get authentication query parameters for the given `#{ShapeDefinition}`.
   """
-  @spec authenticate_shape(t(), ShapeDefinition.t()) :: Client.Authenticator.params()
+  @spec authenticate_shape(t(), ShapeDefinition.t()) :: Client.Authenticator.headers()
   def authenticate_shape(%Client{authenticator: {module, config}}, %ShapeDefinition{} = shape) do
     module.authenticate_shape(shape, config)
   end
@@ -318,6 +318,8 @@ defmodule Electric.Client do
   end
 
   defp validate_queryable!(queryable) when is_atom(queryable) do
+    Code.ensure_loaded!(queryable)
+
     if function_exported?(queryable, :__schema__, 1) do
       queryable
     else

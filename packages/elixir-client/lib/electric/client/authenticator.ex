@@ -3,7 +3,7 @@ defmodule Electric.Client.Authenticator do
   Behaviour to authenticate a `Electric.Client.Fetch.Request`.
 
   The assumption here is that authentication is per
-  [`ShapeDefinition`](`#{ShapeDefinition}`) not per request.
+  [`ShapeDefinition`](`Electric.Client.ShapeDefinition`) not per request.
   """
 
   alias Electric.Client.Fetch.Request
@@ -12,7 +12,7 @@ defmodule Electric.Client.Authenticator do
   @type headers :: Request.headers()
 
   @doc """
-  Update the given `Request` struct with authentication parameters.
+  Update the given `Request` struct with authentication headers.
 
   Independent of the actual authentication mechanism, implementations of this
   Behaviour **MUST** set the `authenticated` field in the `Request` to `true`.
