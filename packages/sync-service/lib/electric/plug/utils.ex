@@ -47,6 +47,37 @@ defmodule Electric.Plug.Utils do
     end)
   end
 
+  @doc """
+  Calculate the next interval that should be used for long polling based on the
+  current time and previous interval used.
+  """
+  @oct9th2024 DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
+  @spec seconds_since_oct9th_2024_next_interval(integer(), binary() | nil) :: integer()
+  def seconds_since_oct9th_2024_next_interval(long_poll_timeout_ms, prev_interval \\ nil) do
+    case div(long_poll_timeout_ms, 1000) do
+      0 ->
+        0
+
+      long_poll_timeout_sec ->
+        now = DateTime.utc_now()
+
+        diff_in_seconds = DateTime.diff(now, @oct9th2024, :second)
+        next_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
+
+        # randomize the interval if previous one is the same
+        next_interval =
+          if prev_interval && "#{next_interval}" == prev_interval do
+            # Generate a random integer between 0 and 99999
+            random_integer = :rand.uniform(100_000)
+            next_interval + random_integer
+          else
+            next_interval
+          end
+
+        next_interval
+    end
+  end
+
   defmodule CORSHeaderPlug do
     @behaviour Plug
     import Plug.Conn
