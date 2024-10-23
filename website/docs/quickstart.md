@@ -42,7 +42,7 @@ curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
 ::: info A bit of explanation about the URL structure.
 
 - `/v1/shape` is a standard prefix with the API version and the shape sync endpoint path
-- `foo` is the name of the [`root_table`](/docs/guides/shapes#root-table) of the shape (and is required); if you wanted to sync data from the `items` table, you would change the path to `/v1/shape?table=items`
+- `foo` is the name of the [`table`](/docs/guides/shapes#table) of the shape (and is required); if you wanted to sync data from the `items` table, you would change the path to `/v1/shape?table=items`
 - `offset=-1` means we're asking for the *entire* Shape as we don't have any of the data cached locally yet. If we had previously fetched the shape and wanted to see if there were any updates, we'd set the offset to the last offset we'd already seen.
 :::
 
