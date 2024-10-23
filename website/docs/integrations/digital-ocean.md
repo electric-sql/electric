@@ -25,9 +25,9 @@ If you already run a Managed Postgres in Digital Ocean, then it's a great idea t
 Digital Ocean provides [Managed Postgres](https://docs.digitalocean.com/products/databases/postgresql/). This has logical replication enabled and works with Electric out of the box.
 
 > [!Tip] Use <code>doadmin</code> for older Postgres versions
-> If you're using Postgres version 15 or lower, you will need to connect to Digital Ocean Managed Postgres as the default `doadmin` user, in order for Electric to establish a logical replication connection.
+> If you're using Postgres version 15 or lower, you will need to connect to your Managed Postgres as the `doadmin` user. This is the default user and the only user with the `REPLICATION` role.
 >
-> (With later Postgres versions its fine to use the `doadmin` role to create other users and grant them `REPLICATION`).
+> (With later Postgres versions its fine to create other users and use the `doadmin` user to grant them the `REPLICATION` role).
 
 ### Deploy Electric
 
@@ -131,4 +131,4 @@ $ curl http://YOUR_IP_ADDRESS/v1/health
 
 ### Deploy your app
 
-You can [your client app to Digital Ocean using App Platform](https://www.digitalocean.com/community/tutorials/how-to-deploy-a-static-website-to-the-cloud-with-digitalocean-app-platform).
+You can deploy [your client app to Digital Ocean using App Platform](https://www.digitalocean.com/community/tutorials/how-to-deploy-a-static-website-to-the-cloud-with-digitalocean-app-platform).

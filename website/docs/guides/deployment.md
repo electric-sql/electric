@@ -54,7 +54,7 @@ This includes Postgres you host yourself, or Postgres hosted by managed database
 - [Digital Ocean](/docs/integrations/digital-ocean)
 - [Crunchy](/docs/integrations/crunchy)
 
-Postgres must have [logical replication](https://www.postgresql.org/docs/current/logical-replication-config.html) enabled. You also need to connect as a database user that has the [`REPLICATION`](https://www.postgresql.org/docs/current/logical-replication-security.html) privilege.
+Postgres must have [logical replication](https://www.postgresql.org/docs/current/logical-replication-config.html) enabled. You also need to connect as a database user that has the [`REPLICATION`](https://www.postgresql.org/docs/current/logical-replication-security.html) role.
 
 ### Data model compatibility
 
