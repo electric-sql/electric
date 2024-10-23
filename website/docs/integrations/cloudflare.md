@@ -108,7 +108,7 @@ You can see a demo of this pattern, using SQLite to persist the Shape data, at [
 />
 
 > [!Tip] Combining CDN and Durable Objects
-> Note that if you sync data into a Durable Object (or a Worker) [from Cloudflare's CDN](#cdn) it can be *extremely fast* &mdash; with very high bandwidth and very low network latency.
+> Note that if you sync data into a Durable Object (or a Worker) [from Cloudflare's CDN](#cdn) it can be *extremely fast* &mdash; with high bandwidth and low network latency.
 
 <HelpWanted issue="1884">
   example apps using Cloudflare and/or wrap up the code samples above into a library.
