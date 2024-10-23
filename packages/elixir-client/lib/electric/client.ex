@@ -220,11 +220,23 @@ defmodule Electric.Client do
   @doc """
   A shortcut to `ShapeDefinition.new!/2`.
   """
-  @spec shape!(String.t(), ShapeDefinition.options()) :: ShapeDefinition.t() | no_return()
   def shape!(table_name, opts \\ [])
 
-  def shape!(table_name, opts) do
+  @spec shape!(String.t(), ShapeDefinition.options()) :: ShapeDefinition.t() | no_return()
+  def shape!(table_name, opts) when is_binary(table_name) do
     ShapeDefinition.new!(table_name, opts)
+  end
+
+  if Code.ensure_loaded?(Ecto) do
+    def shape!(queryable, _opts) when is_atom(queryable) do
+      queryable
+      |> validate_queryable!()
+      |> Electric.Client.EctoAdapter.shape_from_query!()
+    end
+
+    def shape!(%Ecto.Query{} = query, _opts) do
+      Electric.Client.EctoAdapter.shape_from_query!(query)
+    end
   end
 
   @doc """
@@ -243,17 +255,14 @@ defmodule Electric.Client do
 
   if Code.ensure_loaded?(Ecto) do
     def stream(%Client{} = client, queryable, opts) when is_atom(queryable) do
-      if function_exported?(queryable, :__schema__, 1) do
-        {shape_definition, parser} = Electric.Client.EctoAdapter.shape_from_query!(queryable)
-        stream(client, shape_definition, Keyword.put(opts, :parser, parser))
-      else
-        raise ArgumentError, message: "Expected Ecto struct or query, got #{inspect(queryable)}"
-      end
+      shape_definition = shape!(queryable)
+
+      stream(client, shape_definition, opts)
     end
 
     def stream(%Client{} = client, %Ecto.Query{} = query, opts) do
-      {shape_definition, parser} = Electric.Client.EctoAdapter.shape_from_query!(query)
-      stream(client, shape_definition, Keyword.put(opts, :parser, parser))
+      shape_definition = shape!(query)
+      stream(client, shape_definition, opts)
     end
   end
 
@@ -306,5 +315,13 @@ defmodule Electric.Client do
   def delete_shape(%Client{} = client, %ShapeDefinition{} = shape) do
     request = request(client, method: :delete, shape: shape)
     Electric.Client.Fetch.Request.request(client, request)
+  end
+
+  defp validate_queryable!(queryable) when is_atom(queryable) do
+    if function_exported?(queryable, :__schema__, 1) do
+      queryable
+    else
+      raise ArgumentError, message: "Expected Ecto struct or query, got #{inspect(queryable)}"
+    end
   end
 end
