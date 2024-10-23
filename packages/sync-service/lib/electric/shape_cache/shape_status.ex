@@ -121,7 +121,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     ])
   end
 
-  @spec remove_shape(t(), shape_handle()) :: {:ok, t()} | {:error, term()}
+  @spec remove_shape(t(), Shape.t()) :: {:ok, t()} | {:error, term()}
   def remove_shape(state, shape_handle) do
     try do
       shape =
