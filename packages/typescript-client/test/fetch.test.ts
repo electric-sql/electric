@@ -297,7 +297,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(result).toBe(initialResponse)
 
     // fetch the next chunk as well
-    const nextUrl = `${baseUrl}?shape_id=123&offset=456`
+    const nextUrl = `${baseUrl}&shape_id=123&offset=456`
     const nextResult = await fetchWrapper(nextUrl)
     expect(nextResult).toBe(nextResponse)
 
@@ -370,7 +370,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledTimes(2)
 
     // requesting a different path should clear the prefetches
-    const altUrl = `${baseUrl}/bar`
+    const altUrl = `${baseUrl}_alt`
     await fetchWrapper(altUrl)
     await sleep()
 
@@ -389,12 +389,12 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenNthCalledWith(3, altUrl)
     expect(mockFetch).toHaveBeenNthCalledWith(
       4,
-      `${altUrl}?shape_id=123&offset=2`,
+      `${altUrl}&shape_id=123&offset=2`,
       expect.anything()
     )
     expect(mockFetch).toHaveBeenNthCalledWith(
       5,
-      `${altUrl}?shape_id=123&offset=3`,
+      `${altUrl}&shape_id=123&offset=3`,
       expect.anything()
     )
   })

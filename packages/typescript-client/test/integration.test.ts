@@ -690,7 +690,8 @@ describe(`HTTP Sync`, () => {
       // Get initial data
       const shapeData = new Map()
       const issueStream = new ShapeStream({
-        url: `${BASE_URL}/v1/shape/${tableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: tableUrl,
         columns: [`txt`, `i2`, `i4`],
         signal: aborter.signal,
       })
