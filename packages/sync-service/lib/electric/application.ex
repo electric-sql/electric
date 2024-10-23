@@ -22,11 +22,12 @@ defmodule Electric.Application do
     config = configure()
 
     tenant_id = Application.get_env(:electric, :default_tenant)
+    tenant_opts = [electric_instance_id: config.electric_instance_id]
 
     router_opts =
       Enum.concat([
         [
-          tenant_manager: Electric.TenantManager,
+          tenant_manager: Electric.TenantManager.name(tenant_opts),
           long_poll_timeout: 20_000,
           max_age: Application.fetch_env!(:electric, :cache_max_age),
           stale_age: Application.fetch_env!(:electric, :cache_stale_age),
@@ -54,7 +55,7 @@ defmodule Electric.Application do
           {Registry,
            name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
           Electric.TenantSupervisor,
-          Electric.TenantManager,
+          {Electric.TenantManager, tenant_opts},
           {Bandit,
            plug: {Electric.Plug.Router, router_opts},
            port: Application.fetch_env!(:electric, :service_port),
@@ -71,7 +72,7 @@ defmodule Electric.Application do
 
     if tenant_id do
       connection_opts = Application.fetch_env!(:electric, :default_connection_opts)
-      Electric.TenantManager.create_tenant(tenant_id, connection_opts)
+      Electric.TenantManager.create_tenant(tenant_id, connection_opts, tenant_opts)
     end
 
     {:ok, sup_pid}
