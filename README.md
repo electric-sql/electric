@@ -23,7 +23,7 @@
   <a href="https://x.com/ElectricSQL" target="_blank"><img src="https://img.shields.io/twitter/follow/ElectricSQL.svg?style=social&label=Follow @ElectricSQL"></a>
 </p>
 
-# Electric
+# Electric!
 
 Your Postgres data, in sync, wherever you need it.
 
