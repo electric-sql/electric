@@ -26,14 +26,39 @@ If you're interested in early-access to the Electric Cloud, you can sign up to t
 
 ## Next steps
 
-In the meantime, you may like to [#say-hello on Discord](https://discord.electric-sql.com).
+In the meantime, you may like to [#say-hello on Discord](https://discord.electric-sql.com) and check out our guides on installing locally and self-hosting in the meantime.
 
 <div class="actions cta-actions page-footer-actions left">
-  <div class="action">
+  <div class="action hidden-xs">
     <VPButton href="https://discord.electric-sql.com"
         text="#say-hello on Discord"
         target="_blank"
         theme="brand"
+    />
+  </div>
+  <div class="action block-xs">
+    <VPButton href="https://discord.electric-sql.com"
+        text="Join Discord"
+        target="_blank"
+        theme="brand"
+    />
+  </div>
+  <div class="action hidden-xs">
+    <VPButton href="/docs/guides/installation"
+        text="Installation"
+        theme="alt"
+    />
+  </div>
+  <div class="action block-xs">
+    <VPButton href="/docs/guides/installation"
+        text="Install"
+        theme="alt"
+    />
+  </div>
+  <div class="action">
+    <VPButton href="/docs/guides/deployment"
+        text="Self host"
+        theme="alt"
     />
   </div>
 </div>

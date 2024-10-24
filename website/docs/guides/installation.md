@@ -42,7 +42,7 @@ docker run \
 
 ### Postgres requirements
 
-You can use any Postgres (new or existing) that has [logical replication](https://www.postgresql.org/docs/current/logical-replication-config.html) enabled. You also need to connect as a database user that has the [`REPLICATION`](https://www.postgresql.org/docs/current/logical-replication-security.html) privilege.
+You can use any Postgres (new or existing) that has [logical replication](https://www.postgresql.org/docs/current/logical-replication-config.html) enabled. You also need to connect as a database user that has the [`REPLICATION`](https://www.postgresql.org/docs/current/logical-replication-security.html) role.
 
 
 ## Advanced
@@ -83,7 +83,7 @@ mix run --no-halt
 
 This will try to connect to Postgres using the `DATABASE_URL` configured in [packages/sync-service/.env.dev](https://github.com/electric-sql/electric/blob/main/packages/sync-service/.env.dev), which defaults to:
 
-<<< @/../packages/sync-service/.env.dev
+<<< @/../packages/sync-service/.env.dev{shell}
 
 You can edit this file to change the configuration. To run the tests, you'll need a Postgres running that matches the `:test` env config in [config/runtime.exs](https://github.com/electric-sql/electric/blob/main/packages/sync-service/config/runtime.exs) and then:
 
