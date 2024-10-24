@@ -84,22 +84,31 @@ otel_simple_processor =
 config :opentelemetry,
   processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1)
 
-{:ok, database_url_config} =
-  env!("DATABASE_URL", :string)
-  |> Electric.ConfigParser.parse_postgresql_uri()
+database_url = env!("DATABASE_URL", :string, nil)
+default_tenant = env!("TENANT_ID", :string, nil)
 
-database_ipv6_config =
-  env!("DATABASE_USE_IPV6", :boolean, false)
+case {database_url, default_tenant} do
+  {nil, nil} ->
+    # No default tenant provided
+    :ok
 
-connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
+  {nil, _} ->
+    raise "TENANT_ID must be provided when DATABASE_URL is set"
 
-# TODO: make DATABASE_URL optional
-#       then only assign this config if it is provided
-#       then in applicaton.ex only create a tenant if these opts are provided
-config :electric, default_connection_opts: Electric.Utils.obfuscate_password(connection_opts)
+  {_, nil} ->
+    raise "DATABASE_URL must be provided when TENANT_ID is set"
 
-if default_tenant = env!("TENANT_ID", :string, nil) do
-  config :electric, default_tenant: default_tenant
+  {_, _} ->
+    # A default tenant is provided
+    {:ok, database_url_config} = Electric.ConfigParser.parse_postgresql_uri(database_url)
+
+    database_ipv6_config =
+      env!("DATABASE_USE_IPV6", :boolean, false)
+
+    connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
+
+    config :electric, default_connection_opts: Electric.Utils.obfuscate_password(connection_opts)
+    config :electric, default_tenant: default_tenant
 end
 
 enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)
