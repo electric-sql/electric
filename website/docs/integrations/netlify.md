@@ -24,7 +24,7 @@ Netlify is a great choice for deploying client-side web apps that use Electric.
 ### Connect to Electric
 
 > [!Warning] You need Electric (and Postgres) running somewhere else
-> The easiest way is to use the [Electric Cloud](/products/cloud). Or see the [Deployment guide](/docs/guides/deployment).
+> The easiest way is to use the [Electric Cloud](/product/cloud). Or see the [Deployment guide](/docs/guides/deployment).
 
 Copy the URL to your Electric instance and use it when [syncing data](/docs/api/clients/typescript#shape) into your app. E.g.: by [setting an environment variable](https://docs.netlify.com/environment-variables/get-started/#site-environment-variables) and using it in your code:
 
@@ -40,6 +40,6 @@ See the [Client docs](/docs/api/clients/typescript) for more information.
 
 ### Deploy example app
 
-Deploy our [standalone-basic-example]() app using the form below:
+Deploy our [standalone-basic-example](https://github.com/electric-sql/standalone-basic-example) app using the form below:
 
 <DeployToNetlifyForm repo="electric-sql/standalone-basic-example" />
