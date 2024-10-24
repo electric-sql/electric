@@ -45,7 +45,7 @@ defmodule Electric.Client.Fetch.HTTP do
 
   defp retry_delay(n) do
     (Integer.pow(2, n) * 1000 * jitter())
-    |> min(30_000 * (1 - 0.1 * :rand.uniform()))
+    |> min(30_000 * jitter())
     |> trunc()
   end
 
