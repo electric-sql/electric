@@ -55,47 +55,53 @@ defmodule Electric.Client.EctoAdapterTest do
     {:ok, _} = start_supervised(Support.Repo)
 
     columns = [
-      "id uuid primary key",
-      "name varchar(255)",
-      "amount int4",
-      "cost numeric",
-      "visible boolean default true",
-      "inserted_at timestamp without time zone",
-      "updated_at timestamp without time zone"
+      {"id", "uuid primary key"},
+      {"name", "varchar(255)"},
+      {"amount", "int4"},
+      {"cost", "numeric"},
+      {"visible", "boolean default true"},
+      {"inserted_at", "timestamp without time zone"},
+      {"updated_at", "timestamp without time zone"}
     ]
 
+    column_names = Enum.map(columns, &elem(&1, 0))
+
     with_table(@table_name, columns)
+    |> Map.put(:column_names, column_names)
   end
 
   import Ecto.Query
 
   describe "shape_from_query!/1" do
-    test "schema module" do
+    test "schema module", %{column_names: column_names} = _ctx do
       query = TestTable
 
       assert %Electric.Client.ShapeDefinition{
                table: @table_name,
+               columns: ^column_names,
                where: nil,
                parser: {EctoAdapter, TestTable}
              } = EctoAdapter.shape_from_query!(query)
     end
 
-    test "full table" do
+    test "full table", %{column_names: column_names} = _ctx do
       query = from(t in TestTable)
 
       assert %Electric.Client.ShapeDefinition{
                table: @table_name,
                where: nil,
+               columns: ^column_names,
                parser: {EctoAdapter, TestTable}
              } = EctoAdapter.shape_from_query!(query)
     end
 
-    test "with where clause" do
+    test "with where clause", %{column_names: column_names} = _ctx do
       query = from(t in TestTable, where: t.price < 2.0 and t.amount > 3, select: t)
 
       assert %Electric.Client.ShapeDefinition{
                table: @table_name,
                where: ~s[(("cost" < 2.0) AND ("amount" > 3))],
+               columns: ^column_names,
                parser: {EctoAdapter, TestTable}
              } = EctoAdapter.shape_from_query!(query)
     end
@@ -114,11 +120,12 @@ defmodule Electric.Client.EctoAdapterTest do
       end)
     end
 
-    test "table namespaces" do
+    test "table namespaces", %{column_names: column_names} = _ctx do
       assert %Electric.Client.ShapeDefinition{
                namespace: "myapp",
                table: "my_table",
                where: nil,
+               columns: ^column_names,
                parser: {EctoAdapter, NamespacedTable}
              } = EctoAdapter.shape_from_query!(NamespacedTable)
     end

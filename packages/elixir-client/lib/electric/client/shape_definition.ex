@@ -19,6 +19,12 @@ defmodule Electric.Client.ShapeDefinition do
               default: nil,
               doc: "Filter the table according to the where clause."
             ],
+            columns: [
+              type: {:or, [nil, {:list, :string}]},
+              default: nil,
+              doc:
+                "List of columns to include in the shape. Must include all primary keys. If `nil` this is equivalent to all columns (`SELECT *`)"
+            ],
             namespace: [
               type: {:or, [nil, :string]},
               required: false,
@@ -63,6 +69,7 @@ defmodule Electric.Client.ShapeDefinition do
        %__MODULE__{
          table: table_name,
          where: Access.get(opts, :where),
+         columns: Access.get(opts, :columns),
          namespace: Access.get(opts, :namespace),
          parser: Access.get(opts, :parser)
        }}
@@ -118,8 +125,10 @@ defmodule Electric.Client.ShapeDefinition do
   @doc false
   @spec params(t()) :: Electric.Client.Fetch.Request.params()
   def params(%__MODULE__{} = shape) do
-    %{where: where} = shape
+    %{where: where, columns: columns} = shape
 
-    Util.map_put_if(%{}, "where", where, is_binary(where))
+    %{}
+    |> Util.map_put_if("where", where, is_binary(where))
+    |> Util.map_put_if("columns", fn -> Enum.join(columns, ",") end, is_list(columns))
   end
 end

@@ -5,8 +5,8 @@ defmodule Support.DbSetup do
 
   def with_unique_table(_ctx) do
     columns = [
-      "id uuid primary key",
-      "title text"
+      {"id", "uuid primary key"},
+      {"title", "text"}
     ]
 
     with_table(tablename(), columns)
@@ -24,11 +24,13 @@ defmodule Support.DbSetup do
 
     Process.unlink(utility_pool)
 
+    column_spec = Enum.map(table_columns, fn {name, attrs} -> "#{name} #{attrs}" end)
+
     Postgrex.query!(
       utility_pool,
       """
         CREATE TABLE IF NOT EXISTS \"#{tablename}\" (
-          #{Enum.join(table_columns, ",\n  ")}
+          #{Enum.join(column_spec, ",\n  ")}
         );
       """,
       []
@@ -41,7 +43,7 @@ defmodule Support.DbSetup do
     end)
 
     {:ok, pool} = Postgrex.start_link(base_config ++ extra_opts)
-    {:ok, %{utility_pool: utility_pool, pool: pool, db_conn: pool, tablename: tablename}}
+    %{utility_pool: utility_pool, pool: pool, db_conn: pool, tablename: tablename}
   end
 
   def insert_item(%{db_conn: db, tablename: tablename}) do

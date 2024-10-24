@@ -14,18 +14,29 @@ if Code.ensure_loaded?(Ecto) do
       validate_query!(query)
 
       {table_name, namespace, struct} = table_name(query)
-
+      # it's possible that the ecto schema does not contain all the columns in
+      # the table so, since we know the columns we want, let's specify them
+      # explicitly
+      columns = query_columns(query)
       where = where(query)
 
       ShapeDefinition.new!(table_name,
         namespace: namespace,
         where: where,
+        columns: columns,
         parser: {__MODULE__, struct}
       )
     end
 
     defp table_name(%{from: %{prefix: prefix, source: {table_name, struct}}}) do
       {table_name, prefix, struct}
+    end
+
+    defp query_columns(%{from: %{source: {_table_name, struct}}}) do
+      Enum.map(
+        struct.__schema__(:fields),
+        &to_string(struct.__schema__(:field_source, &1))
+      )
     end
 
     @doc false

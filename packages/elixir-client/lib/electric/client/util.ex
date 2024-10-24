@@ -22,8 +22,17 @@ defmodule Electric.Client.Util do
 
       iex> map_put_if(%{a: 1}, :a, 2, true)
       %{a: 2}
+
+      iex> map_put_if(%{a: 1}, :a, fn -> 2 end, true)
+      %{a: 2}
+
   """
-  def map_put_if(map, key, value, true) do
+  def map_put_if(map, key, value_or_fun, true) do
+    value =
+      if is_function(value_or_fun, 0),
+        do: value_or_fun.(),
+        else: value_or_fun
+
     Map.put(map, key, value)
   end
 
