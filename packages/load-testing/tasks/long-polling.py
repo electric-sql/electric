@@ -21,6 +21,13 @@ from util.electric import ElectricUser
 ##   for each write.
 ## - WRITE_RATE: control write frequency in seconds.
 
+# Increase the tolerance to heartbeat misses
+# Not sure this is working
+import locust.runners
+locust.runners.HEARTBEAT_LIVENESS = 300
+locust.runners.HEARTBEAT_INTERVAL = 5
+locust.runners.MASTER_HEARTBEAT_TIMEOUT = 240
+
 base_url = "/v1/shape/"
 
 shared_max_offset = {}
@@ -55,7 +62,7 @@ def on_test_start(environment, **kwargs):
     else:
         connection = get_pg_connection()
         cursor = connection.cursor()
-        cursor.execute(open("/tasks/long-polling.sql", "r").read())
+        cursor.execute(open("./tasks/long-polling.sql", "r").read())
         connection.commit()
         connection.close()
 
