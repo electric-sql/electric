@@ -23,18 +23,7 @@ defmodule Electric.Application do
 
     tenant_id = Application.get_env(:electric, :default_tenant)
     tenant_opts = [electric_instance_id: config.electric_instance_id]
-
-    router_opts =
-      Enum.concat([
-        [
-          tenant_manager: Electric.TenantManager.name(tenant_opts),
-          long_poll_timeout: 20_000,
-          max_age: Application.fetch_env!(:electric, :cache_max_age),
-          stale_age: Application.fetch_env!(:electric, :cache_stale_age),
-          allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)
-        ],
-        get_service_status_option(config.electric_instance_id, tenant_id)
-      ])
+    router_opts = [tenant_manager: Electric.TenantManager.name(tenant_opts)]
 
     # The root application supervisor starts the core global processes, including the HTTP
     # server and the database connection manager. The latter is responsible for establishing
@@ -129,11 +118,4 @@ defmodule Electric.Application do
       []
     end
   end
-
-  defp get_service_status_option(_, nil), do: []
-
-  defp get_service_status_option(electric_instance_id, tenant_id),
-    do: [
-      get_service_status: fn -> Electric.ServiceStatus.check(electric_instance_id, tenant_id) end
-    ]
 end
