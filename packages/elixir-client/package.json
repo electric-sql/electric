@@ -1,7 +1,7 @@
 {
   "name": "@core/elixir-client",
   "private": true,
-  "version": "0.1.0-dev-16",
+  "version": "0.1.0-dev-17",
   "scripts": {
     "publish:hex": "mix do deps.get, hex.publish --yes"
   }

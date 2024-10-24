@@ -220,36 +220,40 @@ defmodule Electric.Client do
     ShapeDefinition.new(table_name, opts)
   end
 
+  if Code.ensure_loaded?(Ecto) do
+    @doc """
+    Create a [`ShapeDefinition`](`Electric.Client.ShapeDefinition`) from an `Ecto` query.
+
+    Accepts any implementation of `Ecto.Queryable` (e.g. an [`%Ecto.Query{}`](`Ecto.Query`) struct or
+    `Ecto.Schema` module) to generate a [`ShapeDefinition`](`Electric.Client.ShapeDefinition`).
+
+        iex> query = from(t in MyApp.Todo, where: t.completed == false)
+        iex> Elixir.Client.shape!(query)
+        %Electric.Client.ShapeDefinition{table: "todos" where: "(\\"completed\\" = FALSE)"}
+
+    Values from the Electric change stream will be mapped to instances of the
+    passed `Ecto.Schema` module.
+    """
+    @spec shape!(Ecto.Queryable.t()) :: ShapeDefinition.t() | no_return()
+    def shape!(queryable) when is_atom(queryable) do
+      queryable
+      |> validate_queryable!()
+      |> Electric.Client.EctoAdapter.shape_from_query!()
+    end
+
+    def shape!(%Ecto.Query{} = query) do
+      Electric.Client.EctoAdapter.shape_from_query!(query)
+    end
+  end
+
   @doc """
   A shortcut to [`ShapeDefinition.new!/2`](`Electric.Client.ShapeDefinition.new!/2`).
-
-  Also accepts any implementation of `Ecto.Queryable` to generate a
-  `ShapeDefinition` from an `Ecto` query or `Ecto.Schema` module.
-
-      iex> query = from(t in MyApp.Todo, where: t.completed == false)
-      iex> Elixir.Client.shape!(query)
-      %Electric.Client.ShapeDefinition{table: "todos" where: "(\\"completed\\" = FALSE)"}
-
   """
   def shape!(table_or_query, opts \\ [])
 
   @spec shape!(String.t(), ShapeDefinition.options()) :: ShapeDefinition.t() | no_return()
   def shape!(table_name, opts) when is_binary(table_name) do
     ShapeDefinition.new!(table_name, opts)
-  end
-
-  if Code.ensure_loaded?(Ecto) do
-    @spec shape!(Ecto.Queryable.t(), ShapeDefinition.options()) ::
-            ShapeDefinition.t() | no_return()
-    def shape!(queryable, _opts) when is_atom(queryable) do
-      queryable
-      |> validate_queryable!()
-      |> Electric.Client.EctoAdapter.shape_from_query!()
-    end
-
-    def shape!(%Ecto.Query{} = query, _opts) do
-      Electric.Client.EctoAdapter.shape_from_query!(query)
-    end
   end
 
   @doc """
