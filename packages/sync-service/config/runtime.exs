@@ -81,7 +81,7 @@ config :opentelemetry,
   processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1)
 
 database_url = env!("DATABASE_URL", :string, nil)
-default_tenant = env!("TENANT_ID", :string, nil)
+default_tenant = env!("DATABASE_ID", :string, nil)
 
 case {database_url, default_tenant} do
   {nil, nil} ->
@@ -89,10 +89,10 @@ case {database_url, default_tenant} do
     :ok
 
   {nil, _} ->
-    raise "TENANT_ID must be provided when DATABASE_URL is set"
+    raise "DATABASE_ID must be provided when DATABASE_URL is set"
 
   {_, nil} ->
-    raise "DATABASE_URL must be provided when TENANT_ID is set"
+    raise "DATABASE_URL must be provided when DATABASE_ID is set"
 
   {_, _} ->
     # A default tenant is provided
