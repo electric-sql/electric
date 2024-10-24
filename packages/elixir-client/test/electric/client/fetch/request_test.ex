@@ -16,7 +16,7 @@ defmodule Electric.Client.Fetch.RequestTest do
           shape_id: "my-shape",
           live: true,
           next_cursor: 123_948,
-          shape: Client.shape("my_table")
+          shape: Client.shape!("my_table")
         )
 
       url = Request.url(request)
@@ -46,7 +46,7 @@ defmodule Electric.Client.Fetch.RequestTest do
           shape_id: "my-shape",
           live: true,
           next_cursor: 123_948,
-          shape: Client.shape("my_table"),
+          shape: Client.shape!("my_table"),
           params: %{"my_param" => "here"}
         )
 
@@ -54,9 +54,31 @@ defmodule Electric.Client.Fetch.RequestTest do
 
       {:ok, uri} = URI.new(url)
 
-      params = URI.decode_query(uri.query) |> dbg
+      params = URI.decode_query(uri.query)
 
       assert %{"my_param" => "here"} = params
+    end
+
+    test "includes column list in parameters" do
+      columns = ["id", "value", "description"]
+
+      request =
+        Client.request(client!(),
+          offset: Client.Offset.new(1234, 1),
+          shape_id: "my-shape",
+          live: true,
+          next_cursor: 123_948,
+          shape: Client.shape!("my_table", columns: columns)
+        )
+
+      url = Request.url(request)
+
+      {:ok, uri} = URI.new(url)
+
+      params = URI.decode_query(uri.query)
+
+      column_list = Enum.join(columns, ",")
+      assert %{"columns" => ^column_list} = params
     end
   end
 end

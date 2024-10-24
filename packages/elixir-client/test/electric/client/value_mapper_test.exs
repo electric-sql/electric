@@ -34,17 +34,17 @@ defmodule Electric.Client.ValueMapperTest do
     end
 
     @tag columns: [
-           "id uuid primary key",
-           "i2_1 smallint",
-           "i2_2 int2",
-           "i4_1 integer",
-           "i4_2 int4",
-           "i8_1 bigint",
-           "i8_2 int8",
-           "f4_1 real",
-           "f4_2 float4",
-           "f8_1 double precision",
-           "f8_2 float8"
+           {"id", "uuid primary key"},
+           {"i2_1", "smallint"},
+           {"i2_2", "int2"},
+           {"i4_1", "integer"},
+           {"i4_2", "int4"},
+           {"i8_1", "bigint"},
+           {"i8_2", "int8"},
+           {"f4_1", "real"},
+           {"f4_2", "float4"},
+           {"f8_1", "double precision"},
+           {"f8_2", "float8"}
          ]
     test "column value mapping", ctx do
       %{tablename: table, db_conn: conn} = ctx

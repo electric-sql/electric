@@ -5,6 +5,17 @@ defmodule Electric.Client.ShapeDefinitionTest do
 
   doctest ShapeDefinition, import: true
 
+  describe "new" do
+    test "includes columns" do
+      assert {:ok, shape} = ShapeDefinition.new("my_table", columns: ["id", "size", "cost"])
+      assert shape.columns == ["id", "size", "cost"]
+    end
+
+    test "errors if column list is invalid" do
+      assert {:error, _} = ShapeDefinition.new("my_table", columns: "id")
+    end
+  end
+
   describe "table_name/1" do
     test "quotes the name if it contains characters other than [0-9a-z_-]" do
       assert ~s|my_table29| = ShapeDefinition.url_table_name(ShapeDefinition.new!("my_table29"))
