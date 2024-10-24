@@ -5,7 +5,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # The halt/1 function is redefined further down below
   import Plug.Conn, except: [halt: 1]
 
-  alias OpenTelemetry.SemanticConventions, as: SC
+  alias OpenTelemetry.SemConv, as: SC
 
   alias Electric.Shapes
   alias Electric.Schema
@@ -14,7 +14,6 @@ defmodule Electric.Plug.ServeShapePlug do
   alias Plug.Conn
 
   require Logger
-  require SC.Trace
 
   # Aliasing for pattern matching
   @before_all_offset LogOffset.before_all()
@@ -624,17 +623,18 @@ defmodule Electric.Plug.ServeShapePlug do
       "error.type" => assigns[:error_str],
       "http.request_id" => assigns[:plug_request_id],
       "http.query_string" => conn.query_string,
-      SC.Trace.http_client_ip() => client_ip(conn),
-      SC.Trace.http_scheme() => conn.scheme,
-      SC.Trace.net_peer_name() => conn.host,
-      SC.Trace.net_peer_port() => conn.port,
-      SC.Trace.http_target() => conn.request_path,
-      SC.Trace.http_method() => conn.method,
-      SC.Trace.http_status_code() => conn.status,
-      SC.Trace.http_response_content_length() => assigns[:streaming_bytes_sent],
-      SC.Trace.net_transport() => :"IP.TCP",
-      SC.Trace.http_user_agent() => user_agent(conn),
-      SC.Trace.http_url() =>
+      SC.ClientAttributes.client_address() => client_ip(conn),
+      SC.ServerAttributes.server_address() => conn.host,
+      SC.ServerAttributes.server_port() => conn.port,
+      SC.HTTPAttributes.http_request_method() => conn.method,
+      SC.HTTPAttributes.http_response_status_code() => conn.status,
+      SC.Incubating.HTTPAttributes.http_response_size() => assigns[:streaming_bytes_sent],
+      SC.NetworkAttributes.network_transport() => :tcp,
+      SC.NetworkAttributes.network_local_port() => conn.port,
+      SC.UserAgentAttributes.user_agent_original() => user_agent(conn),
+      SC.Incubating.URLAttributes.url_path() => conn.request_path,
+      SC.URLAttributes.url_scheme() => conn.scheme,
+      SC.URLAttributes.url_full() =>
         %URI{
           scheme: to_string(conn.scheme),
           host: conn.host,
