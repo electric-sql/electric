@@ -1,9 +1,9 @@
 defmodule Electric.Client.ValueMapper do
   @moduledoc """
-  A behaviour for mapping the value fields of `Message.ChangeMessage` messages
+  A behaviour for mapping the `value` fields of [`Message.ChangeMessage`](`Electric.Client.Message.ChangeMessage`) messages
   from the shape stream.
 
-  This requires implementing a single function `for_schema/2`.
+  This requires implementing a single function `c:for_schema/2`.
 
   Electric sends schema information with every response. For example the schema
   of the `foo` table from the [Electric
@@ -15,7 +15,7 @@ defmodule Electric.Client.ValueMapper do
         value: %{type: "float8"}
       }
 
-  The `for_schema/2` function receives this schema as the first argument and it
+  The `c:for_schema/2` function receives this schema as the first argument and it
   must return a 1-arity function that will map the value structs received from
   Electric to the desired format.
 
@@ -37,10 +37,9 @@ defmodule Electric.Client.ValueMapper do
         "value" => "45.6"
       }
 
-      mapper_fun.(value)
-
       # the mapping parses the integer and float values to their respective
       # Elixir/Erlang types.
+      mapper_fun.(value)
       %{
         "id" => 1,
         "name" => "James",
