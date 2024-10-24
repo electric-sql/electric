@@ -113,7 +113,7 @@ jobs:
             mix run --no-halt &
 
           wait-on: |
-            http-get://localhost:3000/v1/health
+            http-get://localhost:3000/v1/health?database_id=${{ env.DATABASE_ID }}
 
           tail: true
           log-output-resume: stderr

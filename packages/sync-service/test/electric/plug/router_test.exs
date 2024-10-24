@@ -46,9 +46,9 @@ defmodule Electric.Plug.RouterTest do
       do: %{opts: Router.init(build_router_opts(ctx, get_service_status: fn -> :active end))}
     )
 
-    test "GET returns health status of service", %{opts: opts} do
+    test "GET returns health status of service", %{opts: opts, tenant_id: tenant_id} do
       conn =
-        conn("GET", "/v1/health")
+        conn("GET", "/v1/health?database_id=#{tenant_id}")
         |> Router.call(opts)
 
       assert %{status: 200} = conn
