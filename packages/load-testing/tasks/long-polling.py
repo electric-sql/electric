@@ -1,7 +1,7 @@
 import os
 import json
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
+
 
 from locust import task, constant, events #, web
 from locust.runners import MasterRunner
@@ -12,6 +12,7 @@ import random
 
 from util.common import get_pg_connection
 from util.electric import ElectricUser
+import logging
 
 ## Long polling latency for number of clients and write frequency.
 ## Measures the latency of a row travelling from Postgres to all
@@ -31,7 +32,7 @@ locust.runners.MASTER_HEARTBEAT_TIMEOUT = 240
 base_url = "/v1/shape/"
 
 shared_max_offset = {}
-user_time_buckets = {}
+operation_buckets = {}
 master_time_buckets = {}
 
 auth_token = None
@@ -60,11 +61,14 @@ def on_test_start(environment, **kwargs):
     if not isinstance(environment.runner, MasterRunner):
         pass
     else:
-        connection = get_pg_connection()
-        cursor = connection.cursor()
-        cursor.execute(open("./tasks/long-polling.sql", "r").read())
-        connection.commit()
-        connection.close()
+        try:
+            connection = get_pg_connection()
+            cursor = connection.cursor()
+            cursor.execute(open("./tasks/long-polling.sql", "r").read())
+            connection.commit()
+            connection.close()
+        except Exception as e:
+            logging.error(f"Failed to init schema: {e}")
 
 class Writer(ElectricUser):
     connection = None
@@ -115,14 +119,9 @@ class Client(ElectricUser):
         shared_max_offset['shape_id'] = shape['params']['shape_id']
         shared_max_offset['offset'] = shape['params']['offset']
 
-    def on_stop():
-        global shared_max_offset
-        shared_max_offset.clear()
-        user_time_buckets.clear()
-
     @task
     def live_mode(self):
-        not_before = datetime.now()
+        not_before = datetime.now().astimezone()
         result = self.live()
         if 'body' in result:
             handle_response(not_before, result['body'])
@@ -146,35 +145,47 @@ class Client(ElectricUser):
 def handle_response(not_before, rows):
     for row in rows:
         if 'value' in row:
-            created_at = datetime.fromisoformat(row['value']['created_at']) # ns
+            if 'created_at' not in row['value']:
+                continue
+            
+            created_at = datetime.fromisoformat(row['value']['created_at'])
 
-            # skip entries with timestamp prior to the request
             if created_at < not_before:
                 continue
 
-            # Need to handle timezone better
-            now = datetime.now() - time.localtime().tm_gmtoff
+            now = datetime.now().astimezone()
             time_diff_ms = (now - created_at).microseconds // 1000 # ms
 
             bucket = (time_diff_ms // 50) * 50 # buckets of 50ms
-            global user_time_buckets
-            if bucket not in user_time_buckets:
-                user_time_buckets[bucket] = 0
-            user_time_buckets[bucket] += 1
+
+            op_id = row['value']['counter']
+
+            global operation_buckets
+            if op_id not in operation_buckets:
+                operation_buckets[op_id] = {'buckets': {}, 'count': 0, 'created_at': created_at}
+            op_buckets = operation_buckets[op_id]
+            if bucket not in op_buckets['buckets']:
+                op_buckets['buckets'][bucket] = 0
+            op_buckets['buckets'][bucket] += 1
+            op_buckets['count'] += 1
 
 # Handle events bewtween workers and master
 @events.report_to_master.add_listener
 def on_report_to_master(client_id, data):
-    data['time_buckets'] = user_time_buckets.copy()
-    user_time_buckets.clear()
+    data['operation_buckets'] = operation_buckets.copy()
+    operation_buckets.clear()
 
 @events.worker_report.add_listener
 def on_worker_report(client_id, data):
-    if 'time_buckets' in data:
-        for bucket, count in data['time_buckets'].items():
-            if bucket not in master_time_buckets:
-                master_time_buckets[bucket] = 0
-            master_time_buckets[bucket] += count
+    if 'operation_buckets' in data:
+        for op_id, buckets_count in data['operation_buckets'].items():
+            if op_id not in master_time_buckets:
+                master_time_buckets[op_id] = {'buckets': {}, 'count': 0}
+            master_time_buckets[op_id]['count'] += buckets_count['count']
+            for bucket, count in buckets_count['buckets'].items():
+                if bucket not in master_time_buckets[op_id]['buckets']:
+                    master_time_buckets[op_id]['buckets'][bucket] = 0
+                master_time_buckets[op_id]['buckets'][bucket] += count 
     # logging.info(f'{get_latency_histogram()}')
 
 
@@ -210,5 +221,7 @@ def locust_init(environment, **kwargs):
 
 @events.reset_stats.add_listener
 def on_reset_stats():
-    global master_time_buckets
+    global master_time_buckets, operation_buckets, shared_max_offset
     master_time_buckets.clear()
+    shared_max_offset.clear()
+    operation_buckets.clear()
