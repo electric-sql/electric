@@ -1,7 +1,7 @@
 defmodule Electric.Client.Authenticator.Unauthenticated do
   @moduledoc """
   Placeholder `Electric.Client.Authenticator` implementation that doesn't add
-  any authentication params to the `Request`.
+  any authentication params or headers to the `Request`.
   """
 
   @behaviour Electric.Client.Authenticator

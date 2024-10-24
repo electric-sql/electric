@@ -2,8 +2,8 @@ defmodule Electric.Client.Authenticator.MockAuthenticator do
   @moduledoc """
   A pseudo-authenticating `Electric.Client.Authenticator` implementation.
 
-  This appends a parameter to the `Request` URL, the value of which depends on
-  the `Request` itself, but that parameter is meaningless for authentication.
+  This generates fake authentication headers, useful for validating that the
+  `Authenticator` behaviour is being called correctly.
   """
 
   @behaviour Electric.Client.Authenticator
