@@ -19,7 +19,7 @@
   
 # First service should be health and active
 [shell orchestator]
-  !curl -X GET http://localhost:3000/v1/health
+  !curl -X GET http://localhost:3000/v1/health?database_id=integration_test_tenant
   ??{"status":"active"}
 
 ## Start the second sync service.
@@ -35,9 +35,9 @@
 
 # Second service should be in waiting state, ready to take over
 [shell orchestator]
-  !curl -X GET http://localhost:3000/v1/health
+  !curl -X GET http://localhost:3000/v1/health?database_id=integration_test_tenant
   ??{"status":"active"}
-  !curl -X GET http://localhost:3001/v1/health
+  !curl -X GET http://localhost:3001/v1/health?database_id=integration_test_tenant
   ??{"status":"waiting"}
 
 ## Terminate first electric
@@ -55,7 +55,7 @@
 
 # Second service is now healthy and active
 [shell orchestator]
-  !curl -X GET http://localhost:3001/v1/health
+  !curl -X GET http://localhost:3001/v1/health?database_id=integration_test_tenant
   ??{"status":"active"}
 
 [cleanup]
