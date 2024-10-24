@@ -23,7 +23,11 @@ defmodule Electric.Application do
 
     tenant_id = Application.get_env(:electric, :default_tenant)
     tenant_opts = [electric_instance_id: config.electric_instance_id]
-    router_opts = [tenant_manager: Electric.TenantManager.name(tenant_opts)]
+
+    router_opts = [
+      tenant_manager: Electric.TenantManager.name(tenant_opts),
+      allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)
+    ]
 
     # The root application supervisor starts the core global processes, including the HTTP
     # server and the database connection manager. The latter is responsible for establishing
