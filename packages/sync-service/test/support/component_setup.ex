@@ -30,7 +30,8 @@ defmodule Support.ComponentSetup do
       registry: ctx.registry,
       long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
       max_age: Access.get(ctx, :max_age, 60),
-      stale_age: Access.get(ctx, :stale_age, 300)
+      stale_age: Access.get(ctx, :stale_age, 300),
+      get_service_status: fn -> :active end
     ]
 
     Electric.TenantManager.delete_tenant(ctx.tenant_id, tenant_manager: ctx.tenant_manager)
