@@ -171,8 +171,8 @@ defmodule Electric.Client do
   @type client_option :: unquote(NimbleOptions.option_typespec(@client_schema))
   @type client_options :: [client_option()]
   @type shape :: table_name() | ShapeDefinition.t() | Ecto.Queryable.t()
-  @type shape_option :: unquote(NimbleOptions.option_typespec(Client.Stream.options_schema()))
-  @type shape_options :: [shape_option()]
+  @type stream_option :: unquote(NimbleOptions.option_typespec(Client.Stream.options_schema()))
+  @type stream_options :: [stream_option()]
 
   @type t :: %__MODULE__{
           base_url: URI.t(),
@@ -207,7 +207,7 @@ defmodule Electric.Client do
   end
 
   @doc """
-  A shortcut to `ShapeDefinition.new/2`.
+  A shortcut to [`ShapeDefinition.new/2`](`Electric.Client.ShapeDefinition.new/2`).
   """
   @spec shape(String.t(), ShapeDefinition.options()) ::
           {:ok, ShapeDefinition.t()} | {:error, term()}
@@ -218,7 +218,7 @@ defmodule Electric.Client do
   end
 
   @doc """
-  A shortcut to `ShapeDefinition.new!/2`.
+  A shortcut to [`ShapeDefinition.new!/2`](`Electric.Client.ShapeDefinition.new!/2`).
   """
   def shape!(table_name, opts \\ [])
 
@@ -228,6 +228,8 @@ defmodule Electric.Client do
   end
 
   if Code.ensure_loaded?(Ecto) do
+    @spec shape!(Ecto.Queryable.t(), ShapeDefinition.options()) ::
+            ShapeDefinition.t() | no_return()
     def shape!(queryable, _opts) when is_atom(queryable) do
       queryable
       |> validate_queryable!()
@@ -250,7 +252,7 @@ defmodule Electric.Client do
 
   #{NimbleOptions.docs(Client.Stream.options_schema())}
   """
-  @spec stream(t(), shape(), shape_options()) :: Enumerable.t(message())
+  @spec stream(t(), shape(), stream_options()) :: Enumerable.t(message())
   def stream(client, shape_or_query, opts \\ [])
 
   if Code.ensure_loaded?(Ecto) do
