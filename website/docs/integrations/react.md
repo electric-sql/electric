@@ -10,7 +10,7 @@ image: /img/integrations/electric-react.jpg
 
 React is a popular library for building declarative, component-based UI.
 
-## Electric <> React
+## Electric and React
 
 Electric has first-class support for React. We maintain a [react-hooks](https://github.com/electric-sql/electric/tree/main/packages/react-hooks) package that provides a number of [React Hooks](https://react.dev/reference/react/hooks) to bind Shape data to your components.
 

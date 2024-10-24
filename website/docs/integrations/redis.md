@@ -14,7 +14,7 @@ image: /img/integrations/electric-redis.jpg
 
 Redis is an in-memory "data structure server", often used as a cache.
 
-## Electric <> Redis
+## Electric and Redis
 
 Many applications use [Redis](https://redis.io/docs/latest/develop/use/client-side-caching/) as a local cache. With Electric, you can define a [Shape](/docs/guides/shapes) and sync it into a [Redis data structure](https://redis.io/docs/latest/develop/data-types/hashes/).
 

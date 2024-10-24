@@ -12,6 +12,8 @@ image: /img/integrations/electric-livestore.jpg
 
 LiveStore is under active development by [Johannes Schickling](https://x.com/schickling).
 
+## Electric and Livestore
+
 ElectricSQL are sponsoring LiveStore development and building a sync integration. This will be released when LiveStore is released (as public open-source code).
 
 ## Early access

@@ -10,7 +10,7 @@ image: /img/integrations/electric-aws.jpg
 
 AWS is a cloud infrastructure platform.
 
-## Electric on AWS
+## Electric and AWS
 
 You can use AWS to deploy any or all components of the Electric stack:
 

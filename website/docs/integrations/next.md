@@ -14,7 +14,7 @@ image: /img/integrations/electric-next.jpg
 
 [Next.js](https://mobx.js.org) is a full-stack React framework.
 
-## Next.js and React
+## Electric and Next.js
 
 Next.js is based on React. Electric [works with React](./react). You can integrate Electric into your Next.js application like any other npm / React library.
 

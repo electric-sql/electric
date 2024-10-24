@@ -87,7 +87,9 @@
   --ddn-color: #D0BCFF;
   --pglite-color: #F6F95C;
 
-  --vp-code-font-size: 0.925em;
+  --vp-code-bg: var(--vp-c-bg-elv);
+  --vp-code-color: #9ECBFF;
+  --vp-code-font-size: 0.875em;
   --vp-font-family-base: OpenSauceOne, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --vp-font-family-mono: SourceCodePro, ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }

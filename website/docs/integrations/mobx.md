@@ -14,6 +14,8 @@ image: /img/integrations/electric-mobx.jpg
 
 [MobX](https://mobx.js.org) is a framework for simple, scalable, client-side state management.
 
+## Electric and MobX
+
 Electric can be integrated with MobX by syncing data into a [Shape](/docs/api/clients/typescript#shape) and then [making the shape observable](https://mobx.js.org/observable-state.html).
 
 <HelpWanted issue="1477">

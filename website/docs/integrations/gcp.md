@@ -10,7 +10,7 @@ image: /img/integrations/electric-gcp.jpg
 
 GCP is a cloud infrastructure platform.
 
-## Electric on GCP
+## Electric and GCP
 
 You can use GCP to deploy any or all components of the Electric stack:
 

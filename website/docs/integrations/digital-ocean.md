@@ -10,7 +10,7 @@ image: /img/integrations/electric-digital-ocean.jpg
 
 Digital Ocean is a cloud hosting platform.
 
-## Electric on Digital Ocean
+## Electric and Digital Ocean
 
 You can use Digital Ocean to deploy any or all components of the Electric stack:
 

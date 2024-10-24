@@ -8,11 +8,14 @@ image: /img/integrations/electric-neon.jpg
 
 # Neon
 
-[Neon](https://neon.tech) is a [serverless Postgres](https://neon.tech/docs/introduction/serverless) hosting platform.
+[Neon](https://neon.tech) is a serverless Postgres hosting platform.
 
-## Electric on Neon
+## Electric and Neon
 
-You can use Electric with Neon's serverless Postgres hosting.
+You can use Electric with Neon's [serverless Postgres hosting](https://neon.tech/docs/introduction/serverless).
+
+> [!Info] Neon originally created what is now PGlite
+> Electric and Neon have also collaborated to develop [PGlite](/product/pglite), which was started as a project by Neon's CTO, [Stas Kelvich](https://github.com/kelvich).
 
 ### Deploy Postgres
 
@@ -37,4 +40,5 @@ docker run -it \
     electricsql/electric:latest
 ```
 
-If you need somewhere to deploy Electric then [Neon works well](https://neon.tech/docs/guides/render) with [Render](./render#deploy-electric).
+> [!Tip] Need somewhere to host Electric?
+> If you need somewhere to deploy Electric then [Neon works well](https://neon.tech/docs/guides/render) with [Render](./render#deploy-electric).
