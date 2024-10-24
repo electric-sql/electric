@@ -16,12 +16,15 @@ defmodule Electric.Shapes.Consumer do
 
   @initial_log_state %{current_chunk_byte_size: 0}
 
-  def name(%{electric_instance_id: electric_instance_id, shape_id: shape_id} = _config) do
-    name(electric_instance_id, shape_id)
+  def name(
+        %{electric_instance_id: electric_instance_id, tenant_id: tenant_id, shape_id: shape_id} =
+          _config
+      ) do
+    name(electric_instance_id, tenant_id, shape_id)
   end
 
-  def name(electric_instance_id, shape_id) when is_binary(shape_id) do
-    Electric.Application.process_name(electric_instance_id, __MODULE__, shape_id)
+  def name(electric_instance_id, tenant_id, shape_id) when is_binary(shape_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_id)
   end
 
   def initial_state(consumer) do
@@ -33,16 +36,14 @@ defmodule Electric.Shapes.Consumer do
   # when the `shape_id` consumer has processed every transaction.
   # Transactions that we skip because of xmin logic do not generate
   # a notification
-  @spec monitor(atom(), ShapeCache.shape_id(), pid()) :: reference()
-  def monitor(electric_instance_id, shape_id, pid \\ self()) do
-    GenStage.call(name(electric_instance_id, shape_id), {:monitor, pid})
+  @spec monitor(atom(), String.t(), ShapeCache.shape_id(), pid()) :: reference()
+  def monitor(electric_instance_id, tenant_id, shape_id, pid \\ self()) do
+    GenStage.call(name(electric_instance_id, tenant_id, shape_id), {:monitor, pid})
   end
 
-  @spec whereis(atom(), ShapeCache.shape_id()) :: pid() | nil
-  def whereis(electric_instance_id, shape_id) do
-    electric_instance_id
-    |> name(shape_id)
-    |> GenServer.whereis()
+  @spec whereis(atom(), String.t(), ShapeCache.shape_id()) :: pid() | nil
+  def whereis(electric_instance_id, tenant_id, shape_id) do
+    GenServer.whereis(name(electric_instance_id, tenant_id, shape_id))
   end
 
   def start_link(config) when is_map(config) do
@@ -230,6 +231,7 @@ defmodule Electric.Shapes.Consumer do
     %{
       shape: shape,
       shape_id: shape_id,
+      tenant_id: tenant_id,
       log_state: log_state,
       chunk_bytes_threshold: chunk_bytes_threshold,
       shape_cache: {shape_cache, shape_cache_opts},
@@ -268,7 +270,7 @@ defmodule Electric.Shapes.Consumer do
 
         shape_cache.update_shape_latest_offset(shape_id, last_log_offset, shape_cache_opts)
 
-        notify_listeners(registry, :new_changes, shape_id, last_log_offset)
+        notify_listeners(registry, :new_changes, tenant_id, shape_id, last_log_offset)
 
         {:cont, notify(txn, %{state | log_state: new_log_state})}
 
@@ -281,10 +283,10 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp notify_listeners(registry, :new_changes, shape_id, latest_log_offset) do
-    Registry.dispatch(registry, shape_id, fn registered ->
+  defp notify_listeners(registry, :new_changes, tenant_id, shape_id, latest_log_offset) do
+    Registry.dispatch(registry, {tenant_id, shape_id}, fn registered ->
       Logger.debug(fn ->
-        "Notifying ~#{length(registered)} clients about new changes to #{shape_id}"
+        "[Tenant #{tenant_id}]: Notifying ~#{length(registered)} clients about new changes to #{shape_id}"
       end)
 
       for {pid, ref} <- registered,

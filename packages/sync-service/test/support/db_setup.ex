@@ -9,7 +9,7 @@ defmodule Support.DbSetup do
   ]
 
   def with_unique_db(ctx) do
-    base_config = Application.fetch_env!(:electric, :connection_opts)
+    base_config = Application.fetch_env!(:electric, :default_connection_opts)
     {:ok, utility_pool} = start_db_pool(base_config)
     Process.unlink(utility_pool)
 
@@ -56,7 +56,7 @@ defmodule Support.DbSetup do
   end
 
   def with_shared_db(_ctx) do
-    config = Application.fetch_env!(:electric, :connection_opts)
+    config = Application.fetch_env!(:electric, :default_connection_opts)
     {:ok, pool} = start_db_pool(config)
     {:ok, %{pool: pool, db_config: config, db_conn: pool}}
   end

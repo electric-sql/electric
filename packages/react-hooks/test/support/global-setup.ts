@@ -3,6 +3,7 @@ import { makePgClient } from './test-helpers'
 
 const url = process.env.ELECTRIC_URL ?? `http://localhost:3000`
 const proxyUrl = process.env.ELECTRIC_PROXY_CACHE_URL ?? `http://localhost:3002`
+const databaseId = process.env.DATABASE_ID ?? `test_tenant`
 
 // name of proxy cache container to execute commands against,
 // see docker-compose.yml that spins it up for details
@@ -29,7 +30,7 @@ function waitForElectric(url: string): Promise<void> {
     )
 
     const tryHealth = async () =>
-      fetch(`${url}/v1/health`)
+      fetch(`${url}/v1/health?database_id=${databaseId}`)
         .then(async (res): Promise<void> => {
           if (!res.ok) return tryHealth()
           const { status } = (await res.json()) as { status: string }
