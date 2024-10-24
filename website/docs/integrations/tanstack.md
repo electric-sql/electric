@@ -20,7 +20,7 @@ import DataFlowJPG from '/static/img/docs/integrations/tanstack/data-flow.jpg?ur
 
 [TanStack Query](https://tanstack.com/query/latest) is a data-fetching and state management library.
 
-## Electric <> TanStack
+## Electric and TanStack
 
 Electric works very well together with TanStack Query, where Electric provides the read-path sync and TanStack provides a [local write-path with optimistic state](https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates#via-the-cache).
 

@@ -36,6 +36,7 @@ app = "YOUR_UNIQUE_APP_NAME"
 
 [env]
   DATABASE_URL = "postgresql://..."
+  DATABASE_USE_IPV6 = true
 
 [http_service]
   internal_port = 3000

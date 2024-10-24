@@ -14,7 +14,7 @@ image: /img/integrations/electric-phoenix.jpg
 
 [Phoenix](https://www.phoenixframework.org) is a full-stack web development framework for [Elixir](https://elixir-lang.org).
 
-## Phoenix integration
+## Electric and Phoenix
 
 Electric is [developed in Elixir](/product/sync#how-does-it-work) and provides [an Elixir client](/docs/api/clients/elixir). We've leveraged this to develop a batteries-included Phoenix integration for:
 

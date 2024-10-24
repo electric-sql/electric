@@ -13,7 +13,7 @@ image: /img/integrations/electric-netlify.jpg
 
 [Netlify](https://www.netlify.com/) is an [application deployment platform](https://www.netlify.com/platform/).
 
-## Electric on Netlify
+## Electric and Netlify
 
 Netlify is a great choice for deploying client-side web apps that use Electric.
 
