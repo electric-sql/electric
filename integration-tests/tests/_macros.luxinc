@@ -91,7 +91,7 @@
   [shell $shell_name]
     -$fail_pattern
   
-    !TENANT_ID=integration_test_tenant DATABASE_URL=$database_url PORT=$port $env ../scripts/electric_dev.sh
+    !DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url PORT=$port $env ../scripts/electric_dev.sh
 [endmacro]
 
 [macro teardown]
