@@ -208,19 +208,30 @@ defmodule Electric.Client do
 
   @doc """
   A shortcut to [`ShapeDefinition.new/2`](`Electric.Client.ShapeDefinition.new/2`).
+
+      iex> Elixir.Client.shape("my_table")
+      {:ok, %Electric.Client.ShapeDefinition{table: "my_table"}}
   """
   @spec shape(String.t(), ShapeDefinition.options()) ::
           {:ok, ShapeDefinition.t()} | {:error, term()}
   def shape(table_name, opts \\ [])
 
-  def shape(table_name, opts) do
+  def shape(table_name, opts) when is_binary(table_name) do
     ShapeDefinition.new(table_name, opts)
   end
 
   @doc """
   A shortcut to [`ShapeDefinition.new!/2`](`Electric.Client.ShapeDefinition.new!/2`).
+
+  Also accepts any implementation of `Ecto.Queryable` to generate a
+  `ShapeDefinition` from an `Ecto` query or `Ecto.Schema` module.
+
+      iex> query = from(t in MyApp.Todo, where: t.completed == false)
+      iex> Elixir.Client.shape!(query)
+      %Electric.Client.ShapeDefinition{table: "todos" where: "(\\"completed\\" = FALSE)"}
+
   """
-  def shape!(table_name, opts \\ [])
+  def shape!(table_or_query, opts \\ [])
 
   @spec shape!(String.t(), ShapeDefinition.options()) :: ShapeDefinition.t() | no_return()
   def shape!(table_name, opts) when is_binary(table_name) do
