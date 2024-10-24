@@ -37,4 +37,4 @@ docker run -it \
     electricsql/electric:latest
 ```
 
-If you need somewhere to deploy Electric then [Neon works well](https://neon.tech/docs/guides/render) with [Render](./render).
+If you need somewhere to deploy Electric then [Neon works well](https://neon.tech/docs/guides/render) with [Render](./render#deploy-electric).
