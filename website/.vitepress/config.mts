@@ -196,7 +196,6 @@ export default defineConfig({
                 { text: 'Fly.io', link: '/docs/integrations/fly' },
                 { text: 'GCP', link: '/docs/integrations/gcp' },
                 { text: 'Neon', link: '/docs/integrations/neon' },
-                { text: 'Neon', link: '/docs/integrations/neon' },
                 { text: 'Netlify', link: '/docs/integrations/netlify' },
                 { text: 'Render', link: '/docs/integrations/render' },
                 { text: 'Supabase', link: '/docs/integrations/supabase' }
