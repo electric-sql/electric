@@ -191,6 +191,7 @@ export default defineConfig({
               items: [
                 { text: 'AWS', link: '/docs/integrations/aws' },
                 { text: 'Cloudflare', link: '/docs/integrations/cloudflare' },
+                { text: 'Crunchy', link: '/docs/integrations/crunchy' },
                 { text: 'Digital Ocean', link: '/docs/integrations/digital-ocean' },
                 { text: 'Expo', link: '/docs/integrations/expo' },
                 { text: 'Fly.io', link: '/docs/integrations/fly' },
