@@ -69,7 +69,7 @@ defmodule Electric.Application do
               shape_cache: {Electric.ShapeCache, config.shape_cache_opts},
               get_service_status: &Electric.ServiceStatus.check/0,
               inspector: config.inspector,
-              long_poll_timeout: 20_000,
+              long_poll_timeout: Application.fetch_env!(:electric, :long_poll_timeout),
               max_age: Application.fetch_env!(:electric, :cache_max_age),
               stale_age: Application.fetch_env!(:electric, :cache_stale_age),
               allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},

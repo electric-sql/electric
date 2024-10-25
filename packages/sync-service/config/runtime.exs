@@ -189,6 +189,7 @@ config :electric,
   cache_max_age: cache_max_age,
   cache_stale_age: cache_stale_age,
   chunk_bytes_threshold: chunk_bytes_threshold,
+  long_poll_timeout: env!("LONG_POLL_TIMEOUT", :integer, 20_000),
   # Used in telemetry
   environment: config_env(),
   instance_id: instance_id,
