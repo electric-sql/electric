@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 0.7.7
+
+### Patch Changes
+
+- 11c326f: Unify CORS header handling to ensure they are always present
+- 7de9f1d: Handle 400 errors as unrecoverable rather than `must-refetch` cases
+- 3bdf6b6: Handle relations in `ShapeLogCollector` same way that transactions are handled
+- a8b36ac: Validate table names locally first before going to PG to save resources
+
 ## 0.7.6
 
 ### Patch Changes
