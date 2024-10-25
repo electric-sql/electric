@@ -1,13 +1,13 @@
 ---
 title: Alternatives
 description: >-
-  Alternative projects and systems for syncing data into local applications.
+  Alternative projects and systems for syncing data and building local-first applications.
 outline: deep
 ---
 
 # Alternatives
 
-There are many alternative systems for syncing data and building local-first apps.
+There are many systems for syncing data and building local-first applications.
 
 > [!Tip] Add a project to this page
 > If you'd like to suggest a project to add to this page, please feel free to
