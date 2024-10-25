@@ -7,13 +7,21 @@ outline: deep
 
 # Alternatives
 
-There are many alternative systems for syncing data and building local-first apps. We list a selection of them below.
+There are many alternative systems for syncing data and building local-first apps.
 
 > [!Tip] Add a project to this page
 > If you'd like to suggest a project to add to this page, please feel free to
 > <span class="no-wrap-sm">[submit a pull‑request](https://github.com/electric-sql/electric/edit/main/website/docs/reference/alternatives.md)</span>.
 
 ## Alternative projects
+
+We list a selection of projects below, including for example:
+
+- [InstantDB](https://www.instantdb.com)
+- [Jazz](https://jazz.tools)
+- [PowerSync](https://www.powersync.co)
+- [Turso](https://turso.tech)
+- [Zero](https://zerosync.dev)
 
 ### Real-time and sync
 
@@ -26,16 +34,18 @@ There are many alternative systems for syncing data and building local-first app
 - [DriftDB](https://driftdb.com)
 - [EDB BDR](https://www.enterprisedb.com/docs/pgd/4/bdr)
 - [Fanout](https://www.fastly.com/products/fanout)
-- [Firebase (Google)](https://firebase.google.com)
+- [Firebase](https://firebase.google.com)
+- [Hevo](https://hevodata.com/)
 - [Litestream](https://litestream.io)
 - [Liveblocks](https://liveblocks.io)
 - [Materialize](https://materialize.com)
 - [Mycelial](https://mycelial.com)
 - [PartyKit](https://partykit.io)
 - [pgEdge](https://www.pgedge.com)
-- [Powersync](https://www.powersync.co)
+- [PowerSync](https://www.powersync.co)
 - [Pusher](https://pusher.com)
 - [Prisma Pulse](https://www.prisma.io/data-platform/pulse)
+- [Qlik](https://www.qlik.com/us/products/qlik-data-streaming-cdc)
 - [SKDB](https://skdb.io)
 - [SQLedge](https://github.com/zknill/sqledge)
 - [SQLSync](https://github.com/orbitinghail/sqlsync)
@@ -65,6 +75,7 @@ Electric and PGlite are *components* that can be composed, with other tools, int
 - [InstantDB](https://www.instantdb.com)
 - [Jazz](https://jazz.tools)
 - [Kinto](https://kinto-storage.org)
+- [LiveStore](https://github.com/livestorejs)
 - [Pocketbase](https://pocketbase.io)
 - [Pouch](https://pouchdb.com)
 - [remoteStorage.js](https://remotestorage.io)
@@ -109,6 +120,8 @@ Other tools for exposing data from Postgres:
 Other interesting projects include:
 
 - [AntidoteDB](https://www.antidotedb.eu)
+- [Beehive](https://www.inkandswitch.com/beehive)
+- [Cambria](https://www.inkandswitch.com/cambria)
 - [CockroachDB](https://www.cockroachlabs.com/product)
 - [Concordant](https://github.com/concordant)
 - [Dat-ecosystem](https://blog.dat-ecosystem.org/staying-connected)
