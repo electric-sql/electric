@@ -33,6 +33,8 @@ Digital Ocean provides [Managed Postgres](https://docs.digitalocean.com/products
 
 Digital Ocean has a number of different ways to deploy web services. We recommend using a [Docker Droplet](https://marketplace.digitalocean.com/apps/docker).
 
+Below we walk through the steps to deploy Electric using a Docker Droplet. First you create the Droplet. Then setup some Docker / SSH networking so your local Docker can talk to it. Then use Docker Compose to run Electric inside the Droplet.
+
 > [!Warning] Don't use App Platform
 > We **don't recommend** that you use [App Platform](https://docs.digitalocean.com/products/app-platform/) to deploy the Electric sync service because App Platform does not provide persistent file storage for Shape logs.
 
@@ -56,9 +58,9 @@ Warning: Permanently added 'YOUR_IP_ADDRESS' (ED25519) to the list of known host
 > [!Warning] Permission denied?
 > If the output from the command above ends with:
 >
->     root@YOUR_IP_ADDRESS: Permission denied (publickey).
+>     ... Permission denied (publickey).
 >
-> Then you need to add a section to your SSH config to tell it to use your SSH key
+> Then you need to add a section to your `~/.ssg/config` to tell it to use your SSH key
 > when connecting to `YOUR_IP_ADDRESS`. Something like this will do:
 >
 > ```

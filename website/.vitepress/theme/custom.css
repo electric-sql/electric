@@ -593,6 +593,11 @@ iframe {
   padding: 24px 0 !important;
 }
 
+pre {
+  max-width: 100%;
+  overflow-x: scroll;
+}
+
 ul.benefits {
   color: var(--vp-c-text-1) !important;
 
