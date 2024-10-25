@@ -15,7 +15,7 @@ image: /img/integrations/electric-render.jpg
 You can use Render to deploy [an Electric sync service](#deploy-electric) and [your client application](#deploy-your-app).
 
 > [!Info] Postgres on Render and logical replication
-> Render provides [managed Postgres hosting](https://docs.render.com/postgresql). This [doesn't yet](https://feedback.render.com/features/p/allow-for-postgres-logical-replication) support logical replication, so doesn't yet work with Electric.
+> Render does provide [managed Postgres hosting](https://docs.render.com/postgresql). However, this [doesn't yet](https://feedback.render.com/features/p/allow-for-postgres-logical-replication) support logical replication, so you can't currently use Electric with it.
 >
 > If you need Postgres hosting to use with Render, [Neon](./neon) and [Supabase](./supabase) both work great.
 
@@ -71,7 +71,7 @@ services:
   - type: web
     runtime: static
     name: app
-    buildCommand: VITE_ELECTRIC_URL="https://${ELECTRIC_HOST}" npm run build
+    buildCommand: VITE_ELECTRIC_URL="https://${ELECTRIC_HOST}.onrender.com" npm run build
     staticPublishPath: ./dist
     envVars:
       - key: ELECTRIC_HOST
@@ -81,4 +81,6 @@ services:
           property: host
 ```
 
-Follow [the instructions here](https://docs.render.com/infrastructure-as-code#setup).
+You can then follow [the instructions here](https://docs.render.com/infrastructure-as-code#setup) to deploy the Blueprint on Render.
+
+In short, you push the `render.yaml` to a repo, open the [Render Dashboard](https://dashboard.render.com/), click "New > Blueprint", connect the repo and enter your `DATABASE_URL` when prompted.
