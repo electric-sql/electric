@@ -11,6 +11,8 @@ import { matchStream } from "./match-stream"
 import { Offset, ShapeStreamOptions } from "@electric-sql/client"
 import { useOptimistic } from "react"
 
+const ELECTRIC_URL = process.env.ELECTRIC_URL || "http://localhost:3000"
+
 const parser = {
   timestamptz: (date: string) => new Date(date).getTime(),
 }
@@ -20,7 +22,7 @@ const shapePosition: { shapeId?: string; offset?: Offset } = {
   offset: `-1`,
 }
 
-const baseItemShape: () => ShapeStreamOptions = () => {
+const shapeOptions: () => ShapeStreamOptions = () => {
   if (typeof window !== `undefined`) {
     return {
       url: new URL(`/shape-proxy/items`, window?.location.origin).href,
@@ -29,14 +31,13 @@ const baseItemShape: () => ShapeStreamOptions = () => {
     const controller = new AbortController()
     controller.abort()
     return {
-      url: new URL(`https://not-sure-how-this-works.com/shape-proxy/items`)
-        .href,
+      url: new URL(`/v1/items`, ELECTRIC_URL).href,
       signal: controller.signal,
-      subscribe: false,
     }
   }
 }
-const itemShape = () => ({ ...baseItemShape(), ...shapePosition })
+
+const itemShape = () => ({ ...shapeOptions(), ...shapePosition })
 
 const updateShapePosition = (offset: Offset, shapeId?: string) => {
   shapePosition.offset = offset
