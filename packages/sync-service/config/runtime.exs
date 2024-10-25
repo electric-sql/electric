@@ -81,28 +81,20 @@ otel_simple_processor =
 config :opentelemetry,
   processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1)
 
-connection_opts =
-  if Config.config_env() == :test do
-    [
-      hostname: "localhost",
-      port: 54321,
-      username: "postgres",
-      password: "password",
-      database: "postgres",
-      sslmode: :disable
-    ]
-  else
-    {:ok, database_url_config} =
-      env!("DATABASE_URL", :string)
-      |> Electric.ConfigParser.parse_postgresql_uri()
-
-    database_ipv6_config =
-      env!("DATABASE_USE_IPV6", :boolean, false)
-
-    database_url_config ++ [ipv6: database_ipv6_config]
-  end
-
-config :electric, connection_opts: Electric.Utils.obfuscate_password(connection_opts)
+# only pre-configure the connection opts in test env
+# for others, rely on `DATABASE_URL`
+if Config.config_env() == :test do
+  config :electric,
+    connection_opts:
+      Electric.Utils.obfuscate_password(
+        hostname: "localhost",
+        port: 54321,
+        username: "postgres",
+        password: "password",
+        database: "postgres",
+        sslmode: :disable
+      )
+end
 
 enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)
 cache_max_age = env!("CACHE_MAX_AGE", :integer, 60)

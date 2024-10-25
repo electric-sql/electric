@@ -18,7 +18,7 @@ defmodule Electric.Application do
   def start(_type, _args) do
     :erlang.system_flag(:backtrace_depth, 50)
 
-    config = configure()
+    config = Electric.Application.Configuration.load()
 
     shape_log_collector = Electric.Replication.ShapeLogCollector.name(config.electric_instance_id)
 
@@ -71,13 +71,13 @@ defmodule Electric.Application do
               get_service_status: &Electric.ServiceStatus.check/0,
               inspector: config.inspector,
               long_poll_timeout: 20_000,
-              max_age: Application.fetch_env!(:electric, :cache_max_age),
-              stale_age: Application.fetch_env!(:electric, :cache_stale_age),
+              max_age: Application.get_env(:electric, :cache_max_age, 60),
+              stale_age: Application.get_env(:electric, :cache_stale_age, 60 * 5),
               allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)},
-           port: Application.fetch_env!(:electric, :service_port),
+           port: Application.get_env(:electric, :service_port, 3000),
            thousand_island_options: http_listener_options()}
         ],
-        prometheus_endpoint(Application.fetch_env!(:electric, :prometheus_port)),
+        prometheus_endpoint(Application.get_env(:electric, :prometheus_port, nil)),
         [{Electric.Connection.Supervisor, connection_manager_opts}]
       ])
 
@@ -85,67 +85,6 @@ defmodule Electric.Application do
       strategy: :one_for_one,
       name: Electric.Supervisor
     )
-  end
-
-  # This function is called once in the application's start() callback. It reads configuration
-  # from the OTP application env, runs some pre-processing functions and stores the processed
-  # configuration as a single map using `:persistent_term`.
-  defp configure do
-    electric_instance_id = Application.fetch_env!(:electric, :electric_instance_id)
-
-    {storage_module, storage_in_opts} = Application.fetch_env!(:electric, :storage)
-    storage_opts = storage_module.shared_opts(storage_in_opts)
-    storage = {storage_module, storage_opts}
-
-    {kv_module, kv_fun, kv_params} = Application.fetch_env!(:electric, :persistent_kv)
-    persistent_kv = apply(kv_module, kv_fun, [kv_params])
-
-    replication_stream_id = Application.fetch_env!(:electric, :replication_stream_id)
-    publication_name = "electric_publication_#{replication_stream_id}"
-    slot_name = "electric_slot_#{replication_stream_id}"
-    slot_temporary? = Application.get_env(:electric, :replication_slot_temporary?, false)
-
-    get_pg_version_fn = fn ->
-      Electric.Connection.Manager.get_pg_version(Electric.Connection.Manager)
-    end
-
-    prepare_tables_mfa =
-      {Electric.Postgres.Configuration, :configure_tables_for_replication!,
-       [get_pg_version_fn, publication_name]}
-
-    inspector =
-      {Electric.Postgres.Inspector.EtsInspector, server: Electric.Postgres.Inspector.EtsInspector}
-
-    shape_cache_opts = [
-      electric_instance_id: electric_instance_id,
-      storage: storage,
-      inspector: inspector,
-      prepare_tables_fn: prepare_tables_mfa,
-      chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold),
-      log_producer: Electric.Replication.ShapeLogCollector.name(electric_instance_id),
-      consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(electric_instance_id),
-      registry: Registry.ShapeChanges
-    ]
-
-    config = %Electric.Application.Configuration{
-      electric_instance_id: electric_instance_id,
-      storage: storage,
-      persistent_kv: persistent_kv,
-      connection_opts: Application.fetch_env!(:electric, :connection_opts),
-      replication_opts: %{
-        stream_id: replication_stream_id,
-        publication_name: publication_name,
-        slot_name: slot_name,
-        slot_temporary?: slot_temporary?
-      },
-      pool_opts: %{
-        size: Application.fetch_env!(:electric, :db_pool_size)
-      },
-      inspector: inspector,
-      shape_cache_opts: shape_cache_opts
-    }
-
-    Electric.Application.Configuration.save(config)
   end
 
   defp prometheus_endpoint(nil), do: []

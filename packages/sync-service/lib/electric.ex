@@ -6,7 +6,7 @@ defmodule Electric do
   """
   @spec instance_id() :: binary | no_return
   def instance_id do
-    Application.fetch_env!(:electric, :instance_id)
+    Application.get_env(:electric, :instance_id, :default)
   end
 
   @type relation :: {schema :: String.t(), table :: String.t()}
