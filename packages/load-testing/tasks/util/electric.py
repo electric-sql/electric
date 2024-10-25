@@ -22,9 +22,9 @@ def validate_shape_options(shape):
         raise ValueError('params is required')
     if 'offset' not in shape['params']:
         raise ValueError('offset is required')
-    if 'offset' == '-1' and 'shape_id' in shape['params']:
+    if shape['params']['offset'] == '-1' and 'shape_id' in shape['params']:
         raise ValueError('can\'t provide shape_id when offset is -1')
-    if 'shape_id' in shape['params'] and 'offset' == '-1':
+    if 'shape_id' in shape['params'] and shape['params']['offset'] == '-1':
         raise ValueError('offset can\'t be -1 when shape_id is provided')
 
 
@@ -47,15 +47,17 @@ class ElectricUser(FastHttpUser):
         global auth_token
         shape = self.get_shape_options()
         params = shape['params'].copy()
+
+        if live and shape['params']['offset'] == '-1':
+            raise ValueError('can\'t start live mode with offset -1')
+
         if live:
             params['live'] = 'true'
 
         if database_id:
             params['database_id'] = database_id
 
-        if live and shape['params']['offset'] == '-1':
-            raise ValueError('can\'t start live mode with offset -1')
-        
+
         headers = {}
         if auth_token:
             headers['Authorization'] = f'Bearer {auth_token}'
@@ -75,9 +77,11 @@ class ElectricUser(FastHttpUser):
                     location_qp = parse_qs(location_url.query)
                     shape['params']['shape_id'] = location_qp['shape_id'][0]
                     shape['params']['offset'] = location_qp['offset'][0]
+                    res.success()
+                    # logging.error(f'\n409: old {params} new {shape['params']}')
                 else:
-                    logging.error(f'unexpected error:\nstatus: {res.status_code}\n{res.headers}')
-                    res.failure(f'unexpected error: {res.status_code} {res.headers}')
+                    logging.error(f'unexpected error:\nstatus: {res.status_code}\n{res.headers}\n{url}')
+                    res.failure(f'unexpected error: {res.status_code} {res.headers}\n{url}')
                 return result
 
             shape['params']['shape_id'] = res.headers['electric-shape-id']
@@ -98,13 +102,16 @@ class ElectricUser(FastHttpUser):
         while True:
             res = self.__get_offset()
             if res['status'] != 200 and res['status'] != 204:
-                # TODO
-                raise ValueError('unexpected error')
+                raise Exception(f'sync failed {res['status']} {self.get_shape_options()}')
             if res['up-to-date']:
                 break
 
     def live(self):
-        return self.__get_offset(live=True)
+        res = self.__get_offset(live=True)
+        if res['status'] == 409:
+            # Follow 409 with non-live request
+            res = self.__get_offset(live=False)
+        return res
 
 def get_response_body(response):
     if 'Content-Encoding' in response.headers and response.headers['Content-Encoding'] == 'gzip':
