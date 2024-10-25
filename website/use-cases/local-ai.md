@@ -46,7 +46,7 @@ There are two ways to reduce AI latency:
 
 Reducing inference latency is complex and expensive.
 
-### Data latancy
+### Data latency
 
 This is why having local data, on device, for the local AI to use as context data, is so important. Because local data avoids network latency when retrieving data.
 
