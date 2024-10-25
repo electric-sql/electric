@@ -1,28 +1,19 @@
 "use client"
 
 import { v4 as uuidv4 } from "uuid"
-import {
-  useShape,
-  getShapeStream,
-  SerializedShapeData,
-} from "@electric-sql/react"
+import { useShape, getShapeStream } from "@electric-sql/react"
 import "./Example.css"
 import { matchStream } from "./match-stream"
-import { Offset, ShapeStreamOptions } from "@electric-sql/client"
+import { Row, ShapeStream, ShapeStreamOptions } from "@electric-sql/client"
 import { useOptimistic } from "react"
 
-const ELECTRIC_URL = process.env.ELECTRIC_URL || "http://localhost:3000"
+const ELECTRIC_URL = process.env.ELECTRIC_URL || `http://localhost:3000`
 
 const parser = {
   timestamptz: (date: string) => new Date(date).getTime(),
 }
 
-const shapePosition: { shapeId?: string; offset?: Offset } = {
-  shapeId: undefined,
-  offset: `-1`,
-}
-
-const shapeOptions: () => ShapeStreamOptions = () => {
+const shapeOptions: () => ShapeStreamOptions<Row> = () => {
   if (typeof window !== `undefined`) {
     return {
       url: new URL(`/shape-proxy/items`, window?.location.origin).href,
@@ -37,17 +28,12 @@ const shapeOptions: () => ShapeStreamOptions = () => {
   }
 }
 
-const itemShape = () => ({ ...shapeOptions(), ...shapePosition })
-
-const updateShapePosition = (offset: Offset, shapeId?: string) => {
-  shapePosition.offset = offset
-  shapePosition.shapeId = shapeId
-}
-
 type Item = { id: string; created_at: number }
+const itemShape = (): ShapeStreamOptions<Row> => ({ ...shapeOptions() })
 
 async function createItem(newId: string) {
-  const itemsStream = getShapeStream(itemShape())
+  // FIX types later
+  const itemsStream = getShapeStream(itemShape()) as unknown as ShapeStream<Row>
 
   // Match the insert
   const findUpdatePromise = matchStream({
@@ -66,7 +52,9 @@ async function createItem(newId: string) {
 }
 
 async function clearItems() {
-  const itemsStream = getShapeStream(itemShape())
+  // FIX types later
+  const itemsStream = getShapeStream(itemShape()) as unknown as ShapeStream<Row>
+
   // Match the delete
   const findUpdatePromise = matchStream({
     stream: itemsStream,
@@ -82,17 +70,9 @@ async function clearItems() {
   return await Promise.all([findUpdatePromise, fetchPromise])
 }
 
-export default function Home({
-  shapes,
-}: {
-  shapes: { items: SerializedShapeData }
-}) {
-  const { shapeId, offset, data } = shapes.items
-  updateShapePosition(offset, shapeId)
-
+export default function Home() {
   const { data: items } = useShape({
     ...itemShape(),
-    shapeData: new Map(Object.entries(data ?? new Map())),
     parser,
   }) as unknown as {
     data: Item[]

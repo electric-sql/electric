@@ -31,7 +31,14 @@ export async function preloadShape<T extends Row<unknown> = Row>(
 }
 
 export function sortedOptionsHash<T>(options: ShapeStreamOptions<T>): string {
-  return JSON.stringify(options, Object.keys(options).sort())
+  // Filter options that uniquely identify the shape. DISCUSS BEFORE MERGING
+  const uniqueShapeOptions = {
+    url: options.url,
+    where: options.where,
+    columns: options.columns,
+    headers: options.headers,
+  }
+  return JSON.stringify(uniqueShapeOptions, Object.keys(options).sort())
 }
 
 export function getShapeStream<T extends Row<unknown>>(
