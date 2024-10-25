@@ -19,6 +19,9 @@ You can use Render to deploy [an Electric sync service](#deploy-electric) and [y
 >
 > If you need Postgres hosting to use with Render, [Neon](./neon) and [Supabase](./supabase) both work great.
 
+> [!Tip] Need context?
+> See the [Deployment guide](/docs/guides/deployment) for more details.
+
 ### Deploy Electric
 
 Deploy Electric as a [Web Service](https://docs.render.com/web-services) using their [deploy from a container registry](https://docs.render.com/web-services#deploy-from-a-container-registry) option.

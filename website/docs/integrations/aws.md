@@ -20,6 +20,9 @@ You can use AWS to deploy any or all components of the Electric stack:
 
 If you already run Postgres in AWS, potentially using RDS or Aurora, then it's a great idea to also deploy Electric within the same network.
 
+> [!Tip] Need context?
+> See the [Deployment guide](/docs/guides/deployment) for more details.
+
 ### Deploy Postgres
 
 AWS provides Postgres hosting via RDS and Aurora. Electric works with either. You need to configure them to enable logical replication and connect with the right user.

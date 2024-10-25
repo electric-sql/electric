@@ -14,8 +14,8 @@ image: /img/integrations/electric-neon.jpg
 
 You can use Electric with Neon's [serverless Postgres hosting](https://neon.tech/docs/introduction/serverless).
 
-> [!Info] Neon originally created what is now PGlite
-> Electric and Neon have also collaborated to develop [PGlite](/product/pglite), which was started as a project by Neon's CTO, [Stas Kelvich](https://github.com/kelvich).
+> [!Tip] Need context?
+> See the [Deployment guide](/docs/guides/deployment) for more details.
 
 ### Deploy Postgres
 
@@ -42,3 +42,7 @@ docker run -it \
 
 > [!Tip] Need somewhere to host Electric?
 > If you need somewhere to deploy Electric then [Neon works well](https://neon.tech/docs/guides/render) with [Render](./render#deploy-electric).
+
+## PGlite
+
+Electric and Neon have also collaborated to develop [PGlite](/product/pglite), which was started as a project by Neon's CTO, [Stas Kelvich](https://github.com/kelvich).

@@ -20,6 +20,9 @@ You *can* use Fly to deploy any or all components of the Electric stack:
 
 Fly's sweet spot is deploying Elixir applications, like the Electric sync service and/or [Phoenix aplications](./phoenix).
 
+> [!Tip] Need context?
+> See the [Deployment guide](/docs/guides/deployment) for more details.
+
 ### Deploy Postgres
 
 Fly isn't really a managed Postgres host. They do offer [database hosting](https://fly.io/docs/database-storage-guides/#managed-database-services) but they prefer to offload it to other providers, such as [Supabase](./supabase).

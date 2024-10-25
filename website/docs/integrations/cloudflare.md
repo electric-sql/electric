@@ -18,6 +18,9 @@ Cloudflare is a global network and edge-cloud platform.
 
 You can use Cloudflare [as a CDN](#cdn) in front of Electric and as a sync target to sync data into Cloudflare primitives including [Workers](#workers) and [Durable Objects](#durable-objects).
 
+> [!Tip] Need context?
+> See the [Deployment guide](/docs/guides/deployment) for more details.
+
 ### CDN
 
 Cloudflare provides a [global content delivery network](https://developers.cloudflare.com/cache/get-started/).

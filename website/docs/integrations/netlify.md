@@ -17,6 +17,9 @@ image: /img/integrations/electric-netlify.jpg
 
 Netlify is a great choice for deploying client-side web apps that use Electric.
 
+> [!Tip] Need context?
+> See the [Deployment guide](/docs/guides/deployment) for more details.
+
 ### Deploy your app
 
 [Create your app](https://docs.netlify.com/welcome/add-new-site/), connect it to Netlify and [deploy via `git push`](https://docs.netlify.com/site-deploys/create-deploys/#deploy-with-git).

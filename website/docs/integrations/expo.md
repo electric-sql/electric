@@ -16,6 +16,9 @@ Expo applications are developed in Javacript (or Typescript) using [React Native
 
 You can use the Electric [Typescript client](/docs/api/clients/typescript) in your Expo applications. This allows you to sync data from Electric into mobile apps.
 
+> [!Tip] Need context?
+> See the [Deployment guide](/docs/guides/deployment) for more details.
+
 ## Example
 
 Follow the [Expo Quickstart](https://docs.expo.dev/get-started/create-a-project/) to create an Expo app. Replace the generated `./app/(tabs)/index.tsx` with the following:

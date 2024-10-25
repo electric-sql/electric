@@ -20,6 +20,9 @@ You can use Digital Ocean to deploy any or all components of the Electric stack:
 
 If you already run a Managed Postgres in Digital Ocean, then it's a great idea to also deploy Electric within the same network.
 
+> [!Tip] Need context?
+> See the [Deployment guide](/docs/guides/deployment) for more details.
+
 ### Deploy Postgres
 
 Digital Ocean provides [Managed Postgres](https://docs.digitalocean.com/products/databases/postgresql/). This has logical replication enabled and works with Electric out of the box.

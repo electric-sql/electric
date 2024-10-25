@@ -12,46 +12,44 @@ image: /img/integrations/electric-supabase.jpg
 
 ## Electric and Supabase
 
-You can use Electric on Supabase's [hosted Postgres](https://supabase.com/docs/guides/database/overview). You can also use Electric to [sync data into Supabase Edge Functions](#sync-into-edge-function).
+You can use Electric on Supabase's [hosted Postgres](#deploy-postgres).
 
-> [!Info] Supabase contributions to PGlite
-> Electric and Supabase are also collaborating to develop [PGlite](/product/pglite), which Supabase sponsor, contribute to and have developed [database.build](https://database.build) on.
+You can also use Electric to [sync data into Supabase Edge Functions](#sync-into-edge-function).
+
+> [!Tip] Need context?
+> See the [Deployment guide](/docs/guides/deployment) for more details.
 
 ### Deploy Postgres
 
-All Supabase Postgres databases come with logical replication enabled and the necessary permissions for Electric to work.
+[Supabase Postgres databases](https://supabase.com/docs/guides/database/overview) come with logical replication enabled and the necessary permissions for Electric to work.
 
-Open [Supabase.com](https://supabase.com) and create a new project. Enter a database password and copy it somewhere secure. Wait a moment for the database to be created and then click the "Connect" button in the top right to get the connection string.
+Create a database on [Supabase.com](https://supabase.com). Click the "Connect" button in the top right to get the connection string.
 
-#### Direct access with IPv6
-
-Untick the "Display connection pooler" option to get the direct access URL that works with logical replication. Note that this only works with IPv6, which means you will need to configure Electric to connect over IPv6.
+Make sure you untick the "Display connection pooler" option to get the direct access URL that works with logical replication. Note that this only works with IPv6, which means you will need to configure Electric to connect over IPv6.
 
 ### Connect Electric
 
-Configure Electric to connect to the direct access `DATABASE_URL`, replacing `[YOUR-PASSWORD]` with the database password you noted down above.
-
-You also need to set [`DATABASE_USE_IPV6`](/docs/api/config#database-use-ipv6) to `true`.
-
-For example:
+Configure Electric to connect to the direct access `DATABASE_URL` you copied above. Set [`DATABASE_USE_IPV6`](/docs/api/config#database-use-ipv6) to `true`, e.g.:
 
 ```shell
 docker run -it \
-    -e "DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.abcd.supabase.co:5432/postgres" \
+    -e "DATABASE_URL=postgresql://postgres:[YOUR_PASSWORD]@db.[YOUR_PROJECT_ID].supabase.co:5432/postgres" \
     -e "DATABASE_USE_IPV6=true" \
     -p 3000:3000 \
     electricsql/electric:latest
 ```
 
+#### Troubleshooting IPv6
+
+The network where Electric is running must support IPv6. If you're running Electric on your own computer, check if you have IPv6 support by opening [test-ipv6.com](https://test-ipv6.com). If you see "No IPv6 address detected" on that page, consider `ssh`ing into another machine or using a VPN service that works with IPv6 networks.
+
+When running Electric in a Docker container, there's an additional hurdle in that Docker does not enable IPv6 out-of-the-box. Follow the [official guide](https://docs.docker.com/config/daemon/ipv6/#use-ipv6-for-the-default-bridge-network) to configure your Docker daemon for IPv6.
+
+If you're subscribed to the Pro or Team plan on Supabase Platform, you can side-step those hurdles by purchasing the [IPv4 add-on](https://supabase.com/docs/guides/platform/ipv4-address#enabling-the-add-on) to make your database host available at an IPv4 address.
+
 > [!Tip] Need somewhere to host Electric?
 > If you need to deploy Electric, then [Supabase works great](https://supabase.com/blog/postgres-on-fly-by-supabase) with [Fly.io](./fly#deploy-electric).
 
-> [!Warning] Troubleshooting IPv6
-> The network where Electric is running must support IPv6. If you're running Electric on your own computer, check if you have IPv6 support by opening [test-ipv6.com](https://test-ipv6.com). If you see "No IPv6 address detected" on that page, consider `ssh`ing into another machine or using a VPN service that works with IPv6 networks.
->
-> When running Electric in a Docker container, there's an additional hurdle in that Docker does not enable IPv6 out-of-the-box. Follow the [official guide](https://docs.docker.com/config/daemon/ipv6/#use-ipv6-for-the-default-bridge-network) to configure your Docker daemon for IPv6.
->
-> If you are subscribed to the Pro or Team plan on Supabase Platform, you can side-step those hurdles by purchasing the [IPv4 add-on](https://supabase.com/docs/guides/platform/ipv4-address#enabling-the-add-on) to make your database host available at an IPv4 address.
 
 ### Sync into Edge Function
 
@@ -119,3 +117,13 @@ $ curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/hello-e
 
 [["\"public\".\"items\"/\"69ad0c7c-7a84-48e8-84fc-d92e5bd5e2f4\"", ...]
 ```
+
+## PGlite
+
+Electric and Supabase are also collaborating to develop [PGlite](/product/pglite), which Supabase sponsor, contribute to and have developed [database.build](https://database.build) on.
+
+<div style="max-width: 512px; margin: 24px 0">
+  <div class="embed-container">
+    <YoutubeEmbed video-id="ooWaPVvljlU" />
+  </div>
+</div>
