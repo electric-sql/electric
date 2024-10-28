@@ -11,7 +11,10 @@ export type UpdateIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type DeleteIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type InsertIssuesFn = (...rows: GeneratedIssueRow[]) => Promise<string[]>
 export type ClearIssuesShapeFn = (shapeId?: string) => Promise<void>
-export type ClearShapeFn = (table: string, shapeId?: string) => Promise<void>
+export type ClearShapeFn = (
+  table: string,
+  options?: { shapeId?: string; databaseId?: string }
+) => Promise<void>
 
 export const testWithDbClient = test.extend<{
   dbClient: Client
@@ -38,24 +41,32 @@ export const testWithDbClient = test.extend<{
     await use(
       async (
         table: string,
-        databaseId: string = inject(`databaseId`),
-        shapeId?: string
+        options: {
+          databaseId?: string
+          shapeId?: string
+        } = {}
       ) => {
         const baseUrl = inject(`baseUrl`)
-        const resp = await fetch(
-          `${baseUrl}/v1/shape/${table}?database_id=${databaseId}${shapeId ? `&shape_id=${shapeId}` : ``}`,
-          {
-            method: `DELETE`,
-          }
-        )
+        const url = new URL(`${baseUrl}/v1/shape/${table}`)
+
+        if (!options.databaseId) {
+          options.databaseId = inject(`databaseId`)
+        }
+
+        url.searchParams.set(`database_id`, options.databaseId)
+
+        if (options.shapeId) {
+          url.searchParams.set(`shape_id`, options.shapeId)
+        }
+
+        const resp = await fetch(url.toString(), { method: `DELETE` })
         if (!resp.ok) {
           console.error(
-            await FetchError.fromResponse(
-              resp,
-              `DELETE ${baseUrl}/v1/shape/${table}`
-            )
+            await FetchError.fromResponse(resp, `DELETE ${url.toString()}`)
           )
-          throw new Error(`Could not delete shape ${table} with ID ${shapeId}`)
+          throw new Error(
+            `Could not delete shape ${table} with ID ${options.shapeId}`
+          )
         }
       }
     )
@@ -141,7 +152,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
     }),
 
   clearIssuesShape: async ({ clearShape, issuesTableUrl }, use) => {
-    use((shapeId?: string) => clearShape(issuesTableUrl, shapeId))
+    use((shapeId?: string) => clearShape(issuesTableUrl, { shapeId }))
   },
 })
 
@@ -182,7 +193,9 @@ export const testWithMultiTenantIssuesTable = testWithDbClients.extend<{
     // we don't want to interrupt cleanup
     await Promise.allSettled([
       clearShape(urlAppropriateTable),
-      clearShape(urlAppropriateTable, inject(`otherDatabaseId`)),
+      clearShape(urlAppropriateTable, {
+        databaseId: inject(`otherDatabaseId`),
+      }),
     ])
   },
   insertIssues: ({ issuesTableSql, dbClient }, use) =>
