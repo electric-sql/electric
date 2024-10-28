@@ -36,7 +36,7 @@ defmodule Electric.Plug.DeleteShapePlug do
 
       _ ->
         conn
-        |> send_resp(400, Jason.encode_to_iodata!("database_id should be a connection string"))
+        |> send_resp(400, Jason.encode_to_iodata!("database_id should be a string"))
         |> halt()
     end
   end
