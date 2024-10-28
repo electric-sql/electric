@@ -662,7 +662,7 @@ describe(`HTTP Sync`, () => {
       }
     })
 
-    await clearShape(issuesTableUrl, issueStream.shapeId!)
+    await clearShape(issuesTableUrl, { shapeId: issueStream.shapeId! })
 
     expect(shapeData).toEqual(
       new Map([[`${issuesTableKey}/"${id1}"`, { id: id1, title: `foo1` }]])
@@ -1112,4 +1112,16 @@ describe.sequential(`Multi tenancy sync`, () => {
       })
     }
   )
+
+  it(`should allow databases to be deleted`, async () => {
+    const url = new URL(`${BASE_URL}/v1/admin/database`)
+    url.searchParams.set(`database_id`, otherDatabaseId)
+
+    // Add the database
+    const res = await fetch(url.toString(), { method: `DELETE` })
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toBe(otherDatabaseId)
+  })
 })
