@@ -5,7 +5,7 @@ import { Client } from 'pg'
 const url = process.env.ELECTRIC_URL ?? `http://localhost:3000`
 const proxyUrl = process.env.ELECTRIC_PROXY_CACHE_URL ?? `http://localhost:3002`
 const databaseId = process.env.DATABASE_ID ?? `test_tenant`
-const otherDatabaseId = process.env.OTHER_DATABASE_ID ?? `other_test_tenant`
+const otherDatabaseId = `other_test_tenant`
 const otherDatabaseUrl =
   process.env.OTHER_DATABASE_URL ??
   `postgresql://postgres:password@localhost:54322/electric?sslmode=disable`
