@@ -41,9 +41,9 @@ export default defineConfig({
   markdown: {
     theme: 'github-dark',
     languages: [
+      'css',
       'elixir',
       'html',
-      'css',
       'javascript',
       'jsx',
       'nginx',
