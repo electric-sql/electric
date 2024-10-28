@@ -54,7 +54,7 @@ defmodule Electric.TenantManagerTest do
                  app_config: app_config
                )
 
-      assert {:error, :tenant_already_exists} =
+      assert {:error, {:tenant_already_exists, ^tenant_id}} =
                TenantManager.create_tenant(
                  tenant_id,
                  Keyword.put(connection_opts, :port, "654"),
@@ -78,7 +78,11 @@ defmodule Electric.TenantManagerTest do
                  app_config: app_config
                )
 
-      assert {:error, :db_already_in_use} =
+      pg_id =
+        connection_opts[:hostname] <>
+          ":" <> to_string(connection_opts[:port]) <> "/" <> connection_opts[:database]
+
+      assert {:error, {:db_already_in_use, ^pg_id}} =
                TenantManager.create_tenant("another_tenant", connection_opts,
                  inspector: inspector,
                  tenant_manager: tenant_manager,
