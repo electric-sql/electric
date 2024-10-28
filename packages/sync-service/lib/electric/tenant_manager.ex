@@ -142,7 +142,7 @@ defmodule Electric.TenantManager do
   @doc """
   Deletes a tenant by its ID.
   """
-  @spec delete_tenant(String.t(), Keyword.t()) :: :ok
+  @spec delete_tenant(String.t(), Keyword.t()) :: :ok | :not_found
   def delete_tenant(tenant_id, opts \\ []) do
     server = Keyword.get(opts, :tenant_manager, name(opts))
 
@@ -152,7 +152,7 @@ defmodule Electric.TenantManager do
         GenServer.call(server, {:delete_tenant, tenant_id, pg_id})
 
       {:error, :not_found} ->
-        :ok
+        :not_found
     end
   end
 
