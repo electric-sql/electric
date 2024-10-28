@@ -89,11 +89,30 @@ defmodule Electric.Plug.AddDatabasePlug do
       connection_opts =
         Electric.Utils.obfuscate_password(database_url_config ++ database_ipv6_config)
 
-      :ok = TenantManager.create_tenant(tenant_id, connection_opts, conn.assigns.config)
+      case TenantManager.create_tenant(tenant_id, connection_opts, conn.assigns.config) do
+        :ok ->
+          conn
+          |> send_resp(200, Jason.encode_to_iodata!(tenant_id))
+          |> halt()
 
-      conn
-      |> send_resp(200, Jason.encode_to_iodata!(tenant_id))
-      |> halt()
+        {:error, {:tenant_already_exists, tenant_id}} ->
+          conn
+          |> send_resp(400, Jason.encode_to_iodata!("Database #{tenant_id} already exists."))
+          |> halt()
+
+        {:error, {:db_already_in_use, pg_id}} ->
+          conn
+          |> send_resp(
+            400,
+            Jason.encode_to_iodata!("The database #{pg_id} is already in use by another tenant.")
+          )
+          |> halt()
+
+        {:error, error} ->
+          conn
+          |> send_resp(500, Jason.encode_to_iodata!(error))
+          |> halt()
+      end
     end)
   end
 
@@ -201,7 +220,6 @@ defmodule Electric.Plug.AddDatabasePlug do
 
   @impl Plug.ErrorHandler
   def handle_errors(conn, error) do
-    dbg(error)
     OpenTelemetry.record_exception(error.reason, error.stack)
 
     error_str = Exception.format(error.kind, error.reason)
