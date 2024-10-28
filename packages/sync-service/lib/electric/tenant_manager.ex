@@ -133,8 +133,8 @@ defmodule Electric.TenantManager do
     server = Keyword.get(opts, :tenant_manager, name(opts))
 
     case GenServer.call(server, {:store_tenant, tenant}) do
-      :tenant_already_exists -> {:error, :tenant_already_exists}
-      :db_already_in_use -> {:error, :db_already_in_use}
+      {:tenant_already_exists, tenant_id} -> {:error, {:tenant_already_exists, tenant_id}}
+      {:db_already_in_use, pg_id} -> {:error, {:db_already_in_use, pg_id}}
       :ok -> :ok
     end
   end
@@ -175,10 +175,10 @@ defmodule Electric.TenantManager do
     pg_id = tenant[:pg_id]
 
     if Map.has_key?(tenants, tenant_id) do
-      {:reply, :tenant_already_exists, state}
+      {:reply, {:tenant_already_exists, tenant_id}, state}
     else
       if MapSet.member?(dbs, pg_id) do
-        {:reply, :db_already_in_use, state}
+        {:reply, {:db_already_in_use, pg_id}, state}
       else
         {:reply, :ok,
          %{tenants: Map.put(tenants, tenant_id, tenant), dbs: MapSet.put(dbs, pg_id)}}
