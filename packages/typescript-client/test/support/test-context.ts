@@ -35,24 +35,50 @@ export const testWithDbClient = test.extend<{
   baseUrl: async ({}, use) => use(inject(`baseUrl`)),
   pgSchema: async ({}, use) => use(inject(`testPgSchema`)),
   clearShape: async ({}, use) => {
-    await use(async (table: string, shapeId?: string) => {
-      const baseUrl = inject(`baseUrl`)
-      const resp = await fetch(
-        `${baseUrl}/v1/shape/${table}${shapeId ? `?shape_id=${shapeId}` : ``}`,
-        {
-          method: `DELETE`,
-        }
-      )
-      if (!resp.ok) {
-        console.error(
-          await FetchError.fromResponse(
-            resp,
-            `DELETE ${baseUrl}/v1/shape/${table}`
-          )
+    await use(
+      async (
+        table: string,
+        databaseId: string = inject(`databaseId`),
+        shapeId?: string
+      ) => {
+        const baseUrl = inject(`baseUrl`)
+        const resp = await fetch(
+          `${baseUrl}/v1/shape/${table}?database_id=${databaseId}${shapeId ? `&shape_id=${shapeId}` : ``}`,
+          {
+            method: `DELETE`,
+          }
         )
-        throw new Error(`Could not delete shape ${table} with ID ${shapeId}`)
+        if (!resp.ok) {
+          console.error(
+            await FetchError.fromResponse(
+              resp,
+              `DELETE ${baseUrl}/v1/shape/${table}`
+            )
+          )
+          throw new Error(`Could not delete shape ${table} with ID ${shapeId}`)
+        }
       }
+    )
+  },
+})
+
+export const testWithDbClients = testWithDbClient.extend<{
+  otherDbClient: Client
+  otherAborter: AbortController
+}>({
+  otherDbClient: async ({}, use) => {
+    const client = new Client({
+      connectionString: inject(`otherDatabaseUrl`),
+      options: `-csearch_path=${inject(`testPgSchema`)}`,
     })
+    await client.connect()
+    await use(client)
+    await client.end()
+  },
+  otherAborter: async ({}, use) => {
+    const controller = new AbortController()
+    await use(controller)
+    controller.abort(`Test complete`)
   },
 })
 
@@ -117,6 +143,70 @@ export const testWithIssuesTable = testWithDbClient.extend<{
   clearIssuesShape: async ({ clearShape, issuesTableUrl }, use) => {
     use((shapeId?: string) => clearShape(issuesTableUrl, shapeId))
   },
+})
+
+export const testWithMultiTenantIssuesTable = testWithDbClients.extend<{
+  issuesTableSql: string
+  issuesTableUrl: string
+  insertIssues: InsertIssuesFn
+  insertIssuesToOtherDb: InsertIssuesFn
+}>({
+  issuesTableSql: async ({ dbClient, otherDbClient, task }, use) => {
+    const tableName = `"issues for ${task.id}_${Math.random().toString(16)}"`
+    const clients = [dbClient, otherDbClient]
+    const queryProms = clients.map((client) =>
+      client.query(`
+        DROP TABLE IF EXISTS ${tableName};
+        CREATE TABLE ${tableName} (
+          id UUID PRIMARY KEY,
+          title TEXT NOT NULL,
+          priority INTEGER NOT NULL
+        );
+        COMMENT ON TABLE ${tableName} IS 'Created for ${task.file?.name.replace(/'/g, `\``) ?? `unknown`} - ${task.name.replace(`'`, `\``)}';
+      `)
+    )
+
+    await Promise.all(queryProms)
+
+    await use(tableName)
+
+    const cleanupProms = clients.map((client) =>
+      client.query(`DROP TABLE ${tableName}`)
+    )
+    await Promise.all(cleanupProms)
+  },
+  issuesTableUrl: async ({ issuesTableSql, pgSchema, clearShape }, use) => {
+    const urlAppropriateTable = pgSchema + `.` + issuesTableSql
+    await use(urlAppropriateTable)
+    // ignore errors - clearShape has its own logging
+    // we don't want to interrupt cleanup
+    await Promise.allSettled([
+      clearShape(urlAppropriateTable),
+      clearShape(urlAppropriateTable, inject(`otherDatabaseId`)),
+    ])
+  },
+  insertIssues: ({ issuesTableSql, dbClient }, use) =>
+    use(async (...rows) => {
+      const placeholders = rows.map(
+        (_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`
+      )
+      const { rows: result } = await dbClient.query(
+        `INSERT INTO ${issuesTableSql} (id, title, priority) VALUES ${placeholders} RETURNING id`,
+        rows.flatMap((x) => [x.id ?? uuidv4(), x.title, 10])
+      )
+      return result.map((x) => x.id)
+    }),
+  insertIssuesToOtherDb: ({ issuesTableSql, otherDbClient }, use) =>
+    use(async (...rows) => {
+      const placeholders = rows.map(
+        (_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`
+      )
+      const { rows: result } = await otherDbClient.query(
+        `INSERT INTO ${issuesTableSql} (id, title, priority) VALUES ${placeholders} RETURNING id`,
+        rows.flatMap((x) => [x.id ?? uuidv4(), x.title, 10])
+      )
+      return result.map((x) => x.id)
+    }),
 })
 
 export const testWithMultitypeTable = testWithDbClient.extend<{

@@ -72,6 +72,7 @@ jobs:
         working-directory: ${{ matrix.package_dir }}
     env:
       DATABASE_ID: ci_test_tenant
+      OTHER_DATABASE_ID: ci_other_test_tenant
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
