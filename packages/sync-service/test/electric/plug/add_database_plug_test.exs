@@ -80,10 +80,6 @@ defmodule Electric.Plug.AddDatabasePlugTest do
       assert Jason.decode!(conn.resp_body) == ctx.tenant_id
     end
 
-    # Also test:
-    # - error when database ID (i.e. tenant) already exists
-    # - error when PG ID already exists (i.e combination of host, port and database already exists)
-
     test "returns 400 when tenant already exists", ctx do
       conn =
         ctx
