@@ -20,6 +20,24 @@ services:
       - docker-entrypoint.sh
       - -c
       - config_file=/etc/postgresql.conf
+  postgres2:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: electric
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "54322:5433"
+    volumes:
+      - ./postgres2.conf:/etc/postgresql.conf:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/00_shared_init.sql:ro
+    tmpfs:
+      - /var/lib/postgresql/data
+      - /tmp
+    entrypoint:
+      - docker-entrypoint.sh
+      - -c
+      - config_file=/etc/postgresql.conf
   nginx:
     image: nginx:latest
     ports:
