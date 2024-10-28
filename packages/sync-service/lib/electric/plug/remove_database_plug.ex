@@ -1,4 +1,4 @@
-defmodule Electric.Plug.DeleteDatabasePlug do
+defmodule Electric.Plug.RemoveDatabasePlug do
   use Plug.Builder
 
   alias Plug.Conn
