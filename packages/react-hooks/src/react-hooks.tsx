@@ -32,35 +32,49 @@ export function getShapeStream<T extends Row<unknown>>(
 ): ShapeStream<T> {
   const shapeHash = sortedOptionsHash(options)
 
-  // If the stream is already cached, return
+  // If the stream is already cached, return it if valid
   if (streamCache.has(shapeHash)) {
-    // Return the ShapeStream
-    return streamCache.get(shapeHash)! as ShapeStream<T>
-  } else {
-    const newShapeStream = new ShapeStream<T>(options)
+    const stream = streamCache.get(shapeHash)! as ShapeStream<T>
+    if (stream.error === undefined && !stream.options.signal?.aborted) {
+      return stream
+    }
 
-    streamCache.set(shapeHash, newShapeStream)
-
-    // Return the created shape
-    return newShapeStream
+    // if stream is cached but errored/aborted, remove it and related shapes
+    streamCache.delete(shapeHash)
+    shapeCache.delete(stream)
   }
+
+  const newShapeStream = new ShapeStream<T>(options)
+
+  streamCache.set(shapeHash, newShapeStream)
+
+  // Return the created shape
+  return newShapeStream
 }
 
 export function getShape<T extends Row<unknown>>(
   shapeStream: ShapeStream<T>
 ): Shape<T> {
-  // If the stream is already cached, return
+  // If the stream is already cached, return it if valid
   if (shapeCache.has(shapeStream)) {
-    // Return the ShapeStream
-    return shapeCache.get(shapeStream)! as Shape<T>
-  } else {
-    const newShape = new Shape<T>(shapeStream)
+    if (
+      shapeStream.error === undefined &&
+      !shapeStream.options.signal?.aborted
+    ) {
+      return shapeCache.get(shapeStream)! as Shape<T>
+    }
 
-    shapeCache.set(shapeStream, newShape)
-
-    // Return the created shape
-    return newShape
+    // if stream is cached but errored/aborted, remove it and related shapes
+    streamCache.delete(sortedOptionsHash(shapeStream.options))
+    shapeCache.delete(shapeStream)
   }
+
+  const newShape = new Shape<T>(shapeStream)
+
+  shapeCache.set(shapeStream, newShape)
+
+  // Return the created shape
+  return newShape
 }
 
 export interface UseShapeResult<T extends Row<unknown> = Row> {
