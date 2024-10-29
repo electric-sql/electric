@@ -73,47 +73,60 @@ defmodule Electric.Plug.AddDatabasePlug do
     end
   end
 
-  defp create_tenant(%Conn{assigns: %{database_id: tenant_id} = assigns} = conn, _) do
-    %{DATABASE_URL: db_url, DATABASE_USE_IPV6: use_ipv6?} = assigns
-
+  defp create_tenant(%Conn{assigns: %{DATABASE_URL: db_url}} = conn, _) do
     OpenTelemetry.with_span("add_db.plug.create_tenant", [], fn ->
-      {:ok, database_url_config} = Electric.ConfigParser.parse_postgresql_uri(db_url)
-
-      database_ipv6_config =
-        if use_ipv6? do
-          [ipv6: true]
-        else
-          []
-        end
-
-      connection_opts =
-        Electric.Utils.obfuscate_password(database_url_config ++ database_ipv6_config)
-
-      case TenantManager.create_tenant(tenant_id, connection_opts, conn.assigns.config) do
-        :ok ->
-          conn
-          |> send_resp(200, Jason.encode_to_iodata!(tenant_id))
-          |> halt()
-
-        {:error, {:tenant_already_exists, tenant_id}} ->
-          conn
-          |> send_resp(400, Jason.encode_to_iodata!("Database #{tenant_id} already exists."))
-          |> halt()
-
-        {:error, {:db_already_in_use, pg_id}} ->
-          conn
-          |> send_resp(
-            400,
-            Jason.encode_to_iodata!("The database #{pg_id} is already in use by another tenant.")
-          )
-          |> halt()
+      case Electric.ConfigParser.parse_postgresql_uri(db_url) do
+        {:ok, database_url_config} ->
+          do_create_tenant(conn, database_url_config)
 
         {:error, error} ->
           conn
-          |> send_resp(500, Jason.encode_to_iodata!(error))
+          |> send_resp(400, Jason.encode_to_iodata!("Invalid DATABASE_URL: " <> error))
           |> halt()
       end
     end)
+  end
+
+  defp do_create_tenant(
+         %Conn{assigns: %{database_id: tenant_id} = assigns} = conn,
+         database_url_config
+       ) do
+    %{DATABASE_USE_IPV6: use_ipv6?} = assigns
+
+    database_ipv6_config =
+      if use_ipv6? do
+        [ipv6: true]
+      else
+        []
+      end
+
+    connection_opts =
+      Electric.Utils.obfuscate_password(database_url_config ++ database_ipv6_config)
+
+    case TenantManager.create_tenant(tenant_id, connection_opts, conn.assigns.config) do
+      :ok ->
+        conn
+        |> send_resp(200, Jason.encode_to_iodata!(tenant_id))
+        |> halt()
+
+      {:error, {:tenant_already_exists, tenant_id}} ->
+        conn
+        |> send_resp(400, Jason.encode_to_iodata!("Database #{tenant_id} already exists."))
+        |> halt()
+
+      {:error, {:db_already_in_use, pg_id}} ->
+        conn
+        |> send_resp(
+          400,
+          Jason.encode_to_iodata!("The database #{pg_id} is already in use by another tenant.")
+        )
+        |> halt()
+
+      {:error, error} ->
+        conn
+        |> send_resp(500, Jason.encode_to_iodata!(error))
+        |> halt()
+    end
   end
 
   def cors(conn, _opts) do
@@ -220,6 +233,7 @@ defmodule Electric.Plug.AddDatabasePlug do
 
   @impl Plug.ErrorHandler
   def handle_errors(conn, error) do
+    dbg(error)
     OpenTelemetry.record_exception(error.reason, error.stack)
 
     error_str = Exception.format(error.kind, error.reason)
