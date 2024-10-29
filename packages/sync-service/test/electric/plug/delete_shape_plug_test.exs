@@ -102,6 +102,16 @@ defmodule Electric.Plug.DeleteShapePlugTest do
              }
     end
 
+    test "returns 404 when database is not found", ctx do
+      conn =
+        ctx
+        |> conn(:delete, "?root_table=public.users&database_id=unknown")
+        |> DeleteShapePlug.call([])
+
+      assert conn.status == 404
+      assert Jason.decode!(conn.resp_body) == ~s|Database "unknown" not found|
+    end
+
     test "should clean shape based on shape definition", ctx do
       Mock.ShapeCache
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts -> {@test_shape_id, 0} end)
