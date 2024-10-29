@@ -37,6 +37,8 @@ stream.subscribe(messages => {
 })
 ```
 
+#### Custom parsing
+
 By default, `ShapeStream` parses the following Postgres types into native JavaScript values:
 - `int2`, `int4`, `float4`, and `float8` are parsed into JavaScript `Number`
 - `int8` is parsed into a JavaScript `BigInt`
