@@ -7,7 +7,7 @@
 [my invalidated_slot_error=
   """
   [error] GenServer Electric.Connection.Manager terminating
-  ** (Postgrex.Error) ERROR 55000 (object_not_in_prerequisite_state) cannot read from logical replication slot "electric_slot_default"
+  ** (Postgrex.Error) ERROR 55000 (object_not_in_prerequisite_state) cannot read from logical replication slot "electric_slot_integration"
 
   This slot has been invalidated because it exceeded the maximum reserved size.
   """]
@@ -34,7 +34,7 @@
 
 ## Confirm slot invalidation in Postgres.
 [shell pg]
-  ?invalidating slot "electric_slot_default" because its restart_lsn [\d\w]+/[\d\w]+ exceeds max_slot_wal_keep_size
+  ?invalidating slot "electric_slot_integration" because its restart_lsn [\d\w]+/[\d\w]+ exceeds max_slot_wal_keep_size
 
 ## Observe the fatal connection error.
 [shell electric]

@@ -86,6 +86,20 @@ defmodule Electric.Postgres.Identifiers do
       else: {:ok, unescape_quotes(ident)}
   end
 
+  @doc """
+  Parse an unquoted PostgreSQL identifier, downcasing characters and failing if any
+  special characters are present
+
+  ## Examples
+      iex> Electric.Postgres.Identifiers.parse_unquoted_identifier("FooBar")
+      {:ok, "foobar"}
+
+      iex> Electric.Postgres.Identifiers.parse_unquoted_identifier("foob@r")
+      {:error, ~S|Invalid unquoted identifier contains special characters: foob@r|}
+  """
+  @spec parse(binary(), boolean(), boolean()) :: {:ok, binary()} | {:error, term()}
+  def parse_unquoted_identifier(ident, truncate \\ false, single_byte_encoding \\ false)
+
   def parse_unquoted_identifier("", _, _), do: parse_quoted_identifier("")
 
   def parse_unquoted_identifier(ident, truncate, single_byte_encoding) do
