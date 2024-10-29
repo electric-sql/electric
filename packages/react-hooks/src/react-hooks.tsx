@@ -96,7 +96,7 @@ function parseShapeData<T extends Row<unknown>>(
   shape: Shape<T>
 ): UseShapeResult<T> {
   return {
-    data: shape.rowsSync,
+    data: shape.currentRows,
     isLoading: shape.isLoading(),
     lastSyncedAt: shape.lastSyncedAt(),
     isError: shape.error !== false,
