@@ -4,12 +4,12 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # The halt/1 function is redefined further down below
   import Plug.Conn, except: [halt: 1]
+  import Electric.Plug.TenantUtils
 
   alias OpenTelemetry.SemConv, as: SC
 
   alias Electric.Shapes
   alias Electric.Schema
-  alias Electric.TenantManager
   alias Electric.Replication.LogOffset
   alias Electric.Telemetry.OpenTelemetry
   alias Plug.Conn
@@ -198,51 +198,6 @@ defmodule Electric.Plug.ServeShapePlug do
   # end_telemetry_span needs to always be the last plug here.
   plug :end_telemetry_span
 
-  defp validate_tenant_id(%Conn{} = conn, _) do
-    case Map.get(conn.query_params, "database_id", :not_found) do
-      :not_found ->
-        conn
-
-      id when is_binary(id) ->
-        assign(conn, :database_id, id)
-
-      _ ->
-        conn
-        |> send_resp(400, Jason.encode_to_iodata!("database_id should be a connection string"))
-        |> halt()
-    end
-  end
-
-  defp load_tenant(%Conn{assigns: %{database_id: tenant_id}} = conn, _) do
-    {:ok, tenant_config} = TenantManager.get_tenant(tenant_id, conn.assigns.config)
-    assign_tenant(conn, tenant_config)
-  end
-
-  defp load_tenant(%Conn{} = conn, _) do
-    # Tenant ID is not specified
-    # ask the tenant manager for the only tenant
-    # if there's more than one tenant we reply with an error
-    case TenantManager.get_only_tenant(conn.assigns.config) do
-      {:ok, tenant_config} ->
-        assign_tenant(conn, tenant_config)
-
-      {:error, :not_found} ->
-        conn
-        |> send_resp(400, Jason.encode_to_iodata!("No database found"))
-        |> halt()
-
-      {:error, :several_tenants} ->
-        conn
-        |> send_resp(
-          400,
-          Jason.encode_to_iodata!(
-            "Database ID was not provided and there are multiple databases. Please specify a database ID using the `database_id` query parameter."
-          )
-        )
-        |> halt()
-    end
-  end
-
   defp validate_query_params(%Conn{} = conn, _) do
     Logger.info("Query String: #{conn.query_string}")
 
@@ -259,14 +214,6 @@ defmodule Electric.Plug.ServeShapePlug do
         |> send_resp(400, Jason.encode_to_iodata!(error_map))
         |> halt()
     end
-  end
-
-  defp assign_tenant(%Conn{} = conn, tenant_config) do
-    id = tenant_config[:tenant_id]
-
-    conn
-    |> assign(:config, tenant_config)
-    |> assign(:tenant_id, id)
   end
 
   defp load_shape_info(%Conn{} = conn, _) do
