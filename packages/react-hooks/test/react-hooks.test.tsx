@@ -60,7 +60,7 @@ describe(`useShape`, () => {
     )
   })
 
-  it.only(`should re-sync a shape after an interrupt`, async ({
+  it(`should re-sync a shape after an interrupt`, async ({
     aborter,
     issuesTableUrl,
     insertIssues,
