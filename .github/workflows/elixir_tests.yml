@@ -2,8 +2,14 @@ name: Elixir CI
 
 on:
   push:
-    branches: ['main']
+    branches: ["main"]
+    paths-ignore:
+      - "website/**"
+      - "**/README.md"
   pull_request:
+    paths-ignore:
+      - "website/**"
+      - "**/README.md"
 
 permissions:
   contents: read
@@ -32,14 +38,14 @@ jobs:
           - 54321:5432
     steps:
       - uses: actions/checkout@v4
-      - name: 'Set PG settings'
+      - name: "Set PG settings"
         run: |
           docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
           docker restart ${{ job.services.postgres.id }}
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
-          version-file: '.tool-versions'
+          version-file: ".tool-versions"
       - name: Restore dependencies cache
         uses: actions/cache@v3
         with:
@@ -89,14 +95,14 @@ jobs:
           - 54321:5432
     steps:
       - uses: actions/checkout@v4
-      - name: 'Set PG settings'
+      - name: "Set PG settings"
         run: |
           docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
           docker restart ${{ job.services.postgres.id }}
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
-          version-file: '.tool-versions'
+          version-file: ".tool-versions"
       - name: Restore dependencies cache
         uses: actions/cache@v3
         with:
@@ -134,7 +140,7 @@ jobs:
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
-          version-file: '.tool-versions'
+          version-file: ".tool-versions"
       - name: Cache dependencies
         id: cache-deps
         uses: actions/cache@v4
