@@ -209,6 +209,16 @@ defmodule Electric.Plug.ServeShapePlugTest do
              }
     end
 
+    test "returns 404 when database is not found", ctx do
+      conn =
+        ctx
+        |> conn(:get, %{"root_table" => "public.users"}, "?offset=-1&database_id=unknown")
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 404
+      assert Jason.decode!(conn.resp_body) == ~s|Database "unknown" not found|
+    end
+
     test "returns snapshot when offset is -1", %{tenant_id: tenant_id} = ctx do
       Mock.ShapeCache
       |> expect(:get_or_create_shape_id, fn @test_shape, _opts ->
