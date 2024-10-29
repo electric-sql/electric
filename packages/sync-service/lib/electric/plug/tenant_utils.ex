@@ -24,8 +24,15 @@ defmodule Electric.Plug.TenantUtils do
   end
 
   def load_tenant(%Conn{assigns: %{database_id: tenant_id}} = conn, _) do
-    {:ok, tenant_config} = TenantManager.get_tenant(tenant_id, conn.assigns.config)
-    assign_tenant(conn, tenant_config)
+    case TenantManager.get_tenant(tenant_id, conn.assigns.config) do
+      {:ok, tenant_config} ->
+        assign_tenant(conn, tenant_config)
+
+      {:error, :not_found} ->
+        conn
+        |> send_resp(404, Jason.encode_to_iodata!(~s|Database "#{tenant_id}" not found|))
+        |> halt()
+    end
   end
 
   def load_tenant(%Conn{} = conn, _) do
@@ -38,7 +45,7 @@ defmodule Electric.Plug.TenantUtils do
 
       {:error, :not_found} ->
         conn
-        |> send_resp(400, Jason.encode_to_iodata!("No database found"))
+        |> send_resp(404, Jason.encode_to_iodata!("No database found"))
         |> halt()
 
       {:error, :several_tenants} ->
