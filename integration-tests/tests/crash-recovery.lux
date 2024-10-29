@@ -42,9 +42,9 @@
   # strip ANSI codes from response for easier matching
   !curl -v -X GET "http://localhost:3000/v1/shape?table=items&offset=-1"
   ?electric-handle: ([\d-]+)
-  [local shape_handle=$1]
+  [local handle=$1]
   ?electric-offset: ([\w\d_]+)
-  [local last_offset=$1]
+  [local offset=$1]
 
 ## Terminate electric
 [shell electric]
@@ -58,7 +58,7 @@
 
 # Client should be able to continue same shape
 [shell client]
-  !curl -v -X GET "http://localhost:3000/v1/shape?table=items&handle=$shape_handle&offset=$last_offset"
+  !curl -v -X GET "http://localhost:3000/v1/shape?table=items&handle=$handle&offset=$offset"
   ??HTTP/1.1 200 OK
 
 [cleanup]
