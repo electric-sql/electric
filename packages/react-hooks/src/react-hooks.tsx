@@ -24,7 +24,14 @@ export async function preloadShape<T extends Row<unknown> = Row>(
 }
 
 export function sortedOptionsHash<T>(options: ShapeStreamOptions<T>): string {
-  return JSON.stringify(options, Object.keys(options).sort())
+  const hashOptions = {
+    url: options.url,
+    where: options.where,
+    columns: options.columns,
+    headers: options.headers,
+  }
+
+  return JSON.stringify(hashOptions, Object.keys(hashOptions).sort())
 }
 
 export function getShapeStream<T extends Row<unknown>>(
