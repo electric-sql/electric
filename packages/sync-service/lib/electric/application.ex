@@ -29,6 +29,7 @@ defmodule Electric.Application do
         publication_name: config.replication_opts.publication_name,
         try_creating_publication?: true,
         slot_name: config.replication_opts.slot_name,
+        slot_temporary?: config.replication_opts.slot_temporary?,
         transaction_received:
           {Electric.Replication.ShapeLogCollector, :store_transaction, [shape_log_collector]},
         relation_received:
@@ -102,6 +103,7 @@ defmodule Electric.Application do
     replication_stream_id = Application.fetch_env!(:electric, :replication_stream_id)
     publication_name = "electric_publication_#{replication_stream_id}"
     slot_name = "electric_slot_#{replication_stream_id}"
+    slot_temporary? = Application.get_env(:electric, :replication_slot_temporary?, false)
 
     get_pg_version_fn = fn ->
       Electric.Connection.Manager.get_pg_version(Electric.Connection.Manager)
@@ -133,7 +135,8 @@ defmodule Electric.Application do
       replication_opts: %{
         stream_id: replication_stream_id,
         publication_name: publication_name,
-        slot_name: slot_name
+        slot_name: slot_name,
+        slot_temporary?: slot_temporary?
       },
       pool_opts: %{
         size: Application.fetch_env!(:electric, :db_pool_size)

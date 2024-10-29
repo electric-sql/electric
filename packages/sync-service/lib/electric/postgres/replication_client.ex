@@ -33,6 +33,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :try_creating_publication?,
       :start_streaming?,
       :slot_name,
+      :slot_temporary?,
       :display_settings,
       origin: "postgres",
       txn_collector: %Collector{},
@@ -56,6 +57,7 @@ defmodule Electric.Postgres.ReplicationClient do
             try_creating_publication?: boolean(),
             start_streaming?: boolean(),
             slot_name: String.t(),
+            slot_temporary?: boolean(),
             origin: String.t(),
             txn_collector: Collector.t(),
             step: Electric.Postgres.ReplicationClient.step(),
@@ -70,7 +72,8 @@ defmodule Electric.Postgres.ReplicationClient do
                    publication_name: [required: true, type: :string],
                    try_creating_publication?: [required: true, type: :boolean],
                    start_streaming?: [type: :boolean, default: true],
-                   slot_name: [required: true, type: :string]
+                   slot_name: [required: true, type: :string],
+                   slot_temporary?: [type: :boolean, default: false]
                  )
 
     @spec new(Access.t()) :: t()

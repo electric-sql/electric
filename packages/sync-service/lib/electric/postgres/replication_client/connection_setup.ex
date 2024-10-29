@@ -8,6 +8,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   module focused on the handling of logical messages.
   """
   alias Electric.Utils
+  alias Electric.Postgres.ReplicationClient.State
 
   require Logger
 
@@ -100,9 +101,15 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   ###
 
-  defp create_slot_query(state) do
-    query =
-      "CREATE_REPLICATION_SLOT #{Utils.quote_name(state.slot_name)} LOGICAL pgoutput NOEXPORT_SNAPSHOT"
+  @slot_options "LOGICAL pgoutput NOEXPORT_SNAPSHOT"
+  @temp_slot_options "TEMPORARY #{@slot_options}"
+  defp create_slot_query(%State{slot_name: slot_name, slot_temporary?: true} = state) do
+    query = "CREATE_REPLICATION_SLOT #{Utils.quote_name(slot_name)} #{@temp_slot_options}"
+    {:query, query, state}
+  end
+
+  defp create_slot_query(%State{slot_name: slot_name} = state) do
+    query = "CREATE_REPLICATION_SLOT #{Utils.quote_name(slot_name)} #{@slot_options}"
 
     {:query, query, state}
   end
