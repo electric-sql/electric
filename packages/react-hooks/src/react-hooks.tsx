@@ -19,7 +19,7 @@ export async function preloadShape<T extends Row<unknown> = Row>(
 ): Promise<Shape<T>> {
   const shapeStream = getShapeStream<T>(options)
   const shape = getShape<T>(shapeStream)
-  await shape.value
+  await shape.rows
   return shape
 }
 

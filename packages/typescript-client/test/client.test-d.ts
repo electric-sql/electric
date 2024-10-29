@@ -56,8 +56,9 @@ describe(`client`, () => {
 
       expectTypeOf(shape).toEqualTypeOf<Shape<Row>>()
 
-      shape.subscribe((data) => {
-        expectTypeOf(data).toEqualTypeOf<ShapeData<Row>>()
+      shape.subscribe(({ value, rows }) => {
+        expectTypeOf(value).toEqualTypeOf<ShapeData<Row>>()
+        expectTypeOf(rows).toEqualTypeOf<Row[]>()
       })
 
       const data = await shape.value
@@ -76,8 +77,9 @@ describe(`client`, () => {
       const shape = new Shape(shapeStream)
       expectTypeOf(shape).toEqualTypeOf<Shape<CustomRow>>()
 
-      shape.subscribe((data) => {
-        expectTypeOf(data).toEqualTypeOf<ShapeData<CustomRow>>()
+      shape.subscribe(({ value, rows }) => {
+        expectTypeOf(value).toEqualTypeOf<ShapeData<CustomRow>>()
+        expectTypeOf(rows).toEqualTypeOf<CustomRow[]>()
       })
 
       const data = await shape.value
