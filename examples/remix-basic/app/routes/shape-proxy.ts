@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs } from "@remix-run/node"
 
-export async function loader({ params, request }: LoaderFunctionArgs) {
+export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url)
   const originUrl = new URL(`http://localhost:3000/v1/shape`)
   url.searchParams.forEach((value, key) => {
