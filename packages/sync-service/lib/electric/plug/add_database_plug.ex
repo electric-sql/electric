@@ -23,13 +23,13 @@ defmodule Electric.Plug.AddDatabasePlug do
     embedded_schema do
       field(:DATABASE_URL, :string)
       field(:DATABASE_USE_IPV6, :boolean, default: false)
-      field(:id, :string, autogenerate: {Electric.Utils, :uuid4, []})
+      field(:database_id, :string, autogenerate: {Electric.Utils, :uuid4, []})
     end
 
     def validate(params) do
       %__MODULE__{}
       |> cast(params, __schema__(:fields), message: fn _, _ -> "must be %{type}" end)
-      |> validate_required([:DATABASE_URL, :id])
+      |> validate_required([:DATABASE_URL, :database_id])
       |> apply_action(:validate)
       |> case do
         {:ok, params} ->
@@ -73,7 +73,7 @@ defmodule Electric.Plug.AddDatabasePlug do
     end
   end
 
-  defp create_tenant(%Conn{assigns: %{id: tenant_id} = assigns} = conn, _) do
+  defp create_tenant(%Conn{assigns: %{database_id: tenant_id} = assigns} = conn, _) do
     %{DATABASE_URL: db_url, DATABASE_USE_IPV6: use_ipv6?} = assigns
 
     OpenTelemetry.with_span("add_db.plug.create_tenant", [], fn ->
@@ -125,7 +125,7 @@ defmodule Electric.Plug.AddDatabasePlug do
 
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do
     %{
-      "tenant.id" => assigns[:id],
+      "tenant.id" => assigns[:database_id],
       "tenant.DATABASE_URL" => assigns[:DATABASE_URL],
       "error.type" => assigns[:error_str],
       "http.request_id" => assigns[:plug_request_id],

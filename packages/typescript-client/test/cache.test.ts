@@ -165,16 +165,22 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     proxyCacheBaseUrl,
     issuesTableUrl,
   }) => {
+    console.log(
+      `FETCHING: ` + `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`
+    )
     const originalRes = await fetch(
       `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
       {}
     )
+    console.log(originalRes.headers)
     const lastOffset = originalRes.headers.get(CHUNK_LAST_OFFSET_HEADER)
     const shapeId = originalRes.headers.get(SHAPE_ID_HEADER)
     const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_id=${shapeId}`
 
     // Make a first request such that response is cached
+    console.log(`FETCHING: ` + urlToTest)
     const originalUpToDateRes = await fetch(urlToTest, {})
+    console.log(`GOT RESPONSE: ` + JSON.stringify(originalUpToDateRes, null, 2))
 
     expect(originalUpToDateRes.status).toBe(200)
     expect(getCacheStatus(originalUpToDateRes)).toBe(CacheStatus.MISS)

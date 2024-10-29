@@ -409,7 +409,7 @@ paths:
               type: object
               required:
                 - DATABASE_URL
-                - id
+                - database_id
               properties:
                 DATABASE_URL:
                   type: string
@@ -418,7 +418,7 @@ paths:
                   type: boolean
                   default: false
                   description: Whether to use IPv6 for database connections
-                id:
+                database_id:
                   type: string
                   description: Unique identifier for the database (auto-generated UUID if not provided)
       responses:
@@ -438,17 +438,9 @@ paths:
                 description: Error message
                 examples:
                   already_exists:
-                    value: "Database 0bcb489b-c860-48a5-ba30-87e1c4b8be22 already exists."
+                    value: "Database {id} already exists."
                   db_in_use:
                     value: "The database localhost:54321/db is already in use by another tenant."
-        "500":
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: string
-                description: Error message
-
     delete:
       summary: Remove Database
       description: |-

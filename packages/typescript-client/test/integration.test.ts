@@ -963,7 +963,7 @@ describe.sequential(`Multi tenancy sync`, () => {
         'Content-Type': `application/json`,
       },
       body: JSON.stringify({
-        id: otherDatabaseId,
+        database_id: otherDatabaseId,
         DATABASE_URL: OTHER_DATABASE_URL,
       }),
     })

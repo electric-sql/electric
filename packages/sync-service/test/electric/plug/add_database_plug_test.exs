@@ -66,14 +66,14 @@ defmodule Electric.Plug.AddDatabasePlugTest do
 
       assert Jason.decode!(conn.resp_body) == %{
                "DATABASE_URL" => ["can't be blank"],
-               "id" => ["can't be blank"]
+               "database_id" => ["can't be blank"]
              }
     end
 
     test "returns 200 when successfully adding a tenant", ctx do
       conn =
         ctx
-        |> conn("POST", %{id: ctx.tenant_id, DATABASE_URL: @conn_url})
+        |> conn("POST", %{database_id: ctx.tenant_id, DATABASE_URL: @conn_url})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 200
@@ -83,7 +83,7 @@ defmodule Electric.Plug.AddDatabasePlugTest do
     test "returns 400 when tenant already exists", ctx do
       conn =
         ctx
-        |> conn("POST", %{id: ctx.tenant_id, DATABASE_URL: @conn_url})
+        |> conn("POST", %{database_id: ctx.tenant_id, DATABASE_URL: @conn_url})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 200
@@ -92,7 +92,7 @@ defmodule Electric.Plug.AddDatabasePlugTest do
       # Now try creating another tenant with the same ID
       conn =
         ctx
-        |> conn("POST", %{id: ctx.tenant_id, DATABASE_URL: @other_conn_url})
+        |> conn("POST", %{database_id: ctx.tenant_id, DATABASE_URL: @other_conn_url})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 400
@@ -102,7 +102,7 @@ defmodule Electric.Plug.AddDatabasePlugTest do
     test "returns 400 when database is already in use", ctx do
       conn =
         ctx
-        |> conn("POST", %{id: ctx.tenant_id, DATABASE_URL: @conn_url})
+        |> conn("POST", %{database_id: ctx.tenant_id, DATABASE_URL: @conn_url})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 200
@@ -111,7 +111,7 @@ defmodule Electric.Plug.AddDatabasePlugTest do
       # Now try creating another tenant with the same database
       conn =
         ctx
-        |> conn("POST", %{id: "other_tenant", DATABASE_URL: @conn_url})
+        |> conn("POST", %{database_id: "other_tenant", DATABASE_URL: @conn_url})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 400
