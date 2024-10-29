@@ -824,7 +824,8 @@ describe(`HTTP Sync`, () => {
     aborter,
   }) => {
     const issueStream = new ShapeStream<IssueRow>({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       subscribe: true,
       signal: aborter.signal,
     })
@@ -834,7 +835,8 @@ describe(`HTTP Sync`, () => {
     })
 
     const invalidIssueStream = new ShapeStream<IssueRow>({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       subscribe: true,
       shapeId: issueStream.shapeId,
       where: `1=1`,
