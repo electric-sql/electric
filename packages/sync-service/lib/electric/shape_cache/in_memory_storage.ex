@@ -18,7 +18,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     :snapshot_table,
     :log_table,
     :chunk_checkpoint_table,
-    :shape_id,
+    :shape_handle,
     :electric_instance_id,
     :tenant_id
   ]
@@ -36,26 +36,26 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     }
   end
 
-  def name(electric_instance_id, tenant_id, shape_id) when is_binary(shape_id) do
-    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_id)
+  def name(electric_instance_id, tenant_id, shape_handle) when is_binary(shape_handle) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_handle)
   end
 
   @impl Electric.ShapeCache.Storage
-  def for_shape(shape_id, _tenant_id, %{shape_id: shape_id} = opts) do
+  def for_shape(shape_handle, _tenant_id, %{shape_handle: shape_handle} = opts) do
     opts
   end
 
-  def for_shape(shape_id, tenant_id, %{
+  def for_shape(shape_handle, tenant_id, %{
         table_base_name: table_base_name,
         electric_instance_id: electric_instance_id
       }) do
-    snapshot_table_name = :"#{table_base_name}.#{tenant_id}.Snapshot_#{shape_id}"
-    log_table_name = :"#{table_base_name}.#{tenant_id}.Log_#{shape_id}"
-    chunk_checkpoint_table_name = :"#{table_base_name}.#{tenant_id}.ChunkCheckpoint_#{shape_id}"
+    snapshot_table_name = :"#{table_base_name}.#{tenant_id}.Snapshot_#{shape_handle}"
+    log_table_name = :"#{table_base_name}.#{tenant_id}.Log_#{shape_handle}"
+    chunk_checkpoint_table_name = :"#{table_base_name}.#{tenant_id}.ChunkCheckpoint_#{shape_handle}"
 
     %__MODULE__{
       table_base_name: table_base_name,
-      shape_id: shape_id,
+      shape_handle: shape_handle,
       snapshot_table: snapshot_table_name,
       log_table: log_table_name,
       chunk_checkpoint_table: chunk_checkpoint_table_name,
@@ -66,7 +66,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   @impl Electric.ShapeCache.Storage
   def start_link(%MS{} = opts) do
-    if is_nil(opts.shape_id), do: raise("cannot start an un-attached storage instance")
+    if is_nil(opts.shape_handle), do: raise("cannot start an un-attached storage instance")
     if is_nil(opts.electric_instance_id), do: raise("electric_instance_id cannot be nil")
     if is_nil(opts.tenant_id), do: raise("tenant_id cannot be nil")
 
@@ -78,7 +78,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
           chunk_checkpoint_table: storage_table(opts.chunk_checkpoint_table)
         }
       end,
-      name: name(opts.electric_instance_id, opts.tenant_id, opts.shape_id)
+      name: name(opts.electric_instance_id, opts.tenant_id, opts.shape_handle)
     )
   end
 
@@ -203,7 +203,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def make_new_snapshot!(data_stream, %MS{} = opts) do
     OpenTelemetry.with_span(
       "storage.make_new_snapshot",
-      [storage_impl: "in_memory", "shape.id": opts.shape_id],
+      [storage_impl: "in_memory", "shape.handle": opts.shape_handle],
       fn ->
         table = opts.snapshot_table
 

@@ -20,7 +20,7 @@ defmodule Electric.ShapeCache.FileStorage do
 
   defstruct [
     :base_path,
-    :shape_id,
+    :shape_handle,
     :db,
     :cubdb_dir,
     :shape_definition_dir,
@@ -41,30 +41,30 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def for_shape(shape_id, _tenant_id, %FS{shape_id: shape_id} = opts) do
+  def for_shape(shape_handle, _tenant_id, %FS{shape_handle: shape_handle} = opts) do
     opts
   end
 
   def for_shape(
-        shape_id,
+        shape_handle,
         tenant_id,
         %{base_path: base_path, electric_instance_id: electric_instance_id} = opts
       ) do
     %FS{
       base_path: base_path,
-      shape_id: shape_id,
-      db: name(electric_instance_id, tenant_id, shape_id),
-      cubdb_dir: Path.join([base_path, tenant_id, shape_id, "cubdb"]),
-      snapshot_dir: Path.join([base_path, tenant_id, shape_id, "snapshots"]),
-      shape_definition_dir: Path.join([base_path, tenant_id, shape_id]),
+      shape_handle: shape_handle,
+      db: name(electric_instance_id, tenant_id, shape_handle),
+      cubdb_dir: Path.join([base_path, tenant_id, shape_handle, "cubdb"]),
+      snapshot_dir: Path.join([base_path, tenant_id, shape_handle, "snapshots"]),
+      shape_definition_dir: Path.join([base_path, tenant_id, shape_handle]),
       electric_instance_id: electric_instance_id,
       tenant_id: tenant_id,
       extra_opts: Map.get(opts, :extra_opts, %{})
     }
   end
 
-  defp name(electric_instance_id, tenant_id, shape_id) do
-    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_id)
+  defp name(electric_instance_id, tenant_id, shape_handle) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_handle)
   end
 
   def child_spec(%FS{} = opts) do
@@ -128,17 +128,17 @@ defmodule Electric.ShapeCache.FileStorage do
     shapes_dir = Path.join([opts.base_path, opts.tenant_id])
 
     case File.ls(shapes_dir) do
-      {:ok, shape_ids} ->
-        Enum.reduce(shape_ids, %{}, fn shape_id, acc ->
+      {:ok, shape_handles} ->
+        Enum.reduce(shape_handles, %{}, fn shape_handle, acc ->
           shape_def_path =
             shape_definition_path(%{
-              shape_definition_dir: Path.join([opts.base_path, opts.tenant_id, shape_id])
+              shape_definition_dir: Path.join([opts.base_path, opts.tenant_id, shape_handle])
             })
 
           with {:ok, shape_def_encoded} <- File.read(shape_def_path),
                {:ok, shape_def_json} <- Jason.decode(shape_def_encoded),
                shape = Electric.Shapes.Shape.from_json_safe!(shape_def_json) do
-            Map.put(acc, shape_id, shape)
+            Map.put(acc, shape_handle, shape)
           else
             # if the shape definition file cannot be read/decoded, just ignore it
             {:error, _reason} -> acc
@@ -201,7 +201,7 @@ defmodule Electric.ShapeCache.FileStorage do
   def make_new_snapshot!(data_stream, %FS{} = opts) do
     OpenTelemetry.with_span(
       "storage.make_new_snapshot",
-      [storage_impl: "mixed_disk", "shape.id": opts.shape_id],
+      [storage_impl: "mixed_disk", "shape.handle": opts.shape_handle],
       fn ->
         data_stream
         |> Stream.map(&[&1, ?\n])

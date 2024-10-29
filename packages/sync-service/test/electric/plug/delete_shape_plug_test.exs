@@ -27,7 +27,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       }
     }
   }
-  @test_shape_id "test-shape-id"
+  @test_shape_handle "test-shape-handle"
   @test_pg_id "12345"
 
   def load_column_info({"public", "users"}, _),
@@ -117,8 +117,8 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
     test "should clean shape based on shape definition", ctx do
       Mock.ShapeCache
-      |> expect(:get_or_create_shape_id, fn @test_shape, _opts -> {@test_shape_id, 0} end)
-      |> expect(:clean_shape, fn @test_shape_id, _ -> :ok end)
+      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts -> {@test_shape_handle, 0} end)
+      |> expect(:clean_shape, fn @test_shape_handle, _ -> :ok end)
 
       conn =
         ctx
@@ -128,13 +128,13 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       assert conn.status == 202
     end
 
-    test "should clean shape based on shape_id", ctx do
+    test "should clean shape based on shape_handle", ctx do
       Mock.ShapeCache
-      |> expect(:clean_shape, fn @test_shape_id, _ -> :ok end)
+      |> expect(:clean_shape, fn @test_shape_handle, _ -> :ok end)
 
       conn =
         ctx
-        |> conn(:delete, "?table=public.users&shape_id=#{@test_shape_id}")
+        |> conn(:delete, "?table=public.users&handle=#{@test_shape_handle}")
         |> DeleteShapePlug.call([])
 
       assert conn.status == 202

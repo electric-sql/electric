@@ -164,7 +164,7 @@
 
 ### Patch Changes
 
-- 958cc0c: Respect 409 errors by restarting the stream with the new `shape_id`.
+- 958cc0c: Respect 409 errors by restarting the stream with the new `shape_handle`.
 
 ## 0.0.3
 

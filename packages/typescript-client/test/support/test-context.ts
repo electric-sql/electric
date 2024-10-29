@@ -4,16 +4,17 @@ import { Client, QueryResult } from 'pg'
 import { inject, test } from 'vitest'
 import { makePgClient } from './test-helpers'
 import { FetchError } from '../../src/error'
+import { DATABASE_ID_QUERY_PARAM, SHAPE_HANDLE_QUERY_PARAM } from '../../src/constants'
 
 export type IssueRow = { id: string; title: string; priority?: string }
 export type GeneratedIssueRow = { id?: string; title: string }
 export type UpdateIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type DeleteIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type InsertIssuesFn = (...rows: GeneratedIssueRow[]) => Promise<string[]>
-export type ClearIssuesShapeFn = (shapeId?: string) => Promise<void>
+export type ClearIssuesShapeFn = (shapeHandle?: string) => Promise<void>
 export type ClearShapeFn = (
   table: string,
-  options?: { shapeId?: string; databaseId?: string }
+  options?: { shapeHandle?: string; databaseId?: string }
 ) => Promise<void>
 
 export const testWithDbClient = test.extend<{
@@ -43,7 +44,7 @@ export const testWithDbClient = test.extend<{
         table: string,
         options: {
           databaseId?: string
-          shapeId?: string
+          shapeHandle?: string
         } = {}
       ) => {
         const baseUrl = inject(`baseUrl`)
@@ -53,10 +54,10 @@ export const testWithDbClient = test.extend<{
           options.databaseId = inject(`databaseId`)
         }
 
-        url.searchParams.set(`database_id`, options.databaseId)
+        url.searchParams.set(DATABASE_ID_QUERY_PARAM, options.databaseId)
 
-        if (options.shapeId) {
-          url.searchParams.set(`shape_id`, options.shapeId)
+        if (options.shapeHandle) {
+          url.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, options.shapeHandle)
         }
 
         const resp = await fetch(url.toString(), { method: `DELETE` })
@@ -65,7 +66,7 @@ export const testWithDbClient = test.extend<{
             await FetchError.fromResponse(resp, `DELETE ${url.toString()}`)
           )
           throw new Error(
-            `Could not delete shape ${table} with ID ${options.shapeId}`
+            `Could not delete shape ${table} with ID ${options.shapeHandle}`
           )
         }
       }
@@ -152,7 +153,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
     }),
 
   clearIssuesShape: async ({ clearShape, issuesTableUrl }, use) => {
-    use((shapeId?: string) => clearShape(issuesTableUrl, { shapeId }))
+    use((shapeHandle?: string) => clearShape(issuesTableUrl, { shapeHandle }))
   },
 })
 
@@ -221,6 +222,7 @@ export const testWithMultiTenantIssuesTable = testWithDbClients.extend<{
       return result.map((x) => x.id)
     }),
 })
+
 
 export const testWithMultitypeTable = testWithDbClient.extend<{
   tableSql: string

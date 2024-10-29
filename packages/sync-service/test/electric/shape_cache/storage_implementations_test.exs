@@ -13,7 +13,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   @moduletag :tmp_dir
 
-  @shape_id "the-shape-id"
+  @shape_handle "the-shape-handle"
   @shape %Shape{
     root_table: {"public", "items"},
     root_table_id: 1,
@@ -527,7 +527,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.initialise(opts)
         storage.set_shape_definition(@shape, opts)
 
-        assert {:ok, %{@shape_id => @shape}} =
+        assert {:ok, %{@shape_handle => @shape}} =
                  Electric.ShapeCache.Storage.get_all_stored_shapes({storage, opts})
       end
     end
@@ -535,7 +535,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   defp start_storage(%{module: module} = context) do
     opts = module |> opts(context) |> module.shared_opts()
-    shape_opts = module.for_shape(@shape_id, @tenant_id, opts)
+    shape_opts = module.for_shape(@shape_handle, @tenant_id, opts)
     {:ok, _} = module.start_link(shape_opts)
     {:ok, %{module: module, opts: shape_opts}}
   end
