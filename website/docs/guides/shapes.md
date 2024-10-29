@@ -128,14 +128,14 @@ const stream = new ShapeStream({
 const shape = new Shape(stream)
 
 // Returns promise that resolves with the latest shape data once it's fully loaded
-await shape.value
+await shape.rows
 ```
 
 You can register a callback to be notified whenever the shape data changes:
 
 ```ts
-shape.subscribe(shapeData => {
-  // shapeData is a Map of the latest value of each row in a shape.
+shape.subscribe(({ rows }) => {
+  // rows is an array of the latest value of each row in a shape.
 })
 ```
 
