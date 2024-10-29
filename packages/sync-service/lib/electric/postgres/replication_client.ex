@@ -192,13 +192,14 @@ defmodule Electric.Postgres.ReplicationClient do
       "Primary Keepalive: wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)}) reply=#{reply}"
     end)
 
-    messages =
-      case reply do
-        1 -> [encode_standby_status_update(state)]
-        0 -> []
-      end
+    case reply do
+      1 ->
+        state = update_applied_wal(state, wal_end)
+        {:noreply, [encode_standby_status_update(state)], state}
 
-    {:noreply, messages, state}
+      0 ->
+        {:noreply, [], state}
+    end
   end
 
   defp process_x_log_data(data, wal_end, %State{} = state) do
@@ -289,6 +290,6 @@ defmodule Electric.Postgres.ReplicationClient do
   @epoch DateTime.to_unix(~U[2000-01-01 00:00:00Z], :microsecond)
   defp current_time(), do: System.os_time(:microsecond) - @epoch
 
-  defp update_applied_wal(state, wal) when wal > state.applied_wal,
+  defp update_applied_wal(state, wal) when wal >= state.applied_wal,
     do: %{state | applied_wal: wal}
 end
