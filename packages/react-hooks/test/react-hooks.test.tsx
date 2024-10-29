@@ -60,6 +60,37 @@ describe(`useShape`, () => {
     )
   })
 
+  it(`should re-sync a shape after an interrupt`, async ({
+    aborter,
+    issuesTableUrl,
+    insertIssues,
+  }) => {
+    const manualAborter = new AbortController()
+    renderHook(() =>
+      useShape({
+        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        signal: manualAborter.signal,
+        subscribe: false,
+      })
+    )
+
+    manualAborter.abort()
+
+    const [id] = await insertIssues({ title: `test row` })
+
+    const { result } = renderHook(() =>
+      useShape({
+        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        signal: aborter?.signal,
+        subscribe: false,
+      })
+    )
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+    )
+  })
+
   it(`should expose isLoading status`, async ({ issuesTableUrl }) => {
     const { result } = renderHook(() =>
       useShape({
