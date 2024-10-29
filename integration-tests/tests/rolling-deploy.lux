@@ -13,8 +13,8 @@
 [invoke setup_electric_shell "electric_1" "3000" ""]
 
 [shell electric_1]
-  ??[info] Acquiring lock from postgres with name electric_slot_default
-  ??[info] Lock acquired from postgres with name electric_slot_default
+  ??[info] Acquiring lock from postgres with name electric_slot_integration
+  ??[info] Lock acquired from postgres with name electric_slot_integration
   ??[info] Starting replication from postgres
   
 # First service should be health and active
@@ -29,7 +29,7 @@
 ## in the second electric
 [shell electric_2]
   -Lock acquired from postgres|Starting replication from postgres|$fail_pattern
-  ??[info] Acquiring lock from postgres with name electric_slot_default
+  ??[info] Acquiring lock from postgres with name electric_slot_integration
   [sleep 2]
 
 
@@ -50,7 +50,7 @@
 ## Lock should now be acquired and replication starting
 [shell electric_2]
   -$fail_pattern
-  ??[info] Lock acquired from postgres with name electric_slot_default
+  ??[info] Lock acquired from postgres with name electric_slot_integration
   ??[info] Starting replication from postgres
 
 # Second service is now healthy and active
