@@ -2,8 +2,14 @@ name: Integration Tests
 
 on:
   push:
-    branches: ['main']
+    branches: ["main"]
+    paths-ignore:
+      - "website/**"
+      - "**/README.md"
   pull_request:
+    paths-ignore:
+      - "website/**"
+      - "**/README.md"
 
 permissions:
   contents: read
@@ -20,7 +26,7 @@ jobs:
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
-          version-file: '.tool-versions'
+          version-file: ".tool-versions"
       - name: Restore dependencies cache
         uses: actions/cache@v3
         with:
