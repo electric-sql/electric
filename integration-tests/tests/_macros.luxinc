@@ -91,7 +91,7 @@
   [shell $shell_name]
     -$fail_pattern
   
-    !DATABASE_URL=$database_url PORT=$port $env ../scripts/electric_dev.sh
+    !DATABASE_URL=$database_url REPLICATION_STREAM_ID=integration PORT=$port $env ../scripts/electric_dev.sh
 [endmacro]
 
 [macro teardown]
