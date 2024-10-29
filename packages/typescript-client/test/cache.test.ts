@@ -83,8 +83,8 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     await insertIssues({ title: `foo` })
     const searchParams = new URLSearchParams({
       table: issuesTableUrl,
-      offset: initialRes.headers.get(`electric-chunk-last-offset`)!,
-      shape_handle: initialRes.headers.get(`electric-handle`)!,
+      handle: initialRes.headers.get(`electric-handle`)!,
+      offset: initialRes.headers.get(`electric-offset`)!,
       live: `true`,
     })
 
@@ -171,13 +171,8 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
       {}
     )
     const lastOffset = originalRes.headers.get(CHUNK_LAST_OFFSET_HEADER)
-<<<<<<< HEAD
     const shapeHandle = originalRes.headers.get(SHAPE_HANDLE_HEADER)
     const urlToTest = `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=${lastOffset}&handle=${shapeHandle}`
-=======
-    const shapeId = originalRes.headers.get(SHAPE_HANDLE_HEADER)
-    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_handle=${shapeId}`
->>>>>>> 667e3032 (Fix more references to shape id)
 
     // Make a first request such that response is cached
     const originalUpToDateRes = await fetch(urlToTest, {})
@@ -241,7 +236,7 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
 
     expect(getCacheStatus(client2Res)).toBe(CacheStatus.HIT)
 
-    const latestOffset = client2Res.headers.get(`electric-chunk-last-offset`)
+    const latestOffset = client2Res.headers.get(`electric-offset`)
     assert(latestOffset, `latestOffset should be defined`)
 
     // Now GC the shape

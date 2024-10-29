@@ -691,7 +691,7 @@ defmodule Electric.Plug.RouterTest do
       conn = conn("GET", "/v1/shape?table=large_rows_table&offset=-1") |> Router.call(opts)
       assert %{status: 200} = conn
       [shape_handle] = Plug.Conn.get_resp_header(conn, "electric-handle")
-      [next_offset] = Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset")
+      [next_offset] = Plug.Conn.get_resp_header(conn, "electric-offset")
 
       assert [] = Jason.decode!(conn.resp_body)
 
@@ -732,7 +732,7 @@ defmodule Electric.Plug.RouterTest do
                }
              ] = Jason.decode!(conn.resp_body)
 
-      [next_offset] = Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset")
+      [next_offset] = Plug.Conn.get_resp_header(conn, "electric-offset")
 
       conn =
         conn("GET", "/v1/shape?table=large_rows_table&offset=#{next_offset}&handle=#{shape_handle}")
@@ -767,7 +767,7 @@ defmodule Electric.Plug.RouterTest do
       assert conn.resp_body != ""
 
       shape_handle = get_resp_shape_handle(conn)
-      [next_offset] = Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset")
+      [next_offset] = Plug.Conn.get_resp_header(conn, "electric-offset")
 
       # Make the next request but forget to include the where clause
       conn =
@@ -899,7 +899,7 @@ defmodule Electric.Plug.RouterTest do
   end
 
   defp get_resp_shape_handle(conn), do: get_resp_header(conn, "electric-handle")
-  defp get_resp_last_offset(conn), do: get_resp_header(conn, "electric-chunk-last-offset")
+  defp get_resp_last_offset(conn), do: get_resp_header(conn, "electric-offset")
 
   defp get_resp_header(conn, header) do
     assert [val] = Plug.Conn.get_resp_header(conn, header)

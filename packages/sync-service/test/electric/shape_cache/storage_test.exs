@@ -33,7 +33,7 @@ defmodule Electric.ShapeCache.StorageTest do
 
   test "get_log_stream/4 correctly guards offset ordering" do
     storage = {Mock.Storage, :opts}
-    shape_id = "test"
+    shape_handle = "test"
     tenant_id = "test_tenant"
 
     Mock.Storage
@@ -43,7 +43,7 @@ defmodule Electric.ShapeCache.StorageTest do
     l1 = LogOffset.new(26_877_408, 10)
     l2 = LogOffset.new(26_877_648, 0)
 
-    shape_storage = Storage.for_shape(shape_id, tenant_id, storage)
+    shape_storage = Storage.for_shape(shape_handle, tenant_id, storage)
 
     Storage.get_log_stream(l1, l2, shape_storage)
 

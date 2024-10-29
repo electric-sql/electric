@@ -65,7 +65,7 @@ defmodule Electric.Plug.ServeShapePlug do
     embedded_schema do
       field(:table, :string)
       field(:offset, :string)
-      field(:shape_handle, :string)
+      field(:handle, :string)
       field(:live, :boolean, default: false)
       field(:where, :string)
       field(:columns, :string)
@@ -80,7 +80,7 @@ defmodule Electric.Plug.ServeShapePlug do
       |> validate_required([:table, :offset])
       |> cast_offset()
       |> cast_columns()
-      |> validate_shape_handle_with_offset()
+      |> validate_handle_with_offset()
       |> validate_live_with_offset()
       |> cast_root_table(opts)
       |> apply_action(:validate)
@@ -127,16 +127,16 @@ defmodule Electric.Plug.ServeShapePlug do
       end
     end
 
-    def validate_shape_handle_with_offset(%Ecto.Changeset{valid?: false} = changeset),
+    def validate_handle_with_offset(%Ecto.Changeset{valid?: false} = changeset),
       do: changeset
 
-    def validate_shape_handle_with_offset(%Ecto.Changeset{} = changeset) do
+    def validate_handle_with_offset(%Ecto.Changeset{} = changeset) do
       offset = fetch_change!(changeset, :offset)
 
       if offset == LogOffset.before_all() do
         changeset
       else
-        validate_required(changeset, [:shape_handle], message: "can't be blank when offset != -1")
+        validate_required(changeset, [:handle], message: "can't be blank when offset != -1")
       end
     end
 
@@ -220,9 +220,9 @@ defmodule Electric.Plug.ServeShapePlug do
     end)
   end
 
-  # No shape_handle is provided so we can get the existing one for this shape
+  # No handle is provided so we can get the existing one for this shape
   # or create a new shape if it does not yet exist
-  defp get_or_create_shape_handle(%{shape_definition: shape, config: config, shape_handle: nil}) do
+  defp get_or_create_shape_handle(%{shape_definition: shape, config: config, handle: nil}) do
     Shapes.get_or_create_shape_handle(config, shape)
   end
 
@@ -232,7 +232,7 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp handle_shape_info(
-         %Conn{assigns: %{shape_definition: shape, config: config, shape_handle: shape_handle}} =
+         %Conn{assigns: %{shape_definition: shape, config: config, handle: shape_handle}} =
            conn,
          nil
        ) do
@@ -256,7 +256,7 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp handle_shape_info(
-         %Conn{assigns: %{shape_handle: shape_handle}} = conn,
+         %Conn{assigns: %{handle: shape_handle}} = conn,
          {active_shape_handle, last_offset}
        )
        when is_nil(shape_handle) or shape_handle == active_shape_handle do
@@ -322,7 +322,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
     conn
     |> assign(:chunk_end_offset, chunk_end_offset)
-    |> put_resp_header("electric-chunk-last-offset", "#{chunk_end_offset}")
+    |> put_resp_header("electric-offset", "#{chunk_end_offset}")
   end
 
   defp determine_up_to_date(
@@ -343,11 +343,11 @@ defmodule Electric.Plug.ServeShapePlug do
       |> assign(:up_to_date, [])
       # header might have been added on first pass but no longer valid
       # if listening to live changes and an incomplete chunk is formed
-      |> delete_resp_header("electric-chunk-up-to-date")
+      |> delete_resp_header("electric-up-to-date")
     else
       conn
       |> assign(:up_to_date, [@up_to_date])
-      |> put_resp_header("electric-chunk-up-to-date", "")
+      |> put_resp_header("electric-up-to-date", "")
     end
   end
 
@@ -406,7 +406,7 @@ defmodule Electric.Plug.ServeShapePlug do
         "public, max-age=5, stale-while-revalidate=5"
       )
       |> put_resp_header(
-        "electric-next-cursor",
+        "electric-cursor",
         TimeUtils.seconds_since_oct9th_2024_next_interval(conn) |> Integer.to_string()
       )
 
@@ -576,7 +576,7 @@ defmodule Electric.Plug.ServeShapePlug do
         |> assign(:last_offset, latest_log_offset)
         |> assign(:chunk_end_offset, latest_log_offset)
         # update last offset header
-        |> put_resp_header("electric-chunk-last-offset", "#{latest_log_offset}")
+        |> put_resp_header("electric-offset", "#{latest_log_offset}")
         |> determine_up_to_date([])
         |> serve_shape_log()
 
@@ -602,7 +602,7 @@ defmodule Electric.Plug.ServeShapePlug do
       if is_struct(conn.query_params, Plug.Conn.Unfetched) do
         assigns[:active_shape_handle] || assigns[:shape_handle]
       else
-        conn.query_params["shape_id"] || assigns[:active_shape_id] || assigns[:shape_id]
+        conn.query_params["handle"] || assigns[:active_shape_handle] || assigns[:shape_handle]
       end
 
     maybe_up_to_date = if up_to_date = assigns[:up_to_date], do: up_to_date != []

@@ -174,7 +174,17 @@ paths:
                 Etag header specifying the shape handle and offset for efficient caching.
 
                 In the format `{shape_handle}:{start_offset}:{end_offset}`.
-            electric-chunk-last-offset:
+            electric-cursor:
+              schema:
+                type: string
+              example: "1674440"
+              description: |-
+                If present, provides a cursor to use as the value of the `cursor`
+                parameter in the next `live` mode long polling request.
+
+                This works around some inconsistent request coalescing behaviour
+                with different CDNs.
+            electric-offset:
               schema:
                 type: string
               example: "26800584_4"
@@ -185,6 +195,9 @@ paths:
                 you have provided. This header simplifies client development by
                 avoiding the need to parse the last offset out of the stream of
                 log entries.
+
+                Must be used as the value of the `offset` parameter in your
+                next request.
             electric-handle:
               schema:
                 type: string
@@ -192,12 +205,12 @@ paths:
               description: |-
                 The shape handle.
 
-                Must be provided as the `shape_handle` parameter when making
+                Must be provided as the value of the `handle` parameter when making
                 subsequent requests where `offset` is not `-1`.
             electric-schema:
               schema:
                 type: string
-                example: '{"id":{"type":"int4","dimensions":0},"title":{"type":"text","dimensions":0},"status":{"type":"text","dimensions":0,"max_length":8}}'
+                example: '":0},"status":{"type":"text","dimensions":0,"max_length":8}}'
                 description: |-
                   A JSON string of an object that maps column names to the corresponding schema object.
                   The schema object contains the type of the column, the number of dimensions, and possibly additional properties.
@@ -211,6 +224,13 @@ paths:
                         `INTERVAL(4)` has an additional `"precision": 4` property,
                         `INTERVAL MINUTE TO SECOND` has an additional `"fields": "MINUTE TO SECOND"` property,
                         `BIT(5)` has an additional `"length": 5` property.
+            electric-up-to-date:
+              schema:
+                description: |-
+                  If present, this header indicates that the response ends with
+                  an `up-to-date` control message, indicating that the client has
+                  recieved all of the data that the server is aware of and can
+                  safely process/apply any accumulated messages.
           content:
             application/json:
               schema:
@@ -298,6 +318,17 @@ paths:
           description: >-
             No content. The `live=true` polling request timed out without
             any new content to process.
+          headers:
+            electric-cursor:
+              schema:
+                type: string
+              example: "1674440"
+              description: |-
+                Provides a cursor to use as the value of the `cursor` parameter
+                in the next long polling request.
+
+                This works around some inconsistent request coalescing behaviour
+                with different CDNs.
         "400":
           description: Bad request.
         "404":

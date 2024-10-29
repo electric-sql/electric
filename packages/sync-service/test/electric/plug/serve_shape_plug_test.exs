@@ -393,11 +393,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Plug.Conn.get_resp_header(conn, "electric-handle") == [@test_shape_handle]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset") == [
+      assert Plug.Conn.get_resp_header(conn, "electric-offset") == [
                "#{next_next_offset}"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == []
+      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == []
     end
 
     test "returns 304 Not Modified when If-None-Match matches ETag",
@@ -489,8 +489,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
                "public, max-age=5, stale-while-revalidate=5"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-chunk-last-offset") == [next_offset_str]
-      assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == [""]
+      assert Plug.Conn.get_resp_header(conn, "electric-offset") == [next_offset_str]
+      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
       assert Plug.Conn.get_resp_header(conn, "electric-schema") == []
     end
 
@@ -540,7 +540,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 200
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "up-to-date"}}]
-      assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == [""]
+      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
     end
 
     test "sends an up-to-date response after a timeout if no changes are observed",
@@ -578,7 +578,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
                "public, max-age=5, stale-while-revalidate=5"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-chunk-up-to-date") == [""]
+      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
     end
 
     test "sends 409 with a redirect to existing shape when requested shape handle does not exist",

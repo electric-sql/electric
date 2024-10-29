@@ -135,7 +135,7 @@ describe(`HTTP Sync`, () => {
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
-    const lastOffset = res.headers.get(`electric-chunk-last-offset`)
+    const lastOffset = res.headers.get(`electric-offset`)
     expect(lastOffset).to.exist
   })
 

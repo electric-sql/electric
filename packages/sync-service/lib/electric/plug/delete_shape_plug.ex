@@ -44,8 +44,8 @@ defmodule Electric.Plug.DeleteShapePlug do
   end
 
   defp truncate_or_delete_shape(%Plug.Conn{} = conn, _) do
-    if conn.assigns.shape_handle !== nil do
-      with :ok <- Shapes.clean_shape(conn.assigns.shape_handle, conn.assigns.config) do
+    if conn.assigns.handle !== nil do
+      with :ok <- Shapes.clean_shape(conn.assigns.handle, conn.assigns.config) do
         send_resp(conn, 202, "")
       end
     else
