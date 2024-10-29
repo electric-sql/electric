@@ -14,8 +14,10 @@ describe(`Shape`, () => {
     })
     const shape = new Shape(shapeStream)
     const map = await shape.value
+    const rows = await shape.rows
 
     expect(map).toEqual(new Map())
+    expect(rows).toEqual([])
     expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
     expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
@@ -48,6 +50,9 @@ describe(`Shape`, () => {
     })
 
     expect(map).toEqual(expectedValue)
+    expect(shape.rowsSync).toEqual([
+      { id: id, title: `test title`, priority: 10 },
+    ])
     expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
     expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)

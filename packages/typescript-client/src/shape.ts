@@ -69,6 +69,14 @@ export class Shape<T extends Row<unknown> = Row> {
     return this.#stream.isUpToDate
   }
 
+  get rows(): Promise<T[]> {
+    return this.value.then((v) => Array.from(v.values()))
+  }
+
+  get rowsSync(): T[] {
+    return Array.from(this.valueSync.values())
+  }
+
   get value(): Promise<ShapeData<T>> {
     return new Promise((resolve, reject) => {
       if (this.#stream.isUpToDate) {
