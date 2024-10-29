@@ -69,11 +69,11 @@ const stream = new ShapeStream({
 const shape = new Shape(stream)
 
 // Returns promise that resolves with the latest shape data once it's fully loaded
-await shape.value
+await shape.rows
 
 // passes subscribers shape data when the shape updates
-shape.subscribe(shapeData => {
-  // shapeData is a Map of the latest value of each row in a shape.
+shape.subscribe(({ rows }) => {
+  // rows is an array of the latest value of each row in a shape.
 })
 ```
 

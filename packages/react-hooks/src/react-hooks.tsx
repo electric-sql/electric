@@ -19,7 +19,7 @@ export async function preloadShape<T extends Row<unknown> = Row>(
 ): Promise<Shape<T>> {
   const shapeStream = getShapeStream<T>(options)
   const shape = getShape<T>(shapeStream)
-  await shape.value
+  await shape.rows
   return shape
 }
 
@@ -96,7 +96,7 @@ function parseShapeData<T extends Row<unknown>>(
   shape: Shape<T>
 ): UseShapeResult<T> {
   return {
-    data: [...shape.valueSync.values()],
+    data: shape.currentRows,
     isLoading: shape.isLoading(),
     lastSyncedAt: shape.lastSyncedAt(),
     isError: shape.error !== false,
