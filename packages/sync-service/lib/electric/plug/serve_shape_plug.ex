@@ -547,7 +547,7 @@ defmodule Electric.Plug.ServeShapePlug do
   defp listen_for_new_changes(%Conn{assigns: assigns} = conn, _) do
     # Only start listening when we know there is a possibility that nothing is going to be returned
     if LogOffset.compare(assigns.offset, assigns.last_offset) != :lt do
-      shape_handle = assigns.shape_handle
+      shape_handle = assigns.handle
 
       ref = make_ref()
       registry = conn.assigns.config[:registry]

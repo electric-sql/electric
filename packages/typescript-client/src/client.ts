@@ -241,7 +241,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         if (this.#shapeHandle) {
           // This should probably be a header for better cache breaking?
-          fetchUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, this.#shapeHandle!)
+          fetchUrl.searchParams.set(
+            SHAPE_HANDLE_QUERY_PARAM,
+            this.#shapeHandle!
+          )
         }
 
         if (this.#databaseId) {

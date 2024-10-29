@@ -274,8 +274,9 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
       newInitialSyncRes.headers.get(`electric-handle`) ?? undefined
     expect(newInitialSyncRes.status).toBe(200)
     expect(getCacheStatus(newInitialSyncRes)).toBe(CacheStatus.HIT)
-    expect(cachedShapeHandle, `Got old shape handle that is out of scope`).not.toBe(
-      originalShapeHandle
-    )
+    expect(
+      cachedShapeHandle,
+      `Got old shape handle that is out of scope`
+    ).not.toBe(originalShapeHandle)
   })
 })

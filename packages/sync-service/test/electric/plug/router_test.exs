@@ -144,7 +144,7 @@ defmodule Electric.Plug.RouterTest do
                Jason.decode!(conn.resp_body)
 
       assert %{status: 202} =
-               conn("DELETE", "/v1/shape/items?shape_handle=#{shape1_handle}")
+               conn("DELETE", "/v1/shape?table=items&handle=#{shape1_handle}")
                |> Router.call(opts)
 
       Postgrex.query!(db_conn, "DELETE FROM items", [])
@@ -156,7 +156,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 200} = conn
       shape2_handle = get_resp_shape_handle(conn)
-      assert shape1_id != shape2_handle
+      assert shape1_handle != shape2_handle
 
       assert [%{"value" => %{"value" => "test value 2"}}] =
                Jason.decode!(conn.resp_body)
@@ -452,7 +452,7 @@ defmodule Electric.Plug.RouterTest do
         Task.async(fn ->
           conn("GET", "/v1/shape?table=items", %{
             offset: "0_0",
-            shape_handle: shape_handle,
+            handle: shape_handle,
             where: where,
             live: true
           })
@@ -474,7 +474,7 @@ defmodule Electric.Plug.RouterTest do
                conn =
                conn("GET", "/v1/shape?table=items", %{
                  offset: new_offset,
-                 shape_handle: shape_handle,
+                 handle: shape_handle,
                  where: where
                })
                |> Router.call(opts)
@@ -514,7 +514,7 @@ defmodule Electric.Plug.RouterTest do
         Task.async(fn ->
           conn("GET", "/v1/shape?table=serial_ids", %{
             offset: "0_0",
-            shape_handle: shape_handle,
+            handle: shape_handle,
             where: where,
             live: true
           })
@@ -544,7 +544,7 @@ defmodule Electric.Plug.RouterTest do
         Task.async(fn ->
           conn("GET", "/v1/shape?table=serial_ids", %{
             offset: new_offset,
-            shape_handle: shape_handle,
+            handle: shape_handle,
             where: where,
             live: true
           })
@@ -628,7 +628,7 @@ defmodule Electric.Plug.RouterTest do
         Task.async(fn ->
           conn("GET", "/v1/shape?table=serial_ids", %{
             offset: "0_0",
-            shape_handle: shape_handle,
+            handle: shape_handle,
             where: where,
             live: true
           })
@@ -714,7 +714,10 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 200} = Task.await(task)
 
       conn =
-        conn("GET", "/v1/shape?table=large_rows_table&offset=#{next_offset}&handle=#{shape_handle}")
+        conn(
+          "GET",
+          "/v1/shape?table=large_rows_table&offset=#{next_offset}&handle=#{shape_handle}"
+        )
         |> Router.call(opts)
 
       assert %{status: 200} = conn
@@ -735,7 +738,10 @@ defmodule Electric.Plug.RouterTest do
       [next_offset] = Plug.Conn.get_resp_header(conn, "electric-offset")
 
       conn =
-        conn("GET", "/v1/shape?table=large_rows_table&offset=#{next_offset}&handle=#{shape_handle}")
+        conn(
+          "GET",
+          "/v1/shape?table=large_rows_table&offset=#{next_offset}&handle=#{shape_handle}"
+        )
         |> Router.call(opts)
 
       assert %{status: 200} = conn

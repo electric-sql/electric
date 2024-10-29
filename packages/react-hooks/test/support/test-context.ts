@@ -11,7 +11,10 @@ export type UpdateIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type DeleteIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type InsertIssuesFn = (...rows: GeneratedIssueRow[]) => Promise<string[]>
 export type ClearIssuesShapeFn = (shapeHandle?: string) => Promise<void>
-export type ClearShapeFn = (table: string, shapeHandle?: string) => Promise<void>
+export type ClearShapeFn = (
+  table: string,
+  shapeHandle?: string
+) => Promise<void>
 
 export const testWithDbClient = test.extend<{
   dbClient: Client
@@ -50,7 +53,9 @@ export const testWithDbClient = test.extend<{
             `DELETE ${baseUrl}/v1/shape?table=${table}`
           )
         )
-        throw new Error(`Could not delete shape ${table} with handle ${shapeHandle}`)
+        throw new Error(
+          `Could not delete shape ${table} with handle ${shapeHandle}`
+        )
       }
     })
   },

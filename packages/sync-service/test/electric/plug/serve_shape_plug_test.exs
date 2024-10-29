@@ -191,7 +191,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "shape_handle" => ["can't be blank when offset != -1"]
+               "handle" => ["can't be blank when offset != -1"]
              }
     end
 
@@ -638,6 +638,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
       assert get_resp_header(conn, "electric-handle") == [new_shape_handle]
+
       assert get_resp_header(conn, "location") == [
                "/?table=public.users&handle=#{new_shape_handle}&offset=-1"
              ]
