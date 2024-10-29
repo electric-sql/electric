@@ -35,13 +35,13 @@ export function getShapeStream<T extends Row<unknown>>(
   // If the stream is already cached, return it if valid
   if (streamCache.has(shapeHash)) {
     const stream = streamCache.get(shapeHash)! as ShapeStream<T>
-    // if stream is cached but errored/aborted, remove it and related shapes
-    if (stream.error !== undefined || stream.options.signal?.aborted) {
-      streamCache.delete(shapeHash)
-      shapeCache.delete(stream)
-    } else {
+    if (stream.error === undefined && !stream.options.signal?.aborted) {
       return stream
     }
+
+    // if stream is cached but errored/aborted, remove it and related shapes
+    streamCache.delete(shapeHash)
+    shapeCache.delete(stream)
   }
 
   const newShapeStream = new ShapeStream<T>(options)
@@ -57,16 +57,16 @@ export function getShape<T extends Row<unknown>>(
 ): Shape<T> {
   // If the stream is already cached, return it if valid
   if (shapeCache.has(shapeStream)) {
-    // if stream is cached but errored/aborted, remove it and related shapes
     if (
-      shapeStream.error !== undefined ||
-      shapeStream.options.signal?.aborted
+      shapeStream.error === undefined &&
+      !shapeStream.options.signal?.aborted
     ) {
-      streamCache.delete(sortedOptionsHash(shapeStream.options))
-      shapeCache.delete(shapeStream)
-    } else {
       return shapeCache.get(shapeStream)! as Shape<T>
     }
+
+    // if stream is cached but errored/aborted, remove it and related shapes
+    streamCache.delete(sortedOptionsHash(shapeStream.options))
+    shapeCache.delete(shapeStream)
   }
 
   const newShape = new Shape<T>(shapeStream)
