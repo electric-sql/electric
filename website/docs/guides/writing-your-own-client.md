@@ -38,10 +38,10 @@ In the initial sync phase, you make a series of requests to get Shape data, incr
 
 #### Construct your shape URL
 
-Encode a [shape definition](/docs/guides/shapes#defining-shapes) into a `GET /v1/shape` URL. See the <a href="/openapi.html#/paths/~1v1~1shape~1%7Broot_table%7D/get">specification for the URL structure here</a>. For example, a Shape that contains all of the rows in the `items` table has the path:
+Encode a [shape definition](/docs/guides/shapes#defining-shapes) into a `GET /v1/shape` URL. See the <a href="/openapi.html#/paths/~1v1~1shape~1%7Broot_table%7D/get">specification for the URL structure here</a>. For example, a Shape that contains all of the rows in the `items` table would be requested with:
 
 ```http
-GET /v1/shape/items
+GET /v1/shape?table=items
 ```
 
 #### Make the initial `offset=-1` request
@@ -49,12 +49,12 @@ GET /v1/shape/items
 The first request to a shape should set the `offset` parameter to `-1`. This indicates to Electric that you want to consume all of the data from the beginning of the [Shape log](/docs/api/http#shape-log). For example, you might make a request to:
 
 ```http
-GET /v1/shape/items?offset=-1
+GET /v1/shape?table=items?offset=-1
 ```
 
 The body of the response will contain a JSON array of messages. The headers of the response will contain two pieces of important information:
 
-- `electric-shape-handle` an ephemeral identifier to an existing shape log
+- `electric-handle` an ephemeral identifier to an existing shape log
 - `electric-offset` the offset value for your next request
 
 If the last message in the response body contains an `up-to-date` control message:
@@ -70,7 +70,7 @@ Then the response will also contain an:
 Either of which indicate that you can [process the messages](#materialise-the-shape-log) and switch into [live mode](#live-mode). Otherwise, you should continue to accumulate messages by making additional requests to the same URL, with the new shape handle and offset. For example:
 
 ```http
-GET /v1/shape/items?shape_handle=38083685-1729874417404&offset=0_0
+GET /v1/shape?table=items&handle=38083685-1729874417404&offset=0_0
 ```
 
 In this way, you keep making GET requests with increasing offsets until you load all the data that the server is aware of, at which point you get the `up-to-date` message.
@@ -91,7 +91,7 @@ If the previous response contains an `electric-cursor` header, then also set the
 For example:
 
 ```http
-GET /v1/shape/items?live=true&shape_handle=38083685-1729874417404&offset=27344208_0&cursor=1674440
+GET /v1/shape?table=items&handle=38083685-1729874417404&offset=27344208_0&cursor=1674440&live=true
 ```
 
 #### Keep polling
@@ -120,18 +120,18 @@ Shape log messages are either control messages or logical `insert`, `update` or 
 ```ts
 switch (message.headers.operation) {
   case `insert`:
-    this.#data.set(message.key, message.value)
+    data.set(message.key, message.value)
 
     break
   case `update`:
-    this.#data.set(message.key, {
-      ...this.#data.get(message.key)!,
+    data.set(message.key, {
+      ...data.get(message.key)!,
       ...message.value,
     })
 
     break
   case `delete`:
-    this.#data.delete(message.key)
+    data.delete(message.key)
 
     break
 }
@@ -256,7 +256,8 @@ class Shape(object):
         # Fetch the response.
         response = requests.get(url)
 
-        # A real client should errors and backoff, reconnect, etc.
+        # This is a happy path example, so we just log error codes.
+        # A real client should handle errors, backoff, reconnect, etc.
         if response.status_code > 204:
             raise Exception("Error: {}".format(response.status_code))
 
@@ -266,17 +267,17 @@ class Shape(object):
 
             # If we're up-to-date, switch into live mode and process
             # the accumulated messages.
-            if 'electric-chunk-up-to-date' in response.headers:
+            if 'electric-up-to-date' in response.headers:
                 self.live = True
                 self.process_messages()
 
         # Set the shape handle, offset and optionally cursor for
         # the next request from the response headers.
-        self.handle = response.headers['electric-shape-id']
-        self.offset = response.headers['electric-chunk-last-offset']
+        self.handle = response.headers['electric-handle']
+        self.offset = response.headers['electric-offset']
 
-        if 'electric-next-cursor' in response.headers:
-            self.cursor = r.headers['electric-next-cursor']
+        if 'electric-cursor' in response.headers:
+            self.cursor = r.headers['electric-cursor']
 
     def process_messages(self):
         """Process any batched up messages. If the data has changed,
@@ -340,14 +341,15 @@ class Shape(object):
 
     def build_url(self):
         params = {
-            'offset': self.offset
+            'offset': self.offset,
+            'table': self.table
         }
 
         if self.cursor is not None:
             params['cursor'] = self.cursor
 
         if self.handle is not None:
-            params['shape_id'] = self.handle
+            params['handle'] = self.handle
 
         if self.live:
             params['live'] = True
@@ -355,11 +357,7 @@ class Shape(object):
         if self.where is not None:
             params['where'] = self.where
 
-        return "{}/v1/shape/{}?{}".format(
-          self.base_url,
-          self.table,
-          urlencode(params)
-        )
+        return "{}/v1/shape?{}".format(self.base_url, urlencode(params))
 ```
 
 Now let's create a test file to test running the client. Save the following in `client.test.py`:
