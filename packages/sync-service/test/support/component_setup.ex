@@ -34,7 +34,11 @@ defmodule Support.ComponentSetup do
       get_service_status: fn -> :active end
     ]
 
-    Electric.TenantManager.delete_tenant(ctx.tenant_id, tenant_manager: ctx.tenant_manager)
+    Electric.TenantManager.delete_tenant(ctx.tenant_id,
+      tenant_manager: ctx.tenant_manager,
+      tenant_tables_name: ctx.tenant_tables_name
+    )
+
     :ok = Electric.TenantManager.store_tenant(tenant, tenant_manager: ctx.tenant_manager)
 
     %{tenant: tenant}
