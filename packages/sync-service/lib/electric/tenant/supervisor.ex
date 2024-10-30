@@ -7,7 +7,9 @@ defmodule Electric.Tenant.Supervisor do
     Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
   end
 
-  def name(%{electric_instance_id: electric_instance_id, tenant_id: tenant_id}) do
+  def name(opts) do
+    electric_instance_id = Access.fetch!(opts, :electric_instance_id)
+    tenant_id = Access.fetch!(opts, :tenant_id)
     name(electric_instance_id, tenant_id)
   end
 

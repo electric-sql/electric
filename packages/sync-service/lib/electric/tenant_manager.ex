@@ -151,7 +151,9 @@ defmodule Electric.TenantManager do
     case GenServer.call(server, {:get_tenant, tenant_id}) do
       {:ok, tenant} ->
         pg_id = Access.fetch!(tenant, :pg_id)
-        GenServer.call(server, {:delete_tenant, tenant_id, pg_id})
+        :ok = GenServer.call(server, {:delete_tenant, tenant_id, pg_id})
+        dbg(tenant)
+        :ok = Electric.TenantSupervisor.stop_tenant(tenant)
 
       {:error, :not_found} ->
         :not_found
