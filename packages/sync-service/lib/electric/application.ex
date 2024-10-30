@@ -75,6 +75,9 @@ defmodule Electric.Application do
   # from the OTP application env, runs some pre-processing functions and stores the processed
   # configuration as a single map using `:persistent_term`.
   defp configure do
+    tenant_tables_name = Application.fetch_env!(:electric, :tenant_tables_name)
+    :ets.new(tenant_tables_name, [:public, :named_table, :set, {:read_concurrency, true}])
+
     electric_instance_id = Application.fetch_env!(:electric, :electric_instance_id)
 
     {kv_module, kv_fun, kv_params} = Application.fetch_env!(:electric, :persistent_kv)

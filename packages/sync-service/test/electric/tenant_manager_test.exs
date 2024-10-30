@@ -30,14 +30,16 @@ defmodule Electric.TenantManagerTest do
       tenant_id: tenant_id,
       connection_opts: connection_opts,
       inspector: inspector,
-      app_config: app_config
+      app_config: app_config,
+      tenant_tables_name: tenant_tables_name
     } do
-      assert :ok =
-               TenantManager.create_tenant(tenant_id, connection_opts,
-                 inspector: inspector,
-                 tenant_manager: tenant_manager,
-                 app_config: app_config
-               )
+      :ok =
+        TenantManager.create_tenant(tenant_id, connection_opts,
+          inspector: inspector,
+          tenant_manager: tenant_manager,
+          app_config: app_config,
+          tenant_tables_name: tenant_tables_name
+        )
     end
 
     test "complains if tenant already exists", %{
@@ -45,13 +47,15 @@ defmodule Electric.TenantManagerTest do
       tenant_id: tenant_id,
       connection_opts: connection_opts,
       inspector: inspector,
-      app_config: app_config
+      app_config: app_config,
+      tenant_tables_name: tenant_tables_name
     } do
       assert :ok =
                TenantManager.create_tenant(tenant_id, connection_opts,
                  inspector: inspector,
                  tenant_manager: tenant_manager,
-                 app_config: app_config
+                 app_config: app_config,
+                 tenant_tables_name: tenant_tables_name
                )
 
       assert {:error, {:tenant_already_exists, ^tenant_id}} =
@@ -60,7 +64,8 @@ defmodule Electric.TenantManagerTest do
                  Keyword.put(connection_opts, :port, "654"),
                  inspector: inspector,
                  tenant_manager: tenant_manager,
-                 app_config: app_config
+                 app_config: app_config,
+                 tenant_tables_name: tenant_tables_name
                )
     end
 
@@ -69,13 +74,15 @@ defmodule Electric.TenantManagerTest do
       tenant_id: tenant_id,
       connection_opts: connection_opts,
       inspector: inspector,
-      app_config: app_config
+      app_config: app_config,
+      tenant_tables_name: tenant_tables_name
     } do
       assert :ok =
                TenantManager.create_tenant(tenant_id, connection_opts,
                  inspector: inspector,
                  tenant_manager: tenant_manager,
-                 app_config: app_config
+                 app_config: app_config,
+                 tenant_tables_name: tenant_tables_name
                )
 
       pg_id =
@@ -86,7 +93,8 @@ defmodule Electric.TenantManagerTest do
                TenantManager.create_tenant("another_tenant", connection_opts,
                  inspector: inspector,
                  tenant_manager: tenant_manager,
-                 app_config: app_config
+                 app_config: app_config,
+                 tenant_tables_name: tenant_tables_name
                )
     end
   end

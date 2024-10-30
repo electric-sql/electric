@@ -24,7 +24,10 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
         __MODULE__,
         Map.new(opts)
         |> Map.put_new(:pg_info_table, @default_pg_info_table)
-        |> Map.put_new(:pg_relation_table, @default_pg_relation_table),
+        |> Map.put_new(:pg_relation_table, @default_pg_relation_table)
+        |> Map.put_new_lazy(:tenant_tables_name, fn ->
+          Application.fetch_env!(:electric, :tenant_tables_name)
+        end),
         name: Keyword.get_lazy(opts, :name, fn -> name(opts) end)
       )
 
@@ -90,6 +93,13 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     pg_info_table = :ets.new(opts.pg_info_table, [:public, :set])
     pg_relation_table = :ets.new(opts.pg_relation_table, [:public, :bag])
 
+    # Store both references in a global ETS table so that we can retrieve them later
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    tenant_tables_name = Access.fetch!(opts, :tenant_tables_name)
+
+    :ets.insert(tenant_tables_name, {{tenant_id, :pg_info_table}, pg_info_table})
+    :ets.insert(tenant_tables_name, {{tenant_id, :pg_relation_table}, pg_relation_table})
+
     state = %{
       pg_info_table: pg_info_table,
       pg_relation_table: pg_relation_table,
@@ -154,14 +164,6 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     e -> {:reply, {:error, e, __STACKTRACE__}, state}
   end
 
-  def handle_call(:get_column_info_table, _from, state) do
-    {:reply, state.pg_info_table, state}
-  end
-
-  def handle_call(:get_relation_table, _from, state) do
-    {:reply, state.pg_relation_table, state}
-  end
-
   @pg_rel_position 2
   defp relation_from_ets(table, opts_or_state) do
     ets_table = get_column_info_table(opts_or_state)
@@ -187,10 +189,38 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   # When called from within the GenServer it is passed the state
   # which contains the reference to the ETS table.
   # When called from outside the GenServer it is passed the opts keyword list
-  # which contains a reference to the GenServer.
-  defp get_column_info_table(%{pg_info_table: ets_table}), do: ets_table
-  defp get_column_info_table(opts), do: GenServer.call(opts[:server], :get_column_info_table)
+  @pg_info_table_ref_position 2
+  def get_column_info_table(%{pg_info_table: ets_table}), do: ets_table
 
-  defp get_relation_table(%{pg_relation_table: ets_table}), do: ets_table
-  defp get_relation_table(opts), do: GenServer.call(opts[:server], :get_relation_table)
+  def get_column_info_table(opts) do
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    tenant_tables_name = fetch_tenant_tables_name(opts)
+
+    :ets.lookup_element(
+      tenant_tables_name,
+      {tenant_id, :pg_info_table},
+      @pg_info_table_ref_position
+    )
+  end
+
+  @pg_relation_table_ref_position 2
+  def get_relation_table(%{pg_relation_table: ets_table}), do: ets_table
+
+  def get_relation_table(opts) do
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    tenant_tables_name = fetch_tenant_tables_name(opts)
+
+    :ets.lookup_element(
+      tenant_tables_name,
+      {tenant_id, :pg_relation_table},
+      @pg_relation_table_ref_position
+    )
+  end
+
+  def fetch_tenant_tables_name(opts) do
+    case Access.fetch(opts, :tenant_tables_name) do
+      :error -> Application.fetch_env!(:electric, :tenant_tables_name)
+      {:ok, tenant_tables_name} -> tenant_tables_name
+    end
+  end
 end

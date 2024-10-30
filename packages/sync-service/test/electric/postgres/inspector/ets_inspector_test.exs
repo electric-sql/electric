@@ -5,7 +5,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   alias Electric.Postgres.Inspector.EtsInspector
 
   describe "load_relation/2" do
-    setup [:with_inspector, :with_basic_tables, :with_sql_execute]
+    setup [:with_tenant_id, :with_inspector, :with_basic_tables, :with_sql_execute]
 
     setup %{inspector: {EtsInspector, opts}} do
       {:ok, %{opts: opts, table: {"public", "items"}}}
@@ -54,16 +54,18 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   end
 
   describe "clean/2" do
-    setup [:with_inspector, :with_basic_tables, :with_sql_execute]
+    setup [:with_tenant_id, :with_inspector, :with_basic_tables, :with_sql_execute]
 
     setup %{
-      inspector: {EtsInspector, opts}
+      inspector: {EtsInspector, opts},
+      pg_info_table: pg_info_table,
+      pg_relation_table: pg_relation_table
     } do
       {:ok,
        %{
          opts: opts,
-         pg_info_table: GenServer.call(opts[:server], :get_column_info_table),
-         pg_relation_table: GenServer.call(opts[:server], :get_relation_table),
+         pg_info_table: pg_info_table,
+         pg_relation_table: pg_relation_table,
          table: {"public", "items"}
        }}
     end
@@ -122,7 +124,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   end
 
   describe "load_column_info/2" do
-    setup [:with_inspector, :with_basic_tables]
+    setup [:with_tenant_id, :with_inspector, :with_basic_tables]
 
     setup %{inspector: {EtsInspector, opts}} do
       {:ok, %{opts: opts, table: {"public", "items"}}}
