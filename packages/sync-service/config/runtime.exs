@@ -89,10 +89,10 @@ case {database_url, default_tenant} do
     :ok
 
   {nil, _} ->
-    raise "DATABASE_ID must be provided when DATABASE_URL is set"
+    raise "DATABASE_URL must be provided when DATABASE_ID is set"
 
   {_, nil} ->
-    raise "DATABASE_URL must be provided when DATABASE_ID is set"
+    raise "DATABASE_ID must be provided when DATABASE_URL is set"
 
   {_, _} ->
     # A default tenant is provided
