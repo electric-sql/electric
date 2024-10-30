@@ -1,0 +1,455 @@
+- year: 2011
+  papers:
+    - title: Conflict-free Replicated Data Types (CRDTs)
+      authors:
+        - Nuno Preguiça
+        - Carlos Baquero
+        - Marc Shapiro
+      year:
+      url: 'https://hal.inria.fr/hal-00932836'
+    - title: >-
+        Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage
+        with COPS
+      authors:
+        - Wyatt Lloyd
+        - Michael J. Freedman
+        - Michael Kaminsky
+        - David G. Andersen
+      url: 'https://www.cs.cmu.edu/~dga/papers/cops-sosp2011.pdf'
+
+- year: 2012
+  papers:
+    - title: 'Making Geo-Replicated Systems Fast as Possible, Consistent when Necessary'
+      authors:
+        - Cheng Li
+        - Daniel Porto
+        - Allen Clement
+        - Johannes Gehrke
+        - Nuno Preguiça
+        - Rodrigo Rodrigues
+      url: 'https://doi.org/10.5555/2387880.2387906'
+    - title: 'Calvin: Fast Distributed Transactions for Partitioned Database Systems'
+      authors:
+        - Alexander Thomson
+        - Thaddeus Diamond
+        - Shu-Chun Weng
+        - Kun Ren
+        - Philip Shao
+        - Daniel J. Abadi
+      url: 'https://doi.org/10.1145/2213836.2213838'
+
+- year: 2013
+  papers:
+    - title: 'Spanner: Google’s Globally-Distributed Database'
+      authors:
+        - James C. Corbett
+        - Jeffrey Dean
+        - Michael Epstein
+        - Andrew Fikes
+        - Christopher Frost
+        - J. J. Furman
+        - Sanjay Ghemawat
+        - Andrey Gubarev
+        - Christopher Heiser
+        - Peter Hochschild
+        - Wilson Hsieh
+        - Sebastian Kanthak
+        - Eugene Kogan
+        - Hongyi Li
+        - Alexander Lloyd
+        - Sergey Melnik
+        - David Mwaura
+        - David Nagle
+        - Sean Quinlan
+        - Rajesh Rao
+        - Lindsay Rolig
+        - Yasushi Saito
+        - Michal Szymaniak
+        - Christopher Taylor
+        - Ruth Wang
+        - Dale Woodford
+      url: 'https://doi.org/10.1145/2491245'
+    - title: 'Highly Available Transactions: Virtues and Limitations'
+      authors:
+        - Peter Bailis
+        - Aaron Davidson
+        - Alan Fekete
+        - Ali Ghodsi
+        - Joseph M. Hellerstein
+        - Ion Stoica
+      url: 'https://doi.org/10.14778/2732232.2732237'
+    - title: >-
+        SwiftCloud: Fault-Tolerant Geo-Replication Integrated all the Way to the
+        Client Machine
+      authors:
+        - Marek Zawirski
+        - Annette Bieniusa
+        - Valter Balegas
+        - Sérgio Duarte
+        - Carlos Baquero
+        - Marc Shapiro
+        - Nuno Preguiça
+      url: 'https://arxiv.org/abs/1310.3107'
+
+- year: 2014
+  papers:
+    - title: Coordination Avoidance in Database Systems
+      authors:
+        - Peter Bailis
+        - Alan Fekete†
+        - Michael J. Franklin
+        - Ali Ghodsi
+        - Joseph M. Hellerstein
+        - Ion Stoica
+      url: 'https://arxiv.org/abs/1402.2237'
+    - title: Scalable Atomic Visibility with RAMP Transactions
+      authors:
+        - Peter Bailis
+        - Alan Fekete
+        - Ali Ghodsi
+        - Joseph M. Hellerstein
+        - Ion Stoica
+      url: 'https://doi.org/10.1145/2588555.2588562'
+
+- year: 2015
+  papers:
+    - title: >-
+        Extending Eventually Consistent Cloud Databases for Enforcing Numeric
+        Invariants
+      authors:
+        - Valter Balegas
+        - Sérgio Duarte
+        - Carla Ferreira
+        - Mahsa Najafzadeh
+        - Nuno Preguiça
+        - Rodrigo Rodrigues
+        - Marc Shapiro
+        - Diogo Serra
+      url: 'https://doi.org/10.1109/SRDS.2015.32'
+    - title: >-
+        Feral Concurrency Control: An Empirical Investigation of Modern Application
+        Integrity
+      authors:
+        - Peter Bailis
+        - Alan Fekete
+        - Michael J. Franklin
+        - Ali Ghodsi
+        - Joseph M. Hellerstein
+        - Ion Stoica
+      url: 'https://doi.org/10.1145/2723372.2737784'
+
+- year: 2016
+  papers:
+    - title: >-
+        Cause I’m Strong Enough: Reasoning about Consistency Choices in Distributed
+        Systems
+      authors:
+        - Alexey Gotsman
+        - Hongseok Yang
+        - Mahsa Najafzadeh
+        - Carla Ferreira
+        - Marc Shapiro
+      url: 'https://doi.org/10.1145/2837614.2837625'
+    - title: 'The CISE Tool: Proving Weakly-Consistent Applications Correct'
+      authors:
+        - Mahsa Najafzadeh
+        - Alexey Gotsman
+        - Hongseok Yang
+        - Carla Ferreira
+        - Marc Shapiro
+      url: 'https://doi.org/10.1145/2911151.2911160'
+    - title: 'Cure: strong semantics meets high availability and low latency'
+      authors:
+        - Deepthi Devaki Akkoorath
+        - Alejandro Z. Tomsic
+        - Manuel Bravo
+        - Zhongmiao Li
+        - Tyler Crain
+        - Annette Bieniusa
+        - Nuno Preguiça
+        - Marc Shapiro
+      url: 'https://doi.org/10.1109/ICDCS.2016.98'
+    - title: >-
+        Antidote: the highly-available geo-replicated database with strongest
+        guarantees
+      authors:
+        - Deepthi Devaki Akkoorath
+        - Annette Bieniusa
+      url: >-
+        https://pages.lip6.fr/syncfree/attachments/article/59/antidote-white-paper.pdf
+    - title: 'BigSets: Scaling CRDTs to large sizes in Riak'
+      authors:
+        - Russell Brown
+        - Torben Hoffmann
+      url: 'https://pages.lip6.fr/syncfree/index.php/2-uncategorised/53-big-sets.html'
+
+- year: 2017
+  papers:
+    - title: Bringing Hybrid Consistency Closer to Programmers
+      authors:
+        - Gonçalo Marcelino
+        - Valter Balegas
+        - Carla Ferreira
+      url: 'https://doi.org/10.1145/3064889.3064896'
+    - title: Pure Operation-Based Replicated Data Types
+      authors:
+        - Carlos Baquero
+        - Paulo Sérgio Almeida
+        - Ali Shoker
+      url: 'https://arxiv.org/abs/1710.04469'
+
+- year: 2018
+  papers:
+    - title: 'Just-Right Consistency: reconciling availability and safety'
+      authors:
+        - Marc Shapiro
+        - Annette Bieniusa
+        - Nuno Preguiça
+        - Valter Balegas
+        - Christopher Meiklejohn
+      url: 'https://arxiv.org/abs/1801.06340'
+    - title: >-
+        IPA: invariant-preserving applications for weakly consistent replicated
+        databases
+      authors:
+        - Valter Balegas
+        - Sérgio Duarte
+        - Carla Ferreira
+        - Rodrigo Rodrigues
+        - Nuno Preguiça
+      url: 'https://doi.org/10.14778/3297753.3297760'
+    - title: Delta State Replicated Data Types
+      authors:
+        - Paulo Sérgio Almeida
+        - Ali Shoker
+        - Carlos Baquero
+      url: 'https://doi.org/10.1016/j.jpdc.2017.08.003'
+    - title: 'Anna: A KVS For Any Scale'
+      authors:
+        - Chenggang Wu
+        - Jose M. Faleiro
+        - Yihan Lin
+        - Joseph M. Hellerstein
+      url: 'https://dl.acm.org/doi/10.1109/TKDE.2019.2898401'
+    - title: Interactive Checks for Coordination Avoidance
+      authors:
+        - Michael Whittaker
+        - Joseph M. Hellerstein
+      url: 'https://doi.org/10.14778/3275536.3275538'
+    - title: >-
+        ACGreGate: A Framework for Practical Access Control for Applications using
+        Weakly Consistent Databases
+      authors:
+        - Mathias Weber
+        - Annette Bieniusa
+      url: 'https://arxiv.org/abs/1801.07005'
+
+- year: 2019
+  papers:
+    - title: 'CAnDoR: Consistency Aware Dynamic data Replication'
+      authors:
+        - Etienne Mauffret
+        - Flavien Vernier
+        - Sébastien Monnet
+      url: 'https://hal.inria.fr/hal-02274165'
+    - title: A Generic Replicated Data Type for Strong Eventual Consistency
+      authors:
+        - Kevin De Porre
+        - Florian Myter
+        - Christophe De Troyer
+        - Christophe Scholliers
+        - Wolfgang De Meuter
+        - Elisa Gonzalez Boix
+      url: 'https://doi.org/10.1145/3301419.3323974'
+    - title: 'Keeping CALM: When Distributed Consistency is Easy'
+      authors:
+        - Joseph M. Hellerstein
+        - Peter Alvaro
+      url: 'https://arxiv.org/abs/1901.01930'
+    - title: Invariant Safety for Distributed Applications"
+      authors:
+        - Sreeja Nair
+        - Gustavo Petri
+        - Marc Shapiro
+      url: 'https://doi.org/10.1145/3301419.3323970'
+    - title: LightKone Reference Architecture (LiRA)
+      authors:
+        - Ali Shoker
+        - Paulo Sergio Almeida
+        - Carlos Baquero
+        - Annette Bieniusa
+        - Roger Pueyo Centelles
+        - Pedro Akos Costa
+        - Vitor Enes
+        - Carla Ferreira
+        - Pedro Fouto
+        - Felix Freitag
+        - Bradley King
+        - Igor Kopestenski
+        - Giorgos Kostopoulos
+        - João Leitão
+        - Adam Lindberg
+        - Albert van der Linde
+        - Sreeja Nair
+        - Nuno Preguiça
+        - Mennan Selimi
+        - Marc Shapiro
+        - Peer Stritzinger
+        - Ilyas Toumlilt
+        - Peter Van Roy
+        - Dimitrios Vasilas
+        - Georges Younes
+        - Igor Zavalyshyn
+        - Peter Zeller
+      url: 'https://www.lightkone.eu'
+    - title: 'CDB: Geo-Replicated, Conflict-Free Document Database with Session Guarantees'
+      authors:
+        - Chetan Venkatesh
+        - Durga Gokina
+        - Christopher S. Meiklejohn
+      url: 'https://www.macrometa.com/global-data-network'
+    - title: 'A Tour of Gallifrey, a Language for Geodistributed Programming'
+      authors:
+        - Mae Milano
+        - Rolph Recto
+        - Tom Magrino
+        - Andrew C. Myers
+      url: 'https://doi.org/10.4230/LIPIcs.SNAPL.2019.11'
+    - title: 'Local-First Software: You Own Your Data, in spite of the Cloud'
+      authors:
+        - Martin Kleppmann
+        - Adam Wiggins
+        - Peter van Hardenberg
+        - Mark McGranaghan
+      url: 'https://www.inkandswitch.com/local-first/static/local-first.pdf'
+
+- year: 2020
+  papers:
+    - title: Specification of a Transactionally and Causally-Consistent (TCC) database
+      authors:
+        - Saalik Hatia
+        - Marc Shapiro
+      url: 'https://hal.inria.fr/hal-02902474v1'
+    - title: >-
+        CScript: A distributed programming language for building mixed-consistency
+        applications
+      authors:
+        - Kevin De Porre
+        - Florian Myter
+        - Christophe Scholliers
+        - Elisa Gonzalez Boix
+      url: 'https://soft.vub.ac.be/~kdeporre/'
+    - title: 'Cloudburst: Stateful Functions-as-a-Service'
+      authors:
+        - Vikram Sreekanti
+        - Chenggang Wu
+        - Xiayue Charles Lin
+        - Johann Schleier-Smith
+        - Joseph E. Gonzalez
+        - Joseph M. Hellerstein
+        - Alexey Tumanov
+      url: 'https://doi.org/10.14778/3407790.3407836'
+    - title: Transactional Causal Consistency for Serverless Computing
+      authors:
+        - Chenggang Wu
+        - Vikram Sreekanti
+        - Joseph M. Hellerstein
+      url: 'https://doi.org/10.1145/3318464.3389710'
+    - title: >-
+        Conflict-Free Replicated Relations for Multi-Synchronous Database Management
+        at Edge
+      authors:
+        - Weihai Yu
+        - Claudia-Lavinia Ignat
+      url: 'https://hal.inria.fr/hal-02983557'
+
+- year: 2021
+  papers:
+    - title: >-
+        Advanced Domain-Driven Design for Consistency in Distributed Data-Intensive
+        Systems
+      authors:
+        - Susanne Braun
+        - Annette Bieniusa
+        - Frank Elberzhager
+      url: 'https://doi.org/10.1145/3447865.3457969'
+    - title: >-
+        Tackling Consistency-related Design Challenges of Distributed Data-Intensive
+        Systems - An Action Research Study
+      authors:
+        - Susanne Braun
+        - Stefan Deßloch
+        - Eberhard Wolff
+        - Frank Elberzhager
+        - Andreas Jedlitschka
+      url: 'https://doi.org/10.1145/3475716.3475771'
+    - title: 'ECROs: Building Global Scale Systems from Sequential Code'
+      authors:
+        - Kevin De Porre
+        - Carla Ferreira
+        - Nuno Preguiça
+        - Elisa Gonzalez
+      url: 'https://doi.org/10.1145/3485484'
+    - title: >-
+        It’s about Thyme: On the design and implementation of a time-aware reactive
+        storage system for pervasive edge computing
+      authors:
+        - João A. Silva
+        - Filipe Cerqueira
+        - Hervé Paulino
+        - João M. Lourenço
+        - João Leitão
+        - Nuno Preguiça
+      url: 'https://doi.org/10.1016/j.future.2020.12.008'
+    - title: 'Thespis: Causally-consistent OLTP'
+      authors:
+        - Joseph G. Vella
+        - Vitezslav Nezval
+      url: 'https://doi.org/0.15439/2021F34'
+    - title: >-
+        AUTOGR: automated geo-replication with fast system performance and preserved
+        application semantics
+      authors:
+        - Jiawei Wang
+        - Cheng Li
+        - Kai Ma
+        - Jingze Huo
+        - Feng Yan
+        - Xinyu Feng
+        - Yinlong Xu
+      url: 'https://doi.org/10.14778/3461535.3461541'
+    - title: New Directions in Cloud Programming
+      authors:
+        - Alvin Cheung
+        - Natacha Crooks
+        - Joseph M. Hellerstein
+        - Mae Milano
+      url: 'https://arxiv.org/abs/2101.01159'
+    - title: Highly-Available and Consistent Group Collaboration at the Edge with Colony
+      authors:
+        - Ilyas Toumlilt
+        - Pierre Sutra
+        - Marc Shapiro
+      url: 'https://dl.acm.org/doi/abs/10.1145/3464298.3493405'
+    - title: >-
+        Towards a General Database Management System of Conflict-Free Repli- cated
+        Relations
+      authors:
+        - Iver Toft Tomter
+      url: 'https://munin.uit.no/bitstream/handle/10037/22344/thesis.pdf'
+
+- year: 2022
+  papers:
+    - title: Building data-centric apps with a reactive relational database
+      authors:
+        - Nicholas Schiefer
+        - Geoffrey Litt
+        - Johannes Schickling
+        - Daniel Jackson
+      url: 'https://riffle.systems/essays/prelude'
+    - title: 'VeriFx: Correct Replicated Data Types for the Masses'
+      authors:
+        - Kevin De Porre
+        - Carla Ferreira
+        - Elisa Gonzalez Boix
+      url: 'https://arxiv.org/pdf/2207.02502.pdf'
