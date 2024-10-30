@@ -177,52 +177,71 @@ defmodule Electric.TenantManagerTest do
     setup :with_unique_db
 
     setup do
-      %{publication_name: "electric_test_publication", slot_name: "electric_test_slot"}
+      %{
+        publication_name: "electric_test_publication",
+        slot_name: "electric_test_slot",
+        stream_id: "default"
+      }
     end
 
-    setup :with_complete_stack
+    setup ctx do
+      Map.put(ctx, :connection_opts, Map.fetch!(ctx, :db_config))
+    end
+
+    setup :with_complete_stack_but_no_tenant
+    setup :with_app_config
 
     test "deletes the tenant", %{
       electric_instance_id: electric_instance_id,
       tenant_id: tenant_id,
       tenant_manager: tenant_manager,
+      connection_opts: connection_opts,
+      inspector: inspector,
+      app_config: app_config,
       tenant_tables_name: tenant_tables_name
     } do
-      # Check that the tenant is up and running
-      # and the ETS tables are correctly populated
-      # {:via, Registry, {registry_name, registry_key}} =
-      #  Electric.Tenant.Supervisor.name(
-      #    electric_instance_id: electric_instance_id,
-      #    tenant_id: tenant_id
-      #  )
-      #
-      # [{pid, _}] = Registry.lookup(registry_name, registry_key)
-      # assert Process.alive?(pid)
+      # Create a tenant
+      :ok =
+        TenantManager.create_tenant(tenant_id, connection_opts,
+          inspector: inspector,
+          tenant_manager: tenant_manager,
+          app_config: app_config,
+          tenant_tables_name: tenant_tables_name
+        )
 
+      {:via, _, {registry_name, registry_key}} =
+        Electric.Tenant.Supervisor.name(
+          electric_instance_id: electric_instance_id,
+          tenant_id: tenant_id
+        )
+
+      [{tenant_supervisor_pid, _}] = Registry.lookup(registry_name, registry_key)
+
+      # Check that the tenant supervisor is running
+      # and that the tenant's ETS tables are registered in the global ETS table
+      assert Process.alive?(tenant_supervisor_pid)
       assert :ets.member(tenant_tables_name, {tenant_id, :pg_info_table})
       assert :ets.member(tenant_tables_name, {tenant_id, :pg_relation_table})
-
-      dbg("HERE")
-      dbg(tenant_tables_name)
 
       # Delete the tenant
       assert :ok =
                TenantManager.delete_tenant(tenant_id,
+                 electric_instance_id: electric_instance_id,
+                 tenant_id: tenant_id,
                  tenant_manager: tenant_manager,
                  tenant_tables_name: tenant_tables_name
                )
-
-      dbg("AFTER")
 
       # Check that the tenant is now unknown to the tenant manager
       # and that it is fully shut down and removed from the ETS table
       assert {:error, :not_found} =
                TenantManager.get_tenant(tenant_id, tenant_manager: tenant_manager)
 
-      # assert !Process.alive?(pid)
+      # Verify process was terminated
+      refute Process.alive?(tenant_supervisor_pid)
 
-      assert !:ets.member(tenant_tables_name, {tenant_id, :pg_info_table})
-      assert !:ets.member(tenant_tables_name, {tenant_id, :pg_relation_table})
+      refute :ets.member(tenant_tables_name, {tenant_id, :pg_info_table})
+      refute :ets.member(tenant_tables_name, {tenant_id, :pg_relation_table})
     end
   end
 end

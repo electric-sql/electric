@@ -40,8 +40,20 @@ defmodule Support.ComponentSetup do
     )
 
     :ok = Electric.TenantManager.store_tenant(tenant, tenant_manager: ctx.tenant_manager)
+    Electric.TenantSupervisor.start_tenant(ctx)
 
     %{tenant: tenant}
+  end
+
+  def with_tenant_supervisor(ctx) do
+    {:via, _, {registry_name, registry_key}} =
+      Electric.Tenant.Supervisor.name(
+        electric_instance_id: ctx.electric_instance_id,
+        tenant_id: ctx.tenant_id
+      )
+
+    [{tenant_supervisor_pid, _}] = Registry.lookup(registry_name, registry_key)
+    %{tenant_supervisor_pid: tenant_supervisor_pid}
   end
 
   def with_registry(ctx) do
@@ -180,6 +192,7 @@ defmodule Support.ComponentSetup do
     server = :"inspector #{full_test_name(ctx)}"
     pg_info_table = :"pg_info_table #{full_test_name(ctx)}"
     pg_relation_table = :"pg_relation_table #{full_test_name(ctx)}"
+
     tenant_tables_name = :"tenant_tables_name #{full_test_name(ctx)}"
     :ets.new(tenant_tables_name, [:public, :named_table, :set])
 

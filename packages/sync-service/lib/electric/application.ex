@@ -26,7 +26,8 @@ defmodule Electric.Application do
 
     router_opts = [
       tenant_manager: Electric.TenantManager.name(tenant_opts),
-      allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false)
+      allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false),
+      registry: @process_registry_name
     ]
 
     # The root application supervisor starts the core global processes, including the HTTP

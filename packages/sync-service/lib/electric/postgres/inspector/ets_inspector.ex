@@ -87,8 +87,15 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   defp clean_tenant_info(opts) do
     tenant_id = Access.fetch!(opts, :tenant_id)
     tenant_tables_name = fetch_tenant_tables_name(opts)
-    :ets.delete(tenant_tables_name, {tenant_id, :pg_info_table})
-    :ets.delete(tenant_tables_name, {tenant_id, :pg_relation_table})
+
+    case :ets.whereis(tenant_tables_name) do
+      :undefined ->
+        true
+
+      _ ->
+        :ets.delete(tenant_tables_name, {tenant_id, :pg_info_table})
+        :ets.delete(tenant_tables_name, {tenant_id, :pg_relation_table})
+    end
   end
 
   ## Internal API

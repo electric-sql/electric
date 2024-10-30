@@ -18,6 +18,8 @@ defmodule Electric.Plug.RemoveDatabasePlugTest do
   def conn(ctx, method, database_id \\ nil) do
     # Pass mock dependencies to the plug
     config = [
+      electric_instance_id: ctx.electric_instance_id,
+      tenant_id: ctx.tenant_id,
       storage: {Mock.Storage, []},
       tenant_manager: Access.fetch!(ctx, :tenant_manager),
       app_config: ctx.app_config
@@ -62,6 +64,12 @@ defmodule Electric.Plug.RemoveDatabasePlugTest do
     end
 
     test "returns 200 when successfully deleting a tenant", ctx do
+      # The tenant manager will try to shut down the tenant supervisor
+      # but we did not start a tenant supervisor in this test
+      # so we create one here
+      supervisor_name = Electric.Tenant.Supervisor.name(ctx.electric_instance_id, ctx.tenant_id)
+      Supervisor.start_link([], name: supervisor_name, strategy: :one_for_one)
+
       conn =
         ctx
         |> conn("DELETE", ctx.tenant_id)
