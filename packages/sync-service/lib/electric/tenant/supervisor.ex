@@ -80,9 +80,15 @@ defmodule Electric.Tenant.Supervisor do
       shape_cache_opts: shape_cache_opts
     ]
 
+    {_, opts} = inspector
+    tenant_tables_name = Access.fetch!(opts, :tenant_tables_name)
+
     children = [
       {Electric.Postgres.Inspector.EtsInspector,
-       pool: db_pool, electric_instance_id: electric_instance_id, tenant_id: tenant_id},
+       pool: db_pool,
+       electric_instance_id: electric_instance_id,
+       tenant_id: tenant_id,
+       tenant_tables_name: tenant_tables_name},
       {Electric.Connection.Supervisor, connection_manager_opts}
     ]
 

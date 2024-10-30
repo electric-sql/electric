@@ -66,7 +66,9 @@ defmodule Electric.TenantManager do
            Electric.Postgres.Inspector.EtsInspector.name(
              electric_instance_id,
              tenant_id
-           )}
+           ),
+         tenant_tables_name:
+           Electric.Postgres.Inspector.EtsInspector.fetch_tenant_tables_name(opts)}
       )
 
     {storage_module, storage_in_opts} = Application.fetch_env!(:electric, :storage)

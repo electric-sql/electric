@@ -214,7 +214,7 @@ defmodule Electric.Shapes.ShapeTest do
     import Support.DbStructureSetup
     import Support.ComponentSetup
 
-    setup [:with_shared_db, :with_inspector, :with_sql_execute]
+    setup [:with_shared_db, :with_tenant_id, :with_inspector, :with_sql_execute]
 
     @tag with_sql: [
            "CREATE SCHEMA IF NOT EXISTS test",
@@ -354,7 +354,7 @@ defmodule Electric.Shapes.ShapeTest do
     import Support.DbStructureSetup
     import Support.ComponentSetup
 
-    setup [:with_shared_db, :with_inspector, :with_sql_execute]
+    setup [:with_shared_db, :with_tenant_id, :with_inspector, :with_sql_execute]
 
     @tag with_sql: [
            "CREATE SCHEMA IF NOT EXISTS test",
