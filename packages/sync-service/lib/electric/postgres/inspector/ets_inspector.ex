@@ -83,10 +83,22 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     clean_relation(relation, opts_or_state)
   end
 
+  # Removes the references to the tenant's ETS tables from the global ETS table
+  defp clean_tenant_info(opts) do
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    tenant_tables_name = fetch_tenant_tables_name(opts)
+    :ets.delete(tenant_tables_name, {tenant_id, :pg_info_table})
+    :ets.delete(tenant_tables_name, {tenant_id, :pg_relation_table})
+  end
+
   ## Internal API
 
   @impl GenServer
   def init(opts) do
+    # Trap exits such that `terminate/2` is called
+    # when the parent process sends an exit signal
+    Process.flag(:trap_exit, true)
+
     # Each tenant creates its own ETS table.
     # Name needs to be an atom but we don't want to dynamically create atoms.
     # Instead, we will use the reference to the table that is returned by `:ets.new`
@@ -101,6 +113,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     :ets.insert(tenant_tables_name, {{tenant_id, :pg_relation_table}, pg_relation_table})
 
     state = %{
+      tenant_id: tenant_id,
+      tenant_tables_name: tenant_tables_name,
       pg_info_table: pg_info_table,
       pg_relation_table: pg_relation_table,
       pg_pool: opts.pool
@@ -144,6 +158,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     end
   end
 
+  @impl GenServer
   def handle_call({:load_column_info, table}, _from, state) do
     case column_info_from_ets(table, state) do
       :not_found ->
@@ -162,6 +177,11 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     end
   rescue
     e -> {:reply, {:error, e, __STACKTRACE__}, state}
+  end
+
+  @impl GenServer
+  def terminate(_reason, state) do
+    clean_tenant_info(state)
   end
 
   @pg_rel_position 2

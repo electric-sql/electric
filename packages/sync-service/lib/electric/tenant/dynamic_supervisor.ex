@@ -19,6 +19,15 @@ defmodule Electric.TenantSupervisor do
     DynamicSupervisor.start_child(@name, {Tenant.Supervisor, opts})
   end
 
+  @doc """
+  Stops all tenant processes.
+  """
+  @spec stop_tenant(Keyword.t()) :: :ok
+  def stop_tenant(opts) do
+    sup = Tenant.Supervisor.name(opts)
+    :ok = Supervisor.stop(sup)
+  end
+
   @impl true
   def init(_opts) do
     Logger.debug(fn -> "Starting #{__MODULE__}" end)
