@@ -26,7 +26,7 @@ const usersShape = (): ShapeStreamOptions => {
       ).href,
       headers: {
         Authorization: org_id || ``,
-      }
+      },
     }
   } else {
     return {
