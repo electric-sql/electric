@@ -28,7 +28,8 @@ defmodule Electric.Plug.AddDatabasePlugTest do
     config = [
       storage: {Mock.Storage, []},
       tenant_manager: Access.fetch!(ctx, :tenant_manager),
-      app_config: ctx.app_config
+      app_config: ctx.app_config,
+      tenant_tables_name: ctx.tenant_tables_name
     ]
 
     conn =

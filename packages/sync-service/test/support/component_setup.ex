@@ -176,21 +176,32 @@ defmodule Support.ComponentSetup do
     server = :"inspector #{full_test_name(ctx)}"
     pg_info_table = :"pg_info_table #{full_test_name(ctx)}"
     pg_relation_table = :"pg_relation_table #{full_test_name(ctx)}"
+    tenant_tables_name = :"tenant_tables_name #{full_test_name(ctx)}"
+    :ets.new(tenant_tables_name, [:public, :named_table, :set])
 
     {:ok, _} =
       EtsInspector.start_link(
+        tenant_id: ctx.tenant_id,
         pg_info_table: pg_info_table,
         pg_relation_table: pg_relation_table,
         pool: ctx.db_conn,
-        name: server
+        name: server,
+        tenant_tables_name: tenant_tables_name
       )
+
+    opts = [tenant_id: ctx.tenant_id, tenant_tables_name: tenant_tables_name]
 
     %{
       inspector:
         {EtsInspector,
-         pg_info_table: pg_info_table, pg_relation_table: pg_relation_table, server: server},
-      pg_info_table: pg_info_table,
-      pg_relation_table: pg_relation_table
+         tenant_id: ctx.tenant_id,
+         tenant_tables_name: tenant_tables_name,
+         pg_info_table: EtsInspector.get_column_info_table(opts),
+         pg_relation_table: EtsInspector.get_relation_table(opts),
+         server: server},
+      pg_info_table: EtsInspector.get_column_info_table(opts),
+      pg_relation_table: EtsInspector.get_relation_table(opts),
+      tenant_tables_name: tenant_tables_name
     }
   end
 

@@ -208,4 +208,5 @@ config :electric,
   prometheus_port: prometheus_port,
   storage: storage,
   persistent_kv: persistent_kv,
-  listen_on_ipv6?: env!("LISTEN_ON_IPV6", :boolean, false)
+  listen_on_ipv6?: env!("LISTEN_ON_IPV6", :boolean, false),
+  tenant_tables_name: :tenant_tables
