@@ -72,12 +72,22 @@ defmodule Electric.Plug.ServeShapePlugTest do
     ]
 
     # because test mode creates a tenant by default
-    TenantManager.delete_tenant(ctx.tenant_id)
-    :ok = TenantManager.store_tenant(tenant)
+    TenantManager.delete_tenant(ctx.tenant_id,
+      electric_instance_id: ctx.electric_instance_id,
+      tenant_id: ctx.tenant_id,
+      tenant_manager: ctx.tenant_manager
+    )
+
+    :ok =
+      TenantManager.store_tenant(tenant,
+        electric_instance_id: ctx.electric_instance_id,
+        tenant_id: ctx.tenant_id,
+        tenant_manager: ctx.tenant_manager
+      )
 
     config = [
       storage: {Mock.Storage, []},
-      tenant_manager: Electric.TenantManager
+      tenant_manager: ctx.tenant_manager
     ]
 
     Plug.Test.conn(method, "/" <> query_string, params)
@@ -146,7 +156,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
   end
 
   describe "serving shape" do
-    setup [:with_electric_instance_id, :with_tenant_id]
+    setup [:with_electric_instance_id, :with_tenant_manager, :with_tenant_id]
 
     test "returns 400 for invalid params", ctx do
       conn =
