@@ -20,11 +20,12 @@ const usersShape = (): ShapeStreamOptions => {
     const queryParams = new URLSearchParams(window.location.search)
     const org_id = queryParams.get(`org_id`)
     return {
-      url: new URL(`/shape-proxy?org_id=${org_id}`, window.location.origin).href,
+      url: new URL(`/shape-proxy?org_id=${org_id}`, window.location.origin)
+        .href,
       table: `users`,
       headers: {
         Authorization: org_id || ``,
-      }
+      },
     }
   } else {
     return {
