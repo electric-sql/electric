@@ -49,7 +49,7 @@ Note also that, when running Electric behind a CDN, you may want your proxy in f
 
 ## 1. Running Postgres
 
-You can use ***any standard Postgres***, version 15 and above.
+You can use ***any standard Postgres***, version 14 and above.
 
 This includes Postgres you host yourself, or Postgres hosted by managed database hosting providers, including:
 
