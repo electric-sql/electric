@@ -25,7 +25,7 @@ You can also use Electric to [sync data into Supabase Edge Functions](#sync-into
 
 Create a database on [Supabase.com](https://supabase.com). Click the "Connect" button in the top right to get the connection string.
 
-Make sure you untick the "Display connection pooler" option to get the direct access URL that works with logical replication. Note that this only works with IPv6, which means you will need to configure Electric to connect over IPv6.
+Make sure you untick the "Display connection pooler" option to get the direct access URL, because the pooled URL does not support logical replication. Note that this direct access URL only works with IPv6, which means you will need to [configure Electric to connect over IPv6](#troubleshooting-ipv6).
 
 ### Connect Electric
 
