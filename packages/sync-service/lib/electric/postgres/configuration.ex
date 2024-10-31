@@ -7,7 +7,6 @@ defmodule Electric.Postgres.Configuration do
   alias Electric.Shapes.Shape
 
   @type filter() :: String.t() | nil
-  @type maybe_filter() :: filter() | :relation_not_found
   @type filters() :: %{Electric.relation() => filter()}
 
   @pg_15 150_000
@@ -42,8 +41,6 @@ defmodule Electric.Postgres.Configuration do
   defp configure_tables_for_replication_internal!(pool, relations, pg_version, publication_name)
        when pg_version < @pg_15 do
     Postgrex.transaction(pool, fn conn ->
-      set_replica_identity!(conn, relations)
-
       for {relation, _} <- relations,
           table = Utils.relation_to_sql(relation),
           publication = Utils.quote_name(publication_name) do
@@ -69,37 +66,37 @@ defmodule Electric.Postgres.Configuration do
             raise reason
         end
       end
+
+      set_replica_identity!(conn, relations)
     end)
   end
 
   defp configure_tables_for_replication_internal!(pool, relations, _pg_version, publication_name) do
     Postgrex.transaction(pool, fn conn ->
+      # We're using advisory locks to prevent race conditions when multiple
+      # processes try to read-then-update the publication configuration. We're not using `SELECT FOR UPDATE`
+      # because it doesn't read the value that was updated by other transaction holding the lock. This lock
+      # is thus acquired before reading the existing configuration, so the first read sees the latest value.
+      Postgrex.query!(conn, "SELECT pg_advisory_xact_lock($1)", [:erlang.phash2(publication_name)])
+
+      filters = get_publication_filters(conn, publication_name)
+
+      # Get the existing filter for the table
+      # and extend it with the where clause for the table
+      # and update the table in the map with the new filter
+      filters =
+        Enum.reduce(relations, filters, fn {relation, clause}, acc ->
+          Map.update(acc, relation, clause, &extend_where_clause(&1, clause))
+        end)
+
+      Postgrex.query!(conn, make_alter_publication_query(publication_name, filters), [])
+
+      # `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
+      # but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
+      # deadlock if the order is reversed.
       set_replica_identity!(conn, relations)
 
-      for {relation, rel_where_clause} <- relations do
-        Postgrex.query!(conn, "SAVEPOINT before_publication", [])
-
-        filters = get_publication_filters(conn, publication_name)
-
-        # Get the existing filter for the table
-        # and extend it with the where clause for the table
-        # and update the table in the map with the new filter
-        filter = Map.get(filters, relation, :relation_not_found)
-        rel_filter = extend_where_clause(filter, rel_where_clause)
-        filters = Map.put(filters, relation, rel_filter)
-
-        alter_publication_sql =
-          make_alter_publication_query(publication_name, filters)
-
-        case Postgrex.query(conn, alter_publication_sql, []) do
-          {:ok, _} ->
-            Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
-            :ok
-
-          {:error, reason} ->
-            raise reason
-        end
-      end
+      [:ok]
     end)
   end
 
@@ -147,11 +144,7 @@ defmodule Electric.Postgres.Configuration do
 
   # Joins the existing filter for the table with the where clause for the table.
   # If one of them is `nil` (i.e. no filter) then the resulting filter is `nil`.
-  @spec extend_where_clause(maybe_filter(), filter()) :: filter()
-  defp extend_where_clause(:relation_not_found, where_clause) do
-    where_clause
-  end
-
+  @spec extend_where_clause(filter(), filter()) :: filter()
   defp extend_where_clause(filter, where_clause) when is_nil(filter) or is_nil(where_clause) do
     nil
   end
@@ -173,7 +166,7 @@ defmodule Electric.Postgres.Configuration do
     base_sql <> tables
   end
 
-  @spec make_table_clause(filter()) :: String.t()
+  @spec make_table_clause({Electric.relation(), filter()}) :: String.t()
   defp make_table_clause({{schema, tbl}, nil}) do
     Utils.relation_to_sql({schema, tbl})
   end

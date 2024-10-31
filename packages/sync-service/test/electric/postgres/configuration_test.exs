@@ -32,6 +32,17 @@ defmodule Electric.Postgres.ConfigurationTest do
       []
     )
 
+    Postgrex.query!(
+      conn,
+      """
+      CREATE TABLE other_other_table (
+        id UUID PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+      """,
+      []
+    )
+
     :ok
   end
 
@@ -217,6 +228,67 @@ defmodule Electric.Postgres.ConfigurationTest do
           "nonexistent"
         )
       end
+    end
+
+    test "concurrent alters to the publication don't deadlock and run correctly", %{
+      pool: conn,
+      publication_name: publication,
+      get_pg_version: get_pg_version
+    } do
+      # Create the publication first
+      Configuration.configure_tables_for_replication!(
+        conn,
+        [
+          {{"public", "items"}, "(value ILIKE 'yes%')"},
+          {{"public", "other_table"}, "(value ILIKE '1%')"},
+          {{"public", "other_other_table"}, "(value ILIKE '1%')"}
+        ],
+        get_pg_version,
+        publication
+      )
+
+      task1 =
+        Task.async(fn ->
+          Postgrex.transaction(conn, fn conn ->
+            Configuration.configure_tables_for_replication!(
+              conn,
+              [{{"public", "other_other_table"}, "(value ILIKE '2%')"}],
+              get_pg_version,
+              publication
+            )
+
+            :ok
+          end)
+        end)
+
+      task2 =
+        Task.async(fn ->
+          Postgrex.transaction(conn, fn conn ->
+            Configuration.configure_tables_for_replication!(
+              conn,
+              [{{"public", "other_table"}, "(value ILIKE '2%')"}],
+              get_pg_version,
+              publication
+            )
+
+            :ok
+          end)
+        end)
+
+      # First check: both tasks completed successfully, that means there were no deadlocks
+      assert [{:ok, :ok}, {:ok, :ok}] == Task.await_many([task1, task2])
+
+      # Second check: the publication has the correct filters, that means one didn't override the other
+      assert list_tables_in_publication(conn, publication) |> Enum.sort() ==
+               expected_filters(
+                 [
+                   {"public", "items", "(value ~~* 'yes%'::text)"},
+                   {"public", "other_other_table",
+                    "((value ~~* '1%'::text) OR (value ~~* '2%'::text))"},
+                   {"public", "other_table", "((value ~~* '1%'::text) OR (value ~~* '2%'::text))"}
+                 ],
+                 get_pg_version.()
+               )
     end
   end
 
