@@ -34,9 +34,12 @@ if (!(props.required || props.optional || props.defaultValue !== undefined)) {
 }
 </script>
 
-<style scoped>
+<style>
 .envVarConfigDescription {
   width: 100%;
+}
+.envVarConfigDescription p:first-child {
+  margin-top: 0;
 }
 .envVarConfigDescription p:last-child {
   margin-bottom: 0;

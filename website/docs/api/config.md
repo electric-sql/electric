@@ -42,13 +42,15 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="DATABASE_URL"
     required={true}
     example="postgresql://user:password@example.com:54321/electric">
-  Postgres connection string. Used to connect to the Postgres database.
 
-  The connection string must be in the [libpg Connection URI format](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS) of `postgresql://[userspec@][hostspec][/dbname][?sslmode=<sslmode>]`.
+Postgres connection string. Used to connect to the Postgres database.
 
-  The `userspec` section of the connection string specifies the database user that Electric connects to Postgres as. They must have the `REPLICATION` role.
+The connection string must be in the [libpg Connection URI format](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS) of `postgresql://[userspec@][hostspec][/dbname][?sslmode=<sslmode>]`.
 
-  For a secure connection, set the `sslmode` query parameter to `require`.
+The `userspec` section of the connection string specifies the database user that Electric connects to Postgres as. They must have the `REPLICATION` role.
+
+For a secure connection, set the `sslmode` query parameter to `require`.
+
 </EnvVarConfig>
 
 ### DATABASE_USE_IPV6
@@ -57,7 +59,9 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="DATABASE_USE_IPV6"
     defaultValue="false"
     example="true">
-  Set to `true` to prioritise connecting to the database over IPv6. Electric will fall back to an IPv4 DNS lookup if the IPv6 lookup fails.
+
+Set to `true` to prioritise connecting to the database over IPv6. Electric will fall back to an IPv4 DNS lookup if the IPv6 lookup fails.
+
 </EnvVarConfig>
 
 ### DB_POOL_SIZE
@@ -66,7 +70,9 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="DB_POOL_SIZE"
     defaultValue="20"
     example="10">
-  How many connections Electric opens as a pool for handling shape queries.
+
+How many connections Electric opens as a pool for handling shape queries.
+
 </EnvVarConfig>
 
 ### REPLICATION_STREAM_ID
@@ -75,7 +81,9 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="REPLICATION_STREAM_ID"
     defaultValue="default"
     example="my-app">
-  Suffix for the logical replication publication and slot name.
+
+Suffix for the logical replication publication and slot name.
+
 </EnvVarConfig>
 
 ## Electric
@@ -86,7 +94,9 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="ELECTRIC_INSTANCE_ID"
     defaultValue="Electric.Utils.uuid4()"
     example="some-unique-instance-identifier">
-  A unique identifier for the Electric instance. Defaults to a randomly generated UUID.
+
+A unique identifier for the Electric instance. Defaults to a randomly generated UUID.
+
 </EnvVarConfig>
 
 ### ELECTRIC_SERVICE_NAME
@@ -95,7 +105,9 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="ELECTRIC_SERVICE_NAME"
     defaultValue="electric"
     example="my-electric-service">
-  Name of the electric service. Used as a resource identifier and namespace.
+
+Name of the electric service. Used as a resource identifier and namespace.
+
 </EnvVarConfig>
 
 ### ENABLE_INTEGRATION_TESTING
@@ -104,8 +116,10 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="ENABLE_INTEGRATION_TESTING"
     defaultValue="false"
     example="true">
-  Expose some unsafe operations that faciliate integration testing.
-  Do not enable this production.
+
+Expose some unsafe operations that faciliate integration testing.
+Do not enable this production.
+
 </EnvVarConfig>
 
 ### LISTEN_ON_IPV6
@@ -114,7 +128,9 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="LISTEN_ON_IPV6"
     defaultValue="false"
     example="true">
-  By default, Electric binds to IPv4. Enable this to listen on IPv6 addresses as well.
+
+By default, Electric binds to IPv4. Enable this to listen on IPv6 addresses as well.
+
 </EnvVarConfig>
 
 ### LOG_CHUNK_BYTES_THRESHOLD
@@ -123,9 +139,10 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="LOG_CHUNK_BYTES_THRESHOLD"
     defaultValue="10485760"
     example="20971520">
-  Limit the maximum size of a shape log response, to ensure they are cached by
-  upstream caches. Defaults to 10MB (10 * 1024 * 1024). See
-  https://github.com/electric-sql/electric/issues/1581 for context.
+
+Limit the maximum size of a shape log response, to ensure they are cached by
+upstream caches. Defaults to 10MB (10 * 1024 * 1024). See [#1581](https://github.com/electric-sql/electric/issues/1581) for context.
+
 </EnvVarConfig>
 
 ### PORT
@@ -134,7 +151,9 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="PORT"
     defaultValue="3000"
     example="8080">
-  Port that the [HTTP API](/docs/api/http) is exposed on.
+
+Port that the [HTTP API](/docs/api/http) is exposed on.
+
 </EnvVarConfig>
 
 ## Caching
@@ -145,7 +164,9 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="CACHE_MAX_AGE"
     defaultValue="60"
     example="5">
-  Default max-age for the cache headers of the HTTP API.
+
+Default `max-age` for the cache headers of the HTTP API.
+
 </EnvVarConfig>
 
 ### CACHE_STALE_AGE
@@ -154,7 +175,9 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="CACHE_STALE_AGE"
     defaultValue="300"
     example="5">
-  Default stale-age for the cache headers of the HTTP API.
+
+Default `stale-age` for the cache headers of the HTTP API.
+
 </EnvVarConfig>
 
 ## Storage
@@ -165,8 +188,10 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="PERSISTENT_STATE"
     defaultValue="FILE"
     example="MEMORY">
-  Where to store shape metadata. Defaults to storing on the filesystem.
-  If provided must be one of `MEMORY` or `FILE`.
+
+Where to store shape metadata. Defaults to storing on the filesystem.
+If provided must be one of `MEMORY` or `FILE`.
+
 </EnvVarConfig>
 
 ### STORAGE
@@ -175,8 +200,10 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="STORAGE"
     defaultValue="FILE"
     example="MEMORY">
-  Where to store shape logs. Defaults to storing on the filesystem.
-  If provided must be one of `MEMORY` or `FILE`.
+
+Where to store shape logs. Defaults to storing on the filesystem.
+If provided must be one of `MEMORY` or `FILE`.
+
 </EnvVarConfig>
 
 ### STORAGE_DIR
@@ -185,7 +212,9 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="STORAGE_DIR"
     defaultValue="./persistent"
     example="/var/example">
-  Path to root folder for storing data on the filesystem.
+
+Path to root folder for storing data on the filesystem.
+
 </EnvVarConfig>
 
 ## Telemetry
@@ -196,8 +225,10 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="OTLP_ENDPOINT"
     optional="true"
     example="https://example.com">
-  Set an [OpenTelemetry](https://opentelemetry.io/docs/what-is-opentelemetry/) endpoint URL
-  to enable telemetry.
+
+Set an [OpenTelemetry](https://opentelemetry.io/docs/what-is-opentelemetry/) endpoint URL
+to enable telemetry.
+
 </EnvVarConfig>
 
 ### OTEL_DEBUG
@@ -206,7 +237,9 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="OTEL_DEBUG"
     defaultValue="false"
     example="true">
-  Debug tracing by printing spans to stdout, without batching.
+
+Debug tracing by printing spans to stdout, without batching.
+
 </EnvVarConfig>
 
 ### HNY_API_KEY
@@ -215,8 +248,10 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="HNY_API_KEY"
     optional="true"
     example="your-api-key">
-  Honeycomb.io api key. Specify along with `HNY_DATASET` to export traces
-  directly to Honeycomb, without the need to run an OpenTelemetry Collector.
+
+[Honeycomb.io](https://www.honeycomb.io) api key. Specify along with `HNY_DATASET` to
+export traces directly to Honeycomb, without the need to run an OpenTelemetry Collector.
+
 </EnvVarConfig>
 
 ### HNY_DATASET
@@ -225,7 +260,9 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="HNY_DATASET"
     optional="true"
     example="your-dataset-name">
-  Name of your Honeycomb Dataset.
+
+Name of your Honeycomb Dataset.
+
 </EnvVarConfig>
 
 ### PROMETHEUS_PORT
@@ -234,7 +271,9 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="PROMETHEUS_PORT"
     optional="true"
     example="9090">
-  Expose a prometheus reporter for telemetry data on the specified port.
+
+Expose a prometheus reporter for telemetry data on the specified port.
+
 </EnvVarConfig>
 
 ### STATSD_HOST
@@ -243,5 +282,7 @@ These are passed into the application via [config/runtime.exs](https://github.co
     name="STATSD_HOST"
     optional="true"
     example="https://example.com">
-  Enable sending telemetry data to a StatsD reporting endpoint.
+
+Enable sending telemetry data to a StatsD reporting endpoint.
+
 </EnvVarConfig>
