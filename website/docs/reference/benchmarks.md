@@ -1,6 +1,6 @@
 ---
 title: Benchmarks - Reference
-outline: deep
+outline: [2, 4]
 ---
 
 <script setup>
@@ -14,29 +14,27 @@ import WriteFanoutMemory from '/static/img/benchmarks/write-fanout-memory.png?ur
 
 # Benchmarks
 
-We run benchmarks to measure and help improve the Electric's performance.
+We run benchmarks for both the [Electric sync engine](#electric) directly, and the [Electric Cloud](#cloud), which hosts the sync engine behind a CDN.
 
-## Context
+[PGlite](#pglite) publishes its own benchmarks.
 
-We run benchmarks for both the [Electric sync engine](/product/sync) directly, and the [Electric Cloud](/product/cloud), which runs the sync engine behind a CDN.
-
-### Understanding the benchmarks
+## Understanding the benchmarks
 
 Electric is designed to be simple, scalable and low-cost to run. This means that it should handle a high number of concurrent users, with high read and write workloads, corresponding to high throughput of data from Postgres out to many clients, through various shape topologies, for a variety of workloads.
 
 Our goals are to support millions of concurrent users, hundreds of thousands of shapes and high read and write throughput from a single Electric instance, with minimal impact on the source Postgres. With low, stable and predictable compute and memory usage. In order to work towards this, we use benchmarks internally to measure and inform work to improve performance.
 
-This page lists a selection of these benchmarks, purely to give you an indication of:
+This page lists a selection of these benchmarks, to give you an indication of:
 
 1. the types of benchmarks that the Electric team is running
-2. the performance levels that the Electric team are seeing for their internal benchmark runs
+2. the performance levels that we're seeing for our internal benchmark runs
 
-> [!Warning] Benchmarks are always highly **workload**, **version** and **hardware** dependent.
+> [!Warning] Benchmarks are always highly workload, version and hardware dependent.
 > These benchmarks are **not in any way guaranteed to be representative of the performance numbers that you will see when running Electric on your own hardware**.
 >
 > You **must** test Electric yourself, with a representative workload, on your own infrastructure.
 
-### Running benchmarks yourself
+### Running yourself
 
 We are in the process of open sourcing our [electric-sql/benchmarking-fleet](https://github.com/electric-sql/benchmarking-fleet) repo. When public, you will be able to follow the instructions there to run the benchmarks yourself.
 
@@ -44,9 +42,7 @@ We are in the process of open sourcing our [electric-sql/benchmarking-fleet](htt
 
 We are working to set up benchmarks to run on every release (patch, minor and major). When this is done, we will document how to see the release benchmarks and how to track improvements and/or regression in performance.
 
-## Benchmarks
-
-## Electric sync engine
+## Electric
 
 The first two benchmarks measure initial sync time (i.e.: read performance):
 
@@ -133,7 +129,7 @@ Latency rises linearly. Memory usage is relatively flat.
 
 Similar to the diverse write fanout, but with many shapes the write falls into, only one is  actively listened to.
 
-## Electric Cloud <Badge type="warning" text="todo" />
+## Cloud <Badge type="warning" text="coming soon" />
 
 Cloud benchmarks test the performance and scalability of Electric when running behind a CDN.
 
