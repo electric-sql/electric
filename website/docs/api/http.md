@@ -18,7 +18,7 @@ The HTTP API is the primary, low level API for syncing data with Electric.
 
 ## HTTP API specification
 
-Normative API documentation is published as an [OpenAPI](https://www.openapis.org/what-is-openapi) specification:
+API documentation is published as an [OpenAPI](https://www.openapis.org/what-is-openapi) specification:
 
 - [download the specification file](https://github.com/electric-sql/electric/blob/main/website/electric-api.yaml) to view or use with other OpenAPI [tooling](https://tools.openapis.org/)
 - <a href="/openapi.html" target="_blank">view the HTML documentation</a> generated using [Redocly](https://redocly.com)
