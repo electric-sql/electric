@@ -19,8 +19,8 @@ defmodule Support.ComponentSetup do
     %{tenant_manager: Electric.TenantManager.name(opts)}
   end
 
-  def with_tenant(ctx) do
-    tenant = [
+  defp tenant(ctx) do
+    [
       electric_instance_id: ctx.electric_instance_id,
       tenant_id: ctx.tenant_id,
       pg_id: Map.get(ctx, :pg_id, "12345"),
@@ -33,6 +33,10 @@ defmodule Support.ComponentSetup do
       stale_age: Access.get(ctx, :stale_age, 300),
       get_service_status: fn -> :active end
     ]
+  end
+
+  def with_tenant(ctx) do
+    tenant = tenant(ctx)
 
     Electric.TenantManager.delete_tenant(ctx.tenant_id,
       tenant_manager: ctx.tenant_manager,
@@ -45,7 +49,30 @@ defmodule Support.ComponentSetup do
     %{tenant: tenant}
   end
 
-  def with_tenant_supervisor(ctx) do
+  def with_supervised_tenant(ctx) do
+    tenant = tenant(ctx)
+
+    Electric.TenantManager.delete_tenant(ctx.tenant_id,
+      tenant_manager: ctx.tenant_manager,
+      tenant_tables_name: ctx.tenant_tables_name
+    )
+
+    :ok =
+      Electric.TenantManager.create_tenant(ctx.tenant_id, ctx.db_config,
+        pg_id: tenant[:pg_id],
+        shape_cache: tenant[:shape_cache],
+        storage: tenant[:storage],
+        inspector: tenant[:inspector],
+        registry: tenant[:registry],
+        long_poll_timeout: tenant[:long_poll_timeout],
+        max_age: tenant[:max_age],
+        stale_age: tenant[:stale_age],
+        get_service_status: tenant[:get_service_status],
+        tenant_manager: ctx.tenant_manager,
+        app_config: ctx.app_config,
+        tenant_tables_name: ctx.tenant_tables_name
+      )
+
     {:via, _, {registry_name, registry_key}} =
       Electric.Tenant.Supervisor.name(
         electric_instance_id: ctx.electric_instance_id,
@@ -53,7 +80,8 @@ defmodule Support.ComponentSetup do
       )
 
     [{tenant_supervisor_pid, _}] = Registry.lookup(registry_name, registry_key)
-    %{tenant_supervisor_pid: tenant_supervisor_pid}
+
+    %{tenant: tenant, tenant_supervisor_pid: tenant_supervisor_pid}
   end
 
   def with_registry(ctx) do
@@ -165,6 +193,14 @@ defmodule Support.ComponentSetup do
     %{shape_log_collector: ShapeLogCollector.name(ctx.electric_instance_id, ctx.tenant_id)}
   end
 
+  def with_slot_name_and_stream_id(_ctx) do
+    # Use a random slot name to avoid conflicts
+    %{
+      slot_name: "electric_test_slot_#{:rand.uniform(10_000)}",
+      stream_id: "default"
+    }
+  end
+
   def with_replication_client(ctx) do
     replication_opts = [
       publication_name: ctx.publication_name,
@@ -250,8 +286,10 @@ defmodule Support.ComponentSetup do
       Keyword.get(opts, :storage, &with_cub_db_storage/1),
       Keyword.get(opts, :log_collector, &with_shape_log_collector/1),
       Keyword.get(opts, :shape_cache, &with_shape_cache/1),
+      Keyword.get(opts, :slot_name_and_stream_id, &with_slot_name_and_stream_id/1),
       Keyword.get(opts, :replication_client, &with_replication_client/1),
       Keyword.get(opts, :tenant_manager, &with_tenant_manager/1),
+      Keyword.get(opts, :app_config, &with_app_config/1),
       Keyword.get(opts, :tenant, &with_tenant/1)
     ]
     |> Enum.reduce(ctx, &Map.merge(&2, apply(&1, [&2])))
@@ -268,6 +306,7 @@ defmodule Support.ComponentSetup do
       Keyword.get(opts, :storage, &with_cub_db_storage/1),
       Keyword.get(opts, :log_collector, &with_shape_log_collector/1),
       Keyword.get(opts, :shape_cache, &with_shape_cache/1),
+      Keyword.get(opts, :slot_name_and_stream_id, &with_slot_name_and_stream_id/1),
       Keyword.get(opts, :replication_client, &with_replication_client/1),
       Keyword.get(opts, :tenant_manager, &with_tenant_manager/1)
     ]
