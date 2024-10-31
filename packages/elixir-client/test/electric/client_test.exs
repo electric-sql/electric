@@ -170,7 +170,7 @@ defmodule Electric.ClientTest do
       assert_receive {:stream, 2, up_to_date()}
     end
 
-    test "live: false should halt once snapshot is complete", ctx do
+    test "oneshot: true should halt once snapshot is complete", ctx do
       {:ok, id1} = insert_item(ctx)
       {:ok, id2} = insert_item(ctx)
       {:ok, id3} = insert_item(ctx)
@@ -186,7 +186,7 @@ defmodule Electric.ClientTest do
       {:ok, id5} = insert_item(ctx)
       {:ok, id6} = insert_item(ctx)
 
-      stream = stream(ctx, live: false)
+      stream = stream(ctx, oneshot: true)
 
       events = stream |> Enum.into([])
 

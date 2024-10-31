@@ -46,27 +46,21 @@ defmodule Support.DbSetup do
     %{utility_pool: utility_pool, pool: pool, db_conn: pool, tablename: tablename}
   end
 
-  def insert_item(%{db_conn: db, tablename: tablename}) do
-    insert_item(db, tablename)
+  def insert_item(%{db_conn: db, tablename: tablename}, opts \\ []) do
+    insert_item(db, tablename, opts)
   end
 
-  def insert_item(db_conn, tablename) do
-    id = UUID.uuid4()
+  def insert_item(db_conn, tablename, opts) do
+    id = Keyword.get(opts, :id, UUID.uuid4())
+    value = Keyword.get(opts, :value, "Some title")
 
     %Postgrex.Result{num_rows: 1} =
       Postgrex.query!(
         db_conn,
         """
-          INSERT INTO \"#{tablename}\" (
-              id,
-              title
-            )
-            VALUES (
-              $1,
-              'Some title'
-            );
+        INSERT INTO \"#{tablename}\" (id, title) VALUES ($1, $2);
         """,
-        [UUID.string_to_binary!(id)]
+        [UUID.string_to_binary!(id), value]
       )
 
     {:ok, id}
