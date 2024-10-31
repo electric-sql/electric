@@ -63,26 +63,26 @@ const stream = new ShapeStream({
 })
 ```
 
-#### Update Mode
+#### `Replica`
 
 By default Electric only sends the modified columns in an update message, not
 the complete row. If your use case requires the receipt of the full row, not just
-the modified columns, then set the `updateMode` of your `ShapeStream` to `full`:
+the modified columns, then set the `replica` of your `ShapeStream` to `full`:
 
 ```tsx
 import { ShapeStream } from "@electric-sql/client"
 
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape/foo`,
-  updateMode: `full`,
+  replica: `full`,
 })
 ```
 
 This is less efficient and will use much more bandwidth for the same shape,
 especially for tables with large static column values.
 
-Shapes with differing `updateMode`s are distinct, even for the same table and
-where clause combination.
+Shapes with differing `replica` settings are distinct, even for the same table
+and where clause combination.
 
 ### `Shape`
 
