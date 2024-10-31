@@ -25,6 +25,7 @@ defmodule Electric.Application do
     tenant_opts = [electric_instance_id: config.electric_instance_id]
 
     router_opts = [
+      electric_instance_id: config.electric_instance_id,
       tenant_manager: Electric.TenantManager.name(tenant_opts),
       allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false),
       registry: @process_registry_name
