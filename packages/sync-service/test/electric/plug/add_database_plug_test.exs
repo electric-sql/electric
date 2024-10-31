@@ -47,13 +47,6 @@ defmodule Electric.Plug.AddDatabasePlugTest do
     setup :with_unique_db
     setup :with_publication
 
-    setup do
-      %{
-        slot_name: "electric_test_slot",
-        stream_id: "default"
-      }
-    end
-
     setup :with_complete_stack_but_no_tenant
     setup :with_app_config
 

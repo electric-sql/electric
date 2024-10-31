@@ -11,13 +11,6 @@ defmodule Electric.TenantManagerTest do
     setup :with_unique_db
     setup :with_publication
 
-    setup do
-      %{
-        slot_name: "electric_test_slot",
-        stream_id: "default"
-      }
-    end
-
     setup :with_complete_stack_but_no_tenant
     setup :with_app_config
 
@@ -103,7 +96,7 @@ defmodule Electric.TenantManagerTest do
     setup :with_unique_db
 
     setup do
-      %{publication_name: "electric_test_publication", slot_name: "electric_test_slot"}
+      %{publication_name: "electric_test_publication"}
     end
 
     setup :with_complete_stack_but_no_tenant
@@ -178,45 +171,23 @@ defmodule Electric.TenantManagerTest do
 
     setup do
       %{
-        publication_name: "electric_test_publication",
-        slot_name: "electric_test_slot",
-        stream_id: "default"
+        publication_name: "electric_test_publication"
       }
     end
 
     setup ctx do
-      Map.put(ctx, :connection_opts, Map.fetch!(ctx, :db_config))
+      ctx
+      |> Map.put(:connection_opts, Map.fetch!(ctx, :db_config))
+      |> with_complete_stack(tenant: &with_supervised_tenant/1)
     end
-
-    setup :with_complete_stack_but_no_tenant
-    setup :with_app_config
 
     test "deletes the tenant", %{
       electric_instance_id: electric_instance_id,
       tenant_id: tenant_id,
       tenant_manager: tenant_manager,
-      connection_opts: connection_opts,
-      inspector: inspector,
-      app_config: app_config,
-      tenant_tables_name: tenant_tables_name
+      tenant_tables_name: tenant_tables_name,
+      tenant_supervisor_pid: tenant_supervisor_pid
     } do
-      # Create a tenant
-      :ok =
-        TenantManager.create_tenant(tenant_id, connection_opts,
-          inspector: inspector,
-          tenant_manager: tenant_manager,
-          app_config: app_config,
-          tenant_tables_name: tenant_tables_name
-        )
-
-      {:via, _, {registry_name, registry_key}} =
-        Electric.Tenant.Supervisor.name(
-          electric_instance_id: electric_instance_id,
-          tenant_id: tenant_id
-        )
-
-      [{tenant_supervisor_pid, _}] = Registry.lookup(registry_name, registry_key)
-
       # Check that the tenant supervisor is running
       # and that the tenant's ETS tables are registered in the global ETS table
       assert Process.alive?(tenant_supervisor_pid)
