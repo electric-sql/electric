@@ -271,7 +271,7 @@ function getNextChunkUrl(url: string, res: Response): string | void {
  */
 function chainAborter(
   aborter: AbortController,
-  sourceSignal?: AbortSignal
+  sourceSignal?: AbortSignal | null
 ): AbortSignal {
   if (!sourceSignal) return aborter.signal
   if (sourceSignal.aborted) aborter.abort()

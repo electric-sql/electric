@@ -72,7 +72,8 @@ describe(`useShape`, () => {
     const manualAborter = new AbortController()
     renderHook(() =>
       useShape({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         signal: manualAborter.signal,
         subscribe: false,
       })
@@ -84,7 +85,8 @@ describe(`useShape`, () => {
 
     const { result } = renderHook(() =>
       useShape({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         signal: aborter?.signal,
         subscribe: false,
       })
