@@ -4,7 +4,6 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
   alias Electric.Plug.DeleteShapePlug
   alias Electric.Shapes.Shape
-  alias Electric.TenantManager
 
   import Support.ComponentSetup
   import Support.TestUtils, only: [with_electric_instance_id: 1]
@@ -57,19 +56,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       stale_age: Access.get(ctx, :stale_age, 300)
     ]
 
-    # because test mode creates a tenant by default
-    TenantManager.delete_tenant(ctx.tenant_id,
-      electric_instance_id: ctx.electric_instance_id,
-      tenant_id: ctx.tenant_id,
-      tenant_manager: ctx.tenant_manager
-    )
-
-    :ok =
-      TenantManager.store_tenant(tenant,
-        electric_instance_id: ctx.electric_instance_id,
-        tenant_id: ctx.tenant_id,
-        tenant_manager: ctx.tenant_manager
-      )
+    store_tenant(tenant, ctx)
 
     config = [
       storage: {Mock.Storage, []},
@@ -82,7 +69,13 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   end
 
   describe "DeleteShapePlug" do
-    setup [:with_electric_instance_id, :with_tenant_manager, :with_tenant_id]
+    setup [
+      :with_electric_instance_id,
+      :with_persistent_kv,
+      :with_minimal_app_config,
+      :with_tenant_manager,
+      :with_tenant_id
+    ]
 
     test "returns 404 if shape deletion is not allowed", ctx do
       conn =

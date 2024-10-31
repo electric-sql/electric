@@ -28,7 +28,7 @@ defmodule Electric.Application do
       electric_instance_id: config.electric_instance_id,
       tenant_manager: Electric.TenantManager.name(tenant_opts),
       allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false),
-      registry: @process_registry_name
+      registry: Registry.ShapeChanges
     ]
 
     # The root application supervisor starts the core global processes, including the HTTP
@@ -50,7 +50,7 @@ defmodule Electric.Application do
           {Registry,
            name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
           Electric.TenantSupervisor,
-          {Electric.TenantManager, tenant_opts},
+          {Electric.TenantManager, router_opts},
           {Bandit,
            plug: {Electric.Plug.Router, router_opts},
            port: Application.fetch_env!(:electric, :service_port),

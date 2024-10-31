@@ -14,12 +14,22 @@ defmodule Support.ComponentSetup do
   end
 
   def with_tenant_manager(ctx) do
-    opts = [electric_instance_id: ctx.electric_instance_id]
-    {:ok, _pid} = Electric.TenantManager.start_link(opts)
+    # TODO: remove this comment after testing that this is no longer the case
+    # A tenant supervisor and tenant manager are needed for the test tenant that gets created in
+    # Electric.Application.start() callback.
+    Electric.TenantSupervisor.start_link([])
+
+    opts = [
+      app_config: ctx.app_config,
+      electric_instance_id: ctx.electric_instance_id
+    ]
+
+    Electric.TenantManager.start_link(opts)
+
     %{tenant_manager: Electric.TenantManager.name(opts)}
   end
 
-  defp tenant(ctx) do
+  defp tenant_config(ctx) do
     [
       electric_instance_id: ctx.electric_instance_id,
       tenant_id: ctx.tenant_id,
@@ -35,22 +45,42 @@ defmodule Support.ComponentSetup do
     ]
   end
 
+  def store_tenant(tenant, ctx) do
+    :ok =
+      Electric.TenantManager.store_tenant(tenant,
+        electric_instance_id: ctx.electric_instance_id,
+        tenant_manager: ctx.tenant_manager,
+        app_config: ctx.app_config,
+        # not important for this test
+        connection_opts:
+          Access.get(ctx, :connection_opts, Electric.Utils.obfuscate_password(password: "foo"))
+      )
+  end
+
   def with_tenant(ctx) do
-    tenant = tenant(ctx)
+    tenant = Map.get_lazy(ctx, :tenant_config, fn -> tenant_config(ctx) end)
 
     Electric.TenantManager.delete_tenant(ctx.tenant_id,
       tenant_manager: ctx.tenant_manager,
       tenant_tables_name: ctx.tenant_tables_name
     )
 
-    :ok = Electric.TenantManager.store_tenant(tenant, tenant_manager: ctx.tenant_manager)
+    tenant_opts = [
+      electric_instance_id: ctx.electric_instance_id,
+      persistent_kv: ctx.persistent_kv,
+      connection_opts: ctx.db_config,
+      tenant_manager: ctx.tenant_manager,
+      app_config: ctx.app_config
+    ]
+
+    :ok = Electric.TenantManager.store_tenant(tenant, tenant_opts)
     Electric.TenantSupervisor.start_tenant(ctx)
 
     %{tenant: tenant}
   end
 
   def with_supervised_tenant(ctx) do
-    tenant = tenant(ctx)
+    tenant = Access.get(ctx, :tenant_config, tenant_config(ctx))
 
     Electric.TenantManager.delete_tenant(ctx.tenant_id,
       tenant_manager: ctx.tenant_manager,
@@ -276,6 +306,16 @@ defmodule Support.ComponentSetup do
     }
   end
 
+  # This is a reduced version of the app config that the tenant manager can use to restore persisted tenants
+  def with_minimal_app_config(ctx) do
+    %{
+      app_config: %Electric.Application.Configuration{
+        electric_instance_id: ctx.electric_instance_id,
+        persistent_kv: ctx.persistent_kv
+      }
+    }
+  end
+
   def with_complete_stack(ctx, opts \\ []) do
     [
       Keyword.get(opts, :electric_instance_id, &Support.TestUtils.with_electric_instance_id/1),
@@ -289,8 +329,8 @@ defmodule Support.ComponentSetup do
       Keyword.get(opts, :shape_cache, &with_shape_cache/1),
       Keyword.get(opts, :slot_name_and_stream_id, &with_slot_name_and_stream_id/1),
       Keyword.get(opts, :replication_client, &with_replication_client/1),
-      Keyword.get(opts, :tenant_manager, &with_tenant_manager/1),
       Keyword.get(opts, :app_config, &with_app_config/1),
+      Keyword.get(opts, :tenant_manager, &with_tenant_manager/1),
       Keyword.get(opts, :tenant, &with_tenant/1)
     ]
     |> Enum.reduce(ctx, &Map.merge(&2, apply(&1, [&2])))
@@ -309,6 +349,7 @@ defmodule Support.ComponentSetup do
       Keyword.get(opts, :shape_cache, &with_shape_cache/1),
       Keyword.get(opts, :slot_name_and_stream_id, &with_slot_name_and_stream_id/1),
       Keyword.get(opts, :replication_client, &with_replication_client/1),
+      Keyword.get(opts, :app_config, &with_app_config/1),
       Keyword.get(opts, :tenant_manager, &with_tenant_manager/1)
     ]
     |> Enum.reduce(ctx, &Map.merge(&2, apply(&1, [&2])))
