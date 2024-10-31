@@ -1,6 +1,8 @@
 defmodule Electric.TenantManager do
   use GenServer
 
+  alias Electric.Tenant.Persistence
+
   # Public API
 
   def name(electric_instance_id)
@@ -18,9 +20,14 @@ defmodule Electric.TenantManager do
   end
 
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts,
-      name: Keyword.get_lazy(opts, :name, fn -> name(opts) end)
-    )
+    {:ok, pid} =
+      GenServer.start_link(__MODULE__, opts,
+        name: Keyword.get_lazy(opts, :name, fn -> name(opts) end)
+      )
+
+    recreate_tenants_from_disk!(opts)
+
+    {:ok, pid}
   end
 
   @doc """
@@ -52,7 +59,7 @@ defmodule Electric.TenantManager do
           :ok | {:error, atom()}
   def create_tenant(tenant_id, connection_opts, opts \\ []) do
     app_config =
-      %{electric_instance_id: electric_instance_id} =
+      %{electric_instance_id: electric_instance_id, persistent_kv: persistent_kv} =
       Keyword.get_lazy(opts, :app_config, fn -> Electric.Application.Configuration.get() end)
 
     inspector =
@@ -138,7 +145,15 @@ defmodule Electric.TenantManager do
     ]
 
     # Store the tenant in the tenant manager
-    case store_tenant(tenant, opts) do
+    store_tenant_opts =
+      opts ++
+        [
+          electric_instance_id: electric_instance_id,
+          persistent_kv: persistent_kv,
+          connection_opts: connection_opts
+        ]
+
+    case store_tenant(tenant, store_tenant_opts) do
       {:error, reason} ->
         {:error, reason}
 
@@ -161,13 +176,22 @@ defmodule Electric.TenantManager do
   Stores the provided tenant in the tenant manager.
   """
   @spec store_tenant(Keyword.t(), Keyword.t()) :: :ok | {:error, atom()}
-  def store_tenant(tenant, opts \\ []) do
+  def store_tenant(tenant, opts) do
     server = Keyword.get(opts, :tenant_manager, name(opts))
 
     case GenServer.call(server, {:store_tenant, tenant}) do
-      {:tenant_already_exists, tenant_id} -> {:error, {:tenant_already_exists, tenant_id}}
-      {:db_already_in_use, pg_id} -> {:error, {:db_already_in_use, pg_id}}
-      :ok -> :ok
+      {:tenant_already_exists, tenant_id} ->
+        {:error, {:tenant_already_exists, tenant_id}}
+
+      {:db_already_in_use, pg_id} ->
+        {:error, {:db_already_in_use, pg_id}}
+
+      :ok ->
+        Electric.Tenant.Persistence.persist_tenant!(
+          Keyword.fetch!(tenant, :tenant_id),
+          Keyword.fetch!(opts, :connection_opts),
+          opts
+        )
     end
   end
 
@@ -246,5 +270,15 @@ defmodule Electric.TenantManager do
   @impl GenServer
   def handle_call({:delete_tenant, tenant_id, pg_id}, _from, %{tenants: tenants, dbs: dbs}) do
     {:reply, :ok, %{tenants: Map.delete(tenants, tenant_id), dbs: MapSet.delete(dbs, pg_id)}}
+  end
+
+  defp recreate_tenants_from_disk!(opts) do
+    # Load the tenants from the persistent KV store
+    tenants = Persistence.load_tenants!(opts)
+
+    # Recreate all tenants
+    Enum.each(tenants, fn {tenant_id, conn_opts} ->
+      :ok = create_tenant(tenant_id, conn_opts, opts)
+    end)
   end
 end
