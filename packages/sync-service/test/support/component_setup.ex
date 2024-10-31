@@ -266,7 +266,8 @@ defmodule Support.ComponentSetup do
         replication_opts: %{
           stream_id: ctx.stream_id,
           publication_name: ctx.publication_name,
-          slot_name: ctx.slot_name
+          slot_name: ctx.slot_name,
+          slot_temporary?: false
         },
         pool_opts: %{
           size: 20
