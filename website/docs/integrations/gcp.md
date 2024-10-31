@@ -60,6 +60,9 @@ For example, you can deploy Electric on a [Container-Optimized OS](https://cloud
 > [!Warning] Don't use Cloud Run
 > We **don't recommend** that you use [Cloud Run](https://cloud.google.com/run) to deploy the Electric sync service because Cloud Run uses an in-memory filesystem and does not provide persistent file storage for Shape logs.
 
+> [!Warning] IPv6 support
+> If you're connecting to Postgres over IPv6 (for example, if you're [connecting to Supabase Postgres](./supabase#troubleshooting-ipv6)) then you may need to be on a Premium Network Tier to configure IPv6 for your VPC. See [this article](https://cloud.google.com/vpc/docs/subnets#ipv6-ranges) for more details.
+
 ### Deploy your app
 
 GCP provides a range of [website hosting options](https://cloud.google.com/solutions/web-hosting?hl=en). For example you can deploy a static app to [Google Storage](https://cloud.google.com/storage/docs/hosting-static-website) with [Cloud Build](https://cloud.google.com/build/docs/overview).
