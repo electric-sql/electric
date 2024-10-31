@@ -35,7 +35,7 @@ You can also use [Cloudflare Workers](https://workers.cloudflare.com) in front o
 
 #### Auth example
 
-For example, you could [validate an auth token](https://developers.cloudflare.com/workers/examples/auth-with-headers/) to protect access to a shape and then [proxy the request through to Electric](https://developers.cloudflare.com/workers/examples/respond-with-another-site):
+For example, you could validate an auth token to protect access to a shape and then proxy the request through to Electric:
 
 ```ts
 export default {
@@ -67,7 +67,7 @@ export default {
 } satisfies ExportedHandler;
 ```
 
-#### Sync example
+#### Syncing data into the worker
 
 Or you can use Electric to hydrate data quickly into an edge worker. For example, you could sync data into an edge worker to dynamically redirect the request:
 
@@ -98,7 +98,7 @@ export default {
 
 ### Durable Objects
 
-You can implement a similar pattern to the [sync example above](#sync-example) to sync data into a Durable Object.
+You can implement a similar pattern to the [sync example above](#syncing-data-into-the-worker) to sync data into a Durable Object.
 
 The key difference is that with a [Durable Object](https://developers.cloudflare.com/durable-objects/), the data can be persisted across requests. This allows you to sync a shape log into the Durable Object, materialise the shape into persistent storage and then re-sync the latest changes whenver the Durable Object is accessed.
 
