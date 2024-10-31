@@ -41,6 +41,12 @@ As a result, there are three ingredients to a successful Electric deployment:
 2. you need to [run and connect the Electric sync service](#_2-running-electric)
 3. you need your app/client to [connect to Electric over HTTP](#_3-connecting-your-app)
 
+### Proxying requests to Electric
+
+You also often want to proxy requests to Electric through your API, or other proxy. For example to implement [auth](./auth) and/or [caching](/docs/api/http#caching). In these cases, you'll also need to deploy your API and/or proxy layer in front of Electric.
+
+Note also that, when running Electric behind a CDN, you may want your proxy in front of the CDN. This is where primitives like [edge functions](/docs/integrations/supabase#sync-into-edge-function) and [edge workers](/docs/integrations/cloudflare#workers) can very useful.
+
 ## 1. Running Postgres
 
 You can use ***any standard Postgres***, version 15 and above.
