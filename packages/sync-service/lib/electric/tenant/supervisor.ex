@@ -64,7 +64,7 @@ defmodule Electric.Tenant.Supervisor do
         publication_name: app_config.replication_opts.publication_name,
         try_creating_publication?: true,
         slot_name: app_config.replication_opts.slot_name,
-        slot_temporary?: config.replication_opts.slot_temporary?,
+        slot_temporary?: app_config.replication_opts.slot_temporary?,
         transaction_received:
           {Electric.Replication.ShapeLogCollector, :store_transaction, [shape_log_collector]},
         relation_received:
