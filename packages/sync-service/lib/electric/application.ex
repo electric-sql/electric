@@ -50,7 +50,7 @@ defmodule Electric.Application do
           {Registry,
            name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
           Electric.TenantSupervisor,
-          {Electric.TenantManager, tenant_opts},
+          {Electric.TenantManager, router_opts},
           {Bandit,
            plug: {Electric.Plug.Router, router_opts},
            port: Application.fetch_env!(:electric, :service_port),
