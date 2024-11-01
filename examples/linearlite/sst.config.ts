@@ -1,15 +1,14 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
 import { execSync } from 'child_process'
-import { env } from 'process'
 
 export default $config({
   app(input) {
     return {
-      name: 'linearlite',
-      removal: input?.stage === 'production' ? 'retain' : 'remove',
-      home: 'aws',
-      providers: { neon: '0.6.3' },
+      name: `linearlite`,
+      removal: input?.stage === `production` ? `retain` : `remove`,
+      home: `aws`,
+      providers: { neon: `0.6.3` },
     }
   },
   async run() {
@@ -19,9 +18,9 @@ export default $config({
       branchId: project.defaultBranchId,
     }
 
-    const db = new neon.Database('linearlite', {
+    const db = new neon.Database(`linearlite`, {
       ...base,
-      ownerName: 'neondb_owner',
+      ownerName: `neondb_owner`,
     })
 
     const databaseUri = getNeonDbUri(project, db)
@@ -34,14 +33,15 @@ export default $config({
 
     return {
       databaseUri,
-      electricInfo,
-      website: website.url
+      database_id: electricInfo.id,
+      electric_token: electricInfo.token,
+      website: website.url,
     }
   },
 })
 
 function applyMigrations(uri: string) {
-  execSync('pnpm exec pg-migrations apply --directory ./db/migrations', {
+  execSync(`pnpm exec pg-migrations apply --directory ./db/migrations`, {
     env: {
       ...process.env,
       DATABASE_URL: uri,
@@ -52,9 +52,9 @@ function applyMigrations(uri: string) {
 function deployLinearLite(
   electricInfo: $util.Output<{ id: string; token: string }>
 ) {
-  return new sst.aws.StaticSite('linearlite-example', {
+  return new sst.aws.StaticSite(`linearlite-example`, {
     environment: {
-      VITE_ELECTRIC_URL: `https://api-dev-icehaunter.electric-sql.com`,
+      VITE_ELECTRIC_URL: process.env.ELECTRIC_API!,
       VITE_ELECTRIC_TOKEN: electricInfo.token,
       VITE_DATABASE_ID: electricInfo.id,
     },
@@ -63,7 +63,7 @@ function deployLinearLite(
       output: `dist`,
     },
     domain: {
-      name: `linearlite-example.electric-sql.com`,
+      name: `linearlite-example${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
       dns: sst.cloudflare.dns(),
     },
   })
@@ -86,14 +86,13 @@ async function addDatabaseToElectric(
   uri: string
 ): Promise<{ id: string; token: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_HOST
-  console.log(adminApi)
 
   const result = await fetch(`${adminApi}/v1/databases`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    method: `PUT`,
+    headers: { 'Content-Type': `application/json` },
     body: JSON.stringify({
       database_url: uri,
-      region: 'us-east-1',
+      region: `us-east-1`,
     }),
   })
 
