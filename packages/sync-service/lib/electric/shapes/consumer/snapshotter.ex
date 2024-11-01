@@ -94,6 +94,13 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   end
 
   @doc false
+  # wrap DBConnection.run/2 with an infinite timeout. Required because you
+  # can't pass captures in NimbleOptions schemas.
+  def run_with_conn(conn, fun) do
+    DBConnection.run(conn, fun, timeout: :infinity)
+  end
+
+  @doc false
   def query_in_readonly_txn(parent, shape_id, shape, db_pool, storage) do
     shape_attrs = shape_attrs(shape_id, shape)
 
