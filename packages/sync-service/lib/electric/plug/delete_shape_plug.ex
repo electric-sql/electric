@@ -5,10 +5,14 @@ defmodule Electric.Plug.DeleteShapePlug do
   alias Electric.Shapes
   alias Electric.Plug.ServeShapePlug.Params
 
+  import Electric.Plug.TenantUtils
+
   plug :fetch_query_params
   plug :put_resp_content_type, "application/json"
 
   plug :allow_shape_deletion
+  plug :validate_tenant_id
+  plug :load_tenant
   plug :validate_query_params
 
   plug :truncate_or_delete_shape

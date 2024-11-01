@@ -21,6 +21,9 @@ defmodule Electric.Plug.Router do
 
   get "/v1/health", to: Electric.Plug.HealthCheckPlug
 
+  post "/v1/admin/database", to: Electric.Plug.AddDatabasePlug
+  delete "/v1/admin/database", to: Electric.Plug.RemoveDatabasePlug
+
   match _,
     do: send_resp(conn, 404, "Not found")
 

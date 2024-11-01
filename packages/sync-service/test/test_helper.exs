@@ -4,4 +4,9 @@
 # supervision tree in the test environment.
 Registry.start_link(name: Electric.Application.process_registry(), keys: :unique)
 
+# A tenant supervisor and tenant manager are needed for the test tenant that gets created in
+# Electric.Application.start() callback.
+Electric.TenantSupervisor.start_link([])
+Electric.TenantManager.start_link([])
+
 ExUnit.start(assert_receive_timeout: 400)

@@ -8,15 +8,31 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   ## Public API
 
-  def start_link(opts),
-    do:
+  def name(electric_instance_id, tenant_id) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  end
+
+  def name(opts) do
+    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+    tenant_id = Keyword.fetch!(opts, :tenant_id)
+    name(electric_instance_id, tenant_id)
+  end
+
+  def start_link(opts) do
+    {:ok, pid} =
       GenServer.start_link(
         __MODULE__,
         Map.new(opts)
         |> Map.put_new(:pg_info_table, @default_pg_info_table)
-        |> Map.put_new(:pg_relation_table, @default_pg_relation_table),
-        name: Access.get(opts, :name, __MODULE__)
+        |> Map.put_new(:pg_relation_table, @default_pg_relation_table)
+        |> Map.put_new_lazy(:tenant_tables_name, fn ->
+          Application.fetch_env!(:electric, :tenant_tables_name)
+        end),
+        name: Keyword.get_lazy(opts, :name, fn -> name(opts) end)
       )
+
+    {:ok, pid}
+  end
 
   @impl Electric.Postgres.Inspector
   def load_relation(table, opts) do
@@ -30,10 +46,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   end
 
   defp clean_relation(rel, opts_or_state) do
-    pg_relation_ets_table =
-      Access.get(opts_or_state, :pg_relation_table, @default_pg_relation_table)
-
-    pg_info_ets_table = Access.get(opts_or_state, :pg_info_table, @default_pg_info_table)
+    pg_relation_ets_table = get_relation_table(opts_or_state)
+    pg_info_ets_table = get_column_info_table(opts_or_state)
 
     # Delete all tables that are associated with the relation
     tables_from_ets(rel, opts_or_state)
@@ -58,7 +72,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   end
 
   defp clean_column_info(table, opts_or_state) do
-    ets_table = Access.get(opts_or_state, :pg_info_table, @default_pg_info_table)
+    ets_table = get_column_info_table(opts_or_state)
 
     :ets.delete(ets_table, {table, :columns})
   end
@@ -69,14 +83,45 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     clean_relation(relation, opts_or_state)
   end
 
+  # Removes the references to the tenant's ETS tables from the global ETS table
+  defp clean_tenant_info(opts) do
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    tenant_tables_name = fetch_tenant_tables_name(opts)
+
+    case :ets.whereis(tenant_tables_name) do
+      :undefined ->
+        true
+
+      _ ->
+        :ets.delete(tenant_tables_name, {tenant_id, :pg_info_table})
+        :ets.delete(tenant_tables_name, {tenant_id, :pg_relation_table})
+    end
+  end
+
   ## Internal API
 
   @impl GenServer
   def init(opts) do
-    pg_info_table = :ets.new(opts.pg_info_table, [:named_table, :public, :set])
-    pg_relation_table = :ets.new(opts.pg_relation_table, [:named_table, :public, :bag])
+    # Trap exits such that `terminate/2` is called
+    # when the parent process sends an exit signal
+    Process.flag(:trap_exit, true)
+
+    # Each tenant creates its own ETS table.
+    # Name needs to be an atom but we don't want to dynamically create atoms.
+    # Instead, we will use the reference to the table that is returned by `:ets.new`
+    pg_info_table = :ets.new(opts.pg_info_table, [:public, :set])
+    pg_relation_table = :ets.new(opts.pg_relation_table, [:public, :bag])
+
+    # Store both references in a global ETS table so that we can retrieve them later
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    tenant_tables_name = Access.fetch!(opts, :tenant_tables_name)
+
+    :ets.insert(tenant_tables_name, {{tenant_id, :pg_info_table}, pg_info_table})
+    :ets.insert(tenant_tables_name, {{tenant_id, :pg_relation_table}, pg_relation_table})
 
     state = %{
+      tenant_id: tenant_id,
+      tenant_tables_name: tenant_tables_name,
       pg_info_table: pg_info_table,
       pg_relation_table: pg_relation_table,
       pg_pool: opts.pool
@@ -141,16 +186,21 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     e -> {:reply, {:error, e, __STACKTRACE__}, state}
   end
 
+  @impl GenServer
+  def terminate(_reason, state) do
+    clean_tenant_info(state)
+  end
+
   @pg_rel_position 2
   defp relation_from_ets(table, opts_or_state) do
-    ets_table = Access.get(opts_or_state, :pg_info_table, @default_pg_info_table)
+    ets_table = get_column_info_table(opts_or_state)
 
     :ets.lookup_element(ets_table, {table, :table_to_relation}, @pg_rel_position, :not_found)
   end
 
   @pg_table_idx 1
   defp tables_from_ets(relation, opts_or_state) do
-    ets_table = Access.get(opts_or_state, :pg_relation_table, @default_pg_relation_table)
+    ets_table = get_relation_table(opts_or_state)
 
     :ets.lookup(ets_table, {relation, :relation_to_table})
     |> Enum.map(&elem(&1, @pg_table_idx))
@@ -158,8 +208,46 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   @column_info_position 2
   defp column_info_from_ets(table, opts_or_state) do
-    ets_table = Access.get(opts_or_state, :pg_info_table, @default_pg_info_table)
+    ets_table = get_column_info_table(opts_or_state)
 
     :ets.lookup_element(ets_table, {table, :columns}, @column_info_position, :not_found)
+  end
+
+  # When called from within the GenServer it is passed the state
+  # which contains the reference to the ETS table.
+  # When called from outside the GenServer it is passed the opts keyword list
+  @pg_info_table_ref_position 2
+  def get_column_info_table(%{pg_info_table: ets_table}), do: ets_table
+
+  def get_column_info_table(opts) do
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    tenant_tables_name = fetch_tenant_tables_name(opts)
+
+    :ets.lookup_element(
+      tenant_tables_name,
+      {tenant_id, :pg_info_table},
+      @pg_info_table_ref_position
+    )
+  end
+
+  @pg_relation_table_ref_position 2
+  def get_relation_table(%{pg_relation_table: ets_table}), do: ets_table
+
+  def get_relation_table(opts) do
+    tenant_id = Access.fetch!(opts, :tenant_id)
+    tenant_tables_name = fetch_tenant_tables_name(opts)
+
+    :ets.lookup_element(
+      tenant_tables_name,
+      {tenant_id, :pg_relation_table},
+      @pg_relation_table_ref_position
+    )
+  end
+
+  def fetch_tenant_tables_name(opts) do
+    case Access.fetch(opts, :tenant_tables_name) do
+      :error -> Application.fetch_env!(:electric, :tenant_tables_name)
+      {:ok, tenant_tables_name} -> tenant_tables_name
+    end
   end
 end

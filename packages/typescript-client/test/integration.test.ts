@@ -9,11 +9,14 @@ import {
   IssueRow,
   testWithIssuesTable as it,
   testWithMultitypeTable as mit,
+  testWithMultiTenantIssuesTable as multiTenantIt,
 } from './support/test-context'
 import * as h from './support/test-helpers'
 
 const BASE_URL = inject(`baseUrl`)
-
+const OTHER_DATABASE_URL = inject(`otherDatabaseUrl`)
+const databaseId = inject(`databaseId`)
+const otherDatabaseId = inject(`otherDatabaseId`)
 it(`sanity check`, async ({ dbClient, issuesTableSql }) => {
   const result = await dbClient.query(`SELECT * FROM ${issuesTableSql}`)
 
@@ -659,7 +662,7 @@ describe(`HTTP Sync`, () => {
       }
     })
 
-    await clearShape(issuesTableUrl, issueStream.shapeId!)
+    await clearShape(issuesTableUrl, { shapeId: issueStream.shapeId! })
 
     expect(shapeData).toEqual(
       new Map([[`${issuesTableKey}/"${id1}"`, { id: id1, title: `foo1` }]])
@@ -945,5 +948,180 @@ describe(`HTTP Sync`, () => {
           expect.unreachable(`Received more messages than expected`)
       }
     })
+  })
+})
+
+describe.sequential(`Multi tenancy sync`, () => {
+  it(`should allow new databases to be added`, async () => {
+    const url = new URL(`${BASE_URL}/v1/admin/database`)
+
+    // Add the database
+    const res = await fetch(url.toString(), {
+      method: `POST`,
+      headers: {
+        Accept: `application/json`,
+        'Content-Type': `application/json`,
+      },
+      body: JSON.stringify({
+        database_id: otherDatabaseId,
+        DATABASE_URL: OTHER_DATABASE_URL,
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toBe(otherDatabaseId)
+  })
+
+  it(`should serve original database`, async ({
+    issuesTableUrl,
+    aborter,
+    insertIssues,
+  }) => {
+    const id = await insertIssues({ title: `test issue` })
+
+    const shapeData = new Map()
+    const issueStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      databaseId,
+      subscribe: false,
+      signal: aborter.signal,
+    })
+
+    await new Promise<void>((resolve, reject) => {
+      issueStream.subscribe((messages) => {
+        messages.forEach((message) => {
+          if (isChangeMessage(message)) {
+            shapeData.set(message.key, message.value)
+          }
+          if (isUpToDateMessage(message)) {
+            aborter.abort()
+            return resolve()
+          }
+        })
+      }, reject)
+    })
+
+    const values = [...shapeData.values()]
+    expect(values).toHaveLength(1)
+    expect(values[0]).toMatchObject({
+      id: id[0],
+      title: `test issue`,
+    })
+  })
+
+  multiTenantIt(
+    `should serve new database`,
+    async ({ issuesTableUrl, aborter, insertIssuesToOtherDb }) => {
+      const id = await insertIssuesToOtherDb({ title: `test issue in new db` })
+
+      const shapeData = new Map()
+      const issueStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        databaseId: otherDatabaseId,
+        subscribe: false,
+        signal: aborter.signal,
+      })
+
+      await new Promise<void>((resolve, reject) => {
+        issueStream.subscribe((messages) => {
+          messages.forEach((message) => {
+            if (isChangeMessage(message)) {
+              shapeData.set(message.key, message.value)
+            }
+            if (isUpToDateMessage(message)) {
+              aborter.abort()
+              return resolve()
+            }
+          })
+        }, reject)
+      })
+
+      const values = [...shapeData.values()]
+      expect(values).toHaveLength(1)
+      expect(values[0]).toMatchObject({
+        id: id[0],
+        title: `test issue in new db`,
+      })
+    }
+  )
+
+  multiTenantIt(
+    `should serve both databases in live mode`,
+    async ({
+      issuesTableUrl,
+      aborter,
+      otherAborter,
+      insertIssues,
+      insertIssuesToOtherDb,
+    }) => {
+      // Set up streams for both databases
+      const defaultStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        databaseId,
+        subscribe: true,
+        signal: aborter.signal,
+      })
+
+      const otherStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        databaseId: otherDatabaseId,
+        subscribe: true,
+        signal: otherAborter.signal,
+      })
+
+      const defaultData = new Map()
+      const otherData = new Map()
+
+      // Set up subscriptions
+      defaultStream.subscribe((messages) => {
+        messages.forEach((message) => {
+          if (isChangeMessage(message)) {
+            defaultData.set(message.key, message.value)
+          }
+        })
+      })
+
+      otherStream.subscribe((messages) => {
+        messages.forEach((message) => {
+          if (isChangeMessage(message)) {
+            otherData.set(message.key, message.value)
+          }
+        })
+      })
+
+      // Insert data into both databases
+      const defaultId = await insertIssues({ title: `default db issue` })
+      const otherId = await insertIssuesToOtherDb({ title: `other db issue` })
+
+      // Give time for updates to propagate
+      await sleep(1000)
+
+      // Verify data from default database
+      expect([...defaultData.values()]).toHaveLength(1)
+      expect([...defaultData.values()][0]).toMatchObject({
+        id: defaultId[0],
+        title: `default db issue`,
+      })
+
+      // Verify data from other database
+      expect([...otherData.values()]).toHaveLength(1)
+      expect([...otherData.values()][0]).toMatchObject({
+        id: otherId[0],
+        title: `other db issue`,
+      })
+    }
+  )
+
+  it(`should allow databases to be deleted`, async () => {
+    const url = new URL(`${BASE_URL}/v1/admin/database`)
+    url.searchParams.set(`database_id`, otherDatabaseId)
+
+    // Add the database
+    const res = await fetch(url.toString(), { method: `DELETE` })
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toBe(otherDatabaseId)
   })
 })
