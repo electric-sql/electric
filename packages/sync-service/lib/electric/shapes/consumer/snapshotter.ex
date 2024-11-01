@@ -52,7 +52,17 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                 apply(run_with_conn_fn, [
                   pool,
                   fn pool_conn ->
-                    Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [pool_conn, affected_tables])
+                    OpenTelemetry.with_span(
+                      "shape_snapshot.prepare_tables",
+                      shape_attrs(shape_id, shape),
+                      fn ->
+                        Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [
+                          pool_conn,
+                          affected_tables
+                        ])
+                      end
+                    )
+
                     apply(create_snapshot_fn, [consumer, shape_id, shape, pool_conn, storage])
                   end
                 ])
@@ -85,23 +95,43 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
   @doc false
   def query_in_readonly_txn(parent, shape_id, shape, db_pool, storage) do
+    shape_attrs = shape_attrs(shape_id, shape)
+
     Postgrex.transaction(
       db_pool,
       fn conn ->
         OpenTelemetry.with_span(
           "shape_snapshot.query_in_readonly_txn",
-          shape_attrs(shape_id, shape),
+          shape_attrs,
           fn ->
-            Postgrex.query!(conn, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY", [])
+            query_span!(
+              conn,
+              "shape_snapshot.start_readonly_txn",
+              shape_attrs,
+              "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+              []
+            )
 
             %{rows: [[xmin]]} =
-              Postgrex.query!(conn, "SELECT pg_snapshot_xmin(pg_current_snapshot())", [])
+              query_span!(
+                conn,
+                "shape_snapshot.get_snapshot_xmin",
+                shape_attrs,
+                "SELECT pg_snapshot_xmin(pg_current_snapshot())",
+                []
+              )
 
             GenServer.cast(parent, {:snapshot_xmin_known, shape_id, xmin})
 
             # Enforce display settings *before* querying initial data to maintain consistent
             # formatting between snapshot and live log entries.
-            Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
+            OpenTelemetry.with_span(
+              "shape_snapshot.set_display_settings",
+              shape_attrs,
+              fn ->
+                Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
+              end
+            )
 
             stream = Querying.stream_initial_data(conn, shape)
 
@@ -114,6 +144,14 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
         )
       end,
       timeout: :infinity
+    )
+  end
+
+  defp query_span!(conn, span_name, span_attrs, query, params) do
+    OpenTelemetry.with_span(
+      span_name,
+      span_attrs,
+      fn -> Postgrex.query!(conn, query, params) end
     )
   end
 

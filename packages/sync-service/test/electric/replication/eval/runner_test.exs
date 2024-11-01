@@ -76,6 +76,21 @@ defmodule Electric.Replication.Eval.RunnerTest do
                })
                |> Runner.execute(%{["y"] => 1, ["x"] => [1, 2]})
 
+      assert {:ok, nil} =
+               ~S|x @> ARRAY['value']|
+               |> Parser.parse_and_validate_expression!(%{
+                 ["x"] => {:array, :text}
+               })
+               |> Runner.execute(%{["x"] => nil})
+
+      assert {:ok, nil} =
+               ~S|x @> ARRAY[y]|
+               |> Parser.parse_and_validate_expression!(%{
+                 ["x"] => {:array, :int4},
+                 ["y"] => :int4
+               })
+               |> Runner.execute(%{["y"] => 1, ["x"] => nil})
+
       assert {:ok, true} =
                ~S|x::float[] = y::int4[]::float[]|
                |> Parser.parse_and_validate_expression!(%{

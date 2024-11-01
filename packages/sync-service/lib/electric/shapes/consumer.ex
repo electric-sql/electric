@@ -128,11 +128,13 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_cast({:snapshot_xmin_known, shape_id, xmin}, %{shape_id: shape_id} = state) do
+    Logger.debug("Snapshot xmin known shape_id: #{shape_id} xmin: #{xmin}")
     state = set_snapshot_xmin(xmin, state)
     handle_txns(state.buffer, %{state | buffer: []})
   end
 
   def handle_cast({:snapshot_started, shape_id}, %{shape_id: shape_id} = state) do
+    Logger.debug("Snapshot started shape_id: #{shape_id}")
     state = set_snapshot_started(state)
     {:noreply, [], state}
   end
