@@ -41,13 +41,17 @@ EOF
 
 Now change your shape URLs to use port `3001` instead of port 3000 and everything will run much faster 🚀
 
-### Clear data &mdash; how do I clear the server state?
+### Shape logs &mdash; how do I clear the server state?
 
-Electric creates resources, including a logical replication publication and replication slots in your Postgres database. Electric also stores [shape logs](/docs/api/http#shape-log) to disk.
+Electric stores [shape logs](/docs/api/http#shape-log) to disk.
 
-Sometimes in development you may want to clear this state. However, just restarting the services doesn't clear the underlying storage. This can lead to unexpected data in your database or shape logs.
+During development, you may want to clear this state. However, just restarting Electric doesn't clear the underlying storage, which can lead to unexpected behaviour.
 
-##### Solution &mdash; clear the storage volumes
+##### Solution &mdash; clear shape logs
+
+You can remove [```STORAGE_DIR```](https://electric-sql.com/docs/api/config#storage-dir) to delete all shape logs. This will ensure that following shape requests will be re-synced from scratch.
+
+###### Using docker
 
 If you're running using Docker Compose, the simplest solution is to bring the Postgres and Electric services down, using the `--volumes` flag to also clear their mounted storage volumes:
 
@@ -65,10 +69,10 @@ docker compose up
 
 ### WAL growth &mdash; why is my Postgres database storage filling up?
 
-Electric creates a logical replication publication in your Postgres database and adds tables dynamically (as you request shapes) to this publication.
+Electric creates a durable replication slot in Postgres to prevent data loss during downtime. This means that Postgres WAL will grow while Electric is not consuming the publication.
 
-If you don't consume this publication, the WAL can fill up and your Postgres database can run out of storage space. A common way for this to happen is that you create an Electric publication and then stop running Electric.
+##### Solution &mdash; Remove replication slot after Electric is gone
 
-##### Solution &mdash; run Electric
+If you're stopping Electric for the weekend, we recommend removing the ```electric_slot_default``` replication slot to prevent unbounded WAL growth. When Electric restarts, if it doesn't find the replication slot at resume point, it will recreate the replication slot and drop all shape logs.
 
-The simplest way to avoid this is to make sure you're running the Electric sync service against Postgres. This will consume the publication and allow the WAL to be released.
+You can also control the size of the WAL with [```wal_keep_size```](https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-KEEP-SIZE). On restart, Electric will detect if the WAL is past the resume point too.
