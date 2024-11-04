@@ -1,5 +1,6 @@
 defmodule Electric.Telemetry do
   use Supervisor
+
   import Telemetry.Metrics
 
   def start_link(init_arg) do
@@ -12,8 +13,8 @@ defmodule Electric.Telemetry do
     ]
 
     children
-    |> add_statsd_reporter(Application.fetch_env!(:electric, :telemetry_statsd_host))
-    |> add_prometheus_reporter(Application.fetch_env!(:electric, :prometheus_port))
+    |> add_statsd_reporter(Application.get_env(:electric, :telemetry_statsd_host, nil))
+    |> add_prometheus_reporter(Application.get_env(:electric, :prometheus_port, nil))
     |> Supervisor.init(strategy: :one_for_one)
   end
 
