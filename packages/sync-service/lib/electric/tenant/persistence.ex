@@ -10,15 +10,9 @@ defmodule Electric.Tenant.Persistence do
   """
   @spec persist_tenant!(String.t(), Keyword.t(), Keyword.t()) :: :ok
   def persist_tenant!(tenant_id, conn_opts, opts) do
-    %{persistent_kv: kv} =
-      Keyword.get_lazy(opts, :app_config, fn -> Electric.Application.Configuration.get() end)
-
-    serialised_tenants =
-      load_tenants!(opts)
-      |> Map.put(tenant_id, conn_opts)
-      |> serialise_tenants()
-
-    Electric.PersistentKV.set(kv, key(opts), serialised_tenants)
+    load_tenants!(opts)
+    |> Map.put(tenant_id, conn_opts)
+    |> store_tenants(opts)
   end
 
   @doc """
@@ -40,6 +34,24 @@ defmodule Electric.Tenant.Persistence do
       error ->
         raise error
     end
+  end
+
+  @doc """
+  Deletes a tenant from storage.
+  """
+  @spec delete_tenant!(String.t(), Keyword.t()) :: :ok
+  def delete_tenant!(tenant_id, opts) do
+    load_tenants!(opts)
+    |> Map.delete(tenant_id)
+    |> store_tenants(opts)
+  end
+
+  defp store_tenants(tenants, opts) do
+    %{persistent_kv: kv} =
+      Keyword.get_lazy(opts, :app_config, fn -> Electric.Application.Configuration.get() end)
+
+    serialised_tenants = serialise_tenants(tenants)
+    Electric.PersistentKV.set(kv, key(opts), serialised_tenants)
   end
 
   defp serialise_tenants(tenants) do

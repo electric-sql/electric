@@ -77,6 +77,11 @@ defmodule Electric.Plug.RemoveDatabasePlugTest do
 
       assert conn.status == 200
       assert Jason.decode!(conn.resp_body) == ctx.tenant_id
+
+      assert Electric.Tenant.Persistence.load_tenants!(
+               app_config: ctx.app_config,
+               electric_instance_id: ctx.electric_instance_id
+             ) == %{}
     end
 
     test "returns 404 when tenant is not found", ctx do
