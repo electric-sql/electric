@@ -14,9 +14,6 @@ defmodule Support.ComponentSetup do
   end
 
   def with_tenant_manager(ctx) do
-    # TODO: remove this comment after testing that this is no longer the case
-    # A tenant supervisor and tenant manager are needed for the test tenant that gets created in
-    # Electric.Application.start() callback.
     Electric.TenantSupervisor.start_link([])
 
     opts = [
@@ -60,11 +57,6 @@ defmodule Support.ComponentSetup do
   def with_tenant(ctx) do
     tenant = Map.get_lazy(ctx, :tenant_config, fn -> tenant_config(ctx) end)
 
-    Electric.TenantManager.delete_tenant(ctx.tenant_id,
-      tenant_manager: ctx.tenant_manager,
-      tenant_tables_name: ctx.tenant_tables_name
-    )
-
     tenant_opts = [
       electric_instance_id: ctx.electric_instance_id,
       persistent_kv: ctx.persistent_kv,
@@ -81,11 +73,6 @@ defmodule Support.ComponentSetup do
 
   def with_supervised_tenant(ctx) do
     tenant = Access.get(ctx, :tenant_config, tenant_config(ctx))
-
-    Electric.TenantManager.delete_tenant(ctx.tenant_id,
-      tenant_manager: ctx.tenant_manager,
-      tenant_tables_name: ctx.tenant_tables_name
-    )
 
     :ok =
       Electric.TenantManager.create_tenant(ctx.tenant_id, ctx.db_config,
