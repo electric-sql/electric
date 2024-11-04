@@ -5,7 +5,16 @@ description: >-
   working mainly in Typescript, Rust and C++.
 image: /img/icons/pglite.svg
 outline: deep
+application_form: https://airtable.com/appNnEkluhSOHeyQ1/pagm3FNVgH4DOVhUO/form
+active: false
 ---
+
+<div v-if="!$frontmatter.active">
+
+> [!Danger] Sorry, this role is now closed.
+> We are no longer accepting applications for this role. If you're interested in future opportunities like this, keep an eye on [hiring announcements on the Discord](https://discord.electric-sql.com).
+
+</div>
 
 # PGlite Engineer
 
@@ -53,12 +62,22 @@ You need to be able to write your own requirement docs and move between research
 
 ### How to apply
 
+<div v-if="$frontmatter.active">
+
 Apply using the form linked below:
 
 <VPButton
-    href="https://airtable.com/appNnEkluhSOHeyQ1/pagm3FNVgH4DOVhUO/form"
+    :href="$frontmatter.application_form"
     text="View application form"
     target="_blank"
 />
 
 The first step is a 45 minute call. After that, the process is personalised but we strive to keep it as efficient as possible and move swiftly to an offer.
+
+</div>
+<div v-else>
+
+> [!Danger] This role is closed.
+> We are no longer accepting applications.
+
+</div>
