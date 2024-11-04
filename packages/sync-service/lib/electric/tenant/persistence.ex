@@ -3,6 +3,8 @@ defmodule Electric.Tenant.Persistence do
   Helper module to persist information about tenants.
   """
 
+  alias Electric.Utils
+
   @doc """
   Persists a tenant configuration.
   """
@@ -42,14 +44,14 @@ defmodule Electric.Tenant.Persistence do
 
   defp serialise_tenants(tenants) do
     tenants
-    |> map_values(&tenant_config_keyword_to_map/1)
+    |> Utils.map_values(&tenant_config_keyword_to_map/1)
     |> Jason.encode!()
   end
 
   defp deserialise_tenants(tenants) do
     tenants
     |> Jason.decode!()
-    |> map_values(&tenant_config_map_to_keyword/1)
+    |> Utils.map_values(&tenant_config_map_to_keyword/1)
   end
 
   defp tenant_config_keyword_to_map(conn_opts) do
@@ -77,6 +79,4 @@ defmodule Electric.Tenant.Persistence do
     electric_instance_id = Access.fetch!(opts, :electric_instance_id)
     "tenants_#{electric_instance_id}"
   end
-
-  defp map_values(map, fun), do: Map.new(map, fn {k, v} -> {k, fun.(v)} end)
 end
