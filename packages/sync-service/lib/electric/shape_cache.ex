@@ -59,7 +59,10 @@ defmodule Electric.ShapeCache do
             shape_status: [type: :atom, default: Electric.ShapeCache.ShapeStatus],
             registry: [type: {:or, [:atom, :pid]}, required: true],
             db_pool: [type: {:or, [:atom, :pid]}, default: Electric.DbPool],
-            run_with_conn_fn: [type: {:fun, 2}, default: &DBConnection.run/2],
+            run_with_conn_fn: [
+              type: {:fun, 2},
+              default: &Shapes.Consumer.Snapshotter.run_with_conn/2
+            ],
             prepare_tables_fn: [type: {:or, [:mfa, {:fun, 2}]}, required: true],
             create_snapshot_fn: [
               type: {:fun, 5},

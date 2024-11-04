@@ -4,13 +4,14 @@ import { FetchError } from './error'
 import { ShapeStreamInterface } from './client'
 
 export type ShapeData<T extends Row<unknown> = Row> = Map<string, T>
-export type ShapeChangedCallback<T extends Row<unknown> = Row> = (
+export type ShapeChangedCallback<T extends Row<unknown> = Row> = (data: {
   value: ShapeData<T>
-) => void
+  rows: T[]
+}) => void
 
 /**
  * A Shape is an object that subscribes to a shape log,
- * keeps a materialised shape `.value` in memory and
+ * keeps a materialised shape `.rows` in memory and
  * notifies subscribers when the value has changed.
  *
  * It can be used without a framework and as a primitive
@@ -24,19 +25,19 @@ export type ShapeChangedCallback<T extends Row<unknown> = Row> = (
  * const shape = new Shape(shapeStream)
  * ```
  *
- * `value` returns a promise that resolves the Shape data once the Shape has been
+ * `rows` returns a promise that resolves the Shape data once the Shape has been
  * fully loaded (and when resuming from being offline):
  *
- *     const value = await shape.value
+ *     const rows = await shape.rows
  *
- * `valueSync` returns the current data synchronously:
+ * `currentRows` returns the current data synchronously:
  *
- *     const value = shape.valueSync
+ *     const rows = shape.currentRows
  *
  *  Subscribe to updates. Called whenever the shape updates in Postgres.
  *
- *     shape.subscribe(shapeData => {
- *       console.log(shapeData)
+ *     shape.subscribe(({ rows }) => {
+ *       console.log(rows)
  *     })
  */
 export class Shape<T extends Row<unknown> = Row> {
@@ -69,21 +70,29 @@ export class Shape<T extends Row<unknown> = Row> {
     return this.#stream.isUpToDate
   }
 
+  get rows(): Promise<T[]> {
+    return this.value.then((v) => Array.from(v.values()))
+  }
+
+  get currentRows(): T[] {
+    return Array.from(this.currentValue.values())
+  }
+
   get value(): Promise<ShapeData<T>> {
     return new Promise((resolve, reject) => {
       if (this.#stream.isUpToDate) {
-        resolve(this.valueSync)
+        resolve(this.currentValue)
       } else {
-        const unsubscribe = this.subscribe((shapeData) => {
+        const unsubscribe = this.subscribe(({ value }) => {
           unsubscribe()
           if (this.#error) reject(this.#error)
-          resolve(shapeData)
+          resolve(value)
         })
       }
     })
   }
 
-  get valueSync() {
+  get currentValue() {
     return this.#data
   }
 
@@ -192,7 +201,7 @@ export class Shape<T extends Row<unknown> = Row> {
 
   #notify(): void {
     this.#subscribers.forEach((callback) => {
-      callback(this.valueSync)
+      callback({ value: this.currentValue, rows: this.currentRows })
     })
   }
 }

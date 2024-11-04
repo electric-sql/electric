@@ -19,10 +19,14 @@ case log_level_config do
     raise message
 end
 
-# uncomment if you need to track process creation and destruction
-# config :logger,
-#   handle_otp_reports: true,
-#   handle_sasl_reports: true
+# Enable this to get **very noisy** but useful messages from BEAM about
+# processes being started, stopped and crashes.
+# https://www.erlang.org/doc/apps/sasl/error_logging#sasl-reports
+sasl? = env!("LOG_OTP_REPORTS", :boolean, false)
+
+config :logger,
+  handle_otp_reports: sasl?,
+  handle_sasl_reports: sasl?
 
 if config_env() == :test do
   config(:logger, level: :info)
@@ -196,6 +200,7 @@ config :electric,
   telemetry_statsd_host: statsd_host,
   db_pool_size: env!("DB_POOL_SIZE", :integer, 20),
   replication_stream_id: replication_stream_id,
+  replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, false),
   service_port: env!("PORT", :integer, 3000),
   prometheus_port: prometheus_port,
   storage: storage,

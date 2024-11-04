@@ -317,8 +317,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   test "correctly responds to a status update request message from PG", ctx do
-    pg_wal = lsn_to_wal("0/10")
-
     state =
       ReplicationClient.State.new(
         transaction_received: nil,
@@ -329,17 +327,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
         connection_manager: ctx.dummy_pid
       )
 
-    # All offsets are 0+1 until we've processed a transaction and bumped `state.applied_wal`.
-    assert {:noreply, [<<?r, 1::64, 1::64, 1::64, _time::64, 0::8>>], state} =
-             ReplicationClient.handle_data(<<?k, pg_wal::64, 0::64, 1::8>>, state)
-
-    ###
-
-    state = %{state | applied_wal: lsn_to_wal("0/10")}
+    state = %{state | applied_wal: lsn_to_wal("0/0")}
+    pg_wal = lsn_to_wal("0/10")
 
     assert {:noreply, [<<?r, app_wal::64, app_wal::64, app_wal::64, _time::64, 0::8>>], state} =
              ReplicationClient.handle_data(<<?k, pg_wal::64, 0::64, 1::8>>, state)
 
+    assert state.applied_wal == pg_wal
     assert app_wal == state.applied_wal + 1
   end
 

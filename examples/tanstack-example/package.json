@@ -6,12 +6,10 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "backend:up": "PROJECT_NAME=tanstack-basic-example pnpm -C ../../ run example-backend:up && pnpm db:migrate && pnpm api:up",
-    "backend:down": "pnpm api:down && PROJECT_NAME=tanstack-basic-example pnpm -C ../../ run example-backend:down",
+    "backend:up": "PROJECT_NAME=tanstack-basic-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=tanstack-basic-example pnpm -C ../../ run example-backend:down",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
-    "api:up": "forever start src/server/app.js",
-    "api:down": "forever stop src/server/app.js || echo 'API already stopped'",
-    "dev": "vite",
+    "dev": "concurrently \"vite\" \"node src/server/app.js\"",
     "build": "vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
@@ -34,9 +32,9 @@
     "@types/react-dom": "^18.3.0",
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
     "dotenv": "^16.4.5",
     "eslint": "^8.57.0",
-    "forever": "^4.0.3",
     "typescript": "^5.5.3",
     "vite": "^5.3.4"
   }

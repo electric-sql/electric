@@ -15,28 +15,19 @@ interface UserAccumulator {
   [key: number]: User[]
 }
 
-const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
-  const queryParams = new URLSearchParams(window.location.search)
-  const org_id = queryParams.get(`org_id`)
-  const modifiedArgs = [...args]
-  if (org_id) {
-    const headers = new Headers((modifiedArgs[1] as RequestInit)?.headers || {})
-    headers.set(`Authorization`, org_id)
-    modifiedArgs[1] = { ...(modifiedArgs[1] as RequestInit), headers }
-  }
-  const response = await fetch(...(modifiedArgs as [RequestInfo, RequestInit?]))
-  return response
-}
-
 const usersShape = (): ShapeStreamOptions => {
   if (typeof window !== `undefined`) {
     const queryParams = new URLSearchParams(window.location.search)
     const org_id = queryParams.get(`org_id`)
     return {
-      url: new URL(`/shape-proxy?org_id=${org_id}`, window.location.origin)
-        .href,
+      url: new URL(
+        `/shape-proxy/users?org_id=${org_id}`,
+        window.location.origin
+      ).href,
       table: `users`,
-      fetchClient: fetchWrapper,
+      headers: {
+        Authorization: org_id || ``,
+      },
     }
   } else {
     return {

@@ -116,9 +116,9 @@ defmodule Electric.Telemetry.OpenTelemetry do
 
   defp add_exception_event(type, message, stacktrace, attributes) do
     semantic_attributes = [
-      {OpenTelemetry.SemanticConventions.Trace.exception_type(), type},
-      {OpenTelemetry.SemanticConventions.Trace.exception_message(), message},
-      {OpenTelemetry.SemanticConventions.Trace.exception_stacktrace(),
+      {OpenTelemetry.SemConv.ExceptionAttributes.exception_type(), type},
+      {OpenTelemetry.SemConv.ExceptionAttributes.exception_message(), message},
+      {OpenTelemetry.SemConv.ExceptionAttributes.exception_stacktrace(),
        Exception.format_stacktrace(stacktrace)}
     ]
 

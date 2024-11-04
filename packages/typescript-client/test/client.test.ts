@@ -14,9 +14,9 @@ describe(`Shape`, () => {
       table: issuesTableUrl,
     })
     const shape = new Shape(shapeStream)
-    const map = await shape.value
 
-    expect(map).toEqual(new Map())
+    expect(await shape.value).toEqual(new Map())
+    expect(await shape.rows).toEqual([])
     expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
     expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
@@ -24,7 +24,6 @@ describe(`Shape`, () => {
 
   it(`should notify with the initial value`, async ({
     issuesTableUrl,
-    issuesTableKey,
     insertIssues,
     aborter,
   }) => {
@@ -38,18 +37,11 @@ describe(`Shape`, () => {
     })
     const shape = new Shape(shapeStream)
 
-    const map = await new Promise((resolve) => {
-      shape.subscribe(resolve)
+    const rows = await new Promise((resolve) => {
+      shape.subscribe(({ rows }) => resolve(rows))
     })
 
-    const expectedValue = new Map()
-    expectedValue.set(`${issuesTableKey}/"${id}"`, {
-      id: id,
-      title: `test title`,
-      priority: 10,
-    })
-
-    expect(map).toEqual(expectedValue)
+    expect(rows).toEqual([{ id: id, title: `test title`, priority: 10 }])
     expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
     expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
@@ -60,10 +52,17 @@ describe(`Shape`, () => {
     insertIssues,
     deleteIssue,
     updateIssue,
-    issuesTableKey,
     aborter,
   }) => {
     const [id] = await insertIssues({ title: `test title` })
+
+    const expectedValue1 = [
+      {
+        id: id,
+        title: `test title`,
+        priority: 10,
+      },
+    ]
 
     const start = Date.now()
     const shapeStream = new ShapeStream({
@@ -72,15 +71,9 @@ describe(`Shape`, () => {
       signal: aborter.signal,
     })
     const shape = new Shape(shapeStream)
-    const map = await shape.value
+    const rows = await shape.rows
 
-    const expectedValue = new Map()
-    expectedValue.set(`${issuesTableKey}/"${id}"`, {
-      id: id,
-      title: `test title`,
-      priority: 10,
-    })
-    expect(map).toEqual(expectedValue)
+    expect(rows).toEqual(expectedValue1)
     expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
     expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
@@ -101,12 +94,16 @@ describe(`Shape`, () => {
     await sleep(200) // some time for electric to catch up
     await hasNotified
 
-    expectedValue.set(`${issuesTableKey}/"${id2}"`, {
-      id: id2,
-      title: `new title`,
-      priority: 10,
-    })
-    expect(shape.valueSync).toEqual(expectedValue)
+    const expectedValue2 = [
+      ...expectedValue1,
+      {
+        id: id2,
+        title: `new title`,
+        priority: 10,
+      },
+    ]
+
+    expect(shape.currentRows).toEqual(expectedValue2)
     expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(intermediate)
     expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - intermediate)
@@ -116,7 +113,6 @@ describe(`Shape`, () => {
 
   it(`should resync from scratch on a shape rotation`, async ({
     issuesTableUrl,
-    issuesTableKey,
     insertIssues,
     deleteIssue,
     clearIssuesShape,
@@ -126,19 +122,21 @@ describe(`Shape`, () => {
     const id2 = uuidv4()
     await insertIssues({ id: id1, title: `foo1` })
 
-    const expectedValue1 = new Map()
-    expectedValue1.set(`${issuesTableKey}/"${id1}"`, {
-      id: id1,
-      title: `foo1`,
-      priority: 10,
-    })
+    const expectedValue1 = [
+      {
+        id: id1,
+        title: `foo1`,
+        priority: 10,
+      },
+    ]
 
-    const expectedValue2 = new Map()
-    expectedValue2.set(`${issuesTableKey}/"${id2}"`, {
-      id: id2,
-      title: `foo2`,
-      priority: 10,
-    })
+    const expectedValue2 = [
+      {
+        id: id2,
+        title: `foo2`,
+        priority: 10,
+      },
+    ]
 
     let requestsMade = 0
     const start = Date.now()
@@ -171,14 +169,14 @@ describe(`Shape`, () => {
     let dataUpdateCount = 0
     await new Promise<void>((resolve, reject) => {
       setTimeout(() => reject(`Timed out waiting for data changes`), 1000)
-      shape.subscribe((shapeData) => {
+      shape.subscribe(({ rows }) => {
         dataUpdateCount++
         if (dataUpdateCount === 1) {
-          expect(shapeData).toEqual(expectedValue1)
+          expect(rows).toEqual(expectedValue1)
           expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
           return
         } else if (dataUpdateCount === 2) {
-          expect(shapeData).toEqual(expectedValue2)
+          expect(rows).toEqual(expectedValue2)
           expect(shape.lastSynced()).toBeLessThanOrEqual(
             Date.now() - rotationTime
           )
@@ -192,7 +190,6 @@ describe(`Shape`, () => {
   it(`should notify subscribers when the value changes`, async ({
     issuesTableUrl,
     insertIssues,
-    issuesTableKey,
     aborter,
   }) => {
     const [id] = await insertIssues({ title: `test title` })
@@ -206,23 +203,24 @@ describe(`Shape`, () => {
     const shape = new Shape(shapeStream)
 
     const hasNotified = new Promise((resolve) => {
-      shape.subscribe(resolve)
+      shape.subscribe(({ rows }) => resolve(rows))
     })
 
     const [id2] = await insertIssues({ title: `other title` })
 
     const value = await hasNotified
-    const expectedValue = new Map()
-    expectedValue.set(`${issuesTableKey}/"${id}"`, {
-      id: id,
-      title: `test title`,
-      priority: 10,
-    })
-    expectedValue.set(`${issuesTableKey}/"${id2}"`, {
-      id: id2,
-      title: `other title`,
-      priority: 10,
-    })
+    const expectedValue = [
+      {
+        id: id,
+        title: `test title`,
+        priority: 10,
+      },
+      {
+        id: id2,
+        title: `other title`,
+        priority: 10,
+      },
+    ]
     expect(value).toEqual(expectedValue)
     expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
     expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
@@ -259,7 +257,7 @@ describe(`Shape`, () => {
     expect(shapeStream.isConnected()).true
 
     const shape = new Shape(shapeStream)
-    await shape.value
+    await shape.rows
 
     expect(shapeStream.isConnected()).true
 

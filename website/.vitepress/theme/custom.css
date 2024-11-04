@@ -190,12 +190,12 @@ a.no-visual:hover {
 }
 @media (max-width: 559px) {
   :root, .dark {
-    --vp-code-font-size: 0.8em;
+    --vp-code-font-size: 0.835em;
   }
 }
 @media (max-width: 459px) {
   :root, .dark {
-    --vp-code-font-size: 0.75em;
+    --vp-code-font-size: 0.825em;
   }
 }
 

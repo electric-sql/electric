@@ -183,6 +183,7 @@ export default defineConfig({
           collapsed: true,
           items: [
             { text: 'Alternatives', link: '/docs/reference/alternatives' },
+            { text: 'Benchmarks', link: '/docs/reference/benchmarks' },
             { text: 'Literature', link: '/docs/reference/literature' },
             { text: 'Telemetry', link: '/docs/reference/telemetry' },
           ]

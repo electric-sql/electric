@@ -33,6 +33,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :try_creating_publication?,
       :start_streaming?,
       :slot_name,
+      :slot_temporary?,
       :display_settings,
       origin: "postgres",
       txn_collector: %Collector{},
@@ -56,6 +57,7 @@ defmodule Electric.Postgres.ReplicationClient do
             try_creating_publication?: boolean(),
             start_streaming?: boolean(),
             slot_name: String.t(),
+            slot_temporary?: boolean(),
             origin: String.t(),
             txn_collector: Collector.t(),
             step: Electric.Postgres.ReplicationClient.step(),
@@ -70,7 +72,8 @@ defmodule Electric.Postgres.ReplicationClient do
                    publication_name: [required: true, type: :string],
                    try_creating_publication?: [required: true, type: :boolean],
                    start_streaming?: [type: :boolean, default: true],
-                   slot_name: [required: true, type: :string]
+                   slot_name: [required: true, type: :string],
+                   slot_temporary?: [type: :boolean, default: false]
                  )
 
     @spec new(Access.t()) :: t()
@@ -189,13 +192,14 @@ defmodule Electric.Postgres.ReplicationClient do
       "Primary Keepalive: wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)}) reply=#{reply}"
     end)
 
-    messages =
-      case reply do
-        1 -> [encode_standby_status_update(state)]
-        0 -> []
-      end
+    case reply do
+      1 ->
+        state = update_applied_wal(state, wal_end)
+        {:noreply, [encode_standby_status_update(state)], state}
 
-    {:noreply, messages, state}
+      0 ->
+        {:noreply, [], state}
+    end
   end
 
   defp process_x_log_data(data, wal_end, %State{} = state) do
@@ -237,8 +241,13 @@ defmodule Electric.Postgres.ReplicationClient do
         # receives more demand.
         # The timeout for any call here is important. Different storage
         # backends will require different timeouts and the timeout will need to
-        # accomodate varying number of shape consumers. The default of 5_000 ms
-        # should work for our file-based storage backends, for now.
+        # accomodate varying number of shape consumers.
+        #
+        # The current solution is to set timeout: :infinity for the call that
+        # sends the txn message to the consumers and waits for them all to
+        # write to storage, but crash individual consumers if the write takes
+        # too long. So it doesn't matter how many consumers we have but an
+        # individual storage write can timeout the entire batch.
         OpenTelemetry.with_span(
           "pg_txn.replication_client.transaction_received",
           [num_changes: length(txn.changes), num_relations: MapSet.size(txn.affected_relations)],
@@ -286,6 +295,6 @@ defmodule Electric.Postgres.ReplicationClient do
   @epoch DateTime.to_unix(~U[2000-01-01 00:00:00Z], :microsecond)
   defp current_time(), do: System.os_time(:microsecond) - @epoch
 
-  defp update_applied_wal(state, wal) when wal > state.applied_wal,
+  defp update_applied_wal(state, wal) when wal >= state.applied_wal,
     do: %{state | applied_wal: wal}
 end

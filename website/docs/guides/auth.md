@@ -48,27 +48,14 @@ When using the [Typescript client](/docs/api/clients/typescript), you can pass a
 In the client:
 
 ```tsx
-const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
-  const user = loadCurrentUser()
-  const modifiedArgs = [...args]
-  const headers = new Headers(
-    (modifiedArgs[1] as RequestInit)?.headers || {}
-  )
-
-  // Set authorization token
-  headers.set(`Authorization`, `Bearer ${user.token}`)
-
-  modifiedArgs[1] = { ...(modifiedArgs[1] as RequestInit), headers }
-  const response = await fetch(
-    ...(modifiedArgs as [RequestInfo, RequestInit?])
-  )
-  return response
-}
-
 const usersShape = (): ShapeStreamOptions => {
+  const user = loadCurrentUser()
+
   return {
     url: new URL(`/api/shapes/users`, window.location.origin).href,
-    fetchClient: fetchWrapper,
+    headers: {
+      authorization: `Bearer ${user.token}`
+    }
   }
 }
 

@@ -229,9 +229,9 @@ describe(`HTTP Sync`, () => {
         signal: aborter.signal,
       })
       const client = new Shape(issueStream)
-      const data = await client.value
+      const rows = await client.rows
 
-      expect([...data.values()]).toMatchObject([
+      expect(rows).toMatchObject([
         {
           txt: `test`,
           i2: 1,
@@ -306,9 +306,9 @@ describe(`HTTP Sync`, () => {
         const body = (await res.json()) as Message[]
         expect(body.length).greaterThan(1)
       })
-      const updatedData = client.valueSync
+      const updatedData = await client.rows
 
-      expect([...updatedData.values()]).toMatchObject([
+      expect(updatedData).toMatchObject([
         {
           txt: `changed`,
           i2: 1,
