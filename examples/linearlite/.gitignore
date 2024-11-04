@@ -1,3 +1,4 @@
 dist
 .env.local
 db/data/
+.sst/
