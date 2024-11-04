@@ -1,5 +1,5 @@
 defmodule Electric.Plug.AddDatabasePlugTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   import Plug.Conn
 
   alias Electric.Plug.AddDatabasePlug

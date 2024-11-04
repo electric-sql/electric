@@ -186,7 +186,8 @@ defmodule Electric.TenantManagerTest do
       tenant_id: tenant_id,
       tenant_manager: tenant_manager,
       tenant_tables_name: tenant_tables_name,
-      tenant_supervisor_pid: tenant_supervisor_pid
+      tenant_supervisor_pid: tenant_supervisor_pid,
+      app_config: app_config
     } do
       # Check that the tenant supervisor is running
       # and that the tenant's ETS tables are registered in the global ETS table
@@ -200,7 +201,8 @@ defmodule Electric.TenantManagerTest do
                  electric_instance_id: electric_instance_id,
                  tenant_id: tenant_id,
                  tenant_manager: tenant_manager,
-                 tenant_tables_name: tenant_tables_name
+                 tenant_tables_name: tenant_tables_name,
+                 app_config: app_config
                )
 
       # Check that the tenant is now unknown to the tenant manager
