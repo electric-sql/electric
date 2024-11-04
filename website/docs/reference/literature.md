@@ -6,7 +6,13 @@ outline: deep
 ---
 
 <script setup>
-  import { data as papers } from '../../data/literature.data.ts'
+import { data as team } from '../../data/team.data.ts'
+import { data as papers } from '../../data/literature.data.ts'
+
+const teamMembers = {}
+Object.entries(team).forEach(([_key, members]) => members.forEach(member => {
+  teamMembers[member.name] = member.slug
+}))
 </script>
 
 # Literature
@@ -31,7 +37,7 @@ This page lists a non-exhaustive selection of papers that chart the development 
       <a :href="paper.url" target="_blank">
         {{ paper.title }}</a>
       by
-      <span v-for="(author, index) in paper.authors"><span v-if="index > 0 && index < paper.authors.length - 1">, </span><span v-if="index > 0 && index == paper.authors.length - 1"> and </span>{{ author }}</span>
+      <span v-for="(author, index) in paper.authors"><span v-if="index > 0 && index < paper.authors.length - 1">, </span><span v-if="index > 0 && index == paper.authors.length - 1"> and </span><span v-if="author in teamMembers"><a :href="`/about/team#${teamMembers[author]}`">{{ author }}</a></span><span v-else>{{ author }}</span></span>
     </li>
   </ul>
 </div>
