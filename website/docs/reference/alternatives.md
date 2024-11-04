@@ -46,6 +46,7 @@ We list a selection of projects below, including for example:
 - [PowerSync](https://www.powersync.co)
 - [Pusher](https://pusher.com)
 - [Prisma Pulse](https://www.prisma.io/data-platform/pulse)
+- [RisingWave](https://risingwave.com)
 - [Qlik](https://www.qlik.com/us/products/qlik-data-streaming-cdc)
 - [Sequin](https://sequinstream.com)
 - [SKDB](https://skdb.io)
