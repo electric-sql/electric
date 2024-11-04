@@ -19,10 +19,14 @@ case log_level_config do
     raise message
 end
 
-# uncomment if you need to track process creation and destruction
-# config :logger,
-#   handle_otp_reports: true,
-#   handle_sasl_reports: true
+# Enable this to get **very noisy** but useful messages from BEAM about
+# processes being started, stopped and crashes.
+# https://www.erlang.org/doc/apps/sasl/error_logging#sasl-reports
+sasl? = env!("LOG_OTP_REPORTS", :boolean, false)
+
+config :logger,
+  handle_otp_reports: sasl?,
+  handle_sasl_reports: sasl?
 
 if config_env() == :test do
   config(:logger, level: :info)
