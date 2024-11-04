@@ -2,10 +2,49 @@ defmodule Electric.TenantManagerTest do
   use ExUnit.Case, async: false
 
   alias Electric.TenantManager
+  alias Electric.Tenant.Persistence
+
   import Support.ComponentSetup
   import Support.DbSetup
 
   @moduletag :tmp_dir
+
+  describe "start_link/1" do
+    @tenant_id "persisted_tenant"
+
+    setup :with_unique_db
+    setup :with_publication
+
+    setup ctx do
+      # Persist a tenant
+      with_manager = fn ctx ->
+        opts = [
+          app_config: ctx.app_config,
+          persistent_kv: ctx.persistent_kv,
+          electric_instance_id: ctx.electric_instance_id
+        ]
+
+        # Persist a tenant
+        Persistence.persist_tenant!(@tenant_id, ctx.db_config, opts)
+
+        # Now create the tenant manager
+        with_tenant_manager(ctx)
+      end
+
+      with_complete_stack_but_no_tenant(ctx, tenant_manager: with_manager)
+    end
+
+    test "loads tenants from storage", ctx do
+      # Check that it recreated the tenant
+      {:ok, tenant} =
+        TenantManager.get_tenant(@tenant_id,
+          tenant_manager: ctx.tenant_manager,
+          tenant_tables_name: ctx.tenant_tables_name
+        )
+
+      assert tenant[:tenant_id] == @tenant_id
+    end
+  end
 
   describe "create_tenant/1" do
     setup :with_unique_db

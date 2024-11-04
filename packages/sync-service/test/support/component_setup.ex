@@ -18,7 +18,8 @@ defmodule Support.ComponentSetup do
 
     opts = [
       app_config: ctx.app_config,
-      electric_instance_id: ctx.electric_instance_id
+      electric_instance_id: ctx.electric_instance_id,
+      tenant_tables_name: Access.get(ctx, :tenant_tables_name, nil)
     ]
 
     Electric.TenantManager.start_link(opts)
@@ -297,7 +298,6 @@ defmodule Support.ComponentSetup do
   def with_minimal_app_config(ctx) do
     %{
       app_config: %Electric.Application.Configuration{
-        electric_instance_id: ctx.electric_instance_id,
         persistent_kv: ctx.persistent_kv
       }
     }
