@@ -145,6 +145,17 @@ upstream caches. Defaults to 10MB (10 * 1024 * 1024). See [#1581](https://github
 
 </EnvVarConfig>
 
+### LOG_OTP_REPORTS
+
+<EnvVarConfig
+    name="LOG_OTP_REPORTS"
+    defaultValue="false"
+    example="true">
+
+Enable [OTP SASL](https://www.erlang.org/doc/apps/sasl/sasl_app.html) reporting at runtime.
+
+</EnvVarConfig>
+
 ### PORT
 
 <EnvVarConfig
