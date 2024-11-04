@@ -41,12 +41,15 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   # streaming mode.
   @spec start_streaming(state) :: callback_return
   def start_streaming(%{step: :ready_to_stream} = state) do
+    Logger.debug("ReplicationClient step: start_streaming")
     query_for_step(:streaming, %{state | step: :streaming})
   end
 
   ###
 
   defp pg_info_query(state) do
+    Logger.debug("ReplicationClient step: pg_info_query")
+
     query = """
     SELECT
       current_setting('server_version_num') server_version_num,
@@ -75,6 +78,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   end
 
   defp create_publication_query(state) do
+    Logger.debug("ReplicationClient step: create_publication_query")
     # We're creating an "empty" publication because first snapshot creation should add the table
     query = "CREATE PUBLICATION #{Utils.quote_name(state.publication_name)}"
     {:query, query, state}
@@ -109,6 +113,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   end
 
   defp create_slot_query(%State{slot_name: slot_name} = state) do
+    Logger.debug("ReplicationClient step: create_slot")
     query = "CREATE_REPLICATION_SLOT #{Utils.quote_name(slot_name)} #{@slot_options}"
 
     {:query, query, state}
@@ -153,6 +158,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   ###
 
   defp set_display_setting_query(%{display_settings: [query | rest]} = state) do
+    Logger.debug("ReplicationClient step: set_display_setting")
     {:query, query, %{state | display_settings: rest}}
   end
 
@@ -181,6 +187,8 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   # streaming mode. That's why this function must return a `{:stream, ...}` and no queries
   # will be executed after this.
   defp start_replication_slot_query(state) do
+    Logger.debug("ReplicationClient step: start_replication_slot")
+
     query =
       "START_REPLICATION SLOT #{Utils.quote_name(state.slot_name)} LOGICAL 0/0 (proto_version '1', publication_names '#{state.publication_name}')"
 

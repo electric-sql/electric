@@ -241,8 +241,13 @@ defmodule Electric.Postgres.ReplicationClient do
         # receives more demand.
         # The timeout for any call here is important. Different storage
         # backends will require different timeouts and the timeout will need to
-        # accomodate varying number of shape consumers. The default of 5_000 ms
-        # should work for our file-based storage backends, for now.
+        # accomodate varying number of shape consumers.
+        #
+        # The current solution is to set timeout: :infinity for the call that
+        # sends the txn message to the consumers and waits for them all to
+        # write to storage, but crash individual consumers if the write takes
+        # too long. So it doesn't matter how many consumers we have but an
+        # individual storage write can timeout the entire batch.
         OpenTelemetry.with_span(
           "pg_txn.replication_client.transaction_received",
           [num_changes: length(txn.changes), num_relations: MapSet.size(txn.affected_relations)],
