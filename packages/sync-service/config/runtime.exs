@@ -159,7 +159,8 @@ chunk_bytes_threshold =
            storage_dir: shape_path, electric_instance_id: electric_instance_id}
 
         "crashing_file" ->
-          num_calls_until_crash = env!("CRASHING_FILE_ELECTRIC_STORAGE__NUM_CALLS_UNTIL_CRASH", :integer)
+          num_calls_until_crash =
+            env!("CRASHING_FILE_ELECTRIC_STORAGE__NUM_CALLS_UNTIL_CRASH", :integer)
 
           {Electric.ShapeCache.CrashingFileStorage,
            storage_dir: shape_path,
