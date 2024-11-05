@@ -396,7 +396,7 @@ paths:
           description: Bad request.
         "404":
           description: Database or shape not found (or shape deletion is not enabled).
-  v1/admin/database:
+  /v1/admin/database:
     post:
       summary: Add Database
       description: |-
@@ -408,13 +408,13 @@ paths:
             schema:
               type: object
               required:
-                - DATABASE_URL
+                - database_url
                 - database_id
               properties:
-                DATABASE_URL:
+                database_url:
                   type: string
                   description: PostgreSQL connection URL for the database
-                DATABASE_USE_IPV6:
+                database_use_ipv6:
                   type: boolean
                   default: false
                   description: Whether to use IPv6 for database connections
@@ -438,16 +438,17 @@ paths:
                 description: Error message
                 examples:
                   already_exists:
-                    value: "Database {id} already exists."
+                    value: "Database already exists."
                   db_in_use:
                     value: "The database localhost:54321/db is already in use by another tenant."
+  /v1/admin/database/{database_id}:
     delete:
       summary: Remove Database
       description: |-
         Removes a database from Electric.
       parameters:
         - name: database_id
-          in: query
+          in: path
           required: true
           schema:
             type: string
