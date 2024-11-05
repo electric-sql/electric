@@ -1,4 +1,4 @@
-import { ShapeStreamOptions } from '@electric-sql/next'
+import { ShapeStreamOptions } from '@electric-sql/client'
 import { baseUrl, databaseId, token } from './electric'
 
 export const issueShape: ShapeStreamOptions = {

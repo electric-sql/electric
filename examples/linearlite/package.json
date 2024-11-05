@@ -58,7 +58,6 @@
     "@databases/pg-migrations": "^5.0.3",
     "@faker-js/faker": "^8.4.1",
     "@tailwindcss/typography": "^0.5.10",
-    "@types/aws-lambda": "8.10.145",
     "@types/jest": "^29.5.12",
     "@types/lodash.debounce": "^4.0.9",
     "@types/node": "^20.14.10",
