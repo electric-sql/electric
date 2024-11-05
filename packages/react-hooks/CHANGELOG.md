@@ -1,5 +1,23 @@
 # @electric-sql/react
 
+## 0.5.0
+
+### Minor Changes
+
+- 4d872b6: All `Shape` interfaces (`ShapeStream`, `Shape`, `useShape`) now require `table` as an additional configuration parameter, and the shape API endpoint url only needs to point to `/v1/shape`.
+
+### Patch Changes
+
+- 61a18bd: - Implement `rows` and `currentRows` getters on `Shape` interface for easier data access.
+  - [BREAKING] Rename `valueSync` getter on `Shape` to `currentValue` for clarity and consistency.
+  - [BREAKING] Change `subscribe` API on `Shape` to accept callbacks with signature `({ rows: T[], value: Map<string, T> }) => void`
+- 9bd3673: Clear caches when cached stream is in errored state or is explicitly aborted
+- Updated dependencies [61a18bd]
+- Updated dependencies [4d872b6]
+- Updated dependencies [aed079f]
+- Updated dependencies [4d872b6]
+  - @electric-sql/client@0.7.0
+
 ## 0.4.7
 
 ### Patch Changes
