@@ -86,7 +86,7 @@ In live mode, if the server doesn't have any new data, it will hold open your re
 
 Set `live=true` to switch Electric into live mode. Make sure your request timeout is higher than the server timeout (which defaults to `20s`)
 
-If the previous response contains an `electric-cursor` header, then also set the `cursor` parameter to its value. (This is an extra cache-busting parameter used to normalise [request-coalescing](/docs/api/http#coalescing-live-requests) behaviour across different CDNs).
+If the previous response contains an `electric-cursor` header, then also set the `cursor` parameter to its value. (This is an extra cache-busting parameter used to normalise [request-collapsing](/docs/api/http#collapsing-live-requests) behaviour across different CDNs).
 
 For example:
 
