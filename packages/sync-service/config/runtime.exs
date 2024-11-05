@@ -95,9 +95,6 @@ case {database_url, default_tenant} do
   {nil, _} ->
     raise "DATABASE_URL must be provided when DATABASE_ID is set"
 
-  {_, nil} ->
-    raise "DATABASE_ID must be provided when DATABASE_URL is set"
-
   {_, _} ->
     # A default tenant is provided
     {:ok, database_url_config} = Electric.ConfigParser.parse_postgresql_uri(database_url)
@@ -108,7 +105,10 @@ case {database_url, default_tenant} do
     connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
 
     config :electric, default_connection_opts: Electric.Utils.obfuscate_password(connection_opts)
-    config :electric, default_tenant: default_tenant
+
+    # if `default_tenant` is nil, generate a random UUID for it
+    tenant_id = default_tenant || Electric.Utils.uuid4()
+    config :electric, default_tenant: tenant_id
 end
 
 enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)
