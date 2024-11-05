@@ -1,5 +1,6 @@
 defmodule Electric.TenantManager do
   use GenServer
+  require Logger
 
   alias Electric.Tenant.Persistence
 
@@ -279,6 +280,7 @@ defmodule Electric.TenantManager do
 
     # Recreate all tenants
     Enum.each(tenants, fn {tenant_id, conn_opts} ->
+      Logger.info("Reloading tenant #{tenant_id} from storage")
       :ok = create_tenant(tenant_id, conn_opts, opts)
     end)
   end
