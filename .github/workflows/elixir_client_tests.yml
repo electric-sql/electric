@@ -19,9 +19,9 @@ jobs:
       MIX_ENV: test
       POSTGRES_VERSION: 140006
       PORT: 3100
-      PG_PORT: 54322
+      PG_PORT: 54323
       ELECTRIC_URL: "http://127.0.0.1:3100"
-      DATABASE_URL: "postgresql://postgres:password@127.0.0.1:54322/postgres?sslmode=disable"
+      DATABASE_URL: "postgresql://postgres:password@127.0.0.1:54323/postgres?sslmode=disable"
     services:
       postgres:
         image: postgres:14-alpine
@@ -33,7 +33,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 54322:5432
+          - 54323:5432
     steps:
       - uses: actions/checkout@v4
       - name: "Set PG settings"
