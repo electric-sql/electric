@@ -12,8 +12,8 @@ Metrics are reported in StatsD and Prometheus formats. To configure Electric to 
 
 | VARIABLE        | Description |
 |-----------------|-------------|
-| STATSD_HOST     | The address of the StatsD server |
-| PROMETHEUS_PORT | The scrape port for Prometheus |
+| ELECTRIC_STATSD_HOST     | The address of the StatsD server |
+| ELECTRIC_PROMETHEUS_PORT | The scrape port for Prometheus |
 
 You can get the current status of the service by calling the `http://electric-hostname:PROMETHUES_PORT/metrics` endpoint.
 
@@ -23,16 +23,16 @@ Metrics, traces and logs are exported using the OpenTelemetry Protocol (OTLP). Y
 
 | VARIABLE      | Type      | Description     |
 |---------------|-----------|-----------------|
-| OTLP_ENDPOINT | `URL`     | An OpenTelemetry collector endpoint url. |
-| HNY_API_KEY   | `string`  | API key for exporting to Honeycomb.io. |
-| HNY_DATASET   | `string`  | Dataset name for Honeycomb.io. |
-| OTEL_DEBUG    | `boolean` | Enable or disable debug logging of telemetry data to stdout. |
+| ELECTRIC_OTLP_ENDPOINT | `URL`     | An OpenTelemetry collector endpoint url. |
+| ELECTRIC_HNY_API_KEY   | `string`  | API key for exporting to Honeycomb.io. |
+| ELECTRIC_HNY_DATASET   | `string`  | Dataset name for Honeycomb.io. |
+| ELECTRIC_OTEL_DEBUG    | `boolean` | Enable or disable debug logging of telemetry data to stdout. |
 
-Electric enables export of telemetry data when it is configured with an `OTLP_ENDPOINT`.
+Electric enables export of telemetry data when it is configured with an `ELECTRIC_OTLP_ENDPOINT`.
 
-There is builtin support for [Honeycomb.io](https://www.honeycomb.io/): telemetry data can be exported directly to it by specifying `OTLP_ENDPOINT=https://api.honeycomb.io` and adding at least the `HNY_API_KEY` configuration option.
+There is builtin support for [Honeycomb.io](https://www.honeycomb.io/): telemetry data can be exported directly to it by specifying `ELECTRIC_OTLP_ENDPOINT=https://api.honeycomb.io` and adding at least the `ELECTRIC_HNY_API_KEY` configuration option.
 
-In order to use other telemetry data collectors, you'll need to run the [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) and include the exporter of choice in its configuration file along with any required credentials, then use Collector's URL as the value for `OTLP_ENDPOINT`.
+In order to use other telemetry data collectors, you'll need to run the [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) and include the exporter of choice in its configuration file along with any required credentials, then use Collector's URL as the value for `ELECTRIC_OTLP_ENDPOINT`.
 
 Electric always adds the following resource attributes to events:
 
@@ -48,7 +48,7 @@ Electric will also load additional resource attributes from `OTEL_RESOURCE_ATTRI
 
 You can find an example of a docker compose that runs Electric with an OpenTelemetry Collector agent that sends telemetry data to Honeycomb under `packages/sync-service/dev`.
 
-Set `HNY_DATASET` and `HNY_API_KEY` environment variables in a terminal session and run docker compose in it like so:
+Set `ELECTRIC_HNY_DATASET` and `ELECTRIC_HNY_API_KEY` environment variables in a terminal session and run docker compose in it like so:
 
 ```shell
 docker compose -f docker-compose-otel.yml up

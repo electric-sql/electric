@@ -2,8 +2,8 @@ exporters:
   otlp/honeycomb:
     endpoint: api.honeycomb.io:443
     headers:
-      x-honeycomb-team: ${env:HNY_API_KEY}
-      x-honeycomb-dataset: ${env:HNY_DATASET}
+      x-honeycomb-team: ${env:ELECTRIC_HNY_API_KEY}
+      x-honeycomb-dataset: ${env:ELECTRIC_HNY_DATASET}
   logging:
     loglevel: info
 receivers:

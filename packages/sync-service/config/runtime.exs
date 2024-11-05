@@ -22,7 +22,7 @@ end
 # Enable this to get **very noisy** but useful messages from BEAM about
 # processes being started, stopped and crashes.
 # https://www.erlang.org/doc/apps/sasl/error_logging#sasl-reports
-sasl? = env!("LOG_OTP_REPORTS", :boolean, false)
+sasl? = env!("ELECTRIC_LOG_OTP_REPORTS", :boolean, false)
 
 config :logger,
   handle_otp_reports: sasl?,
@@ -43,16 +43,16 @@ config :opentelemetry,
   resource_detectors: [:otel_resource_env_var, :otel_resource_app_env],
   resource: %{service: %{name: service_name, version: version}, instance: %{id: instance_id}}
 
-otlp_endpoint = env!("OTLP_ENDPOINT", :string, nil)
-otel_debug = env!("OTEL_DEBUG", :boolean, false)
+otlp_endpoint = env!("ELECTRIC_OTLP_ENDPOINT", :string, nil)
+otel_debug = env!("ELECTRIC_OTEL_DEBUG", :boolean, false)
 
 if otlp_endpoint do
   # Shortcut config for Honeycomb.io:
-  # users may set the optional HNY_API_KEY and HNY_DATASET environment variables
-  # and specify the Honeycomb URL in OTLP_ENDPOINT to export traces directly to
+  # users may set the optional ELECTRIC_HNY_API_KEY and ELECTRIC_HNY_DATASET environment variables
+  # and specify the Honeycomb URL in ELECTRIC_OTLP_ENDPOINT to export traces directly to
   # Honeycomb, without the need to run an OpenTelemetry Collector.
-  honeycomb_api_key = env!("HNY_API_KEY", :string, nil)
-  honeycomb_dataset = env!("HNY_DATASET", :string, nil)
+  honeycomb_api_key = env!("ELECTRIC_HNY_API_KEY", :string, nil)
+  honeycomb_dataset = env!("ELECTRIC_HNY_DATASET", :string, nil)
 
   headers =
     Enum.reject(
@@ -100,7 +100,7 @@ case {database_url, default_tenant} do
     {:ok, database_url_config} = Electric.ConfigParser.parse_postgresql_uri(database_url)
 
     database_ipv6_config =
-      env!("DATABASE_USE_IPV6", :boolean, false)
+      env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
 
     connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
 
@@ -111,19 +111,19 @@ case {database_url, default_tenant} do
     config :electric, default_tenant: tenant_id
 end
 
-enable_integration_testing = env!("ENABLE_INTEGRATION_TESTING", :boolean, false)
-cache_max_age = env!("CACHE_MAX_AGE", :integer, 60)
-cache_stale_age = env!("CACHE_STALE_AGE", :integer, 60 * 5)
-statsd_host = env!("STATSD_HOST", :string?, nil)
+enable_integration_testing = env!("ELECTRIC_ENABLE_INTEGRATION_TESTING", :boolean, false)
+cache_max_age = env!("ELECTRIC_CACHE_MAX_AGE", :integer, 60)
+cache_stale_age = env!("ELECTRIC_CACHE_STALE_AGE", :integer, 60 * 5)
+statsd_host = env!("ELECTRIC_STATSD_HOST", :string?, nil)
 
-storage_dir = env!("STORAGE_DIR", :string, "./persistent")
+storage_dir = env!("ELECTRIC_STORAGE_DIR", :string, "./persistent")
 
 shape_path = Path.join(storage_dir, "./shapes")
 persistent_state_path = Path.join(storage_dir, "./state")
 
 persistent_kv =
   env!(
-    "PERSISTENT_STATE",
+    "ELECTRIC_PERSISTENT_STATE",
     fn storage ->
       case String.downcase(storage) do
         "memory" ->
@@ -133,7 +133,7 @@ persistent_kv =
           {Electric.PersistentKV.Filesystem, :new!, root: persistent_state_path}
 
         _ ->
-          raise Dotenvy.Error, message: "PERSISTENT_STATE must be one of: MEMORY, FILE"
+          raise Dotenvy.Error, message: "ELECTRIC_PERSISTENT_STATE must be one of: MEMORY, FILE"
       end
     end,
     {Electric.PersistentKV.Filesystem, :new!, root: persistent_state_path}
@@ -141,14 +141,14 @@ persistent_kv =
 
 chunk_bytes_threshold =
   env!(
-    "LOG_CHUNK_BYTES_THRESHOLD",
+    "ELECTRIC_LOG_CHUNK_BYTES_THRESHOLD",
     :integer,
     Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
   )
 
 {storage_mod, storage_opts} =
   env!(
-    "STORAGE",
+    "ELECTRIC_STORAGE",
     fn storage ->
       case String.downcase(storage) do
         "memory" ->
@@ -159,7 +159,8 @@ chunk_bytes_threshold =
            storage_dir: shape_path, electric_instance_id: electric_instance_id}
 
         "crashing_file" ->
-          num_calls_until_crash = env!("CRASHING_FILE_STORAGE__NUM_CALLS_UNTIL_CRASH", :integer)
+          num_calls_until_crash =
+            env!("CRASHING_FILE_ELECTRIC_STORAGE__NUM_CALLS_UNTIL_CRASH", :integer)
 
           {Electric.ShapeCache.CrashingFileStorage,
            storage_dir: shape_path,
@@ -176,7 +177,7 @@ chunk_bytes_threshold =
 
 replication_stream_id =
   env!(
-    "REPLICATION_STREAM_ID",
+    "ELECTRIC_REPLICATION_STREAM_ID",
     fn replication_stream_id ->
       {:ok, parsed_id} =
         replication_stream_id
@@ -189,7 +190,7 @@ replication_stream_id =
 
 storage = {storage_mod, storage_opts}
 
-prometheus_port = env!("PROMETHEUS_PORT", :integer, nil)
+prometheus_port = env!("ELECTRIC_PROMETHEUS_PORT", :integer, nil)
 
 config :electric,
   allow_shape_deletion: enable_integration_testing,
@@ -201,12 +202,12 @@ config :electric,
   instance_id: instance_id,
   electric_instance_id: electric_instance_id,
   telemetry_statsd_host: statsd_host,
-  db_pool_size: env!("DB_POOL_SIZE", :integer, 20),
+  db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, 20),
   replication_stream_id: replication_stream_id,
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, false),
-  service_port: env!("PORT", :integer, 3000),
+  service_port: env!("ELECTRIC_PORT", :integer, 3000),
   prometheus_port: prometheus_port,
   storage: storage,
   persistent_kv: persistent_kv,
-  listen_on_ipv6?: env!("LISTEN_ON_IPV6", :boolean, false),
+  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false),
   tenant_tables_name: :tenant_tables
