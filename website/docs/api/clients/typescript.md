@@ -73,7 +73,8 @@ the modified columns, then set the `replica` of your `ShapeStream` to `full`:
 import { ShapeStream } from "@electric-sql/client"
 
 const stream = new ShapeStream({
-  url: `http://localhost:3000/v1/shape/foo`,
+  url: `http://localhost:3000/v1/shape`,
+  table: `foo`,
   replica: `full`,
 })
 ```
