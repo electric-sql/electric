@@ -18,7 +18,7 @@ jobs:
     env:
       MIX_ENV: test
       POSTGRES_VERSION: 140006
-      PORT: 3100
+      ELECTRIC_PORT: 3100
       PG_PORT: 54323
       ELECTRIC_URL: "http://127.0.0.1:3100"
       DATABASE_URL: "postgresql://postgres:password@127.0.0.1:54323/postgres?sslmode=disable"
