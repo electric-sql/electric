@@ -698,5 +698,53 @@ defmodule Electric.Plug.ServeShapePlugTest do
                "columns" => ["The following columns could not be found: invalid"]
              }
     end
+
+    test "honours replica query param for shape", %{tenant_id: tenant_id} = ctx do
+      test_shape_handle = "test-shape-without-deltas"
+      next_offset = LogOffset.increment(@first_offset)
+
+      Mock.ShapeCache
+      |> expect(:get_or_create_shape_handle, fn %{root_table: {"public", "users"}, replica: :full},
+                                                _opts ->
+        {test_shape_handle, @test_offset}
+      end)
+      |> stub(:has_shape?, fn ^test_shape_handle, _opts -> true end)
+      |> expect(:await_snapshot_start, fn ^test_shape_handle, _ -> :started end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn ^test_shape_handle, ^tenant_id, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
+        next_offset
+      end)
+      |> expect(:get_snapshot, fn @test_opts ->
+        {@first_offset, [Jason.encode!(%{key: "snapshot"})]}
+      end)
+      |> expect(:get_log_stream, fn @first_offset, _, @test_opts ->
+        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+      end)
+
+      conn =
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=-1&replica=full")
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 200
+
+      assert Jason.decode!(conn.resp_body) == [
+               %{"key" => "snapshot"},
+               %{
+                 "key" => "log",
+                 "value" => "foo",
+                 "headers" => %{},
+                 "offset" => "#{next_offset}"
+               }
+             ]
+
+      assert Plug.Conn.get_resp_header(conn, "etag") == [
+               "#{test_shape_handle}:-1:#{next_offset}"
+             ]
+
+      assert Plug.Conn.get_resp_header(conn, "electric-handle") == [test_shape_handle]
+    end
   end
 end

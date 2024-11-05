@@ -6,10 +6,10 @@ defmodule Support.TestUtils do
   Preprocess a list of `Changes.data_change()` structs in the same way they
   are preprocessed before reaching storage.
   """
-  def changes_to_log_items(changes, pk \\ ["id"], xid \\ 1) do
+  def changes_to_log_items(changes, pk \\ ["id"], xid \\ 1, replica \\ :default) do
     changes
     |> Enum.map(&Changes.fill_key(&1, pk))
-    |> Enum.flat_map(&LogItems.from_change(&1, xid, pk))
+    |> Enum.flat_map(&LogItems.from_change(&1, xid, pk, replica))
     |> Enum.map(fn item -> {item.offset, Jason.encode!(item)} end)
   end
 

@@ -375,7 +375,9 @@ defmodule Electric.Shapes.Consumer do
        ) do
     {log_items, new_log_state} =
       changes
-      |> Stream.flat_map(&LogItems.from_change(&1, xid, Shape.pk(shape, &1.relation)))
+      |> Stream.flat_map(
+        &LogItems.from_change(&1, xid, Shape.pk(shape, &1.relation), shape.replica)
+      )
       |> Enum.flat_map_reduce(log_state, fn log_item,
                                             %{current_chunk_byte_size: chunk_size} = state ->
         json_log_item = Jason.encode!(log_item)

@@ -28,7 +28,10 @@ import {
   WHERE_QUERY_PARAM,
   DATABASE_ID_QUERY_PARAM,
   TABLE_QUERY_PARAM,
+  REPLICA_PARAM,
 } from './constants'
+
+type Replica = `full` | `default`
 
 /**
  * Options for constructing a ShapeStream.
@@ -62,6 +65,17 @@ export interface ShapeStreamOptions<T = never> {
    */
   columns?: string[]
 
+  /**
+   * If `replica` is `default` (the default) then Electric will only send the
+   * changed columns in an update.
+   *
+   * If it's `full` Electric will send the entire row with both changed and
+   * unchanged values.
+   *
+   * Setting `replica` to `full` will obviously result in higher bandwidth
+   * usage and so is not recommended.
+   */
+  replica?: Replica
   /**
    * The "offset" on the shape log. This is typically not set as the ShapeStream
    * will handle this automatically. A common scenario where you might pass an offset
@@ -149,6 +163,11 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
 export class ShapeStream<T extends Row<unknown> = Row>
   implements ShapeStreamInterface<T>
 {
+  static readonly Replica = {
+    FULL: `full` as Replica,
+    DEFAULT: `default` as Replica,
+  }
+
   readonly options: ShapeStreamOptions<GetExtensions<T>>
 
   readonly #fetchClient: typeof fetch
@@ -175,6 +194,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #databaseId?: string
   #schema?: Schema
   #error?: unknown
+  #replica?: Replica
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     validateOptions(options)
@@ -184,6 +204,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#shapeHandle = this.options.shapeHandle
     this.#databaseId = this.options.databaseId
     this.#messageParser = new MessageParser<T>(options.parser)
+    this.#replica = this.options.replica
 
     const baseFetchClient =
       options.fetchClient ??
@@ -249,6 +270,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         if (this.#databaseId) {
           fetchUrl.searchParams.set(DATABASE_ID_QUERY_PARAM, this.#databaseId!)
+        }
+
+        if (
+          (this.#replica ?? ShapeStream.Replica.DEFAULT) !=
+          ShapeStream.Replica.DEFAULT
+        ) {
+          fetchUrl.searchParams.set(REPLICA_PARAM, this.#replica as string)
         }
 
         let response!: Response
