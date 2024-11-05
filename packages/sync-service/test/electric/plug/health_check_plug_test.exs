@@ -1,6 +1,8 @@
 defmodule Electric.Plug.HealthCheckPlugTest do
   use ExUnit.Case, async: true
   import Plug.Conn
+  import Support.ComponentSetup
+  import Support.TestUtils
   alias Plug.Conn
 
   alias Electric.Plug.HealthCheckPlug
@@ -14,20 +16,40 @@ defmodule Electric.Plug.HealthCheckPlugTest do
     :ok
   end
 
-  def conn(%{connection_status: connection_status} = _config) do
-    # Pass mock dependencies to the plug
-    config = %{
-      get_service_status: fn -> connection_status end
-    }
+  setup :with_electric_instance_id
+  setup :with_tenant_id
+  setup :with_persistent_kv
+  setup :with_minimal_app_config
+  setup :with_tenant_manager
 
-    Plug.Test.conn("GET", "/")
+  setup ctx do
+    tenant = [
+      electric_instance_id: ctx.electric_instance_id,
+      tenant_id: ctx.tenant_id,
+      pg_id: "foo",
+      registry: @registry,
+      get_service_status: fn -> ctx.connection_status end
+    ]
+
+    store_tenant(tenant, ctx)
+    %{}
+  end
+
+  def conn(ctx) do
+    # Pass mock dependencies to the plug
+    config = [
+      tenant_manager: ctx.tenant_manager
+    ]
+
+    Plug.Test.conn("GET", "/?database_id=#{ctx.tenant_id}")
     |> assign(:config, config)
   end
 
   describe "HealthCheckPlug" do
-    test "has appropriate content and cache headers" do
+    @tag connection_status: :waiting
+    test "has appropriate content and cache headers", ctx do
       conn =
-        conn(%{connection_status: :waiting})
+        conn(ctx)
         |> HealthCheckPlug.call([])
 
       assert Conn.get_resp_header(conn, "content-type") == ["application/json"]
@@ -37,36 +59,40 @@ defmodule Electric.Plug.HealthCheckPlugTest do
              ]
     end
 
-    test "returns 200 when in waiting mode" do
+    @tag connection_status: :waiting
+    test "returns 503 when in waiting mode", ctx do
       conn =
-        conn(%{connection_status: :waiting})
+        conn(ctx)
         |> HealthCheckPlug.call([])
 
-      assert conn.status == 200
+      assert conn.status == 503
       assert Jason.decode!(conn.resp_body) == %{"status" => "waiting"}
     end
 
-    test "returns 200 when in starting mode" do
+    @tag connection_status: :starting
+    test "returns 503 when in starting mode", ctx do
       conn =
-        conn(%{connection_status: :starting})
+        conn(ctx)
         |> HealthCheckPlug.call([])
 
-      assert conn.status == 200
+      assert conn.status == 503
       assert Jason.decode!(conn.resp_body) == %{"status" => "starting"}
     end
 
-    test "returns 200 when in active mode" do
+    @tag connection_status: :active
+    test "returns 200 when in active mode", ctx do
       conn =
-        conn(%{connection_status: :active})
+        conn(ctx)
         |> HealthCheckPlug.call([])
 
       assert conn.status == 200
       assert Jason.decode!(conn.resp_body) == %{"status" => "active"}
     end
 
-    test "returns 503 when stopping" do
+    @tag connection_status: :stopping
+    test "returns 503 when stopping", ctx do
       conn =
-        conn(%{connection_status: :stopping})
+        conn(ctx)
         |> HealthCheckPlug.call([])
 
       assert conn.status == 503

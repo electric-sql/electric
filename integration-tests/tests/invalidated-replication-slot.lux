@@ -6,7 +6,7 @@
 
 [my invalidated_slot_error=
   """
-  [error] GenServer Electric.Connection.Manager terminating
+  [error] :gen_statem {Electric.Registry.Processes, {Electric.Postgres.ReplicationClient, :default, "integration_test_tenant"}} terminating
   ** (Postgrex.Error) ERROR 55000 (object_not_in_prerequisite_state) cannot read from logical replication slot "electric_slot_integration"
 
   This slot has been invalidated because it exceeded the maximum reserved size.

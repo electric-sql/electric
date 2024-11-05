@@ -26,6 +26,7 @@ import {
   SHAPE_ID_QUERY_PARAM,
   SHAPE_SCHEMA_HEADER,
   WHERE_QUERY_PARAM,
+  DATABASE_ID_QUERY_PARAM,
 } from './constants'
 
 /**
@@ -37,6 +38,13 @@ export interface ShapeStreamOptions<T = never> {
    * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape/foo`
    */
   url: string
+
+  /**
+   * Which database to use.
+   * This is optional unless Electric is used with multiple databases.
+   */
+  databaseId?: string
+
   /**
    * The where clauses for the shape.
    */
@@ -158,6 +166,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #isUpToDate: boolean = false
   #connected: boolean = false
   #shapeId?: string
+  #databaseId?: string
   #schema?: Schema
   #error?: unknown
 
@@ -167,6 +176,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
     this.#shapeId = this.options.shapeId
+    this.#databaseId = this.options.databaseId
     this.#messageParser = new MessageParser<T>(options.parser)
 
     const baseFetchClient =
@@ -225,6 +235,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         if (this.#shapeId) {
           // This should probably be a header for better cache breaking?
           fetchUrl.searchParams.set(SHAPE_ID_QUERY_PARAM, this.#shapeId!)
+        }
+
+        if (this.#databaseId) {
+          fetchUrl.searchParams.set(DATABASE_ID_QUERY_PARAM, this.#databaseId!)
         }
 
         let response!: Response

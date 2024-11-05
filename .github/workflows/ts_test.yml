@@ -70,6 +70,8 @@ jobs:
     defaults:
       run:
         working-directory: ${{ matrix.package_dir }}
+    env:
+      DATABASE_ID: ci_test_tenant
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
@@ -111,7 +113,7 @@ jobs:
             mix run --no-halt &
 
           wait-on: |
-            http-get://localhost:3000/v1/health
+            http-get://localhost:3000/v1/health?database_id=${{ env.DATABASE_ID }}
 
           tail: true
           log-output-resume: stderr

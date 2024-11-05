@@ -12,16 +12,17 @@ defmodule Electric.ShapeCache.StorageTest do
   test "should pass through the calls to the storage module" do
     storage = {Mock.Storage, :opts}
     shape_id = "test"
+    tenant_id = "test_tenant"
 
     Mock.Storage
-    |> Mox.stub(:for_shape, fn ^shape_id, :opts -> {shape_id, :opts} end)
+    |> Mox.stub(:for_shape, fn ^shape_id, ^tenant_id, :opts -> {shape_id, :opts} end)
     |> Mox.expect(:make_new_snapshot!, fn _, {^shape_id, :opts} -> :ok end)
     |> Mox.expect(:snapshot_started?, fn {^shape_id, :opts} -> true end)
     |> Mox.expect(:get_snapshot, fn {^shape_id, :opts} -> {1, []} end)
     |> Mox.expect(:append_to_log!, fn _, {^shape_id, :opts} -> :ok end)
     |> Mox.expect(:get_log_stream, fn _, _, {^shape_id, :opts} -> [] end)
 
-    shape_storage = Storage.for_shape(shape_id, storage)
+    shape_storage = Storage.for_shape(shape_id, tenant_id, storage)
 
     Storage.make_new_snapshot!([], shape_storage)
     Storage.snapshot_started?(shape_storage)
@@ -32,15 +33,17 @@ defmodule Electric.ShapeCache.StorageTest do
 
   test "get_log_stream/4 correctly guards offset ordering" do
     storage = {Mock.Storage, :opts}
+    shape_id = "test"
+    tenant_id = "test_tenant"
 
     Mock.Storage
-    |> Mox.stub(:for_shape, fn shape_id, :opts -> {shape_id, :opts} end)
+    |> Mox.stub(:for_shape, fn shape_id, _, :opts -> {shape_id, :opts} end)
     |> Mox.expect(:get_log_stream, fn _, _, {_shape_id, :opts} -> [] end)
 
     l1 = LogOffset.new(26_877_408, 10)
     l2 = LogOffset.new(26_877_648, 0)
 
-    shape_storage = Storage.for_shape("test", storage)
+    shape_storage = Storage.for_shape(shape_id, tenant_id, storage)
 
     Storage.get_log_stream(l1, l2, shape_storage)
 

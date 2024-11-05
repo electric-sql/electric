@@ -4,8 +4,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # The halt/1 function is redefined further down below
   import Plug.Conn, except: [halt: 1]
-
-  alias OpenTelemetry.SemConv, as: SC
+  import Electric.Plug.TenantUtils
 
   alias Electric.Shapes
   alias Electric.Schema
@@ -178,6 +177,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # start_telemetry_span needs to always be the first plug after fetching query params.
   plug :start_telemetry_span
   plug :put_resp_content_type, "application/json"
+  plug :load_tenant
   plug :validate_query_params
   plug :load_shape_info
   plug :put_schema_header
@@ -313,10 +313,10 @@ defmodule Electric.Plug.ServeShapePlug do
   # If chunk offsets are available, use those instead of the latest available offset
   # to optimize for cache hits and response sizes
   defp determine_log_chunk_offset(%Conn{assigns: assigns} = conn, _) do
-    %{config: config, active_shape_id: shape_id, offset: offset} = assigns
+    %{config: config, active_shape_id: shape_id, offset: offset, tenant_id: tenant_id} = assigns
 
     chunk_end_offset =
-      Shapes.get_chunk_end_log_offset(config, shape_id, offset) || assigns.last_offset
+      Shapes.get_chunk_end_log_offset(config, shape_id, offset, tenant_id) || assigns.last_offset
 
     conn
     |> assign(:chunk_end_offset, chunk_end_offset)
@@ -432,14 +432,15 @@ defmodule Electric.Plug.ServeShapePlug do
            assigns: %{
              chunk_end_offset: chunk_end_offset,
              active_shape_id: shape_id,
+             tenant_id: tenant_id,
              up_to_date: maybe_up_to_date
            }
          } = conn
        ) do
-    case Shapes.get_snapshot(conn.assigns.config, shape_id) do
+    case Shapes.get_snapshot(conn.assigns.config, shape_id, tenant_id) do
       {:ok, {offset, snapshot}} ->
         log =
-          Shapes.get_log_stream(conn.assigns.config, shape_id,
+          Shapes.get_log_stream(conn.assigns.config, shape_id, tenant_id,
             since: offset,
             up_to: chunk_end_offset
           )
@@ -475,12 +476,13 @@ defmodule Electric.Plug.ServeShapePlug do
              offset: offset,
              chunk_end_offset: chunk_end_offset,
              active_shape_id: shape_id,
+             tenant_id: tenant_id,
              up_to_date: maybe_up_to_date
            }
          } = conn
        ) do
     log =
-      Shapes.get_log_stream(conn.assigns.config, shape_id,
+      Shapes.get_log_stream(conn.assigns.config, shape_id, tenant_id,
         since: offset,
         up_to: chunk_end_offset
       )
@@ -547,8 +549,12 @@ defmodule Electric.Plug.ServeShapePlug do
 
       ref = make_ref()
       registry = conn.assigns.config[:registry]
-      Registry.register(registry, shape_id, ref)
-      Logger.debug("Client #{inspect(self())} is registered for changes to #{shape_id}")
+      tenant = conn.assigns.tenant_id
+      Registry.register(registry, {tenant, shape_id}, ref)
+
+      Logger.debug(
+        "[Tenant #{tenant}]: Client #{inspect(self())} is registered for changes to #{shape_id}"
+      )
 
       assign(conn, :new_changes_ref, ref)
     else
@@ -597,16 +603,10 @@ defmodule Electric.Plug.ServeShapePlug do
         conn.query_params["shape_id"] || assigns[:active_shape_id] || assigns[:shape_id]
       end
 
-    query_params_map =
-      if is_struct(conn.query_params, Plug.Conn.Unfetched) do
-        %{}
-      else
-        Map.new(conn.query_params, fn {k, v} -> {"http.query_param.#{k}", v} end)
-      end
-
     maybe_up_to_date = if up_to_date = assigns[:up_to_date], do: up_to_date != []
 
-    %{
+    Electric.Plug.Utils.common_open_telemetry_attrs(conn)
+    |> Map.merge(%{
       "shape.id" => shape_id,
       "shape.where" => assigns[:where],
       "shape.root_table" => assigns[:root_table],
@@ -619,54 +619,8 @@ defmodule Electric.Plug.ServeShapePlug do
       "shape_req.is_immediate_response" => assigns[:ot_is_immediate_response] || true,
       "shape_req.is_cached" => if(conn.status, do: conn.status == 304),
       "shape_req.is_error" => if(conn.status, do: conn.status >= 400),
-      "shape_req.is_up_to_date" => maybe_up_to_date,
-      "error.type" => assigns[:error_str],
-      "http.request_id" => assigns[:plug_request_id],
-      "http.query_string" => conn.query_string,
-      SC.ClientAttributes.client_address() => client_ip(conn),
-      SC.ServerAttributes.server_address() => conn.host,
-      SC.ServerAttributes.server_port() => conn.port,
-      SC.HTTPAttributes.http_request_method() => conn.method,
-      SC.HTTPAttributes.http_response_status_code() => conn.status,
-      SC.Incubating.HTTPAttributes.http_response_size() => assigns[:streaming_bytes_sent],
-      SC.NetworkAttributes.network_transport() => :tcp,
-      SC.NetworkAttributes.network_local_port() => conn.port,
-      SC.UserAgentAttributes.user_agent_original() => user_agent(conn),
-      SC.Incubating.URLAttributes.url_path() => conn.request_path,
-      SC.URLAttributes.url_scheme() => conn.scheme,
-      SC.URLAttributes.url_full() =>
-        %URI{
-          scheme: to_string(conn.scheme),
-          host: conn.host,
-          port: conn.port,
-          path: conn.request_path,
-          query: conn.query_string
-        }
-        |> to_string()
-    }
-    |> Map.filter(fn {_k, v} -> not is_nil(v) end)
-    |> Map.merge(query_params_map)
-    |> Map.merge(Map.new(conn.req_headers, fn {k, v} -> {"http.request.header.#{k}", v} end))
-    |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.response.header.#{k}", v} end))
-  end
-
-  defp client_ip(%Conn{remote_ip: remote_ip} = conn) do
-    case get_req_header(conn, "x-forwarded-for") do
-      [] ->
-        remote_ip
-        |> :inet_parse.ntoa()
-        |> to_string()
-
-      [ip_address | _] ->
-        ip_address
-    end
-  end
-
-  defp user_agent(%Conn{} = conn) do
-    case get_req_header(conn, "user-agent") do
-      [] -> ""
-      [head | _] -> head
-    end
+      "shape_req.is_up_to_date" => maybe_up_to_date
+    })
   end
 
   #

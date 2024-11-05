@@ -301,5 +301,11 @@ defmodule Electric.Utils do
     Keyword.update!(connection_opts, :password, fn passw -> passw.() end)
   end
 
+  @doc """
+  Apply a function to each value of a map.
+  """
+  @spec map_values(map(), (term() -> term())) :: map()
+  def map_values(map, fun), do: Map.new(map, fn {k, v} -> {k, fun.(v)} end)
+
   defp wrap_in_fun(val), do: fn -> val end
 end

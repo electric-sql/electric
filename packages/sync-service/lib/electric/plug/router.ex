@@ -21,14 +21,19 @@ defmodule Electric.Plug.Router do
 
   get "/v1/health", to: Electric.Plug.HealthCheckPlug
 
-  match _,
-    do: send_resp(conn, 404, "Not found")
+  post "/v1/admin/database", to: Electric.Plug.AddDatabasePlug
+  delete "/v1/admin/database/:database_id", to: Electric.Plug.RemoveDatabasePlug
+
+  match _, do: send_resp(conn, 404, "Not found")
 
   def server_header(conn, version),
     do: conn |> Plug.Conn.put_resp_header("server", "ElectricSQL/#{version}")
 
   def put_cors_headers(%Plug.Conn{path_info: ["v1", "shape", _ | _]} = conn, _opts),
     do: CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD", "DELETE", "OPTIONS"]})
+
+  def put_cors_headers(%Plug.Conn{path_info: ["v1", "admin", _ | _]} = conn, _opts),
+    do: CORSHeaderPlug.call(conn, %{methods: ["GET", "POST", "DELETE", "OPTIONS"]})
 
   def put_cors_headers(conn, _opts),
     do: CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD"]})

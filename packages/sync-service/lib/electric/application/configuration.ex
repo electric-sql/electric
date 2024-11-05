@@ -6,13 +6,9 @@ defmodule Electric.Application.Configuration do
 
   defstruct ~w[
     electric_instance_id
-    storage
     persistent_kv
-    connection_opts
     replication_opts
     pool_opts
-    inspector
-    shape_cache_opts
   ]a
 
   @type t :: %__MODULE__{}
