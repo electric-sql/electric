@@ -79,7 +79,8 @@ export default {
     const ELECTRIC_URL = 'https://my-electric.example.com'
 
     const stream = new ShapeStream({
-      url: `https://${ELECTRIC_URL}/v1/shape/routes`,
+      url: `${ELECTRIC_URL}/v1/shape`,
+      table: 'routes'
     })
     const shape = new Shape(stream)
     const routes = await shape.value

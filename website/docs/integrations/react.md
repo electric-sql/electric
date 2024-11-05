@@ -34,7 +34,7 @@ import { useShape } from '@electric-sql/react'
 const MyComponent = () => {
   const { isLoading, data } = useShape<{title: string}>({
     url: `http://localhost:3000/v1/shape`,
-    table: `foo`
+    table: 'items'
   })
 
   if (isLoading) {
@@ -85,7 +85,8 @@ export interface UseShapeResult<T extends Row<unknown> = Row> {
 ```tsx
 export const clientLoader = async () => {
   return await preloadShape({
-    url: `http://localhost:3000/v1/shape/items`
+    url: `http://localhost:3000/v1/shape`,
+    table: 'items'
   })
 }
 ```
@@ -98,7 +99,8 @@ It takes the same options as [ShapeStream](/docs/api/clients/typescript#options)
 
 ```tsx
 const itemsStream = getShapeStream<Item>({
-  url: `http://localhost:3000/v1/shape/items`
+  url: `http://localhost:3000/v1/shape`,
+  table: 'items'
 })
 ```
 

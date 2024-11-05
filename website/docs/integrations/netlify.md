@@ -32,8 +32,11 @@ Netlify is a great choice for deploying client-side web apps that use Electric.
 Copy the URL to your Electric instance and use it when [syncing data](/docs/api/clients/typescript#shape) into your app. E.g.: by [setting an environment variable](https://docs.netlify.com/environment-variables/get-started/#site-environment-variables) and using it in your code:
 
 ```tsx
+const ELECTRIC_URL = process.env.ELECTRIC_URL
+
 const stream = new ShapeStream({
-  url: `${ process.env.ELECTRIC_URL }/v1/shape/items`,
+  url: `${ELECTRIC_URL}/v1/shape`,
+  table: 'items'
 })
 ```
 

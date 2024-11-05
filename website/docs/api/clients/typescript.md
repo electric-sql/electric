@@ -29,7 +29,8 @@ These compose together, e.g.:
 import { ShapeStream } from '@electric-sql/client'
 
 const stream = new ShapeStream({
-  url: `http://localhost:3000/v1/shape/items`,
+  url: `http://localhost:3000/v1/shape`,
+  table: 'items'
 })
 const shape = new Shape(stream)
 
@@ -71,9 +72,20 @@ export interface ShapeStreamOptions<T = never> {
   /**
    * The full URL to where the Shape is hosted. This can either be the Electric
    * server directly or a proxy. E.g. for a local Electric instance, you might
-   * set `http://localhost:3000/v1/shape/items`
+   * set `http://localhost:3000/v1/shape`
    */
   url: string
+
+  /**
+   * Which database to use.
+   * This is optional unless Electric is used with multiple databases.
+   */
+  databaseId?: string
+
+  /**
+   * The root table for the shape.
+   */
+  table: string
 
   /**
    * The where clauses for the shape.

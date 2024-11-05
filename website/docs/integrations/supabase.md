@@ -94,7 +94,8 @@ import { Shape, ShapeStream } from 'npm:@electric-sql/client'
 
 Deno.serve(async (req) => {
   const stream = new ShapeStream({
-    url: '[YOUR_ELECTRIC_URL]/v1/shape/items'
+    url: '[YOUR_ELECTRIC_URL]/v1/shape',
+    table: 'items'
   })
   const shape = new Shape(stream)
   const items = [...await shape.value]
