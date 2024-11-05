@@ -27,7 +27,7 @@ Configuration options can be provided as environment variables, e.g.:
 ```shell
 docker run \
     -e "DATABASE_URL=postgresql://..." \
-    -e "DB_POOL_SIZE=10" \
+    -e "ELECTRIC_DB_POOL_SIZE=10" \
     -p 3000:3000 \
     electricsql/electric
 ```
@@ -53,10 +53,10 @@ For a secure connection, set the `sslmode` query parameter to `require`.
 
 </EnvVarConfig>
 
-### DATABASE_USE_IPV6
+### ELECTRIC_DATABASE_USE_IPV6
 
 <EnvVarConfig
-    name="DATABASE_USE_IPV6"
+    name="ELECTRIC_DATABASE_USE_IPV6"
     defaultValue="false"
     example="true">
 
@@ -64,10 +64,10 @@ Set to `true` to prioritise connecting to the database over IPv6. Electric will 
 
 </EnvVarConfig>
 
-### DB_POOL_SIZE
+### ELECTRIC_DB_POOL_SIZE
 
 <EnvVarConfig
-    name="DB_POOL_SIZE"
+    name="ELECTRIC_DB_POOL_SIZE"
     defaultValue="20"
     example="10">
 
@@ -75,10 +75,10 @@ How many connections Electric opens as a pool for handling shape queries.
 
 </EnvVarConfig>
 
-### REPLICATION_STREAM_ID
+### ELECTRIC_REPLICATION_STREAM_ID
 
 <EnvVarConfig
-    name="REPLICATION_STREAM_ID"
+    name="ELECTRIC_REPLICATION_STREAM_ID"
     defaultValue="default"
     example="my-app">
 
@@ -110,10 +110,10 @@ Name of the electric service. Used as a resource identifier and namespace.
 
 </EnvVarConfig>
 
-### ENABLE_INTEGRATION_TESTING
+### ELECTRIC_ENABLE_INTEGRATION_TESTING
 
 <EnvVarConfig
-    name="ENABLE_INTEGRATION_TESTING"
+    name="ELECTRIC_ENABLE_INTEGRATION_TESTING"
     defaultValue="false"
     example="true">
 
@@ -122,10 +122,10 @@ Do not enable this production.
 
 </EnvVarConfig>
 
-### LISTEN_ON_IPV6
+### ELECTRIC_LISTEN_ON_IPV6
 
 <EnvVarConfig
-    name="LISTEN_ON_IPV6"
+    name="ELECTRIC_LISTEN_ON_IPV6"
     defaultValue="false"
     example="true">
 
@@ -133,10 +133,10 @@ By default, Electric binds to IPv4. Enable this to listen on IPv6 addresses as w
 
 </EnvVarConfig>
 
-### LOG_CHUNK_BYTES_THRESHOLD
+### ELECTRIC_LOG_CHUNK_BYTES_THRESHOLD
 
 <EnvVarConfig
-    name="LOG_CHUNK_BYTES_THRESHOLD"
+    name="ELECTRIC_LOG_CHUNK_BYTES_THRESHOLD"
     defaultValue="10485760"
     example="20971520">
 
@@ -145,10 +145,10 @@ upstream caches. Defaults to 10MB (10 * 1024 * 1024). See [#1581](https://github
 
 </EnvVarConfig>
 
-### LOG_OTP_REPORTS
+### ELECTRIC_LOG_OTP_REPORTS
 
 <EnvVarConfig
-    name="LOG_OTP_REPORTS"
+    name="ELECTRIC_LOG_OTP_REPORTS"
     defaultValue="false"
     example="true">
 
@@ -156,10 +156,10 @@ Enable [OTP SASL](https://www.erlang.org/doc/apps/sasl/sasl_app.html) reporting 
 
 </EnvVarConfig>
 
-### PORT
+### ELECTRIC_PORT
 
 <EnvVarConfig
-    name="PORT"
+    name="ELECTRIC_PORT"
     defaultValue="3000"
     example="8080">
 
@@ -169,10 +169,10 @@ Port that the [HTTP API](/docs/api/http) is exposed on.
 
 ## Caching
 
-### CACHE_MAX_AGE
+### ELECTRIC_CACHE_MAX_AGE
 
 <EnvVarConfig
-    name="CACHE_MAX_AGE"
+    name="ELECTRIC_CACHE_MAX_AGE"
     defaultValue="60"
     example="5">
 
@@ -180,10 +180,10 @@ Default `max-age` for the cache headers of the HTTP API.
 
 </EnvVarConfig>
 
-### CACHE_STALE_AGE
+### ElECTRIC_CACHE_STALE_AGE
 
 <EnvVarConfig
-    name="CACHE_STALE_AGE"
+    name="ELECTRIC_CACHE_STALE_AGE"
     defaultValue="300"
     example="5">
 
@@ -193,10 +193,10 @@ Default `stale-age` for the cache headers of the HTTP API.
 
 ## Storage
 
-### PERSISTENT_STATE
+### ELECTRIC_PERSISTENT_STATE
 
 <EnvVarConfig
-    name="PERSISTENT_STATE"
+    name="ELECTRIC_PERSISTENT_STATE"
     defaultValue="FILE"
     example="MEMORY">
 
@@ -205,10 +205,10 @@ If provided must be one of `MEMORY` or `FILE`.
 
 </EnvVarConfig>
 
-### STORAGE
+### ELECTRIC_STORAGE
 
 <EnvVarConfig
-    name="STORAGE"
+    name="ELECTRIC_STORAGE"
     defaultValue="FILE"
     example="MEMORY">
 
@@ -217,10 +217,10 @@ If provided must be one of `MEMORY` or `FILE`.
 
 </EnvVarConfig>
 
-### STORAGE_DIR
+### ELECTRIC_STORAGE_DIR
 
 <EnvVarConfig
-    name="STORAGE_DIR"
+    name="ELECTRIC_STORAGE_DIR"
     defaultValue="./persistent"
     example="/var/example">
 
@@ -230,10 +230,10 @@ Path to root folder for storing data on the filesystem.
 
 ## Telemetry
 
-### OTLP_ENDPOINT
+### ELECTRIC_OTLP_ENDPOINT
 
 <EnvVarConfig
-    name="OTLP_ENDPOINT"
+    name="ELECTRIC_OTLP_ENDPOINT"
     optional="true"
     example="https://example.com">
 
@@ -242,10 +242,10 @@ to enable telemetry.
 
 </EnvVarConfig>
 
-### OTEL_DEBUG
+### ELECTRIC_OTEL_DEBUG
 
 <EnvVarConfig
-    name="OTEL_DEBUG"
+    name="ELECTRIC_OTEL_DEBUG"
     defaultValue="false"
     example="true">
 
@@ -253,10 +253,10 @@ Debug tracing by printing spans to stdout, without batching.
 
 </EnvVarConfig>
 
-### HNY_API_KEY
+### ELECTRIC_HNY_API_KEY
 
 <EnvVarConfig
-    name="HNY_API_KEY"
+    name="ELECTRIC_HNY_API_KEY"
     optional="true"
     example="your-api-key">
 
@@ -265,10 +265,10 @@ export traces directly to Honeycomb, without the need to run an OpenTelemetry Co
 
 </EnvVarConfig>
 
-### HNY_DATASET
+### ELECTRIC_HNY_DATASET
 
 <EnvVarConfig
-    name="HNY_DATASET"
+    name="ELECTRIC_HNY_DATASET"
     optional="true"
     example="your-dataset-name">
 
@@ -276,10 +276,10 @@ Name of your Honeycomb Dataset.
 
 </EnvVarConfig>
 
-### PROMETHEUS_PORT
+### ELECTRIC_PROMETHEUS_PORT
 
 <EnvVarConfig
-    name="PROMETHEUS_PORT"
+    name="ELECTRIC_PROMETHEUS_PORT"
     optional="true"
     example="9090">
 
@@ -287,10 +287,10 @@ Expose a prometheus reporter for telemetry data on the specified port.
 
 </EnvVarConfig>
 
-### STATSD_HOST
+### ELECTRIC_STATSD_HOST
 
 <EnvVarConfig
-    name="STATSD_HOST"
+    name="ELECTRIC_STATSD_HOST"
     optional="true"
     example="https://example.com">
 
