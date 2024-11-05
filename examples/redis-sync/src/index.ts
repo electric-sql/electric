@@ -33,7 +33,8 @@ client.connect().then(async () => {
   const updateKeyScriptSha1 = await client.SCRIPT_LOAD(script)
 
   const itemsStream = new ShapeStream({
-    url: `http://localhost:3000/v1/shape/items`,
+    url: `http://localhost:3000/v1/shape`,
+    table: `items`,
   })
   itemsStream.subscribe(async (messages: Message[]) => {
     // Begin a Redis transaction

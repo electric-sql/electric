@@ -3,7 +3,7 @@ import { describe, expect, assert, inject } from 'vitest'
 import { exec } from 'child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable } from './support/test-context'
-import { CHUNK_LAST_OFFSET_HEADER, SHAPE_ID_HEADER } from '../src/constants'
+import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
 
 // FIXME: pull from environment?
 const maxAge = 1 // seconds
@@ -72,7 +72,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
   }) => {
     // First request get initial request
     const initialRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
 
@@ -82,13 +82,14 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     // add some data and follow with live request
     await insertIssues({ title: `foo` })
     const searchParams = new URLSearchParams({
-      offset: initialRes.headers.get(`electric-chunk-last-offset`)!,
-      shape_id: initialRes.headers.get(`electric-shape-id`)!,
+      table: issuesTableUrl,
+      handle: initialRes.headers.get(`electric-handle`)!,
+      offset: initialRes.headers.get(`electric-offset`)!,
       live: `true`,
     })
 
     const liveRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?${searchParams.toString()}`,
+      `${proxyCacheBaseUrl}/v1/shape?${searchParams.toString()}`,
       {}
     )
     expect(liveRes.status).toBe(200)
@@ -96,7 +97,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
 
     // Second request gets a cached response
     const cachedRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?${searchParams.toString()}`,
+      `${proxyCacheBaseUrl}/v1/shape?${searchParams.toString()}`,
       {}
     )
     expect(cachedRes.status).toBe(200)
@@ -110,7 +111,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
   }) => {
     // First request gets non-cached response
     const originalRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
 
@@ -119,7 +120,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
 
     // Second request gets cached response
     const cachedRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
     expect(cachedRes.status).toBe(200)
@@ -132,12 +133,12 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     issuesTableUrl,
   }) => {
     const originalRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
     const lastOffset = originalRes.headers.get(CHUNK_LAST_OFFSET_HEADER)
-    const shapeId = originalRes.headers.get(SHAPE_ID_HEADER)
-    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_id=${shapeId}`
+    const shapeHandle = originalRes.headers.get(SHAPE_HANDLE_HEADER)
+    const urlToTest = `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=${lastOffset}&handle=${shapeHandle}`
 
     // Make a first request such that response is cached
     const originalUpToDateRes = await fetch(urlToTest, {})
@@ -166,12 +167,12 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     issuesTableUrl,
   }) => {
     const originalRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
     const lastOffset = originalRes.headers.get(CHUNK_LAST_OFFSET_HEADER)
-    const shapeId = originalRes.headers.get(SHAPE_ID_HEADER)
-    const urlToTest = `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${lastOffset}&shape_id=${shapeId}`
+    const shapeHandle = originalRes.headers.get(SHAPE_HANDLE_HEADER)
+    const urlToTest = `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=${lastOffset}&handle=${shapeHandle}`
 
     // Make a first request such that response is cached
     const originalUpToDateRes = await fetch(urlToTest, {})
@@ -209,43 +210,43 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
     // Make a client that fetches a shape
     // which forces the shape data to be cached
     const client1Res = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
     expect(client1Res.status).toBe(200)
-    const originalShapeId =
-      client1Res.headers.get(`electric-shape-id`) ?? undefined
-    assert(originalShapeId, `Should have shape ID`)
+    const originalShapeHandle =
+      client1Res.headers.get(`electric-handle`) ?? undefined
+    assert(originalShapeHandle, `Should have shape handle`)
     expect(getCacheStatus(client1Res)).toBe(CacheStatus.MISS)
     //const messages = client1Res.status === 204 ? [] : await client1Res.json()
 
     // Make a 2nd client that fetches the shape
     // check that it is served from cached data
     const client2Res = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=-1`,
+      `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
     expect(client2Res.status).toBe(200)
-    const shapeId2 = client2Res.headers.get(`electric-shape-id`) ?? undefined
+    const shapeHandle2 = client2Res.headers.get(`electric-handle`) ?? undefined
 
     expect(
-      originalShapeId,
-      `Shape ID changed but expected it to stay the same`
-    ).toBe(shapeId2)
+      originalShapeHandle,
+      `Shape handle changed but expected it to stay the same`
+    ).toBe(shapeHandle2)
 
     expect(getCacheStatus(client2Res)).toBe(CacheStatus.HIT)
 
-    const latestOffset = client2Res.headers.get(`electric-chunk-last-offset`)
+    const latestOffset = client2Res.headers.get(`electric-offset`)
     assert(latestOffset, `latestOffset should be defined`)
 
     // Now GC the shape
-    await clearIssuesShape(originalShapeId)
+    await clearIssuesShape(originalShapeHandle)
 
     // Now try to go live
     // should tell you to go back to initial sync
     // because the shape is out of scope
     const liveRes = await fetch(
-      `${proxyCacheBaseUrl}/v1/shape/${issuesTableUrl}?offset=${latestOffset}&shape_id=${originalShapeId}&live`,
+      `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=${latestOffset}&handle=${originalShapeHandle}&live`,
       {}
     )
     expect(liveRes.status).toBe(409)
@@ -259,22 +260,23 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
 
     expect(newCacheIgnoredSyncRes.status).toBe(200)
     expect(getCacheStatus(newCacheIgnoredSyncRes)).toBe(CacheStatus.MISS)
-    const cacheBustedShapeId =
-      newCacheIgnoredSyncRes.headers.get(`electric-shape-id`)
-    assert(cacheBustedShapeId)
-    expect(cacheBustedShapeId).not.toBe(originalShapeId)
+    const cacheBustedShapeHandle =
+      newCacheIgnoredSyncRes.headers.get(`electric-handle`)
+    assert(cacheBustedShapeHandle)
+    expect(cacheBustedShapeHandle).not.toBe(originalShapeHandle)
 
-    // Then try do that and check that we get new shape id
+    // Then try do that and check that we get new shape handle
     const newInitialSyncRes = await fetch(
       `${proxyCacheBaseUrl}${redirectLocation}`,
       {}
     )
-    const cachedShapeId =
-      newInitialSyncRes.headers.get(`electric-shape-id`) ?? undefined
+    const cachedShapeHandle =
+      newInitialSyncRes.headers.get(`electric-handle`) ?? undefined
     expect(newInitialSyncRes.status).toBe(200)
     expect(getCacheStatus(newInitialSyncRes)).toBe(CacheStatus.HIT)
-    expect(cachedShapeId, `Got old shape id that is out of scope`).not.toBe(
-      originalShapeId
-    )
+    expect(
+      cachedShapeHandle,
+      `Got old shape handle that is out of scope`
+    ).not.toBe(originalShapeHandle)
   })
 })

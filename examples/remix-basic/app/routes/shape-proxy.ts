@@ -1,10 +1,8 @@
-export async function GET(
-  request: Request,
-  { params }: { params: { table: string } }
-) {
+import type { LoaderFunctionArgs } from "@remix-run/node"
+
+export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url)
-  const { table } = params
-  const originUrl = new URL(`http://localhost:3000/v1/shape/${table}`)
+  const originUrl = new URL(`http://localhost:3000/v1/shape`)
   url.searchParams.forEach((value, key) => {
     originUrl.searchParams.set(key, value)
   })

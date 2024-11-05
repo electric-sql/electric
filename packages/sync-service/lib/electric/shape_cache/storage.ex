@@ -6,7 +6,7 @@ defmodule Electric.ShapeCache.Storage do
   alias Electric.Replication.LogOffset
 
   @type tenant_id :: String.t()
-  @type shape_id :: Electric.ShapeCacheBehaviour.shape_id()
+  @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
   @type xmin :: Electric.ShapeCacheBehaviour.xmin()
   @type offset :: LogOffset.t()
 
@@ -26,7 +26,7 @@ defmodule Electric.ShapeCache.Storage do
   @callback shared_opts(Keyword.t()) :: compiled_opts()
 
   @doc "Initialise shape-specific opts from the shared, global, configuration"
-  @callback for_shape(shape_id(), tenant_id(), compiled_opts()) :: shape_opts()
+  @callback for_shape(shape_handle(), tenant_id(), compiled_opts()) :: shape_opts()
 
   @doc "Start any processes required to run the storage backend"
   @callback start_link(shape_opts()) :: GenServer.on_start()
@@ -39,7 +39,7 @@ defmodule Electric.ShapeCache.Storage do
 
   @doc "Retrieve all stored shapes"
   @callback get_all_stored_shapes(compiled_opts()) ::
-              {:ok, %{shape_id() => Shape.t()}} | {:error, term()}
+              {:ok, %{shape_handle() => Shape.t()}} | {:error, term()}
 
   @doc """
   Get the current xmin and offset for the shape storage.
@@ -50,14 +50,14 @@ defmodule Electric.ShapeCache.Storage do
 
   @callback set_snapshot_xmin(xmin(), shape_opts()) :: :ok
 
-  @doc "Check if snapshot for a given shape id already exists"
+  @doc "Check if snapshot for a given shape handle already exists"
   @callback snapshot_started?(shape_opts()) :: boolean()
 
   @doc "Get the full snapshot for a given shape, also returning the offset this snapshot includes"
   @callback get_snapshot(shape_opts()) :: {offset :: LogOffset.t(), log()}
 
   @doc """
-  Make a new snapshot for a shape ID based on the meta information about the table and a stream of plain string rows
+  Make a new snapshot for a shape handle based on the meta information about the table and a stream of plain string rows
 
   Should raise an error if making the snapshot had failed for any reason.
   """
@@ -92,7 +92,7 @@ defmodule Electric.ShapeCache.Storage do
   """
   @callback get_chunk_end_log_offset(LogOffset.t(), shape_opts()) :: LogOffset.t() | nil
 
-  @doc "Clean up snapshots/logs for a shape id"
+  @doc "Clean up snapshots/logs for a shape handle"
   @callback cleanup!(shape_opts()) :: :ok
 
   @behaviour __MODULE__
@@ -114,8 +114,8 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def for_shape(shape_id, tenant_id, {mod, opts}) do
-    {mod, mod.for_shape(shape_id, tenant_id, opts)}
+  def for_shape(shape_handle, tenant_id, {mod, opts}) do
+    {mod, mod.for_shape(shape_handle, tenant_id, opts)}
   end
 
   @impl __MODULE__

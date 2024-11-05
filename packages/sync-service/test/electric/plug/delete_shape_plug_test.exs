@@ -27,7 +27,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       }
     }
   }
-  @test_shape_id "test-shape-id"
+  @test_shape_handle "test-shape-handle"
   @test_pg_id "12345"
 
   def load_column_info({"public", "users"}, _),
@@ -80,7 +80,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     test "returns 404 if shape deletion is not allowed", ctx do
       conn =
         ctx
-        |> conn("DELETE", "?root_table=.invalid_shape", false)
+        |> conn("DELETE", "?table=.invalid_shape", false)
         |> DeleteShapePlug.call([])
 
       assert conn.status == 404
@@ -93,13 +93,13 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     test "returns 400 for invalid params", ctx do
       conn =
         ctx
-        |> conn("DELETE", "?root_table=.invalid_shape")
+        |> conn("DELETE", "?table=.invalid_shape")
         |> DeleteShapePlug.call([])
 
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "root_table" => [
+               "table" => [
                  "Invalid zero-length delimited identifier"
                ]
              }
@@ -117,24 +117,24 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
     test "should clean shape based on shape definition", ctx do
       Mock.ShapeCache
-      |> expect(:get_or_create_shape_id, fn @test_shape, _opts -> {@test_shape_id, 0} end)
-      |> expect(:clean_shape, fn @test_shape_id, _ -> :ok end)
+      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts -> {@test_shape_handle, 0} end)
+      |> expect(:clean_shape, fn @test_shape_handle, _ -> :ok end)
 
       conn =
         ctx
-        |> conn(:delete, "?root_table=public.users")
+        |> conn(:delete, "?table=public.users")
         |> DeleteShapePlug.call([])
 
       assert conn.status == 202
     end
 
-    test "should clean shape based on shape_id", ctx do
+    test "should clean shape based on shape_handle", ctx do
       Mock.ShapeCache
-      |> expect(:clean_shape, fn @test_shape_id, _ -> :ok end)
+      |> expect(:clean_shape, fn @test_shape_handle, _ -> :ok end)
 
       conn =
         ctx
-        |> conn(:delete, "?root_table=public.users&shape_id=#{@test_shape_id}")
+        |> conn(:delete, "?table=public.users&handle=#{@test_shape_handle}")
         |> DeleteShapePlug.call([])
 
       assert conn.status == 202

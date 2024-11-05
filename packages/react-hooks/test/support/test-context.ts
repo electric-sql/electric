@@ -10,8 +10,11 @@ export type GeneratedIssueRow = { id?: string; title: string }
 export type UpdateIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type DeleteIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type InsertIssuesFn = (...rows: GeneratedIssueRow[]) => Promise<string[]>
-export type ClearIssuesShapeFn = (shapeId?: string) => Promise<void>
-export type ClearShapeFn = (table: string, shapeId?: string) => Promise<void>
+export type ClearIssuesShapeFn = (shapeHandle?: string) => Promise<void>
+export type ClearShapeFn = (
+  table: string,
+  shapeHandle?: string
+) => Promise<void>
 
 export const testWithDbClient = test.extend<{
   dbClient: Client
@@ -35,10 +38,10 @@ export const testWithDbClient = test.extend<{
   baseUrl: async ({}, use) => use(inject(`baseUrl`)),
   pgSchema: async ({}, use) => use(inject(`testPgSchema`)),
   clearShape: async ({}, use) => {
-    use(async (table: string, shapeId?: string) => {
+    use(async (table: string, shapeHandle?: string) => {
       const baseUrl = inject(`baseUrl`)
       const resp = await fetch(
-        `${baseUrl}/v1/shape/${table}${shapeId ? `?shape_id=${shapeId}` : ``}`,
+        `${baseUrl}/v1/shape?table=${table}${shapeHandle ? `&handle=${shapeHandle}` : ``}`,
         {
           method: `DELETE`,
         }
@@ -47,10 +50,12 @@ export const testWithDbClient = test.extend<{
         console.error(
           await FetchError.fromResponse(
             resp,
-            `DELETE ${baseUrl}/v1/shape/${table}`
+            `DELETE ${baseUrl}/v1/shape?table=${table}`
           )
         )
-        throw new Error(`Could not delete shape ${table} with ID ${shapeId}`)
+        throw new Error(
+          `Could not delete shape ${table} with handle ${shapeHandle}`
+        )
       }
     })
   },
@@ -113,6 +118,6 @@ export const testWithIssuesTable = testWithDbClient.extend<{
     }),
 
   clearIssuesShape: async ({ clearShape, issuesTableUrl }, use) => {
-    use((shapeId?: string) => clearShape(issuesTableUrl, shapeId))
+    use((shapeHandle?: string) => clearShape(issuesTableUrl, shapeHandle))
   },
 })

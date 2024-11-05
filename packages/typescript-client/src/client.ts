@@ -22,11 +22,12 @@ import {
   COLUMNS_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
-  SHAPE_ID_HEADER,
-  SHAPE_ID_QUERY_PARAM,
+  SHAPE_HANDLE_HEADER,
+  SHAPE_HANDLE_QUERY_PARAM,
   SHAPE_SCHEMA_HEADER,
   WHERE_QUERY_PARAM,
   DATABASE_ID_QUERY_PARAM,
+  TABLE_QUERY_PARAM,
 } from './constants'
 
 /**
@@ -34,8 +35,8 @@ import {
  */
 export interface ShapeStreamOptions<T = never> {
   /**
-   * The full URL to where the Shape is hosted. This can either be the Electric server
-   * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape/foo`
+   * The full URL to where the Shape is served. This can either be the Electric server
+   * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape`
    */
   url: string
 
@@ -44,6 +45,11 @@ export interface ShapeStreamOptions<T = never> {
    * This is optional unless Electric is used with multiple databases.
    */
   databaseId?: string
+
+  /**
+   * The root table for the shape.
+   */
+  table: string
 
   /**
    * The where clauses for the shape.
@@ -61,7 +67,7 @@ export interface ShapeStreamOptions<T = never> {
    * will handle this automatically. A common scenario where you might pass an offset
    * is if you're maintaining a local cache of the log. If you've gone offline
    * and are re-starting a ShapeStream to catch-up to the latest state of the Shape,
-   * you'd pass in the last offset and shapeId you'd seen from the Electric server
+   * you'd pass in the last offset and shapeHandle you'd seen from the Electric server
    * so it knows at what point in the shape to catch you up from.
    */
   offset?: Offset
@@ -69,7 +75,7 @@ export interface ShapeStreamOptions<T = never> {
    * Similar to `offset`, this isn't typically used unless you're maintaining
    * a cache of the shape log.
    */
-  shapeId?: string
+  shapeHandle?: string
   backoffOptions?: BackoffOptions
 
   /**
@@ -106,7 +112,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   isConnected(): boolean
 
   isUpToDate: boolean
-  shapeId?: string
+  shapeHandle?: string
 }
 
 /**
@@ -165,7 +171,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #lastSyncedAt?: number // unix time
   #isUpToDate: boolean = false
   #connected: boolean = false
-  #shapeId?: string
+  #shapeHandle?: string
   #databaseId?: string
   #schema?: Schema
   #error?: unknown
@@ -175,7 +181,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.options = { subscribe: true, ...options }
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
-    this.#shapeId = this.options.shapeId
+    this.#shapeHandle = this.options.shapeHandle
     this.#databaseId = this.options.databaseId
     this.#messageParser = new MessageParser<T>(options.parser)
 
@@ -196,8 +202,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.start()
   }
 
-  get shapeId() {
-    return this.#shapeId
+  get shapeHandle() {
+    return this.#shapeHandle
   }
 
   get isUpToDate() {
@@ -211,7 +217,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   async start() {
     this.#isUpToDate = false
 
-    const { url, where, columns, signal } = this.options
+    const { url, table, where, columns, signal } = this.options
 
     try {
       while (
@@ -219,6 +225,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.options.subscribe
       ) {
         const fetchUrl = new URL(url)
+        fetchUrl.searchParams.set(TABLE_QUERY_PARAM, table)
         if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
         if (columns && columns.length > 0)
           fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, columns.join(`,`))
@@ -232,9 +239,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
           )
         }
 
-        if (this.#shapeId) {
+        if (this.#shapeHandle) {
           // This should probably be a header for better cache breaking?
-          fetchUrl.searchParams.set(SHAPE_ID_QUERY_PARAM, this.#shapeId!)
+          fetchUrl.searchParams.set(
+            SHAPE_HANDLE_QUERY_PARAM,
+            this.#shapeHandle!
+          )
         }
 
         if (this.#databaseId) {
@@ -253,9 +263,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
           if (!(e instanceof FetchError)) throw e // should never happen
           if (e.status == 409) {
             // Upon receiving a 409, we should start from scratch
-            // with the newly provided shape ID
-            const newShapeId = e.headers[SHAPE_ID_HEADER]
-            this.#reset(newShapeId)
+            // with the newly provided shape handle
+            const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
+            this.#reset(newShapeHandle)
             await this.#publish(e.json as Message<T>[])
             continue
           } else if (e.status >= 400 && e.status < 500) {
@@ -270,9 +280,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
 
         const { headers, status } = response
-        const shapeId = headers.get(SHAPE_ID_HEADER)
-        if (shapeId) {
-          this.#shapeId = shapeId
+        const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
+        if (shapeHandle) {
+          this.#shapeHandle = shapeHandle
         }
 
         const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
@@ -411,12 +421,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   /**
    * Resets the state of the stream, optionally with a provided
-   * shape ID
+   * shape handle
    */
-  #reset(shapeId?: string) {
+  #reset(shapeHandle?: string) {
     this.#lastOffset = `-1`
     this.#liveCacheBuster = ``
-    this.#shapeId = shapeId
+    this.#shapeHandle = shapeHandle
     this.#isUpToDate = false
     this.#connected = false
     this.#schema = undefined
@@ -425,7 +435,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
 function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (!options.url) {
-    throw new Error(`Invalid shape option. It must provide the url`)
+    throw new Error(`Invalid shape options. It must provide the url`)
+  }
+  if (!options.table) {
+    throw new Error(`Invalid shape options. It must provide the table`)
   }
   if (options.signal && !(options.signal instanceof AbortSignal)) {
     throw new Error(
@@ -436,10 +449,10 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (
     options.offset !== undefined &&
     options.offset !== `-1` &&
-    !options.shapeId
+    !options.shapeHandle
   ) {
     throw new Error(
-      `shapeId is required if this isn't an initial fetch (i.e. offset > -1)`
+      `shapeHandle is required if this isn't an initial fetch (i.e. offset > -1)`
     )
   }
   return

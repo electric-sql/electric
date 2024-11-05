@@ -17,14 +17,18 @@ defmodule Electric.Shapes.Consumer do
   @initial_log_state %{current_chunk_byte_size: 0}
 
   def name(
-        %{electric_instance_id: electric_instance_id, tenant_id: tenant_id, shape_id: shape_id} =
+        %{
+          electric_instance_id: electric_instance_id,
+          tenant_id: tenant_id,
+          shape_handle: shape_handle
+        } =
           _config
       ) do
-    name(electric_instance_id, tenant_id, shape_id)
+    name(electric_instance_id, tenant_id, shape_handle)
   end
 
-  def name(electric_instance_id, tenant_id, shape_id) when is_binary(shape_id) do
-    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_id)
+  def name(electric_instance_id, tenant_id, shape_handle) when is_binary(shape_handle) do
+    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_handle)
   end
 
   def initial_state(consumer) do
@@ -33,17 +37,17 @@ defmodule Electric.Shapes.Consumer do
 
   @doc false
   # use in tests to avoid race conditions. registers `pid` to be notified
-  # when the `shape_id` consumer has processed every transaction.
+  # when the `shape_handle` consumer has processed every transaction.
   # Transactions that we skip because of xmin logic do not generate
   # a notification
-  @spec monitor(atom(), String.t(), ShapeCache.shape_id(), pid()) :: reference()
-  def monitor(electric_instance_id, tenant_id, shape_id, pid \\ self()) do
-    GenStage.call(name(electric_instance_id, tenant_id, shape_id), {:monitor, pid})
+  @spec monitor(atom(), String.t(), ShapeCache.shape_handle(), pid()) :: reference()
+  def monitor(electric_instance_id, tenant_id, shape_handle, pid \\ self()) do
+    GenStage.call(name(electric_instance_id, tenant_id, shape_handle), {:monitor, pid})
   end
 
-  @spec whereis(atom(), String.t(), ShapeCache.shape_id()) :: pid() | nil
-  def whereis(electric_instance_id, tenant_id, shape_id) do
-    GenServer.whereis(name(electric_instance_id, tenant_id, shape_id))
+  @spec whereis(atom(), String.t(), ShapeCache.shape_handle()) :: pid() | nil
+  def whereis(electric_instance_id, tenant_id, shape_handle) do
+    GenServer.whereis(name(electric_instance_id, tenant_id, shape_handle))
   end
 
   def start_link(config) when is_map(config) do
@@ -54,7 +58,7 @@ defmodule Electric.Shapes.Consumer do
     %{log_producer: producer, storage: storage, shape_status: {shape_status, shape_status_state}} =
       config
 
-    Logger.metadata(shape_id: config.shape_id)
+    Logger.metadata(shape_handle: config.shape_handle)
 
     Process.flag(:trap_exit, true)
 
@@ -68,7 +72,7 @@ defmodule Electric.Shapes.Consumer do
     :ok =
       shape_status.initialise_shape(
         shape_status_state,
-        config.shape_id,
+        config.shape_handle,
         snapshot_xmin,
         latest_offset
       )
@@ -123,32 +127,38 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_call(:await_snapshot_start, from, %{awaiting_snapshot_start: waiters} = state) do
-    Logger.debug("Starting a wait on the snapshot #{state.shape_id} for #{inspect(from)}}")
+    Logger.debug("Starting a wait on the snapshot #{state.shape_handle} for #{inspect(from)}}")
 
     {:noreply, [], %{state | awaiting_snapshot_start: [from | waiters]}}
   end
 
-  def handle_cast({:snapshot_xmin_known, shape_id, xmin}, %{shape_id: shape_id} = state) do
-    Logger.debug("Snapshot xmin known shape_id: #{shape_id} xmin: #{xmin}")
+  def handle_cast(
+        {:snapshot_xmin_known, shape_handle, xmin},
+        %{shape_handle: shape_handle} = state
+      ) do
+    Logger.debug("Snapshot xmin known shape_handle: #{shape_handle} xmin: #{xmin}")
     state = set_snapshot_xmin(xmin, state)
     handle_txns(state.buffer, %{state | buffer: []})
   end
 
-  def handle_cast({:snapshot_started, shape_id}, %{shape_id: shape_id} = state) do
-    Logger.debug("Snapshot started shape_id: #{shape_id}")
+  def handle_cast({:snapshot_started, shape_handle}, %{shape_handle: shape_handle} = state) do
+    Logger.debug("Snapshot started shape_handle: #{shape_handle}")
     state = set_snapshot_started(state)
     {:noreply, [], state}
   end
 
-  def handle_cast({:snapshot_failed, shape_id, error, stacktrace}, %{shape_id: shape_id} = state) do
+  def handle_cast(
+        {:snapshot_failed, shape_handle, error, stacktrace},
+        %{shape_handle: shape_handle} = state
+      ) do
     if match?(%DBConnection.ConnectionError{reason: :queue_timeout}, error),
       do:
         Logger.warning(
-          "Snapshot creation failed for #{shape_id} because of a connection pool queue timeout"
+          "Snapshot creation failed for #{shape_handle} because of a connection pool queue timeout"
         ),
       else:
         Logger.error(
-          "Snapshot creation failed for #{shape_id} because of:\n#{Exception.format(:error, error, stacktrace)}"
+          "Snapshot creation failed for #{shape_handle} because of:\n#{Exception.format(:error, error, stacktrace)}"
         )
 
     state = reply_to_snapshot_waiters({:error, error}, state)
@@ -156,7 +166,7 @@ defmodule Electric.Shapes.Consumer do
     {:stop, :normal, state}
   end
 
-  def handle_cast({:snapshot_exists, shape_id}, %{shape_id: shape_id} = state) do
+  def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
     state = set_snapshot_xmin(state.snapshot_xmin, state)
     state = set_snapshot_started(state)
     {:noreply, [], state}
@@ -172,7 +182,7 @@ defmodule Electric.Shapes.Consumer do
     %{shape: %{root_table: root_table}, inspector: {inspector, inspector_opts}} = state
 
     Logger.info(
-      "Schema for the table #{Utils.inspect_relation(root_table)} changed - terminating shape #{state.shape_id}"
+      "Schema for the table #{Utils.inspect_relation(root_table)} changed - terminating shape #{state.shape_handle}"
     )
 
     # We clean up the relation info from ETS as it has changed and we want
@@ -192,7 +202,7 @@ defmodule Electric.Shapes.Consumer do
   # Buffer incoming transactions until we know our xmin
   def handle_events([%Transaction{xid: xid}] = txns, _from, %{snapshot_xmin: nil} = state) do
     Logger.debug(fn ->
-      "Consumer for #{state.shape_id} buffering 1 transaction with xid #{xid}"
+      "Consumer for #{state.shape_handle} buffering 1 transaction with xid #{xid}"
     end)
 
     {:noreply, [], %{state | buffer: state.buffer ++ txns}}
@@ -222,7 +232,8 @@ defmodule Electric.Shapes.Consumer do
 
   defp handle_txn(%Transaction{} = txn, state) do
     ot_attrs =
-      [xid: txn.xid, num_changes: length(txn.changes)] ++ shape_attrs(state.shape_id, state.shape)
+      [xid: txn.xid, num_changes: length(txn.changes)] ++
+        shape_attrs(state.shape_handle, state.shape)
 
     OpenTelemetry.with_span("shape_write.consumer.handle_txn", ot_attrs, fn ->
       do_handle_txn(txn, state)
@@ -232,7 +243,7 @@ defmodule Electric.Shapes.Consumer do
   defp do_handle_txn(%Transaction{} = txn, state) do
     %{
       shape: shape,
-      shape_id: shape_id,
+      shape_handle: shape_handle,
       tenant_id: tenant_id,
       log_state: log_state,
       chunk_bytes_threshold: chunk_bytes_threshold,
@@ -251,12 +262,12 @@ defmodule Electric.Shapes.Consumer do
       Enum.any?(relevant_changes, &is_struct(&1, Changes.TruncatedRelation)) ->
         # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
         #       present in the transaction, we're considering the whole transaction empty, and
-        #       just rotate the shape id. "Correct" way to handle truncates is to be designed.
+        #       just rotate the shape handle. "Correct" way to handle truncates is to be designed.
         Logger.warning(
-          "Truncate operation encountered while processing txn #{txn.xid} for #{shape_id}"
+          "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
         )
 
-        :ok = shape_cache.handle_truncate(shape_id, shape_cache_opts)
+        :ok = shape_cache.handle_truncate(shape_handle, shape_cache_opts)
 
         :ok = ShapeCache.Storage.cleanup!(storage)
 
@@ -270,9 +281,9 @@ defmodule Electric.Shapes.Consumer do
         #       Right now we'll just fail everything
         :ok = ShapeCache.Storage.append_to_log!(log_entries, storage)
 
-        shape_cache.update_shape_latest_offset(shape_id, last_log_offset, shape_cache_opts)
+        shape_cache.update_shape_latest_offset(shape_handle, last_log_offset, shape_cache_opts)
 
-        notify_listeners(registry, :new_changes, tenant_id, shape_id, last_log_offset)
+        notify_listeners(registry, :new_changes, tenant_id, shape_handle, last_log_offset)
 
         {:cont, notify(txn, %{state | log_state: new_log_state})}
 
@@ -285,10 +296,10 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp notify_listeners(registry, :new_changes, tenant_id, shape_id, latest_log_offset) do
-    Registry.dispatch(registry, {tenant_id, shape_id}, fn registered ->
+  defp notify_listeners(registry, :new_changes, tenant_id, shape_handle, latest_log_offset) do
+    Registry.dispatch(registry, {tenant_id, shape_handle}, fn registered ->
       Logger.debug(fn ->
-        "[Tenant #{tenant_id}]: Notifying ~#{length(registered)} clients about new changes to #{shape_id}"
+        "[Tenant #{tenant_id}]: Notifying ~#{length(registered)} clients about new changes to #{shape_handle}"
       end)
 
       for {pid, ref} <- registered,
@@ -301,13 +312,13 @@ defmodule Electric.Shapes.Consumer do
     set_snapshot_xmin(xmin, %{state | snapshot_xmin: xmin})
   end
 
-  defp set_snapshot_xmin(xmin, %{snapshot_xmin: xmin, shape_id: shape_id} = state) do
+  defp set_snapshot_xmin(xmin, %{snapshot_xmin: xmin, shape_handle: shape_handle} = state) do
     %{shape_status: {shape_status, shape_status_state}} = state
 
-    unless shape_status.set_snapshot_xmin(shape_status_state, shape_id, xmin),
+    unless shape_status.set_snapshot_xmin(shape_status_state, shape_handle, xmin),
       do:
         Logger.warning(
-          "Got snapshot information for a #{shape_id}, that shape id is no longer valid. Ignoring."
+          "Got snapshot information for a #{shape_handle}, that shape id is no longer valid. Ignoring."
         )
 
     state
@@ -318,15 +329,15 @@ defmodule Electric.Shapes.Consumer do
     set_snapshot_started(%{state | snapshot_started: true})
   end
 
-  defp set_snapshot_started(%{shape_id: shape_id} = state) do
+  defp set_snapshot_started(%{shape_handle: shape_handle} = state) do
     %{shape_status: {shape_status, shape_status_state}} = state
-    :ok = shape_status.mark_snapshot_started(shape_status_state, shape_id)
+    :ok = shape_status.mark_snapshot_started(shape_status_state, shape_handle)
     reply_to_snapshot_waiters(:started, state)
   end
 
   defp cleanup(state) do
     %{shape_status: {shape_status, shape_status_state}} = state
-    shape_status.remove_shape(shape_status_state, state.shape_id)
+    shape_status.remove_shape(shape_status_state, state.shape_handle)
     ShapeCache.Storage.cleanup!(state.storage)
     state
   end
@@ -385,7 +396,11 @@ defmodule Electric.Shapes.Consumer do
     {log_items, new_log_state}
   end
 
-  defp shape_attrs(shape_id, shape) do
-    ["shape.id": shape_id, "shape.root_table": shape.root_table, "shape.where": shape.where]
+  defp shape_attrs(shape_handle, shape) do
+    [
+      "shape.handle": shape_handle,
+      "shape.root_table": shape.root_table,
+      "shape.where": shape.where
+    ]
   end
 end

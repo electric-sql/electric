@@ -12,12 +12,14 @@ describe(`sortedOptionsHash`, () => {
     `should create the same hash from options sorted in different ways`,
     () => {
       const hash1 = sortedOptionsHash({
-        url: `http://whatever/foo`,
+        url: `http://whatever`,
+        table: `foo`,
         offset: `-1`,
       })
       const hash2 = sortedOptionsHash({
         offset: `-1`,
-        url: `http://whatever/foo`,
+        table: `foo`,
+        url: `http://whatever`,
       })
       expect(hash1).toEqual(hash2)
     }
@@ -28,7 +30,8 @@ describe(`useShape`, () => {
   it(`should sync an empty shape`, async ({ aborter, issuesTableUrl }) => {
     const { result } = renderHook(() =>
       useShape({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         signal: aborter.signal,
         subscribe: false,
       })
@@ -49,7 +52,8 @@ describe(`useShape`, () => {
 
     const { result } = renderHook(() =>
       useShape({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         signal: aborter?.signal,
         subscribe: false,
       })
@@ -68,7 +72,8 @@ describe(`useShape`, () => {
     const manualAborter = new AbortController()
     renderHook(() =>
       useShape({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         signal: manualAborter.signal,
         subscribe: false,
       })
@@ -80,7 +85,8 @@ describe(`useShape`, () => {
 
     const { result } = renderHook(() =>
       useShape({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         signal: aborter?.signal,
         subscribe: false,
       })
@@ -94,7 +100,8 @@ describe(`useShape`, () => {
   it(`should expose isLoading status`, async ({ issuesTableUrl }) => {
     const { result } = renderHook(() =>
       useShape({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         fetchClient: async (input, init) => {
           await sleep(10)
           return fetch(input, init)
@@ -112,7 +119,8 @@ describe(`useShape`, () => {
   }) => {
     const { result } = renderHook(() =>
       useShape({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         fetchClient: async (input, init) => {
           await sleep(50)
           return fetch(input, init)
@@ -139,13 +147,15 @@ describe(`useShape`, () => {
 
     const { result } = renderHook(() =>
       useShape({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         signal: aborter.signal,
         subscribe: true,
       })
     )
 
     await waitFor(() => expect(result.current.data).not.toEqual([]))
+    await sleep(100) // TODO: remove later, just testing if this improves flakes
 
     // Add an item.
     const [id2] = await insertIssues({ title: `other row` })
@@ -170,7 +180,8 @@ describe(`useShape`, () => {
 
     const { result, rerender } = renderHook((options) => useShape(options), {
       initialProps: {
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         where: `id = '${id}'`,
         signal: aborter.signal,
         subscribe: true,
@@ -182,7 +193,8 @@ describe(`useShape`, () => {
     )
 
     rerender({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       where: `id = '${id2}'`,
       signal: aborter.signal,
       subscribe: true,
@@ -203,7 +215,8 @@ describe(`useShape`, () => {
 
     const { result } = renderHook(() =>
       useShape({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         signal: aborter.signal,
         subscribe: true,
         selector: (result) => {
@@ -249,7 +262,8 @@ describe(`useShape`, () => {
     const { result, rerender } = renderHook(
       ({ selector }) =>
         useShape({
-          url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+          url: `${BASE_URL}/v1/shape`,
+          table: issuesTableUrl,
           signal: aborter.signal,
           subscribe: true,
           selector: selector,
@@ -277,7 +291,8 @@ describe(`useShape`, () => {
 
     const { result, unmount } = renderHook(() =>
       useShape({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         signal: aborter.signal,
         subscribe: true,
       })
@@ -292,7 +307,7 @@ describe(`useShape`, () => {
     // And wait until it's definitely seen
     await waitFor(async () => {
       const res = await fetch(
-        `${BASE_URL}/v1/shape/${issuesTableUrl}?offset=-1`
+        `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`
       )
       const body = (await res.json()) as Message[]
       expect(body).toMatchObject([{}, { value: { id: newId } }])

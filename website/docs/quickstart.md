@@ -36,13 +36,13 @@ First let's try the low-level [HTTP API](/docs/api/http).
 In a new terminal, use `curl` to request a [Shape](/docs/guides/shapes) containing all rows in the `foo` table:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
+curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
 ```
 
 ::: info A bit of explanation about the URL structure.
 
-- `/v1/shape/` is a standard prefix with the API version and the shape sync endpoint path
-- `foo` is the name of the [`root_table`](/docs/guides/shapes#root-table) of the shape (and is required); if you wanted to sync data from the `items` table, you would change the path to `/v1/shape/items`
+- `/v1/shape` is a standard prefix with the API version and the shape sync endpoint path
+- `foo` is the name of the [`table`](/docs/guides/shapes#table) of the shape (and is required); if you wanted to sync data from the `items` table, you would change the path to `/v1/shape?table=items`
 - `offset=-1` means we're asking for the *entire* Shape as we don't have any of the data cached locally yet. If we had previously fetched the shape and wanted to see if there were any updates, we'd set the offset to the last offset we'd already seen.
 :::
 
@@ -60,7 +60,7 @@ access-control-expose-headers: *
 access-control-allow-methods: GET, POST, OPTIONS
 content-type: application/json; charset=utf-8
 
-{"root_table":["table not found"]}
+{"table":["table not found"]}
 ```
 
 So it didn't work! Which makes sense... as it's an empty database without any tables or data. Let's fix that.
@@ -99,7 +99,7 @@ INSERT INTO foo (name, value) VALUES
 Exit your Postgres client (e.g.: with `psql` enter `\q`) and try the `curl` request again:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
+curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
 ```
 
 Success! You should see the data you just put into Postgres in the shape response:
@@ -115,9 +115,10 @@ access-control-allow-origin: *
 access-control-expose-headers: *
 access-control-allow-methods: GET, POST, OPTIONS
 content-type: application/json; charset=utf-8
-x-electric-shape-id: 3833821-1721299734314
-x-electric-chunk-last-offset: 0_0
-x-electric-schema: {"id":{"type":"int4","pk_index":0},"name":{"type":"varchar","max_length":255},"value":{"type":"float8"}}
+electric-handle: 3833821-1721299734314
+electric-offset: 0_0
+electric-schema: {"id":{"type":"int4","pk_index":0},"name":{"type":"varchar","max_length":255},"value":{"type":"float8"}}
+electric-up-to-date:
 etag: 3833821-1721299734314:-1:0_0
 
 [{"offset":"0_0","value":{"id":"1","name":"Alice","value":"3.14"},"key":"\"public\".\"foo\"/1","headers":{"operation"
@@ -158,7 +159,8 @@ import { useShape } from '@electric-sql/react'
 
 function Component() {
   const { data } = useShape({
-    url: `http://localhost:3000/v1/shape/foo`,
+    url: `http://localhost:3000/v1/shape`,
+    table: `foo`
   })
 
   return (

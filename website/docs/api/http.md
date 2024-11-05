@@ -23,14 +23,14 @@ The rest of this page will describe the features of the API.
 ## Syncing shapes
 
 The API allows you to sync [Shapes](/docs/guides/shapes) of data out of Postgres using the
-<a href="/openapi.html#/paths/~1v1~1shape~1{root_table}/get"
+<a href="/openapi.html#/paths/~1v1~1shape~1{table}/get"
     target="_blank">
   <code>GET /v1/shape</code></a> endpoint. The pattern is as follows.
 
 First you make an initial sync request to get the current data for the Shape, such as:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape/foo?offset=-1'
+curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
 ```
 
 Then you switch into a live mode to use long-polling to receive real-time updates. We'll go over these steps in more detail below. First a note on the data that the endpoint returns.
@@ -62,7 +62,7 @@ When you make an initial sync request, with `offset=-1`, you're telling the serv
 
 When a shape is first requested, Electric queries Postgres for the data and populates the log by turning the query results into insert operations. This allows you to sync shapes without having to pre-define them. Electric then streams out the log data in the response.
 
-Sometimes a log can fit in a single response. Sometimes it's too big and requires multiple requests. In this case, the first request will return a batch of data and an `x-electric-chunk-last-offset` header. An HTTP client should then continue to make requests setting the `offset` parameter to the this header value. This allows the client to paginate through the shape log until it has received all the current data.
+Sometimes a log can fit in a single response. Sometimes it's too big and requires multiple requests. In this case, the first request will return a batch of data and an `electric-offset` header. An HTTP client should then continue to make requests setting the `offset` parameter to the this header value. This allows the client to paginate through the shape log until it has received all the current data.
 
 ### Control messages
 
@@ -84,10 +84,10 @@ Note that the other control message is `must-refetch` which indicates that the c
 
 ### Live mode
 
-Once a client is up-to-date, it can switch to live mode to receive real-time updates, by making requests with `live=true`, an `offset` and a `shape_id`, e.g.:
+Once a client is up-to-date, it can switch to live mode to receive real-time updates, by making requests with `live=true`, an `offset` and a shape `handle`, e.g.:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape/foo?live=true&offset=0_0&shape_id=3833821-1721812114261'
+curl -i 'http://localhost:3000/v1/shape?table=foo&live=true&handle=3833821-1721812114261&offset=0_0'
 ```
 
 The `live` parameter puts the server into live mode, where it will hold open the connection, waiting for new data arrive. This allows you to implement a long-polling strategy to consume real-time updates.
