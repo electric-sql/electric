@@ -23,8 +23,8 @@ services:
   electric:
     image: electricsql/electric:latest
     environment:
-      OTLP_ENDPOINT: http://otel:4318/
-      PROMETHEUS_PORT: ${PROMETHEUS_PORT:-4000}
+      ELECTRIC_OTLP_ENDPOINT: http://otel:4318/
+      ELECTRIC_PROMETHEUS_PORT: ${ELECTRIC_PROMETHEUS_PORT:-4000}
       DATABASE_URL: postgresql://postgres:password@postgres:5432/electric
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES_FOR_DOCKER_COMPOSE}
     ports:
@@ -33,8 +33,8 @@ services:
   otel:
     image: otel/opentelemetry-collector-contrib:0.105.0
     environment:
-      HNY_DATASET: ${HNY_DATASET}
-      HNY_API_KEY: ${HNY_API_KEY}
+      ELECTRIC_HNY_DATASET: ${ELECTRIC_HNY_DATASET}
+      ELECTRIC_HNY_API_KEY: ${ELECTRIC_HNY_API_KEY}
       PROMETHEUS_SCRAPE_ENDPOINT: electric:4000
       # Need to set OTEL_RESOURCE_ATTRIBUTES_FOR_DOCKER_COMPOSE
       # see https://github.com/docker/cli/issues/4958
