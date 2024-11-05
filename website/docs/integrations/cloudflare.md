@@ -54,7 +54,7 @@ export default {
     }
 
     const url = new URL(request.url)
-    const shapeUrl = `${ELECTRIC_URL}${url.pathname}`
+    const shapeUrl = `${ELECTRIC_URL}${url.pathname}${url.search}`
     const clonedHeaders = new Headers(new Request(request).headers)
 
     return await fetch(

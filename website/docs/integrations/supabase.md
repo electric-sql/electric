@@ -29,12 +29,12 @@ Make sure you untick the "Display connection pooler" option to get the direct ac
 
 ### Connect Electric
 
-Configure Electric to connect to the direct access `DATABASE_URL` you copied above. Set [`DATABASE_USE_IPV6`](/docs/api/config#database-use-ipv6) to `true`, e.g.:
+Configure Electric to connect to the direct access `DATABASE_URL` you copied above. Set [`ELECTRIC_DATABASE_USE_IPV6`](/docs/api/config#database-use-ipv6) to `true`, e.g.:
 
 ```shell
 docker run -it \
     -e "DATABASE_URL=postgresql://postgres:[YOUR_PASSWORD]@db.[YOUR_PROJECT_ID].supabase.co:5432/postgres" \
-    -e "DATABASE_USE_IPV6=true" \
+    -e "ELECTRIC_DATABASE_USE_IPV6=true" \
     -p 3000:3000 \
     electricsql/electric:latest
 ```
