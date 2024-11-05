@@ -72,7 +72,7 @@ Electric will work as a drop on to any existing data model. There are no limitat
 
 You connect to Postgres using a [`DATABASE_URL`](/docs/api/config#database-url) env var. This connection string contains your user credentials and an `sslmode` parameter.
 
-Make sure you're connecting directly to Postgres and not via a PGBouncer-style connection pool. This is because Electric uses logical replication and connection poolers don't usually support it.
+You usually want to connect directly to Postgres and not via a connection pool. This is because Electric uses logical replication and most connection poolers don't support it. (pgBouncer does support logical replication, [as of version 1.23](https://www.pgbouncer.org/changelog.html#pgbouncer-123x) so this may change in future).
 
 > [!Tip] Troubleshooting common errors
 > If you get a TCP connection error saying `non-existing domain - :nxdomain` or `network is unreachable - :enetunreach` then you may need to connect using IPv6. You can enable this by setting [`ELECTRIC_DATABASE_USE_IPV6=true`](/docs/api/config#database-use-ipv6).

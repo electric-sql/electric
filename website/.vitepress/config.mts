@@ -172,7 +172,7 @@ export default defineConfig({
         },
         {
           text: 'Integrations',
-          collapsed: true,
+          collapsed: false,
           items: [
             {
               text: 'Frameworks',
@@ -206,7 +206,7 @@ export default defineConfig({
         },
         {
           text: 'Reference',
-          collapsed: true,
+          collapsed: false,
           items: [
             { text: 'Alternatives', link: '/docs/reference/alternatives' },
             { text: 'Benchmarks', link: '/docs/reference/benchmarks' },
