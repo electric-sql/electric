@@ -246,7 +246,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.options.subscribe
       ) {
         const fetchUrl = new URL(url)
-        fetchUrl.searchParams.set(TABLE_QUERY_PARAM, table)
+        if (table) fetchUrl.searchParams.set(TABLE_QUERY_PARAM, table)
         if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
         if (columns && columns.length > 0)
           fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, columns.join(`,`))
