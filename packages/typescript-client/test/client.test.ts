@@ -349,7 +349,8 @@ describe(`Shape`, () => {
     const [id] = await insertIssues({ title: `first title` })
 
     const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       replica: `full`,
       signal: aborter.signal,
     })
@@ -379,7 +380,7 @@ describe(`Shape`, () => {
     } finally {
       // the normal cleanup doesn't work because our shape definition is
       // changed by the updates: 'full' param
-      await clearIssuesShape(shapeStream.shapeId)
+      await clearIssuesShape(shapeStream.shapeHandle)
     }
   })
 })
