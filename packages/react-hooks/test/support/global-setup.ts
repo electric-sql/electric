@@ -3,7 +3,7 @@ import { makePgClient } from './test-helpers'
 
 const url = process.env.ELECTRIC_URL ?? `http://localhost:3000`
 const proxyUrl = process.env.ELECTRIC_PROXY_CACHE_URL ?? `http://localhost:3002`
-const databaseId = process.env.DATABASE_ID ?? `test_tenant`
+const databaseId = process.env.ELECTRIC_DATABASE_ID ?? `test_tenant`
 
 // name of proxy cache container to execute commands against,
 // see docker-compose.yml that spins it up for details
