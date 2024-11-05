@@ -5,7 +5,7 @@ defmodule Electric.Application do
   @process_registry_name Electric.Registry.Processes
   def process_registry, do: @process_registry_name
 
-  @spec process_name(atom(), String.t(), atom()) :: {:via, atom(), atom()}
+  @spec process_name(atom(), String.t(), atom()) :: {:via, atom(), {atom(), term()}}
   def process_name(electric_instance_id, tenant_id, module) when is_atom(module) do
     {:via, Registry, {@process_registry_name, {module, electric_instance_id, tenant_id}}}
   end

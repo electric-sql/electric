@@ -13,9 +13,15 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   end
 
   def name(opts) do
-    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
-    tenant_id = Keyword.fetch!(opts, :tenant_id)
-    name(electric_instance_id, tenant_id)
+    case Keyword.fetch(opts, :name) do
+      {:ok, name} ->
+        name
+
+      :error ->
+        electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
+        tenant_id = Keyword.fetch!(opts, :tenant_id)
+        name(electric_instance_id, tenant_id)
+    end
   end
 
   def start_link(opts) do
@@ -28,7 +34,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
         |> Map.put_new_lazy(:tenant_tables_name, fn ->
           Application.fetch_env!(:electric, :tenant_tables_name)
         end),
-        name: Keyword.get_lazy(opts, :name, fn -> name(opts) end)
+        name: name(opts)
       )
 
     {:ok, pid}

@@ -68,7 +68,6 @@ defmodule Electric.Plug.ServeShapePlug do
       field(:root_table, :string)
       field(:offset, :string)
       field(:shape_id, :string)
-      field(:database_id, :string)
       field(:live, :boolean, default: false)
       field(:where, :string)
       field(:columns, :string)
@@ -180,7 +179,6 @@ defmodule Electric.Plug.ServeShapePlug do
   # start_telemetry_span needs to always be the first plug after fetching query params.
   plug :start_telemetry_span
   plug :put_resp_content_type, "application/json"
-  plug :validate_tenant_id
   plug :load_tenant
   plug :validate_query_params
   plug :load_shape_info

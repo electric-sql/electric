@@ -16,24 +16,34 @@ defmodule Electric.Plug.AddDatabasePlug do
   require SC.Trace
 
   defmodule Params do
+    alias Ecto.Changeset
     use Ecto.Schema
     import Ecto.Changeset
 
     @primary_key false
     embedded_schema do
-      field(:DATABASE_URL, :string)
-      field(:DATABASE_USE_IPV6, :boolean, default: false)
+      field(:database_url, :string)
+      field(:connection_params, :any, virtual: true)
+      field(:database_use_ipv6, :boolean, default: false)
       field(:database_id, :string, autogenerate: {Electric.Utils, :uuid4, []})
     end
 
     def validate(params) do
       %__MODULE__{}
       |> cast(params, __schema__(:fields), message: fn _, _ -> "must be %{type}" end)
-      |> validate_required([:DATABASE_URL, :database_id])
+      |> validate_required([:database_url, :database_id])
+      |> validate_database_url()
       |> apply_action(:validate)
       |> case do
         {:ok, params} ->
-          {:ok, Map.from_struct(params)}
+          result = Map.from_struct(params)
+
+          result =
+            if result.database_use_ipv6,
+              do: Map.update!(result, :connection_params, &Keyword.put(&1, :ipv6, true)),
+              else: result
+
+          {:ok, result}
 
         {:error, changeset} ->
           {:error,
@@ -44,17 +54,30 @@ defmodule Electric.Plug.AddDatabasePlug do
            end)}
       end
     end
+
+    defp validate_database_url(changeset) do
+      case Changeset.fetch_change(changeset, :database_url) do
+        :error ->
+          changeset
+
+        {:ok, value} ->
+          case Electric.ConfigParser.parse_postgresql_uri(value) do
+            {:ok, parsed} -> Changeset.put_change(changeset, :connection_params, parsed)
+            {:error, reason} -> Changeset.add_error(changeset, :database_url, reason)
+          end
+      end
+    end
   end
 
   plug Plug.Parsers,
     parsers: [:json],
     json_decoder: Jason
 
+  plug :put_resp_content_type, "application/json"
+
   # start_telemetry_span needs to always be the first plug after fetching query params.
   plug :start_telemetry_span
 
-  plug :cors
-  plug :put_resp_content_type, "application/json"
   plug :validate_body
   plug :create_tenant
 
@@ -73,73 +96,41 @@ defmodule Electric.Plug.AddDatabasePlug do
     end
   end
 
-  defp create_tenant(%Conn{assigns: %{DATABASE_URL: db_url}} = conn, _) do
+  defp create_tenant(%Conn{assigns: %{database_id: tenant_id} = assigns} = conn, _) do
+    connection_opts = Electric.Utils.obfuscate_password(assigns.connection_params)
+
     OpenTelemetry.with_span("add_db.plug.create_tenant", [], fn ->
-      case Electric.ConfigParser.parse_postgresql_uri(db_url) do
-        {:ok, database_url_config} ->
-          do_create_tenant(conn, database_url_config)
+      case TenantManager.create_tenant(tenant_id, connection_opts, conn.assigns.config) do
+        :ok ->
+          conn
+          |> send_resp(200, Jason.encode_to_iodata!(tenant_id))
+          |> halt()
+
+        {:error, {:tenant_already_exists, tenant_id}} ->
+          conn
+          |> send_resp(400, Jason.encode_to_iodata!("Database #{tenant_id} already exists."))
+          |> halt()
+
+        {:error, {:db_already_in_use, pg_id}} ->
+          conn
+          |> send_resp(
+            400,
+            Jason.encode_to_iodata!("The database #{pg_id} is already in use by another tenant.")
+          )
+          |> halt()
 
         {:error, error} ->
           conn
-          |> send_resp(400, Jason.encode_to_iodata!("Invalid DATABASE_URL: " <> error))
+          |> send_resp(500, Jason.encode_to_iodata!(error))
           |> halt()
       end
     end)
   end
 
-  defp do_create_tenant(
-         %Conn{assigns: %{database_id: tenant_id} = assigns} = conn,
-         database_url_config
-       ) do
-    %{DATABASE_USE_IPV6: use_ipv6?} = assigns
-
-    database_ipv6_config =
-      if use_ipv6? do
-        [ipv6: true]
-      else
-        []
-      end
-
-    connection_opts =
-      Electric.Utils.obfuscate_password(database_url_config ++ database_ipv6_config)
-
-    case TenantManager.create_tenant(tenant_id, connection_opts, conn.assigns.config) do
-      :ok ->
-        conn
-        |> send_resp(200, Jason.encode_to_iodata!(tenant_id))
-        |> halt()
-
-      {:error, {:tenant_already_exists, tenant_id}} ->
-        conn
-        |> send_resp(400, Jason.encode_to_iodata!("Database #{tenant_id} already exists."))
-        |> halt()
-
-      {:error, {:db_already_in_use, pg_id}} ->
-        conn
-        |> send_resp(
-          400,
-          Jason.encode_to_iodata!("The database #{pg_id} is already in use by another tenant.")
-        )
-        |> halt()
-
-      {:error, error} ->
-        conn
-        |> send_resp(500, Jason.encode_to_iodata!(error))
-        |> halt()
-    end
-  end
-
-  def cors(conn, _opts) do
-    conn
-    |> put_resp_header("access-control-allow-origin", "*")
-    |> put_resp_header("access-control-expose-headers", "*")
-    |> put_resp_header("access-control-allow-methods", "GET, POST, DELETE")
-  end
-
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do
     %{
       "tenant.id" => assigns[:database_id],
-      "tenant.DATABASE_URL" => assigns[:DATABASE_URL],
+      "tenant.database_url" => assigns[:database_url],
       "error.type" => assigns[:error_str],
       "http.request_id" => assigns[:plug_request_id],
       "http.query_string" => conn.query_string,
@@ -200,7 +191,7 @@ defmodule Electric.Plug.AddDatabasePlug do
   # Start the root span for the shape request, serving as an ancestor for any subsequent
   # sub-span.
   defp start_telemetry_span(conn, _) do
-    OpentelemetryTelemetry.start_telemetry_span(OpenTelemetry, "Plug_shape_get", %{}, %{})
+    OpentelemetryTelemetry.start_telemetry_span(OpenTelemetry, "plug_add_database", %{}, %{})
     add_span_attrs_from_conn(conn)
     conn
   end

@@ -8,44 +8,24 @@ defmodule Electric.Plug.TenantUtils do
   alias Plug.Conn
   alias Electric.TenantManager
 
-  def validate_tenant_id(%Conn{} = conn, _) do
-    case Map.get(conn.query_params, "database_id", :not_found) do
-      :not_found ->
-        conn
-
-      id when is_binary(id) ->
-        assign(conn, :database_id, id)
-
-      _ ->
-        conn
-        |> send_resp(400, Jason.encode_to_iodata!("database_id should be a string"))
-        |> halt()
-    end
-  end
-
-  def load_tenant(%Conn{assigns: %{database_id: tenant_id}} = conn, _) do
-    case TenantManager.get_tenant(tenant_id, conn.assigns.config) do
-      {:ok, tenant_config} ->
-        assign_tenant(conn, tenant_config)
-
-      {:error, :not_found} ->
-        conn
-        |> send_resp(404, Jason.encode_to_iodata!(~s|Database "#{tenant_id}" not found|))
-        |> halt()
-    end
-  end
-
+  @doc """
+  Load an appropriate tenant configuration into assigns based on the `database_id` query parameter.
+  """
   def load_tenant(%Conn{} = conn, _) do
-    # Tenant ID is not specified
-    # ask the tenant manager for the only tenant
-    # if there's more than one tenant we reply with an error
-    case TenantManager.get_only_tenant(conn.assigns.config) do
+    # This is a no-op if they are already fetched.
+    conn = Conn.fetch_query_params(conn)
+
+    Map.get(conn.query_params, "database_id", :not_provided)
+    |> maybe_get_tenant(conn.assigns.config)
+    |> case do
       {:ok, tenant_config} ->
-        assign_tenant(conn, tenant_config)
+        conn
+        |> assign(:config, tenant_config)
+        |> assign(:tenant_id, tenant_config[:tenant_id])
 
       {:error, :not_found} ->
         conn
-        |> send_resp(404, Jason.encode_to_iodata!("No database found"))
+        |> send_resp(404, Jason.encode_to_iodata!(~s|Database not found|))
         |> halt()
 
       {:error, :several_tenants} ->
@@ -60,11 +40,7 @@ defmodule Electric.Plug.TenantUtils do
     end
   end
 
-  defp assign_tenant(%Conn{} = conn, tenant_config) do
-    id = tenant_config[:tenant_id]
-
-    conn
-    |> assign(:config, tenant_config)
-    |> assign(:tenant_id, id)
-  end
+  defp maybe_get_tenant(:not_provided, config), do: TenantManager.get_only_tenant(config)
+  defp maybe_get_tenant(id, config) when is_binary(id), do: TenantManager.get_tenant(id, config)
+  defp maybe_get_tenant(_, _), do: {:error, :not_found}
 end

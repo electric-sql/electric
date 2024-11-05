@@ -112,7 +112,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         |> DeleteShapePlug.call([])
 
       assert conn.status == 404
-      assert Jason.decode!(conn.resp_body) == ~s|Database "unknown" not found|
+      assert Jason.decode!(conn.resp_body) == ~s|Database not found|
     end
 
     test "should clean shape based on shape definition", ctx do

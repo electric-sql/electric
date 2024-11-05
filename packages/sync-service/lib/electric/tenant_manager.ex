@@ -154,22 +154,18 @@ defmodule Electric.TenantManager do
           connection_opts: connection_opts
         ]
 
-    case store_tenant(tenant, store_tenant_opts) do
-      {:error, reason} ->
-        {:error, reason}
+    start_tenant_opts = [
+      app_config: app_config,
+      electric_instance_id: electric_instance_id,
+      tenant_id: tenant_id,
+      connection_opts: connection_opts,
+      inspector: inspector,
+      storage: storage
+    ]
 
-      :ok ->
-        case Electric.TenantSupervisor.start_tenant(
-               app_config: app_config,
-               electric_instance_id: electric_instance_id,
-               tenant_id: tenant_id,
-               connection_opts: connection_opts,
-               inspector: inspector,
-               storage: storage
-             ) do
-          {:ok, _} -> :ok
-          {:error, reason} -> {:error, reason}
-        end
+    with :ok <- store_tenant(tenant, store_tenant_opts),
+         {:ok, _} <- Electric.TenantSupervisor.start_tenant(start_tenant_opts) do
+      :ok
     end
   end
 

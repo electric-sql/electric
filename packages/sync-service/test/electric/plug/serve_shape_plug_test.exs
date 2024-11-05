@@ -219,7 +219,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> ServeShapePlug.call([])
 
       assert conn.status == 404
-      assert Jason.decode!(conn.resp_body) == ~s|Database "unknown" not found|
+      assert Jason.decode!(conn.resp_body) == ~s|Database not found|
     end
 
     test "returns snapshot when offset is -1", %{tenant_id: tenant_id} = ctx do

@@ -11,7 +11,6 @@ defmodule Electric.Plug.DeleteShapePlug do
   plug :put_resp_content_type, "application/json"
 
   plug :allow_shape_deletion
-  plug :validate_tenant_id
   plug :load_tenant
   plug :validate_query_params
 

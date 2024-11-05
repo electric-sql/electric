@@ -29,7 +29,8 @@ defmodule Electric.Plug.RemoveDatabasePlugTest do
       if is_nil(database_id) do
         Plug.Test.conn(method, "/")
       else
-        Plug.Test.conn(method, "/?database_id=#{database_id}")
+        Plug.Test.conn(method, "/#{database_id}")
+        |> Map.update!(:path_params, &Map.put(&1, "database_id", database_id))
       end
 
     conn
@@ -49,19 +50,6 @@ defmodule Electric.Plug.RemoveDatabasePlugTest do
 
     setup :with_complete_stack
     setup :with_app_config
-
-    test "returns 400 for invalid params", ctx do
-      conn =
-        ctx
-        |> conn("DELETE")
-        |> RemoveDatabasePlug.call([])
-
-      assert conn.status == 400
-
-      assert Jason.decode!(conn.resp_body) == %{
-               "database_id" => ["can't be blank"]
-             }
-    end
 
     test "returns 200 when successfully deleting a tenant", ctx do
       # The tenant manager will try to shut down the tenant supervisor

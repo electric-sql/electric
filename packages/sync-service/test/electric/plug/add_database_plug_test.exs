@@ -59,7 +59,7 @@ defmodule Electric.Plug.AddDatabasePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "DATABASE_URL" => ["can't be blank"],
+               "database_url" => ["can't be blank"],
                "database_id" => ["can't be blank"]
              }
     end
@@ -67,7 +67,7 @@ defmodule Electric.Plug.AddDatabasePlugTest do
     test "returns 200 when successfully adding a tenant", ctx do
       conn =
         ctx
-        |> conn("POST", %{database_id: ctx.tenant_id, DATABASE_URL: @conn_url})
+        |> conn("POST", %{database_id: ctx.tenant_id, database_url: @conn_url})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 200
@@ -77,7 +77,7 @@ defmodule Electric.Plug.AddDatabasePlugTest do
     test "returns 400 when tenant already exists", ctx do
       conn =
         ctx
-        |> conn("POST", %{database_id: ctx.tenant_id, DATABASE_URL: @conn_url})
+        |> conn("POST", %{database_id: ctx.tenant_id, database_url: @conn_url})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 200
@@ -86,7 +86,7 @@ defmodule Electric.Plug.AddDatabasePlugTest do
       # Now try creating another tenant with the same ID
       conn =
         ctx
-        |> conn("POST", %{database_id: ctx.tenant_id, DATABASE_URL: @other_conn_url})
+        |> conn("POST", %{database_id: ctx.tenant_id, database_url: @other_conn_url})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 400
@@ -96,7 +96,7 @@ defmodule Electric.Plug.AddDatabasePlugTest do
     test "returns 400 when database is already in use", ctx do
       conn =
         ctx
-        |> conn("POST", %{database_id: ctx.tenant_id, DATABASE_URL: @conn_url})
+        |> conn("POST", %{database_id: ctx.tenant_id, database_url: @conn_url})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 200
@@ -105,7 +105,7 @@ defmodule Electric.Plug.AddDatabasePlugTest do
       # Now try creating another tenant with the same database
       conn =
         ctx
-        |> conn("POST", %{database_id: "other_tenant", DATABASE_URL: @conn_url})
+        |> conn("POST", %{database_id: "other_tenant", database_url: @conn_url})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 400
