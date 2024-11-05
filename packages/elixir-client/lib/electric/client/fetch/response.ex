@@ -4,7 +4,7 @@ defmodule Electric.Client.Fetch.Response do
   defstruct [
     :status,
     :last_offset,
-    :shape_id,
+    :shape_handle,
     :schema,
     :next_cursor,
     body: [],
@@ -16,7 +16,7 @@ defmodule Electric.Client.Fetch.Response do
           body: [map()],
           headers: %{String.t() => [String.t()]},
           last_offset: nil | Client.Offset.t(),
-          shape_id: nil | Client.shape_id(),
+          shape_handle: nil | Client.shape_handle(),
           schema: nil | Client.schema(),
           next_cursor: nil | Client.cursor()
         }
@@ -27,7 +27,7 @@ defmodule Electric.Client.Fetch.Response do
       status: status,
       headers: decode_headers(headers),
       body: body,
-      shape_id: decode_shape_id(headers),
+      shape_handle: decode_shape_handle(headers),
       last_offset: decode_offset(headers),
       schema: decode_schema(headers),
       next_cursor: decode_next_cursor(headers)
@@ -38,13 +38,13 @@ defmodule Electric.Client.Fetch.Response do
     Map.new(headers, fn {k, v} -> {k, List.wrap(v)} end)
   end
 
-  defp decode_shape_id(%{"electric-shape-id" => shape_id}) do
-    unlist(shape_id)
+  defp decode_shape_handle(%{"electric-handle" => shape_handle}) do
+    unlist(shape_handle)
   end
 
-  defp decode_shape_id(_headers), do: nil
+  defp decode_shape_handle(_headers), do: nil
 
-  defp decode_offset(%{"electric-chunk-last-offset" => offset}) do
+  defp decode_offset(%{"electric-offset" => offset}) do
     offset |> unlist() |> Client.Offset.from_string!()
   end
 
@@ -60,7 +60,7 @@ defmodule Electric.Client.Fetch.Response do
   defp unlist([]), do: nil
   defp unlist(value), do: value
 
-  defp decode_next_cursor(%{"electric-next-cursor" => cursor}) do
+  defp decode_next_cursor(%{"electric-cursor" => cursor}) do
     cursor |> unlist() |> String.to_integer()
   end
 

@@ -13,7 +13,7 @@ defmodule Electric.Client.Fetch.RequestTest do
       request =
         Client.request(client!(),
           offset: Client.Offset.new(1234, 1),
-          shape_id: "my-shape",
+          shape_handle: "my-shape",
           live: true,
           next_cursor: 123_948,
           shape: Client.shape!("my_table")
@@ -23,7 +23,7 @@ defmodule Electric.Client.Fetch.RequestTest do
       {:ok, uri} = URI.new(url)
 
       assert %{
-               path: "/v1/shape/my_table",
+               path: "/v1/shape",
                scheme: "https",
                host: "cloud.electric.com",
                query: query
@@ -32,10 +32,37 @@ defmodule Electric.Client.Fetch.RequestTest do
       params = URI.decode_query(query)
 
       assert %{
+               "table" => "my_table",
                "cursor" => "123948",
                "live" => "true",
                "offset" => "1234_1",
-               "shape_id" => "my-shape"
+               "handle" => "my-shape"
+             } = params
+    end
+
+    test "wraps table names in quotes" do
+      request =
+        Client.request(client!(),
+          offset: Client.Offset.new(1234, 1),
+          shape_handle: "my-shape",
+          live: true,
+          next_cursor: 123_948,
+          shape: Client.shape!("my table", namespace: "Wobbly")
+        )
+
+      url = Request.url(request)
+      {:ok, uri} = URI.new(url)
+
+      assert %{query: query} = uri
+
+      params = URI.decode_query(query)
+
+      assert %{
+               "table" => ~s["Wobbly"."my table"],
+               "cursor" => "123948",
+               "live" => "true",
+               "offset" => "1234_1",
+               "handle" => "my-shape"
              } = params
     end
 
@@ -43,7 +70,7 @@ defmodule Electric.Client.Fetch.RequestTest do
       request =
         Client.request(client!(),
           offset: Client.Offset.new(1234, 1),
-          shape_id: "my-shape",
+          shape_handle: "my-shape",
           live: true,
           next_cursor: 123_948,
           shape: Client.shape!("my_table"),
@@ -65,7 +92,7 @@ defmodule Electric.Client.Fetch.RequestTest do
       request =
         Client.request(client!(),
           offset: Client.Offset.new(1234, 1),
-          shape_id: "my-shape",
+          shape_handle: "my-shape",
           live: true,
           next_cursor: 123_948,
           shape: Client.shape!("my_table", columns: columns)

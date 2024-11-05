@@ -18,7 +18,7 @@ defmodule Electric.Client.Stream do
     up_to_date?: false,
     update_mode: :modified,
     offset: Offset.before_all(),
-    shape_id: nil,
+    shape_handle: nil,
     next_cursor: nil,
     state: :init,
     opts: %{}
@@ -92,7 +92,7 @@ defmodule Electric.Client.Stream do
           up_to_date?: boolean(),
           offset: Offset.t(),
           update_mode: Client.update_mode(),
-          shape_id: nil | Client.shape_id(),
+          shape_handle: nil | Client.shape_handle(),
           state: :init | :stream | :done,
           opts: opts()
         }
@@ -150,12 +150,13 @@ defmodule Electric.Client.Stream do
   defp handle_response(%Fetch.Response{status: status} = resp, stream)
        when status in 200..299 do
     start_offset = stream.offset
-    shape_id = shape_id!(resp)
+    shape_handle = shape_handle!(resp)
     final_offset = last_offset(resp, stream.offset)
     next_cursor = resp.next_cursor
 
     %{value_mapper_fun: value_mapper_fun} =
-      stream = handle_schema(resp, %{stream | shape_id: shape_id, next_cursor: next_cursor})
+      stream =
+      handle_schema(resp, %{stream | shape_handle: shape_handle, next_cursor: next_cursor})
 
     resp.body
     |> List.wrap()
@@ -178,7 +179,7 @@ defmodule Electric.Client.Stream do
     offset = last_offset(resp, stream.offset)
 
     stream
-    |> reset(shape_id(resp))
+    |> reset(shape_handle(resp))
     |> buffer(Enum.flat_map(resp.body, &Message.parse(&1, offset, value_mapper_fun)))
     |> dispatch()
   end
@@ -208,7 +209,7 @@ defmodule Electric.Client.Stream do
     resume_message = %Message.ResumeMessage{
       schema: stream.schema,
       offset: offset,
-      shape_id: stream.shape_id
+      shape_handle: stream.shape_handle
     }
 
     {:halt, {offset, %{stream | buffer: :queue.in(resume_message, stream.buffer), state: :done}}}
@@ -218,7 +219,7 @@ defmodule Electric.Client.Stream do
     resume_message = %Message.ResumeMessage{
       schema: stream.schema,
       offset: stream.offset,
-      shape_id: stream.shape_id
+      shape_handle: stream.shape_handle
     }
 
     {msgs, %{stream | buffer: :queue.in(resume_message, stream.buffer), state: :done}}
@@ -241,14 +242,14 @@ defmodule Electric.Client.Stream do
       shape: shape,
       up_to_date?: up_to_date?,
       update_mode: update_mode,
-      shape_id: shape_id,
+      shape_handle: shape_handle,
       offset: offset,
       next_cursor: cursor
     } = stream
 
     Client.request(client,
       offset: offset,
-      shape_id: shape_id,
+      shape_handle: shape_handle,
       update_mode: update_mode,
       live: up_to_date?,
       next_cursor: cursor,
@@ -266,11 +267,11 @@ defmodule Electric.Client.Stream do
     Fetch.Request.request(stream.client, request)
   end
 
-  defp reset(stream, shape_id) do
+  defp reset(stream, shape_handle) do
     %{
       stream
       | offset: Offset.before_all(),
-        shape_id: shape_id,
+        shape_handle: shape_handle,
         up_to_date?: false,
         buffer: :queue.new(),
         schema: nil,
@@ -282,13 +283,13 @@ defmodule Electric.Client.Stream do
     %{stream | buffer: Enum.reduce(msgs, stream.buffer, &:queue.in/2)}
   end
 
-  defp shape_id!(resp) do
-    shape_id(resp) ||
-      raise Client.Error, message: "Missing electric-shape-id header", resp: resp
+  defp shape_handle!(resp) do
+    shape_handle(resp) ||
+      raise Client.Error, message: "Missing electric-handle header", resp: resp
   end
 
-  defp shape_id(%Fetch.Response{shape_id: shape_id}) do
-    shape_id
+  defp shape_handle(%Fetch.Response{shape_handle: shape_handle}) do
+    shape_handle
   end
 
   defp last_offset(%Fetch.Response{last_offset: %Offset{} = offset}, _offset) do
@@ -323,9 +324,9 @@ defmodule Electric.Client.Stream do
   end
 
   defp resume(%{opts: %{resume: %Message.ResumeMessage{} = resume}} = stream) do
-    %{shape_id: shape_id, offset: offset, schema: schema} = resume
+    %{shape_handle: shape_handle, offset: offset, schema: schema} = resume
 
-    generate_value_mapper(schema, %{stream | shape_id: shape_id, offset: offset})
+    generate_value_mapper(schema, %{stream | shape_handle: shape_handle, offset: offset})
   end
 
   defp resume(stream) do

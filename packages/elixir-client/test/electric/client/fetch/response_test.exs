@@ -7,10 +7,10 @@ defmodule Electric.Client.Fetch.ResponseTest do
     schema = %{id: %{type: "int8"}}
 
     headers = %{
-      "electric-shape-id" => "1234987-2349827349",
-      "electric-chunk-last-offset" => "29827_3",
+      "electric-handle" => "1234987-2349827349",
+      "electric-offset" => "29827_3",
       "electric-schema" => Jason.encode!(schema),
-      "electric-next-cursor" => "2394829387"
+      "electric-cursor" => "2394829387"
     }
 
     # headers are normalised lists of values
@@ -19,7 +19,7 @@ defmodule Electric.Client.Fetch.ResponseTest do
     assert %{
              status: 200,
              headers: ^expected_headers,
-             shape_id: "1234987-2349827349",
+             shape_handle: "1234987-2349827349",
              last_offset: %Electric.Client.Offset{tx: 29827, op: 3},
              schema: ^schema,
              next_cursor: 2_394_829_387
@@ -30,16 +30,16 @@ defmodule Electric.Client.Fetch.ResponseTest do
     schema = %{id: %{type: "int8"}}
 
     headers = %{
-      "electric-shape-id" => ["1234987-2349827349"],
-      "electric-chunk-last-offset" => ["29827_3"],
+      "electric-handle" => ["1234987-2349827349"],
+      "electric-offset" => ["29827_3"],
       "electric-schema" => [Jason.encode!(schema)],
-      "electric-next-cursor" => ["2394829387"]
+      "electric-cursor" => ["2394829387"]
     }
 
     assert %{
              status: 200,
              headers: ^headers,
-             shape_id: "1234987-2349827349",
+             shape_handle: "1234987-2349827349",
              last_offset: %Electric.Client.Offset{tx: 29827, op: 3},
              schema: ^schema,
              next_cursor: 2_394_829_387

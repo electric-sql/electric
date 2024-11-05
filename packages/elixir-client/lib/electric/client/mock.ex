@@ -17,7 +17,7 @@ defmodule Electric.Client.Mock do
     status: 200,
     schema: %{id: %{type: "int8"}, name: %{type: "text"}},
     last_offset: Client.Offset.first(),
-    shape_id: "users-1",
+    shape_handle: "users-1",
     body: Electric.Client.Mock.transaction(users, operation: :insert)
   )
 
@@ -82,7 +82,7 @@ defmodule Electric.Client.Mock do
           | {:headers, %{String.t() => String.t() | [String.t(), ...]}}
           | {:body, [map()]}
           | {:schema, Client.schema()}
-          | {:shape_id, Client.shape_id()}
+          | {:shape_handle, Client.shape_handle()}
           | {:last_offset, Client.Offset.t()}
   @type response_opts :: [response_opt()]
 
@@ -197,21 +197,21 @@ defmodule Electric.Client.Mock do
       headers: headers(opts[:headers] || []),
       body: jsonify(opts[:body] || []),
       schema: Keyword.get(opts, :schema, nil),
-      shape_id: Keyword.get(opts, :shape_id, nil),
+      shape_handle: Keyword.get(opts, :shape_handle, nil),
       last_offset: Keyword.get(opts, :last_offset, nil)
     }
   end
 
   @spec headers([
-          {:shape_id, Client.shape_id()}
+          {:shape_handle, Client.shape_handle()}
           | {:last_offset, Client.Offset.t()}
           | {:schema, Client.schema()}
         ]) :: %{String.t() => [String.t()]}
   def headers(args) do
     %{}
-    |> put_optional_header("electric-shape-id", args[:shape_id])
+    |> put_optional_header("electric-handle", args[:shape_handle])
     |> put_optional_header(
-      "electric-chunk-last-offset",
+      "electric-offset",
       args[:last_offset],
       &Client.Offset.to_string/1
     )

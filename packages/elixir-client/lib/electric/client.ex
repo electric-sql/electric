@@ -154,7 +154,7 @@ defmodule Electric.Client do
                    ]
                  )
 
-  @type shape_id :: String.t()
+  @type shape_handle :: String.t()
   @type cursor :: integer()
   @type update_mode :: :modified | :full
   @type column :: %{

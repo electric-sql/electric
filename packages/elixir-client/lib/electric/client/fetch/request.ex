@@ -11,7 +11,7 @@ defmodule Electric.Client.Fetch.Request do
 
   defstruct [
     :base_url,
-    :shape_id,
+    :shape_handle,
     :live,
     :shape,
     :next_cursor,
@@ -30,7 +30,7 @@ defmodule Electric.Client.Fetch.Request do
     method: quote(do: :get | :head | :delete),
     base_url: quote(do: URI.t()),
     offset: quote(do: Electric.Client.Offset.t()),
-    shape_id: quote(do: Electric.Client.shape_id() | nil),
+    shape_handle: quote(do: Electric.Client.shape_handle() | nil),
     update_mode: quote(do: Electric.Client.update_mode()),
     live: quote(do: boolean()),
     next_cursor: quote(do: Electric.Client.cursor()),
@@ -61,14 +61,14 @@ defmodule Electric.Client.Fetch.Request do
     {:via, Registry, {Electric.Client.Registry, {__MODULE__, request_id}}}
   end
 
-  defp request_id(%Client{fetch: {fetch_impl, _}}, %__MODULE__{shape_id: nil} = request) do
+  defp request_id(%Client{fetch: {fetch_impl, _}}, %__MODULE__{shape_handle: nil} = request) do
     %{base_url: base_url, shape: shape_definition} = request
     {fetch_impl, base_url, shape_definition}
   end
 
   defp request_id(%Client{fetch: {fetch_impl, _}}, %__MODULE__{} = request) do
-    %{base_url: base_url, offset: offset, live: live, shape_id: shape_id} = request
-    {fetch_impl, base_url, shape_id, Offset.to_tuple(offset), live}
+    %{base_url: base_url, offset: offset, live: live, shape_handle: shape_handle} = request
+    {fetch_impl, base_url, shape_handle, Offset.to_tuple(offset), live}
   end
 
   @doc """
@@ -76,8 +76,8 @@ defmodule Electric.Client.Fetch.Request do
   """
   @spec url(t()) :: binary()
   def url(%__MODULE__{} = request, opts \\ []) do
-    %{base_url: base_url, shape: shape} = request
-    path = "/v1/shape/#{ShapeDefinition.url_table_name(shape)}"
+    %{base_url: base_url} = request
+    path = "/v1/shape"
     uri = URI.append_path(base_url, path)
 
     if Keyword.get(opts, :query, true) do
@@ -96,7 +96,7 @@ defmodule Electric.Client.Fetch.Request do
       shape: shape,
       update_mode: update_mode,
       live: live?,
-      shape_id: shape_id,
+      shape_handle: shape_handle,
       offset: %Offset{} = offset,
       next_cursor: cursor,
       params: params
@@ -106,7 +106,7 @@ defmodule Electric.Client.Fetch.Request do
     |> Map.merge(ShapeDefinition.params(shape))
     |> Map.merge(%{"offset" => Offset.to_string(offset)})
     |> Util.map_put_if("update_mode", to_string(update_mode), update_mode != :modified)
-    |> Util.map_put_if("shape_id", shape_id, is_binary(shape_id))
+    |> Util.map_put_if("handle", shape_handle, is_binary(shape_handle))
     |> Util.map_put_if("live", "true", live?)
     |> Util.map_put_if("cursor", cursor, !is_nil(cursor))
   end

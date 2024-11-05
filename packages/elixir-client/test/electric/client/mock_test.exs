@@ -30,7 +30,7 @@ defmodule Electric.Client.MockTest do
         status: 200,
         schema: %{id: %{type: "int8"}},
         last_offset: Offset.new(0, 0),
-        shape_id: "my-shape",
+        shape_handle: "my-shape",
         body: [
           Client.Mock.change(value: %{id: "1111"}),
           Client.Mock.change(value: %{id: "2222"}),
@@ -43,7 +43,7 @@ defmodule Electric.Client.MockTest do
         status: 200,
         schema: %{id: %{type: "int8"}},
         last_offset: Offset.new(0, 0),
-        shape_id: "my-shape",
+        shape_handle: "my-shape",
         body: [
           Client.Mock.change(value: %{id: "4444"}),
           Client.Mock.up_to_date()

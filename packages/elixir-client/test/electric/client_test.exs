@@ -250,10 +250,10 @@ defmodule Electric.ClientTest do
 
     conn
     |> Plug.Conn.put_resp_content_type("application/json")
-    |> put_optional_header("electric-shape-id", opts[:shape_id])
-    |> put_optional_header("electric-chunk-last-offset", opts[:last_offset])
+    |> put_optional_header("electric-handle", opts[:shape_handle])
+    |> put_optional_header("electric-offset", opts[:last_offset])
     |> put_optional_header("electric-schema", opts[:schema])
-    |> put_optional_header("electric-next-cursor", opts[:cursor])
+    |> put_optional_header("electric-cursor", opts[:cursor])
     |> Plug.Conn.resp(status, body)
   end
 
@@ -294,18 +294,18 @@ defmodule Electric.ClientTest do
              %{
                "-1" => [
                  &bypass_resp(&1, body1,
-                   shape_id: "my-shape",
+                   shape_handle: "my-shape",
                    last_offset: "1_0",
                    schema: schema
                  )
                ],
                "1_0" => [
                  &bypass_resp(&1, "",
-                   shape_id: "my-shape",
+                   shape_handle: "my-shape",
                    last_offset: "1_0"
                  ),
                  &bypass_resp(&1, body2,
-                   shape_id: "my-shape",
+                   shape_handle: "my-shape",
                    last_offset: "2_0"
                  )
                ]
@@ -316,7 +316,8 @@ defmodule Electric.ClientTest do
       parent = self()
 
       Bypass.expect(ctx.bypass, fn
-        %{request_path: "/v1/shape/my_table", query_params: %{"offset" => offset}} = conn ->
+        %{request_path: "/v1/shape", query_params: %{"table" => "my_table", "offset" => offset}} =
+            conn ->
           fun =
             Agent.get_and_update(responses, fn resps ->
               Map.get_and_update(resps, offset, fn [fun | rest] -> {fun, rest} end)
@@ -376,7 +377,7 @@ defmodule Electric.ClientTest do
              %{
                "-1" => [
                  &bypass_resp(&1, body1,
-                   shape_id: "my-shape",
+                   shape_handle: "my-shape",
                    last_offset: "1_0",
                    cursor: "299292",
                    schema: schema
@@ -385,7 +386,7 @@ defmodule Electric.ClientTest do
                "1_0" => [
                  fn %{query_params: %{"cursor" => "299292"}} = conn ->
                    bypass_resp(conn, body2,
-                     shape_id: "my-shape",
+                     shape_handle: "my-shape",
                      last_offset: "2_0"
                    )
                  end
@@ -397,7 +398,8 @@ defmodule Electric.ClientTest do
       parent = self()
 
       Bypass.expect(ctx.bypass, fn
-        %{request_path: "/v1/shape/my_table", query_params: %{"offset" => offset}} = conn ->
+        %{request_path: "/v1/shape", query_params: %{"table" => "my_table", "offset" => offset}} =
+            conn ->
           fun =
             Agent.get_and_update(responses, fn resps ->
               Map.get_and_update(resps, offset, fn [fun | rest] -> {fun, rest} end)
@@ -452,12 +454,12 @@ defmodule Electric.ClientTest do
            %{
              {"-1", nil, false} => [
                &bypass_resp(&1, Jason.encode!(body1),
-                 shape_id: "my-shape",
+                 shape_handle: "my-shape",
                  last_offset: "1_0",
                  schema: Jason.encode!(%{"id" => %{type: "text"}})
                ),
                &bypass_resp(&1, Jason.encode!(body1),
-                 shape_id: "my-shape-2",
+                 shape_handle: "my-shape-2",
                  last_offset: "1_0",
                  schema: Jason.encode!(%{"id" => %{type: "text"}})
                )
@@ -481,7 +483,7 @@ defmodule Electric.ClientTest do
                  end) ++
                  [
                    &bypass_resp(&1, Jason.encode!(body2),
-                     shape_id: "my-shape",
+                     shape_handle: "my-shape",
                      last_offset: "2_0"
                    )
                  ]
@@ -492,15 +494,15 @@ defmodule Electric.ClientTest do
 
       Bypass.expect(ctx.bypass, fn
         %{
-          request_path: "/v1/shape/my_table",
-          query_params: %{"offset" => offset} = query_params
+          request_path: "/v1/shape",
+          query_params: %{"table" => "my_table", "offset" => offset} = query_params
         } = conn ->
-          shape_id = Map.get(query_params, "shape_id", nil)
+          shape_handle = Map.get(query_params, "handle", nil)
           live = Map.get(query_params, "live", "false") == "true"
 
           fun =
             Agent.get_and_update(responses, fn resps ->
-              Map.get_and_update(resps, {offset, shape_id, live}, fn [fun | rest] ->
+              Map.get_and_update(resps, {offset, shape_handle, live}, fn [fun | rest] ->
                 {fun, rest}
               end)
             end)
@@ -542,12 +544,12 @@ defmodule Electric.ClientTest do
              %{
                {"-1", nil} => [
                  &bypass_resp(&1, Jason.encode!(body1),
-                   shape_id: "my-shape",
+                   shape_handle: "my-shape",
                    last_offset: "1_0",
                    schema: Jason.encode!(%{"id" => %{type: "text"}})
                  ),
                  &bypass_resp(&1, Jason.encode!(body1),
-                   shape_id: "my-shape-2",
+                   shape_handle: "my-shape-2",
                    last_offset: "1_0",
                    schema: Jason.encode!(%{"id" => %{type: "text"}})
                  )
@@ -557,7 +559,7 @@ defmodule Electric.ClientTest do
                    status: 400
                  ),
                  &bypass_resp(&1, Jason.encode!(body1),
-                   shape_id: "my-shape",
+                   shape_handle: "my-shape",
                    last_offset: "2_0"
                  )
                ]
@@ -569,14 +571,14 @@ defmodule Electric.ClientTest do
 
       Bypass.expect(ctx.bypass, fn
         %{
-          request_path: "/v1/shape/my_table",
-          query_params: %{"offset" => offset} = query_params
+          request_path: "/v1/shape",
+          query_params: %{"table" => "my_table", "offset" => offset} = query_params
         } = conn ->
-          shape_id = Map.get(query_params, "shape_id", nil)
+          shape_handle = Map.get(query_params, "handle", nil)
 
           fun =
             Agent.get_and_update(responses, fn resps ->
-              Map.get_and_update(resps, {offset, shape_id}, fn [fun | rest] -> {fun, rest} end)
+              Map.get_and_update(resps, {offset, shape_handle}, fn [fun | rest] -> {fun, rest} end)
             end)
 
           send(parent, {:offset, offset})
@@ -617,14 +619,14 @@ defmodule Electric.ClientTest do
              %{
                {"-1", nil} => [
                  &bypass_resp(&1, Jason.encode!(body1),
-                   shape_id: "my-shape",
+                   shape_handle: "my-shape",
                    last_offset: "1_0",
                    schema: Jason.encode!(%{"id" => %{type: "text"}})
                  )
                ],
                {"-1", "my-shape-2"} => [
                  &bypass_resp(&1, Jason.encode!(body1),
-                   shape_id: "my-shape-2",
+                   shape_handle: "my-shape-2",
                    last_offset: "1_0",
                    schema: Jason.encode!(%{"id" => %{type: "text"}})
                  )
@@ -632,7 +634,7 @@ defmodule Electric.ClientTest do
                {"1_0", "my-shape"} => [
                  &bypass_resp(&1, Jason.encode!([%{"headers" => %{"control" => "must-refetch"}}]),
                    status: 409,
-                   shape_id: "my-shape-2"
+                   shape_handle: "my-shape-2"
                  )
                ]
              }
@@ -643,14 +645,14 @@ defmodule Electric.ClientTest do
 
       Bypass.expect(ctx.bypass, fn
         %{
-          request_path: "/v1/shape/my_table",
-          query_params: %{"offset" => offset} = query_params
+          request_path: "/v1/shape",
+          query_params: %{"table" => "my_table", "offset" => offset} = query_params
         } = conn ->
-          shape_id = Map.get(query_params, "shape_id", nil)
+          shape_handle = Map.get(query_params, "handle", nil)
 
           fun =
             Agent.get_and_update(responses, fn resps ->
-              Map.get_and_update(resps, {offset, shape_id}, fn [fun | rest] -> {fun, rest} end)
+              Map.get_and_update(resps, {offset, shape_handle}, fn [fun | rest] -> {fun, rest} end)
             end)
 
           send(parent, {:offset, offset})
@@ -702,17 +704,21 @@ defmodule Electric.ClientTest do
   end
 
   defp bypass_response(ctx, responses) do
-    path = "/v1/shape/#{ctx.table_name}"
+    %{table_name: table_name} = ctx
+    path = "/v1/shape"
     parent = self()
 
     Bypass.expect(
       ctx.bypass,
-      fn %{request_path: ^path, query_params: %{"offset" => offset} = query_params} = conn ->
-        shape_id = Map.get(query_params, "shape_id", nil)
+      fn %{
+           request_path: ^path,
+           query_params: %{"table" => ^table_name, "offset" => offset} = query_params
+         } = conn ->
+        shape_handle = Map.get(query_params, "handle", nil)
 
         fun =
           Agent.get_and_update(responses, fn resps ->
-            Map.get_and_update(resps, {offset, shape_id}, fn [fun | rest] -> {fun, rest} end)
+            Map.get_and_update(resps, {offset, shape_handle}, fn [fun | rest] -> {fun, rest} end)
           end)
 
         send(parent, {:offset, offset})
@@ -759,20 +765,20 @@ defmodule Electric.ClientTest do
              %{
                {"-1", nil} => [
                  &bypass_resp(&1, Jason.encode!(body1),
-                   shape_id: "my-shape",
+                   shape_handle: "my-shape",
                    last_offset: "1_0",
                    schema: Jason.encode!(%{"id" => %{type: "text"}})
                  )
                ],
                {"1_0", "my-shape"} => [
                  &bypass_resp(&1, Jason.encode!(body2),
-                   shape_id: "my-shape",
+                   shape_handle: "my-shape",
                    last_offset: "2_0"
                  )
                ],
                {"2_0", "my-shape"} => [
                  &bypass_resp(&1, Jason.encode!(body3),
-                   shape_id: "my-shape",
+                   shape_handle: "my-shape",
                    last_offset: "3_0"
                  )
                ]
@@ -797,7 +803,7 @@ defmodule Electric.ClientTest do
                },
                up_to_date(2, 0),
                %ResumeMessage{
-                 shape_id: "my-shape",
+                 shape_handle: "my-shape",
                  offset: offset(2, 0),
                  schema: %{id: %{type: "text"}}
                }
@@ -829,13 +835,13 @@ defmodule Electric.ClientTest do
              %{
                {"2_0", "my-shape"} => [
                  &bypass_resp(&1, Jason.encode!(body3),
-                   shape_id: "my-shape",
+                   shape_handle: "my-shape",
                    last_offset: "3_0"
                  )
                ],
                {"3_0", "my-shape"} => [
                  &bypass_resp(&1, Jason.encode!(body4),
-                   shape_id: "my-shape",
+                   shape_handle: "my-shape",
                    last_offset: "4_0"
                  )
                ]
@@ -846,7 +852,7 @@ defmodule Electric.ClientTest do
       bypass_response(ctx, responses)
 
       resume = %ResumeMessage{
-        shape_id: "my-shape",
+        shape_handle: "my-shape",
         offset: offset(2, 0),
         schema: %{id: %{type: "text"}}
       }
@@ -899,7 +905,7 @@ defmodule Electric.ClientTest do
              %{
                {"-1", nil} => [
                  &bypass_resp(&1, Jason.encode!(body1),
-                   shape_id: "my-shape",
+                   shape_handle: "my-shape",
                    last_offset: "1234_0",
                    schema: Jason.encode!(%{"id" => %{type: "text"}, "value" => %{type: "text"}})
                  )
@@ -939,7 +945,7 @@ defmodule Electric.ClientTest do
                  offset: %Electric.Client.Offset{tx: 1234, op: 0}
                },
                %ResumeMessage{
-                 shape_id: "my-shape",
+                 shape_handle: "my-shape",
                  offset: offset(1234, 0),
                  schema: %{id: %{type: "text"}}
                }

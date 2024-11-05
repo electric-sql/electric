@@ -53,8 +53,6 @@ defmodule Electric.Client.ShapeDefinition do
   @type option :: unquote(NimbleOptions.option_typespec(@schema))
   @type options :: [option()]
 
-  @quot "%22"
-
   @spec new(String.t(), options()) :: {:ok, t()} | {:error, term()}
   @doc """
   Create a `ShapeDefinition` for the given `table_name`.
@@ -94,7 +92,7 @@ defmodule Electric.Client.ShapeDefinition do
       "my_app.my_table"
 
       iex> ShapeDefinition.url_table_name(ShapeDefinition.new!("my table", namespace: "my app"))
-      "%22my app%22.%22my table%22"
+      ~s["my app"."my table"]
 
   """
   @spec url_table_name(t()) :: String.t()
@@ -116,9 +114,9 @@ defmodule Electric.Client.ShapeDefinition do
 
   defp quote_table_name(name) do
     IO.iodata_to_binary([
-      @quot,
-      :binary.replace(name, ~s["], ~s[#{@quot}#{@quot}], [:global]),
-      @quot
+      ?",
+      :binary.replace(name, ~s["], ~s[""], [:global]),
+      ?"
     ])
   end
 
@@ -126,8 +124,9 @@ defmodule Electric.Client.ShapeDefinition do
   @spec params(t()) :: Electric.Client.Fetch.Request.params()
   def params(%__MODULE__{} = shape) do
     %{where: where, columns: columns} = shape
+    table_name = url_table_name(shape)
 
-    %{}
+    %{table: table_name}
     |> Util.map_put_if("where", where, is_binary(where))
     |> Util.map_put_if("columns", fn -> Enum.join(columns, ",") end, is_list(columns))
   end

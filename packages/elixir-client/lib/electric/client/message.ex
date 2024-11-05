@@ -104,12 +104,12 @@ defmodule Electric.Client.Message do
     ```
     """
 
-    @enforce_keys [:shape_id, :offset, :schema]
+    @enforce_keys [:shape_handle, :offset, :schema]
 
-    defstruct [:shape_id, :offset, :schema]
+    defstruct [:shape_handle, :offset, :schema]
 
     @type t :: %__MODULE__{
-            shape_id: Client.shape_id(),
+            shape_handle: Client.shape_handle(),
             offset: Offset.t(),
             schema: Client.schema()
           }
