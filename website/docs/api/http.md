@@ -73,7 +73,7 @@ When you make an initial sync request, with `offset=-1`, you're telling the serv
 
 When a shape is first requested, Electric queries Postgres for the data and populates the log by turning the query results into insert operations. This allows you to sync shapes without having to pre-define them. Electric then streams out the log data in the response.
 
-Sometimes a log can fit in a single response. Sometimes it's too big and requires multiple requests. In this case, the first request will return a batch of data and an `electric-offset` header. An HTTP client should then continue to make requests setting the `offset` parameter to the this header value. This allows the client to paginate through the shape log until it has received all the current data.
+Sometimes a log can fit in a single response. Sometimes it's too big and requires multiple requests. In this case, the first request will return a batch of data and an `electric-offset` header. An HTTP client should then continue to make requests setting the `offset` parameter to this header value. This allows the client to paginate through the shape log until it has received all of the current data.
 
 ### Control messages
 
@@ -109,7 +109,7 @@ The server holds open the request until either a timeout (returning `204 No cont
 
 The algorithm for consuming the HTTP API described above can be implemented from scratch for your application. Howerver, it's typically implemented by clients that can be re-used and provide a simpler interface for application code.
 
-There are a number of existing clients, such as the [TypeScript](/docs/api/clients/typescript) and [Elixir](/docs/api/clients/elixir) clients. If one doesn't exist for your language or environment, we hope that the pattern is simple enough that you should be able to write your own client quite simply.
+There are a number of existing clients, such as the [TypeScript](/docs/api/clients/typescript) and [Elixir](/docs/api/clients/elixir) clients. If one doesn't exist for your language or environment, we hope that the pattern is simple enough that you should be able to [write your own client](/docs/guides/writing-your-own-client) relatively easily.
 
 ## Caching
 
@@ -119,7 +119,7 @@ There are three aspects to caching:
 
 1. [accelerating initial sync](#accelerating-initial-sync)
 2. [caching in the browser](#caching-in-the-browser)
-3. [coalescing live requests](#coalescing-live-requests)
+3. [collapsing live requests](#collapsing-live-requests)
 
 ### Accelerating initial sync
 
@@ -165,11 +165,11 @@ The next time the user navigates to the same page, the data is in the browser fi
 
 This can make data access instant and available offline, even without using a persistent local store.
 
-### Coalescing live requests
+### Collapsing live requests
 
 Once a client has requested the initial data for a shape, it switches into [live mode](#live-mode), using long polling to wait for new data. When new data arrives, the client reconnects to wait for more data, and so on.
 
-Most caching proxies and CDNs support a feature called [request coalescing](https://info.varnish-software.com/blog/two-minutes-tech-tuesdays-request-coalescing). This identifies requests to the same resource, queues them on a waiting list, and only sends a single request to the origin.
+Most caching proxies and CDNs support a feature called [request collapsing](https://info.varnish-software.com/blog/two-minutes-tech-tuesdays-request-coalescing) (sometimes also called request coalescing). This identifies requests to the same resource, queues them on a waiting list, and only sends a single request to the origin.
 
 <div style="width: 100%; max-width: 512px">
   <div class="embed-container">
