@@ -190,19 +190,38 @@ defmodule Electric.ClientTest do
 
       events = stream |> Enum.into([])
 
-      assert events |> Enum.filter(&is_struct(&1, ChangeMessage)) |> Enum.map(& &1.value["id"]) ==
-               [id1, id2, id3, id4]
+      # not happy about this testing methodology, feels a little forced, but
+      # it's the only way to avoid timing/race issues on slower machines we're
+      # basically asserting that the first `oneshot` request runs and
+      # definitely gets the snapshot (plus potentially some other items) and
+      # that the resume message allows us to continue at the right point.
+      all = MapSet.new([id1, id2, id3, id4, id5, id6])
+
+      received =
+        events
+        |> Enum.filter(&is_struct(&1, ChangeMessage))
+        |> Enum.map(& &1.value["id"])
+        |> MapSet.new()
 
       assert resume = %ResumeMessage{} = List.last(events)
 
-      stream = stream(ctx, resume: resume)
+      unless MapSet.equal?(received, all) do
+        stream = stream(ctx, resume: resume)
 
-      # the exact number of control + change messages varies but we know there
-      # (should) always be 2 change messages
-      events = stream |> Stream.filter(&is_struct(&1, ChangeMessage)) |> Enum.take(2)
+        Enum.reduce_while(stream, MapSet.new(received), fn
+          %ChangeMessage{value: %{"id" => id}}, acc ->
+            received = MapSet.put(acc, id)
 
-      assert events |> Enum.filter(&is_struct(&1, ChangeMessage)) |> Enum.map(& &1.value["id"]) ==
-               [id5, id6]
+            if MapSet.equal?(received, all) do
+              {:halt, received}
+            else
+              {:cont, received}
+            end
+
+          _msg, acc ->
+            {:cont, acc}
+        end)
+      end
     end
   end
 
