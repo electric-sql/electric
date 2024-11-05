@@ -1001,7 +1001,8 @@ describe.sequential(`Multi tenancy sync`, () => {
 
     const shapeData = new Map()
     const issueStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
       databaseId,
       subscribe: false,
       signal: aborter.signal,
@@ -1036,7 +1037,8 @@ describe.sequential(`Multi tenancy sync`, () => {
 
       const shapeData = new Map()
       const issueStream = new ShapeStream({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         databaseId: otherDatabaseId,
         subscribe: false,
         signal: aborter.signal,
@@ -1076,14 +1078,16 @@ describe.sequential(`Multi tenancy sync`, () => {
     }) => {
       // Set up streams for both databases
       const defaultStream = new ShapeStream({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         databaseId,
         subscribe: true,
         signal: aborter.signal,
       })
 
       const otherStream = new ShapeStream({
-        url: `${BASE_URL}/v1/shape/${issuesTableUrl}`,
+        url: `${BASE_URL}/v1/shape`,
+        table: issuesTableUrl,
         databaseId: otherDatabaseId,
         subscribe: true,
         signal: otherAborter.signal,
