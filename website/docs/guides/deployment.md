@@ -114,17 +114,7 @@ Electric caches [Shape logs](/docs/api/http#shape-log) and metadata on the files
 
 The path to Electric's persistent storage can be configured via the [`ELECTRIC_STORAGE_DIR`](/docs/api/config#electric-storage-dir) environment variable, e.g. `ELECTRIC_STORAGE_DIR=/var/lib/electric/persistent`. Electric will create the directory at that path if it doesn't exist yet. However, you need to make sure that the OS user that Electric is running as has the necessary permissions in the parent directory.
 
-<<<<<<< HEAD
 Naturally, the file system location configured via `ELECTRIC_STORAGE_DIR` and the data Electric stores there must survive sync service's restarts. For example, when using Kubernetes, you'll want to create a persistent volume and attach it to your Electric deployment.
-
-> [!Tip] Evaluating storage need
-> Electric trades storage for low memory use and fast sync. How much storage you need is highly application dependent. We encourage you to test with your own workload.
-=======
-> [!Tip] Persistent disk
-> The file system and the data Electric stores there must survive sync service's restarts.
->>>>>>> 6e712113 (docs: flesh out the deployment guide)
->
-> For example, when using Kubernetes, you'll want to create a [Persistent Volume](https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage) and attach it to your Electric deployment.
 
 > [!Tip] Clear one, clear the other
 > The persistent state that Electric maintains in Postgres (via the logical replication publication and replication slot) **must** stay in sync with the shape data cached on disk by Electric.
