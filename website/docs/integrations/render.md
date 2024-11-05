@@ -30,7 +30,7 @@ In the Render dashboard, create a new Web Service, select Existing Image and pas
 
 You can also optionally enter `/v1/health` as the path for a health check.
 
-Under "Advanced" make sure you add a Persistent Disk and set the Mount path to e.g.: `/var/electric`. Then also set the [`STORAGE_DIR` environment variable](/docs/api/config#storage-dir) to the same mount path, e.g.: `STORAGE_DIR=/var/electric`.
+Under "Advanced" make sure you add a Persistent Disk and set the Mount path to e.g.: `/var/electric`. Then also set the [`ELECTRIC_STORAGE_DIR` environment variable](/docs/api/config#storage-dir) to the same mount path, e.g.: `ELECTRIC_STORAGE_DIR=/var/electric`.
 
 ### Deploy your app
 
@@ -69,7 +69,7 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
-      - key: STORAGE_DIR
+      - key: ELECTRIC_STORAGE_DIR
         value: "/var/electric"
   - type: web
     runtime: static
