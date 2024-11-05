@@ -175,14 +175,6 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     )
   end
 
-  defp query_span!(conn, span_name, span_attrs, query, params) do
-    OpenTelemetry.with_span(
-      span_name,
-      span_attrs,
-      fn -> Postgrex.query!(conn, query, params) end
-    )
-  end
-
   defp shape_attrs(shape_handle, shape) do
     [
       "shape.handle": shape_handle,
