@@ -163,6 +163,9 @@ paths:
 
             When set to `full` the entire row will be sent for updates and
             deletes.
+
+            Note that insert operations always include the full row,
+            in either mode.
         # Headers
         - name: If-None-Match
           in: header

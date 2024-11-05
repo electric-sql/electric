@@ -87,7 +87,9 @@
   --ddn-color: #D0BCFF;
   --pglite-color: #F6F95C;
 
-  --vp-code-font-size: 0.925em;
+  --vp-code-bg: var(--vp-c-bg-elv);
+  --vp-code-color: #9ECBFF;
+  --vp-code-font-size: 0.875em;
   --vp-font-family-base: OpenSauceOne, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --vp-font-family-mono: SourceCodePro, ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
@@ -421,22 +423,24 @@ a.no-visual:hover {
   text-align: center;
   font-weight: 600;
   white-space: nowrap;
-  transition: color 0.25s, border-color 0.25s, background-color 0.25s;
+  transition: color 0.25s, border-color 0.25s, background-color 0.25s !important;
 }
 .VPButton.brand {
   background-color: var(--vp-button-brand-bg);
   border-color: var(--vp-button-brand-border);
-  color: var(--vp-button-brand-text);
+  color: var(--vp-button-brand-text) !important;
 }
 .VPButton.brand:hover {
   background-color: var(--vp-button-brand-hover-bg);
   border-color: var(--vp-button-brand-hover-border);
-  color: var(--vp-button-brand-hover-text);
+  color: var(--vp-button-brand-hover-text) !important;
+  opacity: 1 !important;
 }
 .VPButton.brand:active {
   background-color: var(--vp-button-brand-active-bg);
   border-color: var(--vp-button-brand-active-border);
-  color: var(--vp-button-brand-active-text);
+  color: var(--vp-button-brand-active-text) !important;
+  opacity: 1 !important;
 }
 
 .VPButton.electric,
@@ -450,6 +454,16 @@ a.no-visual:hover {
   background-color: var(--pglite-color);
   border-color: var(--pglite-color);
   color: var(--vp-c-bg);
+}
+.VPButton.small {
+  border-radius: 16px;
+  padding: 0 16px;
+  line-height: 34px;
+  font-size: 13.5px;
+}
+.VPButton.vspace {
+  margin-top: 6px;
+  margin-bottom: 6px;
 }
 
 .img-row {
@@ -560,7 +574,10 @@ iframe {
 .vp-doc .custom-block {
   margin: 24px 0;
 }
-
+.custom-block {
+  border-radius: 12px;
+  padding: 19px 21px 11px;
+}
 .custom-block-no-title {
   margin-bottom: 10px !important;
 }
@@ -574,6 +591,11 @@ iframe {
 .vp-block pre,
 .vp-doc [class*='language-'] pre {
   padding: 24px 0 !important;
+}
+
+pre {
+  max-width: 100%;
+  overflow-x: scroll;
 }
 
 ul.benefits {

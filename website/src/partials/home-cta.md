@@ -15,7 +15,7 @@ You can start by adopting Electric incrementally,
     <a href="/docs/api/clients/typescript">
       client&nbsp;libraries</a>
     and
-    <a href="/docs/api/integrations/react">
+    <a href="/docs/integrations/react">
       framework&nbsp;hooks</a></span>.
 </span>
 

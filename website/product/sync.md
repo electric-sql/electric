@@ -84,9 +84,9 @@ You can sync data into:
 
 ## How does it work?
 
-The Electric sync engine is an [Elixir](https://elixir-lang.org) application, developed at [electric-sql/electric/tree/main/packages/sync-service](https://github.com/electric-sql/electric/tree/main/packages/sync-service).
+The Electric sync engine is an [Elixir](https://elixir-lang.org) application, developed at [packages/sync-service](https://github.com/electric-sql/electric/tree/main/packages/sync-service).
 
-It connects to your Postgres using a `DATABASE_URL`, consumes the logical replication stream and fans out data into [Shapes](/docs/guides/shapes), which [Clients](/docs/api/clients/typescript) then consume and sync.
+It connects to your Postgres using a [`DATABASE_URL`](/docs/api/config#database-url), consumes the logical replication stream and fans out data into [Shapes](/docs/guides/shapes), which [Clients](/docs/api/clients/typescript) then consume and sync.
 
 <figure>
   <a href="/img/api/shape-log.jpg">
@@ -105,7 +105,7 @@ This enables a massive number of clients to query and get real-time updates to s
 
 ## More information
 
-See the [Docs](/docs/intro) and [Quickstart](/docs/quickstart) to get up-and-running with Electric sync. The source code is on GitHub at [electric-sql/electric](https://github.com/electric-sql/electric), including a list of [Examples](https://github.com/electric-sql/electric/tree/main/examples).
+See the [Docs](/docs/intro), [Quickstart](/docs/quickstart) and [Examples](https://github.com/electric-sql/electric/tree/main/examples). You can [self-host](/docs/guides/deployment) or use the [Electric&nbsp;Cloud](/product/cloud).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">

@@ -5,11 +5,20 @@ description: >-
 outline: deep
 ---
 
+<script setup>
+import InitialRequest from '/static/img/docs/api/http/initial-request.png?url'
+import InitialRequestSm from '/static/img/docs/api/http/initial-request.sm.png?url'
+import SubsequentRequest from '/static/img/docs/api/http/subsequent-request.png?url'
+import SubsequentRequestSm from '/static/img/docs/api/http/subsequent-request.sm.png?url'
+</script>
+
 # HTTP API
 
 The HTTP API is the primary, low level API for syncing data with Electric.
 
-Normative API documentation is published as an [OpenAPI](https://www.openapis.org/what-is-openapi) specification:
+## HTTP API specification
+
+API documentation is published as an [OpenAPI](https://www.openapis.org/what-is-openapi) specification:
 
 - [download the specification file](https://github.com/electric-sql/electric/blob/main/website/electric-api.yaml) to view or use with other OpenAPI [tooling](https://tools.openapis.org/)
 - <a href="/openapi.html" target="_blank">view the HTML documentation</a> generated using [Redocly](https://redocly.com)
@@ -41,7 +50,7 @@ When you sync a shape from Electric, you get the data in the form of a log of lo
 
 The `offset` that you see in the messages and provide as the `?offset=...` query parameter in your request identifies a position in the log. The messages you see in the response are shape log entries (the ones with `value`s and `action` headers) and control messages (the ones with `control` headers).
 
-The Shape Log is similar conceptually to the logical replication stream from Postgres. Except that instead of getting all the database operations, you're getting the ones that affect the data in your Shape. It's then the responsibility of the client to consume the log and materialize out the current value of the shape. The values included in the shape log are strings formatted according to Postgres' display settings. The [OpenAPI](https://www.openapis.org/what-is-openapi) specification defines the display settings the HTTP API adheres to.
+The Shape Log is similar conceptually to the logical replication stream from Postgres. Except that instead of getting all the database operations, you're getting the ones that affect the data in your Shape. It's then the responsibility of the client to consume the log and materialize out the current value of the shape.
 
 <figure>
   <a href="/img/api/shape-log.jpg">
@@ -55,6 +64,8 @@ The Shape Log is similar conceptually to the logical replication stream from Pos
     Shape log flow diagramme.
   </figcaption>
 </figure>
+
+The values included in the shape log are strings formatted according to Postgres' display settings. The <a href="/openapi.html" target="_blank">OpenAPI specification</a> defines the display settings the HTTP API adheres to.
 
 ### Initial sync request
 
@@ -99,3 +110,73 @@ The server holds open the request until either a timeout (returning `204 No cont
 The algorithm for consuming the HTTP API described above can be implemented from scratch for your application. Howerver, it's typically implemented by clients that can be re-used and provide a simpler interface for application code.
 
 There are a number of existing clients, such as the [TypeScript](/docs/api/clients/typescript) and [Elixir](/docs/api/clients/elixir) clients. If one doesn't exist for your language or environment, we hope that the pattern is simple enough that you should be able to write your own client quite simply.
+
+## Caching
+
+HTTP API responses contain cache headers, including `cache-control` with `max-age` and `stale-age` and `etag`. These work out-of-the-box with caching proxies, such as [Nginx](https://nginx.org/en), [Caddy](https://caddyserver.com) or [Varnish](https://varnish-cache.org), or a CDN like [Cloudflare](https://www.cloudflare.com/en-gb/application-services/products/cdn) or [Fastly](https://www.fastly.com/products/cdn).
+
+There are three aspects to caching:
+
+1. [accelerating initial sync](#accelerating-initial-sync)
+2. [caching in the browser](#caching-in-the-browser)
+3. [coalescing live requests](#coalescing-live-requests)
+
+### Accelerating initial sync
+
+When a client makes a `GET` request to fetch shape data at a given `offset`, the response can be cached. Subsequent clients requesting the same data can be served from the proxy or CDN. This removes load from Electric (and from Postrgres) and allows data to be served extremely quickly, at the edge by an optimised CDN.
+
+You can see an example Nginx config at [packages/sync-service/dev/nginx.conf](https://github.com/electric-sql/electric/blob/main/packages/sync-service/dev/nginx.conf):
+
+<<< @../../packages/sync-service/dev/nginx.conf{nginx}
+
+### Caching in the browser
+
+Requests are also designed to be cached by the browser. This allows apps to cache and avoid re-fetching data.
+
+For example, say a page loads data by syncing a shape.
+
+<figure>
+  <a :href="InitialRequest" class="hidden-sm">
+    <img :src="InitialRequest"
+        alt="Console showing initial request loading from the network"
+    />
+  </a>
+  <a :href="InitialRequest" class="block-sm">
+    <img :src="InitialRequestSm"
+        alt="Console showing initial request loading from the network"
+    />
+  </a>
+</figure>
+
+The next time the user navigates to the same page, the data is in the browser file cache.
+
+<figure>
+  <a :href="SubsequentRequest" class="hidden-sm">
+    <img :src="SubsequentRequest"
+        alt="Console showing subsequent requests loading from the browser's file cache"
+    />
+  </a>
+  <a :href="SubsequentRequest" class="block-sm">
+    <img :src="SubsequentRequestSm"
+        alt="Console showing subsequent requests loading from the browser's file cache"
+    />
+  </a>
+</figure>
+
+This can make data access instant and available offline, even without using a persistent local store.
+
+### Coalescing live requests
+
+Once a client has requested the initial data for a shape, it switches into [live mode](#live-mode), using long polling to wait for new data. When new data arrives, the client reconnects to wait for more data, and so on.
+
+Most caching proxies and CDNs support a feature called [request coalescing](https://info.varnish-software.com/blog/two-minutes-tech-tuesdays-request-coalescing). This identifies requests to the same resource, queues them on a waiting list, and only sends a single request to the origin.
+
+<div style="width: 100%; max-width: 512px">
+  <div class="embed-container">
+    <YoutubeEmbed video-id="9G9ipVQCZ9w" />
+  </div>
+</div>
+
+Electric takes advantage of this to optimise realtime delivery to large numbers of concurrent clients. Instead of Electric holding open a connection per client, this is handled at the CDN level and allows us to coalesce concurrent long-polling requests in live mode.
+
+This is how Electric can support millions of concurrent clients with minimal load on the sync service and no load on the source Postgres.

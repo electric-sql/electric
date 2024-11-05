@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="90px" height="90px" viewBox="0 0 90 90" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Artboard</title>
+    <defs>
+        <path d="M72.6923077,41.5380162 L48.4653978,65.7661135 L72.6923077,90 L72.6923077,90 L45.0035837,90 L34.6181413,79.6140486 L34.6181413,79.6140486 L20.7708848,65.7661135 L45.0035837,41.5380162 L72.6923077,41.5380162 L72.6923077,41.5380162 L72.6923077,41.5380162 Z M45.0035837,0 L0,45 L13.8472565,58.8479352 L72.6923077,0 L45.0035837,0 Z" id="path-1"></path>
+        <path d="M72.6923077,41.5380162 L48.4653978,65.7661135 L72.6923077,90 L72.6923077,90 L45.0035837,90 L34.6181413,79.6140486 L34.6181413,79.6140486 L20.7708848,65.7661135 L45.0035837,41.5380162 L72.6923077,41.5380162 L72.6923077,41.5380162 L72.6923077,41.5380162 Z M45.0035837,0 L0,45 L13.8472565,58.8479352 L72.6923077,0 L45.0035837,0 Z" id="path-3"></path>
+        <path d="M72.6923077,41.5380162 L48.4653978,65.7661135 L72.6923077,90 L72.6923077,90 L45.0035837,90 L34.6181413,79.6140486 L34.6181413,79.6140486 L20.7708848,65.7661135 L45.0035837,41.5380162 L72.6923077,41.5380162 L72.6923077,41.5380162 L72.6923077,41.5380162 Z M45.0035837,0 L0,45 L13.8472565,58.8479352 L72.6923077,0 L45.0035837,0 Z" id="path-5"></path>
+        <path d="M72.6923077,41.5380162 L48.4653978,65.7661135 L72.6923077,90 L72.6923077,90 L45.0035837,90 L34.6181413,79.6140486 L34.6181413,79.6140486 L20.7708848,65.7661135 L45.0035837,41.5380162 L72.6923077,41.5380162 L72.6923077,41.5380162 L72.6923077,41.5380162 Z M45.0035837,0 L0,45 L13.8472565,58.8479352 L72.6923077,0 L45.0035837,0 Z" id="path-7"></path>
+        <linearGradient x1="19.6594305%" y1="81.5112737%" x2="69.8834226%" y2="47.652425%" id="linearGradient-9">
+            <stop stop-color="#1A237E" stop-opacity="0.4" offset="0%"></stop>
+            <stop stop-color="#1A237E" stop-opacity="0" offset="100%"></stop>
+        </linearGradient>
+        <path d="M72.6923077,41.5380162 L48.4653978,65.7661135 L72.6923077,90 L72.6923077,90 L45.0035837,90 L34.6181413,79.6140486 L34.6181413,79.6140486 L20.7708848,65.7661135 L45.0035837,41.5380162 L72.6923077,41.5380162 L72.6923077,41.5380162 L72.6923077,41.5380162 Z M45.0035837,0 L0,45 L13.8472565,58.8479352 L72.6923077,0 L45.0035837,0 Z" id="path-10"></path>
+        <radialGradient cx="2.81665605%" cy="6.81643188%" fx="2.81665605%" fy="6.81643188%" r="151.473063%" gradientTransform="translate(0.0282, 0.0682), scale(1, 0.8077), translate(-0.0282, -0.0682)" id="radialGradient-12">
+            <stop stop-color="#FFFFFF" stop-opacity="0.1" offset="0%"></stop>
+            <stop stop-color="#FFFFFF" stop-opacity="0" offset="100%"></stop>
+        </radialGradient>
+    </defs>
+    <g id="Artboard" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Group" transform="translate(9, 0)">
+            <g id="Clipped">
+                <g>
+                    <mask id="mask-2" fill="white">
+                        <use xlink:href="#path-1"></use>
+                    </mask>
+                    <g id="SVGID_1_"></g>
+                    <polygon id="Path" fill="#39CEFD" fill-rule="nonzero" mask="url(#mask-2)" points="72.6923077 41.5380162 72.6923077 41.5380162 72.6923077 41.5380162 45.0035837 41.5380162 20.7708848 65.7719027 34.6181413 79.6140486"></polygon>
+                </g>
+                <g>
+                    <mask id="mask-4" fill="white">
+                        <use xlink:href="#path-3"></use>
+                    </mask>
+                    <g id="SVGID_3_"></g>
+                    <polygon id="Path" fill="#39CEFD" fill-rule="nonzero" mask="url(#mask-4)" points="13.8472565 58.8479352 0 45 45.0035837 0 72.6923077 0"></polygon>
+                </g>
+                <g>
+                    <mask id="mask-6" fill="white">
+                        <use xlink:href="#path-5"></use>
+                    </mask>
+                    <g id="SVGID_5_"></g>
+                    <polygon id="Path" fill="#03569B" fill-rule="nonzero" mask="url(#mask-6)" points="34.6181413 79.6140486 45.0035837 90 72.6923077 90 72.6923077 90 48.4653978 65.7719027"></polygon>
+                </g>
+                <g>
+                    <mask id="mask-8" fill="white">
+                        <use xlink:href="#path-7"></use>
+                    </mask>
+                    <g id="SVGID_7_"></g>
+                    <polygon id="Path" fill="url(#linearGradient-9)" fill-rule="nonzero" mask="url(#mask-8)" points="34.6181413 79.6140486 55.1516776 72.5048244 48.4653978 65.7719027"></polygon>
+                </g>
+                <g>
+                    <mask id="mask-11" fill="white">
+                        <use xlink:href="#path-10"></use>
+                    </mask>
+                    <g id="SVGID_10_"></g>
+                    <polygon id="Rectangle" fill="#16B9FD" fill-rule="nonzero" mask="url(#mask-11)" transform="translate(34.6146, 65.7659) rotate(-45) translate(-34.6146, -65.7659)" points="24.8255404 55.9768668 44.4041859 55.976387 44.4037062 75.5550325 24.8250607 75.5555123"></polygon>
+                </g>
+            </g>
+            <path d="M72.6923077,41.5380162 L48.4653978,65.7661135 L72.6923077,90 L72.6923077,90 L45.0035837,90 L34.6181413,79.6140486 L34.6181413,79.6140486 L20.7708848,65.7661135 L45.0035837,41.5380162 L72.6923077,41.5380162 L72.6923077,41.5380162 L72.6923077,41.5380162 Z M45.0035837,0 L0,45 L13.8472565,58.8479352 L72.6923077,0 L45.0035837,0 Z" id="Shape" fill="url(#radialGradient-12)" fill-rule="nonzero"></path>
+        </g>
+    </g>
+</svg>

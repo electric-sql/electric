@@ -46,6 +46,7 @@ export default defineConfig({
       'css',
       'javascript',
       'jsx',
+      'nginx',
       'shellscript',
       'sql',
       'tsx',
@@ -147,8 +148,8 @@ export default defineConfig({
           items: [
             { text: 'Auth', link: '/docs/guides/auth' },
             { text: 'Shapes', link: '/docs/guides/shapes' },
-            { text: 'Deployment', link: '/docs/guides/deployment' },
             { text: 'Installation', link: '/docs/guides/installation' },
+            { text: 'Deployment', link: '/docs/guides/deployment' },
             { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
             { text: 'Writing your own client', link: '/docs/guides/writing-your-own-client' },
           ]
@@ -166,21 +167,46 @@ export default defineConfig({
               ],
               collapsed: false
             },
+            { text: 'Config', link: '/docs/api/config' }
+          ]
+        },
+        {
+          text: 'Integrations',
+          collapsed: false,
+          items: [
             {
-              text: 'Integrations',
+              text: 'Frameworks',
               items: [
-                // { text: 'MobX', link: '/docs/api/integrations/mobx' },
-                { text: 'React', link: '/docs/api/integrations/react' },
-                // { text: 'Redis', link: '/docs/api/integrations/redis' },
-                // { text: 'TanStack', link: '/docs/api/integrations/tanstack' },
+                { text: 'LiveStore', link: '/docs/integrations/livestore' },
+                { text: 'MobX', link: '/docs/integrations/mobx' },
+                { text: 'Next.js', link: '/docs/integrations/next' },
+                { text: 'Phoenix', link: '/docs/integrations/phoenix' },
+                { text: 'React', link: '/docs/integrations/react' },
+                { text: 'Redis', link: '/docs/integrations/redis' },
+                { text: 'TanStack', link: '/docs/integrations/tanstack' },
               ],
-              collapsed: false
+            },
+            {
+              text: 'Platforms',
+              items: [
+                { text: 'AWS', link: '/docs/integrations/aws' },
+                { text: 'Cloudflare', link: '/docs/integrations/cloudflare' },
+                { text: 'Crunchy', link: '/docs/integrations/crunchy' },
+                { text: 'Digital Ocean', link: '/docs/integrations/digital-ocean' },
+                { text: 'Expo', link: '/docs/integrations/expo' },
+                { text: 'Fly.io', link: '/docs/integrations/fly' },
+                { text: 'GCP', link: '/docs/integrations/gcp' },
+                { text: 'Neon', link: '/docs/integrations/neon' },
+                { text: 'Netlify', link: '/docs/integrations/netlify' },
+                { text: 'Render', link: '/docs/integrations/render' },
+                { text: 'Supabase', link: '/docs/integrations/supabase' }
+              ]
             }
           ]
         },
         {
           text: 'Reference',
-          collapsed: true,
+          collapsed: false,
           items: [
             { text: 'Alternatives', link: '/docs/reference/alternatives' },
             { text: 'Benchmarks', link: '/docs/reference/benchmarks' },
