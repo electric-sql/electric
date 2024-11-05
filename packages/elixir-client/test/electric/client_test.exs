@@ -176,10 +176,10 @@ defmodule Electric.ClientTest do
       {:ok, id3} = insert_item(ctx)
       {:ok, id4} = insert_item(ctx)
 
-      stream = stream(ctx)
+      stream = stream(ctx, live: false)
 
-      # create the shape
-      events = stream |> Stream.take(4) |> Enum.into([])
+      # create the shape and make sure we've got all the ids
+      events = stream |> Enum.filter(&is_struct(&1, ChangeMessage)) |> Enum.into([])
 
       assert Enum.map(events, & &1.value["id"]) == [id1, id2, id3, id4]
 
