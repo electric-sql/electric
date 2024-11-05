@@ -1,5 +1,19 @@
 # @electric-sql/client
 
+## 0.7.0
+
+### Minor Changes
+
+- 61a18bd: - Implement `rows` and `currentRows` getters on `Shape` interface for easier data access.
+  - [BREAKING] Rename `valueSync` getter on `Shape` to `currentValue` for clarity and consistency.
+  - [BREAKING] Change `subscribe` API on `Shape` to accept callbacks with signature `({ rows: T[], value: Map<string, T> }) => void`
+- 4d872b6: All `Shape` interfaces (`ShapeStream`, `Shape`, `useShape`) now require `table` as an additional configuration parameter, and the shape API endpoint url only needs to point to `/v1/shape`.
+- 4d872b6: [breaking] Changes the API contract for the server to use new, clearer header names and query parameter names. One highlight is the change from `shape_id` to `handle` as the URL query parameter
+
+### Patch Changes
+
+- aed079f: Add `replica` parameter to change the behaviour for updates to include the full row, not just the modified columns
+
 ## 0.6.5
 
 ### Patch Changes

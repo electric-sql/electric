@@ -1,5 +1,23 @@
 # @core/sync-service
 
+## 0.8.0
+
+### Minor Changes
+
+- 4d872b6: [breaking] Changes the API contract for the server to use new, clearer header names and query parameter names. One highlight is the change from `shape_id` to `handle` as the URL query parameter
+- 4d872b6: [BREAKING] All shape API endpoints now accept `table` as a query parameter rather than a path parameter, so `/v1/shape/foo?offset=-1` now becomes `/v1/shape?table=foo&offset=-1`.
+
+### Patch Changes
+
+- 1cf8bf9: Fix `ELECTRIC_REPLICATION_STREAM_ID` not being able to be set because of incorrect parsing
+- 16698ff: Add tracing of snapshot creation and more logging of postgres connection status. Prevent connection timeouts when writing snapshot data. Add `ELECTRIC_LOG_OTP_REPORTS` environment variable to enable OTP SASL reporting at runtime.
+- c4d118d: Add `CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN` env var option to configure whether temporary replication slots are used, to allow easier cleanups on test deploys
+- b110ed9: Update acknowledged WAL on keep alive messages
+- 0873da2: Consistently prefix environment variables with our ELECTRIC\_ namespace
+- 52caf48: Update OpenTelemetry dependencies
+- aed079f: Add `replica` parameter to change the behaviour for updates to include the full row, not just the modified columns
+- 85618d0: Fix a possible deadlock issue when creating or updating multiple where-claused shapes that occured while updating the Postgres publication (only on PG 15+). Fix a possible race condition between reading the existing publication and writing the updated version.
+
 ## 0.7.7
 
 ### Patch Changes
