@@ -75,7 +75,7 @@ You connect to Postgres using a [`DATABASE_URL`](/docs/api/config#database-url) 
 Make sure you're connecting directly to Postgres and not via a PGBouncer-style connection pool. This is because Electric uses logical replication and connection poolers don't usually support it.
 
 > [!Tip] Troubleshooting common errors
-> If you get a TCP connection error saying `non-existing domain - :nxdomain` or `network is unreachable - :enetunreach` then you may need to connect using IPv6. You can enable this by setting [`DATABASE_USE_IPV6=true`](/docs/api/config#database-use-ipv6).
+> If you get a TCP connection error saying `non-existing domain - :nxdomain` or `network is unreachable - :enetunreach` then you may need to connect using IPv6. You can enable this by setting [`ELECTRIC_DATABASE_USE_IPV6=true`](/docs/api/config#database-use-ipv6).
 >
 > If you get a TCP connection `timeout` error then make sure you're connecting directly to Postgres and not via a connection pool. For example, when using [Supabase](/docs/integrations/supabase) you need to untick their "Use connection pooling" option on the database settings page.
 >
@@ -83,9 +83,9 @@ Make sure you're connecting directly to Postgres and not via a PGBouncer-style c
 
 ### Database resources
 
-Electric creates a logical replication [publication](https://www.postgresql.org/docs/current/logical-replication-publication.html) and [replication slot](https://www.postgresql.org/docs/current/logical-replication-subscription.html#LOGICAL-REPLICATION-SUBSCRIPTION-SLOT) inside Postgres. These are called `electric_publication_default` and `electric_slot_default` by default. You can configure the name suffix using the [`REPLICATION_STREAM_ID`](/docs/api/config#replication-stream-id) env var.
+Electric creates a logical replication [publication](https://www.postgresql.org/docs/current/logical-replication-publication.html) and [replication slot](https://www.postgresql.org/docs/current/logical-replication-subscription.html#LOGICAL-REPLICATION-SUBSCRIPTION-SLOT) inside Postgres. These are called `electric_publication_default` and `electric_slot_default` by default. You can configure the name suffix using the [`ELECTRIC_REPLICATION_STREAM_ID`](/docs/api/config#replication-stream-id) env var.
 
-When running, Electric also keeps a pool of active database connections open. The size of this pool defaults to `20` and can be configured using [`DB_POOL_SIZE`](/docs/api/config#db-pool-size).
+When running, Electric also keeps a pool of active database connections open. The size of this pool defaults to `20` and can be configured using [`ELECTRIC_DB_POOL_SIZE`](/docs/api/config#electric-db-pool-size).
 
 > [!Tip] Cleaning up resources
 > If you decide to stop using Electric with a given Postgres database or switch to a different database but keep the old one around, make sure to clean up both the publication and the replication slot.
@@ -138,7 +138,7 @@ Naturally, the file system location configured via `ELECTRIC_STORAGE_DIR` and th
 
 ### HTTP port
 
-Electric provides an HTTP API exposed on a configurable [`PORT`](/docs/api/config#port). You should make sure this is exposed to the Internet.
+Electric provides an HTTP API exposed on a configurable [`ELECTRIC_PORT`](/docs/api/config#electric-port). You should make sure this is exposed to the Internet.
 
 ### Caching proxy
 
