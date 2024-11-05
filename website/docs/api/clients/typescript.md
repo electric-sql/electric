@@ -39,7 +39,7 @@ shape.subscribe(data => console.log(data))
 
 ### ShapeStream
 
-The [`ShapeStream`](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/client.ts#L135) is a low-level primitive for consuming a [Shape Log](../http#shape-log).
+The [`ShapeStream`](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/client.ts#L163) is a low-level primitive for consuming a [Shape Log](../http#shape-log).
 
 Construct with a shape definition and options and then either subscribe to the shape log messages directly or pass into a [`Shape`](#shape) to materialise the stream into an object.
 
@@ -61,7 +61,7 @@ stream.subscribe(messages => {
 
 #### Options
 
-The `ShapeStream` constructor takes [the following options](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/client.ts#L34):
+The `ShapeStream` constructor takes [the following options](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/client.ts#L39):
 
 ```ts
 /**
@@ -154,7 +154,7 @@ All other types aren't parsed and are left in the string format as they were ser
 
 ##### Custom parsing
 
-You can extend this behaviour by configuring a custom parser. This is an object mapping Postgres types to parsing functions for those types. For example, we can extend the [default parser](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/parser.ts#L14-L22) to parse booleans into `1` or `0` instead of `true` or `false`:
+You can extend this behaviour by configuring a custom parser. This is an object mapping Postgres types to parsing functions for those types. For example, we can extend the [default parser](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/parser.ts#L28-L37) to parse booleans into `1` or `0` instead of `true` or `false`:
 
 ```ts
 const stream = new ShapeStream({

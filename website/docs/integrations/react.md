@@ -26,7 +26,7 @@ npm i @electricsql/react
 
 ### `useShape`
 
-[`useShape`](https://github.com/electric-sql/electric/blob/main/packages/react-hooks/src/react-hooks.tsx#L117) binds a materialised [Shape](/docs/api/clients/typescript#shape) to a state variable. For example:
+[`useShape`](https://github.com/electric-sql/electric/blob/main/packages/react-hooks/src/react-hooks.tsx#L131) binds a materialised [Shape](/docs/api/clients/typescript#shape) to a state variable. For example:
 
 ```tsx
 import { useShape } from '@electric-sql/react'
