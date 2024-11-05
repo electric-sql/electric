@@ -761,11 +761,8 @@ defmodule Electric.ShapeCacheTest do
 
       ref =
         Process.monitor(
-
           module.name(ctx.electric_instance_id, ctx.tenant_id, shape_handle)
-
           |> GenServer.whereis()
-
         )
 
       log = capture_log(fn -> :ok = ShapeCache.clean_shape(shape_handle, opts) end)

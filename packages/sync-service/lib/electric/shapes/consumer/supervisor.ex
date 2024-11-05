@@ -31,7 +31,11 @@ defmodule Electric.Shapes.Consumer.Supervisor do
     Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_handle)
   end
 
-  def name(%{electric_instance_id: electric_instance_id, tenant_id: tenant_id, shape_handle: shape_handle}) do
+  def name(%{
+        electric_instance_id: electric_instance_id,
+        tenant_id: tenant_id,
+        shape_handle: shape_handle
+      }) do
     name(electric_instance_id, tenant_id, shape_handle)
   end
 

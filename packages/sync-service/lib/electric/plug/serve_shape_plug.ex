@@ -315,10 +315,12 @@ defmodule Electric.Plug.ServeShapePlug do
   # If chunk offsets are available, use those instead of the latest available offset
   # to optimize for cache hits and response sizes
   defp determine_log_chunk_offset(%Conn{assigns: assigns} = conn, _) do
-    %{config: config, active_shape_handle: shape_handle, offset: offset, tenant_id: tenant_id} = assigns
+    %{config: config, active_shape_handle: shape_handle, offset: offset, tenant_id: tenant_id} =
+      assigns
 
     chunk_end_offset =
-      Shapes.get_chunk_end_log_offset(config, shape_handle, offset, tenant_id) || assigns.last_offset
+      Shapes.get_chunk_end_log_offset(config, shape_handle, offset, tenant_id) ||
+        assigns.last_offset
 
     conn
     |> assign(:chunk_end_offset, chunk_end_offset)

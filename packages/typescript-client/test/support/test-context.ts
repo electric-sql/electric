@@ -4,7 +4,10 @@ import { Client, QueryResult } from 'pg'
 import { inject, test } from 'vitest'
 import { makePgClient } from './test-helpers'
 import { FetchError } from '../../src/error'
-import { DATABASE_ID_QUERY_PARAM, SHAPE_HANDLE_QUERY_PARAM } from '../../src/constants'
+import {
+  DATABASE_ID_QUERY_PARAM,
+  SHAPE_HANDLE_QUERY_PARAM,
+} from '../../src/constants'
 
 export type IssueRow = { id: string; title: string; priority?: string }
 export type GeneratedIssueRow = { id?: string; title: string }
@@ -222,7 +225,6 @@ export const testWithMultiTenantIssuesTable = testWithDbClients.extend<{
       return result.map((x) => x.id)
     }),
 })
-
 
 export const testWithMultitypeTable = testWithDbClient.extend<{
   tableSql: string

@@ -278,7 +278,10 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeCache
       |> expect(:update_shape_latest_offset, fn @shape_handle2, _offset, _ -> :ok end)
-      |> allow(self(), Shapes.Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle2))
+      |> allow(
+        self(),
+        Shapes.Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle2)
+      )
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -304,7 +307,10 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeCache
       |> expect(:handle_truncate, fn @shape_handle1, _ -> :ok end)
-      |> allow(self(), Shapes.Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle1))
+      |> allow(
+        self(),
+        Shapes.Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle1)
+      )
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -354,7 +360,10 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeCache
       |> expect(:handle_truncate, fn @shape_handle1, _ -> :ok end)
-      |> allow(self(), Shapes.Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle1))
+      |> allow(
+        self(),
+        Shapes.Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle1)
+      )
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -408,16 +417,16 @@ defmodule Electric.Shapes.ConsumerTest do
 
       ref1 =
         Process.monitor(
-
-          GenServer.whereis(Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle1))
-
+          GenServer.whereis(
+            Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle1)
+          )
         )
 
       ref2 =
         Process.monitor(
-
-          GenServer.whereis(Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle2))
-
+          GenServer.whereis(
+            Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle2)
+          )
         )
 
       Mock.ShapeStatus
@@ -444,16 +453,16 @@ defmodule Electric.Shapes.ConsumerTest do
 
       ref1 =
         Process.monitor(
-
-          GenServer.whereis(Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle1))
-
+          GenServer.whereis(
+            Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle1)
+          )
         )
 
       ref2 =
         Process.monitor(
-
-          GenServer.whereis(Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle2))
-
+          GenServer.whereis(
+            Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle2)
+          )
         )
 
       # also cleans up inspector cache and shape status cache
@@ -490,16 +499,16 @@ defmodule Electric.Shapes.ConsumerTest do
 
       ref1 =
         Process.monitor(
-
-          GenServer.whereis(Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle1))
-
+          GenServer.whereis(
+            Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle1)
+          )
         )
 
       ref2 =
         Process.monitor(
-
-          GenServer.whereis(Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle2))
-
+          GenServer.whereis(
+            Consumer.name(ctx.electric_instance_id, ctx.tenant_id, @shape_handle2)
+          )
         )
 
       # also cleans up inspector cache and shape status cache

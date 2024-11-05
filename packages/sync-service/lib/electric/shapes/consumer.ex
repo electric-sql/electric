@@ -17,7 +17,11 @@ defmodule Electric.Shapes.Consumer do
   @initial_log_state %{current_chunk_byte_size: 0}
 
   def name(
-        %{electric_instance_id: electric_instance_id, tenant_id: tenant_id, shape_handle: shape_handle} =
+        %{
+          electric_instance_id: electric_instance_id,
+          tenant_id: tenant_id,
+          shape_handle: shape_handle
+        } =
           _config
       ) do
     name(electric_instance_id, tenant_id, shape_handle)

@@ -10,7 +10,11 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
   require Logger
 
-  def name(%{electric_instance_id: electric_instance_id, tenant_id: tenant_id, shape_handle: shape_handle}) do
+  def name(%{
+        electric_instance_id: electric_instance_id,
+        tenant_id: tenant_id,
+        shape_handle: shape_handle
+      }) do
     name(electric_instance_id, tenant_id, shape_handle)
   end
 

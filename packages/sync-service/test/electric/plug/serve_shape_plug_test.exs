@@ -651,7 +651,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
       |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
 
       Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, ^tenant_id, opts -> {@test_shape_handle, opts} end)
+      |> stub(:for_shape, fn @test_shape_handle, ^tenant_id, opts ->
+        {@test_shape_handle, opts}
+      end)
 
       conn =
         ctx

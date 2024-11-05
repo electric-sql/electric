@@ -30,7 +30,9 @@ defmodule Electric.Shapes.ConsumerSupervisor do
   end
 
   def stop_shape_consumer(_name, electric_instance_id, tenant_id, shape_handle) do
-    case GenServer.whereis(Consumer.Supervisor.name(electric_instance_id, tenant_id, shape_handle)) do
+    case GenServer.whereis(
+           Consumer.Supervisor.name(electric_instance_id, tenant_id, shape_handle)
+         ) do
       nil ->
         {:error, "no consumer for shape handle #{inspect(shape_handle)}"}
 

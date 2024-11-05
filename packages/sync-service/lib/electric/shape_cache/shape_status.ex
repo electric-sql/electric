@@ -235,7 +235,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
     snapshot_xmin(table, shape_handle)
   end
 
-  def snapshot_xmin(meta_table, shape_handle) when is_reference(meta_table) or is_atom(meta_table) do
+  def snapshot_xmin(meta_table, shape_handle)
+      when is_reference(meta_table) or is_atom(meta_table) do
     turn_raise_into_error(fn ->
       :ets.lookup_element(
         meta_table,
