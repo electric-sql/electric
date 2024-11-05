@@ -964,7 +964,7 @@ describe.sequential(`Multi tenancy sync`, () => {
       },
       body: JSON.stringify({
         database_id: otherDatabaseId,
-        DATABASE_URL: OTHER_DATABASE_URL,
+        database_url: OTHER_DATABASE_URL,
       }),
     })
 
@@ -1114,8 +1114,7 @@ describe.sequential(`Multi tenancy sync`, () => {
   )
 
   it(`should allow databases to be deleted`, async () => {
-    const url = new URL(`${BASE_URL}/v1/admin/database`)
-    url.searchParams.set(`database_id`, otherDatabaseId)
+    const url = new URL(`${BASE_URL}/v1/admin/database/${otherDatabaseId}`)
 
     // Add the database
     const res = await fetch(url.toString(), { method: `DELETE` })
