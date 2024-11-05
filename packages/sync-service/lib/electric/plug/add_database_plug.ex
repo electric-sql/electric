@@ -128,55 +128,11 @@ defmodule Electric.Plug.AddDatabasePlug do
   end
 
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do
-    %{
+    Electric.Plug.Utils.common_open_telemetry_attrs(conn)
+    |> Map.merge(%{
       "tenant.id" => assigns[:database_id],
-      "tenant.database_url" => assigns[:database_url],
-      "error.type" => assigns[:error_str],
-      "http.request_id" => assigns[:plug_request_id],
-      "http.query_string" => conn.query_string,
-      SC.Trace.http_client_ip() => client_ip(conn),
-      SC.Trace.http_scheme() => conn.scheme,
-      SC.Trace.net_peer_name() => conn.host,
-      SC.Trace.net_peer_port() => conn.port,
-      SC.Trace.http_target() => conn.request_path,
-      SC.Trace.http_method() => conn.method,
-      SC.Trace.http_status_code() => conn.status,
-      SC.Trace.http_response_content_length() => assigns[:streaming_bytes_sent],
-      SC.Trace.net_transport() => :"IP.TCP",
-      SC.Trace.http_user_agent() => user_agent(conn),
-      SC.Trace.http_url() =>
-        %URI{
-          scheme: to_string(conn.scheme),
-          host: conn.host,
-          port: conn.port,
-          path: conn.request_path,
-          query: conn.query_string
-        }
-        |> to_string()
-    }
-    |> Map.filter(fn {_k, v} -> not is_nil(v) end)
-    |> Map.merge(Map.new(conn.req_headers, fn {k, v} -> {"http.request.header.#{k}", v} end))
-    |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.response.header.#{k}", v} end))
-  end
-
-  # TODO: move these functions into a shared module or a trait that we can mix in here and in the other plugs?
-  defp client_ip(%Conn{remote_ip: remote_ip} = conn) do
-    case get_req_header(conn, "x-forwarded-for") do
-      [] ->
-        remote_ip
-        |> :inet_parse.ntoa()
-        |> to_string()
-
-      [ip_address | _] ->
-        ip_address
-    end
-  end
-
-  defp user_agent(%Conn{} = conn) do
-    case get_req_header(conn, "user-agent") do
-      [] -> ""
-      [head | _] -> head
-    end
+      "tenant.database_url" => assigns[:database_url]
+    })
   end
 
   #

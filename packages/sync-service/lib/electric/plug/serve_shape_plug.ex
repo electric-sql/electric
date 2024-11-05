@@ -6,8 +6,6 @@ defmodule Electric.Plug.ServeShapePlug do
   import Plug.Conn, except: [halt: 1]
   import Electric.Plug.TenantUtils
 
-  alias OpenTelemetry.SemConv, as: SC
-
   alias Electric.Shapes
   alias Electric.Schema
   alias Electric.Replication.LogOffset
@@ -605,16 +603,10 @@ defmodule Electric.Plug.ServeShapePlug do
         conn.query_params["shape_id"] || assigns[:active_shape_id] || assigns[:shape_id]
       end
 
-    query_params_map =
-      if is_struct(conn.query_params, Plug.Conn.Unfetched) do
-        %{}
-      else
-        Map.new(conn.query_params, fn {k, v} -> {"http.query_param.#{k}", v} end)
-      end
-
     maybe_up_to_date = if up_to_date = assigns[:up_to_date], do: up_to_date != []
 
-    %{
+    Electric.Plug.Utils.common_open_telemetry_attrs(conn)
+    |> Map.merge(%{
       "shape.id" => shape_id,
       "shape.where" => assigns[:where],
       "shape.root_table" => assigns[:root_table],
@@ -627,54 +619,8 @@ defmodule Electric.Plug.ServeShapePlug do
       "shape_req.is_immediate_response" => assigns[:ot_is_immediate_response] || true,
       "shape_req.is_cached" => if(conn.status, do: conn.status == 304),
       "shape_req.is_error" => if(conn.status, do: conn.status >= 400),
-      "shape_req.is_up_to_date" => maybe_up_to_date,
-      "error.type" => assigns[:error_str],
-      "http.request_id" => assigns[:plug_request_id],
-      "http.query_string" => conn.query_string,
-      SC.ClientAttributes.client_address() => client_ip(conn),
-      SC.ServerAttributes.server_address() => conn.host,
-      SC.ServerAttributes.server_port() => conn.port,
-      SC.HTTPAttributes.http_request_method() => conn.method,
-      SC.HTTPAttributes.http_response_status_code() => conn.status,
-      SC.Incubating.HTTPAttributes.http_response_size() => assigns[:streaming_bytes_sent],
-      SC.NetworkAttributes.network_transport() => :tcp,
-      SC.NetworkAttributes.network_local_port() => conn.port,
-      SC.UserAgentAttributes.user_agent_original() => user_agent(conn),
-      SC.Incubating.URLAttributes.url_path() => conn.request_path,
-      SC.URLAttributes.url_scheme() => conn.scheme,
-      SC.URLAttributes.url_full() =>
-        %URI{
-          scheme: to_string(conn.scheme),
-          host: conn.host,
-          port: conn.port,
-          path: conn.request_path,
-          query: conn.query_string
-        }
-        |> to_string()
-    }
-    |> Map.filter(fn {_k, v} -> not is_nil(v) end)
-    |> Map.merge(query_params_map)
-    |> Map.merge(Map.new(conn.req_headers, fn {k, v} -> {"http.request.header.#{k}", v} end))
-    |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.response.header.#{k}", v} end))
-  end
-
-  defp client_ip(%Conn{remote_ip: remote_ip} = conn) do
-    case get_req_header(conn, "x-forwarded-for") do
-      [] ->
-        remote_ip
-        |> :inet_parse.ntoa()
-        |> to_string()
-
-      [ip_address | _] ->
-        ip_address
-    end
-  end
-
-  defp user_agent(%Conn{} = conn) do
-    case get_req_header(conn, "user-agent") do
-      [] -> ""
-      [head | _] -> head
-    end
+      "shape_req.is_up_to_date" => maybe_up_to_date
+    })
   end
 
   #
