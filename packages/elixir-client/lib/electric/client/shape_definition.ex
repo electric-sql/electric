@@ -121,13 +121,26 @@ defmodule Electric.Client.ShapeDefinition do
   end
 
   @doc false
-  @spec params(t()) :: Electric.Client.Fetch.Request.params()
-  def params(%__MODULE__{} = shape) do
+  @spec params(t(), [{:format, :query | :json}]) :: Electric.Client.Fetch.Request.params()
+  def params(%__MODULE__{} = shape, opts \\ []) do
     %{where: where, columns: columns} = shape
     table_name = url_table_name(shape)
+    format = Keyword.get(opts, :format, :query)
 
-    %{table: table_name}
+    %{"table" => table_name}
     |> Util.map_put_if("where", where, is_binary(where))
-    |> Util.map_put_if("columns", fn -> Enum.join(columns, ",") end, is_list(columns))
+    |> Util.map_put_if(
+      "columns",
+      fn -> params_columns_list(columns, format) end,
+      is_list(columns)
+    )
+  end
+
+  defp params_columns_list(columns, :query) when is_list(columns) do
+    Enum.join(columns, ",")
+  end
+
+  defp params_columns_list(columns, :json) when is_list(columns) do
+    columns
   end
 end

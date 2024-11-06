@@ -38,4 +38,29 @@ defmodule Electric.Client.ShapeDefinitionTest do
                )
     end
   end
+
+  describe "params/2" do
+    test "format: :query returns column names joined by comma" do
+      assert {:ok, shape} = ShapeDefinition.new("my_table", columns: ["id", "size", "cost"])
+
+      assert ShapeDefinition.params(shape, format: :query) == %{
+               "columns" => "id,size,cost",
+               "table" => "my_table"
+             }
+
+      assert ShapeDefinition.params(shape) == %{
+               "columns" => "id,size,cost",
+               "table" => "my_table"
+             }
+    end
+
+    test "format: :json returns column names as a list" do
+      assert {:ok, shape} = ShapeDefinition.new("my_table", columns: ["id", "size", "cost"])
+
+      assert ShapeDefinition.params(shape, format: :json) == %{
+               "columns" => ["id", "size", "cost"],
+               "table" => "my_table"
+             }
+    end
+  end
 end
