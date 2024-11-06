@@ -28,7 +28,7 @@
 [endmacro]
 
 [macro setup_pg initdb_args config_opts]
-  [invoke setup_pg "pg" $initdb_args $config_opts]
+  [invoke setup_pg_with_name "pg" $initdb_args $config_opts]
 [endmacro]
 
 [macro stop_pg]
