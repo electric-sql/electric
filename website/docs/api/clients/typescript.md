@@ -83,9 +83,9 @@ export interface ShapeStreamOptions<T = never> {
   databaseId?: string
 
   /**
-   * The root table for the shape.
+   * The root table for the shape. Passed as a query parameter. Not required if you set the table in your proxy.
    */
-  table: string
+  table?: string
 
   /**
    * The where clauses for the shape.

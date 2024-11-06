@@ -50,9 +50,9 @@ export interface ShapeStreamOptions<T = never> {
   databaseId?: string
 
   /**
-   * The root table for the shape.
+   * The root table for the shape. Passed as a query parameter. Not required if you set the table in your proxy.
    */
-  table: string
+  table?: string
 
   /**
    * The where clauses for the shape.
@@ -246,7 +246,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.options.subscribe
       ) {
         const fetchUrl = new URL(url)
-        fetchUrl.searchParams.set(TABLE_QUERY_PARAM, table)
+        if (table) fetchUrl.searchParams.set(TABLE_QUERY_PARAM, table)
         if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
         if (columns && columns.length > 0)
           fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, columns.join(`,`))
@@ -464,9 +464,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
 function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (!options.url) {
     throw new Error(`Invalid shape options. It must provide the url`)
-  }
-  if (!options.table) {
-    throw new Error(`Invalid shape options. It must provide the table`)
   }
   if (options.signal && !(options.signal instanceof AbortSignal)) {
     throw new Error(
