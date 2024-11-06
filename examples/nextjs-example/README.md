@@ -1,4 +1,4 @@
-# Basic Remix example
+# Basic Next.js example
 
 ## Setup
 

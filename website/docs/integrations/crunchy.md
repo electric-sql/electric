@@ -38,6 +38,7 @@ CREATE ROLE electric WITH REPLICATION LOGIN PASSWORD '...';
 GRANT ALL PRIVILEGES ON DATABASE "postgres" to electric;
 ```
 
-You can then connect
+You can then connect as the new `electric` user.
+
 > [!Tip] Need somewhere to host Electric?
 > If you need somewhere to deploy Electric then [Crunchy works well](https://neon.tech/docs/guides/render) with [Render](./render#deploy-electric).
