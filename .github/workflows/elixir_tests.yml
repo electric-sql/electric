@@ -16,22 +16,20 @@ permissions:
 
 jobs:
   build_and_test:
-    name: Build and test
+    name: "Build and test, Postgres ${{ matrix.postgres_version }}"
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: packages/sync-service
     strategy:
       matrix:
-        postgres_version:
-          - postgres: 14
-          - postgres: 15
+        postgres_version: [14, 15]
     env:
       MIX_ENV: test
-      POSTGRES_VERSION: "${{ matrix.postgres_version.postgres }}0000"
+      POSTGRES_VERSION: "${{ matrix.postgres_version }}0000"
     services:
       postgres:
-        image: "postgres:${{ matrix.postgres_version.postgres }}-alpine"
+        image: "postgres:${{ matrix.postgres_version }}-alpine"
         env:
           POSTGRES_PASSWORD: password
         options: >-
