@@ -22,11 +22,7 @@
 [invoke setup_multi_tenant_electric]
 
 [shell electric]
-<<<<<<< HEAD
   ???[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
-=======
-  ??[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
->>>>>>> 2a1540a8 (e2e test for multi tenancy)
 
 ## Create tenant 1
 [invoke add_tenant "tenant1" 3000]
@@ -137,33 +133,18 @@
   # Re-enable fail pattern for Electric
   -$fail_pattern
   [invoke setup_multi_tenant_electric]
-<<<<<<< HEAD
   ???Reloading tenant tenant1 from storage
   ???Reloading tenant tenant2 from storage
   ???[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
 
 ## Make a query to check that they still see their data
 [shell tenant1]
-=======
-  ?? Reloading tenant tenant1 from storage
-  ?? Reloading tenant tenant2 from storage
-
-## Make a query to check that they still see their data
-[shell tenant1]
-  # wait for Electric to start
-  [invoke wait-for "lsof -Pi :3000 -sTCP:LISTEN" "TCP \*:3000" 10 $PS1]
->>>>>>> 2a1540a8 (e2e test for multi tenancy)
   # Query the shape
   !curl -i -X GET "http://localhost:3000/v1/shape?table=items&offset=${offset}&handle=${shape_id}&database_id=tenant1"
   ???[{"headers":{"control":"up-to-date"}}]
   ??$PS1
   
 [shell tenant2]
-<<<<<<< HEAD
-=======
-  # wait for Electric to start
-  [invoke wait-for "lsof -Pi :3000 -sTCP:LISTEN" "TCP \*:3000" 10 $PS1]
->>>>>>> 2a1540a8 (e2e test for multi tenancy)
   # Query the shape
   !curl -i -X GET "http://localhost:3000/v1/shape?table=items&offset=${offset}&handle=${shape_id}&database_id=tenant2"
   ???[{"headers":{"control":"up-to-date"}}]
@@ -233,7 +214,6 @@
   # Set fail pattern to fail if tenant 2 is reloaded
   -Reloading tenant tenant2 from storage
   !PORT=3000 ../scripts/electric_dev.sh
-<<<<<<< HEAD
   ???Reloading tenant tenant1 from storage
   ???[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
 
@@ -241,7 +221,3 @@
   [invoke teardown]
   # Also tear down the first tenant
   [invoke teardown_container $tenant1_pg_container_name]
-=======
-  ?? Reloading tenant tenant1 from storage
-  ??[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
->>>>>>> 2a1540a8 (e2e test for multi tenancy)
