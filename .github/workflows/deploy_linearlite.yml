@@ -39,6 +39,9 @@ jobs:
           restore-keys: |
             sst-cache-main-${{ runner.os }}
 
+      - name: Attempt refresh
+        run: sst refresh --stage production
+
       - name: Deploy to production stack
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
