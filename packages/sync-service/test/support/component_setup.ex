@@ -69,7 +69,6 @@ defmodule Support.ComponentSetup do
 
     :ok = Electric.TenantManager.store_tenant(tenant, tenant_opts)
 
-    Electric.TenantSupervisor.start_tenant(ctx)
     # {:ok, _} =
     #   ctx
     #   |> Map.put(:connection_opts, ctx.db_config)
