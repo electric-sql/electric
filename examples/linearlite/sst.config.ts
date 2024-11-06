@@ -86,7 +86,7 @@ function getNeonDbUri(
 async function addDatabaseToElectric(
   uri: string
 ): Promise<{ id: string; token: string }> {
-  const adminApi = process.env.ELECTRIC_ADMIN_HOST
+  const adminApi = process.env.ELECTRIC_ADMIN_API
 
   const result = await fetch(`${adminApi}/v1/databases`, {
     method: `PUT`,
