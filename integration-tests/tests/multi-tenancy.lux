@@ -22,7 +22,7 @@
 [invoke setup_multi_tenant_electric]
 
 [shell electric]
-  ??[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
+  ???[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
 
 ## Create tenant 1
 [invoke add_tenant "tenant1" 3000]
@@ -133,21 +133,18 @@
   # Re-enable fail pattern for Electric
   -$fail_pattern
   [invoke setup_multi_tenant_electric]
-  ?? Reloading tenant tenant1 from storage
-  ?? Reloading tenant tenant2 from storage
+  ???Reloading tenant tenant1 from storage
+  ???Reloading tenant tenant2 from storage
+  ???[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
 
 ## Make a query to check that they still see their data
 [shell tenant1]
-  # wait for Electric to start
-  [invoke wait-for "lsof -Pi :3000 -sTCP:LISTEN" "TCP \*:3000" 10 $PS1]
   # Query the shape
   !curl -i -X GET "http://localhost:3000/v1/shape?table=items&offset=${offset}&handle=${shape_id}&database_id=tenant1"
   ???[{"headers":{"control":"up-to-date"}}]
   ??$PS1
   
 [shell tenant2]
-  # wait for Electric to start
-  [invoke wait-for "lsof -Pi :3000 -sTCP:LISTEN" "TCP \*:3000" 10 $PS1]
   # Query the shape
   !curl -i -X GET "http://localhost:3000/v1/shape?table=items&offset=${offset}&handle=${shape_id}&database_id=tenant2"
   ???[{"headers":{"control":"up-to-date"}}]
@@ -217,5 +214,5 @@
   # Set fail pattern to fail if tenant 2 is reloaded
   -Reloading tenant tenant2 from storage
   !PORT=3000 ../scripts/electric_dev.sh
-  ?? Reloading tenant tenant1 from storage
-  ??[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
+  ???Reloading tenant tenant1 from storage
+  ???[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
