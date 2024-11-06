@@ -60,7 +60,7 @@ function deployLinearLite(
       VITE_DATABASE_ID: electricInfo.id,
     },
     build: {
-      command: `pnpm run build`,
+      command: `pnpm run --filter @electric-sql/client  --filter @electric-sql/react --filter @electric-examples/linearlite build`,
       output: `dist`,
     },
     domain: {
