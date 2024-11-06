@@ -216,3 +216,8 @@
   !PORT=3000 ../scripts/electric_dev.sh
   ???Reloading tenant tenant1 from storage
   ???[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
+
+[cleanup]
+  [invoke teardown]
+  # Also tear down the first tenant
+  [invoke teardown_container $tenant1_pg_container_name]

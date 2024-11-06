@@ -119,10 +119,14 @@
     [invoke wait-for "curl -X GET http://localhost:$electric_port/v1/health?database_id=$tenant_id" "\{\"status\":\"$expected_status\"\}" 10 $PS1]
 [endmacro]
 
-[macro teardown]
+[macro teardown_container container_name]
   -$fail_pattern
-  !docker rm -f -v $pg_container_name
+  !docker rm -f -v $container_name
   ?$PS1
+[endmacro]
+
+[macro teardown]
+  [invoke teardown_container $pg_container_name]
   !../scripts/clean_up.sh
   ?$PS1
 [endmacro]
