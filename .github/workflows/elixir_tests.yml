@@ -52,39 +52,32 @@ jobs:
           version-type: strict
           version-file: ".tool-versions"
 
-      - name: Restore dependencies cache
-        uses: actions/cache/restore@v4
+      - name: Cache dependencies
+        uses: actions/cache@v4
         with:
           path: packages/sync-service/deps
-          restore-keys: ${{ runner.os }}-mix-deps-
+          key: "${{ runner.os }}-mix-deps-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          restore-keys: |
+            ${{ runner.os }}-mix-deps-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-mix-deps-
 
-      - name: Restore compiled code
-        uses: actions/cache/restore@v4
+      - name: Cache compiled code
+        uses: actions/cache@v4
         with:
           path: |
             packages/sync-service/_build/*/lib
             !packages/sync-service/_build/*/lib/electric
-          key: ${{ runner.os }}-build-test-
+          key: "${{ runner.os }}-build-test-${{ github.ref_name }}-${{ github.sha }}"
+          restore-keys: |
+            ${{ runner.os }}-build-test-${{ github.ref_name }}-${{ github.sha }}
+            ${{ runner.os }}-build-test-${{ github.ref_name }}-
+            ${{ runner.os }}-build-test-
 
       - name: Install dependencies
         run: mix deps.get && mix deps.compile
 
-      - name: Save dependencies cache
-        uses: actions/cache/save@v4
-        with:
-          path: packages/sync-service/deps
-          key: ${{ runner.os }}-mix-deps-${{ hashFiles('packages/sync-service/mix.lock') }}
-
       - name: Compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
-
-      - name: Save compiled code
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            packages/sync-service/_build/*/lib
-            !packages/sync-service/_build/*/lib/electric
-          key: ${{ runner.os }}-build-test-${{ hashFiles('packages/sync-service/mix.lock') }}
 
       - name: Run tests
         run: mix test
@@ -107,7 +100,10 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: packages/sync-service/deps
-          restore-keys: ${{ runner.os }}-mix-deps-
+          key: "${{ runner.os }}-mix-deps-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          restore-keys: |
+            ${{ runner.os }}-mix-deps-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-mix-deps-
 
       - run: mix deps.get
 
