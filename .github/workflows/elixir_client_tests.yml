@@ -40,36 +40,35 @@ jobs:
         run: |
           docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
           docker restart ${{ job.services.postgres.id }}
+
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
           version-file: ".tool-versions"
 
-      - name: Restore dependencies cache
+      - name: Cache dependencies
         uses: actions/cache@v4
         with:
           path: packages/elixir-client/deps
-          key: ${{ runner.os }}-mix-${{ hashFiles('packages/elixir-client/mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-
+          key: ${{ runner.os }}-elixir-client-deps-${{ hashFiles('packages/elixir-client/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-elixir-client-deps-${{ hashFiles('packages/elixir-client/mix.lock') }}
+            ${{ runner.os }}-elixir-client-deps-
 
-      - name: Restore compiled code
-        uses: actions/cache/restore@v4
+      - name: Cache compiled code
+        uses: actions/cache@v4
         with:
           path: |
             packages/elixir-client/_build/*/lib
-            !packages/elixir-client/_build/*/lib/electric
-          key: ${{ runner.os }}-build-test-${{ hashFiles('packages/elixir-client/mix.lock') }}
+            !packages/elixir-client/_build/*/lib/electric_client
+          key: "${{ runner.os }}-elixir-client-build-[${{ github.ref_name }}]-${{ github.sha }}"
+          restore-keys: |
+            ${{ runner.os }}-elixir-client-build-[${{ github.ref_name }}]-${{ github.sha }}
+            ${{ runner.os }}-elixir-client-build-[${{ github.ref_name }}]-
+            ${{ runner.os }}-elixir-client-build-
 
       - name: Install dependencies
         run: mix deps.get && mix deps.compile
-
-      - name: Save compiled code
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            packages/elixir-client/_build/*/lib
-            !packages/elixir-client/_build/*/lib/electric
-          key: ${{ runner.os }}-build-test-${{ hashFiles('packages/elixir-client/mix.lock') }}
 
       - name: Compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
@@ -109,15 +108,22 @@ jobs:
         working-directory: packages/elixir-client
     steps:
       - uses: actions/checkout@v4
+
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
           version-file: ".tool-versions"
+
       - name: Cache dependencies
         id: cache-deps
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: packages/elixir-client/deps
-          key: ${{ runner.os }}-mix-${{ hashFiles('packages/elixir-client/mix.lock') }}
+          key: ${{ runner.os }}-elixir-client-deps-${{ hashFiles('packages/elixir-client/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-elixir-client-deps-${{ hashFiles('packages/elixir-client/mix.lock') }}
+            ${{ runner.os }}-elixir-client-deps-
+
       - run: mix deps.get
+
       - run: mix format --check-formatted
