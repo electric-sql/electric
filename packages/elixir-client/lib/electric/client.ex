@@ -1,22 +1,36 @@
 defmodule Electric.Client do
   @moduledoc """
-  An Elixir client for the [ElectricSQL synchronisation server](https://electric-sql.com/).
+  An Elixir client for [ElectricSQL](https://electric-sql.com).
 
-  Subscribing to a particular
-  [Shape](https://electric-sql.com/docs/guides/shapes) produce a stream of
-  update messages that will allow you to synchronise your local system to the
-  state the Postgres database.
+  Electric is a sync engine that allows you to sync
+  [little subsets](https://electric-sql.com/docs/guides/shapes)
+  of data from Postgres into local apps and services. This client
+  allows you to sync data from Electric into Elixir applications.
 
   ## Quickstart
 
-  ### Start and connect the Electric Sync Service
+  ### Start and connect the Electric sync service
 
-  Follow the [quickstart guide](https://electric-sql.com/docs/quickstart) to
-  get Electric running and connected to a Postgres database.
+  Follow the
+  [Installation guide](https://electric-sql.com/docs/guides/installation)
+  to get Electric up-and-running and connected to a Postgres database.
 
-  ### Install the Electric Client and Receive sync events
+  ### Create a table
 
-  Create a simple script that will subscribe to events from the `foo` table you created as part of the [Quickstart](#quickstart).
+  Create a `foo` table in your Postgres schema, as per the Electric
+  [Quickstart guide](https://electric-sql.com/docs/guides/installation),
+  so that we have a table to sync.
+
+      CREATE TABLE foo (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255),
+          value FLOAT
+      );
+
+  ### Install the Electric Client and receive sync events
+
+  Create a simple script that will subscribe to events from a `foo` table
+  in your Postgres database,
 
       # electric.ex
       Mix.install([
@@ -24,6 +38,7 @@ defmodule Electric.Client do
       ])
 
       {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
+
       # You can create a stream from a table name or a Shape defined using
       # `ShapeDefinition.new/2`
       stream = Electric.Client.stream(client, "foo")
@@ -55,8 +70,8 @@ defmodule Electric.Client do
 
   ### Filtering Using WHERE clauses
 
-  You can subscribe to subsets of the data in your table using [`where` clauses](https://electric-sql.com/docs/guides/shapes#where-clause).
-
+  You can subscribe to subsets of the data in your table using
+  [`where` clauses](https://electric-sql.com/docs/guides/shapes#where-clause).
 
       {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
 
@@ -75,7 +90,8 @@ defmodule Electric.Client do
 
   ## Ecto Integration
 
-  If you have [Ecto](https://hexdocs.pm/ecto) installed then you can define you Shapes using Ecto queries:
+  If you have [Ecto](https://hexdocs.pm/ecto) installed then you can define your Shapes
+  using Ecto queries:
 
       # ecto.ex
       Mix.install([
