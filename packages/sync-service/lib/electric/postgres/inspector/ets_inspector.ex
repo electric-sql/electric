@@ -30,10 +30,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
         __MODULE__,
         Map.new(opts)
         |> Map.put_new(:pg_info_table, @default_pg_info_table)
-        |> Map.put_new(:pg_relation_table, @default_pg_relation_table)
-        |> Map.put_new_lazy(:tenant_tables_name, fn ->
-          Application.fetch_env!(:electric, :tenant_tables_name)
-        end),
+        |> Map.put_new(:pg_relation_table, @default_pg_relation_table),
         name: name(opts)
       )
 

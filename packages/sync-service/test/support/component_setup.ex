@@ -20,7 +20,7 @@ defmodule Support.ComponentSetup do
     opts = [
       app_config: ctx.app_config,
       electric_instance_id: ctx.electric_instance_id,
-      tenant_tables_name: Access.get(ctx, :tenant_tables_name, nil)
+      tenant_tables_name: Electric.TenantsTable.name(ctx.electric_instance_id)
     ]
 
     {:ok, _} = Electric.TenantManager.start_link(opts)
@@ -252,8 +252,8 @@ defmodule Support.ComponentSetup do
     pg_info_table = :"pg_info_table #{full_test_name(ctx)}"
     pg_relation_table = :"pg_relation_table #{full_test_name(ctx)}"
 
-    tenant_tables_name = :"tenant_tables_name #{full_test_name(ctx)}"
-    :ets.new(tenant_tables_name, [:public, :named_table, :set])
+    tenant_tables_name = Electric.TenantsTable.name(ctx.electric_instance_id)
+    Electric.TenantsTable.init(ctx.electric_instance_id)
 
     {:ok, _} =
       EtsInspector.start_link(
