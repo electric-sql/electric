@@ -1,4 +1,4 @@
-name: Deploy production stack
+name: Deploy Linearlite Production
 
 on:
     push:
@@ -8,8 +8,8 @@ on:
       paths: ['examples/linearlite/**']
 
 jobs:
-  deploy-production:
-    name: Deploy linearlite example
+  deploy-linearlite:
+    name: Deploy Linearlite Production
     environment: Production
     runs-on: ubuntu-latest
     steps:
@@ -37,7 +37,7 @@ jobs:
         run: |
           sudo apt install -y tini
 
-      - name: Deploy production stack
+      - name: Deploy to production stack
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
