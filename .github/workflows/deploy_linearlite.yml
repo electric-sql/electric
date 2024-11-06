@@ -7,6 +7,9 @@ on:
     pull_request:
       paths: ['examples/linearlite/**']
 
+concurrency:
+  group: prod-deploy-group
+
 jobs:
   deploy-linearlite:
     name: Deploy Linearlite Production
@@ -36,10 +39,6 @@ jobs:
           restore-keys: |
             sst-cache-main-${{ runner.os }}
 
-      - name: Initialize SST environment
-        run: |
-          sudo apt install -y tini
-
       - name: Deploy to production stack
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -52,4 +51,4 @@ jobs:
           ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
           # HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }} TODO
         run: |
-          exec tini -s -g -- pnpm sst deploy --stage production
+          pnpm sst deploy --stage production
