@@ -16,7 +16,7 @@ defmodule Electric.Client.Stream do
     parser: {Electric.Client.ValueMapper, []},
     buffer: :queue.new(),
     up_to_date?: false,
-    update_mode: :modified,
+    replica: :default,
     offset: Offset.before_all(),
     shape_handle: nil,
     next_cursor: nil,
@@ -39,10 +39,10 @@ defmodule Electric.Client.Stream do
       default: true,
       doc: "If `true` (the default) reads an infinite stream of update messages from the server."
     ],
-    update_mode: [
-      type: {:in, [:full, :modified]},
-      default: :modified,
-      type_spec: quote(do: :modified | :full),
+    replica: [
+      type: {:in, [:full, :default]},
+      default: :default,
+      type_spec: quote(do: :default | :full),
       doc:
         "Instructs the server to send just the changed columns for an update (`:modified`) or the full row (`:full`)."
     ],
@@ -91,7 +91,7 @@ defmodule Electric.Client.Stream do
           buffer: :queue.queue(),
           up_to_date?: boolean(),
           offset: Offset.t(),
-          update_mode: Client.update_mode(),
+          replica: Client.replica(),
           shape_handle: nil | Client.shape_handle(),
           state: :init | :stream | :done,
           opts: opts()
@@ -110,7 +110,7 @@ defmodule Electric.Client.Stream do
     {core, opts} =
       attrs
       |> NimbleOptions.validate!(@schema)
-      |> Keyword.split([:client, :shape, :parser, :update_mode])
+      |> Keyword.split([:client, :shape, :parser, :replica])
 
     opts = NimbleOptions.validate!(Map.new(opts), @opts_schema)
 
@@ -241,7 +241,7 @@ defmodule Electric.Client.Stream do
       client: client,
       shape: shape,
       up_to_date?: up_to_date?,
-      update_mode: update_mode,
+      replica: replica,
       shape_handle: shape_handle,
       offset: offset,
       next_cursor: cursor
@@ -250,7 +250,7 @@ defmodule Electric.Client.Stream do
     Client.request(client,
       offset: offset,
       shape_handle: shape_handle,
-      update_mode: update_mode,
+      replica: replica,
       live: up_to_date?,
       next_cursor: cursor,
       shape: shape

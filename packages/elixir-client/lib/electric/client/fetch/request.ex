@@ -16,7 +16,7 @@ defmodule Electric.Client.Fetch.Request do
     :live,
     :shape,
     :next_cursor,
-    update_mode: :modified,
+    replica: :default,
     method: :get,
     offset: Offset.before_all(),
     params: %{},
@@ -32,7 +32,7 @@ defmodule Electric.Client.Fetch.Request do
     base_url: quote(do: URI.t()),
     offset: quote(do: Electric.Client.Offset.t()),
     shape_handle: quote(do: Electric.Client.shape_handle() | nil),
-    update_mode: quote(do: Electric.Client.update_mode()),
+    replica: quote(do: Electric.Client.replica()),
     live: quote(do: boolean()),
     next_cursor: quote(do: Electric.Client.cursor()),
     shape: quote(do: ShapeDefinition.t()),
@@ -95,7 +95,7 @@ defmodule Electric.Client.Fetch.Request do
   def params(%__MODULE__{} = request) do
     %{
       shape: shape,
-      update_mode: update_mode,
+      replica: replica,
       live: live?,
       shape_handle: shape_handle,
       database_id: database_id,
@@ -107,7 +107,7 @@ defmodule Electric.Client.Fetch.Request do
     (params || %{})
     |> Map.merge(ShapeDefinition.params(shape))
     |> Map.merge(%{"offset" => Offset.to_string(offset)})
-    |> Util.map_put_if("update_mode", to_string(update_mode), update_mode != :modified)
+    |> Util.map_put_if("replica", to_string(replica), replica != :default)
     |> Util.map_put_if("handle", shape_handle, is_binary(shape_handle))
     |> Util.map_put_if("live", "true", live?)
     |> Util.map_put_if("cursor", cursor, !is_nil(cursor))

@@ -114,15 +114,15 @@ defmodule Electric.Client do
       {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
 
       # Replace the table or `ShapeDefinition` with an `Ecto` query and set
-      # `update_mode` to `:full` to receive full rows for update messages.
+      # `replica` to `:full` to receive full rows for update messages.
       #
-      # The normal `update_mode: :modified` setting will only send the changed
+      # The normal `replica: :default` setting will only send the changed
       # columns, so we'd end up with partial `%Foo{}` instances.
       stream =
         Electric.Client.stream(
           client,
           from(f in Foo, where: ilike(f.name, "a%")),
-          update_mode: :full
+          replica: :full
         )
 
       for %{headers: %{operation: operation}, value: value} <- stream do
@@ -178,7 +178,7 @@ defmodule Electric.Client do
 
   @type shape_handle :: String.t()
   @type cursor :: integer()
-  @type update_mode :: :modified | :full
+  @type replica :: :default | :full
   @type column :: %{
           required(:type) => String.t(),
           optional(:pk_index) => non_neg_integer(),
