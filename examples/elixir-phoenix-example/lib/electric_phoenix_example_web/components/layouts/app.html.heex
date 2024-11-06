@@ -1,0 +1,58 @@
+<header class="px-4 sm:px-6 lg:px-8">
+  <div class="flex items-center justify-between border-b border-zinc-100 py-3 text-sm">
+    <div class="flex items-center gap-4">
+      <a href="/">
+        <img src={~p"/images/logo.svg"} width="36" />
+      </a>
+      <p class="bg-brand/5 text-brand rounded-full px-2 font-medium leading-6">
+        v<%= Application.spec(:phoenix, :vsn) %>
+      </p>
+    </div>
+    <div class="flex items-center gap-4 font-semibold leading-6 text-zinc-900">
+      <a href="https://twitter.com/elixirphoenix" class="hover:text-zinc-700">
+        @elixirphoenix
+      </a>
+      <a href="https://github.com/phoenixframework/phoenix" class="hover:text-zinc-700">
+        GitHub
+      </a>
+      <a
+        href="https://hexdocs.pm/phoenix/overview.html"
+        class="rounded-lg bg-zinc-100 px-2 py-1 hover:bg-zinc-200/80"
+      >
+        Get Started <span aria-hidden="true">&rarr;</span>
+      </a>
+    </div>
+  </div>
+  <div class="mx-auto max-w-2xl">
+    <div class="text-center">
+      <a href="https://electric-sql.com" target="_blank" class="">
+        <img
+          width="512"
+          height="142"
+          class="mx-auto max-w-sm"
+          alt="ElectricSQL logo"
+          src="https://raw.githubusercontent.com/electric-sql/meta/main/identity/ElectricSQL-logo-black.svg"
+        />
+      </a>
+    </div>
+    <div id="blurb">
+      <p>
+        A todo-list powered by <a href="https://github.com/electric-sql/electric_phoenix">Electric.Phoenix</a>.
+      </p>
+      <p>
+        All connected clients will see the same updates, powered by
+        <a href="https://electric-sql.com">Electric’s
+          PostgreSQL replication stream</a>
+        sending events straight from the database to
+        the browser via <a href="https://fly.io/phoenix-files/phoenix-dev-blog-streams/">Phoenix
+      LiveView’s Streams</a>.
+      </p>
+    </div>
+  </div>
+</header>
+<main class="sm:px-6 lg:px-8">
+  <div class="mx-auto max-w-2xl">
+    <.flash_group flash={@flash} />
+    <%= @inner_content %>
+  </div>
+</main>
