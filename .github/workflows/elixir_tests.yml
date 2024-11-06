@@ -56,10 +56,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: packages/sync-service/deps
-          key: "${{ runner.os }}-mix-deps-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          key: "${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-mix-deps-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-mix-deps-
+            ${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-
 
       - name: Cache compiled code
         uses: actions/cache@v4
@@ -67,11 +67,11 @@ jobs:
           path: |
             packages/sync-service/_build/*/lib
             !packages/sync-service/_build/*/lib/electric
-          key: "${{ runner.os }}-build-test-${{ github.ref_name }}-${{ github.sha }}"
+          key: "${{ runner.os }}-sync-service-build-[${{ github.ref_name }}]-${{ github.sha }}"
           restore-keys: |
-            ${{ runner.os }}-build-test-${{ github.ref_name }}-${{ github.sha }}
-            ${{ runner.os }}-build-test-${{ github.ref_name }}-
-            ${{ runner.os }}-build-test-
+            ${{ runner.os }}-sync-service-build-[${{ github.ref_name }}]-${{ github.sha }}
+            ${{ runner.os }}-sync-service-build-[${{ github.ref_name }}]-
+            ${{ runner.os }}-sync-service-build-
 
       - name: Install dependencies
         run: mix deps.get && mix deps.compile
@@ -100,10 +100,10 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: packages/sync-service/deps
-          key: "${{ runner.os }}-mix-deps-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          key: "${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-mix-deps-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-mix-deps-
+            ${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-
 
       - run: mix deps.get
 
