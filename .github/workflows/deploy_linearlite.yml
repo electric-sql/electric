@@ -12,6 +12,9 @@ jobs:
     name: Deploy Linearlite Production
     environment: Production
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/linearlite
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
