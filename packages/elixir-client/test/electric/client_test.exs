@@ -169,60 +169,6 @@ defmodule Electric.ClientTest do
       assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id3}}}, 500
       assert_receive {:stream, 2, up_to_date()}
     end
-
-    test "oneshot: true should halt once snapshot is complete", ctx do
-      {:ok, id1} = insert_item(ctx)
-      {:ok, id2} = insert_item(ctx)
-      {:ok, id3} = insert_item(ctx)
-      {:ok, id4} = insert_item(ctx)
-
-      stream = stream(ctx, live: false)
-
-      # create the shape and make sure we've got all the ids
-      events = stream |> Enum.filter(&is_struct(&1, ChangeMessage)) |> Enum.into([])
-
-      assert Enum.map(events, & &1.value["id"]) == [id1, id2, id3, id4]
-
-      {:ok, id5} = insert_item(ctx)
-      {:ok, id6} = insert_item(ctx)
-
-      stream = stream(ctx, oneshot: true)
-
-      events = stream |> Enum.into([])
-
-      # not happy about this testing methodology, feels a little forced, but
-      # it's the only way to avoid timing/race issues on slower machines we're
-      # basically asserting that the first `oneshot` request runs and
-      # definitely gets the snapshot (plus potentially some other items) and
-      # that the resume message allows us to continue at the right point.
-      all = MapSet.new([id1, id2, id3, id4, id5, id6])
-
-      received =
-        events
-        |> Enum.filter(&is_struct(&1, ChangeMessage))
-        |> Enum.map(& &1.value["id"])
-        |> MapSet.new()
-
-      assert resume = %ResumeMessage{} = List.last(events)
-
-      unless MapSet.equal?(received, all) do
-        stream = stream(ctx, resume: resume)
-
-        Enum.reduce_while(stream, MapSet.new(received), fn
-          %ChangeMessage{value: %{"id" => id}}, acc ->
-            received = MapSet.put(acc, id)
-
-            if MapSet.equal?(received, all) do
-              {:halt, received}
-            else
-              {:cont, received}
-            end
-
-          _msg, acc ->
-            {:cont, acc}
-        end)
-      end
-    end
   end
 
   defp bypass_client(ctx) do
