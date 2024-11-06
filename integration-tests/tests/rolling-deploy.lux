@@ -18,9 +18,7 @@
   ??[info] Starting replication from postgres
   
 # First service should be health and active
-[shell orchestator]
-  !curl -X GET http://localhost:3000/v1/health?database_id=integration_test_tenant
-  ??{"status":"active"}
+[invoke check_tenant_status "integration_test_tenant" "active" 3000]
 
 ## Start the second sync service.
 [invoke setup_electric_shell "electric_2" "3001" ""]
@@ -34,11 +32,8 @@
 
 
 # Second service should be in waiting state, ready to take over
-[shell orchestator]
-  !curl -X GET http://localhost:3000/v1/health?database_id=integration_test_tenant
-  ??{"status":"active"}
-  !curl -X GET http://localhost:3001/v1/health?database_id=integration_test_tenant
-  ??{"status":"waiting"}
+[invoke check_tenant_status "integration_test_tenant" "active" 3000]
+[invoke check_tenant_status "integration_test_tenant" "waiting" 3001]
 
 ## Terminate first electric
 [shell electric_1]
@@ -54,9 +49,7 @@
   ??[info] Starting replication from postgres
 
 # Second service is now healthy and active
-[shell orchestator]
-  !curl -X GET http://localhost:3001/v1/health?database_id=integration_test_tenant
-  ??{"status":"active"}
+[invoke check_tenant_status "integration_test_tenant" "active" 3001]
 
 [cleanup]
   [invoke teardown]
