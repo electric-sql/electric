@@ -35,6 +35,18 @@ defmodule Electric.ClientTest do
     [bypass: Bypass.open()]
   end
 
+  describe "new" do
+    test "database_id is correctly assigned" do
+      {:ok, %Client{database_id: "1234"}} =
+        Client.new(base_url: "http://localhost:3000", database_id: "1234")
+    end
+
+    test "database_id is optional" do
+      {:ok, %Client{database_id: nil}} =
+        Client.new(base_url: "http://localhost:3000", database_id: nil)
+    end
+  end
+
   describe "stream/1" do
     setup :with_unique_table
 

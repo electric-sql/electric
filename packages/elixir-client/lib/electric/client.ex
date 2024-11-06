@@ -151,6 +151,7 @@ defmodule Electric.Client do
 
   defstruct [
     :base_url,
+    :database_id,
     :fetch,
     :authenticator
   ]
@@ -161,6 +162,11 @@ defmodule Electric.Client do
                      required: true,
                      doc:
                        "The URL of the electric server, e.g. for local development this would be `http://localhost:3000`."
+                   ],
+                   database_id: [
+                     type: {:or, [nil, :string]},
+                     doc:
+                       "Which database to use, optional unless Electric is used with multiple databases."
                    ],
                    fetch: [type: :mod_arg, default: {Client.Fetch.HTTP, []}, doc: false],
                    authenticator: [
@@ -321,7 +327,7 @@ defmodule Electric.Client do
   @doc false
   @spec request(t(), Fetch.Request.attrs()) :: Fetch.Request.t()
   def request(%Client{} = client, opts) do
-    struct(%Fetch.Request{base_url: client.base_url}, opts)
+    struct(%Fetch.Request{base_url: client.base_url, database_id: client.database_id}, opts)
   end
 
   @doc """
