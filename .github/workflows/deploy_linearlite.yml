@@ -40,7 +40,10 @@ jobs:
             sst-cache-main-${{ runner.os }}
 
       - name: Attempt refresh
-        run: sst refresh --stage production
+        run: pnpm sst refresh --stage production || true
+
+      - name: Attempt remove
+        run: pnpm sst remove --stage production
 
       - name: Deploy to production stack
         env:
