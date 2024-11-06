@@ -5,8 +5,8 @@
 [global pg_host_port=54331]
 [global database_url=postgresql://postgres:password@localhost:$pg_host_port/postgres?sslmode=disable]
 
-[macro setup_pg initdb_args config_opts]
-  [shell pg]
+[macro setup_pg_with_name shell_name initdb_args config_opts]
+  [shell $shell_name]
     -$fail_pattern
   
     !docker run \
@@ -25,6 +25,10 @@
     # Reset the failure pattern to avoid false failures when Electric tries to create an already
     # existing publication or replication slot.
     -
+[endmacro]
+
+[macro setup_pg initdb_args config_opts]
+  [invoke setup_pg "pg" $initdb_args $config_opts]
 [endmacro]
 
 [macro stop_pg]
@@ -48,9 +52,13 @@
     ??database system is ready to accept connections
 [endmacro]
 
-[macro start_psql]
-  [shell psql]
+[macro start_psql_shell shell_name pg_container_name]
+  [shell $shell_name]
     !docker exec -u postgres -it $pg_container_name psql
+[endmacro]
+
+[macro start_psql]
+  [invoke start_psql_shell psql $pg_container_name]
 [endmacro]
 
 [macro seed_pg]
@@ -80,6 +88,10 @@
 [endmacro]
 
 [macro setup_electric]
+  [invoke setup_electric_with_env "ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url"]
+[endmacro]
+
+[macro setup_multi_tenant_electric]
   [invoke setup_electric_with_env ""]
 [endmacro]
 
@@ -91,7 +103,20 @@
   [shell $shell_name]
     -$fail_pattern
   
-    !ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh
+    !ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh
+[endmacro]
+
+[macro add_tenant tenant_id electric_port]
+  [shell $tenant_id]
+    !curl -X POST http://localhost:$electric_port/v1/admin/database \
+      -H "Content-Type: application/json" \
+      -d "{\"database_id\":\"$tenant_id\",\"database_url\":\"$database_url\"}"
+    ??"$tenant_id"
+[endmacro]
+
+[macro check_tenant_status tenant_id expected_status electric_port]
+  [shell $tenant_id]
+    [invoke wait-for "curl -X GET http://localhost:$electric_port/v1/health?database_id=$tenant_id" "\{\"status\":\"$expected_status\"\}" 10 $PS1]
 [endmacro]
 
 [macro teardown]
@@ -100,4 +125,22 @@
   ?$PS1
   !../scripts/clean_up.sh
   ?$PS1
+[endmacro]
+
+[macro wait-for command match max_time prompt]
+    [loop i 1..$max_time]
+        @$match
+        !$command
+        ??$command
+        ?$prompt
+        [sleep 1]
+    [endloop]
+    # The last prompt won't match since the loop pattern will
+    # match before it, so match it here instead.
+    ?$prompt
+
+    # Sync up after the loop.
+    !$command
+    ??$command
+    ?$prompt
 [endmacro]
