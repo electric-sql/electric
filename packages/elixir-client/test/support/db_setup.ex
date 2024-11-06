@@ -6,7 +6,8 @@ defmodule Support.DbSetup do
   def with_unique_table(_ctx) do
     columns = [
       {"id", "uuid primary key"},
-      {"title", "text"}
+      {"title", "text"},
+      {"value", "int8"}
     ]
 
     with_table(tablename(), columns)
@@ -52,17 +53,32 @@ defmodule Support.DbSetup do
 
   def insert_item(db_conn, tablename, opts) do
     id = Keyword.get(opts, :id, UUID.uuid4())
-    value = Keyword.get(opts, :value, "Some title")
+    title = Keyword.get(opts, :title, "Some title")
+    value = Keyword.get(opts, :value, 0)
 
     %Postgrex.Result{num_rows: 1} =
       Postgrex.query!(
         db_conn,
         """
-        INSERT INTO \"#{tablename}\" (id, title) VALUES ($1, $2);
+        INSERT INTO \"#{tablename}\" (id, title, value) VALUES ($1, $2, $3);
         """,
-        [UUID.string_to_binary!(id), value]
+        [UUID.string_to_binary!(id), title, value]
       )
 
     {:ok, id}
+  end
+
+  def update_item(%{db_conn: db, tablename: tablename}, id, values) do
+    update_item(db, tablename, id, values)
+  end
+
+  def update_item(db_conn, tablename, id, values) do
+    updates =
+      Enum.map_join(values, fn {column, value} -> ~s["#{column}" = '#{value}'] end)
+
+    {:ok, %Postgrex.Result{}} =
+      Postgrex.query(db_conn, ~s[UPDATE "#{tablename}" SET #{updates} WHERE "id" = '#{id}'], [])
+
+    :ok
   end
 end

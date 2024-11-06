@@ -181,6 +181,36 @@ defmodule Electric.ClientTest do
       assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id3}}}, 500
       assert_receive {:stream, 2, up_to_date()}
     end
+
+    test "sends full rows with replica: :full", ctx do
+      {:ok, id1} = insert_item(ctx, title: "Changing item")
+      parent = self()
+      stream = stream(ctx, replica: :full)
+
+      {:ok, _task} =
+        start_supervised(
+          {Task,
+           fn ->
+             stream
+             |> Stream.each(&send(parent, {:stream, 1, &1}))
+             |> Stream.run()
+           end},
+          id: {:stream, 1}
+        )
+
+      assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
+      assert_receive {:stream, 1, up_to_date0()}
+
+      :ok = update_item(ctx, id1, value: 999)
+
+      assert_receive {:stream, 1,
+                      %ChangeMessage{
+                        value: %{"id" => ^id1, "value" => 999, "title" => "Changing item"}
+                      }},
+                     500
+
+      assert_receive {:stream, 1, up_to_date()}
+    end
   end
 
   defp bypass_client(ctx) do
