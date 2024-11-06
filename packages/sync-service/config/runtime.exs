@@ -203,6 +203,7 @@ prometheus_port = env!("ELECTRIC_PROMETHEUS_PORT", :integer, nil)
 # `ELECTRIC_PORT` env var by default and only reading `PORT` if
 # explicitly configured to (to avoid unexpected behaviour).
 default_service_port = 3000
+
 service_port =
   case env!("ELECTRIC_PORT", :string, :not_set) do
     :not_set ->
