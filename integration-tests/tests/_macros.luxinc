@@ -43,12 +43,8 @@
 [endmacro]
 
 [macro resume_pg]
-  [shell pg_lifecycle]
-    !docker start $pg_container_name
-    ?$PS1
-
   [shell pg]
-    !docker attach $pg_container_name
+    !docker start --attach $pg_container_name
     ??database system is ready to accept connections
 [endmacro]
 
@@ -99,11 +95,19 @@
   [invoke setup_electric_shell "electric" "3000" $env]
 [endmacro]
 
+[macro setup_electric_with_env_and_tenant env]
+  [invoke setup_electric_with_env "ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url $env"]
+[endmacro]
+
 [macro setup_electric_shell shell_name port env]
   [shell $shell_name]
     -$fail_pattern
   
     !ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh
+[endmacro]
+
+[macro setup_electric_shell_with_tenant shell_name port]
+  [invoke setup_electric_shell $shell_name $port "ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url"]
 [endmacro]
 
 [macro add_tenant tenant_id electric_port]
