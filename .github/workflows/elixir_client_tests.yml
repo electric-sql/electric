@@ -46,7 +46,7 @@ jobs:
           version-type: strict
           version-file: ".tool-versions"
 
-      - name: Cache dependencies
+      - name: Cache elixir-client dependencies
         uses: actions/cache@v4
         with:
           path: packages/elixir-client/deps
@@ -55,7 +55,7 @@ jobs:
             ${{ runner.os }}-elixir-client-deps-${{ hashFiles('packages/elixir-client/mix.lock') }}
             ${{ runner.os }}-elixir-client-deps-
 
-      - name: Cache compiled code
+      - name: Cache elixir-client compiled code
         uses: actions/cache@v4
         with:
           path: |
@@ -66,6 +66,27 @@ jobs:
             ${{ runner.os }}-elixir-client-build-[${{ github.ref_name }}]-${{ github.sha }}
             ${{ runner.os }}-elixir-client-build-[${{ github.ref_name }}]-
             ${{ runner.os }}-elixir-client-build-
+
+      - name: Cache sync-service dependencies
+        uses: actions/cache@v4
+        with:
+          path: packages/sync-service/deps
+          key: "${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          restore-keys: |
+            ${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-
+
+      - name: Cache sync-service compiled code
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/sync-service/_build/*/lib
+            !packages/sync-service/_build/*/lib/electric
+          key: "${{ runner.os }}-sync-service-build-[${{ github.ref_name }}]-${{ github.sha }}"
+          restore-keys: |
+            ${{ runner.os }}-sync-service-build-[${{ github.ref_name }}]-${{ github.sha }}
+            ${{ runner.os }}-sync-service-build-[${{ github.ref_name }}]-
+            ${{ runner.os }}-sync-service-build-
 
       - name: Install dependencies
         run: mix deps.get && mix deps.compile
