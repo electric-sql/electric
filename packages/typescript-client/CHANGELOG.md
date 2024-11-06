@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 0.7.1
+
+### Patch Changes
+
+- b367c8d: Make the client table option _not_ required as a team using a proxy API might set the table there.
+
 ## 0.7.0
 
 ### Minor Changes

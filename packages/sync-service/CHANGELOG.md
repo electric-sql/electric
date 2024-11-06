@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.8.1
+
+### Patch Changes
+
+- b367c8d: Make the client table option _not_ required as a team using a proxy API might set the table there.
+
 ## 0.8.0
 
 ### Minor Changes
