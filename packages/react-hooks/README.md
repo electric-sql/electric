@@ -10,7 +10,7 @@ This packages exposes a `useShape` hook for pulling shape data into your React c
 
 ## Install
 
-`npm i @electricsql/react`
+`npm i @electric-sql/react`
 
 ## How to use
 
