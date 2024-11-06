@@ -14,7 +14,8 @@ defmodule Support.ComponentSetup do
   end
 
   def with_tenant_manager(ctx) do
-    Electric.TenantSupervisor.start_link([])
+    {:ok, _} =
+      Electric.TenantSupervisor.start_link(electric_instance_id: ctx.electric_instance_id)
 
     opts = [
       app_config: ctx.app_config,
@@ -22,7 +23,7 @@ defmodule Support.ComponentSetup do
       tenant_tables_name: Access.get(ctx, :tenant_tables_name, nil)
     ]
 
-    Electric.TenantManager.start_link(opts)
+    {:ok, _} = Electric.TenantManager.start_link(opts)
 
     %{tenant_manager: Electric.TenantManager.name(opts)}
   end
@@ -67,7 +68,12 @@ defmodule Support.ComponentSetup do
     ]
 
     :ok = Electric.TenantManager.store_tenant(tenant, tenant_opts)
+
     Electric.TenantSupervisor.start_tenant(ctx)
+    # {:ok, _} =
+    #   ctx
+    #   |> Map.put(:connection_opts, ctx.db_config)
+    #   |> Electric.TenantSupervisor.start_tenant()
 
     %{tenant: tenant}
   end
