@@ -106,6 +106,10 @@
     !ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh
 [endmacro]
 
+[macro setup_electric_shell_with_tenant shell_name port]
+  [invoke setup_electric_shell $shell_name $port "ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url"]
+[endmacro]
+
 [macro add_tenant tenant_id electric_port]
   [shell $tenant_id]
     !curl -X POST http://localhost:$electric_port/v1/admin/database \
