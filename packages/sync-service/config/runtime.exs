@@ -192,6 +192,29 @@ storage = {storage_mod, storage_opts}
 
 prometheus_port = env!("ELECTRIC_PROMETHEUS_PORT", :integer, nil)
 
+# If `ELECTRIC_PORT` is set to the special string "PORT" then
+# try to read the service port from the standard `PORT` env var.
+#
+# Otherwise, set the service port to the equivalent of
+# `env!("ELECTRIC_PORT", :integer, 3000)`.
+#
+# This enables support for deployment environments that expect
+# services to bind to `PORT`, whilst still using the namespaced
+# `ELECTRIC_PORT` env var by default and only reading `PORT` if
+# explicitly configured to (to avoid unexpected behaviour).
+default_service_port = 3000
+service_port =
+  case env!("ELECTRIC_PORT", :string, :not_set) do
+    :not_set ->
+      default_service_port
+
+    "PORT" ->
+      env!("PORT", :integer, default_service_port)
+
+    value when is_binary(value) ->
+      Dotenvy.Transformer.to!(value, :integer)
+  end
+
 config :electric,
   allow_shape_deletion: enable_integration_testing,
   cache_max_age: cache_max_age,
@@ -205,7 +228,7 @@ config :electric,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, 20),
   replication_stream_id: replication_stream_id,
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, false),
-  service_port: env!("ELECTRIC_PORT", :integer, 3000),
+  service_port: service_port,
   prometheus_port: prometheus_port,
   storage: storage,
   persistent_kv: persistent_kv,

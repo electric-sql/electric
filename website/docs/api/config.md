@@ -165,6 +165,14 @@ Enable [OTP SASL](https://www.erlang.org/doc/apps/sasl/sasl_app.html) reporting 
 
 Port that the [HTTP API](/docs/api/http) is exposed on.
 
+> ![Tip] Binding to `PORT`
+> Some deployment environments expect web services to bind to a system provided
+> `PORT` environment variable.
+>
+> You can enable support for this by explicitly setting `ELECTRIC_PORT=PORT`.
+> This tells Electric to read the port from the `PORT` variable. (Still falling
+> back on the default value of `3000` if `PORT` is not set).
+
 </EnvVarConfig>
 
 ## Caching
