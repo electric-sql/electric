@@ -12,20 +12,22 @@ image: /img/integrations/electric-fly.jpg
 
 ## Electric and Fly
 
-You *can* use Fly to deploy any or all components of the Electric stack:
+You can use Fly to deploy any or all components of the Electric stack:
 
 - [deploy a Postgres database](#deploy-postgres)
 - [an Electric sync service](#deploy-electric)
 - [your client application](#deploy-your-app)
 
-Fly's sweet spot is deploying Elixir applications, like the Electric sync service and/or [Phoenix aplications](./phoenix).
+One of Fly's specialities is deploying Elixir applications. So Fly is especially good for [deploying the Electric sync service](#deploy-electric) and/or [Phoenix applications](./phoenix) using Electric.
 
 > [!Tip] Need context?
 > See the [Deployment guide](/docs/guides/deployment) for more details.
 
 ### Deploy Postgres
 
-Fly isn't really a managed Postgres host. They do offer [database hosting](https://fly.io/docs/database-storage-guides/#managed-database-services) but they prefer to offload it to other providers, such as [Supabase](./supabase).
+[Fly Postgres](https://fly.io/docs/postgres) is not a managed Postgres service. See the general advice on [Running Postgres](/docs/guides/deployment#_1-running-postgres) in the deployment guide for information on how to configure Postgres to work with Electric.
+
+Fly's [Supabase Postgres](https://fly.io/docs/supabase) is a managed Postgres service, powered by [Supabase](./supabase). If you use it, make sure to connect on the IPv6 `DATABASE_URL` rather than the `DATABASE_POOLER_URL` and see the [Supabase guide](./supabase#deploy-postgres) for more context.
 
 ### Deploy Electric
 
