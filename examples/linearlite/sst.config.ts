@@ -9,7 +9,7 @@ export default $config({
       name: `linearlite`,
       removal: input?.stage === `production` ? `retain` : `remove`,
       home: `aws`,
-      providers: { neon: `0.6.3` },
+      providers: { cloudflare: `5.42.0`, aws: `6.57.0`, neon: `0.6.3` },
     }
   },
   async run() {
