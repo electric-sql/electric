@@ -28,7 +28,7 @@
 [endmacro]
 
 [macro setup_pg initdb_args config_opts]
-  [invoke setup_pg_with_name "pg" $initdb_args $config_opts]
+  [invoke setup_pg "pg" $initdb_args $config_opts]
 [endmacro]
 
 [macro stop_pg]
@@ -106,10 +106,6 @@
     !ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh
 [endmacro]
 
-[macro setup_electric_shell_with_tenant shell_name port]
-  [invoke setup_electric_shell $shell_name $port "ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url"]
-[endmacro]
-
 [macro add_tenant tenant_id electric_port]
   [shell $tenant_id]
     !curl -X POST http://localhost:$electric_port/v1/admin/database \
@@ -121,12 +117,6 @@
 [macro check_tenant_status tenant_id expected_status electric_port]
   [shell $tenant_id]
     [invoke wait-for "curl -X GET http://localhost:$electric_port/v1/health?database_id=$tenant_id" "\{\"status\":\"$expected_status\"\}" 10 $PS1]
-[endmacro]
-
-[macro teardown_container container_name]
-  -$fail_pattern
-  !docker rm -f -v $container_name
-  ?$PS1
 [endmacro]
 
 [macro teardown]
