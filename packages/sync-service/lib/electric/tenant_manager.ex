@@ -187,8 +187,25 @@ defmodule Electric.TenantManager do
           connection_opts: connection_opts
         ]
 
+    # We deliberately don't include the electric instance ID
+    # in the publication and slot name because
+    # those are shared between all Electric instances connected to the same PG DB
+    # and there may be cases where we want one Electric to take over the publication
+    # and slot for a certain tenant of another Electric instance, e.g. during a rolling deploy.
+    # Note that this assumes that tenant IDs are unique across all Electric instances.
+    tenant_hash = tenant_id |> :erlang.phash2() |> Integer.to_string()
+
+    updated_app_config =
+      app_config
+      |> update_in([:replication_opts, :publication_name], &(&1 <> "_" <> tenant_hash))
+      |> update_in([:replication_opts, :slot_name], &(&1 <> "_" <> tenant_hash))
+
+    # tenant_publication_name = app_config.replication_opts.publication_name <> "_" <> tenant_hash
+    # tenant_slot_name = app_config.replication_opts.slot_name <> "_" <> tenant_hash
+    # updated_replication_opts = %{app_config.replication_opts | publication_name: tenant_publication_name, slot_name: tenant_slot_name}
+
     start_tenant_opts = [
-      app_config: app_config,
+      app_config: updated_app_config,
       electric_instance_id: electric_instance_id,
       tenant_id: tenant_id,
       connection_opts: connection_opts,

@@ -1,4 +1,6 @@
 defmodule Electric.Application.Configuration do
+  @behaviour Access
+
   @moduledoc """
   A simple interface to `:persistent_term` that is designed for storing and retrieving the
   global application configuration (stored as a single map).
@@ -30,4 +32,20 @@ defmodule Electric.Application.Configuration do
 
   @spec get :: t
   def get, do: :persistent_term.get(@persistent_key)
+
+  # Implementing the Access behaviour
+  @impl Access
+  def fetch(%__MODULE__{} = config, key) do
+    Map.fetch(config, key)
+  end
+
+  @impl Access
+  def get_and_update(%__MODULE__{} = config, key, fun) do
+    Map.get_and_update(config, key, fun)
+  end
+
+  @impl Access
+  def pop(%__MODULE__{} = config, key) do
+    Map.pop(config, key)
+  end
 end
