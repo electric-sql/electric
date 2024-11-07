@@ -73,6 +73,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     store_tenant(tenant, ctx)
 
     config = [
+      electric_instance_id: ctx.electric_instance_id,
       storage: {Mock.Storage, []},
       tenant_manager: ctx.tenant_manager
     ]

@@ -38,6 +38,7 @@ defmodule Electric.TenantManagerTest do
       # Check that it recreated the tenant
       {:ok, tenant} =
         TenantManager.get_tenant(@tenant_id,
+          electric_instance_id: ctx.electric_instance_id,
           tenant_manager: ctx.tenant_manager,
           tenant_tables_name: ctx.tenant_tables_name
         )
@@ -142,12 +143,18 @@ defmodule Electric.TenantManagerTest do
 
     test "get_only_tenant/1 complains if there are no tenants", ctx do
       assert {:error, :not_found} =
-               TenantManager.get_only_tenant(tenant_manager: ctx.tenant_manager)
+               TenantManager.get_only_tenant(
+                 tenant_manager: ctx.tenant_manager,
+                 electric_instance_id: ctx.electric_instance_id
+               )
     end
 
     test "get_tenant/2 complains if the tenant does not exist", ctx do
       assert {:error, :not_found} =
-               TenantManager.get_tenant("non-existing tenant", tenant_manager: ctx.tenant_manager)
+               TenantManager.get_tenant("non-existing tenant",
+                 tenant_manager: ctx.tenant_manager,
+                 electric_instance_id: ctx.electric_instance_id
+               )
     end
   end
 
@@ -162,14 +169,20 @@ defmodule Electric.TenantManagerTest do
 
     test "get_only_tenant/1 returns the only tenant", ctx do
       {:ok, tenant_config} =
-        TenantManager.get_only_tenant(tenant_manager: ctx.tenant_manager)
+        TenantManager.get_only_tenant(
+          tenant_manager: ctx.tenant_manager,
+          electric_instance_id: ctx.electric_instance_id
+        )
 
       assert tenant_config[:tenant_id] == ctx.tenant_id
     end
 
     test "get_tenant/2 returns the requested tenant", ctx do
       {:ok, tenant_config} =
-        TenantManager.get_tenant(ctx.tenant_id, tenant_manager: ctx.tenant_manager)
+        TenantManager.get_tenant(ctx.tenant_id,
+          tenant_manager: ctx.tenant_manager,
+          electric_instance_id: ctx.electric_instance_id
+        )
 
       assert tenant_config[:tenant_id] == ctx.tenant_id
     end
@@ -194,12 +207,18 @@ defmodule Electric.TenantManagerTest do
 
     test "get_only_tenant/1 complains if there are several tenants", ctx do
       assert {:error, :several_tenants} =
-               TenantManager.get_only_tenant(tenant_manager: ctx.tenant_manager)
+               TenantManager.get_only_tenant(
+                 tenant_manager: ctx.tenant_manager,
+                 electric_instance_id: ctx.electric_instance_id
+               )
     end
 
     test "get_tenant/2 returns the requested tenant", ctx do
       {:ok, tenant_config} =
-        TenantManager.get_tenant("another_tenant", tenant_manager: ctx.tenant_manager)
+        TenantManager.get_tenant("another_tenant",
+          tenant_manager: ctx.tenant_manager,
+          electric_instance_id: ctx.electric_instance_id
+        )
 
       assert tenant_config[:tenant_id] == "another_tenant"
     end
@@ -247,7 +266,10 @@ defmodule Electric.TenantManagerTest do
       # Check that the tenant is now unknown to the tenant manager
       # and that it is fully shut down and removed from the ETS table
       assert {:error, :not_found} =
-               TenantManager.get_tenant(tenant_id, tenant_manager: tenant_manager)
+               TenantManager.get_tenant(tenant_id,
+                 tenant_manager: tenant_manager,
+                 electric_instance_id: electric_instance_id
+               )
 
       # Verify process was terminated
       refute Process.alive?(tenant_supervisor_pid)
