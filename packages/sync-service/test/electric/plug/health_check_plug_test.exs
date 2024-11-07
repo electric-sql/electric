@@ -38,6 +38,7 @@ defmodule Electric.Plug.HealthCheckPlugTest do
   def conn(ctx) do
     # Pass mock dependencies to the plug
     config = [
+      electric_instance_id: ctx.electric_instance_id,
       tenant_manager: ctx.tenant_manager
     ]
 

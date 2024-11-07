@@ -344,6 +344,7 @@ defmodule Support.ComponentSetup do
 
   def build_router_opts(ctx, overrides \\ []) do
     [
+      electric_instance_id: ctx.electric_instance_id,
       tenant_manager: ctx.tenant_manager,
       storage: ctx.storage,
       registry: ctx.registry,

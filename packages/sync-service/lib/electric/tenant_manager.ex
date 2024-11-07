@@ -4,6 +4,8 @@ defmodule Electric.TenantManager do
 
   alias Electric.Tenant.Persistence
 
+  @tenant_info_pos 2
+
   # Public API
 
   def name(electric_instance_id)
@@ -18,6 +20,16 @@ defmodule Electric.TenantManager do
   def name(opts) do
     Access.get(opts, :electric_instance_id, [])
     |> name()
+  end
+
+  def tenants_ets_table_name(electric_instance_id)
+      when is_binary(electric_instance_id) or is_atom(electric_instance_id) do
+    :"tenants_ets_table_#{electric_instance_id}"
+  end
+
+  def tenants_ets_table_name(opts) do
+    Access.fetch!(opts, :electric_instance_id)
+    |> tenants_ets_table_name()
   end
 
   def start_link(opts) do
@@ -39,18 +51,39 @@ defmodule Electric.TenantManager do
   """
   @spec get_only_tenant(Keyword.t()) ::
           {:ok, Keyword.t()} | {:error, :not_found} | {:error, :several_tenants}
-  def get_only_tenant(opts \\ []) do
-    server = Keyword.get(opts, :tenant_manager, name(opts))
-    GenServer.call(server, :get_only_tenant)
+  def get_only_tenant(opts) do
+    tenants = tenants_ets_table_name(opts)
+
+    case :ets.first(tenants) do
+      :"$end_of_table" ->
+        # the ETS table does not contain any tenant
+        {:error, :not_found}
+
+      tenant_id ->
+        case :ets.next(tenants, tenant_id) do
+          :"$end_of_table" ->
+            # There is no next key, so this is the only tenant
+            tenant = :ets.lookup_element(tenants, tenant_id, @tenant_info_pos)
+            {:ok, tenant}
+
+          _ ->
+            {:error, :several_tenants}
+        end
+    end
   end
 
   @doc """
   Retrieves a tenant by its ID.
   """
   @spec get_tenant(String.t(), Keyword.t()) :: {:ok, Keyword.t()} | {:error, :not_found}
-  def get_tenant(tenant_id, opts \\ []) do
-    server = Keyword.get(opts, :tenant_manager, name(opts))
-    GenServer.call(server, {:get_tenant, tenant_id})
+  def get_tenant(tenant_id, opts) do
+    tenants = tenants_ets_table_name(opts)
+
+    if :ets.member(tenants, tenant_id) do
+      {:ok, :ets.lookup_element(tenants, tenant_id, @tenant_info_pos)}
+    else
+      {:error, :not_found}
+    end
   end
 
   @doc """
@@ -196,15 +229,21 @@ defmodule Electric.TenantManager do
   Deletes a tenant by its ID.
   """
   @spec delete_tenant(String.t(), Keyword.t()) :: :ok | :not_found
-  def delete_tenant(tenant_id, opts \\ []) do
+  def delete_tenant(tenant_id, opts) do
     server = Keyword.get(opts, :tenant_manager, name(opts))
 
-    case GenServer.call(server, {:get_tenant, tenant_id}) do
+    case get_tenant(tenant_id, opts) do
       {:ok, tenant} ->
         pg_id = Access.fetch!(tenant, :pg_id)
-        :ok = GenServer.call(server, {:delete_tenant, tenant_id, pg_id})
-        :ok = Electric.TenantSupervisor.stop_tenant(opts ++ [tenant_id: tenant_id])
-        :ok = Electric.Tenant.Persistence.delete_tenant!(tenant_id, opts)
+
+        case GenServer.call(server, {:delete_tenant, tenant_id, pg_id}) do
+          :ok ->
+            :ok = Electric.TenantSupervisor.stop_tenant(opts ++ [tenant_id: tenant_id])
+            :ok = Electric.Tenant.Persistence.delete_tenant!(tenant_id, opts)
+
+          :not_found ->
+            :not_found
+        end
 
       {:error, :not_found} ->
         :not_found
@@ -214,60 +253,59 @@ defmodule Electric.TenantManager do
   ## Internal API
 
   @impl GenServer
-  def init(_opts) do
-    # state contains an index `tenants` of tenant_id -> tenant
-    # and a set `dbs` of PG identifiers used by tenants
-    {:ok, %{tenants: Map.new(), dbs: MapSet.new()}}
+  def init(opts) do
+    # information about all tenants is kept in an ETS table
+    # that maps tenant_id to tenant information.
+    # it is stored in an ETS table to allow concurrent reads.
+    # the table is protected such that only this genserver can write to it
+    # which ensures that all writes are serialised
+    tenants_ets_table =
+      :ets.new(tenants_ets_table_name(opts), [
+        :named_table,
+        :protected,
+        :set,
+        {:read_concurrency, true}
+      ])
+
+    # state is a set `dbs` of PG identifiers used by tenants
+    # such that we can reject any request to store a tenant
+    # that uses a DB that is already in use
+    {:ok, %{tenants_ets: tenants_ets_table, dbs: MapSet.new()}}
   end
 
   @impl GenServer
   def handle_call(
         {:store_tenant, tenant},
         _from,
-        %{tenants: tenants, dbs: dbs} = state
+        %{dbs: dbs, tenants_ets: tenants} = state
       ) do
     tenant_id = tenant[:tenant_id]
     pg_id = tenant[:pg_id]
 
-    if Map.has_key?(tenants, tenant_id) do
+    if :ets.member(tenants, tenant_id) do
       {:reply, {:tenant_already_exists, tenant_id}, state}
     else
       if MapSet.member?(dbs, pg_id) do
         {:reply, {:db_already_in_use, pg_id}, state}
       else
-        {:reply, :ok,
-         %{tenants: Map.put(tenants, tenant_id, tenant), dbs: MapSet.put(dbs, pg_id)}}
+        true = :ets.insert_new(tenants, {tenant_id, tenant})
+        {:reply, :ok, %{state | dbs: MapSet.put(dbs, pg_id)}}
       end
     end
   end
 
   @impl GenServer
-  def handle_call(:get_only_tenant, _from, %{tenants: tenants} = state) do
-    case map_size(tenants) do
-      1 ->
-        tenant = tenants |> Map.values() |> Enum.at(0)
-        {:reply, {:ok, tenant}, state}
-
-      0 ->
-        {:reply, {:error, :not_found}, state}
-
-      _ ->
-        {:reply, {:error, :several_tenants}, state}
-    end
-  end
-
-  @impl GenServer
-  def handle_call({:get_tenant, tenant_id}, _from, %{tenants: tenants} = state) do
-    if Map.has_key?(tenants, tenant_id) do
-      {:reply, {:ok, Map.get(tenants, tenant_id)}, state}
+  def handle_call(
+        {:delete_tenant, tenant_id, pg_id},
+        _from,
+        %{tenants_ets: tenants, dbs: dbs} = state
+      ) do
+    if :ets.member(tenants, tenant_id) do
+      :ets.delete(tenants, tenant_id)
+      {:reply, :ok, %{state | dbs: MapSet.delete(dbs, pg_id)}}
     else
-      {:reply, {:error, :not_found}, state}
+      {:reply, :not_found, state}
     end
-  end
-
-  @impl GenServer
-  def handle_call({:delete_tenant, tenant_id, pg_id}, _from, %{tenants: tenants, dbs: dbs}) do
-    {:reply, :ok, %{tenants: Map.delete(tenants, tenant_id), dbs: MapSet.delete(dbs, pg_id)}}
   end
 
   defp recreate_tenants_from_disk!(opts) do
