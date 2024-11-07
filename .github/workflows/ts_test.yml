@@ -31,7 +31,7 @@ jobs:
       example_names: ${{ steps.list_examples.outputs.example_names }}
     steps:
       - uses: actions/checkout@v4
-      - run: echo "example_names=`find examples/ -mindepth 1 -maxdepth 1 -type d | jq -R -s -c 'split("\n")[:-1]'`" >> $GITHUB_OUTPUT
+      - run: echo "example_names=$(find examples/ -mindepth 1 -maxdepth 2 -type f -name package.json | xargs dirname | jq -R -s -c 'split("\n")[:-1]')" >> $GITHUB_OUTPUT
         id: list_examples
 
   check_packages:
