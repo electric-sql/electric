@@ -110,7 +110,7 @@
   [invoke setup_electric_shell $shell_name $port "ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url"]
 [endmacro]
 
-[macro add_tenant tenant_id electric_port]
+[macro add_tenant tenant_id electric_port database_url]
   [shell $tenant_id]
     !curl -X POST http://localhost:$electric_port/v1/admin/database \
       -H "Content-Type: application/json" \

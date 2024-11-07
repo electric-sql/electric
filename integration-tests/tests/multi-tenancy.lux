@@ -15,7 +15,6 @@
 ## Start a new Postgres DB
 [global pg_container_name=$tenant1_pg_container_name]
 [global pg_host_port=$tenant1_pg_host_port]
-[global database_url=$tenant1_database_url]
 [invoke setup_pg_with_name "tenant1_pg" "" ""]
 
 ## Start Electric in multi tenancy mode
@@ -25,7 +24,7 @@
   ???[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
 
 ## Create tenant 1
-[invoke add_tenant "tenant1" 3000]
+[invoke add_tenant "tenant1" 3000 $tenant1_database_url]
 [invoke check_tenant_status "tenant1" "active" 3000]
 
 ## Setup a second Postgres DB
@@ -35,7 +34,7 @@
 [invoke setup_pg_with_name "tenant2_pg" "" ""]
 
 ## Create tenant 2
-[invoke add_tenant "tenant2" 3000]
+[invoke add_tenant "tenant2" 3000 $tenant2_database_url]
 [invoke check_tenant_status "tenant2" "active" 3000]
 
 ## Insert some data in both DBs
