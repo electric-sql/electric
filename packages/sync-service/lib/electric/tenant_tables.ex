@@ -1,4 +1,4 @@
-defmodule Electric.TenantsTable do
+defmodule Electric.TenantTables do
   def name(electric_instance_id) do
     :"tenant_tables_#{electric_instance_id}"
   end

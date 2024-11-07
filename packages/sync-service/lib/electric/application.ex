@@ -84,7 +84,7 @@ defmodule Electric.Application do
   defp configure do
     electric_instance_id = Application.fetch_env!(:electric, :electric_instance_id)
 
-    Electric.TenantsTable.init(electric_instance_id)
+    Electric.TenantTables.init(electric_instance_id)
 
     {kv_module, kv_fun, kv_params} = Application.fetch_env!(:electric, :persistent_kv)
     persistent_kv = apply(kv_module, kv_fun, [kv_params])
