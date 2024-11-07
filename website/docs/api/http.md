@@ -109,7 +109,10 @@ The server holds open the request until either a timeout (returning `204 No cont
 
 The algorithm for consuming the HTTP API described above can be implemented from scratch for your application. Howerver, it's typically implemented by clients that can be re-used and provide a simpler interface for application code.
 
-There are a number of existing clients, such as the [TypeScript](/docs/api/clients/typescript) and [Elixir](/docs/api/clients/elixir) clients. If one doesn't exist for your language or environment, we hope that the pattern is simple enough that you should be able to [write your own client](/docs/guides/writing-your-own-client) relatively easily.
+There are a number of existing clients, such as the [TypeScript](/docs/api/clients/typescript) and [Elixir](/docs/api/clients/elixir) clients. If one doesn't exist for your language or environment, we hope that the pattern is simple enough that you should be able to write your own quite easily.
+
+> [!Tip] Writing your own client
+> We have a guide on [Writing your own client](/docs/guides/writing-your-own-client) that walks through the process and goes into slightly more depth on the HTTP API implementation details if you're interested in understanding more about how Electric works.
 
 ## Caching
 
