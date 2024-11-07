@@ -78,6 +78,9 @@ defmodule Electric.PhoenixExample.MixProject do
         "tailwind electric_phoenix_example --minify",
         "esbuild electric_phoenix_example --minify",
         "phx.digest"
+      ],
+      "electric.start": [
+        "cmd docker compose -f ../../.support/docker-compose.yml up -d"
       ]
     ]
   end
