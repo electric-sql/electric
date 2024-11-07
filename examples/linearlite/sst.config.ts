@@ -64,7 +64,7 @@ function deployLinearLite(
       output: `dist`,
     },
     domain: {
-      name: `linearlite-example${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+      name: `linearlite${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
       dns: sst.cloudflare.dns(),
     },
   })
