@@ -22,7 +22,7 @@
   ??INSERT 0 2
 
 ## Start the sync service with the CrashingFileStorage storage backend.
-[invoke setup_electric_with_env "ELECTRIC_STORAGE=crashing_file CRASHING_FILE_ELECTRIC_STORAGE__NUM_CALLS_UNTIL_CRASH=2"]
+[invoke setup_electric_with_env_and_tenant "ELECTRIC_STORAGE=crashing_file CRASHING_FILE_ELECTRIC_STORAGE__NUM_CALLS_UNTIL_CRASH=2"]
 
 [shell electric]
  ??[info] Starting replication from postgres

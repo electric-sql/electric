@@ -5,8 +5,8 @@
 [global pg_host_port=54331]
 [global database_url=postgresql://postgres:password@localhost:$pg_host_port/postgres?sslmode=disable]
 
-[macro setup_pg initdb_args config_opts]
-  [shell pg]
+[macro setup_pg_with_name shell_name initdb_args config_opts]
+  [shell $shell_name]
     -$fail_pattern
   
     !docker run \
@@ -27,6 +27,10 @@
     -
 [endmacro]
 
+[macro setup_pg initdb_args config_opts]
+  [invoke setup_pg_with_name "pg" $initdb_args $config_opts]
+[endmacro]
+
 [macro stop_pg]
   [shell pg_lifecycle]
     # This timeout is needed until https://github.com/electric-sql/electric/issues/1632 is fixed.
@@ -39,18 +43,18 @@
 [endmacro]
 
 [macro resume_pg]
-  [shell pg_lifecycle]
-    !docker start $pg_container_name
-    ?$PS1
-
   [shell pg]
-    !docker attach $pg_container_name
+    !docker start --attach $pg_container_name
     ??database system is ready to accept connections
 [endmacro]
 
-[macro start_psql]
-  [shell psql]
+[macro start_psql_shell shell_name pg_container_name]
+  [shell $shell_name]
     !docker exec -u postgres -it $pg_container_name psql
+[endmacro]
+
+[macro start_psql]
+  [invoke start_psql_shell psql $pg_container_name]
 [endmacro]
 
 [macro seed_pg]
@@ -80,6 +84,10 @@
 [endmacro]
 
 [macro setup_electric]
+  [invoke setup_electric_with_env "ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url"]
+[endmacro]
+
+[macro setup_multi_tenant_electric]
   [invoke setup_electric_with_env ""]
 [endmacro]
 
@@ -87,17 +95,60 @@
   [invoke setup_electric_shell "electric" "3000" $env]
 [endmacro]
 
+[macro setup_electric_with_env_and_tenant env]
+  [invoke setup_electric_with_env "ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url $env"]
+[endmacro]
+
 [macro setup_electric_shell shell_name port env]
   [shell $shell_name]
     -$fail_pattern
   
-    !ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh
+    !ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh
+[endmacro]
+
+[macro setup_electric_shell_with_tenant shell_name port]
+  [invoke setup_electric_shell $shell_name $port "ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url"]
+[endmacro]
+
+[macro add_tenant tenant_id electric_port]
+  [shell $tenant_id]
+    !curl -X POST http://localhost:$electric_port/v1/admin/database \
+      -H "Content-Type: application/json" \
+      -d "{\"database_id\":\"$tenant_id\",\"database_url\":\"$database_url\"}"
+    ??"$tenant_id"
+[endmacro]
+
+[macro check_tenant_status tenant_id expected_status electric_port]
+  [shell $tenant_id]
+    [invoke wait-for "curl -X GET http://localhost:$electric_port/v1/health?database_id=$tenant_id" "\{\"status\":\"$expected_status\"\}" 10 $PS1]
+[endmacro]
+
+[macro teardown_container container_name]
+  -$fail_pattern
+  !docker rm -f -v $container_name
+  ?$PS1
 [endmacro]
 
 [macro teardown]
-  -$fail_pattern
-  !docker rm -f -v $pg_container_name
-  ?$PS1
+  [invoke teardown_container $pg_container_name]
   !../scripts/clean_up.sh
   ?$PS1
+[endmacro]
+
+[macro wait-for command match max_time prompt]
+    [loop i 1..$max_time]
+        @$match
+        !$command
+        ??$command
+        ?$prompt
+        [sleep 1]
+    [endloop]
+    # The last prompt won't match since the loop pattern will
+    # match before it, so match it here instead.
+    ?$prompt
+
+    # Sync up after the loop.
+    !$command
+    ??$command
+    ?$prompt
 [endmacro]

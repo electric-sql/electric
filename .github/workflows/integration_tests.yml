@@ -66,4 +66,11 @@ jobs:
         run: make
 
       - name: Run integration tests
+        id: tests
         run: ./run.sh
+      - name: Upload lux logs
+        uses: actions/upload-artifact@v3
+        if: ${{ failure() && steps.tests.outcome == 'failure'  }}
+        with:
+          name: lux_logs
+          path: integration-tests/**/lux_logs/run_*

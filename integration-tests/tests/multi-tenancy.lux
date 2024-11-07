@@ -1,0 +1,223 @@
+[doc Verify support for multi tenancy]
+
+[include _macros.luxinc]
+
+[global tenant1_pg_container_name=multi-tenancy-tenant1__pg]
+[global tenant1_pg_host_port=54331]
+[global tenant1_database_url=postgresql://postgres:password@localhost:$tenant1_pg_host_port/postgres?sslmode=disable]
+
+[global tenant2_pg_container_name=multi-tenancy-tenant2__pg]
+[global tenant2_pg_host_port=54332]
+[global tenant2_database_url=postgresql://postgres:password@localhost:$tenant2_pg_host_port/postgres?sslmode=disable]
+
+###
+
+## Start a new Postgres DB
+[global pg_container_name=$tenant1_pg_container_name]
+[global pg_host_port=$tenant1_pg_host_port]
+[global database_url=$tenant1_database_url]
+[invoke setup_pg_with_name "tenant1_pg" "" ""]
+
+## Start Electric in multi tenancy mode
+[invoke setup_multi_tenant_electric]
+
+[shell electric]
+  ???[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
+
+## Create tenant 1
+[invoke add_tenant "tenant1" 3000]
+[invoke check_tenant_status "tenant1" "active" 3000]
+
+## Setup a second Postgres DB
+[global pg_container_name=$tenant2_pg_container_name]
+[global pg_host_port=$tenant2_pg_host_port]
+[global database_url=$tenant2_database_url]
+[invoke setup_pg_with_name "tenant2_pg" "" ""]
+
+## Create tenant 2
+[invoke add_tenant "tenant2" 3000]
+[invoke check_tenant_status "tenant2" "active" 3000]
+
+## Insert some data in both DBs
+[invoke start_psql_shell "tenant1_psql" $tenant1_pg_container_name]
+[invoke start_psql_shell "tenant2_psql" $tenant2_pg_container_name]
+
+[shell tenant1_psql]
+  !CREATE TABLE items (id INT PRIMARY KEY, val TEXT);
+  ??CREATE TABLE
+  !INSERT INTO items (id, val) VALUES (1, 'tenant1');
+  ??INSERT 0 1
+
+[shell tenant2_psql]
+  !CREATE TABLE items (id INT PRIMARY KEY, val TEXT);
+  ??CREATE TABLE
+  !INSERT INTO items (id, val) VALUES (1, 'tenant2');
+  ??INSERT 0 1
+
+## Check that both tenants can query their data
+[shell tenant1]
+  # Chech tenant 1 data
+  !curl -i -X GET "http://localhost:3000/v1/shape?table=items&offset=-1&database_id=tenant1"
+  ?\e\[1melectric-handle\e\[0m: ([\d-]+)
+  [local shape_id=$1]
+  ?\e\[1melectric-offset\e\[0m: ([\d_]+)
+  [local offset=$1]
+  """??
+  [{"key":"\"public\".\"items\"/\"1\"","value":{"id":"1","val":"tenant1"},"headers":{"operation":"insert","relation":["public","items"]},"offset":"$offset"}
+  ]
+  """
+  
+# Check tenant 2 data
+[shell tenant2]
+  !curl -i -X GET "http://localhost:3000/v1/shape?table=items&offset=-1&database_id=tenant2"
+  ?\e\[1melectric-handle\e\[0m: ([\d-]+)
+  [local shape_id=$1]
+  ?\e\[1melectric-offset\e\[0m: ([\d_]+)
+  [local offset=$1]
+  """??
+  [{"key":"\"public\".\"items\"/\"1\"","value":{"id":"1","val":"tenant2"},"headers":{"operation":"insert","relation":["public","items"]},"offset":"$offset"}
+  ]
+  """
+
+## Now do a live query on tenant 1
+[shell tenant1]
+  ??$PS1
+  !curl -i -X GET "localhost:3000/v1/shape?table=items&offset=$offset&handle="$shape_id"&database_id=tenant1&live"
+
+## And a live query on tenant 2
+[shell tenant2]
+  ??$PS1
+  !curl -i -X GET "localhost:3000/v1/shape?table=items&offset=$offset&handle="$shape_id"&database_id=tenant2&live"
+
+## Insert some data in tenant 1
+[shell tenant1_psql]
+  !INSERT INTO items (id, val) VALUES (2, 'tenant1');
+  ??INSERT 0 1
+
+## Insert some data in tenant 2
+[shell tenant2_psql]
+  !INSERT INTO items (id, val) VALUES (2, 'tenant2');
+  ??INSERT 0 1
+
+## Check that tenant 1 sees the new data
+[shell tenant1]
+  # give some time for the data to sync
+  [sleep 1]
+  ?\e\[1melectric-offset\e\[0m: ([\d_]+)
+  [local offset=$1]
+  ??[{"offset":"$offset","value":{"id":"2","val":"tenant1"},"key":"\"public\".\"items\"/\"2\"","headers":{"relation":["public","items"],"operation":"insert","txid":
+  ?[\d+]
+  ??}},{"headers":{"control":"up-to-date"}}]$PS1
+
+## Check that tenant 2 sees the new data
+[shell tenant2]
+  [sleep 1]
+  ?\e\[1melectric-offset\e\[0m: ([\d_]+)
+  [local offset=$1]
+  ??[{"offset":"$offset","value":{"id":"2","val":"tenant2"},"key":"\"public\".\"items\"/\"2\"","headers":{"relation":["public","items"],"operation":"insert","txid":
+  ?[\d+]
+  ??}},{"headers":{"control":"up-to-date"}}]$PS1
+
+# Disable fail pattern for Electric as we are going to kill it
+[shell electric]
+  -
+
+## kill Electric
+[shell orchestrator]
+  !kill $(lsof -ti:3000)
+  ??$PS1
+
+## restart Electric
+[shell electric]
+  ??$PS1
+  # Re-enable fail pattern for Electric
+  -$fail_pattern
+  [invoke setup_multi_tenant_electric]
+  ???Reloading tenant tenant1 from storage
+  ???Reloading tenant tenant2 from storage
+  ???[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
+
+## Make a query to check that they still see their data
+[shell tenant1]
+  # Query the shape
+  !curl -i -X GET "http://localhost:3000/v1/shape?table=items&offset=${offset}&handle=${shape_id}&database_id=tenant1"
+  ???[{"headers":{"control":"up-to-date"}}]
+  ??$PS1
+  
+[shell tenant2]
+  # Query the shape
+  !curl -i -X GET "http://localhost:3000/v1/shape?table=items&offset=${offset}&handle=${shape_id}&database_id=tenant2"
+  ???[{"headers":{"control":"up-to-date"}}]
+  ??$PS1
+
+## Make a live query on both and check that it still works
+[shell tenant1]
+  !curl -i -X GET "localhost:3000/v1/shape?table=items&offset=$offset&handle="$shape_id"&database_id=tenant1&live"
+
+[shell tenant2]
+  !curl -i -X GET "localhost:3000/v1/shape?table=items&offset=$offset&handle="$shape_id"&database_id=tenant2&live"
+
+## Insert some data in tenant 1
+[shell tenant1_psql]
+  !INSERT INTO items (id, val) VALUES (3, 'tenant 1');
+  ??INSERT 0 1
+
+## Insert some data in tenant 2
+[shell tenant2_psql]
+  !INSERT INTO items (id, val) VALUES (3, 'tenant 2');
+  ??INSERT 0 1
+
+## Check that tenant 1 sees the new data
+[shell tenant1]
+  # give some time for the data to sync
+  [sleep 1]
+  ?\e\[1melectric-offset\e\[0m: ([\d_]+)
+  [local offset=$1]
+  ??[{"offset":"$offset","value":{"id":"3","val":"tenant 1"},"key":"\"public\".\"items\"/\"3\"","headers":{"relation":["public","items"],"operation":"insert","txid":
+  ?[\d+]
+  ??}},{"headers":{"control":"up-to-date"}}]$PS1
+
+## Check that tenant 2 sees the new data
+[shell tenant2]
+  [sleep 1]
+  ?\e\[1melectric-offset\e\[0m: ([\d_]+)
+  [local offset=$1]
+  ??[{"offset":"$offset","value":{"id":"3","val":"tenant 2"},"key":"\"public\".\"items\"/\"3\"","headers":{"relation":["public","items"],"operation":"insert","txid":
+  ?[\d+]
+  ??}},{"headers":{"control":"up-to-date"}}]$PS1
+
+[shell electric]
+  # disable fail pattern because deleting a tenant will stop the tenant processes
+  # which will output some error messages because of the shutdown
+  -
+
+## delete one of the tenants
+[shell orchestrator]
+  !curl -X DELETE http://localhost:3000/v1/admin/database/tenant2
+  ???"tenant2"
+  ??$PS1
+  # Verify that tenant 2 is deleted
+  !curl -X GET http://localhost:3000/v1/health?database_id="tenant2"
+  ???"Database not found"
+  ??$PS1
+  # Verify that tenant 1 still exists
+  [invoke check_tenant_status "tenant1" "active" 3000]
+
+## kill Electric
+[shell orchestrator]
+  !kill $(lsof -ti:3000)
+  ??$PS1
+
+## restart Electric and check that only tenant 1 is reloaded and not tenant 2
+[shell electric]
+  ??$PS1
+  # Set fail pattern to fail if tenant 2 is reloaded
+  -Reloading tenant tenant2 from storage
+  !PORT=3000 ../scripts/electric_dev.sh
+  ???Reloading tenant tenant1 from storage
+  ???[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
+
+[cleanup]
+  [invoke teardown]
+  # Also tear down the first tenant
+  [invoke teardown_container $tenant1_pg_container_name]
