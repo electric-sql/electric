@@ -15,18 +15,21 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build and test with PostgreSQL 14
+  build_and_test:
+    name: "Build and test, Postgres ${{ matrix.postgres_version }}"
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: packages/sync-service
+    strategy:
+      matrix:
+        postgres_version: [14, 15]
     env:
       MIX_ENV: test
-      POSTGRES_VERSION: 140006
+      POSTGRES_VERSION: "${{ matrix.postgres_version }}0000"
     services:
       postgres:
-        image: postgres:14-alpine
+        image: "postgres:${{ matrix.postgres_version }}-alpine"
         env:
           POSTGRES_PASSWORD: password
         options: >-
@@ -38,97 +41,47 @@ jobs:
           - 54321:5432
     steps:
       - uses: actions/checkout@v4
+
       - name: "Set PG settings"
         run: |
           docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
           docker restart ${{ job.services.postgres.id }}
+
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
           version-file: ".tool-versions"
-      - name: Restore dependencies cache
-        uses: actions/cache@v3
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
         with:
           path: packages/sync-service/deps
-          key: ${{ runner.os }}-mix-${{ hashFiles('packages/sync-service/mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-
-      - name: Restore compiled code
-        uses: actions/cache/restore@v4
+          key: "${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          restore-keys: |
+            ${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-
+
+      - name: Cache compiled code
+        uses: actions/cache@v4
         with:
           path: |
             packages/sync-service/_build/*/lib
             !packages/sync-service/_build/*/lib/electric
-          key: ${{ runner.os }}-build-test-${{ hashFiles('packages/sync-service/mix.lock') }}
+          key: "${{ runner.os }}-sync-service-build-[${{ github.ref_name }}]-${{ github.sha }}"
+          restore-keys: |
+            ${{ runner.os }}-sync-service-build-[${{ github.ref_name }}]-${{ github.sha }}
+            ${{ runner.os }}-sync-service-build-[${{ github.ref_name }}]-
+            ${{ runner.os }}-sync-service-build-
+
       - name: Install dependencies
         run: mix deps.get && mix deps.compile
-      - name: Save compiled code
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            packages/sync-service/_build/*/lib
-            !packages/sync-service/_build/*/lib/electric
-          key: ${{ runner.os }}-build-test-${{ hashFiles('packages/sync-service/mix.lock') }}
+
       - name: Compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
+
       - name: Run tests
         run: mix test
-  test_pg_15:
-    name: Build and test with PostgreSQL 15
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/sync-service
-    env:
-      MIX_ENV: test
-      POSTGRES_VERSION: 150001
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_PASSWORD: password
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 54321:5432
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Set PG settings"
-        run: |
-          docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
-          docker restart ${{ job.services.postgres.id }}
-      - uses: erlef/setup-beam@v1
-        with:
-          version-type: strict
-          version-file: ".tool-versions"
-      - name: Restore dependencies cache
-        uses: actions/cache@v3
-        with:
-          path: packages/sync-service/deps
-          key: ${{ runner.os }}-mix-${{ hashFiles('packages/sync-service/mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-
-      - name: Restore compiled code
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            packages/sync-service/_build/*/lib
-            !packages/sync-service/_build/*/lib/electric
-          key: ${{ runner.os }}-build-test-${{ hashFiles('packages/sync-service/mix.lock') }}
-      - name: Install dependencies
-        run: mix deps.get && mix deps.compile
-      - name: Save compiled code
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            packages/sync-service/_build/*/lib
-            !packages/sync-service/_build/*/lib/electric
-          key: ${{ runner.os }}-build-test-${{ hashFiles('packages/sync-service/mix.lock') }}
-      - name: Compiles without warnings
-        run: mix compile --force --all-warnings --warnings-as-errors
-      - name: Run tests
-        run: mix test test/electric/postgres/configuration_test.exs
+
   formatting:
     name: Check formatting
     runs-on: ubuntu-latest
@@ -137,15 +90,21 @@ jobs:
         working-directory: packages/sync-service
     steps:
       - uses: actions/checkout@v4
+
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
           version-file: ".tool-versions"
-      - name: Cache dependencies
-        id: cache-deps
-        uses: actions/cache@v4
+
+      - name: Restore dependencies cache
+        uses: actions/cache/restore@v4
         with:
           path: packages/sync-service/deps
-          key: ${{ runner.os }}-mixdeps-${{ hashFiles('packages/sync-service/mix.lock') }}
+          key: "${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          restore-keys: |
+            ${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-
+
       - run: mix deps.get
+
       - run: mix format --check-formatted
