@@ -82,7 +82,7 @@ For more details and full documentation see [hexdocs.pm/electric_phoenix](https:
 
 ## Examples
 
-### phoenix-liveview
+### Phoenix LiveView
 
 See the
 [phoenix-liveview example](https://github.com/electric-sql/electric/tree/main/examples/phoenix-liveview)
