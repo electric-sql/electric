@@ -51,7 +51,7 @@ jobs:
           ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
           # HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }} TODO
         run: |
-          pnpm sst refresh --stage production --print-logs
+          # pnpm sst refresh --stage production --print-logs
 
       - name: Deploy to production stack
         env:
@@ -65,4 +65,4 @@ jobs:
           ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
           # HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }} TODO
         run: |
-          pnpm sst deploy --stage production --print-logs
+          pnpm sst deploy --stage production
