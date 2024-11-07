@@ -12,10 +12,10 @@ import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-s
 
 type UnknownShape = Shape<Row<unknown>>
 type UnknownShapeStream = ShapeStream<Row<unknown>>
-export type SerializedShapeData = {
+export type SerializedShape = {
   offset: Offset
-  shapeId: string | undefined
-  data?: Record<string, unknown>
+  shapeHandle: string | undefined
+  data?: ShapeData<Row<unknown>>
 }
 
 const streamCache = new Map<string, UnknownShapeStream>()
@@ -34,8 +34,9 @@ export function sortedOptionsHash<T>(options: ShapeStreamOptions<T>): string {
   // Filter options that uniquely identify the shape. DISCUSS BEFORE MERGING
   const uniqueShapeOptions = {
     url: options.url,
-    where: options.where,
+    table: options.table,
     columns: options.columns,
+    where: options.where,
     headers: options.headers,
   }
   return JSON.stringify(uniqueShapeOptions, Object.keys(options).sort())
@@ -149,13 +150,12 @@ export function useShape<
   Selection = UseShapeResult<SourceData>,
 >({
   selector = identity as (arg: UseShapeResult<SourceData>) => Selection,
-  shapeData: data,
   ...options
 }: UseShapeOptions<SourceData, Selection>): Selection {
   const shapeStream = getShapeStream<SourceData>(
     options as ShapeStreamOptions<GetExtensions<SourceData>>
   )
-  const shape = getShape<SourceData>(shapeStream, data)
+  const shape = getShape<SourceData>(shapeStream)
 
   const useShapeData = React.useMemo(() => {
     let latestShapeData = parseShapeData(shape)
@@ -180,12 +180,20 @@ export function useShape<
 }
 export function getSerializedShape(
   options: ShapeStreamOptions
-): SerializedShapeData {
+): SerializedShape {
   const shapeStream = getShapeStream(options)
   const shape = getShape(shapeStream)
   return {
-    shapeId: shapeStream.shapeId,
+    shapeHandle: shapeStream.shapeHandle,
     offset: shapeStream.offset,
-    data: Object.fromEntries(shape.valueSync),
+    data: shape.currentValue,
   }
+}
+
+export function cacheShapeState(
+  options: ShapeStreamOptions,
+  shapeData: ShapeData
+) {
+  const shapeStream = getShapeStream(options)
+  getShape(shapeStream, shapeData)
 }

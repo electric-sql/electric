@@ -4,36 +4,23 @@ import { v4 as uuidv4 } from "uuid"
 import { useShape, getShapeStream } from "@electric-sql/react"
 import "./Example.css"
 import { matchStream } from "./match-stream"
-import { Row, ShapeStream, ShapeStreamOptions } from "@electric-sql/client"
+import { Row, ShapeStreamOptions } from "@electric-sql/client"
 import { useOptimistic } from "react"
-
-const ELECTRIC_URL = process.env.ELECTRIC_URL || `http://localhost:3000`
+import { getProxiedOptions, getUrl } from "./utils"
 
 const parser = {
   timestamptz: (date: string) => new Date(date).getTime(),
 }
 
-const shapeOptions: () => ShapeStreamOptions<Row> = () => {
-  if (typeof window !== `undefined`) {
-    return {
-      url: new URL(`/shape-proxy/items`, window?.location.origin).href,
-    }
-  } else {
-    const controller = new AbortController()
-    controller.abort()
-    return {
-      url: new URL(`/v1/items`, ELECTRIC_URL).href,
-      signal: controller.signal,
-    }
-  }
+type Item = { id: string; created_at: number }
+
+const options: Partial<ShapeStreamOptions> = {
+  table: `items`,
+  parser,
 }
 
-type Item = { id: string; created_at: number }
-const itemShape = (): ShapeStreamOptions<Row> => ({ ...shapeOptions() })
-
 async function createItem(newId: string) {
-  // FIX types later
-  const itemsStream = getShapeStream(itemShape()) as unknown as ShapeStream<Row>
+  const itemsStream = getShapeStream<Row>(getProxiedOptions(options))
 
   // Match the insert
   const findUpdatePromise = matchStream({
@@ -52,8 +39,7 @@ async function createItem(newId: string) {
 }
 
 async function clearItems() {
-  // FIX types later
-  const itemsStream = getShapeStream(itemShape()) as unknown as ShapeStream<Row>
+  const itemsStream = getShapeStream<Row>(getProxiedOptions(options))
 
   // Match the delete
   const findUpdatePromise = matchStream({
@@ -71,10 +57,7 @@ async function clearItems() {
 }
 
 export default function Home() {
-  const { data: items } = useShape({
-    ...itemShape(),
-    parser,
-  }) as unknown as {
+  const { data: items } = useShape(getProxiedOptions(options)) as unknown as {
     data: Item[]
   }
 

@@ -1,20 +1,16 @@
 import React from "react"
-import { getSerializedShape } from "@electric-sql/react"
 import Home from "./Home"
-import SSRShapesInitializer from "./ssr-shapes-provider"
+import ServerShapeProvider from "./server-shape-provider"
+import { ShapeDefintion } from "./utils"
 
-const serverOptions = {
-  url: new URL(`http://localhost:3000/v1/shape/items`).href,
+const itemsShape: ShapeDefintion = {
+  table: `items`,
 }
 
-const Page = async () => {
-  const data = getSerializedShape(serverOptions)
-
-  return (
-    <SSRShapesInitializer serializedShapes={[{ data, serverOptions }]}>
-      <Home />
-    </SSRShapesInitializer>
-  )
-}
+const Page = async () => (
+  <ServerShapeProvider options={[itemsShape]}>
+    <Home />
+  </ServerShapeProvider>
+)
 
 export default Page
