@@ -82,13 +82,22 @@ For more details and full documentation see [hexdocs.pm/electric_phoenix](https:
 
 ## Examples
 
-### electric-phoenix
+### phoenix-liveview
 
 See the
-[elixir-phoenix example](https://github.com/electric-sql/electric/tree/main/examples/electric-phoenix)
-on GitHub. This demonstrates using Electric for cross-browser synchronisation
-using
-[`Electric.Phoenix.live_stream/4`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.html#live_stream/4).
+[phoenix-liveview example](https://github.com/electric-sql/electric/tree/main/examples/phoenix-liveview)
+on GitHub.
+
+This is an example Phoenix LiveView application that uses
+[`Electric.Phoenix.live_stream/4`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.html#live_stream/4)
+to sync data from Postgres into a LiveView using
+[Phoenix Streams](https://fly.io/phoenix-files/phoenix-dev-blog-streams/).
+This keeps the LiveView automatically in-sync with Postgres, without having
+to re-run queries or trigger any change handling yourself.
+
+See the
+[documentation](https://electric-sql.com/docs/integrations/phoenix#liveview-sync)
+for more details.
 
 <HelpWanted issue="1878">
   an equivalent integration for other server-side frameworks, such as Rails, Laravel, Django, etc.
