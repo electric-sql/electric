@@ -56,9 +56,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: packages/sync-service/deps
-          key: "${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-
             ${{ runner.os }}-sync-service-deps-
 
       - name: Cache compiled code
@@ -67,10 +68,11 @@ jobs:
           path: |
             packages/sync-service/_build/*/lib
             !packages/sync-service/_build/*/lib/electric
-          key: "${{ runner.os }}-sync-service-build-[${{ github.ref_name }}]-${{ github.sha }}"
+          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}"
           restore-keys: |
-            ${{ runner.os }}-sync-service-build-[${{ github.ref_name }}]-${{ github.sha }}
-            ${{ runner.os }}-sync-service-build-[${{ github.ref_name }}]-
+            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}
+            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-
+            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-
             ${{ runner.os }}-sync-service-build-
 
       - name: Install dependencies
@@ -88,6 +90,8 @@ jobs:
     defaults:
       run:
         working-directory: packages/sync-service
+    env:
+      MIX_ENV: test
     steps:
       - uses: actions/checkout@v4
 
@@ -100,9 +104,10 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: packages/sync-service/deps
-          key: "${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-sync-service-deps-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-
             ${{ runner.os }}-sync-service-deps-
 
       - run: mix deps.get
