@@ -9,7 +9,14 @@ export default $config({
       name: `linearlite`,
       removal: input?.stage === `production` ? `retain` : `remove`,
       home: `aws`,
-      providers: { cloudflare: `5.42.0`, aws: `6.57.0`, neon: `0.6.3` },
+      providers: {
+        cloudflare: `5.42.0`,
+        aws: {
+          version: `6.57.0`,
+          region: `us-east-1`,
+        },
+        neon: `0.6.3`,
+      },
     }
   },
   async run() {
@@ -25,20 +32,24 @@ export default $config({
     })
 
     const databaseUri = getNeonDbUri(project, db)
+    try {
+      databaseUri.apply(applyMigrations)
 
-    databaseUri.apply(applyMigrations)
+      const electricInfo = databaseUri.apply((uri) =>
+        addDatabaseToElectric(uri)
+      )
 
-    const electricInfo = databaseUri.apply((uri) => addDatabaseToElectric(uri))
-
-    const website = deployLinearLite(electricInfo)
-
-    return {
-      databaseUri,
-      database_id: electricInfo.id,
-      electric_token: electricInfo.token,
-      website: website.url,
+      const website = deployLinearLite(electricInfo)
+      return {
+        databaseUri,
+        database_id: electricInfo.id,
+        electric_token: electricInfo.token,
+        website: website.url,
+      }
+    } catch (e) {
+      console.error('Failed to deploy linearlite stack', e)
     }
-  },
+  }
 })
 
 function applyMigrations(uri: string) {
