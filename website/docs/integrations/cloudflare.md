@@ -101,7 +101,7 @@ export default {
 
 You can implement a similar pattern to the [sync example above](#syncing-data-into-the-worker) to sync data into a Durable Object.
 
-The key difference is that with a [Durable Object](https://developers.cloudflare.com/durable-objects/), the data can be persisted across requests. This allows you to sync a shape log into the Durable Object, materialise the shape into persistent storage and then re-sync the latest changes whenver the Durable Object is accessed.
+The key difference is that with a [Durable Object](https://developers.cloudflare.com/durable-objects/), the data can be persisted across requests. This allows you to sync a shape log into the Durable Object, materialise the shape into persistent storage and then re-sync the latest changes whenever the Durable Object is accessed.
 
 You can see a demo of this pattern, using SQLite to persist the Shape data, at [KyleAMathews/electric-demo-cloudflare-sqlite](https://github.com/KyleAMathews/electric-demo-cloudflare-sqlite):
 
