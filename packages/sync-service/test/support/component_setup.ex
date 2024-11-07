@@ -44,19 +44,6 @@ defmodule Support.ComponentSetup do
     ]
   end
 
-  defp tenant_config_supervised(ctx) do
-    [
-      electric_instance_id: ctx.electric_instance_id,
-      tenant_id: ctx.tenant_id,
-      pg_id: Map.get(ctx, :pg_id, "12345"),
-      registry: ctx.registry,
-      long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
-      max_age: Access.get(ctx, :max_age, 60),
-      stale_age: Access.get(ctx, :stale_age, 300),
-      get_service_status: fn -> :active end
-    ]
-  end
-
   def store_tenant(tenant, ctx) do
     :ok =
       Electric.TenantManager.store_tenant(tenant,
@@ -82,16 +69,21 @@ defmodule Support.ComponentSetup do
 
     :ok = Electric.TenantManager.store_tenant(tenant, tenant_opts)
 
-    # {:ok, _} =
-    #   ctx
-    #   |> Map.put(:connection_opts, ctx.db_config)
-    #   |> Electric.TenantSupervisor.start_tenant()
-
     %{tenant: tenant}
   end
 
   def with_supervised_tenant(ctx) do
-    tenant = Access.get(ctx, :tenant_config, tenant_config_supervised(ctx))
+    tenant =
+      [
+        electric_instance_id: ctx.electric_instance_id,
+        tenant_id: ctx.tenant_id,
+        pg_id: Map.get(ctx, :pg_id, "12345"),
+        registry: ctx.registry,
+        long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
+        max_age: Access.get(ctx, :max_age, 60),
+        stale_age: Access.get(ctx, :stale_age, 300),
+        get_service_status: fn -> :active end
+      ]
 
     :ok =
       Electric.TenantManager.create_tenant(ctx.tenant_id, ctx.db_config,
@@ -114,11 +106,7 @@ defmodule Support.ComponentSetup do
 
     [{tenant_supervisor_pid, _}] = Registry.lookup(registry_name, registry_key)
 
-    %{
-      tenant: tenant,
-      tenant_supervisor_pid: tenant_supervisor_pid
-      # shape_cache: Electric.ShapeCache.name(ctx.electric_instance_id, ctx.tenant_id)
-    }
+    %{tenant: tenant, tenant_supervisor_pid: tenant_supervisor_pid}
   end
 
   def with_registry(ctx) do
