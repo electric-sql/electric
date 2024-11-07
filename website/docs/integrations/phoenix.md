@@ -25,14 +25,6 @@ Electric is [developed in Elixir](/product/sync#how-does-it-work) and provides [
 
 `Electric.Phoenix` is published on Hex as [hex.pm/packages/electric_phoenix](https://hex.pm/packages/electric_phoenix).
 
-### Example
-
-See the
-[elixir-phoenix-example](https://github.com/electric-sql/electric/tree/main/examples/electric-phoenix-example)
-on GitHub. This demonstrates using Electric for cross-browser synchronisation
-using
-[`Electric.Phoenix.live_stream/4`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.html#live_stream/4).
-
 ### Inspiration
 
 It was inspired by [`josevalim/sync`](https://github.com/josevalim/sync). You can read José's [original design document](https://github.com/josevalim/sync/blob/main/DESIGN.md).
@@ -88,7 +80,16 @@ This makes your LiveView applications real-time. In fact, it allows you to build
 
 For more details and full documentation see [hexdocs.pm/electric_phoenix](https://hexdocs.pm/electric_phoenix).
 
+## Examples
+
+### electric-phoenix
+
+See the
+[elixir-phoenix example](https://github.com/electric-sql/electric/tree/main/examples/electric-phoenix)
+on GitHub. This demonstrates using Electric for cross-browser synchronisation
+using
+[`Electric.Phoenix.live_stream/4`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.html#live_stream/4).
+
 <HelpWanted issue="1878">
   an equivalent integration for other server-side frameworks, such as Rails, Laravel, Django, etc.
 </HelpWanted>
-
