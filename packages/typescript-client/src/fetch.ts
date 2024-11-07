@@ -1,7 +1,7 @@
 import {
-  CHUNK_LAST_OFFSET_HEADER,
-  CHUNK_UP_TO_DATE_HEADER,
+  FRONTIER_HEADER,
   LIVE_QUERY_PARAM,
+  OFFSET_HEADER,
   OFFSET_QUERY_PARAM,
   SHAPE_HANDLE_HEADER,
   SHAPE_HANDLE_QUERY_PARAM,
@@ -246,8 +246,8 @@ class PrefetchQueue {
  */
 function getNextChunkUrl(url: string, res: Response): string | void {
   const shapeHandle = res.headers.get(SHAPE_HANDLE_HEADER)
-  const lastOffset = res.headers.get(CHUNK_LAST_OFFSET_HEADER)
-  const atFrontier = res.headers.has(CHUNK_UP_TO_DATE_HEADER)
+  const lastOffset = res.headers.get(OFFSET_HEADER)
+  const atFrontier = res.headers.has(FRONTIER_HEADER)
 
   // only prefetch if shape handle and offset for next chunk are available, and
   // response is not already up-to-date

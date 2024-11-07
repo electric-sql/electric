@@ -16,19 +16,19 @@ import {
   createFetchWithChunkBuffer,
 } from './fetch'
 import {
-  CHUNK_LAST_OFFSET_HEADER,
-  LIVE_CACHE_BUSTER_HEADER,
-  LIVE_CACHE_BUSTER_QUERY_PARAM,
+  CURSOR_HEADER,
+  CURSOR_QUERY_PARAM,
   COLUMNS_QUERY_PARAM,
+  DATABASE_ID_QUERY_PARAM,
   LIVE_QUERY_PARAM,
+  OFFSET_HEADER,
   OFFSET_QUERY_PARAM,
+  REPLICA_QUERY_PARAM,
   SHAPE_HANDLE_HEADER,
   SHAPE_HANDLE_QUERY_PARAM,
   SHAPE_SCHEMA_HEADER,
-  WHERE_QUERY_PARAM,
-  DATABASE_ID_QUERY_PARAM,
   TABLE_QUERY_PARAM,
-  REPLICA_PARAM,
+  WHERE_QUERY_PARAM,
 } from './constants'
 
 type Replica = `full` | `default`
@@ -255,7 +255,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         if (this.#isUpToDate) {
           fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
           fetchUrl.searchParams.set(
-            LIVE_CACHE_BUSTER_QUERY_PARAM,
+            CURSOR_QUERY_PARAM,
             this.#liveCacheBuster
           )
         }
@@ -276,7 +276,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           (this.#replica ?? ShapeStream.Replica.DEFAULT) !=
           ShapeStream.Replica.DEFAULT
         ) {
-          fetchUrl.searchParams.set(REPLICA_PARAM, this.#replica as string)
+          fetchUrl.searchParams.set(REPLICA_QUERY_PARAM, this.#replica as string)
         }
 
         let response!: Response
@@ -313,12 +313,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
           this.#shapeHandle = shapeHandle
         }
 
-        const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
+        const lastOffset = headers.get(OFFSET_HEADER)
         if (lastOffset) {
           this.#lastOffset = lastOffset as Offset
         }
 
-        const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
+        const liveCacheBuster = headers.get(CURSOR_HEADER)
         if (liveCacheBuster) {
           this.#liveCacheBuster = liveCacheBuster
         }

@@ -6,7 +6,7 @@ import {
   BackoffDefaults,
   createFetchWithChunkBuffer,
 } from '../src/fetch'
-import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
+import { OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
 
 describe(`createFetchWithBackoff`, () => {
   const initialDelay = 10
@@ -203,7 +203,7 @@ describe(`createFetchWithChunkBuffer`, () => {
       status: 200,
       headers: responseHeaders({
         [SHAPE_HANDLE_HEADER]: `123`,
-        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+        [OFFSET_HEADER]: `456`,
       }),
     })
 
@@ -236,7 +236,7 @@ describe(`createFetchWithChunkBuffer`, () => {
           status: 200,
           headers: responseHeaders({
             [SHAPE_HANDLE_HEADER]: `123`,
-            [CHUNK_LAST_OFFSET_HEADER]: `${idx}`,
+            [OFFSET_HEADER]: `${idx}`,
           }),
         })
     )
@@ -277,7 +277,7 @@ describe(`createFetchWithChunkBuffer`, () => {
       status: 200,
       headers: responseHeaders({
         [SHAPE_HANDLE_HEADER]: `123`,
-        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+        [OFFSET_HEADER]: `456`,
       }),
     })
 
@@ -285,7 +285,7 @@ describe(`createFetchWithChunkBuffer`, () => {
       status: 200,
       headers: responseHeaders({
         [SHAPE_HANDLE_HEADER]: `123`,
-        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+        [OFFSET_HEADER]: `456`,
       }),
     })
 
@@ -328,7 +328,7 @@ describe(`createFetchWithChunkBuffer`, () => {
       status: 200,
       headers: responseHeaders({
         [SHAPE_HANDLE_HEADER]: `123`,
-        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+        [OFFSET_HEADER]: `456`,
       }),
     })
 
@@ -358,7 +358,7 @@ describe(`createFetchWithChunkBuffer`, () => {
           status: 200,
           headers: responseHeaders({
             [SHAPE_HANDLE_HEADER]: `123`,
-            [CHUNK_LAST_OFFSET_HEADER]: `${idx}`,
+            [OFFSET_HEADER]: `${idx}`,
           }),
         })
       })
@@ -411,7 +411,7 @@ describe(`createFetchWithChunkBuffer`, () => {
           status: 200,
           headers: responseHeaders({
             [SHAPE_HANDLE_HEADER]: `123`,
-            [CHUNK_LAST_OFFSET_HEADER]: `${idx}`,
+            [OFFSET_HEADER]: `${idx}`,
           }),
         })
       })
