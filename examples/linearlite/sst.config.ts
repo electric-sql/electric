@@ -53,7 +53,7 @@ function applyMigrations(uri: string) {
 function deployLinearLite(
   electricInfo: $util.Output<{ id: string; token: string }>
 ) {
-  return new sst.aws.StaticSite(`linearlite-example`, {
+  return new sst.aws.StaticSite(`linearlite`, {
     environment: {
       VITE_ELECTRIC_URL: process.env.ELECTRIC_API!,
       VITE_ELECTRIC_TOKEN: electricInfo.token,
