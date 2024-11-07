@@ -51,4 +51,18 @@ jobs:
           ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
           # HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }} TODO
         run: |
+          pnpm sst refresh --stage production --print-logs
+
+      - name: Deploy to production stack
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+          ELECTRIC_API: ${{ secrets.ELECTRIC_API }}
+          ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
+          # HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }} TODO
+        run: |
           pnpm sst deploy --stage production --print-logs
