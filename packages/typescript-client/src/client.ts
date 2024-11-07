@@ -8,12 +8,17 @@ import {
 } from './types'
 import { MessageParser, Parser } from './parser'
 import { isUpToDateMessage } from './helpers'
-import { FetchError, FetchBackoffAbortError } from './error'
+import {
+  FetchError,
+  FetchBackoffAbortError,
+  MissingHeadersError,
+} from './error'
 import {
   BackoffDefaults,
   BackoffOptions,
   createFetchWithBackoff,
   createFetchWithChunkBuffer,
+  createFetchWithResponseHeadersCheck,
 } from './fetch'
 import {
   CHUNK_LAST_OFFSET_HEADER,
@@ -218,7 +223,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
       },
     })
 
-    this.#fetchClient = createFetchWithChunkBuffer(fetchWithBackoffClient)
+    this.#fetchClient = createFetchWithResponseHeadersCheck(
+      createFetchWithChunkBuffer(fetchWithBackoffClient)
+    )
 
     this.start()
   }
@@ -288,6 +295,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           this.#connected = true
         } catch (e) {
           if (e instanceof FetchBackoffAbortError) break // interrupted
+          if (e instanceof MissingHeadersError) throw e
           if (!(e instanceof FetchError)) throw e // should never happen
           if (e.status == 409) {
             // Upon receiving a 409, we should start from scratch

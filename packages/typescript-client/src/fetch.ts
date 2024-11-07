@@ -6,7 +6,11 @@ import {
   SHAPE_HANDLE_HEADER,
   SHAPE_HANDLE_QUERY_PARAM,
 } from './constants'
-import { FetchError, FetchBackoffAbortError } from './error'
+import {
+  FetchError,
+  FetchBackoffAbortError,
+  MissingHeadersError,
+} from './error'
 
 // Some specific 4xx and 5xx HTTP status codes that we definitely
 // want to retry
@@ -144,6 +148,33 @@ export function createFetchWithChunkBuffer(
   }
 
   return prefetchClient
+}
+
+export const requiredElectricResponseHeaders = [
+  `electric-offset`,
+  `electric-handle`,
+  `electric-schema`,
+]
+
+export function createFetchWithResponseHeadersCheck(
+  fetchClient: typeof fetch
+): typeof fetch {
+  return async (...args: Parameters<typeof fetchClient>) => {
+    const response = await fetchClient(...args)
+
+    if (response.ok) {
+      // Check that the necessary Electric headers are present on the response
+      const headers = response.headers
+      const missingHeaders = requiredElectricResponseHeaders.filter(
+        (h) => !headers.has(h)
+      )
+      if (missingHeaders.length > 0) {
+        throw new MissingHeadersError(args[0].toString(), missingHeaders)
+      }
+    }
+
+    return response
+  }
 }
 
 class PrefetchQueue {

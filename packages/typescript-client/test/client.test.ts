@@ -4,6 +4,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
 import { ShapeStream, Shape, FetchError } from '../src'
 import { Message, Row, ChangeMessage } from '../src/types'
+import { requiredElectricResponseHeaders } from '../src/fetch'
+import { MissingHeadersError } from '../src/error'
 
 const BASE_URL = inject(`baseUrl`)
 
@@ -304,6 +306,32 @@ describe(`Shape`, () => {
     await sleep(200)
 
     expect(shapeStream.isConnected()).true
+  })
+
+  it(`should stop fetching and report an error if response is missing required headers`, async ({
+    issuesTableUrl,
+  }) => {
+    let url: string = ``
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
+      fetchClient: async (input, _init) => {
+        url = input.toString()
+        const headers = new Headers()
+        headers.set(`electric-offset`, `0_0`)
+        return new Response(undefined, { status: 200, headers })
+      },
+    })
+
+    await sleep(10) // give some time for the initial fetch to complete
+    expect(shapeStream.isConnected()).false
+
+    const missingHeaders = requiredElectricResponseHeaders.filter(
+      (h) => h !== `electric-offset`
+    )
+    const expectedErrorMessage = new MissingHeadersError(url, missingHeaders)
+      .message
+    expect((shapeStream.error as Error).message === expectedErrorMessage)
   })
 
   it(`should set isConnected to false after fetch if not subscribed`, async ({
