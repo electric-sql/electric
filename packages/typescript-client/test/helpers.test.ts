@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isChangeMessage, isControlMessage, Message } from '../src'
-import { isUpToDateMessage } from '../src/helpers'
+import { isFrontierMessage } from '../src/helpers'
 
 describe(`helpers`, () => {
   const changeMsg = {
@@ -14,7 +14,7 @@ describe(`helpers`, () => {
 
   const upToDateMsg = {
     headers: {
-      control: `up-to-date`,
+      control: `frontier`,
     },
   } as Message
 
@@ -36,9 +36,9 @@ describe(`helpers`, () => {
     expect(isChangeMessage(mustRefetchMsg)).toBe(false)
   })
 
-  it(`should correctly detect up-to-date message`, () => {
-    expect(isUpToDateMessage(upToDateMsg)).toBe(true)
-    expect(isUpToDateMessage(mustRefetchMsg)).toBe(false)
-    expect(isUpToDateMessage(changeMsg)).toBe(false)
+  it(`should correctly detect frontier message`, () => {
+    expect(isFrontierMessage(upToDateMsg)).toBe(true)
+    expect(isFrontierMessage(mustRefetchMsg)).toBe(false)
+    expect(isFrontierMessage(changeMsg)).toBe(false)
   })
 })

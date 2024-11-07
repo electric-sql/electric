@@ -30,7 +30,7 @@ describe(`helpers`, () => {
   it(`should respect ControlMessages type guard`, () => {
     const message = {
       headers: {
-        control: `up-to-date`,
+        control: `frontier`,
       },
     } as Message<{ [key: string]: string }>
 

@@ -397,7 +397,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
                "#{next_next_offset}"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == []
+      assert Plug.Conn.get_resp_header(conn, "electric-frontier") == []
     end
 
     test "returns 304 Not Modified when If-None-Match matches ETag",
@@ -482,7 +482,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == [
                "test result",
-               %{"headers" => %{"control" => "up-to-date"}}
+               %{"headers" => %{"control" => "frontier"}}
              ]
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
@@ -490,7 +490,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
 
       assert Plug.Conn.get_resp_header(conn, "electric-offset") == [next_offset_str]
-      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
+      assert Plug.Conn.get_resp_header(conn, "electric-frontier") == [""]
       assert Plug.Conn.get_resp_header(conn, "electric-schema") == []
     end
 
@@ -539,11 +539,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
       refute Process.alive?(conn.owner)
 
       assert conn.status == 200
-      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "up-to-date"}}]
-      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
+      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "frontier"}}]
+      assert Plug.Conn.get_resp_header(conn, "electric-frontier") == [""]
     end
 
-    test "sends an up-to-date response after a timeout if no changes are observed",
+    test "sends an frontier response after a timeout if no changes are observed",
          %{tenant_id: tenant_id} = ctx do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
@@ -572,13 +572,13 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 204
 
-      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "up-to-date"}}]
+      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "frontier"}}]
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
                "public, max-age=5, stale-while-revalidate=5"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
+      assert Plug.Conn.get_resp_header(conn, "electric-frontier") == [""]
     end
 
     test "sends 409 with a redirect to existing shape when requested shape handle does not exist",

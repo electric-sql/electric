@@ -6,18 +6,18 @@ defmodule Support.ClientHelpers do
 
   defmacro offset0, do: quote(do: offset(0, 0))
 
-  defmacro up_to_date() do
-    quote(do: %ControlMessage{control: :up_to_date, offset: %Offset{tx: _, op: _}})
+  defmacro frontier() do
+    quote(do: %ControlMessage{control: :frontier, offset: %Offset{tx: _, op: _}})
   end
 
-  defmacro up_to_date(tx, op) do
+  defmacro frontier(tx, op) do
     quote(
       do: %ControlMessage{
-        control: :up_to_date,
+        control: :frontier,
         offset: offset(unquote(tx), unquote(op))
       }
     )
   end
 
-  defmacro up_to_date0(), do: quote(do: up_to_date(0, 0))
+  defmacro frontier0(), do: quote(do: frontier(0, 0))
 end

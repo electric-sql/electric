@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { assert, describe, expect, inject, vi } from 'vitest'
 import { FetchError, Shape, ShapeStream } from '../src'
 import { Message, Offset } from '../src/types'
-import { isChangeMessage, isUpToDateMessage } from '../src/helpers'
+import { isChangeMessage, isFrontierMessage } from '../src/helpers'
 import {
   IssueRow,
   testWithIssuesTable as it,
@@ -43,7 +43,7 @@ describe(`HTTP Sync`, () => {
           if (isChangeMessage(message)) {
             shapeData.set(message.key, message.value)
           }
-          if (isUpToDateMessage(message)) {
+          if (isFrontierMessage(message)) {
             aborter.abort()
             return resolve()
           }
@@ -83,7 +83,7 @@ describe(`HTTP Sync`, () => {
           if (isChangeMessage(message)) {
             shapeData.set(message.key, message.value)
           }
-          if (isUpToDateMessage(message)) {
+          if (isFrontierMessage(message)) {
             upToDateMessageCount += 1
           }
         })
@@ -162,7 +162,7 @@ describe(`HTTP Sync`, () => {
           if (isChangeMessage(message)) {
             shapeData.set(message.key, message.value)
           }
-          if (isUpToDateMessage(message)) {
+          if (isFrontierMessage(message)) {
             aborter.abort()
             return resolve()
           }
@@ -507,7 +507,7 @@ describe(`HTTP Sync`, () => {
       if (`offset` in msg) {
         expect(msg.offset).to.not.eq(`0_`)
         lastOffset = msg.offset
-      } else if (isUpToDateMessage(msg)) {
+      } else if (isFrontierMessage(msg)) {
         res()
       }
     })
@@ -537,7 +537,7 @@ describe(`HTTP Sync`, () => {
     })
 
     await h.forEachMessage(newIssueStream, newAborter, (res, msg, nth) => {
-      if (isUpToDateMessage(msg)) {
+      if (isFrontierMessage(msg)) {
         res()
       } else {
         catchupOpsCount = nth + 1
@@ -748,7 +748,7 @@ describe(`HTTP Sync`, () => {
       if (`offset` in msg) {
         lastOffset = msg.offset
       }
-      if (isUpToDateMessage(msg)) {
+      if (isFrontierMessage(msg)) {
         res()
         aborter.abort()
       }
@@ -800,7 +800,7 @@ describe(`HTTP Sync`, () => {
     })
 
     await h.forEachMessage(newIssueStream, aborter, (res, msg) => {
-      if (isUpToDateMessage(msg)) {
+      if (isFrontierMessage(msg)) {
         res()
       }
     })
@@ -834,7 +834,7 @@ describe(`HTTP Sync`, () => {
     })
 
     await h.forEachMessage(issueStream, aborter, (res, msg) => {
-      if (isUpToDateMessage(msg)) res()
+      if (isFrontierMessage(msg)) res()
     })
 
     const invalidIssueStream = new ShapeStream<IssueRow>({
@@ -906,7 +906,7 @@ describe(`HTTP Sync`, () => {
     let upToDateReachedCount = 0
     await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
       // shapeData.set(msg.key, msg.value)
-      if (isUpToDateMessage(msg)) {
+      if (isFrontierMessage(msg)) {
         upToDateReachedCount++
         if (upToDateReachedCount === 1) {
           // upon reaching up to date initially, we have one
@@ -1014,7 +1014,7 @@ describe.sequential(`Multi tenancy sync`, () => {
           if (isChangeMessage(message)) {
             shapeData.set(message.key, message.value)
           }
-          if (isUpToDateMessage(message)) {
+          if (isFrontierMessage(message)) {
             aborter.abort()
             return resolve()
           }
@@ -1050,7 +1050,7 @@ describe.sequential(`Multi tenancy sync`, () => {
             if (isChangeMessage(message)) {
               shapeData.set(message.key, message.value)
             }
-            if (isUpToDateMessage(message)) {
+            if (isFrontierMessage(message)) {
               aborter.abort()
               return resolve()
             }

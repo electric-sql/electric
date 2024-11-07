@@ -24,7 +24,7 @@ interface Header {
 }
 
 export type ControlMessage = {
-  headers: Header & { control: `up-to-date` | `must-refetch` }
+  headers: Header & { control: `frontier` | `must-refetch` }
 }
 
 export type ChangeMessage<T extends Row<unknown> = Row> = {

@@ -64,7 +64,7 @@ defmodule Electric.ClientTest do
     end
 
     test "streams an empty shape", ctx do
-      assert [%ControlMessage{control: :up_to_date, offset: offset0()}] = stream(ctx, 1)
+      assert [%ControlMessage{control: :frontier, offset: offset0()}] = stream(ctx, 1)
     end
 
     test "streams a non empty shape", ctx do
@@ -91,7 +91,7 @@ defmodule Electric.ClientTest do
                  value: %{"id" => ^id3},
                  offset: %Electric.Client.Offset{tx: 0, op: 0}
                },
-               up_to_date0()
+               frontier0()
              ] = stream(ctx, 4)
     end
 
@@ -121,7 +121,7 @@ defmodule Electric.ClientTest do
                  value: %{"id" => ^id3},
                  offset: %Electric.Client.Offset{tx: 0, op: 0}
                },
-               up_to_date0()
+               frontier0()
              ] = Client.stream(ctx.client, table) |> Enum.take(4)
     end
 
@@ -154,20 +154,20 @@ defmodule Electric.ClientTest do
         )
 
       assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
-      assert_receive {:stream, 1, up_to_date0()}
+      assert_receive {:stream, 1, frontier0()}
       assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
-      assert_receive {:stream, 2, up_to_date0()}
+      assert_receive {:stream, 2, frontier0()}
 
       {:ok, id2} = insert_item(ctx)
       {:ok, id3} = insert_item(ctx)
 
       assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id2}}}, 500
       assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id3}}}, 500
-      assert_receive {:stream, 1, up_to_date()}
+      assert_receive {:stream, 1, frontier()}
 
       assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id2}}}, 500
       assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id3}}}, 500
-      assert_receive {:stream, 2, up_to_date()}
+      assert_receive {:stream, 2, frontier()}
     end
   end
 
@@ -237,7 +237,7 @@ defmodule Electric.ClientTest do
             "offset" => "1_0",
             "value" => %{"id" => "1111"}
           },
-          %{"headers" => %{"control" => "up-to-date"}}
+          %{"headers" => %{"control" => "frontier"}}
         ])
 
       body2 =
@@ -247,7 +247,7 @@ defmodule Electric.ClientTest do
             "offset" => "2_0",
             "value" => %{"id" => "2222"}
           },
-          %{"headers" => %{"control" => "up-to-date"}}
+          %{"headers" => %{"control" => "frontier"}}
         ])
 
       schema = Jason.encode!(%{"id" => %{type: "text"}})
@@ -298,13 +298,13 @@ defmodule Electric.ClientTest do
                  offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
-               up_to_date(1, 0),
+               frontier(1, 0),
                %ChangeMessage{
                  headers: @insert,
                  offset: offset(2, 0),
                  value: %{"id" => "2222"}
                },
-               up_to_date(2, 0)
+               frontier(2, 0)
              ] = stream(ctx, 4)
 
       assert_receive {:offset, "-1"}
@@ -320,7 +320,7 @@ defmodule Electric.ClientTest do
             "offset" => "1_0",
             "value" => %{"id" => "1111"}
           },
-          %{"headers" => %{"control" => "up-to-date"}}
+          %{"headers" => %{"control" => "frontier"}}
         ])
 
       body2 =
@@ -330,7 +330,7 @@ defmodule Electric.ClientTest do
             "offset" => "2_0",
             "value" => %{"id" => "2222"}
           },
-          %{"headers" => %{"control" => "up-to-date"}}
+          %{"headers" => %{"control" => "frontier"}}
         ])
 
       schema = Jason.encode!(%{"id" => %{type: "text"}})
@@ -380,13 +380,13 @@ defmodule Electric.ClientTest do
                  offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
-               up_to_date(1, 0),
+               frontier(1, 0),
                %ChangeMessage{
                  headers: @insert,
                  offset: offset(2, 0),
                  value: %{"id" => "2222"}
                },
-               up_to_date(2, 0)
+               frontier(2, 0)
              ] = stream(ctx, 4)
     end
 
@@ -397,7 +397,7 @@ defmodule Electric.ClientTest do
           "offset" => "1_0",
           "value" => %{"id" => "1111"}
         },
-        %{"headers" => %{"control" => "up-to-date"}}
+        %{"headers" => %{"control" => "frontier"}}
       ]
 
       body2 = [
@@ -406,7 +406,7 @@ defmodule Electric.ClientTest do
           "offset" => "2_0",
           "value" => %{"id" => "2222"}
         },
-        %{"headers" => %{"control" => "up-to-date"}}
+        %{"headers" => %{"control" => "frontier"}}
       ]
 
       # see https://hexdocs.pm/req/Req.Steps.html#retry/1 for the list of
@@ -482,13 +482,13 @@ defmodule Electric.ClientTest do
                  offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
-               up_to_date(1, 0),
+               frontier(1, 0),
                %ChangeMessage{
                  headers: @insert,
                  offset: offset(2, 0),
                  value: %{"id" => "2222"}
                },
-               up_to_date(2, 0)
+               frontier(2, 0)
              ] = stream(ctx, 4)
     end
 
@@ -499,7 +499,7 @@ defmodule Electric.ClientTest do
           "offset" => "1_0",
           "value" => %{"id" => "1111"}
         },
-        %{"headers" => %{"control" => "up-to-date"}}
+        %{"headers" => %{"control" => "frontier"}}
       ]
 
       {:ok, responses} =
@@ -556,14 +556,14 @@ defmodule Electric.ClientTest do
                  offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
-               up_to_date(1, 0),
+               frontier(1, 0),
                %ControlMessage{control: :must_refetch, offset: offset(1, 0)},
                %ChangeMessage{
                  headers: @insert,
                  offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
-               up_to_date(1, 0)
+               frontier(1, 0)
              ] = stream(ctx, 5)
     end
 
@@ -574,7 +574,7 @@ defmodule Electric.ClientTest do
           "offset" => "1_0",
           "value" => %{"id" => "1111"}
         },
-        %{"headers" => %{"control" => "up-to-date"}}
+        %{"headers" => %{"control" => "frontier"}}
       ]
 
       {:ok, responses} =
@@ -630,14 +630,14 @@ defmodule Electric.ClientTest do
                  offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
-               up_to_date(1, 0),
+               frontier(1, 0),
                %ControlMessage{control: :must_refetch, offset: offset(1, 0)},
                %ChangeMessage{
                  headers: @insert,
                  offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
-               up_to_date(1, 0)
+               frontier(1, 0)
              ] = stream(ctx, 5)
 
       assert_receive {:offset, "-1"}
@@ -696,7 +696,7 @@ defmodule Electric.ClientTest do
   describe "partial streams" do
     setup [:start_bypass, :bypass_client, :shape_definition]
 
-    test "live: false should halt when up-to-date", ctx do
+    test "live: false should halt when frontier", ctx do
       body1 = [
         %{
           "headers" => %{"operation" => "insert"},
@@ -711,7 +711,7 @@ defmodule Electric.ClientTest do
           "offset" => "2_0",
           "value" => %{"id" => "2222"}
         },
-        %{"headers" => %{"control" => "up-to-date"}}
+        %{"headers" => %{"control" => "frontier"}}
       ]
 
       body3 = [
@@ -720,7 +720,7 @@ defmodule Electric.ClientTest do
           "offset" => "2_0",
           "value" => %{"id" => "2222"}
         },
-        %{"headers" => %{"control" => "up-to-date"}}
+        %{"headers" => %{"control" => "frontier"}}
       ]
 
       {:ok, responses} =
@@ -766,7 +766,7 @@ defmodule Electric.ClientTest do
                  headers: %Headers{operation: :insert},
                  offset: %Electric.Client.Offset{tx: 2, op: 0}
                },
-               up_to_date(2, 0),
+               frontier(2, 0),
                %ResumeMessage{
                  shape_handle: "my-shape",
                  offset: offset(2, 0),
@@ -790,7 +790,7 @@ defmodule Electric.ClientTest do
           "offset" => "4_0",
           "value" => %{"id" => "4444"}
         },
-        %{"headers" => %{"control" => "up-to-date"}}
+        %{"headers" => %{"control" => "frontier"}}
       ]
 
       {:ok, responses} =
@@ -835,7 +835,7 @@ defmodule Electric.ClientTest do
                  headers: %Headers{operation: :insert},
                  offset: %Electric.Client.Offset{tx: 4, op: 0}
                },
-               up_to_date(4, 0)
+               frontier(4, 0)
              ] = events
     end
 

@@ -87,11 +87,11 @@ paths:
 
             When the `live` parameter is omitted or set to `false`, the server
             will always return immediately, with any data it has, followed by an
-            up-to-date message.
+            frontier message.
 
-            Once you're up-to-date, you should set the `live` parameter to `true`.
-            This puts the server into live mode, where it will hold open the
-            connection, waiting for new data arrive.
+            Once you've recieved a frontier message, you should set the `live`
+            parameter to `true`. This puts the server into live mode, where it
+            will hold open the connection, waiting for new data arrive.
 
             This allows you to implement a long-polling strategy to consume
             real-time updates.
@@ -243,13 +243,16 @@ paths:
                         `INTERVAL(4)` has an additional `"precision": 4` property,
                         `INTERVAL MINUTE TO SECOND` has an additional `"fields": "MINUTE TO SECOND"` property,
                         `BIT(5)` has an additional `"length": 5` property.
-            electric-up-to-date:
+            electric-frontier:
               schema:
                 description: |-
                   If present, this header indicates that the response ends with
-                  an `up-to-date` control message, indicating that the client has
-                  recieved all of the data that the server is aware of and can
-                  safely process/apply any accumulated messages.
+                  an `frontier` control message, indicating that the client has
+                  recieved all of the data that the server was aware of when
+                  generating the response.
+
+                  When you recieve a `frontier` control message, it indicates that
+                  you can safely process/apply any accumulated messages.
           content:
             application/json:
               schema:
@@ -271,7 +274,7 @@ paths:
                         control:
                           type: string
                           enum:
-                            - up-to-date
+                            - frontier
                             - must-refetch
                         operation:
                           type: string
@@ -290,9 +293,10 @@ paths:
                         same transaction. So you can group operations into transactions
                         using the `offset` property.
 
-                        (Note also that when you recieve an `up-to-date` control message
+                        Note also that when you recieve an `frontier` control message
                         this indicates that you have recieved all of the operations in
-                        a transaction.)
+                        a transaction. I.e.: you only ever recieve a `frontier` between
+                        transactions, not in the middle of them.
                     key:
                       type: string
                       description: Row ID
@@ -326,7 +330,7 @@ paths:
                       status: backlog
                   - headers:
                       operation: insert
-                      control: up-to-date
+                      control: frontier
                     offset: 1934_0
                     key: issue-2
                     value:

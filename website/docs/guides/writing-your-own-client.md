@@ -34,7 +34,7 @@ The HTTP API exposes [Shapes](/docs/guides/shapes). There are two phases to sync
 
 ### Initial sync
 
-In the initial sync phase, you make a series of requests to get Shape data, increasing the `offset` parameter until you get an `up-to-date` message.
+In the initial sync phase, you make a series of requests to get Shape data, increasing the `offset` parameter until you get an `frontier` message.
 
 #### Construct your shape URL
 
@@ -57,15 +57,15 @@ The body of the response will contain a JSON array of messages. The headers of t
 - `electric-handle` an ephemeral identifier to an existing shape log
 - `electric-offset` the offset value for your next request
 
-If the last message in the response body contains an `up-to-date` control message:
+If the last message in the response body contains an `frontier` control message:
 
 ```json
-{"headers":{"control":"up-to-date"}}
+{"headers":{"control":"frontier"}}
 ```
 
 Then the response will also contain an:
 
-- `electric-up-to-date` header
+- `electric-frontier` header
 
 Either of which indicate that you can [process the messages](#materialise-the-shape-log) and switch into [live mode](#live-mode). Otherwise, you should continue to accumulate messages by making additional requests to the same URL, with the new shape handle and offset. For example:
 
@@ -73,7 +73,7 @@ Either of which indicate that you can [process the messages](#materialise-the-sh
 GET /v1/shape?table=items&handle=38083685-1729874417404&offset=0_0
 ```
 
-In this way, you keep making GET requests with increasing offsets until you load all the data that the server is aware of, at which point you get the `up-to-date` message.
+In this way, you keep making GET requests with increasing offsets until you load all the data that the server is aware of, at which point you get the `frontier` message.
 
 ### Live mode
 
@@ -98,7 +98,7 @@ GET /v1/shape?table=items&handle=38083685-1729874417404&offset=27344208_0&cursor
 
 Live requests will either timeout, returning `204 No content`, or will return an array of messages and headers, just as with non live responses.
 
-Keep pooling and whenever you get new data with an `up-to-date` header/message then [process the messages](#materialise-the-shape-log).
+Keep pooling and whenever you get new data with an `frontier` header/message then [process the messages](#materialise-the-shape-log).
 
 ## Materialise the shape log
 
@@ -146,7 +146,7 @@ As well as just a single data structure, it's possible to materialise one or mor
 
 ### Transactions
 
-Only apply logical operations to your materialised structure when you get an `up-to-date` message. Then either apply that batch of operations to your data structure or store atomically, for example using some kind of transactional application primitive, or only [trigger reactivity](#reactivity-bindings) once all the changes are applied.
+Only apply logical operations to your materialised structure when you get an `frontier` message. Then either apply that batch of operations to your data structure or store atomically, for example using some kind of transactional application primitive, or only [trigger reactivity](#reactivity-bindings) once all the changes are applied.
 
 
 ## Reactivity bindings
@@ -230,7 +230,7 @@ class Shape(object):
         # Materialiased data.
         self.data = {}
 
-        # Accumulated messages (waiting for an `up-to-date` to apply).
+        # Accumulated messages (waiting for an `frontier` to apply).
         self.messages = []
 
         # Registered callbacks to notify when the data changes.
@@ -265,9 +265,9 @@ class Shape(object):
         if response.status_code == 200:
             self.messages.append(response.json())
 
-            # If we're up-to-date, switch into live mode and process
-            # the accumulated messages.
-            if 'electric-up-to-date' in response.headers:
+            # If we've recieved a frontier control message, switch into
+            # live mode and process the accumulated change messages.
+            if 'electric-frontier' in response.headers:
                 self.live = True
                 self.process_messages()
 

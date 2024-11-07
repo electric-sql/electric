@@ -46,8 +46,8 @@ export function isControlMessage<T extends Row<unknown> = Row>(
   return !isChangeMessage(message)
 }
 
-export function isUpToDateMessage<T extends Row<unknown> = Row>(
+export function isFrontierMessage<T extends Row<unknown> = Row>(
   message: Message<T>
-): message is ControlMessage & { up_to_date: true } {
-  return isControlMessage(message) && message.headers.control === `up-to-date`
+): message is ControlMessage & { frontier: true } {
+  return isControlMessage(message) && message.headers.control === `frontier`
 }

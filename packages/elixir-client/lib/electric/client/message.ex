@@ -28,7 +28,7 @@ defmodule Electric.Client.Message do
 
   defmodule ControlMessage do
     defstruct [:control, :offset]
-    @type control :: :must_refetch | :up_to_date
+    @type control :: :must_refetch | :frontier
     @type t :: %__MODULE__{control: control(), offset: Offset.t()}
 
     def from_message(%{"headers" => %{"control" => control}}, offset) do
@@ -36,9 +36,9 @@ defmodule Electric.Client.Message do
     end
 
     defp control_atom("must-refetch"), do: :must_refetch
-    defp control_atom("up-to-date"), do: :up_to_date
+    defp control_atom("frontier"), do: :frontier
 
-    def up_to_date, do: %__MODULE__{control: :up_to_date}
+    def frontier, do: %__MODULE__{control: :frontier}
     def must_refetch, do: %__MODULE__{control: :must_refetch}
   end
 
@@ -94,7 +94,7 @@ defmodule Electric.Client.Message do
 
     ```
     # passing `live: false` means the stream will terminate once it receives an
-    # `up-to-date` message from the server
+    # `frontier` message from the server
     messages = Electric.Client.stream(client, "my_table", live: false) |> Enum.to_list()
 
     %ResumeMessage{} = resume = List.last(messages)

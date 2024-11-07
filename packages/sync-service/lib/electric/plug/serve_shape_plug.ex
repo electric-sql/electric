@@ -18,7 +18,7 @@ defmodule Electric.Plug.ServeShapePlug do
   @before_all_offset LogOffset.before_all()
 
   # Control messages
-  @up_to_date [Jason.encode!(%{headers: %{control: "up-to-date"}})]
+  @frontier [Jason.encode!(%{headers: %{control: "frontier"}})]
   @must_refetch Jason.encode!([%{headers: %{control: "must-refetch"}}])
   @shape_definition_mismatch Jason.encode!(%{
                                message:
@@ -191,7 +191,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # asked for last offset
   plug :listen_for_new_changes
   plug :determine_log_chunk_offset
-  plug :determine_up_to_date
+  plug :determine_frontier
   plug :generate_etag
   plug :validate_and_put_etag
   plug :put_resp_cache_headers
@@ -332,7 +332,7 @@ defmodule Electric.Plug.ServeShapePlug do
     |> put_resp_header("electric-offset", "#{chunk_end_offset}")
   end
 
-  defp determine_up_to_date(
+  defp determine_frontier(
          %Conn{
            assigns: %{
              offset: offset,
@@ -343,18 +343,18 @@ defmodule Electric.Plug.ServeShapePlug do
          _
        ) do
     # The log can't be up to date if the last_offset is not the actual end.
-    # Also if client is requesting the start of the log, we don't set `up-to-date`
+    # Also if client is requesting the start of the log, we don't set `frontier`
     # here either as we want to set a long max-age on the cache-control.
     if LogOffset.compare(chunk_end_offset, last_offset) == :lt or offset == @before_all_offset do
       conn
-      |> assign(:up_to_date, [])
+      |> assign(:frontier, [])
       # header might have been added on first pass but no longer valid
       # if listening to live changes and an incomplete chunk is formed
-      |> delete_resp_header("electric-up-to-date")
+      |> delete_resp_header("electric-frontier")
     else
       conn
-      |> assign(:up_to_date, [@up_to_date])
-      |> put_resp_header("electric-up-to-date", "")
+      |> assign(:frontier, [@frontier])
+      |> put_resp_header("electric-frontier", "")
     end
   end
 
@@ -442,7 +442,7 @@ defmodule Electric.Plug.ServeShapePlug do
              chunk_end_offset: chunk_end_offset,
              active_shape_handle: shape_handle,
              tenant_id: tenant_id,
-             up_to_date: maybe_up_to_date
+             frontier: maybe_frontier
            }
          } = conn
        ) do
@@ -454,7 +454,7 @@ defmodule Electric.Plug.ServeShapePlug do
             up_to: chunk_end_offset
           )
 
-        [snapshot, log, maybe_up_to_date]
+        [snapshot, log, maybe_frontier]
         |> Stream.concat()
         |> to_json_stream()
         |> Stream.chunk_every(500)
@@ -486,7 +486,7 @@ defmodule Electric.Plug.ServeShapePlug do
              chunk_end_offset: chunk_end_offset,
              active_shape_handle: shape_handle,
              tenant_id: tenant_id,
-             up_to_date: maybe_up_to_date
+             frontier: maybe_frontier
            }
          } = conn
        ) do
@@ -501,7 +501,7 @@ defmodule Electric.Plug.ServeShapePlug do
       |> assign(:ot_is_immediate_response, false)
       |> hold_until_change(shape_handle)
     else
-      [log, maybe_up_to_date]
+      [log, maybe_frontier]
       |> Stream.concat()
       |> to_json_stream()
       |> Stream.chunk_every(500)
@@ -584,7 +584,7 @@ defmodule Electric.Plug.ServeShapePlug do
         |> assign(:chunk_end_offset, latest_log_offset)
         # update last offset header
         |> put_resp_header("electric-offset", "#{latest_log_offset}")
-        |> determine_up_to_date([])
+        |> determine_frontier([])
         |> serve_shape_log()
 
       {^ref, :shape_rotation} ->
@@ -593,14 +593,14 @@ defmodule Electric.Plug.ServeShapePlug do
         conn
         |> assign(:ot_is_shape_rotated, true)
         |> assign(:ot_is_empty_response, true)
-        |> send_resp(200, ["[", @up_to_date, "]"])
+        |> send_resp(200, ["[", @frontier, "]"])
     after
       # If we timeout, return an empty body and 204 as there's no response body.
       long_poll_timeout ->
         conn
         |> assign(:ot_is_long_poll_timeout, true)
         |> assign(:ot_is_empty_response, true)
-        |> send_resp(204, ["[", @up_to_date, "]"])
+        |> send_resp(204, ["[", @frontier, "]"])
     end
   end
 
@@ -612,7 +612,7 @@ defmodule Electric.Plug.ServeShapePlug do
         conn.query_params["handle"] || assigns[:active_shape_handle] || assigns[:shape_handle]
       end
 
-    maybe_up_to_date = if up_to_date = assigns[:up_to_date], do: up_to_date != []
+    maybe_frontier = if frontier = assigns[:frontier], do: frontier != []
 
     Electric.Plug.Utils.common_open_telemetry_attrs(conn)
     |> Map.merge(%{
@@ -629,7 +629,7 @@ defmodule Electric.Plug.ServeShapePlug do
       "shape_req.is_immediate_response" => assigns[:ot_is_immediate_response] || true,
       "shape_req.is_cached" => if(conn.status, do: conn.status == 304),
       "shape_req.is_error" => if(conn.status, do: conn.status >= 400),
-      "shape_req.is_up_to_date" => maybe_up_to_date
+      "shape_req.is_frontier" => maybe_frontier
     })
   end
 

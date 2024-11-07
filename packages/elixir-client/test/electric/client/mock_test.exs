@@ -46,7 +46,7 @@ defmodule Electric.Client.MockTest do
         shape_handle: "my-shape",
         body: [
           Client.Mock.change(value: %{id: "4444"}),
-          Client.Mock.up_to_date()
+          Client.Mock.frontier()
         ]
       )
 
@@ -60,7 +60,7 @@ defmodule Electric.Client.MockTest do
              %ChangeMessage{value: %{"id" => 2222}},
              %ChangeMessage{value: %{"id" => 3333}},
              %ChangeMessage{value: %{"id" => 4444}},
-             up_to_date0()
+             frontier0()
            ] = events
   end
 end

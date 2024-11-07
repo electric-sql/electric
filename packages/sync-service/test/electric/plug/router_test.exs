@@ -19,7 +19,7 @@ defmodule Electric.Plug.RouterTest do
   @moduletag :capture_log
 
   @first_offset to_string(LogOffset.first())
-  @up_to_date %{"headers" => %{"control" => "up-to-date"}}
+  @frontier %{"headers" => %{"control" => "frontier"}}
 
   describe "/" do
     test "returns 200" do
@@ -235,7 +235,7 @@ defmodule Electric.Plug.RouterTest do
                    "fourth" => "h"
                  }
                },
-               @up_to_date
+               @frontier
              ] = Jason.decode!(conn.resp_body)
     end
 
@@ -267,7 +267,7 @@ defmodule Electric.Plug.RouterTest do
 
       # No extra keys should be present, so this is a pin
       value = %{"id" => "1", "value2" => "test value 2"}
-      assert [%{"key" => ^key, "value" => ^value}, @up_to_date] = Jason.decode!(conn.resp_body)
+      assert [%{"key" => ^key, "value" => ^value}, @frontier] = Jason.decode!(conn.resp_body)
     end
 
     @tag with_sql: [
@@ -327,7 +327,7 @@ defmodule Electric.Plug.RouterTest do
                  "value" => %{"id" => "3", "value1" => _, "value2" => _, "value3" => _},
                  "key" => key3
                },
-               @up_to_date
+               @frontier
              ] = Jason.decode!(conn.resp_body)
 
       assert key2 != key
@@ -378,7 +378,7 @@ defmodule Electric.Plug.RouterTest do
                  "value" => %{"col1" => "test4", "col2" => "test5"},
                  "key" => key3
                },
-               @up_to_date
+               @frontier
              ] = Jason.decode!(conn.resp_body)
 
       assert key2 != key
@@ -523,7 +523,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 200} = conn = Task.await(task)
       new_offset = get_resp_last_offset(conn)
-      assert [op1, op2, @up_to_date] = Jason.decode!(conn.resp_body)
+      assert [op1, op2, @frontier] = Jason.decode!(conn.resp_body)
 
       assert [
                %{
@@ -557,7 +557,7 @@ defmodule Electric.Plug.RouterTest do
       end)
 
       assert %{status: 200} = conn = Task.await(task)
-      assert [op1, op2, @up_to_date] = Jason.decode!(conn.resp_body)
+      assert [op1, op2, @frontier] = Jason.decode!(conn.resp_body)
 
       assert [
                %{
@@ -641,7 +641,7 @@ defmodule Electric.Plug.RouterTest do
       end)
 
       assert %{status: 200} = conn = Task.await(task)
-      assert [op1, op2, @up_to_date] = Jason.decode!(conn.resp_body)
+      assert [op1, op2, @frontier] = Jason.decode!(conn.resp_body)
 
       assert [
                %{
@@ -753,7 +753,7 @@ defmodule Electric.Plug.RouterTest do
                  "key" => _
                },
                %{
-                 "headers" => %{"control" => "up-to-date"}
+                 "headers" => %{"control" => "frontier"}
                }
              ] = Jason.decode!(conn.resp_body)
     end

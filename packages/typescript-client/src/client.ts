@@ -7,7 +7,7 @@ import {
   GetExtensions,
 } from './types'
 import { MessageParser, Parser } from './parser'
-import { isUpToDateMessage } from './helpers'
+import { isFrontierMessage } from './helpers'
 import { FetchError, FetchBackoffAbortError } from './error'
 import {
   BackoffDefaults,
@@ -342,7 +342,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         if (batch.length > 0) {
           const prevUpToDate = this.#isUpToDate
           const lastMessage = batch[batch.length - 1]
-          if (isUpToDateMessage(lastMessage)) {
+          if (isFrontierMessage(lastMessage)) {
             this.#lastSyncedAt = Date.now()
             this.#isUpToDate = true
           }

@@ -92,7 +92,7 @@ defmodule Electric.Client.Mock do
           | {:offset, Client.Offset.t()}
   @type change_opts :: [change_opt()]
 
-  @type transaction_opt :: {:lsn, non_neg_integer()} | {:up_to_date, boolean()}
+  @type transaction_opt :: {:lsn, non_neg_integer()} | {:frontier, boolean()}
   @type transaction_opts :: [transaction_opt() | change_opt()]
 
   @impl Electric.Client.Fetch
@@ -144,25 +144,25 @@ defmodule Electric.Client.Mock do
     end
   end
 
-  @spec up_to_date() :: map()
-  def up_to_date(_opts \\ []) do
-    %{"headers" => %{"control" => "up-to-date"}}
+  @spec frontier() :: map()
+  def frontier(_opts \\ []) do
+    %{"headers" => %{"control" => "frontier"}}
   end
 
   @doc """
   Wrap the given `values` in `Client.Messages.ChangeMessage` structs at the
   given `:lsn`.
 
-  By default this will append an `up-to-date` control message to the end of the
-  liist of changes. Pass `up_to_date: false` to disable this.
+  By default this will append an `frontier` control message to the end of the
+  liist of changes. Pass `frontier: false` to disable this.
   """
   @spec transaction(values :: [map()], transaction_opts()) :: [map()]
   def transaction(values, opts \\ []) do
     tx_offset = Keyword.get(opts, :lsn, 0)
 
-    up_to_date =
-      if Keyword.get(opts, :up_to_date, true) do
-        [up_to_date()]
+    frontier =
+      if Keyword.get(opts, :frontier, true) do
+        [frontier()]
       else
         []
       end
@@ -174,7 +174,7 @@ defmodule Electric.Client.Mock do
       |> Keyword.merge(value: value, offset: Offset.new(tx_offset, op_offset))
       |> change()
     end)
-    |> Enum.concat(up_to_date)
+    |> Enum.concat(frontier)
   end
 
   @spec change(change_opts()) :: map()

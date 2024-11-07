@@ -15,7 +15,7 @@ defmodule Electric.Client.Stream do
     :value_mapper_fun,
     parser: {Electric.Client.ValueMapper, []},
     buffer: :queue.new(),
-    up_to_date?: false,
+    frontier?: false,
     update_mode: :modified,
     offset: Offset.before_all(),
     shape_handle: nil,
@@ -89,7 +89,7 @@ defmodule Electric.Client.Stream do
           value_mapper_fun: Client.ValueMapper.mapper_fun(),
           parser: nil | {module(), term()},
           buffer: :queue.queue(),
-          up_to_date?: boolean(),
+          frontier?: boolean(),
           offset: Offset.t(),
           update_mode: Client.update_mode(),
           shape_handle: nil | Client.shape_handle(),
@@ -193,19 +193,19 @@ defmodule Electric.Client.Stream do
     raise Client.Error, message: "Unable to retrieve data stream", resp: error
   end
 
-  defp handle_msg(%Message.ControlMessage{control: :up_to_date} = msg, {offset, stream}) do
-    handle_up_to_date(offset, %{stream | buffer: :queue.in(msg, stream.buffer), up_to_date?: true})
+  defp handle_msg(%Message.ControlMessage{control: :frontier} = msg, {offset, stream}) do
+    handle_frontier(offset, %{stream | buffer: :queue.in(msg, stream.buffer), frontier?: true})
   end
 
   defp handle_msg(%Message.ChangeMessage{} = msg, {_offset, stream}) do
     {:cont, {msg.offset, %{stream | offset: msg.offset, buffer: :queue.in(msg, stream.buffer)}}}
   end
 
-  defp handle_up_to_date(offset, %{opts: %{live: true}} = stream) do
+  defp handle_frontier(offset, %{opts: %{live: true}} = stream) do
     {:cont, {offset, stream}}
   end
 
-  defp handle_up_to_date(offset, %{opts: %{live: false}} = stream) do
+  defp handle_frontier(offset, %{opts: %{live: false}} = stream) do
     resume_message = %Message.ResumeMessage{
       schema: stream.schema,
       offset: offset,
@@ -240,7 +240,7 @@ defmodule Electric.Client.Stream do
     %{
       client: client,
       shape: shape,
-      up_to_date?: up_to_date?,
+      frontier?: frontier?,
       update_mode: update_mode,
       shape_handle: shape_handle,
       offset: offset,
@@ -251,7 +251,7 @@ defmodule Electric.Client.Stream do
       offset: offset,
       shape_handle: shape_handle,
       update_mode: update_mode,
-      live: up_to_date?,
+      live: frontier?,
       next_cursor: cursor,
       shape: shape
     )
@@ -272,7 +272,7 @@ defmodule Electric.Client.Stream do
       stream
       | offset: Offset.before_all(),
         shape_handle: shape_handle,
-        up_to_date?: false,
+        frontier?: false,
         buffer: :queue.new(),
         schema: nil,
         value_mapper_fun: nil

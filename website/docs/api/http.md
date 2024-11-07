@@ -77,13 +77,13 @@ Sometimes a log can fit in a single response. Sometimes it's too big and require
 
 ### Control messages
 
-The client will then receive an `up-to-date` control message at the end of the response data:
+The client will then receive an `frontier` control message at the end of the response data:
 
 ```json
-{"headers": {"control": "up-to-date"}}
+{"headers": {"control": "frontier"}}
 ```
 
-This indicates that the client has all the data that the server was aware of when fulfilling the request. The client can then switch into live mode to receive real-time updates.
+This indicates that the client is up-to-date with all the data that the server was aware of when fulfilling the request. The client can then switch into live mode to receive real-time updates.
 
 ::: info Must-refetch
 Note that the other control message is `must-refetch` which indicates that the client must throwaway their local shape data and re-sync from scratch:
@@ -95,7 +95,7 @@ Note that the other control message is `must-refetch` which indicates that the c
 
 ### Live mode
 
-Once a client is up-to-date, it can switch to live mode to receive real-time updates, by making requests with `live=true`, an `offset` and a shape `handle`, e.g.:
+Once a client is up-to-date (i.e.: has recieved a `frontier` control message), it can switch to live mode to receive real-time updates, by making requests with `live=true`, an `offset` and a shape `handle`, e.g.:
 
 ```sh
 curl -i 'http://localhost:3000/v1/shape?table=foo&live=true&handle=3833821-1721812114261&offset=0_0'

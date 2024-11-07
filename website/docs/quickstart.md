@@ -118,7 +118,7 @@ content-type: application/json; charset=utf-8
 electric-handle: 3833821-1721299734314
 electric-offset: 0_0
 electric-schema: {"id":{"type":"int4","pk_index":0},"name":{"type":"varchar","max_length":255},"value":{"type":"float8"}}
-electric-up-to-date:
+electric-frontier:
 etag: 3833821-1721299734314:-1:0_0
 
 [{"offset":"0_0","value":{"id":"1","name":"Alice","value":"3.14"},"key":"\"public\".\"foo\"/1","headers":{"operation"
@@ -126,7 +126,7 @@ etag: 3833821-1721299734314:-1:0_0
 {"operation":"insert"}},{"offset":"0_0","value":{"id":"3","name":"Charlie","value":"-1.618"},"key":"\"public\".\"foo\
 "/3","headers":{"operation":"insert"}},{"offset":"0_0","value":{"id":"4","name":"David","value":"1.414"},"key":"\"pub
 lic\".\"foo\"/4","headers":{"operation":"insert"}},{"offset":"0_0","value":{"id":"5","name":"Eve","value":"0.0"},"key
-":"\"public\".\"foo\"/5","headers":{"operation":"insert"}},{"headers":{"control":"up-to-date"}}]
+":"\"public\".\"foo\"/5","headers":{"operation":"insert"}},{"headers":{"control":"frontier"}}]
 ```
 
 ::: info What are those messages in the response data?

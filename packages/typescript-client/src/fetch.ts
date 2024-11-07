@@ -247,11 +247,11 @@ class PrefetchQueue {
 function getNextChunkUrl(url: string, res: Response): string | void {
   const shapeHandle = res.headers.get(SHAPE_HANDLE_HEADER)
   const lastOffset = res.headers.get(CHUNK_LAST_OFFSET_HEADER)
-  const isUpToDate = res.headers.has(CHUNK_UP_TO_DATE_HEADER)
+  const atFrontier = res.headers.has(CHUNK_UP_TO_DATE_HEADER)
 
   // only prefetch if shape handle and offset for next chunk are available, and
   // response is not already up-to-date
-  if (!shapeHandle || !lastOffset || isUpToDate) return
+  if (!shapeHandle || !lastOffset || atFrontier) return
 
   const nextUrl = new URL(url)
 

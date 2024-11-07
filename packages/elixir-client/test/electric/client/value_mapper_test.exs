@@ -104,7 +104,7 @@ defmodule Electric.Client.ValueMapperTest do
                  },
                  offset: %Electric.Client.Offset{tx: 0, op: 0}
                },
-               %Message.ControlMessage{control: :up_to_date}
+               %Message.ControlMessage{control: :frontier}
              ] = stream(ctx, 2)
     end
   end

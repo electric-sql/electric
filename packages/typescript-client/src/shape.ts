@@ -167,7 +167,7 @@ export class Shape<T extends Row<unknown> = Row> {
 
       if (isControlMessage(message)) {
         switch (message.headers.control) {
-          case `up-to-date`:
+          case `frontier`:
             isUpToDate = true
             if (!this.#hasNotifiedSubscribersUpToDate) {
               newlyUpToDate = true
