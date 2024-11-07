@@ -259,8 +259,8 @@ defmodule Support.ComponentSetup do
     pg_info_table = :"pg_info_table #{full_test_name(ctx)}"
     pg_relation_table = :"pg_relation_table #{full_test_name(ctx)}"
 
-    tenant_tables_name = Electric.TenantTables.name(ctx.electric_instance_id)
-    Electric.TenantTables.init(ctx.electric_instance_id)
+    tenant_tables_name =
+      Map.get_lazy(ctx, :tenant_tables_name, fn -> with_tenant_tables(ctx).tenant_tables_name end)
 
     {:ok, _} =
       EtsInspector.start_link(
