@@ -51,4 +51,4 @@ jobs:
           ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
           # HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }} TODO
         run: |
-          pnpm sst deploy --stage production
+          pnpm sst deploy --stage production --print-logs
