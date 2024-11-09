@@ -29,11 +29,15 @@ const setupShapeStream = (provider) => {
 
     provider.operationsStream = new ShapeStream({
       url: provider.operationsUrl,
+      table: `ydoc_operations`,
+      where: `room = '${provider.roomname}'`,
       ...provider.resume.operations,
     })
 
     provider.awarenessStream = new ShapeStream({
       url: provider.awarenessUrl,
+      where: `room = '${provider.roomname}'`,
+      table: `ydoc_awareness`,
       ...provider.resume.awareness,
     })
 
@@ -48,8 +52,8 @@ const setupShapeStream = (provider) => {
         })
     }
 
-    const updateShapeState = (name, offset, shapeId) => {
-      provider.persistence?.set(name, { offset, shapeId })
+    const updateShapeState = (name, offset, shapeHandle) => {
+      provider.persistence?.set(name, { offset, shapeHandle })
     }
 
     const handleSyncMessage = (messages) => {
@@ -60,7 +64,7 @@ const setupShapeStream = (provider) => {
       updateShapeState(
         `operations_state`,
         offset,
-        provider.operationsStream.shapeId
+        provider.operationsStream.shapeHandle
       )
 
       handleMessages(messages).forEach((decoder) => {
@@ -89,7 +93,7 @@ const setupShapeStream = (provider) => {
       updateShapeState(
         `awareness_state`,
         offset,
-        provider.awarenessStream.shapeId
+        provider.awarenessStream.shapeHandle
       )
 
       handleMessages(messages).forEach((decoder) => {
@@ -251,7 +255,7 @@ export class ElectricProvider extends Observable {
    * @param {boolean} [opts.connect]
    * @param {awarenessProtocol.Awareness} [opts.awareness]
    * @param {IndexeddbPersistence} [opts.persistence]
-   * @param {Object<string, {offset: string, shapeId: string} >} [opts.resume]
+   * @param {Object<string, {offset: string, shapeHandle: string} >} [opts.resume]
    */
   constructor(
     serverUrl,
@@ -342,19 +346,11 @@ export class ElectricProvider extends Observable {
   }
 
   get operationsUrl() {
-    const params = {
-      where: `room = '${this.roomname}'`,
-    }
-    const encodedParams = url.encodeQueryParams(params)
-    return this.serverUrl + `/v1/shape/ydoc_operations?` + encodedParams
+    return this.serverUrl + `/v1/shape`
   }
 
   get awarenessUrl() {
-    const params = {
-      where: `room = '${this.roomname}'`,
-    }
-    const encodedParams = url.encodeQueryParams(params)
-    return this.serverUrl + `/v1/shape/ydoc_awareness?` + encodedParams
+    return this.serverUrl + `/v1/shape/`
   }
 
   /**

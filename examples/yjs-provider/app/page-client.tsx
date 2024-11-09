@@ -5,8 +5,8 @@ import { useEffect, useRef, useState } from "react"
 import * as Y from "yjs"
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next"
 import { ElectricProvider } from "./y-electric"
-import { IndexeddbPersistence } from "y-indexeddb"
-import { BroadcastProvider } from "./y-broadcast"
+// import { IndexeddbPersistence } from "y-indexeddb"
+// import { BroadcastProvider } from "./y-broadcast"
 import * as awarenessProtocol from "y-protocols/awareness"
 
 import { EditorState } from "@codemirror/state"
@@ -59,7 +59,7 @@ export default function Home({ shapeData }: { shapeData: ShapeData }) {
     if (typeof window !== `undefined` && network === null) {
       const awareness = new awarenessProtocol.Awareness(ydoc)
 
-      const { doc, offset, shapeId } = shapeData
+      const { doc, offset, shapeHandle } = shapeData
 
       const decoder = decoding.createDecoder(fromBase64(doc))
       decoding.readVarUint(decoder)
@@ -68,16 +68,16 @@ export default function Home({ shapeData }: { shapeData: ShapeData }) {
       const opts = {
         connect: true,
         awareness,
-        persistence: new IndexeddbPersistence(room, ydoc),
-        resume: { operations: { offset, shapeId } },
+        // persistence: new IndexeddbPersistence(room, ydoc),
+        resume: { operations: { offset, shapeHandle } },
       }
 
       network = new ElectricProvider(`http://localhost:3000/`, room, ydoc, opts)
 
-      new BroadcastProvider(room, ydoc, {
-        connect: true,
-        awareness,
-      })
+      // new BroadcastProvider(room, ydoc, {
+      //   connect: true,
+      //   awareness,
+      // })
     }
 
     const ytext = ydoc.getText(room)

@@ -1,4 +1,9 @@
-import { Offset, ShapeStream } from "@electric-sql/client"
+import {
+  isChangeMessage,
+  isControlMessage,
+  Offset,
+  ShapeStream,
+} from "@electric-sql/client"
 
 import * as Y from "yjs"
 import * as syncProtocol from "y-protocols/sync"
@@ -11,8 +16,7 @@ import * as decoding from "lib0/decoding"
 export type ShapeData = {
   doc: string
   offset: string
-  shapeId: string
-  // TODO: awareness
+  shapeHandle: string
 }
 
 const ydoc = new Y.Doc()
@@ -20,16 +24,17 @@ const ydoc = new Y.Doc()
 let cached: string | null = null
 let offset: Offset = "-1"
 
-const encodedParams = url.encodeQueryParams({
-  where: `room = 'electric-demo'`,
-})
-
 const stream = new ShapeStream({
-  url: `http://localhost:3000//v1/shape/ydoc_operations?` + encodedParams,
+  url: `http://localhost:3000/v1/shape/`,
+  table: `ydoc_operations`,
+  where: `room = 'electric-demo'`,
 })
 
 stream.subscribe((messages) => {
   messages.map((message: any) => {
+    if (isControlMessage(message)) {
+      return
+    }
     const op = fromBase64(message[`value`][`op`])
     syncProtocol.readSyncMessage(
       decoding.createDecoder(op),
@@ -46,7 +51,7 @@ export function getShapeData(): ShapeData {
   return {
     doc: cached ?? (cached = getDocAsBase64()),
     offset,
-    shapeId: stream["shapeId"]!,
+    shapeHandle: stream.shapeHandle,
   }
 }
 
