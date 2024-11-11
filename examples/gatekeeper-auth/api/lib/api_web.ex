@@ -19,11 +19,6 @@ defmodule ApiWeb do
   def plug do
     quote do
       import Plug.Conn
-
-      alias ApiWeb.Authenticator
-
-      alias ApiWeb.Plugs.AssignShape
-      alias ApiWeb.Plugs.Auth
     end
   end
 
@@ -33,6 +28,11 @@ defmodule ApiWeb do
 
       import Plug.Conn
       import Phoenix.Controller
+
+      alias ApiWeb.Authenticator
+
+      alias ApiWeb.Plugs.AssignShape
+      alias ApiWeb.Plugs.Auth
     end
   end
 
