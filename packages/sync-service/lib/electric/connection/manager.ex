@@ -283,20 +283,20 @@ defmodule Electric.Connection.Manager do
 
         state = %{state | pool_pid: pool_pid, shape_log_collector_pid: log_collector_pid}
 
-        if state.drop_slot_requesters == [] do
-          {:noreply, state}
-        else
-          {:noreply, state, {:continue, :drop_replication_slot}}
-        end
+        {:noreply, state, {:continue, :maybe_drop_replication_slot}}
 
       {:error, reason} ->
         handle_connection_error(reason, state, "regular")
     end
   end
 
-  def handle_continue(:drop_replication_slot, state) do
+  def handle_continue(:maybe_drop_replication_slot, %{drop_slot_requesters: []} = state) do
+    {:noreply, state}
+  end
+
+  def handle_continue(:maybe_drop_replication_slot, %{drop_slot_requesters: requesters} = state) do
     drop_publication(state)
-    Enum.each(state.drop_slot_requesters, fn requester -> GenServer.reply(requester, :ok) end)
+    Enum.each(requesters, fn requester -> GenServer.reply(requester, :ok) end)
     {:noreply, %{state | drop_slot_requesters: []}}
   end
 
