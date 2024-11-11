@@ -22,8 +22,6 @@ defmodule ApiWeb.ConnCase do
       # The default endpoint for testing
       @endpoint ApiWeb.Endpoint
 
-      use ApiWeb, :verified_routes
-
       # Import conveniences for testing with connections
       import Plug.Conn
       import Phoenix.ConnTest
@@ -33,6 +31,7 @@ defmodule ApiWeb.ConnCase do
 
   setup tags do
     Api.DataCase.setup_sandbox(tags)
+
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 end

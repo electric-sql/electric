@@ -6,53 +6,38 @@ defmodule ApiWeb do
   This can be used in your application as:
 
       use ApiWeb, :controller
-      use ApiWeb, :html
-
-  The definitions below will be executed for every controller,
-  component, etc, so keep them short and clean, focused
-  on imports, uses and aliases.
-
-  Do NOT define functions inside the quoted expressions
-  below. Instead, define additional modules and import
-  those modules here.
   """
 
-  def static_paths, do: ~w(assets fonts images favicon.ico robots.txt)
+  def controller do
+    quote do
+      use Phoenix.Controller, formats: [:json]
+
+      import Plug.Conn
+    end
+  end
+
+  def plug do
+    quote do
+      import Plug.Conn
+
+      alias Api.Shape
+      alias ApiWeb.Authenticator
+      alias Electric.Client.ShapeDefinition
+    end
+  end
 
   def router do
     quote do
       use Phoenix.Router, helpers: false
 
-      # Import common connection and controller functions to use in pipelines
       import Plug.Conn
       import Phoenix.Controller
-    end
-  end
 
-  def channel do
-    quote do
-      use Phoenix.Channel
-    end
-  end
+      alias ApiWeb.Authenticator
+      alias ApiWeb.Plugs.AssignShape
+      alias ApiWeb.Plugs.Auth
 
-  def controller do
-    quote do
-      use Phoenix.Controller,
-        formats: [:html, :json],
-        layouts: [html: ApiWeb.Layouts]
-
-      import Plug.Conn
-
-      unquote(verified_routes())
-    end
-  end
-
-  def verified_routes do
-    quote do
-      use Phoenix.VerifiedRoutes,
-        endpoint: ApiWeb.Endpoint,
-        router: ApiWeb.Router,
-        statics: ApiWeb.static_paths()
+      alias Electric.Phoenix.Gateway
     end
   end
 

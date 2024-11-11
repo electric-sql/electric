@@ -29,6 +29,7 @@ defmodule Api.DataCase do
 
   setup tags do
     Api.DataCase.setup_sandbox(tags)
+
     :ok
   end
 

@@ -1,24 +1,33 @@
 import Config
 
+# Configure the proxy endpoint to route shape requests to the external Electric
+# sync service, which we assume in test is running on `localhost:3002`.
+config :api,
+  auth_token_secret: "DY1vSZb/BL1WgLyFq5A1d1FkmzoSMaRhXcBUL41mqciKLRSSSK6AO2hTCQmDyQj4",
+  electric_url: "http://localhost:3000"
+
 # Configure your database
-#
-# The MIX_TEST_PARTITION environment variable can be used
-# to provide built-in test partitioning in CI environment.
-# Run `mix help test` for more information.
 config :api, Api.Repo,
   username: "postgres",
-  password: "postgres",
+  password: "password",
   hostname: "localhost",
-  database: "api_test#{System.get_env("MIX_TEST_PARTITION")}",
+  port: 54321,
+  database: "electric",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
+
+port = 4002
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
 config :api, ApiWeb.Endpoint,
-  http: [ip: {127, 0, 0, 1}, port: 4002],
+  http: [ip: {127, 0, 0, 1}, port: port],
   secret_key_base: "FdsTo+z4sPEhsQNsUtBq26K9qn42nkn1OCH2cLURBZkPCvgJ4F3WiVNFo1NVjojw",
   server: false
+
+# Configure the Electric.Phoenix.Gateway.Plug to route electric client requests
+# via this application's `GET /proxy/v1/shape` endpoint.
+config :electric_phoenix, electric_url: "http://localhost:#{port}/proxy"
 
 # Print only warnings and errors during test
 config :logger, level: :warning
