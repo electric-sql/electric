@@ -17,7 +17,7 @@ import { javascript } from "@codemirror/lang-javascript"
 import * as random from "lib0/random"
 import * as decoding from "lib0/decoding"
 
-import { ShapeData } from "./shape"
+import { ShapeData } from "./ydoc-shape"
 import { fromBase64 } from "lib0/buffer"
 
 const room = `electric-demo`

@@ -1,13 +1,13 @@
 CREATE TABLE ydoc_operations(
   id SERIAL PRIMARY KEY,
   room TEXT,
-  op TEXT NOT NULL 
+  op BYTEA NOT NULL 
 );
 
 CREATE TABLE ydoc_awareness(
   clientId TEXT, 
   room TEXT,
-  op TEXT NOT NULL,
+  op BYTEA NOT NULL,
   updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (clientId, room)
 );
