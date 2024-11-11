@@ -249,7 +249,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   def fetch_tenant_tables_name(opts) do
     case Access.fetch(opts, :tenant_tables_name) do
-      :error -> Application.fetch_env!(:electric, :tenant_tables_name)
+      :error -> Electric.TenantTables.name(Access.fetch!(opts, :electric_instance_id))
       {:ok, tenant_tables_name} -> tenant_tables_name
     end
   end

@@ -54,7 +54,7 @@ defmodule Electric.Application do
            name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()},
           {Registry,
            name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
-          Electric.TenantSupervisor,
+          {Electric.TenantSupervisor, electric_instance_id: config.electric_instance_id},
           {Electric.TenantManager, router_opts},
           {Bandit,
            plug: {Electric.Plug.Router, router_opts},
