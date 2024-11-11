@@ -241,8 +241,7 @@ defmodule Electric.TenantManager do
             publication_name =
               Keyword.fetch!(opts, :app_config).replication_opts.publication_name
 
-            # TODO: Remove this sleep and wait for the pool to be started instead
-            Process.sleep(100)
+            ensure_connection_pool_has_started(tenant_id, opts)
 
             opts
             |> Keyword.fetch!(:electric_instance_id)
@@ -258,6 +257,20 @@ defmodule Electric.TenantManager do
 
       {:error, :not_found} ->
         :not_found
+    end
+  end
+
+  defp ensure_connection_pool_has_started(tenant_id, opts) do
+    manager =
+      Electric.Connection.Manager.name(Keyword.fetch!(opts, :electric_instance_id), tenant_id)
+
+    case Electric.Connection.Manager.get_status(manager) do
+      :active ->
+        :ok
+
+      _ ->
+        Process.sleep(10)
+        ensure_connection_pool_has_started(tenant_id, opts)
     end
   end
 
