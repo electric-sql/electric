@@ -238,6 +238,17 @@ defmodule Electric.TenantManager do
 
         case GenServer.call(server, {:delete_tenant, tenant_id, pg_id}) do
           :ok ->
+            publication_name =
+              Keyword.fetch!(opts, :app_config).replication_opts.publication_name
+
+            # TODO: Remove this sleep and wait for the pool to be started instead
+            Process.sleep(100)
+
+            opts
+            |> Keyword.fetch!(:electric_instance_id)
+            |> Electric.Application.process_name(tenant_id, Electric.DbPool)
+            |> Postgrex.query!("DROP PUBLICATION #{publication_name}", [])
+
             :ok = Electric.TenantSupervisor.stop_tenant(opts ++ [tenant_id: tenant_id])
             :ok = Electric.Tenant.Persistence.delete_tenant!(tenant_id, opts)
 

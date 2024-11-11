@@ -71,6 +71,9 @@ defmodule Electric.Plug.RemoveDatabasePlugTest do
                app_config: ctx.app_config,
                electric_instance_id: ctx.electric_instance_id
              ) == %{}
+
+      # Ensure the publication has been dropped
+      assert %{rows: []} = Postgrex.query!(ctx.db_conn, "SELECT pubname FROM pg_publication", [])
     end
 
     test "returns 404 when tenant is not found", ctx do
