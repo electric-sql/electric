@@ -22,7 +22,7 @@ defmodule ApiWeb.Plugs.Auth.AuthoriseShapeAccess do
     end
   end
 
-  defp is_authorised(:dummy, %ShapeDefinition{}) do
+  defp is_authorised(:dummy, _) do
     true
   end
 

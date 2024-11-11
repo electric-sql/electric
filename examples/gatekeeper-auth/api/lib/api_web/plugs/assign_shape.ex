@@ -5,6 +5,8 @@ defmodule ApiWeb.Plugs.AssignShape do
   """
   use ApiWeb, :plug
 
+  alias Api.Shape
+
   def init(opts), do: opts
 
   # If you pass `table_from_path: true` as an option, then it reads the

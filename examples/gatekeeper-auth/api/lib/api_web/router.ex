@@ -28,7 +28,7 @@ defmodule ApiWeb.Router do
     scope "/gatekeeper" do
       pipe_through :gatekeeper
 
-      post "/:table", Gateway.Plug, client: &Authenticator.client/0
+      post "/:table", Electric.Phoenix.Gateway.Plug, client: &Authenticator.client/0
     end
 
     # The proxy endpoint at `GET /proxy/v1/shape` proxies the request to the

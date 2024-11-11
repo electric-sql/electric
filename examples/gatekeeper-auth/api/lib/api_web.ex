@@ -20,9 +20,10 @@ defmodule ApiWeb do
     quote do
       import Plug.Conn
 
-      alias Api.Shape
       alias ApiWeb.Authenticator
-      alias Electric.Client.ShapeDefinition
+
+      alias ApiWeb.Plugs.AssignShape
+      alias ApiWeb.Plugs.Auth
     end
   end
 
@@ -32,12 +33,6 @@ defmodule ApiWeb do
 
       import Plug.Conn
       import Phoenix.Controller
-
-      alias ApiWeb.Authenticator
-      alias ApiWeb.Plugs.AssignShape
-      alias ApiWeb.Plugs.Auth
-
-      alias Electric.Phoenix.Gateway
     end
   end
 

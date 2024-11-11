@@ -9,6 +9,8 @@ defmodule ApiWeb.Plugs.Auth.VerifyToken do
   """
   use ApiWeb, :plug
 
+  alias ApiWeb.Authenticator
+
   def init(opts), do: opts
 
   def call(%{assigns: %{shape: shape}, req_headers: header_list} = conn, _opts) do
