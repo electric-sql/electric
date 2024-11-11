@@ -7,9 +7,8 @@ defmodule Api.Shape do
 
   Protocol.derive(Jason.Encoder, ShapeDefinition, only: @public_fields)
 
-  # Compare the `shape` derived from the request params with the shape
-  # params signed in the auth token. Does the auth token allows access
-  # to this shape?
+  # Compare the `shape` derived from the request params with the shape params
+  # signed in the auth token. Does the auth token grant access to this shape?
   def matches(%ShapeDefinition{} = request_shape, %ShapeDefinition{} = token_shape) do
     with ^token_shape <- request_shape do
       true
