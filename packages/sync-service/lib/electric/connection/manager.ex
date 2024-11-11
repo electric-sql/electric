@@ -59,7 +59,8 @@ defmodule Electric.Connection.Manager do
       :pg_system_identifier,
       # PostgreSQL timeline ID
       :pg_timeline_id,
-      :tenant_id
+      :tenant_id,
+      drop_slot_requesters: []
     ]
   end
 
@@ -112,20 +113,7 @@ defmodule Electric.Connection.Manager do
     GenServer.call(server, :get_status)
   end
 
-  def await_active(server) do
-    case get_status(server) do
-      :active ->
-        :ok
-
-      _ ->
-        Process.sleep(10)
-        await_active(server)
-    end
-  end
-
   def drop_replication_slot(server) do
-    # Ensure that the connection pool is available
-    await_active(server)
     GenServer.call(server, :drop_replication_slot)
   end
 
@@ -203,11 +191,18 @@ defmodule Electric.Connection.Manager do
     {:reply, status, state}
   end
 
-  def handle_call(:drop_replication_slot, _from, %{pool_pid: pool_pid} = state)
-      when pool_pid != nil do
-    publication_name = Keyword.fetch!(state.replication_opts, :publication_name)
-    Postgrex.query!(pool_pid, "DROP PUBLICATION #{publication_name}", [])
+  def handle_call(:drop_replication_slot, _from, %{pool_pid: pool} = state) when pool != nil do
+    drop_publication(state)
     {:reply, :ok, state}
+  end
+
+  def handle_call(:drop_replication_slot, from, state) do
+    {:noreply, %{state | drop_slot_requesters: [from | state.drop_slot_requesters]}}
+  end
+
+  defp drop_publication(state) do
+    publication_name = Keyword.fetch!(state.replication_opts, :publication_name)
+    Postgrex.query!(state.pool_pid, "DROP PUBLICATION #{publication_name}", [])
   end
 
   @impl true
@@ -287,11 +282,22 @@ defmodule Electric.Connection.Manager do
         Process.monitor(log_collector_pid)
 
         state = %{state | pool_pid: pool_pid, shape_log_collector_pid: log_collector_pid}
-        {:noreply, state}
+
+        if state.drop_slot_requesters == [] do
+          {:noreply, state}
+        else
+          {:noreply, state, {:continue, :drop_replication_slot}}
+        end
 
       {:error, reason} ->
         handle_connection_error(reason, state, "regular")
     end
+  end
+
+  def handle_continue(:drop_replication_slot, state) do
+    drop_publication(state)
+    Enum.each(state.drop_slot_requesters, fn requester -> GenServer.reply(requester, :ok) end)
+    {:noreply, %{state | drop_slot_requesters: []}}
   end
 
   @impl true
