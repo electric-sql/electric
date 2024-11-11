@@ -7,10 +7,10 @@ defmodule ApiWeb.Authenticator do
   alias Electric.Client
 
   @behaviour Client.Authenticator
-  @header "api-auth"
+  @header "authorization"
 
   def authenticate_shape(shape, _config) do
-    %{@header => Token.generate(shape)}
+    %{@header => "Bearer #{Token.generate(shape)}"}
   end
 
   def authenticate_request(request, _config) do
@@ -18,7 +18,7 @@ defmodule ApiWeb.Authenticator do
   end
 
   def authorise(shape, headers) do
-    with {:ok, token} <- Map.fetch(headers, @header) do
+    with {:ok, "Bearer " <> token} <- Map.fetch(headers, @header) do
       Token.verify(shape, token)
     end
   end

@@ -8,8 +8,8 @@ defmodule ApiWeb.AuthenticatorTest do
     test "generate token" do
       {:ok, shape} = Shape.from(%{"table" => "foo"})
 
-      assert %{"api-auth" => token} = Authenticator.authenticate_shape(shape, nil)
-      assert is_binary(token)
+      assert %{"authorization" => "Bearer " <> _token} =
+               Authenticator.authenticate_shape(shape, nil)
     end
 
     test "validate token" do
