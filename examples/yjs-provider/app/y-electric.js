@@ -3,13 +3,12 @@
  */
 
 import * as time from "lib0/time"
-import { toBase64, fromBase64 } from "lib0/buffer"
+import { toBase64 } from "lib0/buffer"
 import * as encoding from "lib0/encoding"
 import * as decoding from "lib0/decoding"
 import * as syncProtocol from "y-protocols/sync"
 import * as awarenessProtocol from "y-protocols/awareness"
 import { Observable } from "lib0/observable"
-import * as url from "lib0/url"
 import * as env from "lib0/environment"
 import * as Y from "yjs"
 
@@ -17,6 +16,7 @@ export const messageSync = 0
 export const messageAwareness = 1
 
 import { ShapeStream } from "@electric-sql/client"
+import { parser } from "./utils"
 
 /**
  * @param {ElectricProvider} provider
@@ -31,14 +31,16 @@ const setupShapeStream = (provider) => {
       url: provider.operationsUrl,
       table: `ydoc_operations`,
       where: `room = '${provider.roomname}'`,
-      ...provider.resume.operations,
+      parser,
+      ...provider.resume.operations
     })
 
     provider.awarenessStream = new ShapeStream({
       url: provider.awarenessUrl,
       where: `room = '${provider.roomname}'`,
       table: `ydoc_awareness`,
-      ...provider.resume.awareness,
+      parser,
+      ...provider.resume.awareness
     })
 
     const handleMessages = (messages) => {
@@ -46,10 +48,7 @@ const setupShapeStream = (provider) => {
       return messages
         .filter((message) => message[`key`] && message[`value`][`op`])
         .map((message) => message[`value`][`op`])
-        .map((operation) => {
-          const base64 = fromBase64(operation)
-          return decoding.createDecoder(base64)
-        })
+        .map(decoding.createDecoder)
     }
 
     const updateShapeState = (name, offset, shapeHandle) => {
