@@ -43,9 +43,9 @@ As a result, there are three ingredients to a successful Electric deployment:
 
 ### Proxying requests to Electric
 
-You also often want to proxy requests to Electric through your API, or other proxy. For example to implement [auth](./auth) and/or [caching](/docs/api/http#caching). In these cases, you'll also need to deploy your API and/or proxy layer in front of Electric.
+You also often want to proxy requests to Electric through your API, or other proxy. For example, to implement [auth](./auth) and/or [caching](/docs/api/http#caching). In these cases, you'll also need to deploy your API and/or proxy layer in front of Electric.
 
-Note also that, when running Electric behind a CDN, you may want your proxy in front of the CDN. This is where primitives like [edge functions](/docs/integrations/supabase#sync-into-edge-function) and [edge workers](/docs/integrations/cloudflare#workers) can very useful.
+Note also that, when running Electric behind a CDN, you may want your proxy in front of the CDN. This is where primitives like [edge functions](/docs/integrations/supabase#sync-into-edge-function) and [edge workers](/docs/integrations/cloudflare#workers) can be very useful.
 
 ## 1. Running Postgres
 
@@ -60,7 +60,7 @@ This includes Postgres you host yourself, or Postgres hosted by managed database
 - [Digital Ocean](/docs/integrations/digital-ocean)
 - [Crunchy](/docs/integrations/crunchy)
 
-Postgres must have [logical replication](https://www.postgresql.org/docs/current/logical-replication-config.html) enabled. You also need to connect as a database user that has the [`REPLICATION`](https://www.postgresql.org/docs/current/logical-replication-security.html) role.
+Postgres must have [logical replication](https://www.postgresql.org/docs/current/logical-replication-config.html) enabled. You also need to connect as a database role that has the [`REPLICATION`](https://www.postgresql.org/docs/current/logical-replication-security.html) attribute.
 
 ### Data model compatibility
 
@@ -79,7 +79,7 @@ You usually want to connect directly to Postgres and not via a connection pool. 
 >
 > If you get a TCP connection `timeout` error then make sure you're connecting directly to Postgres and not via a connection pool. For example, when using [Supabase](/docs/integrations/supabase) you need to untick their "Use connection pooling" option on the database settings page.
 >
-> If you're using IPv6 with Docker, then assuming the machine you're running Electric on has IPv6 connectivity, you may also need to enable IPv6 for the Docker daemon. You can do this by [defining an IpV6-capable network](https://docs.docker.com/engine/daemon/ipv6/#create-an-ipv6-network)) in your Compose file and then adding the `networks` key to the Electric service definition.
+> If you're using IPv6 with Docker, then assuming the machine you're running Electric on has IPv6 connectivity, you may also need to enable IPv6 for the Docker daemon. You can do this by [defining an IPv6-capable network](https://docs.docker.com/engine/daemon/ipv6/#create-an-ipv6-network)) in your Compose file and then adding the `networks` key to the Electric service definition.
 
 ### Database resources
 
