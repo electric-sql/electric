@@ -6,6 +6,7 @@ defmodule Electric.TenantManagerTest do
 
   import Support.ComponentSetup
   import Support.DbSetup
+  import Support.TestUtils, only: [with_electric_instance_id: 1]
 
   @moduletag :tmp_dir
 
@@ -227,17 +228,22 @@ defmodule Electric.TenantManagerTest do
   describe "delete_tenant/2" do
     setup :with_unique_db
 
-    setup do
+    setup ctx do
       %{
-        publication_name: "electric_test_publication"
+        publication_name: "electric_test_publication",
+        connection_opts: Map.fetch!(ctx, :db_config)
       }
     end
 
-    setup ctx do
-      ctx
-      |> Map.put(:connection_opts, Map.fetch!(ctx, :db_config))
-      |> with_complete_stack(tenant: &with_supervised_tenant/1)
-    end
+    setup :with_electric_instance_id
+    setup :with_tenant_id
+    setup :with_registry
+    setup :with_persistent_kv
+    setup :with_tenant_tables
+    setup :with_slot_name_and_stream_id
+    setup :with_app_config
+    setup :with_tenant_manager
+    setup :with_supervised_tenant
 
     test "deletes the tenant", %{
       electric_instance_id: electric_instance_id,
