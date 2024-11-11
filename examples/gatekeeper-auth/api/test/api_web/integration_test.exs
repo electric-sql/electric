@@ -12,26 +12,26 @@ defmodule ApiWeb.IntegrationTest do
       where = "value IS NOT NULL"
 
       # Fetch the client config from the gatekeeper endpoint.
-      assert %{"headers" => %{"api-auth" => auth_token}} =
-        conn
-        |> post("/gatekeeper/#{table}", where: where)
-        |> json_response(200)
+      assert %{"headers" => %{"authorization" => auth_header}} =
+               conn
+               |> post("/gatekeeper/#{table}", where: where)
+               |> json_response(200)
 
       # Make an authorised shape request.
       assert [] =
-        conn
-        |> put_req_header("api-auth", auth_token)
-        |> get("/proxy/v1/shape", offset: -1, table: table, where: where)
-        |> json_response(200)
+               conn
+               |> put_req_header("authorization", auth_header)
+               |> get("/proxy/v1/shape", offset: -1, table: table, where: where)
+               |> json_response(200)
     end
 
     test "using the gatekeeper config", %{conn: conn} do
       # As above but this time dynamically construct the proxy request
       # from the config returned by the gatekeeper endpoint.
       assert data =
-        conn
-        |> post("/gatekeeper/items", where: "value IS NOT NULL")
-        |> json_response(200)
+               conn
+               |> post("/gatekeeper/items", where: "value IS NOT NULL")
+               |> json_response(200)
 
       assert {headers, data} = Map.pop(data, "headers")
       assert {url, shape_params} = Map.pop(data, "url")

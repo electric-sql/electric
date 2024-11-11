@@ -11,8 +11,8 @@ defmodule ApiWeb.GatekeeperTest do
   describe "gatekeeper plug" do
     test "does not support GET requests", %{conn: conn} do
       assert conn
-        |> get("/gatekeeper/items")
-        |> response(404)
+             |> get("/gatekeeper/items")
+             |> response(404)
     end
 
     test "generates valid config", %{conn: conn} do
@@ -43,15 +43,14 @@ defmodule ApiWeb.GatekeeperTest do
         |> post("/gatekeeper/items")
         |> json_response(200)
 
-      assert %{"headers" => %{"api-auth" => auth_header}} = data
-      assert is_binary(auth_header)
+      assert %{"headers" => %{"authorization" => "Bearer " <> _token}} = data
     end
 
     test "generates a valid auth header", %{conn: conn} do
       assert %{"headers" => headers, "table" => table} =
-        conn
-        |> post("/gatekeeper/items")
-        |> json_response(200)
+               conn
+               |> post("/gatekeeper/items")
+               |> json_response(200)
 
       {:ok, shape} = Shape.from(%{"table" => table})
 

@@ -20,10 +20,11 @@ defmodule ApiWeb.AuthenticatorTest do
     end
 
     test "validate token with params" do
-      {:ok, shape} = Shape.from(%{
-        "table" => "foo",
-        "where" => "value IS NOT NULL"
-      })
+      {:ok, shape} =
+        Shape.from(%{
+          "table" => "foo",
+          "where" => "value IS NOT NULL"
+        })
 
       headers = Authenticator.authenticate_shape(shape, nil)
       assert Authenticator.authorise(shape, headers)
