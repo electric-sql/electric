@@ -238,15 +238,10 @@ defmodule Electric.TenantManager do
 
         case GenServer.call(server, {:delete_tenant, tenant_id, pg_id}) do
           :ok ->
-            publication_name =
-              Keyword.fetch!(opts, :app_config).replication_opts.publication_name
-
-            ensure_connection_pool_has_started(tenant_id, opts)
-
             opts
             |> Keyword.fetch!(:electric_instance_id)
-            |> Electric.Application.process_name(tenant_id, Electric.DbPool)
-            |> Postgrex.query!("DROP PUBLICATION #{publication_name}", [])
+            |> Electric.Connection.Manager.name(tenant_id)
+            |> Electric.Connection.Manager.drop_replication_slot()
 
             :ok = Electric.TenantSupervisor.stop_tenant(opts ++ [tenant_id: tenant_id])
             :ok = Electric.Tenant.Persistence.delete_tenant!(tenant_id, opts)
@@ -257,20 +252,6 @@ defmodule Electric.TenantManager do
 
       {:error, :not_found} ->
         :not_found
-    end
-  end
-
-  defp ensure_connection_pool_has_started(tenant_id, opts) do
-    manager =
-      Electric.Connection.Manager.name(Keyword.fetch!(opts, :electric_instance_id), tenant_id)
-
-    case Electric.Connection.Manager.get_status(manager) do
-      :active ->
-        :ok
-
-      _ ->
-        Process.sleep(10)
-        ensure_connection_pool_has_started(tenant_id, opts)
     end
   end
 

@@ -112,6 +112,23 @@ defmodule Electric.Connection.Manager do
     GenServer.call(server, :get_status)
   end
 
+  def await_active(server) do
+    case get_status(server) do
+      :active ->
+        :ok
+
+      _ ->
+        Process.sleep(10)
+        await_active(server)
+    end
+  end
+
+  def drop_replication_slot(server) do
+    # Ensure that the connection pool is available
+    await_active(server)
+    GenServer.call(server, :drop_replication_slot)
+  end
+
   def exclusive_connection_lock_acquired(server) do
     GenServer.cast(server, :exclusive_connection_lock_acquired)
   end
@@ -184,6 +201,13 @@ defmodule Electric.Connection.Manager do
       end
 
     {:reply, status, state}
+  end
+
+  def handle_call(:drop_replication_slot, _from, %{pool_pid: pool_pid} = state)
+      when pool_pid != nil do
+    publication_name = Keyword.fetch!(state.replication_opts, :publication_name)
+    Postgrex.query!(pool_pid, "DROP PUBLICATION #{publication_name}", [])
+    {:reply, :ok, state}
   end
 
   @impl true
