@@ -92,6 +92,14 @@ defmodule Electric.TenantManager do
     GenServer.call(server, {:create_tenant, tenant_id, connection_opts, opts})
   end
 
+  if Mix.env() == :test do
+    @doc false
+    def store_tenant(tenant_conf, tenant_opts) do
+      server = Keyword.get(tenant_opts, :tenant_manager, name(tenant_opts))
+      GenServer.call(server, {:store_tenant, tenant_conf})
+    end
+  end
+
   @doc """
   Deletes a tenant by its ID.
   """
@@ -101,53 +109,6 @@ defmodule Electric.TenantManager do
 
     with {:ok, _} <- get_tenant(tenant_id, opts) do
       GenServer.call(server, {:delete_tenant, tenant_id})
-    end
-  end
-
-  defp do_stop_and_delete_tenant(tenant_id, %{dbs: dbs, tenants_ets: tenants} = state) do
-    state.init_opts
-    |> Keyword.fetch!(:electric_instance_id)
-    |> Electric.Connection.Manager.name(tenant_id)
-    |> Electric.Connection.Manager.drop_replication_slot()
-
-    with {:ok, tenant} <- get_tenant(tenant_id, state.init_opts) do
-      pg_id = Access.fetch!(tenant, :pg_id)
-      :ets.delete(tenants, tenant_id)
-      state = %{state | dbs: MapSet.delete(dbs, pg_id)}
-
-      # TODO: This leaves orphaned shapes with data on disk
-      :ok =
-        Electric.TenantSupervisor.stop_tenant(
-          tenant_id: tenant_id,
-          electric_instance_id: Access.fetch!(state.init_opts, :electric_instance_id)
-        )
-
-      {:ok, state}
-    end
-  end
-
-  defp do_create_and_store_tenant(
-         tenant_id,
-         connection_opts,
-         opts,
-         %{dbs: dbs, tenants_ets: tenants} = state
-       ) do
-    {tenant, start_tenant_opts} = create_tenant_spec(tenant_id, connection_opts, opts)
-    tenant_id = tenant[:tenant_id]
-    pg_id = tenant[:pg_id]
-
-    cond do
-      :ets.member(tenants, tenant_id) ->
-        {:error, {:tenant_already_exists, tenant_id}}
-
-      MapSet.member?(dbs, pg_id) ->
-        {:error, {:db_already_in_use, pg_id}}
-
-      true ->
-        with {:ok, _} <- Electric.TenantSupervisor.start_tenant(start_tenant_opts) do
-          true = :ets.insert_new(tenants, {tenant_id, tenant})
-          {:ok, %{state | dbs: MapSet.put(dbs, pg_id)}}
-        end
     end
   end
 
@@ -203,7 +164,7 @@ defmodule Electric.TenantManager do
   end
 
   def handle_call({:create_tenant, tenant_id, connection_opts, opts}, _, state) do
-    case do_create_and_store_tenant(tenant_id, connection_opts, opts, state) do
+    case do_create_tenant(tenant_id, connection_opts, opts, state) do
       {:ok, state} -> {:reply, :ok, state}
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
@@ -213,6 +174,73 @@ defmodule Electric.TenantManager do
     case do_stop_and_delete_tenant(tenant_id, state) do
       {:ok, state} -> {:reply, :ok, state}
       {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  if Mix.env() == :test do
+    def handle_call({:store_tenant, tenant}, _, %{dbs: dbs, tenants_ets: tenants} = state) do
+      tenant_id = tenant[:tenant_id]
+      pg_id = tenant[:pg_id]
+      true = :ets.insert_new(tenants, {tenant_id, tenant})
+      {:reply, :ok, %{state | dbs: MapSet.put(dbs, pg_id)}}
+    end
+  end
+
+  defp do_stop_and_delete_tenant(tenant_id, %{dbs: dbs, tenants_ets: tenants} = state) do
+    case get_tenant(tenant_id, state.init_opts) do
+      {:ok, tenant} ->
+        pg_id = Access.fetch!(tenant, :pg_id)
+        :ets.delete(tenants, tenant_id)
+        state = %{state | dbs: MapSet.delete(dbs, pg_id)}
+
+        drop_replication_slot(tenant_id, state)
+
+        # TODO: This leaves orphaned shapes with data on disk
+        :ok =
+          Electric.TenantSupervisor.stop_tenant(
+            tenant_id: tenant_id,
+            electric_instance_id: Access.fetch!(state.init_opts, :electric_instance_id)
+          )
+
+        {:ok, state}
+
+      error ->
+        # TODO: after a restart the tenant is not there, so the supervisor is not started,
+        #       so there is no way to clean up the publication slot. This also means `get_tenant`
+        #       will always return "not found" after a restart, so shape data is also orphaned.
+        error
+    end
+  end
+
+  defp drop_replication_slot(tenant_id, state) do
+    state.init_opts
+    |> Keyword.fetch!(:electric_instance_id)
+    |> Electric.Connection.Manager.name(tenant_id)
+    |> Electric.Connection.Manager.drop_replication_slot()
+  end
+
+  defp do_create_tenant(
+         tenant_id,
+         connection_opts,
+         opts,
+         %{dbs: dbs, tenants_ets: tenants} = state
+       ) do
+    {tenant, start_tenant_opts} = create_tenant_spec(tenant_id, connection_opts, opts)
+    tenant_id = tenant[:tenant_id]
+    pg_id = tenant[:pg_id]
+
+    cond do
+      :ets.member(tenants, tenant_id) ->
+        {:error, {:tenant_already_exists, tenant_id}}
+
+      MapSet.member?(dbs, pg_id) ->
+        {:error, {:db_already_in_use, pg_id}}
+
+      true ->
+        with {:ok, _} <- Electric.TenantSupervisor.start_tenant(start_tenant_opts) do
+          true = :ets.insert_new(tenants, {tenant_id, tenant})
+          {:ok, %{state | dbs: MapSet.put(dbs, pg_id)}}
+        end
     end
   end
 
@@ -233,7 +261,7 @@ defmodule Electric.TenantManager do
         {:ok, result} = Electric.ConfigParser.parse_postgresql_uri(connection_url)
         connection_opts = Electric.Utils.obfuscate_password(result)
 
-        case do_create_and_store_tenant(
+        case do_create_tenant(
                tenant_id,
                connection_opts,
                state.init_opts,
