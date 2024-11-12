@@ -1,6 +1,5 @@
 import {
   ChangeMessage,
-  ControlMessage,
   GetExtensions,
   isControlMessage,
   Message,
@@ -11,7 +10,7 @@ import {
   ShapeStreamOptions,
 } from "@electric-sql/client/"
 
-// Reduce all rows for a shape into a single value.
+// Reduce all changes for a shape into a single value.
 // Batches all changes until a control message is received.
 export type ReduceFunction<T extends Row<unknown>, Y> = (
   acc: Y,
@@ -26,32 +25,32 @@ export class ReduceStream<T extends Row<unknown>, Y>
   options: ShapeStreamOptions<GetExtensions<T>>
 
   readonly #callback: ReduceFunction<T, Y>
-  #accMessage: Partial<ChangeMessage<{ acc: Y }>>
-  #acc?: Y
+  #accMessage: ChangeMessage<{ acc: Y }>
 
   constructor(stream: ShapeStream<T>, callback: ReduceFunction<T, Y>, init: Y) {
     super()
     this.#stream = stream
     this.options = stream.options
     this.#callback = callback
-    this.#accMessage = { value: { acc: init } }
-    this.#acc = init
+    this.#accMessage = getInitAccMessage(this.options.table!, init)
 
     stream.subscribe((messages) => {
       messages.map((message: Message<T>) => {
         const messages = []
         if (isControlMessage(message)) {
-          if (this.#acc) {
-            this.#accMessage.value = { acc: this.#acc! }
-            this.#accMessage.key = this.options.table!
-            messages.push(this.#accMessage as ChangeMessage<{ acc: Y }>)
-            this.#acc = undefined
+          if (message.headers.control === "up-to-date") {
+            messages.push(this.#accMessage)
           }
           messages.push(message)
           this.publish(messages)
         } else {
-          this.#acc = this.#callback(this.#acc!, message)
-          this.#accMessage = { ...message, value: { acc: this.#acc } }
+          const current = this.#accMessage.value.acc
+          const next = this.#callback(current, message)
+          this.#accMessage = {
+            ...message,
+            key: this.options.table!,
+            value: { acc: next },
+          }
         }
       })
     })
@@ -82,3 +81,16 @@ export class ReduceStream<T extends Row<unknown>, Y>
     return this.#stream.isLoading()
   }
 }
+
+function getInitAccMessage<Y>(
+  key: string,
+  value: Y
+): ChangeMessage<{ acc: Y }> {
+  return {
+    headers: { operation: "insert" },
+    offset: "-1",
+    key: key,
+    value: { acc: value },
+  }
+}
+
