@@ -35,21 +35,6 @@ const setupShapeStream = (provider) => {
       ...provider.resume.operations
     })
 
-    // handle persistence
-    provider.operationsStream.subscribe((messages) => {
-      provider.lastMessageReceived = time.getUnixTime()
-
-      if (messages.length < 2) {
-        return
-      }
-      const { offset } = messages[messages.length - 2]
-      updateShapeState(
-        `operations_state`,
-        offset,
-        provider.operationsStream.shapeHandle
-      )
-    })
-
     provider.awarenessStream = new ShapeStream({
       url: provider.awarenessUrl,
       where: `room = '${provider.roomname}'`,
@@ -58,24 +43,9 @@ const setupShapeStream = (provider) => {
       ...provider.resume.awareness
     })
 
-    provider.awarenessStream.subscribe((messages) => {
-      provider.lastMessageReceived = time.getUnixTime()
-      if (messages.length < 2) {
-        return
-      }
-      const { offset } = messages[messages.length - 2]
-      updateShapeState(
-        `awareness_state`,
-        offset,
-        provider.operationsStream.shapeHandle
-      )
-    })
-
-    const updateShapeState = (name, offset, shapeHandle) => {
-      provider.persistence?.set(name, { offset, shapeHandle })
-    }
 
     const handleSyncMessage = (messages) => {
+      provider.lastMessageReceived = time.getUnixTime()
       messages.forEach((message) => {
         if(isChangeMessage(message) && message.value.op) {
           const decoder = message.value.op
@@ -98,6 +68,7 @@ const setupShapeStream = (provider) => {
     }
 
     const handleAwarenessMessage = (messages) => {
+      provider.lastMessageReceived = time.getUnixTime()
       messages.forEach((message) => {
         // sometimes buffer is empty
         if(isChangeMessage(message) && message.value.op) {
@@ -184,17 +155,13 @@ const setupShapeStream = (provider) => {
 }
 
 const saveLastSyncedStateVector = (provider) => {
-  provider.modifiedWhileOffline = true
-  return provider.persistence?.set(
-    `last_synced_state_vector`,
-    provider.lastSyncedStateVector
-  )
+  provider.modifiedWhileOffline = true 
 }
 
 const clearLastSyncedStateVector = async (provider) => {
   provider.lastSyncedStateVector = null
   provider.modifiedWhileOffline = false
-  provider.persistence?.del(`last_synced_state_vector`)
+
 }
 
 const sendOperation = async (provider, update) => {
@@ -249,14 +216,13 @@ export class ElectricProvider extends Observable {
    * @param {object} opts
    * @param {boolean} [opts.connect]
    * @param {awarenessProtocol.Awareness} [opts.awareness]
-   * @param {IndexeddbPersistence} [opts.persistence]
    * @param {Object<string, {offset: string, shapeHandle: string} >} [opts.resume]
    */
   constructor(
     serverUrl,
     roomname,
     doc,
-    { connect = false, awareness = null, persistence = null, resume = {} } = {}
+    { connect = false, awareness = null, resume = {} } = {}
   ) {
     super()
 
@@ -280,33 +246,8 @@ export class ElectricProvider extends Observable {
 
     this.disconnectHandler = null
 
-    this.persistence = persistence
-    this.loaded = persistence === null
-
-    persistence?.on(`synced`, () => {
-      persistence
-        .get(`operations_state`)
-        .then((opsState) => {
-          this.resume.operations = opsState
-          return persistence.get(`awareness_state`)
-        })
-        .then((awarenessState) => {
-          this.resume.awareness = awarenessState
-          return persistence.get(`last_synced_state_vector`)
-        })
-        .then((lastSyncedStateVector) => {
-          this.lastSyncedStateVector = lastSyncedStateVector ?? null
-          this.modifiedWhileOffline = lastSyncedStateVector ?? false
-        })
-        .then(() => {
-          this.loaded = true
-          this.connect()
-        })
-    })
-
     this._updateHandler = (update, origin) => {
-      // deduplicate events that come from broadcast provider
-      if (origin !== this && !origin.bcChannel) {
+      if (origin !== this) {
         sendOperation(this, update)
       }
     }
@@ -335,7 +276,7 @@ export class ElectricProvider extends Observable {
     }
     awareness?.on(`update`, this._awarenessUpdateHandler)
 
-    if (connect && this.loaded) {
+    if (connect) {
       this.connect()
     }
   }
@@ -379,7 +320,7 @@ export class ElectricProvider extends Observable {
   }
 
   connect() {
-    this.shouldConnect = true && this.loaded
+    this.shouldConnect = true
     if (!this.connected && this.operationsStream === null) {
       setupShapeStream(this)
     }
