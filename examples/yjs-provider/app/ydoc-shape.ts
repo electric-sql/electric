@@ -1,11 +1,6 @@
-import {
-  Row,
-  Shape,
-  ShapeStream,
-  ShapeStreamOptions,
-} from "@electric-sql/client"
+import { Shape, ShapeStream, ShapeStreamOptions } from "@electric-sql/client"
 
-import { parseToUint8Array as parser } from "./utils"
+import { parseToUint8Array as parser, parseToBase64, room } from "./utils"
 
 import * as Y from "yjs"
 import * as syncProtocol from "y-protocols/sync"
@@ -16,9 +11,11 @@ import * as decoding from "lib0/decoding"
 import { ReduceFunction, ReduceStream } from "./reduce-stream"
 
 export type ShapeData = {
-  doc: string
-  offset: string
-  shapeHandle: string
+  data: string
+  resume: {
+    offset: string
+    shapeHandle: string
+  }
 }
 type YOp = { op: Uint8Array }
 type YDoc = { acc: Y.Doc }
@@ -33,7 +30,6 @@ function getYDocShape(stream: ShapeStream<YOp>): Shape<YDoc> {
     )
     return acc
   }
-
   const reduceStream = new ReduceStream(stream, reduceChangesToDoc, new Y.Doc())
   return new Shape(reduceStream)
 }
@@ -44,22 +40,46 @@ function getDocAsBase64(ydoc: Y.Doc) {
   return toBase64(encoding.toUint8Array(encoder))
 }
 
-const options: ShapeStreamOptions<Uint8Array> = {
+const doc: ShapeStreamOptions<Uint8Array> = {
   url: `http://localhost:3000/v1/shape/`,
   table: `ydoc_operations`,
-  where: `room = 'electric-demo'`,
+  where: `room = '${room}'`,
   parser,
 }
+const docStream = new ShapeStream<YOp>(doc)
+const docShape = getYDocShape(docStream)
 
-const stream = new ShapeStream<YOp>(options)
-const shape = getYDocShape(stream)
-
-export const getShapeData = async () => {
-  const doc = (await shape.value).get("ydoc_operations")!.acc
-  console.log("offset", stream.lastOffset)
+export const getDocData = async () => {
+  const doc = (await docShape.value).get(`ydoc_operations`)!.acc
   return {
-    doc: getDocAsBase64(doc),
-    offset: stream.lastOffset,
-    shapeHandle: stream.shapeHandle,
+    data: getDocAsBase64(doc),
+    resume: {
+      offset: docStream.lastOffset,
+      shapeHandle: docStream.shapeHandle,
+    },
+  }
+}
+
+const awareness: ShapeStreamOptions = {
+  url: `http://localhost:3000/v1/shape/`,
+  table: `ydoc_awareness`,
+  where: `room = '${room}'`,
+  parser: parseToBase64,
+}
+const awarenessStream = new ShapeStream<YOp>(awareness)
+const awarenessShape = new Shape(awarenessStream)
+
+export const getAwarenessData = async () => {
+  const clients = await awarenessShape.value
+  const data = []
+  for (const client of clients.values()) {
+    data.push(client.op)
+  }
+  return {
+    data: JSON.stringify(data),
+    resume: {
+      offset: awarenessStream.lastOffset,
+      shapeHandle: awarenessStream.shapeHandle,
+    },
   }
 }

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react"
 import * as Y from "yjs"
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next"
 import { ElectricProvider } from "./y-electric"
-import * as awarenessProtocol from "y-protocols/awareness"
+import { Awareness, applyAwarenessUpdate } from "y-protocols/awareness"
 
 import { EditorState } from "@codemirror/state"
 import { EditorView, basicSetup } from "codemirror"
@@ -30,11 +30,16 @@ const usercolors = [
 ]
 
 const userColor = usercolors[random.uint32() % usercolors.length]
-
 const ydoc = new Y.Doc()
 let network: ElectricProvider | null = null
 
-export default function Home({ shapeData }: { shapeData: ShapeData }) {
+export default function ElectricEditor({
+  docShape,
+  awarenessShape,
+}: {
+  docShape: ShapeData
+  awarenessShape: ShapeData
+}) {
   const editor = useRef(null)
 
   const [connect, setConnect] = useState(`connected`)
@@ -55,21 +60,25 @@ export default function Home({ shapeData }: { shapeData: ShapeData }) {
     }
 
     if (typeof window !== `undefined` && network === null) {
-      const awareness = new awarenessProtocol.Awareness(ydoc)
-
-      const { doc, offset, shapeHandle } = shapeData
-
-      const decoder = decoding.createDecoder(fromBase64(doc))
-      decoding.readVarUint(decoder)
-      Y.applyUpdate(ydoc, decoding.readVarUint8Array(decoder), `server`)
+      initDoc(ydoc, docShape.data)
+      const awareness = new Awareness(ydoc)
+      initAwareness(awareness, awarenessShape.data)
 
       const opts = {
         connect: true,
         awareness,
-        resume: { operations: { offset, shapeHandle } },
+        resume: {
+          operations: docShape.resume,
+          awareness: awarenessShape.resume,
+        },
       }
 
-      network = new ElectricProvider(`http://localhost:3000/`, room, ydoc, opts)
+      network = new ElectricProvider(
+        `${process.env.ELECTRIC_URL || `http://localhost:3000`}`,
+        room,
+        ydoc,
+        opts
+      )
     }
 
     const ytext = ydoc.getText(room)
@@ -111,4 +120,21 @@ export default function Home({ shapeData }: { shapeData: ShapeData }) {
       <div ref={editor}></div>
     </div>
   )
+}
+
+const initDoc = (ydoc: Y.Doc, data: string) => {
+  const decoder = decoding.createDecoder(fromBase64(data))
+  decoding.readVarUint(decoder)
+  Y.applyUpdate(ydoc, decoding.readVarUint8Array(decoder), `server`)
+}
+
+const initAwareness = (awareness: Awareness, data: string) => {
+  for (const client of JSON.parse(data)) {
+    const decoder = decoding.createDecoder(fromBase64(client))
+    applyAwarenessUpdate(
+      awareness,
+      decoding.readVarUint8Array(decoder),
+      `server`
+    )
+  }
 }

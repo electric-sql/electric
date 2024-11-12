@@ -1,9 +1,14 @@
 "use server"
 
 import React from "react"
-import Home from "./page-client"
-import { getShapeData } from "./ydoc-shape"
+import ElectricEditor from "./electric-editor"
+import { getAwarenessData, getDocData } from "./ydoc-shape"
 
-const Page = async () => <Home shapeData={await getShapeData()} />
+const Page = async () => (
+  <ElectricEditor
+    docShape={await getDocData()}
+    awarenessShape={await getAwarenessData()}
+  />
+)
 
 export default Page
