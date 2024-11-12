@@ -2,6 +2,7 @@ defmodule Electric.Plug.RemoveDatabasePlug do
   use Plug.Builder
 
   alias Plug.Conn
+
   alias Electric.TenantManager
 
   require Logger

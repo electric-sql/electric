@@ -225,6 +225,14 @@ defmodule Electric.TenantManager do
     end
   end
 
+  @spec delete_all_tenants(Keyword.t()) :: :ok
+  def delete_all_tenants(opts) do
+    opts
+    |> tenants_ets_table_name()
+    |> :ets.tab2list()
+    |> Enum.each(fn {tenant_id, _} -> delete_tenant(tenant_id, opts) end)
+  end
+
   @doc """
   Deletes a tenant by its ID.
   """

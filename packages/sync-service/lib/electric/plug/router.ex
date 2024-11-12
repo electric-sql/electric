@@ -23,6 +23,7 @@ defmodule Electric.Plug.Router do
 
   post "/v1/admin/database", to: Electric.Plug.AddDatabasePlug
   delete "/v1/admin/database/:database_id", to: Electric.Plug.RemoveDatabasePlug
+  delete "/v1/admin/databases", to: Electric.Plug.RemoveAllDatabasesPlug
 
   match _, do: send_resp(conn, 404, "Not found")
 
