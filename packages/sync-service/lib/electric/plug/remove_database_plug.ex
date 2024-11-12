@@ -16,7 +16,7 @@ defmodule Electric.Plug.RemoveDatabasePlug do
         |> send_resp(200, Jason.encode_to_iodata!(tenant_id))
         |> halt()
 
-      :not_found ->
+      {:error, :not_found} ->
         conn
         |> send_resp(404, Jason.encode_to_iodata!("Database #{tenant_id} not found."))
         |> halt()

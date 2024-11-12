@@ -118,74 +118,6 @@
   ?[\d+]
   ??}},{"headers":{"control":"up-to-date"}}]$PS1
 
-# Disable fail pattern for Electric as we are going to kill it
-[shell electric]
-  -
-
-## kill Electric
-[shell orchestrator]
-  !kill $(lsof -ti:3000)
-  ??$PS1
-
-## restart Electric
-[shell electric]
-  ??$PS1
-  # Re-enable fail pattern for Electric
-  -$fail_pattern
-  [invoke setup_multi_tenant_electric]
-  ???Reloading tenant tenant1 from storage
-  ???Reloading tenant tenant2 from storage
-  ???[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
-
-## Make a query to check that they still see their data
-[shell tenant1]
-  # Query the shape
-  !curl -i -X GET "http://localhost:3000/v1/shape?table=items&offset=${offset}&handle=${shape_id}&database_id=tenant1"
-  ???[{"headers":{"control":"up-to-date"}}]
-  ??$PS1
-  
-[shell tenant2]
-  # Query the shape
-  !curl -i -X GET "http://localhost:3000/v1/shape?table=items&offset=${offset}&handle=${shape_id}&database_id=tenant2"
-  ???[{"headers":{"control":"up-to-date"}}]
-  ??$PS1
-
-## Make a live query on both and check that it still works
-[shell tenant1]
-  !curl -i -X GET "localhost:3000/v1/shape?table=items&offset=$offset&handle="$shape_id"&database_id=tenant1&live"
-
-[shell tenant2]
-  !curl -i -X GET "localhost:3000/v1/shape?table=items&offset=$offset&handle="$shape_id"&database_id=tenant2&live"
-
-## Insert some data in tenant 1
-[shell tenant1_psql]
-  !INSERT INTO items (id, val) VALUES (3, 'tenant 1');
-  ??INSERT 0 1
-
-## Insert some data in tenant 2
-[shell tenant2_psql]
-  !INSERT INTO items (id, val) VALUES (3, 'tenant 2');
-  ??INSERT 0 1
-
-## Check that tenant 1 sees the new data
-[shell tenant1]
-  # give some time for the data to sync
-  [sleep 1]
-  ?\e\[1melectric-offset\e\[0m: ([\d_]+)
-  [local offset=$1]
-  ??[{"offset":"$offset","value":{"id":"3","val":"tenant 1"},"key":"\"public\".\"items\"/\"3\"","headers":{"relation":["public","items"],"operation":"insert","txid":
-  ?[\d+]
-  ??}},{"headers":{"control":"up-to-date"}}]$PS1
-
-## Check that tenant 2 sees the new data
-[shell tenant2]
-  [sleep 1]
-  ?\e\[1melectric-offset\e\[0m: ([\d_]+)
-  [local offset=$1]
-  ??[{"offset":"$offset","value":{"id":"3","val":"tenant 2"},"key":"\"public\".\"items\"/\"3\"","headers":{"relation":["public","items"],"operation":"insert","txid":
-  ?[\d+]
-  ??}},{"headers":{"control":"up-to-date"}}]$PS1
-
 [shell electric]
   # disable fail pattern because deleting a tenant will stop the tenant processes
   # which will output some error messages because of the shutdown
@@ -202,20 +134,6 @@
   ??$PS1
   # Verify that tenant 1 still exists
   [invoke check_tenant_status "tenant1" "active" 3000]
-
-## kill Electric
-[shell orchestrator]
-  !kill $(lsof -ti:3000)
-  ??$PS1
-
-## restart Electric and check that only tenant 1 is reloaded and not tenant 2
-[shell electric]
-  ??$PS1
-  # Set fail pattern to fail if tenant 2 is reloaded
-  -Reloading tenant tenant2 from storage
-  !PORT=3000 ../scripts/electric_dev.sh
-  ???Reloading tenant tenant1 from storage
-  ???[info] Running Electric.Plug.Router with Bandit 1.5.5 at 0.0.0.0:3000 (http)
 
 [cleanup]
   [invoke teardown]
