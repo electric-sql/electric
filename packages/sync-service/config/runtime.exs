@@ -106,8 +106,7 @@ case {database_url, default_tenant} do
 
     config :electric, default_connection_opts: Electric.Utils.obfuscate_password(connection_opts)
 
-    # if `default_tenant` is nil, generate a random UUID for it
-    tenant_id = default_tenant || Electric.Utils.uuid4()
+    tenant_id = default_tenant || "00000000-0000-0000-0000-000000000000"
     config :electric, default_tenant: tenant_id
 end
 
@@ -209,4 +208,6 @@ config :electric,
   prometheus_port: prometheus_port,
   storage: storage,
   persistent_kv: persistent_kv,
-  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false)
+  control_plane: env!("ELECTRIC_CONTROL_PLANE", &Electric.ControlPlane.parse_config/1, nil),
+  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false),
+  tenant_tables_name: :tenant_tables

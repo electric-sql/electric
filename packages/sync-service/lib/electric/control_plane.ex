@@ -26,6 +26,18 @@ defmodule Electric.ControlPlane do
           paths: %{optional(String.t()) => map()}
         }
 
+  def parse_config(""), do: nil
+
+  def parse_config(config_string) do
+    result = Jason.decode!(config_string)
+
+    %__MODULE__{
+      base_url: Map.fetch!(result, "base_url"),
+      auth: Map.get(result, "auth", nil),
+      paths: Map.get(result, "paths", %__MODULE__{}.paths)
+    }
+  end
+
   @spec list_tenants(t(), keyword()) ::
           {:ok, included :: list(map()), deleted :: list(map())} | {:error, :unreachable}
   def list_tenants(%__MODULE__{} = plane, opts) do
@@ -106,10 +118,9 @@ defmodule Electric.ControlPlane do
   end
 
   defp insert_instance_id(string, instance_id),
-    do: String.replace(string, "%{instance_id}", instance_id)
+    do: String.replace(string, "%{instance_id}", to_string(instance_id))
 
-  @spec collect_ops(list({String.t(), String.t(), %{String.t() => String.t()}})) ::
-          {map(), map()}
+  @spec collect_ops(Enumerable.t()) :: {map(), map()}
   defp collect_ops(ops) do
     Enum.reduce(ops, {%{}, %{}}, fn
       {"insert", key, value}, {ins_acc, del_acc} ->

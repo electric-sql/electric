@@ -105,7 +105,8 @@ defmodule Electric.Application do
       },
       pool_opts: %{
         size: Application.fetch_env!(:electric, :db_pool_size)
-      }
+      },
+      control_plane: Application.get_env(:electric, :control_plane, nil)
     }
 
     Electric.Application.Configuration.save(config)

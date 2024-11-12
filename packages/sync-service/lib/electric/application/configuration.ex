@@ -9,6 +9,7 @@ defmodule Electric.Application.Configuration do
     persistent_kv
     replication_opts
     pool_opts
+    control_plane
   ]a
 
   @type t :: %__MODULE__{}
