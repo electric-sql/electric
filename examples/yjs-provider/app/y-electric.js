@@ -15,8 +15,8 @@ import * as Y from "yjs"
 export const messageSync = 0
 export const messageAwareness = 1
 
-import { ShapeStream } from "@electric-sql/client"
-import { parser } from "./utils"
+import { isChangeMessage, ShapeStream } from "@electric-sql/client"
+import { parseToDecoder as parser } from "./utils"
 
 /**
  * @param {ElectricProvider} provider
@@ -35,27 +35,10 @@ const setupShapeStream = (provider) => {
       ...provider.resume.operations
     })
 
-    provider.awarenessStream = new ShapeStream({
-      url: provider.awarenessUrl,
-      where: `room = '${provider.roomname}'`,
-      table: `ydoc_awareness`,
-      parser,
-      ...provider.resume.awareness
-    })
-
-    const handleMessages = (messages) => {
+    // handle persistence
+    provider.operationsStream.subscribe((messages) => {
       provider.lastMessageReceived = time.getUnixTime()
-      return messages
-        .filter((message) => message[`key`] && message[`value`][`op`])
-        .map((message) => message[`value`][`op`])
-        .map(decoding.createDecoder)
-    }
 
-    const updateShapeState = (name, offset, shapeHandle) => {
-      provider.persistence?.set(name, { offset, shapeHandle })
-    }
-
-    const handleSyncMessage = (messages) => {
       if (messages.length < 2) {
         return
       }
@@ -65,26 +48,18 @@ const setupShapeStream = (provider) => {
         offset,
         provider.operationsStream.shapeHandle
       )
+    })
 
-      handleMessages(messages).forEach((decoder) => {
-        const encoder = encoding.createEncoder()
-        encoding.writeVarUint(encoder, messageSync)
-        const syncMessageType = syncProtocol.readSyncMessage(
-          decoder,
-          encoder,
-          provider.doc,
-          provider
-        )
-        if (
-          syncMessageType === syncProtocol.messageYjsSyncStep2 &&
-          !provider.synced
-        ) {
-          provider.synced = true
-        }
-      })
-    }
+    provider.awarenessStream = new ShapeStream({
+      url: provider.awarenessUrl,
+      where: `room = '${provider.roomname}'`,
+      table: `ydoc_awareness`,
+      parser,
+      ...provider.resume.awareness
+    })
 
-    const handleAwarenessMessage = (messages) => {
+    provider.awarenessStream.subscribe((messages) => {
+      provider.lastMessageReceived = time.getUnixTime()
       if (messages.length < 2) {
         return
       }
@@ -92,32 +67,55 @@ const setupShapeStream = (provider) => {
       updateShapeState(
         `awareness_state`,
         offset,
-        provider.awarenessStream.shapeHandle
+        provider.operationsStream.shapeHandle
       )
+    })
 
-      handleMessages(messages).forEach((decoder) => {
-        awarenessProtocol.applyAwarenessUpdate(
-          provider.awareness,
-          decoding.readVarUint8Array(decoder),
-          provider
-        )
+    const updateShapeState = (name, offset, shapeHandle) => {
+      provider.persistence?.set(name, { offset, shapeHandle })
+    }
+
+    const handleSyncMessage = (messages) => {
+      messages.forEach((message) => {
+        if(isChangeMessage(message) && message.value.op) {
+          const decoder = message.value.op
+          const encoder = encoding.createEncoder()
+          encoding.writeVarUint(encoder, messageSync)
+          const syncMessageType = syncProtocol.readSyncMessage(
+            decoder,
+            encoder,
+            provider.doc,
+            provider
+          )
+          if (
+            syncMessageType === syncProtocol.messageYjsSyncStep2 &&
+            !provider.synced
+          ) {
+            provider.synced = true
+          }
+        }
       })
     }
 
-    // TODO: need to improve error handling
-    const handleError = (event) => {
-      console.warn(`fetch shape error`, event)
-      provider.emit(`connection-error`, [event, provider])
-    }
+    const handleAwarenessMessage = (messages) => {
+      messages.forEach((message) => {
+        // sometimes buffer is empty
+        if(isChangeMessage(message) && message.value.op) {
+          const decoder = message.value.op
+          awarenessProtocol.applyAwarenessUpdate(
+            provider.awareness,
+            decoding.readVarUint8Array(decoder),
+            provider
+          )
+        }
+      })}
 
     const unsubscribeSyncHandler = provider.operationsStream.subscribe(
-      handleSyncMessage,
-      handleError
+      handleSyncMessage
     )
 
     const unsubscribeAwarenessHandler = provider.awarenessStream.subscribe(
-      handleAwarenessMessage,
-      handleError
+      handleAwarenessMessage
     )
 
     provider.disconnectHandler = (event) => {
@@ -168,8 +166,7 @@ const setupShapeStream = (provider) => {
     }
 
     provider.operationsStream.subscribeOnceToUpToDate(
-      () => handleOperationsFirstSync(),
-      () => handleError()
+      handleOperationsFirstSync.bind(this)
     )
 
     const handleAwarenessFirstSync = () => {
@@ -179,8 +176,7 @@ const setupShapeStream = (provider) => {
     }
 
     provider.awarenessStream.subscribeOnceToUpToDate(
-      () => handleAwarenessFirstSync(),
-      () => handleError()
+      handleAwarenessFirstSync.bind(this)
     )
 
     provider.emit(`status`, [{ status: `connecting` }])
@@ -202,7 +198,7 @@ const clearLastSyncedStateVector = async (provider) => {
 }
 
 const sendOperation = async (provider, update) => {
-  // ignore updates that have no updates
+  // ignore requests that have no changes
   // there is probably a better way of checking this
   if (update.length <= 2) {
     return

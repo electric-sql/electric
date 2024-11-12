@@ -1,6 +1,11 @@
-import { Offset, Shape, ShapeStream } from "@electric-sql/client"
+import {
+  Row,
+  Shape,
+  ShapeStream,
+  ShapeStreamOptions,
+} from "@electric-sql/client"
 
-import { parser } from "./utils"
+import { parseToUint8Array as parser } from "./utils"
 
 import * as Y from "yjs"
 import * as syncProtocol from "y-protocols/sync"
@@ -15,45 +20,46 @@ export type ShapeData = {
   offset: string
   shapeHandle: string
 }
+type YOp = { op: Uint8Array }
+type YDoc = { acc: Y.Doc }
 
-let offset: Offset = "-1"
-let room = `electric-demo`
-
-const stream = new ShapeStream<{ op: Uint8Array }>({
-  url: `http://localhost:3000/v1/shape/`,
-  table: `ydoc_operations`,
-  where: `room = '${room}'`,
-  parser,
-})
-
-const reduceChangesToDoc: ReduceFunction<{ op: Uint8Array }, Y.Doc> = (
-  acc,
-  message
-) => {
-  syncProtocol.readSyncMessage(
-    decoding.createDecoder(message.value.op),
-    encoding.createEncoder(),
-    acc,
-    `server`
-  )
-  offset = message[`offset`]
-  return acc
-}
-
-const reduceStream = new ReduceStream(stream, reduceChangesToDoc, new Y.Doc())
-const shape = new Shape(reduceStream)
-
-export async function getShapeData(): Promise<ShapeData> {
-  const doc = (await shape.value).get("ydoc_operations")!.acc
-  return {
-    doc: getDocAsBase64(doc),
-    offset,
-    shapeHandle: stream.shapeHandle,
+function getYDocShape(stream: ShapeStream<YOp>): Shape<YDoc> {
+  const reduceChangesToDoc: ReduceFunction<YOp, Y.Doc> = (acc, message) => {
+    syncProtocol.readSyncMessage(
+      decoding.createDecoder(message.value.op),
+      encoding.createEncoder(),
+      acc,
+      `server`
+    )
+    return acc
   }
+
+  const reduceStream = new ReduceStream(stream, reduceChangesToDoc, new Y.Doc())
+  return new Shape(reduceStream)
 }
 
 function getDocAsBase64(ydoc: Y.Doc) {
   const encoder = encoding.createEncoder()
   syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(ydoc))
   return toBase64(encoding.toUint8Array(encoder))
+}
+
+const options: ShapeStreamOptions<Uint8Array> = {
+  url: `http://localhost:3000/v1/shape/`,
+  table: `ydoc_operations`,
+  where: `room = 'electric-demo'`,
+  parser,
+}
+
+const stream = new ShapeStream<YOp>(options)
+const shape = getYDocShape(stream)
+
+export const getShapeData = async () => {
+  const doc = (await shape.value).get("ydoc_operations")!.acc
+  console.log("offset", stream.lastOffset)
+  return {
+    doc: getDocAsBase64(doc),
+    offset: stream.lastOffset,
+    shapeHandle: stream.shapeHandle,
+  }
 }
