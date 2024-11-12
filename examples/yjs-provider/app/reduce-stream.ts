@@ -8,7 +8,7 @@ import {
   ShapeStream,
   ShapeStreamInterface,
   ShapeStreamOptions,
-} from "@electric-sql/client/"
+} from "@electric-sql/client"
 
 // Reduce all changes for a shape into a single value.
 // Batches all changes until a control message is received.
@@ -38,7 +38,7 @@ export class ReduceStream<T extends Row<unknown>, Y>
       messages.map((message: Message<T>) => {
         const messages = []
         if (isControlMessage(message)) {
-          if (message.headers.control === "up-to-date") {
+          if (message.headers.control === `up-to-date`) {
             messages.push(this.#accMessage)
           }
           messages.push(message)
@@ -87,10 +87,9 @@ function getInitAccMessage<Y>(
   value: Y
 ): ChangeMessage<{ acc: Y }> {
   return {
-    headers: { operation: "insert" },
-    offset: "-1",
+    headers: { operation: `insert` },
+    offset: `-1`,
     key: key,
     value: { acc: value },
   }
 }
-

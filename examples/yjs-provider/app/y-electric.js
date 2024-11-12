@@ -32,7 +32,7 @@ const setupShapeStream = (provider) => {
       table: `ydoc_operations`,
       where: `room = '${provider.roomname}'`,
       parser,
-      ...provider.resume.operations
+      ...provider.resume.operations,
     })
 
     provider.awarenessStream = new ShapeStream({
@@ -40,14 +40,13 @@ const setupShapeStream = (provider) => {
       where: `room = '${provider.roomname}'`,
       table: `ydoc_awareness`,
       parser,
-      ...provider.resume.awareness
+      ...provider.resume.awareness,
     })
-
 
     const handleSyncMessage = (messages) => {
       provider.lastMessageReceived = time.getUnixTime()
       messages.forEach((message) => {
-        if(isChangeMessage(message) && message.value.op) {
+        if (isChangeMessage(message) && message.value.op) {
           const decoder = message.value.op
           const encoder = encoding.createEncoder()
           encoding.writeVarUint(encoder, messageSync)
@@ -71,7 +70,7 @@ const setupShapeStream = (provider) => {
       provider.lastMessageReceived = time.getUnixTime()
       messages.forEach((message) => {
         // sometimes buffer is empty
-        if(isChangeMessage(message) && message.value.op) {
+        if (isChangeMessage(message) && message.value.op) {
           const decoder = message.value.op
           awarenessProtocol.applyAwarenessUpdate(
             provider.awareness,
@@ -79,11 +78,11 @@ const setupShapeStream = (provider) => {
             provider
           )
         }
-      })}
+      })
+    }
 
-    const unsubscribeSyncHandler = provider.operationsStream.subscribe(
-      handleSyncMessage
-    )
+    const unsubscribeSyncHandler =
+      provider.operationsStream.subscribe(handleSyncMessage)
 
     const unsubscribeAwarenessHandler = provider.awarenessStream.subscribe(
       handleAwarenessMessage
@@ -155,13 +154,12 @@ const setupShapeStream = (provider) => {
 }
 
 const saveLastSyncedStateVector = (provider) => {
-  provider.modifiedWhileOffline = true 
+  provider.modifiedWhileOffline = true
 }
 
 const clearLastSyncedStateVector = async (provider) => {
   provider.lastSyncedStateVector = null
   provider.modifiedWhileOffline = false
-
 }
 
 const sendOperation = async (provider, update) => {
