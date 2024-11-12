@@ -192,8 +192,7 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_call(:drop_replication_slot, _from, %{pool_pid: pool} = state) when pool != nil do
-    drop_publication(state)
-    {:reply, :ok, state}
+    {:reply, drop_publication(state), state}
   end
 
   def handle_call(:drop_replication_slot, from, state) do
@@ -202,7 +201,11 @@ defmodule Electric.Connection.Manager do
 
   defp drop_publication(state) do
     publication_name = Keyword.fetch!(state.replication_opts, :publication_name)
-    Postgrex.query!(state.pool_pid, "DROP PUBLICATION #{publication_name}", [])
+
+    case Postgrex.query(state.pool_pid, "DROP PUBLICATION #{publication_name}", []) do
+      {:ok, _} -> :ok
+      error -> error
+    end
   end
 
   @impl true
@@ -295,8 +298,8 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_continue(:maybe_drop_replication_slot, %{drop_slot_requesters: requesters} = state) do
-    drop_publication(state)
-    Enum.each(requesters, fn requester -> GenServer.reply(requester, :ok) end)
+    result = drop_publication(state)
+    Enum.each(requesters, fn requester -> GenServer.reply(requester, result) end)
     {:noreply, %{state | drop_slot_requesters: []}}
   end
 
