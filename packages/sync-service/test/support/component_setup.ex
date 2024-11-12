@@ -20,7 +20,7 @@ defmodule Support.ComponentSetup do
     opts = [
       app_config: ctx.app_config,
       electric_instance_id: ctx.electric_instance_id,
-      tenant_tables_name: Electric.TenantTables.name(ctx.electric_instance_id)
+      tenant_tables_name: Electric.Tenant.Tables.name(ctx.electric_instance_id)
     ]
 
     {:ok, _} = Electric.TenantManager.start_link(opts)
@@ -250,8 +250,8 @@ defmodule Support.ComponentSetup do
   end
 
   def with_tenant_tables(ctx) do
-    Electric.TenantTables.init(ctx.electric_instance_id)
-    %{tenant_tables_name: Electric.TenantTables.name(ctx.electric_instance_id)}
+    Electric.Tenant.Tables.init(ctx.electric_instance_id)
+    %{tenant_tables_name: Electric.Tenant.Tables.name(ctx.electric_instance_id)}
   end
 
   def with_inspector(ctx) do
