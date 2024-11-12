@@ -1,14 +1,14 @@
 import { getSerializedShape } from "@electric-sql/react"
 import React from "react"
 import ClientShapeProvider from "./client-shapes-provider"
-import { getUrl, SerializedShape, ShapeDefintion } from "./utils"
+import { getUrl, SerializedShape, SerializedShapeOptions } from "./utils"
 
 export default function ServerShapeProvider({
   children,
   options,
 }: {
   children: React.JSX.Element
-  options: ShapeDefintion[]
+  options: SerializedShapeOptions[]
 }) {
   const clientShapes: SerializedShape[] = []
   for (const shapeOptions of options) {

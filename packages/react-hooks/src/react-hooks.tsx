@@ -31,13 +31,15 @@ export async function preloadShape<T extends Row<unknown> = Row>(
 }
 
 export function sortedOptionsHash<T>(options: ShapeStreamOptions<T>): string {
-  // Filter options that uniquely identify the shape. DISCUSS BEFORE MERGING
+  // Filter options that uniquely identify the shape.
   const uniqueShapeOptions = {
     url: options.url,
     table: options.table,
     columns: options.columns,
     where: options.where,
+    databaseId: options.databaseId,
     headers: options.headers,
+    replica: options.replica,
   }
   return JSON.stringify(uniqueShapeOptions, Object.keys(options).sort())
 }

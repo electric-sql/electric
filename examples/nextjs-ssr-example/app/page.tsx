@@ -1,13 +1,15 @@
 import React from "react"
 import Home from "./Home"
 import ServerShapeProvider from "./server-shape-provider"
-import { ShapeDefintion } from "./utils"
+import { SerializedShapeOptions } from "./utils"
 
-const itemsShape: ShapeDefintion = {
+const itemsShape: SerializedShapeOptions = {
   table: `items`,
 }
 
 const Page = async () => (
+  // Passes a shape fetched on server to client
+  // and loads it into clients shape cache
   <ServerShapeProvider options={[itemsShape]}>
     <Home />
   </ServerShapeProvider>

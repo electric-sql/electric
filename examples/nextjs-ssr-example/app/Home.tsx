@@ -6,7 +6,7 @@ import "./Example.css"
 import { matchStream } from "./match-stream"
 import { Row, ShapeStreamOptions } from "@electric-sql/client"
 import { useOptimistic } from "react"
-import { getProxiedOptions, getUrl } from "./utils"
+import { getProxiedOptions } from "./utils"
 
 const parser = {
   timestamptz: (date: string) => new Date(date).getTime(),

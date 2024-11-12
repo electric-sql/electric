@@ -1,23 +1,9 @@
-import {
-  Offset,
-  Shape,
-  ShapeData,
-  ShapeStreamOptions,
-} from "@electric-sql/client/*"
+import { ShapeData, ShapeStreamOptions } from "@electric-sql/client/*"
 
-export type ShapeDefintion = {
-  table: string
-  columns?: string[]
-  where?: string
-}
-
-export type ShapeDefinitionWithPosiotion = ShapeDefintion & {
-  offset: Offset
-  shapeHandle: string | undefined
-}
+export type SerializedShapeOptions = Omit<ShapeStreamOptions, `url`>
 
 export type SerializedShape = {
-  options: ShapeDefinitionWithPosiotion
+  options: SerializedShapeOptions
   data: ShapeData
 }
 
@@ -29,7 +15,7 @@ export function getUrl() {
 }
 
 export function getProxiedOptions(
-  options: Omit<ShapeStreamOptions, "url">
+  options: SerializedShapeOptions
 ): ShapeStreamOptions {
   // ensure shape is not syncing on the server
   const serverOptions: Partial<ShapeStreamOptions> = {}
