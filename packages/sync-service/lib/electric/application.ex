@@ -5,6 +5,11 @@ defmodule Electric.Application do
   @process_registry_name Electric.Registry.Processes
   def process_registry, do: @process_registry_name
 
+  @spec process_name(atom(), atom()) :: {:via, atom(), {atom(), term()}}
+  def process_name(electric_instance_id, module) when is_atom(module) do
+    {:via, Registry, {@process_registry_name, {module, electric_instance_id}}}
+  end
+
   @spec process_name(atom(), String.t(), atom()) :: {:via, atom(), {atom(), term()}}
   def process_name(electric_instance_id, tenant_id, module) when is_atom(module) do
     {:via, Registry, {@process_registry_name, {module, electric_instance_id, tenant_id}}}
@@ -49,7 +54,7 @@ defmodule Electric.Application do
            name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()},
           {Registry,
            name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
-          Electric.TenantSupervisor,
+          {Electric.TenantSupervisor, electric_instance_id: config.electric_instance_id},
           {Electric.TenantManager, router_opts},
           {Bandit,
            plug: {Electric.Plug.Router, router_opts},
@@ -77,10 +82,9 @@ defmodule Electric.Application do
   # from the OTP application env, runs some pre-processing functions and stores the processed
   # configuration as a single map using `:persistent_term`.
   defp configure do
-    tenant_tables_name = Application.fetch_env!(:electric, :tenant_tables_name)
-    :ets.new(tenant_tables_name, [:public, :named_table, :set, {:read_concurrency, true}])
-
     electric_instance_id = Application.fetch_env!(:electric, :electric_instance_id)
+
+    Electric.Tenant.Tables.init(electric_instance_id)
 
     {kv_module, kv_fun, kv_params} = Application.fetch_env!(:electric, :persistent_kv)
     persistent_kv = apply(kv_module, kv_fun, [kv_params])

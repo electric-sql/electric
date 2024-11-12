@@ -59,7 +59,8 @@ defmodule Electric.Connection.Manager do
       :pg_system_identifier,
       # PostgreSQL timeline ID
       :pg_timeline_id,
-      :tenant_id
+      :tenant_id,
+      drop_slot_requesters: []
     ]
   end
 
@@ -110,6 +111,10 @@ defmodule Electric.Connection.Manager do
   @spec get_status(GenServer.server()) :: status()
   def get_status(server) do
     GenServer.call(server, :get_status)
+  end
+
+  def drop_replication_slot(server) do
+    GenServer.call(server, :drop_replication_slot)
   end
 
   def exclusive_connection_lock_acquired(server) do
@@ -184,6 +189,23 @@ defmodule Electric.Connection.Manager do
       end
 
     {:reply, status, state}
+  end
+
+  def handle_call(:drop_replication_slot, _from, %{pool_pid: pool} = state) when pool != nil do
+    {:reply, drop_publication(state), state}
+  end
+
+  def handle_call(:drop_replication_slot, from, state) do
+    {:noreply, %{state | drop_slot_requesters: [from | state.drop_slot_requesters]}}
+  end
+
+  defp drop_publication(state) do
+    publication_name = Keyword.fetch!(state.replication_opts, :publication_name)
+
+    case Postgrex.query(state.pool_pid, "DROP PUBLICATION #{publication_name}", []) do
+      {:ok, _} -> :ok
+      error -> error
+    end
   end
 
   @impl true
@@ -263,11 +285,22 @@ defmodule Electric.Connection.Manager do
         Process.monitor(log_collector_pid)
 
         state = %{state | pool_pid: pool_pid, shape_log_collector_pid: log_collector_pid}
-        {:noreply, state}
+
+        {:noreply, state, {:continue, :maybe_drop_replication_slot}}
 
       {:error, reason} ->
         handle_connection_error(reason, state, "regular")
     end
+  end
+
+  def handle_continue(:maybe_drop_replication_slot, %{drop_slot_requesters: []} = state) do
+    {:noreply, state}
+  end
+
+  def handle_continue(:maybe_drop_replication_slot, %{drop_slot_requesters: requesters} = state) do
+    result = drop_publication(state)
+    Enum.each(requesters, fn requester -> GenServer.reply(requester, result) end)
+    {:noreply, %{state | drop_slot_requesters: []}}
   end
 
   @impl true

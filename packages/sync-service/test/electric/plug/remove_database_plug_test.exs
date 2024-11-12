@@ -6,6 +6,7 @@ defmodule Electric.Plug.RemoveDatabasePlugTest do
 
   import Support.ComponentSetup
   import Support.DbSetup
+  import Support.TestUtils, only: [with_electric_instance_id: 1]
 
   alias Support.Mock
 
@@ -48,16 +49,16 @@ defmodule Electric.Plug.RemoveDatabasePlugTest do
       }
     end
 
-    setup :with_complete_stack
+    setup :with_electric_instance_id
+    setup :with_tenant_id
+    setup :with_registry
+    setup :with_persistent_kv
+    setup :with_tenant_tables
     setup :with_app_config
+    setup :with_tenant_manager
+    setup :with_supervised_tenant
 
     test "returns 200 when successfully deleting a tenant", ctx do
-      # The tenant manager will try to shut down the tenant supervisor
-      # but we did not start a tenant supervisor in this test
-      # so we create one here
-      supervisor_name = Electric.Tenant.Supervisor.name(ctx.electric_instance_id, ctx.tenant_id)
-      Supervisor.start_link([], name: supervisor_name, strategy: :one_for_one)
-
       conn =
         ctx
         |> conn("DELETE", ctx.tenant_id)
@@ -70,6 +71,9 @@ defmodule Electric.Plug.RemoveDatabasePlugTest do
                app_config: ctx.app_config,
                electric_instance_id: ctx.electric_instance_id
              ) == %{}
+
+      # Ensure the publication has been dropped
+      assert %{rows: []} = Postgrex.query!(ctx.db_conn, "SELECT pubname FROM pg_publication", [])
     end
 
     test "returns 404 when tenant is not found", ctx do

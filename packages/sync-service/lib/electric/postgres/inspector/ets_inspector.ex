@@ -30,10 +30,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
         __MODULE__,
         Map.new(opts)
         |> Map.put_new(:pg_info_table, @default_pg_info_table)
-        |> Map.put_new(:pg_relation_table, @default_pg_relation_table)
-        |> Map.put_new_lazy(:tenant_tables_name, fn ->
-          Application.fetch_env!(:electric, :tenant_tables_name)
-        end),
+        |> Map.put_new(:pg_relation_table, @default_pg_relation_table),
         name: name(opts)
       )
 
@@ -252,7 +249,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   def fetch_tenant_tables_name(opts) do
     case Access.fetch(opts, :tenant_tables_name) do
-      :error -> Application.fetch_env!(:electric, :tenant_tables_name)
+      :error -> Electric.Tenant.Tables.name(Access.fetch!(opts, :electric_instance_id))
       {:ok, tenant_tables_name} -> tenant_tables_name
     end
   end

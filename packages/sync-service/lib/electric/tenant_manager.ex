@@ -238,6 +238,12 @@ defmodule Electric.TenantManager do
 
         case GenServer.call(server, {:delete_tenant, tenant_id, pg_id}) do
           :ok ->
+            :ok =
+              opts
+              |> Keyword.fetch!(:electric_instance_id)
+              |> Electric.Connection.Manager.name(tenant_id)
+              |> Electric.Connection.Manager.drop_replication_slot()
+
             :ok = Electric.TenantSupervisor.stop_tenant(opts ++ [tenant_id: tenant_id])
             :ok = Electric.Tenant.Persistence.delete_tenant!(tenant_id, opts)
 

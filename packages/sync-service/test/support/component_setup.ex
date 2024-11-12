@@ -14,15 +14,16 @@ defmodule Support.ComponentSetup do
   end
 
   def with_tenant_manager(ctx) do
-    Electric.TenantSupervisor.start_link([])
+    {:ok, _} =
+      Electric.TenantSupervisor.start_link(electric_instance_id: ctx.electric_instance_id)
 
     opts = [
       app_config: ctx.app_config,
       electric_instance_id: ctx.electric_instance_id,
-      tenant_tables_name: Access.get(ctx, :tenant_tables_name, nil)
+      tenant_tables_name: Electric.Tenant.Tables.name(ctx.electric_instance_id)
     ]
 
-    Electric.TenantManager.start_link(opts)
+    {:ok, _} = Electric.TenantManager.start_link(opts)
 
     %{tenant_manager: Electric.TenantManager.name(opts)}
   end
@@ -67,20 +68,26 @@ defmodule Support.ComponentSetup do
     ]
 
     :ok = Electric.TenantManager.store_tenant(tenant, tenant_opts)
-    Electric.TenantSupervisor.start_tenant(ctx)
 
     %{tenant: tenant}
   end
 
   def with_supervised_tenant(ctx) do
-    tenant = Access.get(ctx, :tenant_config, tenant_config(ctx))
+    tenant =
+      [
+        electric_instance_id: ctx.electric_instance_id,
+        tenant_id: ctx.tenant_id,
+        pg_id: Map.get(ctx, :pg_id, "12345"),
+        registry: ctx.registry,
+        long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
+        max_age: Access.get(ctx, :max_age, 60),
+        stale_age: Access.get(ctx, :stale_age, 300),
+        get_service_status: fn -> :active end
+      ]
 
     :ok =
       Electric.TenantManager.create_tenant(ctx.tenant_id, ctx.db_config,
         pg_id: tenant[:pg_id],
-        shape_cache: tenant[:shape_cache],
-        storage: tenant[:storage],
-        inspector: tenant[:inspector],
         registry: tenant[:registry],
         long_poll_timeout: tenant[:long_poll_timeout],
         max_age: tenant[:max_age],
@@ -242,13 +249,18 @@ defmodule Support.ComponentSetup do
     %{replication_client: pid}
   end
 
+  def with_tenant_tables(ctx) do
+    Electric.Tenant.Tables.init(ctx.electric_instance_id)
+    %{tenant_tables_name: Electric.Tenant.Tables.name(ctx.electric_instance_id)}
+  end
+
   def with_inspector(ctx) do
     server = :"inspector #{full_test_name(ctx)}"
     pg_info_table = :"pg_info_table #{full_test_name(ctx)}"
     pg_relation_table = :"pg_relation_table #{full_test_name(ctx)}"
 
-    tenant_tables_name = :"tenant_tables_name #{full_test_name(ctx)}"
-    :ets.new(tenant_tables_name, [:public, :named_table, :set])
+    tenant_tables_name =
+      Map.get_lazy(ctx, :tenant_tables_name, fn -> with_tenant_tables(ctx).tenant_tables_name end)
 
     {:ok, _} =
       EtsInspector.start_link(
