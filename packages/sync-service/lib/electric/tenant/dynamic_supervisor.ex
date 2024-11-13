@@ -9,12 +9,12 @@ defmodule Electric.TenantSupervisor do
   require Logger
 
   def start_link(opts) do
-    DynamicSupervisor.start_link(__MODULE__, [], name: name(opts))
+    DynamicSupervisor.start_link(__MODULE__, [], name: __MODULE__)
   end
 
   def start_tenant(opts) do
-    Logger.debug(fn -> "Starting tenant for #{Access.fetch!(opts, :tenant_id)}" end)
-    DynamicSupervisor.start_child(name(opts), {Tenant.Supervisor, opts})
+    Logger.debug(fn -> "Starting tenant for #{Access.fetch!(opts, :stack_id)}" end)
+    DynamicSupervisor.start_child(__MODULE__, {Electric.Supervisor, opts})
   end
 
   @doc """
@@ -22,6 +22,7 @@ defmodule Electric.TenantSupervisor do
   """
   @spec stop_tenant(Keyword.t()) :: :ok
   def stop_tenant(opts) do
+    # FIXME: wrong supervisor
     sup = Tenant.Supervisor.name(opts)
     :ok = Supervisor.stop(sup)
   end

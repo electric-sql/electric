@@ -301,34 +301,23 @@ defmodule Electric.TenantManager do
       %{electric_instance_id: electric_instance_id} =
       Keyword.get_lazy(opts, :app_config, fn -> Electric.Application.Configuration.get() end)
 
-    inspector =
-      Access.get(
-        opts,
-        :inspector,
-        {Electric.Postgres.Inspector.EtsInspector,
-         electric_instance_id: electric_instance_id,
-         tenant_id: tenant_id,
-         server:
-           Electric.Postgres.Inspector.EtsInspector.name(
-             electric_instance_id,
-             tenant_id
-           ),
-         tenant_tables_name:
-           Electric.Postgres.Inspector.EtsInspector.fetch_tenant_tables_name(opts)}
-      )
+    # inspector =
+    #   Access.get(
+    #     opts,
+    #     :inspector,
+    #     {Electric.Postgres.Inspector.EtsInspector,
+    #      electric_instance_id: electric_instance_id,
+    #      tenant_id: tenant_id,
+    #      server:
+    #        Electric.Postgres.Inspector.EtsInspector.name(
+    #          electric_instance_id,
+    #          tenant_id
+    #        ),
+    #      tenant_tables_name:
+    #        Electric.Postgres.Inspector.EtsInspector.fetch_tenant_tables_name(opts)}
+    #   )
 
-    registry = Access.get(opts, :registry, Registry.ShapeChanges)
-
-    get_storage = fn ->
-      {storage_module, storage_in_opts} = Application.fetch_env!(:electric, :storage)
-
-      storage_opts =
-        storage_module.shared_opts(storage_in_opts |> Keyword.put(:tenant_id, tenant_id))
-
-      {storage_module, storage_opts}
-    end
-
-    storage = Access.get(opts, :storage, get_storage.())
+    # registry = Access.get(opts, :registry, Registry.ShapeChanges)
 
     # Can't load pg_id here because the connection manager may still be busy
     # connecting to the DB so it might not be known yet
@@ -342,54 +331,54 @@ defmodule Electric.TenantManager do
 
     pg_id = Access.get(opts, :pg_id, get_pg_id.())
 
-    shape_cache =
-      Access.get(
-        opts,
-        :shape_cache,
-        {Electric.ShapeCache,
-         electric_instance_id: electric_instance_id,
-         tenant_id: tenant_id,
-         server: Electric.ShapeCache.name(electric_instance_id, tenant_id)}
-      )
+    # shape_cache =
+    #   Access.get(
+    #     opts,
+    #     :shape_cache,
+    #     {Electric.ShapeCache,
+    #      electric_instance_id: electric_instance_id,
+    #      tenant_id: tenant_id,
+    #      server: Electric.ShapeCache.name(electric_instance_id, tenant_id)}
+    #   )
 
-    get_service_status =
-      Access.get(opts, :get_service_status, fn ->
-        Electric.ServiceStatus.check(electric_instance_id, tenant_id)
-      end)
+    # get_service_status =
+    #   Access.get(opts, :get_service_status, fn ->
+    #     Electric.ServiceStatus.check(electric_instance_id, tenant_id)
+    #   end)
 
-    long_poll_timeout = Access.get(opts, :long_poll_timeout, 20_000)
-    max_age = Access.get(opts, :max_age, Application.fetch_env!(:electric, :cache_max_age))
-    stale_age = Access.get(opts, :stale_age, Application.fetch_env!(:electric, :cache_stale_age))
+    # long_poll_timeout = Access.get(opts, :long_poll_timeout, 20_000)
+    # max_age = Access.get(opts, :max_age, Application.fetch_env!(:electric, :cache_max_age))
+    # stale_age = Access.get(opts, :stale_age, Application.fetch_env!(:electric, :cache_stale_age))
 
-    allow_shape_deletion =
-      Access.get(
-        opts,
-        :allow_shape_deletion,
-        Application.get_env(:electric, :allow_shape_deletion, false)
-      )
+    # allow_shape_deletion =
+    #   Access.get(
+    #     opts,
+    #     :allow_shape_deletion,
+    #     Application.get_env(:electric, :allow_shape_deletion, false)
+    #   )
 
     tenant = [
       electric_instance_id: electric_instance_id,
       tenant_id: tenant_id,
-      pg_id: pg_id,
-      registry: registry,
-      storage: storage,
-      shape_cache: shape_cache,
-      get_service_status: get_service_status,
-      inspector: inspector,
-      long_poll_timeout: long_poll_timeout,
-      max_age: max_age,
-      stale_age: stale_age,
-      allow_shape_deletion: allow_shape_deletion
+      pg_id: pg_id
+      # registry: registry,
+      # storage: nil,
+      # shape_cache: shape_cache,
+      # get_service_status: get_service_status,
+      # inspector: inspector,
+      # long_poll_timeout: long_poll_timeout,
+      # max_age: max_age,
+      # stale_age: stale_age,
+      # allow_shape_deletion: allow_shape_deletion
     ]
 
     start_tenant_opts = [
-      app_config: app_config,
-      electric_instance_id: electric_instance_id,
-      tenant_id: tenant_id,
+      stack_id: tenant_id,
       connection_opts: connection_opts,
-      inspector: inspector,
-      storage: storage
+      replication_opts: Map.to_list(Map.drop(app_config.replication_opts, [:stream_id])),
+      persistent_kv: app_config.persistent_kv,
+      pool_opts: [pool_size: app_config.pool_opts.size],
+      storage: Application.fetch_env!(:electric, :storage)
     ]
 
     {tenant, start_tenant_opts}

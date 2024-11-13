@@ -1,22 +1,61 @@
 defmodule Electric.Supervisor do
   use Supervisor
 
+  @opts_schema NimbleOptions.new!(
+                 name: [type: :any, required: false],
+                 stack_id: [type: :string, required: true],
+                 persistent_kv: [type: :any, required: true],
+                 connection_opts: [
+                   type: :keyword_list,
+                   required: true,
+                   keys: [
+                     hostname: [type: :string, required: true],
+                     port: [type: :integer, required: true],
+                     database: [type: :string, required: true],
+                     username: [type: :string, required: true],
+                     password: [type: {:fun, 0}, required: true],
+                     sslmode: [type: :atom, required: true],
+                     ipv6: [type: :boolean, required: true]
+                   ]
+                 ],
+                 replication_opts: [
+                   type: :keyword_list,
+                   required: true,
+                   keys: [
+                     publication_name: [type: :string, required: true],
+                     slot_name: [type: :string, required: true],
+                     slot_temporary?: [type: :boolean, default: false],
+                     try_creating_publication?: [type: :boolean, default: true],
+                     stream_id: [type: :string, required: false]
+                   ]
+                 ],
+                 pool_opts: [type: :keyword_list, required: true],
+                 storage: [type: :mod_arg, required: true]
+               )
+
   def start_link(opts) do
-    config = Map.new(opts)
-    Supervisor.start_link(__MODULE__, config, name: Access.fetch!(opts, :name))
+    with {:ok, config} <- NimbleOptions.validate(Map.new(opts), @opts_schema) do
+      Supervisor.start_link(__MODULE__, config, Keyword.take(opts, [:name]))
+    end
+    |> dbg
+  end
+
+  defp storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}}) do
+    {mod, arg |> Keyword.put(:stack_id, stack_id) |> mod.shared_opts()}
   end
 
   @impl true
-  def init(%{
-        app_config: app_config,
-        electric_instance_id: electric_instance_id,
-        tenant_id: tenant_id,
-        connection_opts: connection_opts,
-        inspector: inspector,
-        storage: storage
-      }) do
-    # TODO: later add electric instance ID once we decided what it will be
-    stack_id = tenant_id
+  def init(%{stack_id: stack_id} = config) do
+    inspector =
+      Access.get(
+        config,
+        :inspector,
+        {Electric.Postgres.Inspector.EtsInspector,
+         stack_id: stack_id,
+         server: Electric.Postgres.Inspector.EtsInspector.name(stack_id: stack_id)}
+      )
+
+    storage = storage_mod_arg(config)
 
     # This is a name of the ShapeLogCollector process
     shape_log_collector =
@@ -34,8 +73,7 @@ defmodule Electric.Supervisor do
       {
         Electric.Postgres.Configuration,
         :configure_tables_for_replication!,
-        # FIXME: App config is not a thing
-        [get_pg_version_fn, app_config.replication_opts.publication_name]
+        [get_pg_version_fn, config.replication_opts[:publication_name]]
       }
 
     # FIXME: should be passed in as a parameter
@@ -45,46 +83,35 @@ defmodule Electric.Supervisor do
 
     shape_cache_opts = [
       stack_id: stack_id,
-      # Passed in, should be built here instead
       storage: storage,
-      # Passed in, should be built there instead
       inspector: inspector,
       prepare_tables_fn: prepare_tables_mfa,
       chunk_bytes_threshold: chunk_bytes_threshold,
       log_producer: shape_log_collector,
-      consumer_supervisor:
-        Electric.Shapes.ConsumerSupervisor.name(stack_id),
+      consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(stack_id),
       registry: shape_changes_registry_name
     ]
 
     new_connection_manager_opts = [
       stack_id: stack_id,
       # Coming from the outside, need validation
-      connection_opts: connection_opts,
-      replication_opts: [
-        # FIXME: App config is not a thing
-        publication_name: app_config.replication_opts.publication_name,
-        # Does this need to be exposed as a config option?
-        try_creating_publication?: true,
-        # FIXME: App config is not a thing
-        slot_name: app_config.replication_opts.slot_name,
-        # FIXME: App config is not a thing
-        slot_temporary?: app_config.replication_opts.slot_temporary?,
-        transaction_received:
-          {Electric.Replication.ShapeLogCollector, :store_transaction, [shape_log_collector]},
-        relation_received:
-          {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [shape_log_collector]}
-      ],
-      pool_opts: [
-        name: db_pool,
-        # FIXME: App config is not a thing
-        pool_size: app_config.pool_opts.size,
-        types: PgInterop.Postgrex.Types
-      ],
+      connection_opts: config.connection_opts,
+      replication_opts:
+        [
+          transaction_received:
+            {Electric.Replication.ShapeLogCollector, :store_transaction, [shape_log_collector]},
+          relation_received:
+            {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [shape_log_collector]}
+        ] ++ config.replication_opts,
+      pool_opts:
+        [
+          name: db_pool,
+          types: PgInterop.Postgrex.Types
+        ] ++ config.pool_opts,
       # Replaced `tenant_id`, needs updating
       timeline_opts: [
         stack_id: stack_id,
-        persistent_kv: app_config.persistent_kv
+        persistent_kv: config.persistent_kv
       ],
       shape_cache_opts: shape_cache_opts
     ]
@@ -92,13 +119,11 @@ defmodule Electric.Supervisor do
     new_children = [
       {Electric.ProcessRegistry, partitions: System.schedulers_online(), stack_id: stack_id},
       {Registry,
-       name: shape_changes_registry_name,
-       keys: :duplicate,
-       partitions: System.schedulers_online()},
+       name: shape_changes_registry_name, keys: :duplicate, partitions: System.schedulers_online()},
       {Electric.Postgres.Inspector.EtsInspector, stack_id: stack_id, pool: db_pool},
       {Electric.Connection.Supervisor, new_connection_manager_opts}
     ]
 
-    Supervisor.init(new_children, strategy: :one_for_one, auto_shutdown: :any_significant)
+    Supervisor.init(new_children, strategy: :one_for_one, auto_shutdown: :any_significant) |> dbg
   end
 end

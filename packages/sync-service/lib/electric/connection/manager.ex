@@ -154,7 +154,7 @@ defmodule Electric.Connection.Manager do
         shape_cache_opts: shape_cache_opts,
         pg_lock_acquired: false,
         backoff: {:backoff.init(1000, 10_000), nil},
-        stack_id: Keyword.fetch!(opts, :stack_id),
+        stack_id: Keyword.fetch!(opts, :stack_id)
       }
 
     # Try to acquire the connection lock on the replication slot
@@ -414,8 +414,9 @@ defmodule Electric.Connection.Manager do
     #
     # See https://github.com/electric-sql/electric/issues/1554
     Postgrex.start_link(
-      [backoff_type: :exp, max_restarts: 3, max_seconds: 5] ++
-        pool_opts ++ Electric.Utils.deobfuscate_password(connection_opts)
+      pool_opts ++
+        [backoff_type: :exp, max_restarts: 3, max_seconds: 5] ++
+        Electric.Utils.deobfuscate_password(connection_opts)
     )
   end
 

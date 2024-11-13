@@ -1,9 +1,10 @@
 defmodule Electric.ProcessRegistry do
   @spec child_spec([Registry.start_option()]) :: Supervisor.child_spec()
   def child_spec(options) do
-    options
-    |> Keyword.put_new(:name, registry_name(Keyword.fetch!(options, :stack_id)))
-    |> Keyword.put(:keys, :unique)
+    options =
+      options
+      |> Keyword.put_new(:name, registry_name(Keyword.fetch!(options, :stack_id)))
+      |> Keyword.put(:keys, :unique)
 
     %{
       id: Keyword.get(options, :name, Registry),

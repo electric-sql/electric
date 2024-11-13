@@ -23,9 +23,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
-      GenStage.start_link(__MODULE__, Map.new(opts),
-        name: name(opts[:stack_id])
-      )
+      GenStage.start_link(__MODULE__, Map.new(opts), name: name(opts[:stack_id]))
     end
   end
 
