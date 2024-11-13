@@ -38,7 +38,7 @@ export default $config({
         addDatabaseToElectric(uri)
       )
 
-      const website = deployNextJsExample(electricInfo)
+      const website = deployNextJsExample(electricInfo, databaseUri)
       return {
         databaseUri,
         database_id: electricInfo.id,
@@ -61,13 +61,15 @@ function applyMigrations(uri: string) {
 }
 
 function deployNextJsExample(
-  electricInfo: $util.Output<{ id: string; token: string }>
+  electricInfo: $util.Output<{ id: string; token: string }>,
+  uri: $util.Output<string>
 ) {
   return new sst.aws.Nextjs(`nextjs`, {
     environment: {
       ELECTRIC_URL: process.env.ELECTRIC_API!,
       ELECTRIC_TOKEN: electricInfo.token,
       DATABASE_ID: electricInfo.id,
+      DATABASE_URL: uri,
     },
     domain: {
       name: `nextjs${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
