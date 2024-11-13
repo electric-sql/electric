@@ -116,23 +116,36 @@ Copy the auth token and set it to an env var:
 export AUTH_TOKEN="<token>"
 ```
 
-First let's make a `GET` request to the proxy endpoint *without* the auth token:
+First let's make a `GET` request to the proxy endpoint *without* the auth token. It will be rejected with a `403` status:
 
 ```console
-$ curl "http://localhost:4000/proxy/v1/shape?table=items&offset=-1"
-Forbidden
+$ curl -sv "http://localhost:4000/proxy/v1/shape?table=items&offset=-1"
+...
+< HTTP/1.1 403 Forbidden
+...
 ```
 
-Now let's add the authorization header:
+Now let's add the authorization header. The request will be successfully proxied through to Electric:
 
 ```console
-$ curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
+$ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
       "http://localhost:4000/proxy/v1/shape?table=items&offset=-1"
-[]
+...
+< HTTP/1.1 200 OK
+...
 ```
 
-Success! We got an empty response because there are no `items` in the database. If you like,
-you can create some, e.g. using `psql`:
+However if we try to request a different shape (i.e.: using different request parameters), the request will not match the shape signed into the auth token claims and will be rejected:
+
+```console
+$ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
+      "http://localhost:4000/proxy/v1/shape?table=items&offset=-1&where=true"
+...
+< HTTP/1.1 403 Forbidden
+...
+```
+
+Note that we got an empty response when successfully proxied through to Electric above because there are no `items` in the database. If you like, you can create some, e.g. using `psql`:
 
 ```console
 $ psql "postgresql://postgres:password@localhost:54321/electric?sslmode=disable"
@@ -157,7 +170,7 @@ INSERT 0 1
 electric=# \q
 ```
 
-Now re-run the same request and you'll get data:
+Now re-run the successful request and you'll get data:
 
 ```console
 $ curl -s --header "Authorization: Bearer ${AUTH_TOKEN}" \
@@ -199,7 +212,7 @@ Run `postgres`, `electric`, `api` and `caddy` services with the `.env.caddy` env
 docker compose --env-file .env.caddy up postgres electric api caddy
 ```
 
-As above, use the gatekeeper endpoint to generate an auth token. Note that the `url` has changed to point to Caddy:
+As above, use the gatekeeper endpoint to generate an auth token. Note that the `url` in the response data has changed to point to Caddy:
 
 ```console
 $ curl -sX POST "http://localhost:4000/gatekeeper/items" | jq
@@ -221,7 +234,7 @@ export AUTH_TOKEN="<token>"
 An unauthorised request to Caddy will get a 401:
 
 ```console
-$ curl -v "http://localhost:8080/v1/shape?table=items&offset=-1"
+$ curl -sv "http://localhost:8080/v1/shape?table=items&offset=-1"
 ...
 < HTTP/1.1 401 Unauthorized
 < Server: Caddy
@@ -231,17 +244,21 @@ $ curl -v "http://localhost:8080/v1/shape?table=items&offset=-1"
 An authorised request for the correct shape will succeed:
 
 ```console
-$ curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
+$ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
       "http://localhost:8080/v1/shape?table=items&offset=-1"
-[]
+...
+< HTTP/1.1 200 OK
+...
 ```
 
 Caddy validates the shape request against the shape definition signed into the auth token. So an authorised request *for the wrong shape* will fail:
 
 ```console
-$ curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
+$ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
       "http://localhost:8080/v1/shape?table=items&offset=-1&where=true"
-Forbidden
+...
+< HTTP/1.1 403 Forbidden
+...
 ```
 
 Take a look at the [`./caddy/Caddyfile`](./caddy/Caddyfile) for more details.
@@ -254,7 +271,7 @@ You can do this with a centralised cloud proxy, such as an API endpoint deployed
 
 It's often better (faster, more scalable and a more natural topology) to run your authorising proxy at the edge, between your CDN and your user. The gatekeeper pattern works well for this because it minimises both the logic that your edge proxy needs to perform and the network access and credentials that it needs to be granted.
 
-The example in the [`./edge`](./edge) folder shows a Deno server that's designed to match the code you would deploy to a [Supabase Edge Function](https://supabase.com/docs/guides/functions/quickstart). See the README in the folder for more information about deploying to Supabase.
+The example in the [`./edge`](./edge) folder contains a small [Deno HTTP server](https://docs.deno.com/runtime/fundamentals/http_server/) in the [`index.ts`](./edge/index.ts) file that's designed to work as a [Supabase Edge Function](https://supabase.com/docs/guides/functions/quickstart). See the README in the folder for more information about deploying to Supabase.
 
 Here, we'll run it locally using Docker in order to demonstrate it working with the other services:
 
@@ -262,7 +279,7 @@ Here, we'll run it locally using Docker in order to demonstrate it working with 
 docker compose --env-file .env.edge up postgres electric api edge
 ```
 
-As above, first hit the gatekeeper endpoint to get an auth token:
+Hit the gatekeeper endpoint to get an auth token:
 
 ```console
 $ curl -sX POST "http://localhost:4000/gatekeeper/items" | jq
@@ -284,7 +301,7 @@ export AUTH_TOKEN="<token>"
 An unauthorised request to the edge-function proxy will get a 401:
 
 ```console
-$ curl -v "http://localhost:8000/v1/shape?table=items&offset=-1"
+$ curl -sv "http://localhost:8000/v1/shape?table=items&offset=-1"
 ...
 < HTTP/1.1 401 Unauthorized
 ...
@@ -293,19 +310,25 @@ $ curl -v "http://localhost:8000/v1/shape?table=items&offset=-1"
 An authorised request for the correct shape will succeed:
 
 ```console
-$ curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
+$ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
       "http://localhost:8000/v1/shape?table=items&offset=-1"
-[]
+...
+< HTTP/1.1 200 OK
+...
 ```
 
 An authorised request for the wrong shape will fail:
 
 ```console
-$ curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
+$ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
       "http://localhost:8000/v1/shape?table=items&offset=-1&where=true"
-Forbidden
+...
+< HTTP/1.1 403 Forbidden
+...
 ```
 
 ## More information
 
-See the [Auth guide](https://electric-sql.com/docs/guides/auth). If you have any questions about this example please feel free to [ask on Discord](https://discord.electric-sql.com).
+See the [Auth guide](https://electric-sql.com/docs/guides/auth).
+
+If you have any questions about this example please feel free to [ask on Discord](https://discord.electric-sql.com).

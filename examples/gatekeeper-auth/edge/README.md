@@ -42,8 +42,11 @@ And then hit it at `http://localhost:54321/functions/v1/$YOUR_FUNCTION_NAME`, e.
 ```shell
 export FUNCTION_URL="http://localhost:54321/functions/v1/${YOUR_FUNCTION_NAME}"
 
-curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
+curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
     "${FUNCTION_URL}/v1/shape?table=items&offset=-1"
+...
+< HTTP/1.1 200 OK
+...
 ```
 
 To deploy, you login using
@@ -76,6 +79,9 @@ Hit the deployed function at `https://$YOUR_PROJECT_ID.supabase.co/functions/v1/
 ```shell
 export FUNCTION_URL="https://${YOUR_PROJECT_ID}.supabase.co/functions/v1/${YOUR_FUNCTION_NAME}"
 
-curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
+curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
     "${FUNCTION_URL}/v1/shape?table=items&offset=-1"
+...
+< HTTP/1.1 200 OK
+...
 ```
