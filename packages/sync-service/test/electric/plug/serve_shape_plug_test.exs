@@ -669,8 +669,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == %{
                "message" =>
-                 "The specified shape definition and ID do not match." <>
-                   " Please ensure the shape definition is correct or omit the shape ID from the request to obtain a new one."
+                 "The specified shape definition and handle do not match." <>
+                   " Please ensure the shape definition is correct or omit the shape handle from the request to obtain a new one."
              }
     end
 
