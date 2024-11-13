@@ -7,21 +7,21 @@ defmodule ApiWeb.Authenticator do
   alias Electric.Client
 
   @behaviour Client.Authenticator
-  @header "Authorization"
+  @header_name "Authorization"
 
   def authenticate_shape(shape, _config) do
-    %{@header => "Bearer #{Token.generate(shape)}"}
+    %{@header_name => "Bearer #{Token.generate(shape)}"}
   end
 
   def authenticate_request(request, _config) do
     request
   end
 
-  def authorise(shape, header_list) do
-    headers = Enum.into(header_list, %{})
-    header_name = String.downcase(@header)
+  def authorise(shape, request_header_list) do
+    header_map = Enum.into(request_header_list, %{})
+    header_key = String.downcase(@header_name)
 
-    with {:ok, "Bearer " <> token} <- Map.fetch(headers, header_name) do
+    with {:ok, "Bearer " <> token} <- Map.fetch(header_map, header_key) do
       Token.verify(shape, token)
     end
   end
