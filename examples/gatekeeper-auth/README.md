@@ -66,7 +66,7 @@ It makes sense to run through these in order.
 
 ### Pre-reqs
 
-You need [Docker Compose](https://docs.docker.com/compose/) and [curl](https://curl.se). We also (optionally) pipe into `jq` for JSON formatting.
+You need [Docker Compose](https://docs.docker.com/compose/) and [curl](https://curl.se). We also (optionally) pipe into [`jq`](https://jqlang.github.io/jq/) for JSON formatting.
 
 The instructions below all use the same [`./docker-compose.yaml`](./docker-compose.yaml) file in the root of this repo. With a different set of services and environment variables.
 
