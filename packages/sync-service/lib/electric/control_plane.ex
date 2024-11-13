@@ -103,7 +103,9 @@ defmodule Electric.ControlPlane do
     params =
       path_spec
       |> Map.get("params", [])
-      |> Enum.map(fn {k, v} -> {k, insert_instance_id(v, instance_id)} end)
+      |> Enum.map(fn {k, v} -> {String.to_atom(k), insert_instance_id(v, instance_id)} end)
+      # Add a unique cursor to cache bust
+      |> Keyword.merge(cursor: "#{System.os_time()}")
 
     headers =
       path_spec
