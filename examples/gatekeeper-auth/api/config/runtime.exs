@@ -5,10 +5,10 @@ if System.get_env("PHX_SERVER") do
 end
 
 if config_env() == :prod do
-  auth_token_secret =
-    System.get_env("AUTH_TOKEN_SECRET") ||
+  auth_secret =
+    System.get_env("AUTH_SECRET") ||
       raise """
-      environment variable AUTH_TOKEN_SECRET is missing.
+      environment variable AUTH_SECRET is missing.
       It should be a long random string.
       """
 
@@ -22,7 +22,7 @@ if config_env() == :prod do
   # Configure the proxy endpoint to route shape requests to the external
   # Electric sync service.
   config :api,
-    auth_token_secret: auth_token_secret,
+    auth_secret: auth_secret,
     electric_url: electric_url
 
   database_url =

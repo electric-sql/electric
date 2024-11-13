@@ -1,7 +1,7 @@
 import Config
 
 config :api,
-  auth_token_secret: "NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY",
+  auth_secret: "NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY",
   # Configure the proxy endpoint to route shape requests to the external Electric
   # sync service, which we assume in development is running on `localhost:3000`.
   electric_url: "http://localhost:3000"

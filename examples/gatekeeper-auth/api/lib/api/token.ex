@@ -9,7 +9,7 @@ defmodule Api.Token do
     use Joken.Config
 
     def signer do
-      secret = Application.fetch_env!(:api, :auth_token_secret)
+      secret = Application.fetch_env!(:api, :auth_secret)
 
       Joken.Signer.create("HS256", secret)
     end

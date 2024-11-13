@@ -31,7 +31,7 @@ services:
     image: gatekeeper-api:local-build
     build: ./api
     environment:
-      AUTH_TOKEN_SECRET: "NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY"
+      AUTH_SECRET: "NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY"
       DATABASE_URL: "postgresql://postgres:password@postgres:5432/electric?sslmode=disable"
       ELECTRIC_URL: "http://electric:3000"
       ELECTRIC_PROXY_URL: "${ELECTRIC_PROXY_URL:-http://localhost:3000/proxy}"
@@ -49,8 +49,10 @@ services:
     image: caddy:local-build
     build: ./caddy
     environment:
+      # Caddy needs this key to be base64 encoded. So this is actually the same
+      # key as the "NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY" used by the other services.
+      AUTH_SECRET: "TkZMNSowQmMjOVU2RUB0bm1DJkU3U1VONkd3SGZMbVk="
       ELECTRIC_URL: http://electric:3000
-      JWT_AUTH_SIGNING_KEY: "TkZMNSowQmMjOVU2RUB0bm1DJkU3U1VONkd3SGZMbVk="
     ports:
       - 8080:8080
     volumes:

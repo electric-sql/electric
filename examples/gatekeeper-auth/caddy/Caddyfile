@@ -15,8 +15,7 @@
     #     sign_key "<secret_key_bytes_in_base64_format>"
     #
     # See https://caddyserver.com/docs/modules/http.authentication.providers.jwt
-    # for more details.
-    sign_key {$JWT_AUTH_SIGNING_KEY:"TkZMNSowQmMjOVU2RUB0bm1DJkU3U1VONkd3SGZMbVk="}
+    sign_key {$AUTH_SECRET:"TkZMNSowQmMjOVU2RUB0bm1DJkU3U1VONkd3SGZMbVk="}
     sign_alg HS256
 
     # The jwtauth module requires a user claim but we don't actually use
