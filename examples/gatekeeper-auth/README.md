@@ -152,7 +152,7 @@ electric=# select * from items;
 ----+-------+-------------+------------
 (0 rows)
 
-electric=# insert into items (id, inserted_at, updated_at) values (gen_random_uuid(), now(), now());
+electric=# insert into items (id) values (gen_random_uuid());
 INSERT 0 1
 electric=# \q
 ```
