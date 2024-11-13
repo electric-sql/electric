@@ -31,7 +31,7 @@ The core of this example is an [Elixir/Phoenix](https://www.phoenixframework.org
 1. a gatekeeper endpoint at `POST /gatekeeper/:table`
 2. a proxy endpoint at `GET /proxy/v1/shape`
 
-<a href="api/docs/img/flow.jpg" target="_blank">
+<a href="./docs/img/gatekeeper-flow.jpg" target="_blank">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="./docs/img/gatekeeper-flow.dark.png" />
     <source media="(prefers-color-scheme: light)" srcset="./docs/img/gatekeeper-flow.png" />
