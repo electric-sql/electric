@@ -355,5 +355,5 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  defp get_shape_meta_table(opts), do: :"#{opts[:stack_id]}:shape_meta_table"
+  def get_shape_meta_table(opts), do: :"#{opts[:stack_id]}:shape_meta_table"
 end

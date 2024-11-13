@@ -213,12 +213,10 @@ defmodule Electric.Shapes.ShapeTest do
     import Support.DbSetup
     import Support.DbStructureSetup
     import Support.ComponentSetup
-    import Support.TestUtils, only: [with_electric_instance_id: 1]
 
     setup [
-      :with_electric_instance_id,
+      :with_stack_id_from_test,
       :with_shared_db,
-      :with_tenant_id,
       :with_inspector,
       :with_sql_execute
     ]
@@ -373,12 +371,10 @@ defmodule Electric.Shapes.ShapeTest do
     import Support.DbSetup
     import Support.DbStructureSetup
     import Support.ComponentSetup
-    import Support.TestUtils, only: [with_electric_instance_id: 1]
 
     setup [
-      :with_electric_instance_id,
+      :with_stack_id_from_test,
       :with_shared_db,
-      :with_tenant_id,
       :with_inspector,
       :with_sql_execute
     ]

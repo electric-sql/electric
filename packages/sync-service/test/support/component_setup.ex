@@ -9,6 +9,12 @@ defmodule Support.ComponentSetup do
   alias Electric.ShapeCache.InMemoryStorage
   alias Electric.Postgres.Inspector.EtsInspector
 
+  def with_stack_id_from_test(ctx) do
+    stack_id = full_test_name(ctx)
+    registry = start_link_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
+    %{stack_id: stack_id, process_registry: registry}
+  end
+
   def with_tenant_id(_ctx) do
     %{tenant_id: "test_tenant"}
   end
@@ -110,7 +116,7 @@ defmodule Support.ComponentSetup do
   end
 
   def with_registry(ctx) do
-    registry_name = Module.concat(Registry, ctx.electric_instance_id)
+    registry_name = :"#{Registry.ShapeChanges}:#{ctx.stack_id}"
     start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
 
     %{registry: registry_name}
@@ -119,9 +125,8 @@ defmodule Support.ComponentSetup do
   def with_in_memory_storage(ctx) do
     storage_opts =
       InMemoryStorage.shared_opts(
-        table_base_name: :"in_memory_storage_#{full_test_name(ctx)}",
-        electric_instance_id: ctx.electric_instance_id,
-        tenant_id: ctx.tenant_id
+        table_base_name: :"in_memory_storage_#{ctx.stack_id}",
+        stack_id: ctx.stack_id
       )
 
     %{storage: {InMemoryStorage, storage_opts}}
@@ -135,8 +140,7 @@ defmodule Support.ComponentSetup do
     storage_opts =
       FileStorage.shared_opts(
         storage_dir: ctx.tmp_dir,
-        electric_instance_id: ctx.electric_instance_id,
-        tenant_id: ctx.tenant_id
+        stack_id: ctx.stack_id
       )
 
     %{storage: {FileStorage, storage_opts}}
@@ -159,8 +163,7 @@ defmodule Support.ComponentSetup do
     start_opts =
       [
         name: server,
-        electric_instance_id: ctx.electric_instance_id,
-        tenant_id: ctx.tenant_id,
+        stack_id: ctx.stack_id,
         inspector: ctx.inspector,
         storage: ctx.storage,
         chunk_bytes_threshold: ctx.chunk_bytes_threshold,
@@ -181,17 +184,15 @@ defmodule Support.ComponentSetup do
     {:ok, _pid} =
       Electric.Shapes.ConsumerSupervisor.start_link(
         name: consumer_supervisor,
-        electric_instance_id: ctx.electric_instance_id,
-        tenant_id: ctx.tenant_id
+        stack_id: ctx.stack_id
       )
 
     {:ok, _pid} = ShapeCache.start_link(start_opts)
 
-    shape_meta_table = GenServer.call(server, :get_shape_meta_table)
+    shape_meta_table = ShapeCache.get_shape_meta_table(stack_id: ctx.stack_id)
 
     shape_cache_opts = [
-      electric_instance_id: ctx.electric_instance_id,
-      tenant_id: ctx.tenant_id,
+      stack_id: ctx.stack_id,
       server: server,
       storage: ctx.storage,
       shape_meta_table: shape_meta_table
@@ -209,13 +210,12 @@ defmodule Support.ComponentSetup do
   def with_shape_log_collector(ctx) do
     {:ok, _} =
       ShapeLogCollector.start_link(
-        electric_instance_id: ctx.electric_instance_id,
-        tenant_id: ctx.tenant_id,
+        stack_id: ctx.stack_id,
         inspector: ctx.inspector,
         link_consumers: Map.get(ctx, :link_log_collector, true)
       )
 
-    %{shape_log_collector: ShapeLogCollector.name(ctx.electric_instance_id, ctx.tenant_id)}
+    %{shape_log_collector: ShapeLogCollector.name(ctx.stack_id)}
   end
 
   def with_slot_name_and_stream_id(_ctx) do
@@ -255,36 +255,16 @@ defmodule Support.ComponentSetup do
   end
 
   def with_inspector(ctx) do
-    server = :"inspector #{full_test_name(ctx)}"
-    pg_info_table = :"pg_info_table #{full_test_name(ctx)}"
-    pg_relation_table = :"pg_relation_table #{full_test_name(ctx)}"
+    {:ok, server} =
+      EtsInspector.start_link(stack_id: ctx.stack_id, pool: ctx.db_conn)
 
-    tenant_tables_name =
-      Map.get_lazy(ctx, :tenant_tables_name, fn -> with_tenant_tables(ctx).tenant_tables_name end)
-
-    {:ok, _} =
-      EtsInspector.start_link(
-        tenant_id: ctx.tenant_id,
-        pg_info_table: pg_info_table,
-        pg_relation_table: pg_relation_table,
-        pool: ctx.db_conn,
-        name: server,
-        tenant_tables_name: tenant_tables_name
-      )
-
-    opts = [tenant_id: ctx.tenant_id, tenant_tables_name: tenant_tables_name]
+    pg_info_table = EtsInspector.get_column_info_table(stack_id: ctx.stack_id)
+    pg_relation_table = EtsInspector.get_relation_table(stack_id: ctx.stack_id)
 
     %{
-      inspector:
-        {EtsInspector,
-         tenant_id: ctx.tenant_id,
-         tenant_tables_name: tenant_tables_name,
-         pg_info_table: EtsInspector.get_column_info_table(opts),
-         pg_relation_table: EtsInspector.get_relation_table(opts),
-         server: server},
-      pg_info_table: EtsInspector.get_column_info_table(opts),
-      pg_relation_table: EtsInspector.get_relation_table(opts),
-      tenant_tables_name: tenant_tables_name
+      inspector: {EtsInspector, stack_id: ctx.stack_id, server: server},
+      pg_info_table: pg_info_table,
+      pg_relation_table: pg_relation_table
     }
   end
 
