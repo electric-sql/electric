@@ -59,3 +59,16 @@ services:
       - $PWD/caddy/Caddyfile:/etc/caddy/Caddyfile
     depends_on:
       - electric
+
+  edge:
+    image: denoland/deno:2.0.6
+    command: run --allow-env --allow-net /app/index.ts
+    environment:
+      ELECTRIC_URL: http://electric:3000
+      AUTH_SECRET: "NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY"
+    ports:
+      - 8000:8000
+    volumes:
+      - $PWD/edge:/app
+    depends_on:
+      - electric

@@ -248,4 +248,64 @@ Take a look at the [`./caddy/Caddyfile`](./caddy/Caddyfile) for more details.
 
 ### 3. Edge function as proxy
 
+Electric is [designed to run behind a CDN](https://electric-sql.com/docs/api/http#caching). This makes sync faster and more scalable. However, it means that if you want to authorise access to the Electric API using a proxy, you need to run that proxy in-front-of the CDN.
 
+You can do this with a centralised proxy, like your API, or a reverse-proxy like Caddy. However, running these in front of a CDN from a central location reduces the benefit of the CDN &mdash; adding latency and introducing a bottleneck / single point of failure.
+
+So, it's often better (faster, more scalable and a more natural topology) to run your authorising proxy at the edge, between your CDN and your user. The gatekeeper pattern works well for this because it minimises both the logic that your edge proxy needs to perform and the network access and credentials that it needs to be granted.
+
+The example in the [`./edge`](./edge) folder shows a Deno server that's designed to match the code you would deploy to a [Supabase Edge Function](https://supabase.com/docs/guides/functions/quickstart). See the README in the folder for more information about deploying to Supabase.
+
+Here, we'll run it locally using Docker in order to demonstrate it working with the other services:
+
+```shell
+docker compose --env-file .env.edge up postgres electric api edge
+```
+
+As above, first hit the gatekeeper endpoint to get an auth token:
+
+```console
+$ curl -sX POST "http://localhost:4000/gatekeeper/items" | jq
+{
+  "headers": {
+    "authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJKb2tlbiIsImV4cCI6MTczMTUyNDQ1OSwiaWF0IjoxNzMxNTE3MjU5LCJpc3MiOiJKb2tlbiIsImp0aSI6IjMwM3BiaGdob2phcW5pYnE4YzAwMDAwMiIsIm5iZiI6MTczMTUxNzI1OSwic2hhcGUiOnsibmFtZXNwYWNlIjpudWxsLCJ0YWJsZSI6Iml0ZW1zIiwid2hlcmUiOm51bGwsImNvbHVtbnMiOm51bGx9fQ.dNAhTVEUtWGjAoX7IbwX1ccpwZP5sUYTIiTaJnSmaTU"
+  },
+  "url": "http://localhost:8000/v1/shape",
+  "table": "items"
+}
+```
+
+Copy the auth token and set it to an env var:
+
+```shell
+export AUTH_TOKEN="<token>"
+```
+
+An unauthorised request to the edge-function proxy will get a 401:
+
+```console
+$ curl -v "http://localhost:8000/v1/shape?table=items&offset=-1"
+...
+< HTTP/1.1 401 Unauthorized
+...
+```
+
+An authorised request for the correct shape will succeed:
+
+```console
+$ curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
+      "http://localhost:8000/v1/shape?table=items&offset=-1"
+[]
+```
+
+An authorised request for the wrong shape will fail:
+
+```console
+$ curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
+      "http://localhost:8000/v1/shape?table=items&offset=-1&where=true"
+Forbidden
+```
+
+## More information
+
+See the [Auth guide](https://electric-sql.com/docs/guides/auth). If you have any questions about this example please feel free to [ask on Discord](https://discord.electric-sql.com).
