@@ -187,6 +187,12 @@ So far we've shown things working with Electric's lower-level [HTTP API](https:/
 
 ### 2. Caddy as proxy
 
+Build the local docker images:
+
+```shell
+docker compose build api caddy
+```
+
 Run `postgres`, `electric`, `api` and `caddy` services with the `.env.caddy` env file:
 
 ```shell

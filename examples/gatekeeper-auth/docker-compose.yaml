@@ -46,10 +46,8 @@ services:
       - electric
 
   caddy:
-    image: mdirkse/caddy-jwt:2.7.5-0.9.2
-    restart: unless-stopped
-    cap_add:
-      - NET_ADMIN
+    image: caddy:local-build
+    build: ./caddy
     environment:
       ELECTRIC_URL: http://electric:3000
       JWT_AUTH_SIGNING_KEY: "TkZMNSowQmMjOVU2RUB0bm1DJkU3U1VONkd3SGZMbVk="
