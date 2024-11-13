@@ -112,6 +112,8 @@ importers:
         specifier: ^5.3.4
         version: 5.3.4(@types/node@20.14.11)
 
+  examples/gatekeeper-auth: {}
+
   examples/linearlite:
     dependencies:
       '@electric-sql/client':
@@ -643,6 +645,8 @@ importers:
       vite-plugin-capsize-radix:
         specifier: ^0.0.9
         version: 0.0.9
+
+  packages/elixir-client: {}
 
   packages/react-hooks:
     dependencies:
