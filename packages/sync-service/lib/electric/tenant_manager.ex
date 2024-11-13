@@ -256,28 +256,34 @@ defmodule Electric.TenantManager do
           end
         end)
 
-      Enum.reduce(to_add, state, fn %{"id" => tenant_id, "connection_url" => connection_url},
-                                    state ->
-        {:ok, result} = Electric.ConfigParser.parse_postgresql_uri(connection_url)
-        connection_opts = Electric.Utils.obfuscate_password(result)
+      state =
+        Enum.reduce(to_add, state, fn %{
+                                        "id" => tenant_id,
+                                        "connection_url" => connection_url
+                                      },
+                                      state ->
+          {:ok, result} = Electric.ConfigParser.parse_postgresql_uri(connection_url)
+          connection_opts = Electric.Utils.obfuscate_password(result)
 
-        case do_create_tenant(
-               tenant_id,
-               connection_opts,
-               state.init_opts,
-               state
-             ) do
-          {:ok, state} ->
-            {:ok, state}
+          case do_create_tenant(
+                 tenant_id,
+                 connection_opts,
+                 state.init_opts,
+                 state
+               ) do
+            {:ok, state} ->
+              state
 
-          {:error, error} ->
-            raise """
-            Error while trying to initialize a tenant #{tenant_id} from the control plane:
-            #{inspect(error)}
-            Connection opts: #{inspect(result)}
-            """
-        end
-      end)
+            {:error, error} ->
+              raise """
+              Error while trying to initialize a tenant #{tenant_id} from the control plane:
+              #{inspect(error)}
+              Connection opts: #{inspect(result)}
+              """
+          end
+        end)
+
+      {:ok, state}
     end
   end
 
