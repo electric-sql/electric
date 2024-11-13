@@ -97,7 +97,7 @@ In a new terminal, make a `POST` request to the gatekeeper endpoint:
 $ curl -sX POST "http://localhost:4000/gatekeeper/items" | jq
 {
   "headers": {
-    "authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJKb2tlbiIsImV4cCI6MTczMTUwMjM2OSwiaWF0IjoxNzMxNDk1MTY5LCJpc3MiOiJKb2tlbiIsImp0aSI6IjMwM28zYmx0czN2aHYydXNiazAwMDJrMiIsIm5iZiI6MTczMTQ5NTE2OSwic2hhcGUiOnsibmFtZXNwYWNlIjpudWxsLCJ0YWJsZSI6Iml0ZW1zIiwid2hlcmUiOm51bGwsImNvbHVtbnMiOm51bGx9fQ.8UZehIWk1EDQ3dJ4ggCBNkx9vGudfrD9appqs8r6zRI"
+    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJKb2tlbiIsImV4cCI6MTczMTUwMjM2OSwiaWF0IjoxNzMxNDk1MTY5LCJpc3MiOiJKb2tlbiIsImp0aSI6IjMwM28zYmx0czN2aHYydXNiazAwMDJrMiIsIm5iZiI6MTczMTQ5NTE2OSwic2hhcGUiOnsibmFtZXNwYWNlIjpudWxsLCJ0YWJsZSI6Iml0ZW1zIiwid2hlcmUiOm51bGwsImNvbHVtbnMiOm51bGx9fQ.8UZehIWk1EDQ3dJ4ggCBNkx9vGudfrD9appqs8r6zRI"
   },
   "url": "http://localhost:3000/proxy/v1/shape",
   "table": "items"
@@ -108,7 +108,7 @@ You'll see that the response contains:
 
 - the proxy `url` to make shape requests to (`http://localhost:4000/proxy/v1/shape`)
 - the request parameters for the shape we're requesting, in this case `"table": "items"`
-- an `authorization` header, containing a `Bearer <token>`
+- an `Authorization` header, containing a `Bearer <token>`
 
 Copy the auth token and set it to an env var:
 
@@ -205,7 +205,7 @@ As above, use the gatekeeper endpoint to generate an auth token. Note that the `
 $ curl -sX POST "http://localhost:4000/gatekeeper/items" | jq
 {
   "headers": {
-    "authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJKb2tlbiIsImV4cCI6MTczMTUwNDUxNCwiaWF0IjoxNzMxNDk3MzE0LCJpc3MiOiJKb2tlbiIsImp0aSI6IjMwM283OGd1cWIxZ240ODhmazAwMDJnNCIsIm5iZiI6MTczMTQ5NzMxNCwic2hhcGUiOnsibmFtZXNwYWNlIjpudWxsLCJ0YWJsZSI6Iml0ZW1zIiwid2hlcmUiOm51bGwsImNvbHVtbnMiOm51bGx9fQ.EkSj-ro9-3chGyuxlAglOjo0Ln8t4HLVLQ4vCCNjMCY"
+    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJKb2tlbiIsImV4cCI6MTczMTUwNDUxNCwiaWF0IjoxNzMxNDk3MzE0LCJpc3MiOiJKb2tlbiIsImp0aSI6IjMwM283OGd1cWIxZ240ODhmazAwMDJnNCIsIm5iZiI6MTczMTQ5NzMxNCwic2hhcGUiOnsibmFtZXNwYWNlIjpudWxsLCJ0YWJsZSI6Iml0ZW1zIiwid2hlcmUiOm51bGwsImNvbHVtbnMiOm51bGx9fQ.EkSj-ro9-3chGyuxlAglOjo0Ln8t4HLVLQ4vCCNjMCY"
   },
   "url": "http://localhost:8080/v1/shape",
   "table": "items"
@@ -268,7 +268,7 @@ As above, first hit the gatekeeper endpoint to get an auth token:
 $ curl -sX POST "http://localhost:4000/gatekeeper/items" | jq
 {
   "headers": {
-    "authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJKb2tlbiIsImV4cCI6MTczMTUyNDQ1OSwiaWF0IjoxNzMxNTE3MjU5LCJpc3MiOiJKb2tlbiIsImp0aSI6IjMwM3BiaGdob2phcW5pYnE4YzAwMDAwMiIsIm5iZiI6MTczMTUxNzI1OSwic2hhcGUiOnsibmFtZXNwYWNlIjpudWxsLCJ0YWJsZSI6Iml0ZW1zIiwid2hlcmUiOm51bGwsImNvbHVtbnMiOm51bGx9fQ.dNAhTVEUtWGjAoX7IbwX1ccpwZP5sUYTIiTaJnSmaTU"
+    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJKb2tlbiIsImV4cCI6MTczMTUyNDQ1OSwiaWF0IjoxNzMxNTE3MjU5LCJpc3MiOiJKb2tlbiIsImp0aSI6IjMwM3BiaGdob2phcW5pYnE4YzAwMDAwMiIsIm5iZiI6MTczMTUxNzI1OSwic2hhcGUiOnsibmFtZXNwYWNlIjpudWxsLCJ0YWJsZSI6Iml0ZW1zIiwid2hlcmUiOm51bGwsImNvbHVtbnMiOm51bGx9fQ.dNAhTVEUtWGjAoX7IbwX1ccpwZP5sUYTIiTaJnSmaTU"
   },
   "url": "http://localhost:8000/v1/shape",
   "table": "items"

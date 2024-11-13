@@ -12,7 +12,7 @@ defmodule ApiWeb.IntegrationTest do
       where = "value IS NOT NULL"
 
       # Fetch the client config from the gatekeeper endpoint.
-      assert %{"headers" => %{"authorization" => auth_header}} =
+      assert %{"headers" => %{"Authorization" => auth_header}} =
                conn
                |> post("/gatekeeper/#{table}", where: where)
                |> json_response(200)
@@ -42,7 +42,7 @@ defmodule ApiWeb.IntegrationTest do
 
       conn =
         headers
-        |> Enum.reduce(conn, fn {k, v}, acc -> put_req_header(acc, k, v) end)
+        |> Enum.reduce(conn, fn {k, v}, acc -> put_req_header(acc, String.downcase(k), v) end)
         |> get(path, params)
 
       assert [] = json_response(conn, 200)

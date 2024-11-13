@@ -14,9 +14,7 @@ defmodule ApiWeb.Plugs.Auth.VerifyToken do
 
   def init(opts), do: opts
 
-  def call(%{assigns: %{shape: shape}, req_headers: header_list} = conn, _opts) do
-    headers = Enum.into(header_list, %{})
-
+  def call(%{assigns: %{shape: shape}, req_headers: headers} = conn, _opts) do
     case Authenticator.authorise(shape, headers) do
       true ->
         conn

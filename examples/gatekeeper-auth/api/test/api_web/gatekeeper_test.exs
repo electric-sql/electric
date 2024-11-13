@@ -43,7 +43,7 @@ defmodule ApiWeb.GatekeeperTest do
         |> post("/gatekeeper/items")
         |> json_response(200)
 
-      assert %{"headers" => %{"authorization" => "Bearer " <> _token}} = data
+      assert %{"headers" => %{"Authorization" => "Bearer " <> _token}} = data
     end
 
     test "generates a valid auth header", %{conn: conn} do

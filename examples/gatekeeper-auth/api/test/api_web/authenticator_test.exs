@@ -8,7 +8,7 @@ defmodule ApiWeb.AuthenticatorTest do
     test "generate token" do
       {:ok, shape} = Shape.from(%{"table" => "foo"})
 
-      assert %{"authorization" => "Bearer " <> _token} =
+      assert %{"Authorization" => "Bearer " <> _token} =
                Authenticator.authenticate_shape(shape, nil)
     end
 
