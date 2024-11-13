@@ -341,14 +341,14 @@ defmodule Electric.TenantManager do
     #      server: Electric.ShapeCache.name(electric_instance_id, tenant_id)}
     #   )
 
-    # get_service_status =
-    #   Access.get(opts, :get_service_status, fn ->
-    #     Electric.ServiceStatus.check(electric_instance_id, tenant_id)
-    #   end)
+    get_service_status =
+      Access.get(opts, :get_service_status, fn ->
+        Electric.ServiceStatus.check(electric_instance_id, tenant_id)
+      end)
 
-    # long_poll_timeout = Access.get(opts, :long_poll_timeout, 20_000)
-    # max_age = Access.get(opts, :max_age, Application.fetch_env!(:electric, :cache_max_age))
-    # stale_age = Access.get(opts, :stale_age, Application.fetch_env!(:electric, :cache_stale_age))
+    long_poll_timeout = Access.get(opts, :long_poll_timeout, 20_000)
+    max_age = Access.get(opts, :max_age, Application.fetch_env!(:electric, :cache_max_age))
+    stale_age = Access.get(opts, :stale_age, Application.fetch_env!(:electric, :cache_stale_age))
 
     # allow_shape_deletion =
     #   Access.get(
@@ -360,17 +360,17 @@ defmodule Electric.TenantManager do
     tenant = [
       electric_instance_id: electric_instance_id,
       tenant_id: tenant_id,
-      pg_id: pg_id
+      pg_id: pg_id,
       # registry: registry,
       # storage: nil,
       # shape_cache: shape_cache,
-      # get_service_status: get_service_status,
+      get_service_status: get_service_status,
       # inspector: inspector,
-      # long_poll_timeout: long_poll_timeout,
-      # max_age: max_age,
-      # stale_age: stale_age,
-      # allow_shape_deletion: allow_shape_deletion
-    ]
+      long_poll_timeout: long_poll_timeout,
+      max_age: max_age,
+      stale_age: stale_age,
+      allow_shape_deletion: true
+    ] ++ Electric.Supervisor.build_shared_opts(stack_id: tenant_id, storage: Application.fetch_env!(:electric, :storage))
 
     start_tenant_opts = [
       stack_id: tenant_id,

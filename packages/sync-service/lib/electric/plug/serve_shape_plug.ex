@@ -1,10 +1,9 @@
 defmodule Electric.Plug.ServeShapePlug do
-  use Plug.Builder
+  use Plug.Builder, copy_opts_to_assign: :config
   use Plug.ErrorHandler
 
   # The halt/1 function is redefined further down below
   import Plug.Conn, except: [halt: 1]
-  import Electric.Plug.TenantUtils
 
   alias Electric.Shapes
   alias Electric.Schema
@@ -185,7 +184,6 @@ defmodule Electric.Plug.ServeShapePlug do
   # start_telemetry_span needs to always be the first plug after fetching query params.
   plug :start_telemetry_span
   plug :put_resp_content_type, "application/json"
-  plug :load_tenant
   plug :validate_query_params
   plug :load_shape_info
   plug :put_schema_header
@@ -322,11 +320,11 @@ defmodule Electric.Plug.ServeShapePlug do
   # If chunk offsets are available, use those instead of the latest available offset
   # to optimize for cache hits and response sizes
   defp determine_log_chunk_offset(%Conn{assigns: assigns} = conn, _) do
-    %{config: config, active_shape_handle: shape_handle, offset: offset, tenant_id: tenant_id} =
+    %{config: config, active_shape_handle: shape_handle, offset: offset} =
       assigns
 
     chunk_end_offset =
-      Shapes.get_chunk_end_log_offset(config, shape_handle, offset, tenant_id) ||
+      Shapes.get_chunk_end_log_offset(config, shape_handle, offset) ||
         assigns.last_offset
 
     conn
@@ -443,15 +441,14 @@ defmodule Electric.Plug.ServeShapePlug do
            assigns: %{
              chunk_end_offset: chunk_end_offset,
              active_shape_handle: shape_handle,
-             tenant_id: tenant_id,
              up_to_date: maybe_up_to_date
            }
          } = conn
        ) do
-    case Shapes.get_snapshot(conn.assigns.config, shape_handle, tenant_id) do
+    case Shapes.get_snapshot(conn.assigns.config, shape_handle) do
       {:ok, {offset, snapshot}} ->
         log =
-          Shapes.get_log_stream(conn.assigns.config, shape_handle, tenant_id,
+          Shapes.get_log_stream(conn.assigns.config, shape_handle,
             since: offset,
             up_to: chunk_end_offset
           )
@@ -487,13 +484,12 @@ defmodule Electric.Plug.ServeShapePlug do
              offset: offset,
              chunk_end_offset: chunk_end_offset,
              active_shape_handle: shape_handle,
-             tenant_id: tenant_id,
              up_to_date: maybe_up_to_date
            }
          } = conn
        ) do
     log =
-      Shapes.get_log_stream(conn.assigns.config, shape_handle, tenant_id,
+      Shapes.get_log_stream(conn.assigns.config, shape_handle,
         since: offset,
         up_to: chunk_end_offset
       )
@@ -560,11 +556,10 @@ defmodule Electric.Plug.ServeShapePlug do
 
       ref = make_ref()
       registry = conn.assigns.config[:registry]
-      tenant = conn.assigns.tenant_id
-      Registry.register(registry, {tenant, shape_handle}, ref)
+      Registry.register(registry, shape_handle, ref)
 
       Logger.debug(
-        "[Tenant #{tenant}]: Client #{inspect(self())} is registered for changes to #{shape_handle}"
+        "Client #{inspect(self())} is registered for changes to #{shape_handle}"
       )
 
       assign(conn, :new_changes_ref, ref)

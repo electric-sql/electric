@@ -40,6 +40,37 @@ defmodule Electric.Supervisor do
     |> dbg
   end
 
+  def build_shared_opts(opts) do
+    # needs validation
+    opts = Map.new(opts)
+    stack_id = opts[:stack_id]
+
+    shape_changes_registry_name = :"#{Registry.ShapeChanges}:#{stack_id}"
+
+    shape_cache =
+      Access.get(
+        opts,
+        :shape_cache,
+        {Electric.ShapeCache, stack_id: stack_id, server: Electric.ShapeCache.name(stack_id)}
+      )
+
+    inspector =
+      Access.get(
+        opts,
+        :inspector,
+        {Electric.Postgres.Inspector.EtsInspector,
+         stack_id: stack_id,
+         server: Electric.Postgres.Inspector.EtsInspector.name(stack_id: stack_id)}
+      )
+
+    [
+      shape_cache: shape_cache,
+      registry: shape_changes_registry_name,
+      storage: storage_mod_arg(opts),
+      inspector: inspector
+    ]
+  end
+
   defp storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}}) do
     {mod, arg |> Keyword.put(:stack_id, stack_id) |> mod.shared_opts()}
   end

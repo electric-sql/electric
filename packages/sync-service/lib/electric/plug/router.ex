@@ -1,5 +1,7 @@
 defmodule Electric.Plug.Router do
   use Plug.Router, copy_opts_to_assign: :config
+  alias Electric.TenantManager
+  alias Electric.Plug.TenantUtils
   alias Electric.Plug.Utils.CORSHeaderPlug
 
   plug Plug.RequestId, assign_as: :plug_request_id
@@ -15,7 +17,32 @@ defmodule Electric.Plug.Router do
 
   match "/", via: [:get, :head], do: send_resp(conn, 200, "")
 
-  get "/v1/shape", to: Electric.Plug.ServeShapePlug
+  get "/v1/shape" do
+    conn = Plug.Conn.fetch_query_params(conn)
+
+    Map.get(conn.query_params, "database_id", :not_provided)
+    |> maybe_get_tenant(conn.assigns.config)
+    |> case do
+      {:ok, tenant_config} ->
+        Electric.Plug.ServeShapePlug.call(conn, tenant_config |> dbg)
+
+      {:error, :not_found} ->
+        conn
+        |> send_resp(404, Jason.encode_to_iodata!(~s|Database not found|))
+        |> halt()
+
+      {:error, :several_tenants} ->
+        conn
+        |> send_resp(
+          400,
+          Jason.encode_to_iodata!(
+            "Database ID was not provided and there are multiple databases. Please specify a database ID using the `database_id` query parameter."
+          )
+        )
+        |> halt()
+    end
+  end
+
   delete "/v1/shape", to: Electric.Plug.DeleteShapePlug
   match "/v1/shape", via: :options, to: Electric.Plug.OptionsShapePlug
 
@@ -37,4 +64,8 @@ defmodule Electric.Plug.Router do
 
   def put_cors_headers(conn, _opts),
     do: CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD"]})
+
+  defp maybe_get_tenant(:not_provided, config), do: TenantManager.get_only_tenant(config)
+  defp maybe_get_tenant(id, config) when is_binary(id), do: TenantManager.get_tenant(id, config)
+  defp maybe_get_tenant(_, _), do: {:error, :not_found}
 end
