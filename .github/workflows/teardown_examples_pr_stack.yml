@@ -1,18 +1,17 @@
-name: Deploy Examples
+name: Teardown Examples PR stack
 
 on:
-    push:
-      branches: ['main']
-    pull_request:
-      paths: ['examples/*/**']
+  pull_request:
+    paths: ['examples/*/**']
+    types: [closed]
 
 concurrency:
-  group: ${{ github.event_name == 'push' && 'prod-deploy-group' || format('examples-pr-{0}', github.event.number) }}
+  group: examples-pr-${{ github.event.number }}
 
 jobs:
-  deploy-examples:
-    name: Deploy Examples
-    environment: ${{ github.event_name == 'push' && 'Production' || 'Pull request' }}
+  teardown-pr-stack:
+    name: Teardown Examples PR stack
+    environment: Pull request
     runs-on: ubuntu-latest
 
     env:
@@ -44,14 +43,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .sst
-          key: sst-cache-main-${{ runner.os }}
+          key: sst-cache-${{ github.event.number }}-${{ runner.os }}
           restore-keys: |
-            sst-cache-main-${{ runner.os }}
+            sst-cache-${{ runner.os }}
 
-      - name: Deploy Linearlite
+      - name: Remove Linearlite
         working-directory: examples/linearlite
-        run: pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+        run: |
+            export PR_NUMBER=${{ github.event.number }}
+            echo "Removing stage pr-$PR_NUMBER"
+            pnpm sst remove --stage "pr-$PR_NUMBER"
 
-      - name: Deploy NextJs example
+      - name: Remove NextJs example
         working-directory: examples/nextjs-example
-        run: pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+        run: |
+            export PR_NUMBER=${{ github.event.number }}
+            echo "Removing stage pr-$PR_NUMBER"
+            pnpm sst remove --stage "pr-$PR_NUMBER"
