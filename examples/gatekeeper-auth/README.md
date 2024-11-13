@@ -240,7 +240,7 @@ Caddy validates the shape request against the shape definition signed into the a
 
 ```console
 $ curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
-      "http://localhost:4000/proxy/v1/shape?table=items&offset=-1&where=true"
+      "http://localhost:8080/v1/shape?table=items&offset=-1&where=true"
 Forbidden
 ```
 
