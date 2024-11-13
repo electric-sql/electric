@@ -37,7 +37,6 @@ defmodule Electric.Supervisor do
     with {:ok, config} <- NimbleOptions.validate(Map.new(opts), @opts_schema) do
       Supervisor.start_link(__MODULE__, config, Keyword.take(opts, [:name]))
     end
-    |> dbg
   end
 
   def build_shared_opts(opts) do
@@ -155,6 +154,6 @@ defmodule Electric.Supervisor do
       {Electric.Connection.Supervisor, new_connection_manager_opts}
     ]
 
-    Supervisor.init(new_children, strategy: :one_for_one, auto_shutdown: :any_significant) |> dbg
+    Supervisor.init(new_children, strategy: :one_for_one, auto_shutdown: :any_significant)
   end
 end

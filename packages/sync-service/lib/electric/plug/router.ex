@@ -24,7 +24,7 @@ defmodule Electric.Plug.Router do
     |> maybe_get_tenant(conn.assigns.config)
     |> case do
       {:ok, tenant_config} ->
-        Electric.Plug.ServeShapePlug.call(conn, tenant_config |> dbg)
+        Electric.Plug.ServeShapePlug.call(conn, tenant_config)
 
       {:error, :not_found} ->
         conn

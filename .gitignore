@@ -21,3 +21,4 @@ tsconfig.tsbuildinfo
 wal
 /shapes
 .sst
+**/deps/*

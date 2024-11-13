@@ -408,18 +408,10 @@ defmodule Electric.Shapes.ConsumerTest do
       }
 
       ref1 =
-        Process.monitor(
-          GenServer.whereis(
-            Consumer.name(ctx.stack_id, @shape_handle1)
-          )
-        )
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.stack_id, @shape_handle1)))
 
       ref2 =
-        Process.monitor(
-          GenServer.whereis(
-            Consumer.name(ctx.stack_id, @shape_handle2)
-          )
-        )
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.stack_id, @shape_handle2)))
 
       Mock.ShapeStatus
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
@@ -444,18 +436,10 @@ defmodule Electric.Shapes.ConsumerTest do
       }
 
       ref1 =
-        Process.monitor(
-          GenServer.whereis(
-            Consumer.name(ctx.stack_id, @shape_handle1)
-          )
-        )
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.stack_id, @shape_handle1)))
 
       ref2 =
-        Process.monitor(
-          GenServer.whereis(
-            Consumer.name(ctx.stack_id, @shape_handle2)
-          )
-        )
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.stack_id, @shape_handle2)))
 
       # also cleans up inspector cache and shape status cache
       Mock.Inspector
@@ -490,18 +474,10 @@ defmodule Electric.Shapes.ConsumerTest do
       }
 
       ref1 =
-        Process.monitor(
-          GenServer.whereis(
-            Consumer.name(ctx.stack_id, @shape_handle1)
-          )
-        )
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.stack_id, @shape_handle1)))
 
       ref2 =
-        Process.monitor(
-          GenServer.whereis(
-            Consumer.name(ctx.stack_id, @shape_handle2)
-          )
-        )
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.stack_id, @shape_handle2)))
 
       # also cleans up inspector cache and shape status cache
       Mock.Inspector

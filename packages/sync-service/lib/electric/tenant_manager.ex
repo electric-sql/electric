@@ -357,20 +357,25 @@ defmodule Electric.TenantManager do
     #     Application.get_env(:electric, :allow_shape_deletion, false)
     #   )
 
-    tenant = [
-      electric_instance_id: electric_instance_id,
-      tenant_id: tenant_id,
-      pg_id: pg_id,
-      # registry: registry,
-      # storage: nil,
-      # shape_cache: shape_cache,
-      get_service_status: get_service_status,
-      # inspector: inspector,
-      long_poll_timeout: long_poll_timeout,
-      max_age: max_age,
-      stale_age: stale_age,
-      allow_shape_deletion: true
-    ] ++ Electric.Supervisor.build_shared_opts(stack_id: tenant_id, storage: Application.fetch_env!(:electric, :storage))
+    tenant =
+      [
+        electric_instance_id: electric_instance_id,
+        tenant_id: tenant_id,
+        pg_id: pg_id,
+        # registry: registry,
+        # storage: nil,
+        # shape_cache: shape_cache,
+        get_service_status: get_service_status,
+        # inspector: inspector,
+        long_poll_timeout: long_poll_timeout,
+        max_age: max_age,
+        stale_age: stale_age,
+        allow_shape_deletion: true
+      ] ++
+        Electric.Supervisor.build_shared_opts(
+          stack_id: tenant_id,
+          storage: Application.fetch_env!(:electric, :storage)
+        )
 
     start_tenant_opts = [
       stack_id: tenant_id,

@@ -103,9 +103,11 @@ defmodule Electric.TimelineTest do
       assert ^timeline = Timeline.load_timeline(opts)
 
       pg_timeline = {2, 3}
+
       assert capture_log(fn ->
-        assert :timeline_changed = Timeline.check(pg_timeline, opts)
-      end) =~ "Detected different Postgres DB"
+               assert :timeline_changed = Timeline.check(pg_timeline, opts)
+             end) =~ "Detected different Postgres DB"
+
       assert ^pg_timeline = Timeline.load_timeline(opts)
     end
   end
