@@ -47,22 +47,19 @@
   # So, for example, a claim of `{"shape": {"table": "items"}}` will match
   # a query parameter of `?table=items`.
   #
-  # Note that the first expression matches the request table param against
-  # either the shape `table` or `namespace.table` depending on whether the
-  # shape `namespace` is empty or not.
+  # Note that the first part of the expression matches the request table
+  # param against either the shape `table` or `namespace.table` depending
+  # on whether the shape `namespace` is empty or not.
   @definition_matches {
     expression <<CEL
       (
-        {http.auth.user.namespace} == "" &&
-        {http.auth.user.table} == {http.request.uri.query.table}
-      ) || (
-        {http.auth.user.namespace} != "" &&
-        {http.auth.user.namespace} + "." + {http.auth.user.table} == {http.request.uri.query.table}
+        {http.auth.user.namespace} == ""
+        ? {http.auth.user.table} == {http.request.uri.query.table}
+        : {http.auth.user.namespace} + "." + {http.auth.user.table} == {http.request.uri.query.table}
       )
+      && {http.auth.user.where} == {http.request.uri.query.where}
+      && {http.auth.user.columns} == {http.request.uri.query.columns}
     CEL
-
-    expression {http.auth.user.where} == {http.request.uri.query.where}
-    expression {http.auth.user.columns} == {http.request.uri.query.columns}
   }
 
   # Route the request according to the matchers.
