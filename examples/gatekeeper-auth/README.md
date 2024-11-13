@@ -250,9 +250,9 @@ Take a look at the [`./caddy/Caddyfile`](./caddy/Caddyfile) for more details.
 
 Electric is [designed to run behind a CDN](https://electric-sql.com/docs/api/http#caching). This makes sync faster and more scalable. However, it means that if you want to authorise access to the Electric API using a proxy, you need to run that proxy in-front-of the CDN.
 
-You can do this with a centralised proxy, like your API, or a reverse-proxy like Caddy. However, running these in front of a CDN from a central location reduces the benefit of the CDN &mdash; adding latency and introducing a bottleneck / single point of failure.
+You can do this with a centralised cloud proxy, such as an API endpoint deployed as part of a backend web service. Or a reverse-proxy like Caddy that's deployed next to your Electric service. However, running these in front of a CDN from a central location reduces the benefit of the CDN &mdash; adding latency and introducing a bottleneck.
 
-So, it's often better (faster, more scalable and a more natural topology) to run your authorising proxy at the edge, between your CDN and your user. The gatekeeper pattern works well for this because it minimises both the logic that your edge proxy needs to perform and the network access and credentials that it needs to be granted.
+It's often better (faster, more scalable and a more natural topology) to run your authorising proxy at the edge, between your CDN and your user. The gatekeeper pattern works well for this because it minimises both the logic that your edge proxy needs to perform and the network access and credentials that it needs to be granted.
 
 The example in the [`./edge`](./edge) folder shows a Deno server that's designed to match the code you would deploy to a [Supabase Edge Function](https://supabase.com/docs/guides/functions/quickstart). See the README in the folder for more information about deploying to Supabase.
 
