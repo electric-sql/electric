@@ -1,7 +1,7 @@
 import Config
 
 config :api,
-  auth_token_secret: "hxRgQliCC7Ceo/ocTcKOJCYrVxsB5HjcZd1WF9qnbbNdEoju/YMfqNim0RHRWV1B",
+  auth_token_secret: "NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY",
   # Configure the proxy endpoint to route shape requests to the external Electric
   # sync service, which we assume in development is running on `localhost:3000`.
   electric_url: "http://localhost:3000"
@@ -9,9 +9,10 @@ config :api,
 # Configure your database
 config :api, Api.Repo,
   username: "postgres",
-  password: "postgres",
+  password: "password",
   hostname: "localhost",
-  database: "api_dev",
+  port: 54321,
+  database: "electric",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

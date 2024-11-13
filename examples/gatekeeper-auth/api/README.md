@@ -1,18 +1,28 @@
-# Api
 
-To start your Phoenix server:
+# API gatekeeper and proxy
 
-  * Run `mix setup` to install and setup dependencies
-  * Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
+This is a [Phoenix](https://www.phoenixframework.org) web application written in [Elixir](https://elixir-lang.org).
 
-Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
+See the [Implementation](../README.md#implementation) section of the README in the root folder of this example for context and instructions on how to run using Docker Compose.
 
-Ready to run in production? Please [check our deployment guides](https://hexdocs.pm/phoenix/deployment.html).
+## Locally without Docker
 
-## Learn more
+Alternatively you can run locally without Docker. See the [Phoenix Installation](https://hexdocs.pm/phoenix/installation.html) for pre-reqs.
 
-  * Official website: https://www.phoenixframework.org/
-  * Guides: https://hexdocs.pm/phoenix/overview.html
-  * Docs: https://hexdocs.pm/phoenix
-  * Forum: https://elixirforum.com/c/phoenix-forum
-  * Source: https://github.com/phoenixframework/phoenix
+Install and setup dependencies:
+
+```shell
+mix setup
+```
+
+Run the tests:
+
+```shell
+mix test
+```
+
+Run locally:
+
+```
+mix phx.server
+```

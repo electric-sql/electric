@@ -3,7 +3,7 @@ import Config
 # Configure the proxy endpoint to route shape requests to the external Electric
 # sync service, which we assume in test is running on `localhost:3002`.
 config :api,
-  auth_token_secret: "DY1vSZb/BL1WgLyFq5A1d1FkmzoSMaRhXcBUL41mqciKLRSSSK6AO2hTCQmDyQj4",
+  auth_token_secret: "NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY",
   electric_url: "http://localhost:3000"
 
 # Configure your database

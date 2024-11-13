@@ -16,7 +16,7 @@ defmodule Api.Token do
   end
 
   def generate(%ShapeDefinition{} = shape) do
-    {:ok, token, _claims} = JWT.generate_and_sign(%{shape: shape}, JWT.signer())
+    {:ok, token, _claims} = JWT.generate_and_sign(%{"shape" => shape}, JWT.signer())
 
     token
   end

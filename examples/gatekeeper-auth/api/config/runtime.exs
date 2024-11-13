@@ -49,9 +49,10 @@ if config_env() == :prod do
 
   host = System.get_env("PHX_HOST") || "example.com"
   port = System.get_env("PHX_PORT") || 443
+  scheme = System.get_env("PHX_SCHEME") || "https"
 
   config :api, ApiWeb.Endpoint,
-    url: [host: host, port: port, scheme: "https"],
+    url: [host: host, port: port, scheme: scheme],
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
@@ -62,9 +63,11 @@ if config_env() == :prod do
     ],
     secret_key_base: secret_key_base
 
-  # Configure Electric.Phoenix to route electric shape requests via
-  # this API, specifically the `/proxy` endpoint configured in
-  # `../lib/api_web/router.ex`.
-  config :electric_phoenix,
-    electric_url: URI.parse("https://#{host}:#{port}/proxy") |> URI.to_string()
+  # Configure the URL that the Electric.Phoenix.Gateway.Plug uses when returning
+  # shape config to the client. Defaults to this API, specifically the `/proxy`
+  # endpoint configured in `../lib/api_web/router.ex`.
+  default_proxy_url = URI.parse("https://#{host}:#{port}/proxy") |> URI.to_string()
+  proxy_url = System.get_env("ELECTRIC_PROXY_URL") || default_proxy_url
+
+  config :electric_phoenix, electric_url: proxy_url
 end
