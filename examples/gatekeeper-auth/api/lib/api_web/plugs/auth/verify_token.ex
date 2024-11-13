@@ -1,8 +1,9 @@
 defmodule ApiWeb.Plugs.Auth.VerifyToken do
   @moduledoc """
-  Verify that the token matches the shape. We do this by comparing the
-  shape defined in the request query params with the shape signed into
-  the auth token claims.
+  Verify that the auth token in the Authorization header matches the shape.
+
+  We do this by comparing the shape defined in the request query params with
+  the shape signed into the auth token claims.
 
   So you can't proxy a shape request without having a signed token for
   that exact shape definition.
