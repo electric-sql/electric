@@ -6,14 +6,11 @@ defmodule Api.Item do
   @foreign_key_type :binary_id
   schema "items" do
     field :value, :string
-
-    timestamps(type: :utc_datetime)
   end
 
   @doc false
   def changeset(item, attrs) do
     item
     |> cast(attrs, [:value])
-    |> validate_required([:value])
   end
 end
