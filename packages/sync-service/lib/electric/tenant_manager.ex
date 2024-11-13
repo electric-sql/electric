@@ -256,7 +256,7 @@ defmodule Electric.TenantManager do
           end
         end)
 
-      Enum.reduce(to_add, state, fn %{"id" => tenant_id, "connection_uri" => connection_url},
+      Enum.reduce(to_add, state, fn %{"id" => tenant_id, "connection_url" => connection_url},
                                     state ->
         {:ok, result} = Electric.ConfigParser.parse_postgresql_uri(connection_url)
         connection_opts = Electric.Utils.obfuscate_password(result)

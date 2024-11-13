@@ -7,13 +7,14 @@ defmodule Electric.ControlPlane do
   defstruct [
     :base_url,
     :auth,
+    req_opts: [],
     paths: %{
       "tenant_shape" => %{
         "url" => "/v1/shape",
         "params" => %{
           "offset" => "-1",
           "table" => "databases",
-          "where" => "electric_url ILIKE '%%{instance_id}'",
+          "where" => "electric_url LIKE '%%{instance_id}%'",
           "select" => "id,connection_url"
         }
       }
@@ -23,6 +24,7 @@ defmodule Electric.ControlPlane do
   @type t() :: %__MODULE__{
           base_url: String.t(),
           auth: nil | String.t() | {:basic, String.t()} | {:bearer, String.t()},
+          req_opts: keyword(),
           paths: %{optional(String.t()) => map()}
         }
 
@@ -115,6 +117,7 @@ defmodule Electric.ControlPlane do
       auth: plane.auth,
       headers: headers
     )
+    |> Req.merge(plane.req_opts)
   end
 
   defp insert_instance_id(string, instance_id),
