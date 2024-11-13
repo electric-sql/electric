@@ -53,5 +53,5 @@ jobs:
         run: pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
 
       - name: Deploy NextJs example
-      working-directory: examples/nextjs-example
-      run: pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+        working-directory: examples/nextjs-example
+        run: pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}

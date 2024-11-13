@@ -6,9 +6,5 @@ import "sst"
 export {}
 declare module "sst" {
   export interface Resource {
-    "linearlite": {
-      "type": "sst.aws.StaticSite"
-      "url": string
-    }
   }
 }
