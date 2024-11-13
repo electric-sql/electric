@@ -16,7 +16,7 @@ defmodule Electric.Connection.Manager do
       children = [
         ...,
         {Electric.Connection.Manager,
-         electric_instance_id: ...,
+         stack_id: ...,
          connection_opts: [...],
          replication_opts: [...],
          pool_opts: [...],
@@ -53,13 +53,12 @@ defmodule Electric.Connection.Manager do
       :pg_lock_acquired,
       # PostgreSQL server version
       :pg_version,
-      # Electric instance ID is used for connection process labeling
-      :electric_instance_id,
       # PostgreSQL system identifier
       :pg_system_identifier,
       # PostgreSQL timeline ID
       :pg_timeline_id,
-      :tenant_id,
+      # ID used for process labeling and sibling discovery
+      :stack_id,
       drop_slot_requesters: []
     ]
   end
@@ -71,7 +70,7 @@ defmodule Electric.Connection.Manager do
   @type status :: :waiting | :starting | :active
 
   @type option ::
-          {:electric_instance_id, atom | String.t()}
+          {:stack_id, atom | String.t()}
           | {:connection_opts, Keyword.t()}
           | {:replication_opts, Keyword.t()}
           | {:pool_opts, Keyword.t()}
@@ -87,14 +86,12 @@ defmodule Electric.Connection.Manager do
     GenServer.start_link(__MODULE__, opts, name: name(opts))
   end
 
-  def name(electric_instance_id, tenant_id) do
-    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
   def name(opts) do
-    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
-    tenant_id = Keyword.fetch!(opts, :tenant_id)
-    name(electric_instance_id, tenant_id)
+    name(Keyword.fetch!(opts, :stack_id))
   end
 
   @doc """
@@ -157,8 +154,7 @@ defmodule Electric.Connection.Manager do
         shape_cache_opts: shape_cache_opts,
         pg_lock_acquired: false,
         backoff: {:backoff.init(1000, 10_000), nil},
-        electric_instance_id: Keyword.fetch!(opts, :electric_instance_id),
-        tenant_id: Keyword.fetch!(opts, :tenant_id)
+        stack_id: Keyword.fetch!(opts, :stack_id),
       }
 
     # Try to acquire the connection lock on the replication slot
@@ -227,7 +223,7 @@ defmodule Electric.Connection.Manager do
   def handle_continue(:start_replication_client, %State{replication_client_pid: nil} = state) do
     opts =
       state
-      |> Map.take([:electric_instance_id, :tenant_id, :replication_opts, :connection_opts])
+      |> Map.take([:stack_id, :replication_opts, :connection_opts])
       |> Map.to_list()
 
     case start_replication_client(opts) do
@@ -271,8 +267,7 @@ defmodule Electric.Connection.Manager do
 
         {:ok, shapes_sup_pid} =
           Electric.Connection.Supervisor.start_shapes_supervisor(
-            electric_instance_id: state.electric_instance_id,
-            tenant_id: state.tenant_id,
+            stack_id: state.stack_id,
             shape_cache_opts: shape_cache_opts
           )
 

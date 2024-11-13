@@ -25,46 +25,42 @@ defmodule Electric.ShapeCache.FileStorage do
     :cubdb_dir,
     :shape_definition_dir,
     :snapshot_dir,
-    :electric_instance_id,
-    :tenant_id,
+    :stack_id,
     :extra_opts,
     version: @version
   ]
 
   @impl Electric.ShapeCache.Storage
   def shared_opts(opts) do
-    storage_dir = Keyword.get(opts, :storage_dir, "./shapes")
-    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
-    tenant_id = Keyword.fetch!(opts, :tenant_id)
+    stack_id = Keyword.fetch!(opts, :stack_id)
+    storage_dir = Keyword.get(opts, :storage_dir, "./shapes/#{stack_id}")
 
-    %{base_path: storage_dir, electric_instance_id: electric_instance_id, tenant_id: tenant_id}
+    %{base_path: storage_dir, stack_id: stack_id}
   end
 
   @impl Electric.ShapeCache.Storage
-  def for_shape(shape_handle, _tenant_id, %FS{shape_handle: shape_handle} = opts) do
+  def for_shape(shape_handle, %FS{shape_handle: shape_handle} = opts) do
     opts
   end
 
   def for_shape(
         shape_handle,
-        tenant_id,
-        %{base_path: base_path, electric_instance_id: electric_instance_id} = opts
+        %{base_path: base_path, stack_id: stack_id} = opts
       ) do
     %FS{
       base_path: base_path,
       shape_handle: shape_handle,
-      db: name(electric_instance_id, tenant_id, shape_handle),
-      cubdb_dir: Path.join([base_path, tenant_id, shape_handle, "cubdb"]),
-      snapshot_dir: Path.join([base_path, tenant_id, shape_handle, "snapshots"]),
-      shape_definition_dir: Path.join([base_path, tenant_id, shape_handle]),
-      electric_instance_id: electric_instance_id,
-      tenant_id: tenant_id,
+      db: name(stack_id, shape_handle),
+      cubdb_dir: Path.join([base_path, shape_handle, "cubdb"]),
+      snapshot_dir: Path.join([base_path, shape_handle, "snapshots"]),
+      shape_definition_dir: Path.join([base_path, shape_handle]),
+      stack_id: stack_id,
       extra_opts: Map.get(opts, :extra_opts, %{})
     }
   end
 
-  defp name(electric_instance_id, tenant_id, shape_handle) do
-    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_handle)
+  defp name(stack_id, shape_handle) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
   end
 
   def child_spec(%FS{} = opts) do
@@ -125,14 +121,14 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def get_all_stored_shapes(opts) do
-    shapes_dir = Path.join([opts.base_path, opts.tenant_id])
+    shapes_dir = opts.base_path
 
     case File.ls(shapes_dir) do
       {:ok, shape_handles} ->
         Enum.reduce(shape_handles, %{}, fn shape_handle, acc ->
           shape_def_path =
             shape_definition_path(%{
-              shape_definition_dir: Path.join([opts.base_path, opts.tenant_id, shape_handle])
+              shape_definition_dir: Path.join([opts.base_path, shape_handle])
             })
 
           with {:ok, shape_def_encoded} <- File.read(shape_def_path),

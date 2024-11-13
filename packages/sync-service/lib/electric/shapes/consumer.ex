@@ -16,19 +16,15 @@ defmodule Electric.Shapes.Consumer do
 
   @initial_log_state %{current_chunk_byte_size: 0}
 
-  def name(
-        %{
-          electric_instance_id: electric_instance_id,
-          tenant_id: tenant_id,
-          shape_handle: shape_handle
-        } =
-          _config
-      ) do
-    name(electric_instance_id, tenant_id, shape_handle)
+  def name(%{
+        stack_id: stack_id,
+        shape_handle: shape_handle
+      }) do
+    name(stack_id, shape_handle)
   end
 
-  def name(electric_instance_id, tenant_id, shape_handle) when is_binary(shape_handle) do
-    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_handle)
+  def name(stack_id, shape_handle) when is_binary(shape_handle) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
   end
 
   def initial_state(consumer) do
@@ -40,14 +36,14 @@ defmodule Electric.Shapes.Consumer do
   # when the `shape_handle` consumer has processed every transaction.
   # Transactions that we skip because of xmin logic do not generate
   # a notification
-  @spec monitor(atom(), String.t(), ShapeCache.shape_handle(), pid()) :: reference()
-  def monitor(electric_instance_id, tenant_id, shape_handle, pid \\ self()) do
-    GenStage.call(name(electric_instance_id, tenant_id, shape_handle), {:monitor, pid})
+  @spec monitor(String.t(), ShapeCache.shape_handle(), pid()) :: reference()
+  def monitor(stack_id, shape_handle, pid \\ self()) do
+    GenStage.call(name(stack_id, shape_handle), {:monitor, pid})
   end
 
-  @spec whereis(atom(), String.t(), ShapeCache.shape_handle()) :: pid() | nil
-  def whereis(electric_instance_id, tenant_id, shape_handle) do
-    GenServer.whereis(name(electric_instance_id, tenant_id, shape_handle))
+  @spec whereis(String.t(), ShapeCache.shape_handle()) :: pid() | nil
+  def whereis(stack_id, shape_handle) do
+    GenServer.whereis(name(stack_id, shape_handle))
   end
 
   def start_link(config) when is_map(config) do
@@ -58,7 +54,7 @@ defmodule Electric.Shapes.Consumer do
     %{log_producer: producer, storage: storage, shape_status: {shape_status, shape_status_state}} =
       config
 
-    Logger.metadata(shape_handle: config.shape_handle)
+    Logger.metadata(shape_handle: config.shape_handle, stack_id: config.stack_id)
 
     Process.flag(:trap_exit, true)
 
@@ -244,7 +240,6 @@ defmodule Electric.Shapes.Consumer do
     %{
       shape: shape,
       shape_handle: shape_handle,
-      tenant_id: tenant_id,
       log_state: log_state,
       chunk_bytes_threshold: chunk_bytes_threshold,
       shape_cache: {shape_cache, shape_cache_opts},
@@ -283,7 +278,7 @@ defmodule Electric.Shapes.Consumer do
 
         shape_cache.update_shape_latest_offset(shape_handle, last_log_offset, shape_cache_opts)
 
-        notify_listeners(registry, :new_changes, tenant_id, shape_handle, last_log_offset)
+        notify_listeners(registry, :new_changes, shape_handle, last_log_offset)
 
         {:cont, notify(txn, %{state | log_state: new_log_state})}
 
@@ -296,10 +291,10 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp notify_listeners(registry, :new_changes, tenant_id, shape_handle, latest_log_offset) do
-    Registry.dispatch(registry, {tenant_id, shape_handle}, fn registered ->
+  defp notify_listeners(registry, :new_changes, shape_handle, latest_log_offset) do
+    Registry.dispatch(registry, shape_handle, fn registered ->
       Logger.debug(fn ->
-        "[Tenant #{tenant_id}]: Notifying ~#{length(registered)} clients about new changes to #{shape_handle}"
+        "Notifying ~#{length(registered)} clients about new changes to #{shape_handle}"
       end)
 
       for {pid, ref} <- registered,

@@ -11,22 +11,24 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   require Logger
 
   def name(%{
-        electric_instance_id: electric_instance_id,
-        tenant_id: tenant_id,
+        stack_id: stack_id,
         shape_handle: shape_handle
       }) do
-    name(electric_instance_id, tenant_id, shape_handle)
+    name(stack_id, shape_handle)
   end
 
-  def name(electric_instance_id, tenant_id, shape_handle) when is_binary(shape_handle) do
-    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_handle)
+  def name(stack_id, shape_handle) when is_binary(shape_handle) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
   end
 
   def start_link(config) do
     GenServer.start_link(__MODULE__, config, name: name(config))
   end
 
-  def init(config) do
+  def init(%{stack_id: stack_id} = config) do
+    Process.set_label({:snapshotter, stack_id})
+    Logger.metadata(stack_id: stack_id)
+
     {:ok, config, {:continue, :start_snapshot}}
   end
 
@@ -34,12 +36,11 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     %{
       shape_handle: shape_handle,
       shape: shape,
-      electric_instance_id: electric_instance_id,
-      tenant_id: tenant_id
+      stack_id: stack_id
     } =
       state
 
-    case Shapes.Consumer.whereis(electric_instance_id, tenant_id, shape_handle) do
+    case Shapes.Consumer.whereis(stack_id, shape_handle) do
       consumer when is_pid(consumer) ->
         if not Storage.snapshot_started?(state.storage) do
           %{

@@ -100,15 +100,16 @@ defmodule Electric.Postgres.ReplicationClient do
     # one test process exiting and the next one starting.
     start_opts =
       [
-        name: name(config.electric_instance_id, config.tenant_id),
+        # TODO: the name is not necessary
+        name: name(config.stack_id),
         auto_reconnect: false
       ] ++ Electric.Utils.deobfuscate_password(config.connection_opts)
 
     Postgrex.ReplicationConnection.start_link(__MODULE__, config.replication_opts, start_opts)
   end
 
-  def name(electric_instance_id, tenant_id) do
-    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  def name(stack_id) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
   def start_streaming(client) do

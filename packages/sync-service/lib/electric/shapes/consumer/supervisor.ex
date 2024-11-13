@@ -7,11 +7,10 @@ defmodule Electric.Shapes.Consumer.Supervisor do
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   # TODO: unify these with ShapeCache
   @schema NimbleOptions.new!(
+            stack_id: [type: :any, required: true],
             shape_handle: [type: :string, required: true],
             shape: [type: {:struct, Electric.Shapes.Shape}, required: true],
-            electric_instance_id: [type: :atom, required: true],
             inspector: [type: :mod_arg, required: true],
-            tenant_id: [type: :string, required: true],
             log_producer: [type: @genserver_name_schema, required: true],
             shape_cache: [type: :mod_arg, required: true],
             registry: [type: :atom, required: true],
@@ -27,16 +26,15 @@ defmodule Electric.Shapes.Consumer.Supervisor do
             ]
           )
 
-  def name(electric_instance_id, tenant_id, shape_handle) when is_binary(shape_handle) do
-    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__, shape_handle)
+  def name(stack_id, shape_handle) when is_binary(shape_handle) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
   end
 
   def name(%{
-        electric_instance_id: electric_instance_id,
-        tenant_id: tenant_id,
+        stack_id: stack_id,
         shape_handle: shape_handle
       }) do
-    name(electric_instance_id, tenant_id, shape_handle)
+    name(stack_id, shape_handle)
   end
 
   def start_link(opts) do
@@ -47,24 +45,23 @@ defmodule Electric.Shapes.Consumer.Supervisor do
   end
 
   def clean_and_stop(%{
-        electric_instance_id: electric_instance_id,
-        tenant_id: tenant_id,
+        stack_id: stack_id,
         shape_handle: shape_handle
       }) do
     # if consumer is present, terminate it gracefully, otherwise terminate supervisor
-    consumer = Electric.Shapes.Consumer.name(electric_instance_id, tenant_id, shape_handle)
+    consumer = Electric.Shapes.Consumer.name(stack_id, shape_handle)
 
     case GenServer.whereis(consumer) do
-      nil -> Supervisor.stop(name(electric_instance_id, tenant_id, shape_handle))
+      nil -> Supervisor.stop(name(stack_id, shape_handle))
       consumer_pid when is_pid(consumer_pid) -> GenServer.call(consumer_pid, :clean_and_stop)
     end
   end
 
   def init(config) when is_map(config) do
-    %{shape_handle: shape_handle, tenant_id: tenant_id, storage: {_, _} = storage} =
+    %{shape_handle: shape_handle, storage: {_, _} = storage} =
       config
 
-    shape_storage = Electric.ShapeCache.Storage.for_shape(shape_handle, tenant_id, storage)
+    shape_storage = Electric.ShapeCache.Storage.for_shape(shape_handle, storage)
 
     shape_config = %{config | storage: shape_storage}
 

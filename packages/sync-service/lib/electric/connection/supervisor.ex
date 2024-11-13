@@ -20,14 +20,8 @@ defmodule Electric.Connection.Supervisor do
 
   use Supervisor
 
-  def name(electric_instance_id, tenant_id) do
-    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
-  end
-
   def name(opts) do
-    electric_instance_id = Access.fetch!(opts, :electric_instance_id)
-    tenant_id = Access.fetch!(opts, :tenant_id)
-    name(electric_instance_id, tenant_id)
+    Electric.ProcessRegistry.name(opts[:stack_id], __MODULE__)
   end
 
   def start_link(opts) do
@@ -39,23 +33,20 @@ defmodule Electric.Connection.Supervisor do
   end
 
   def start_shapes_supervisor(opts) do
-    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
-    tenant_id = Keyword.fetch!(opts, :tenant_id)
+    stack_id = Keyword.fetch!(opts, :stack_id)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
     inspector = Keyword.fetch!(shape_cache_opts, :inspector)
 
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
     shape_log_collector_spec =
-      {Electric.Replication.ShapeLogCollector,
-       electric_instance_id: electric_instance_id, tenant_id: tenant_id, inspector: inspector}
+      {Electric.Replication.ShapeLogCollector, stack_id: stack_id, inspector: inspector}
 
     child_spec =
       Supervisor.child_spec(
         {
           Electric.Shapes.Supervisor,
-          electric_instance_id: electric_instance_id,
-          tenant_id: tenant_id,
+          stack_id: stack_id,
           shape_cache: shape_cache_spec,
           log_collector: shape_log_collector_spec
         },

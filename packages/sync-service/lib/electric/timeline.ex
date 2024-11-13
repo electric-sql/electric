@@ -90,7 +90,7 @@ defmodule Electric.Timeline do
   end
 
   defp timeline_key(opts) do
-    tenant_id = Access.fetch!(opts, :tenant_id)
-    "timeline_id_#{tenant_id}"
+    stack_id = Access.fetch!(opts, :stack_id)
+    "timeline_id_#{stack_id}"
   end
 end
