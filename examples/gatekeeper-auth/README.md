@@ -135,7 +135,7 @@ Success! We got an empty response because there are no `items` in the database. 
 you can create some, e.g. using `psql`:
 
 ```console
-~ psql "postgresql://postgres:password@localhost:54321/electric?sslmode=disable"
+$ psql "postgresql://postgres:password@localhost:54321/electric?sslmode=disable"
 psql (16.4)
 Type "help" for help.
 
@@ -212,26 +212,17 @@ Copy the auth token and set it to an env var:
 export AUTH_TOKEN="<token>"
 ```
 
-Make an unauthorised shape request to Caddy:
+An unauthorised request to Caddy will get a 401:
 
 ```console
 $ curl -v "http://localhost:8080/v1/shape?table=items&offset=-1"
-*   Trying 127.0.0.1:8080...
-* Connected to localhost (127.0.0.1) port 8080 (#0)
-> GET /v1/shape?table=items&offset=-1 HTTP/1.1
-> Host: localhost:8080
-> User-Agent: curl/8.1.2
-> Accept: */*
->
+...
 < HTTP/1.1 401 Unauthorized
 < Server: Caddy
-< Date: Wed, 13 Nov 2024 11:30:22 GMT
-< Content-Length: 0
-<
-* Connection #0 to host localhost left intact
+...
 ```
 
-Make an authorised request to Caddy with the auth token:
+An authorised request for the correct shape will succeed:
 
 ```console
 $ curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
@@ -239,7 +230,7 @@ $ curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
 []
 ```
 
-Try making a request for a different shape:
+Caddy validates the shape request against the shape definition signed into the auth token. So an authorised request *for the wrong shape* will fail:
 
 ```console
 $ curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
@@ -247,7 +238,7 @@ $ curl --header "Authorization: Bearer ${AUTH_TOKEN}" \
 Forbidden
 ```
 
-As you can see, Caddy is validating the shape request against the shape definition signed into the auth token. Take a look at the [`./caddy/Caddyfile`](./caddy/Caddyfile) for more details.
+Take a look at the [`./caddy/Caddyfile`](./caddy/Caddyfile) for more details.
 
 ### 3. Edge function as proxy
 
