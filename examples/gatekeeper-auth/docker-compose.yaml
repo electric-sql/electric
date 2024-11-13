@@ -1,0 +1,61 @@
+name: "gatekeeper"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: "electric"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "password"
+    ports:
+      - 54321:5432
+    tmpfs:
+      - /var/lib/postgresql/data
+      - /tmp
+    command:
+      - -c
+      - listen_addresses=*
+      - -c
+      - wal_level=logical
+
+  electric:
+    image: electricsql/electric:latest
+    environment:
+      DATABASE_URL: "postgresql://postgres:password@postgres:5432/electric?sslmode=disable"
+    ports:
+      - 3000:3000
+    depends_on:
+      - postgres
+
+  api:
+    image: gatekeeper-api:local-build
+    build: ./api
+    environment:
+      AUTH_TOKEN_SECRET: "NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY"
+      DATABASE_URL: "postgresql://postgres:password@postgres:5432/electric?sslmode=disable"
+      ELECTRIC_URL: "http://electric:3000"
+      ELECTRIC_PROXY_URL: "${ELECTRIC_PROXY_URL:-http://localhost:3000/proxy}"
+      PHX_HOST: "localhost"
+      PHX_PORT: 4000
+      PHX_SCHEME: "http"
+      PHX_SERVER: true
+      SECRET_KEY_BASE: "pVvBh/U565dk0DteMtnoCjwLcoZnMDU9QeQNVr0gvVtYUrF8KqoJeyn5YJ0EQudX"
+    ports:
+      - 4000:4000
+    depends_on:
+      - electric
+
+  caddy:
+    image: mdirkse/caddy-jwt:2.7.5-0.9.2
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    environment:
+      ELECTRIC_URL: http://electric:3000
+      JWT_AUTH_SIGNING_KEY: "TkZMNSowQmMjOVU2RUB0bm1DJkU3U1VONkd3SGZMbVk="
+    ports:
+      - 8080:8080
+    volumes:
+      - $PWD/caddy/Caddyfile:/etc/caddy/Caddyfile
+    depends_on:
+      - electric
