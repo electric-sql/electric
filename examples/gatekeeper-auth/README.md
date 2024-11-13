@@ -70,7 +70,7 @@ You need [Docker Compose](https://docs.docker.com/compose/) and [curl](https://c
 
 The instructions below all use the same [`./docker-compose.yaml`](./docker-compose.yaml) file in the root of this repo. With a different set of services and environment variables.
 
-> [!Tip] Running Postgres and Electric
+> [!TIP] Running Postgres and Electric
 > All of the configurations are based on running Postgres and Electric. This is handled for you by the `./docker-compose.yaml`. However, if you're unfamiliar with how Electric works, it may be useful to go through the [Quickstart](https://electric-sql.com/docs/quickstart) and [Installation](https://electric-sql.com/docs/guides/installation) guides.
 
 ### 1. API as gatekeeper and proxy
