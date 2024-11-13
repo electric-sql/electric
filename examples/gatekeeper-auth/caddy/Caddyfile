@@ -1,10 +1,10 @@
 {
-	order jwtauth before basicauth
+  order jwtauth before basicauth
 }
 
 :8080 {
   jwtauth {
-		# You can sign and validate JWT tokens however you prefer. Here we
+    # You can sign and validate JWT tokens however you prefer. Here we
     # expect tokens to have been signed with the `HS256` algorithm and
     # a shared symmetric signing key to match the configuration in
     # `../api/lib/api/token.ex`, so that this example config validates
@@ -63,7 +63,7 @@
 
     expression {http.auth.user.where} == {http.request.uri.query.where}
     expression {http.auth.user.columns} == {http.request.uri.query.columns}
-	}
+  }
 
   # Route the request according to the matchers.
   handle @get_shape {
