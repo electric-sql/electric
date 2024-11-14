@@ -153,6 +153,8 @@ defmodule Electric.Plug.ServeShapePlug do
       end
     end
 
+    def cast_root_table(%Ecto.Changeset{valid?: false} = changeset, _), do: changeset
+
     def cast_root_table(%Ecto.Changeset{} = changeset, opts) do
       table = fetch_change!(changeset, :table)
       where = fetch_field!(changeset, :where)
