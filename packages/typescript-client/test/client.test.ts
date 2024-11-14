@@ -289,7 +289,14 @@ describe(`Shape`, () => {
             undefined
           )
         await sleep(50)
-        return new Response(undefined, { status: 204 })
+        return new Response(undefined, {
+          status: 204,
+          headers: new Headers({
+            [`electric-offset`]: `0_0`,
+            [`electric-handle`]: `foo`,
+            [`electric-schema`]: ``,
+          }),
+        })
       },
     })
 
