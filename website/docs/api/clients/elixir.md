@@ -1,4 +1,8 @@
 ---
+title: Elixir Client
+description: >-
+  Electric provides an Elixir client and a Phoenix integration.
+image: /img/integrations/electric-phoenix.jpg
 outline: deep
 ---
 

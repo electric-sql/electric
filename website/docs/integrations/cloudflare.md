@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: Cloudflare - Integrations
+description: >-
+  How to use Electric with Cloudflare.
 image: /img/integrations/electric-cloudflare.jpg
 ---
 

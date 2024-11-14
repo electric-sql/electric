@@ -1,4 +1,9 @@
 ---
+title: Typescript Client
+description: >-
+  Electric provides an Typescript client for streaming Shapes from Postgres
+  into the web browser and other Javascript environments.
+image: /img/integrations/electric-typescript.jpg
 outline: [2, 4]
 ---
 

@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: Redis - Integrations
+description: >-
+  How to use Electric to sync data into Redis.
 image: /img/integrations/electric-redis.jpg
 ---
 

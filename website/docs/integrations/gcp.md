@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: Google Cloud Platform (GCP) - Integrations
+description: >-
+  How to deploy Electric on Google Cloud Platform (GCP).
 image: /img/integrations/electric-gcp.jpg
 ---
 

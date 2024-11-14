@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: LiveStore - Integrations
+description: >-
+  How to use Electric with LiveStore.
 image: /img/integrations/electric-livestore.jpg
 ---
 

@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: Supabase - Integrations
+description: >-
+  How to use Electric with Supabase. Including syncing data out of Supabase Postgres and into Supabase Edge Functions.
 image: /img/integrations/electric-supabase.jpg
 ---
 

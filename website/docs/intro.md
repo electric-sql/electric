@@ -1,4 +1,7 @@
 ---
+title: Documentation
+description: >-
+  Welcome to the ElectricSQL developer documentation!
 outline: deep
 ---
 
@@ -13,7 +16,7 @@ outline: deep
 
 Welcome to the ElectricSQL developer documentation!
 
-ElectricSQL is a sync engine. Use it to sync [little subsets](/docs/guides/shapes) of your Postgres data into [local apps](/use-cases/state-transfer), services and [environments](/use-cases/dev-and-test).
+ElectricSQL is a Postgres sync engine. Use it to sync [little subsets](/docs/guides/shapes) of your Postgres data into [local apps](/use-cases/state-transfer), services and [environments](/use-cases/dev-and-test).
 
 You don't need to be an expert in database replication or distributed systems to use Electric. You do need to be familiar with basic web development.
 

@@ -1,8 +1,11 @@
 ---
 outline: deep
 title: Netlify - Integrations
+description: >-
+  How to deploy Electric apps on Netlify.
 image: /img/integrations/electric-netlify.jpg
 ---
+
 <script setup>
   import DeployToNetlifyForm from '/src/components/DeployToNetlifyForm.vue'
 </script>

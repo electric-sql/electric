@@ -2,6 +2,7 @@
 title: Shapes - Guide
 description: >-
   Shapes are the core primitive for controlling sync in the ElectricSQL system.
+image: /img/guides/sync-shape.jpg
 outline: deep
 ---
 

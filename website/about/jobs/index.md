@@ -2,7 +2,7 @@
 title: Jobs
 description: >-
   Join a small, technical, multi-disciplinary team that's passionate
-  about product, developer experience and database engineering.
+  about product, engineering and developer experience.
 image: /img/about/villa-discussion.jpg
 outline: deep
 ---

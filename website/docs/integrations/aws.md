@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: Amazon Web Services (AWS) - Integrations
+description: >-
+  How to deploy Electric on Amazon Web Services (AWS).
 image: /img/integrations/electric-aws.jpg
 ---
 

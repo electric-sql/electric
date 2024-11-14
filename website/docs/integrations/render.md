@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: Render - Integrations
+description: >-
+  How to deploy Electric on Render.
 image: /img/integrations/electric-render.jpg
 ---
 

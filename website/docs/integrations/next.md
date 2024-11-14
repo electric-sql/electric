@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: Next.js - Integrations
+description: >-
+  How to use Electric with Next.js.
 image: /img/integrations/electric-next.jpg
 ---
 
