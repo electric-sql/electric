@@ -50,8 +50,9 @@ The core of this example is an [Elixir/Phoenix](https://www.phoenixframework.org
 #### Proxy endpoint
 
 4. the proxy validates the JWT auth token and verifies that the shape definition in the token matches the shape being requested; if so it reverse-proxies the request onto Electric
-5. Electric then handles the request as normal, sending a response back through the proxy to the client
-6. the client can then process the data and make additional requests using the same auth token (step 3); if the auth token expires or is rejected, the client starts again (step 1).
+5. Electric then handles the request as normal
+6. sending a response back *through the proxy* to the client
+7. the client can then process the data and make additional requests using the same auth token (step 3); if the auth token expires or is rejected, the client starts again (step 1).
 
 
 ## How to run
