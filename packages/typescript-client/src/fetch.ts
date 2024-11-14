@@ -168,6 +168,17 @@ export function createFetchWithResponseHeadersCheck(
       const missingHeaders = requiredElectricResponseHeaders.filter(
         (h) => !headers.has(h)
       )
+
+      const input = args[0]
+      const url = new URL(input)
+      if (
+        url.searchParams.has(LIVE_QUERY_PARAM, `true`) &&
+        !headers.has(`electric-cursor`)
+      ) {
+        // response to live queries should also contain a cursor
+        missingHeaders.push(`electric-cursor`)
+      }
+
       if (missingHeaders.length > 0) {
         throw new MissingHeadersError(args[0].toString(), missingHeaders)
       }

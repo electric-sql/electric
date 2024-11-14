@@ -332,6 +332,32 @@ describe(`Shape`, () => {
     const expectedErrorMessage = new MissingHeadersError(url, missingHeaders)
       .message
     expect((shapeStream.error as Error).message === expectedErrorMessage)
+
+    // Also check that electric-cursor is a required header for responses to live queries
+    const shapeStreamLive = new ShapeStream({
+      url: `${BASE_URL}/v1/shape?live=true`,
+      table: issuesTableUrl,
+      fetchClient: async (input, _init) => {
+        url = input.toString()
+        const headers = new Headers()
+        headers.set(`electric-offset`, `0_0`)
+        return new Response(undefined, { status: 200, headers })
+      },
+    })
+
+    await sleep(10) // give some time for the initial fetch to complete
+    expect(shapeStreamLive.isConnected()).false
+
+    const missingHeadersLive = requiredElectricResponseHeaders
+      .concat([`electric-cursor`])
+      .filter((h) => h !== `electric-offset`)
+    const expectedErrorMessageLive = new MissingHeadersError(
+      url,
+      missingHeadersLive
+    ).message
+    expect(
+      (shapeStreamLive.error as Error).message === expectedErrorMessageLive
+    )
   })
 
   it(`should set isConnected to false after fetch if not subscribed`, async ({
