@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: Neon - Integrations
+description: >-
+  How to use Electric with Neon's serverless Postgres.
 image: /img/integrations/electric-neon.jpg
 ---
 

@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: TanStack - Integrations
+description: >-
+  How to use Electric with TanStack. Including using Electric for read-path sync and TanStack Query for optimistic writes.
 image: /img/integrations/electric-tanstack.jpg
 ---
 

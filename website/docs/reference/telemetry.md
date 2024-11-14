@@ -1,4 +1,7 @@
 ---
+title: Telemetry
+description: >-
+  Electric provides telemetry data for real-time system monitoring.
 outline: deep
 ---
 

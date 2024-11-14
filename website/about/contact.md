@@ -2,6 +2,7 @@
 title: Contact
 description: >-
   Get in touch with us by email or say hello on our community Discord.
+image: /img/about/vizinada.jpg
 outline: deep
 ---
 

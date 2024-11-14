@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: Crunchy Data - Integrations
+description: >-
+  How to use Electric with Crunchy Bridge managed Postgres.
 image: /img/integrations/electric-crunchy.jpg
 ---
 

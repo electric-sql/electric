@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: Expo - Integrations
+description: >-
+  How to use Electric to sync data into Expo apps.
 image: /img/integrations/electric-expo.jpg
 ---
 

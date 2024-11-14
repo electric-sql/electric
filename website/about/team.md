@@ -1,7 +1,8 @@
 ---
 title: Team
 description: >-
-  Meet the team behind ElectricSQL.
+  Meet the team, advisors and investors behind ElectricSQL.
+image: /img/about/team.jpg
 outline: deep
 ---
 

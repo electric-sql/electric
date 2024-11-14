@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: Fly.io - Integrations
+description: >-
+  How to deploy Electric on Fly.
 image: /img/integrations/electric-fly.jpg
 ---
 
