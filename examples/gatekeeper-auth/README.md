@@ -19,7 +19,7 @@ There are two steps to the gatekeeper pattern:
 1. first a client posts authentication credentials to a gatekeeper endpoint to generate an auth token
 2. the client then makes requests to Electric via an authorising proxy that validates the auth token against the shape request
 
-The auth token can be *shape-scoped* (i.e.: can sign a specific shape definition). This allows the proxy to authorise a shape request by comparing the shape signed into the token with the [shape defined in the request parameters](https://electric-sql.com/docs/quickstart#http-api). This allows you to:
+The auth token can be *shape-scoped* (i.e.: can include a claim containing the shape definition). This allows the proxy to authorise a shape request by comparing the shape claim signed into the token with the [shape defined in the request parameters](https://electric-sql.com/docs/quickstart#http-api). This allows you to:
 
 - keep your main authorisation logic in your API (in the gatekeeper endpoint) where it's natural to do things like query the database and call external authorisation services; and to
 - run your authorisation logic *once* when generating a token, rather than on the "hot path" of every shape request in your authorising proxy
