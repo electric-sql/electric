@@ -175,7 +175,8 @@ export function createFetchWithResponseHeadersCheck(
       addMissingHeaders(requiredElectricResponseHeaders)
 
       const input = args[0]
-      const url = new URL(input.toString())
+      const urlString = input.toString()
+      const url = new URL(urlString)
       if (url.searchParams.has(LIVE_QUERY_PARAM, `true`)) {
         addMissingHeaders(requiredLiveResponseHeaders)
       }
@@ -188,7 +189,7 @@ export function createFetchWithResponseHeadersCheck(
       }
 
       if (missingHeaders.length > 0) {
-        throw new MissingHeadersError(args[0].toString(), missingHeaders)
+        throw new MissingHeadersError(urlString, missingHeaders)
       }
     }
 
