@@ -14,8 +14,8 @@ defmodule Electric.Supervisor do
                      database: [type: :string, required: true],
                      username: [type: :string, required: true],
                      password: [type: {:fun, 0}, required: true],
-                     sslmode: [type: :atom, required: true],
-                     ipv6: [type: :boolean, required: true]
+                     sslmode: [type: :atom, required: false],
+                     ipv6: [type: :boolean, required: false]
                    ]
                  ],
                  replication_opts: [
@@ -29,8 +29,17 @@ defmodule Electric.Supervisor do
                      stream_id: [type: :string, required: false]
                    ]
                  ],
-                 pool_opts: [type: :keyword_list, required: true],
-                 storage: [type: :mod_arg, required: true]
+                 pool_opts: [
+                   type: :keyword_list,
+                   required: false,
+                   doc:
+                     "will be passed on to the Postgrex connection pool. See `t:Postgrex.start_option()`, apart from the connection options."
+                 ],
+                 storage: [type: :mod_arg, required: true],
+                 chunk_bytes_threshold: [
+                   type: :pos_integer,
+                   default: Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
+                 ]
                )
 
   def start_link(opts) do
@@ -106,9 +115,6 @@ defmodule Electric.Supervisor do
         [get_pg_version_fn, config.replication_opts[:publication_name]]
       }
 
-    # FIXME: should be passed in as a parameter
-    chunk_bytes_threshold = Application.fetch_env!(:electric, :chunk_bytes_threshold)
-
     shape_changes_registry_name = :"#{Registry.ShapeChanges}:#{stack_id}"
 
     shape_cache_opts = [
@@ -116,7 +122,7 @@ defmodule Electric.Supervisor do
       storage: storage,
       inspector: inspector,
       prepare_tables_fn: prepare_tables_mfa,
-      chunk_bytes_threshold: chunk_bytes_threshold,
+      chunk_bytes_threshold: config.chunk_bytes_threshold,
       log_producer: shape_log_collector,
       consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(stack_id),
       registry: shape_changes_registry_name
