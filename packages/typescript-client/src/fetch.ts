@@ -153,7 +153,6 @@ export function createFetchWithChunkBuffer(
 export const requiredElectricResponseHeaders = [
   `electric-offset`,
   `electric-handle`,
-  `electric-schema`,
 ]
 
 export function createFetchWithResponseHeadersCheck(
@@ -170,13 +169,20 @@ export function createFetchWithResponseHeadersCheck(
       )
 
       const input = args[0]
-      const url = new URL(input)
+      const url = new URL(input.toString())
       if (
         url.searchParams.has(LIVE_QUERY_PARAM, `true`) &&
         !headers.has(`electric-cursor`)
       ) {
         // response to live queries should also contain a cursor
         missingHeaders.push(`electric-cursor`)
+      } else if (
+        (!url.searchParams.has(LIVE_QUERY_PARAM) ||
+          url.searchParams.has(LIVE_QUERY_PARAM, `false`)) &&
+        !headers.has(`electric-schema`)
+      ) {
+        // response to non-live queries should also contain the schema
+        missingHeaders.push(`electric-schema`)
       }
 
       if (missingHeaders.length > 0) {
