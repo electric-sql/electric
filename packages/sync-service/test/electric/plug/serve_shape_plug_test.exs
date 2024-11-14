@@ -168,6 +168,17 @@ defmodule Electric.Plug.ServeShapePlugTest do
              }
     end
 
+    test "returns 400 when table param is missing", ctx do
+      conn =
+        ctx
+        |> conn(:get, %{}, "?offset=-1")
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+
+      assert %{"table" => ["can't be blank"]} = Jason.decode!(conn.resp_body)
+    end
+
     test "returns 400 when table does not exist", ctx do
       # this will pass table name validation
       # but will fail to find the table
