@@ -13,8 +13,14 @@ defmodule Electric.TenantSupervisor do
   end
 
   def start_tenant(opts) do
-    Logger.debug(fn -> "Starting tenant for #{Access.fetch!(opts, :stack_id)}" end)
-    DynamicSupervisor.start_child(__MODULE__, {Electric.Supervisor, opts})
+    stack_id = opts[:stack_id]
+    Logger.debug(fn -> "Starting tenant for #{stack_id}" end)
+    name = Electric.ProcessRegistry.name(stack_id, Electric.Supervisor)
+
+    DynamicSupervisor.start_child(
+      __MODULE__,
+      {Electric.Supervisor, opts |> Keyword.put_new(:name, name)}
+    )
   end
 
   @doc """
@@ -22,8 +28,8 @@ defmodule Electric.TenantSupervisor do
   """
   @spec stop_tenant(Keyword.t()) :: :ok
   def stop_tenant(opts) do
-    # FIXME: wrong supervisor
-    sup = Tenant.Supervisor.name(opts)
+    name = Electric.ProcessRegistry.name(opts[:stack_id], Electric.Supervisor)
+    sup = Access.get(opts, :name, name)
     :ok = Supervisor.stop(sup)
   end
 
@@ -34,7 +40,7 @@ defmodule Electric.TenantSupervisor do
   end
 
   defp name(opts) do
-    electric_instance_id = Access.fetch!(opts, :electric_instance_id)
-    Electric.Application.process_name(electric_instance_id, __MODULE__)
+    stack_id = Access.fetch!(opts, :stack_id)
+    Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 end
