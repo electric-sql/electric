@@ -16,13 +16,18 @@ defmodule ApiWeb.Plugs.Auth.VerifyToken do
 
   def call(%{assigns: %{shape: shape}, req_headers: headers} = conn, _opts) do
     case Authenticator.authorise(shape, headers) do
-      true ->
+      {:error, message} when message in [:invalid, :missing] ->
         conn
+        |> send_resp(401, "Unauthorized")
+        |> halt()
 
-      _alt ->
+      false ->
         conn
         |> send_resp(403, "Forbidden")
         |> halt()
+
+      true ->
+        conn
     end
   end
 end

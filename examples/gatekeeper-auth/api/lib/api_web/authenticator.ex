@@ -17,12 +17,15 @@ defmodule ApiWeb.Authenticator do
     request
   end
 
-  def authorise(shape, request_header_list) do
-    header_map = Enum.into(request_header_list, %{})
+  def authorise(shape, request_headers) do
+    header_map = Enum.into(request_headers, %{})
     header_key = String.downcase(@header_name)
 
     with {:ok, "Bearer " <> token} <- Map.fetch(header_map, header_key) do
       Token.verify(shape, token)
+    else
+      _alt ->
+        {:error, :missing}
     end
   end
 

@@ -22,9 +22,26 @@ defmodule Api.Token do
   end
 
   def verify(%ShapeDefinition{} = request_shape, token) do
-    with {:ok, %{"shape" => token_params}} <- JWT.verify_and_validate(token, JWT.signer()),
-         {:ok, token_shape} <- Shape.from(token_params) do
+    with {:ok, shape_claim} <- validate(token) do
+      matches(request_shape, shape_claim)
+    end
+  end
+
+  defp validate(token) do
+    with {:ok, %{"shape" => shape_claim}} <- JWT.verify_and_validate(token, JWT.signer()) do
+      {:ok, shape_claim}
+    else
+      _alt ->
+        {:error, :invalid}
+    end
+  end
+
+  defp matches(%ShapeDefinition{} = request_shape, %{} = shape_claim) do
+    with {:ok, token_shape} <- Shape.from(shape_claim) do
       Shape.matches(request_shape, token_shape)
+    else
+      _alt ->
+        false
     end
   end
 end

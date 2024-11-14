@@ -18,14 +18,14 @@ defmodule ApiWeb.ProxyControllerTest do
     test "requires auth", %{conn: conn} do
       assert conn
              |> get("/proxy/v1/shape", table: "items")
-             |> response(403)
+             |> response(401)
     end
 
     test "requires valid auth header", %{conn: conn} do
       assert conn
              |> put_req_header("authorization", "Bearer invalid-token")
              |> get("/proxy/v1/shape", table: "items")
-             |> response(403)
+             |> response(401)
     end
 
     test "requires matching shape definition", %{conn: conn} do
