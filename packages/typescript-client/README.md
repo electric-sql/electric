@@ -54,6 +54,18 @@ const stream = new ShapeStream({
   table: `foo`,
 })
 
+// You can also add custom headers and URL parameters
+const streamWithParams = new ShapeStream({
+  url: `${BASE_URL}/v1/shape`,
+  table: `foo`,
+  headers: {
+    'Authorization': 'Bearer token'
+  },
+  params: {
+    'custom-param': 'value'
+  }
+})
+
 stream.subscribe(messages => {
   // messages is an array with one or more row updates
   // and the stream will wait for all subscribers to process them
