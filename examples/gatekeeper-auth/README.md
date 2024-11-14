@@ -197,7 +197,7 @@ $ curl -s --header "Authorization: Bearer ${AUTH_TOKEN}" \
 ]
 ```
 
-So far we've shown things working with Electric's lower-level [HTTP API](https://electric-sql.com/docs/api/http). You can also setup the [higher level clients](https://electric-sql.com/docs/api/clients/typescript) to use an auth token. See the [auth guide](https://electric-sql.com/docs/guides/auth) for more details.
+So far we've shown things working with Electric's lower-level [HTTP API](https://electric-sql.com/docs/api/http). You can also setup the [higher-level clients](https://electric-sql.com/docs/api/clients/typescript) to use an auth token. See the [auth guide](https://electric-sql.com/docs/guides/auth) for more details.
 
 ### 2. Caddy as proxy
 
