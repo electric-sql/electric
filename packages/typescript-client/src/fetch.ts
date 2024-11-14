@@ -155,6 +155,10 @@ export const requiredElectricResponseHeaders = [
   `electric-handle`,
 ]
 
+export const requiredLiveResponseHeaders = [`electric-cursor`]
+
+export const requiredNonLiveResponseHeaders = [`electric-schema`]
+
 export function createFetchWithResponseHeadersCheck(
   fetchClient: typeof fetch
 ): typeof fetch {
@@ -164,25 +168,23 @@ export function createFetchWithResponseHeadersCheck(
     if (response.ok) {
       // Check that the necessary Electric headers are present on the response
       const headers = response.headers
-      const missingHeaders = requiredElectricResponseHeaders.filter(
-        (h) => !headers.has(h)
-      )
+      const missingHeaders: Array<string> = []
+
+      const addMissingHeaders = (requiredHeaders: Array<string>) =>
+        requiredHeaders.filter((h) => !headers.has(h))
+      addMissingHeaders(requiredElectricResponseHeaders)
 
       const input = args[0]
       const url = new URL(input.toString())
+      if (url.searchParams.has(LIVE_QUERY_PARAM, `true`)) {
+        addMissingHeaders(requiredLiveResponseHeaders)
+      }
+
       if (
-        url.searchParams.has(LIVE_QUERY_PARAM, `true`) &&
-        !headers.has(`electric-cursor`)
+        !url.searchParams.has(LIVE_QUERY_PARAM) ||
+        url.searchParams.has(LIVE_QUERY_PARAM, `false`)
       ) {
-        // response to live queries should also contain a cursor
-        missingHeaders.push(`electric-cursor`)
-      } else if (
-        (!url.searchParams.has(LIVE_QUERY_PARAM) ||
-          url.searchParams.has(LIVE_QUERY_PARAM, `false`)) &&
-        !headers.has(`electric-schema`)
-      ) {
-        // response to non-live queries should also contain the schema
-        missingHeaders.push(`electric-schema`)
+        addMissingHeaders(requiredNonLiveResponseHeaders)
       }
 
       if (missingHeaders.length > 0) {
