@@ -55,7 +55,7 @@ export class MissingHeadersError extends Error {
     missingHeaders.forEach((h) => {
       msg += `- ${h}\n`
     })
-    msg += `\nThis is often due to a proxy not allowing all headers to be returned.`
+    msg += `\nThis is often due to a proxy not setting CORS correctly so that all Electric headers can be read by the client.`
     super(msg)
   }
 }
