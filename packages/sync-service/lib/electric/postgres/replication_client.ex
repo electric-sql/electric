@@ -116,8 +116,8 @@ defmodule Electric.Postgres.ReplicationClient do
     send(client, :start_streaming)
   end
 
-  def stop(client) do
-    Postgrex.ReplicationConnection.call(client, :stop)
+  def stop(client, reason) do
+    Postgrex.ReplicationConnection.call(client, {:stop, reason})
   end
 
   # The `Postgrex.ReplicationConnection` behaviour does not follow the gen server conventions and
@@ -134,6 +134,8 @@ defmodule Electric.Postgres.ReplicationClient do
   # TODO(alco): this needs additional info about :noreply and :query return tuples.
   @impl true
   def init(replication_opts) do
+    Process.set_label(__MODULE__)
+
     {:ok, State.new(replication_opts)}
   end
 
@@ -163,8 +165,12 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   @impl true
-  def handle_call(:stop, from, _state) do
-    {:disconnect, "Requested by another process: #{inspect(from)}"}
+  def handle_call({:stop, reason}, from, _state) do
+    Logger.notice(
+      "Replication client #{inspect(self())} is stopping after receiving stop request from #{inspect(elem(from, 0))} with reason #{inspect(reason)}"
+    )
+
+    {:disconnect, reason}
   end
 
   @impl true

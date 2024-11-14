@@ -5,7 +5,7 @@ defmodule Electric.TimelineTest do
   alias Electric.Timeline
 
   @moduletag :tmp_dir
-  @stack_id "test_tenant"
+  @stack_id "test_stack"
 
   describe "load_timeline/1" do
     setup context do

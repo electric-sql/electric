@@ -89,7 +89,6 @@ defmodule Electric.Plug.Utils do
       end
 
     %{
-      "tenant.id" => assigns[:tenant_id],
       "error.type" => assigns[:error_str],
       "http.request_id" => assigns[:plug_request_id],
       "http.query_string" => conn.query_string,
@@ -163,5 +162,11 @@ defmodule Electric.Plug.Utils do
         end
       )
     end
+  end
+
+  defmodule PassAssignToOptsPlug do
+    @behaviour Plug
+    def init(plug: plug, assign_key: key) when is_atom(plug), do: {plug, key}
+    def call(conn, {plug, key}), do: plug.call(conn, plug.init(conn.assigns[key]))
   end
 end

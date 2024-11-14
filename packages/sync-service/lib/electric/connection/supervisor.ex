@@ -53,6 +53,11 @@ defmodule Electric.Connection.Supervisor do
         restart: :temporary
       )
 
-    Supervisor.start_child(name(opts), child_spec)
+    with {:ok, pid} <- Supervisor.start_child(name(opts), child_spec) do
+      if notify_pid = get_in(opts, [:tweaks, :notify_pid]),
+        do: send(notify_pid, {:startup_progress, stack_id, :shape_supervisor_ready})
+
+      {:ok, pid}
+    end
   end
 end

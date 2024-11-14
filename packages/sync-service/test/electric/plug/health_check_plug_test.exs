@@ -1,48 +1,17 @@
 defmodule Electric.Plug.HealthCheckPlugTest do
   use ExUnit.Case, async: true
   import Plug.Conn
-  import Support.ComponentSetup
-  import Support.TestUtils
   alias Plug.Conn
 
   alias Electric.Plug.HealthCheckPlug
 
   @moduletag :capture_log
 
-  @registry Registry.HealthCheckPlugTest
-
-  setup do
-    start_link_supervised!({Registry, keys: :duplicate, name: @registry})
-    :ok
-  end
-
-  setup :with_electric_instance_id
-  setup :with_tenant_id
-  setup :with_persistent_kv
-  setup :with_minimal_app_config
-  setup :with_tenant_manager
-
-  setup ctx do
-    tenant = [
-      electric_instance_id: ctx.electric_instance_id,
-      tenant_id: ctx.tenant_id,
-      pg_id: "foo",
-      registry: @registry,
-      get_service_status: fn -> ctx.connection_status end
-    ]
-
-    store_tenant(tenant, ctx)
-    %{}
-  end
-
   def conn(ctx) do
     # Pass mock dependencies to the plug
-    config = [
-      electric_instance_id: ctx.electric_instance_id,
-      tenant_manager: ctx.tenant_manager
-    ]
+    config = [get_service_status: fn -> ctx.connection_status end]
 
-    Plug.Test.conn("GET", "/?database_id=#{ctx.tenant_id}")
+    Plug.Test.conn("GET", "/")
     |> assign(:config, config)
   end
 

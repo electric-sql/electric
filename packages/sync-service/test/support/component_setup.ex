@@ -1,5 +1,6 @@
 defmodule Support.ComponentSetup do
   import ExUnit.Callbacks
+  import ExUnit.Assertions
   import Support.TestUtils, only: [full_test_name: 1]
 
   alias Electric.Postgres.ReplicationClient
@@ -12,107 +13,7 @@ defmodule Support.ComponentSetup do
   def with_stack_id_from_test(ctx) do
     stack_id = full_test_name(ctx)
     registry = start_link_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
-    %{stack_id: stack_id, process_registry: registry}
-  end
-
-  def with_tenant_id(_ctx) do
-    %{tenant_id: "test_tenant"}
-  end
-
-  def with_tenant_manager(ctx) do
-    {:ok, _} =
-      Electric.TenantSupervisor.start_link(electric_instance_id: ctx.electric_instance_id)
-
-    opts = [
-      app_config: ctx.app_config,
-      electric_instance_id: ctx.electric_instance_id,
-      tenant_tables_name: Electric.Tenant.Tables.name(ctx.electric_instance_id)
-    ]
-
-    {:ok, _} = Electric.TenantManager.start_link(opts)
-
-    %{tenant_manager: Electric.TenantManager.name(opts)}
-  end
-
-  defp tenant_config(ctx) do
-    [
-      electric_instance_id: ctx.electric_instance_id,
-      tenant_id: ctx.tenant_id,
-      pg_id: Map.get(ctx, :pg_id, "12345"),
-      shape_cache: ctx.shape_cache,
-      storage: ctx.storage,
-      inspector: ctx.inspector,
-      registry: ctx.registry,
-      long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
-      max_age: Access.get(ctx, :max_age, 60),
-      stale_age: Access.get(ctx, :stale_age, 300),
-      get_service_status: fn -> :active end
-    ]
-  end
-
-  def store_tenant(tenant, ctx) do
-    :ok =
-      Electric.TenantManager.store_tenant(tenant,
-        electric_instance_id: ctx.electric_instance_id,
-        tenant_manager: ctx.tenant_manager,
-        app_config: ctx.app_config,
-        # not important for this test
-        connection_opts:
-          Access.get(ctx, :connection_opts, Electric.Utils.obfuscate_password(password: "foo"))
-      )
-  end
-
-  def with_tenant(ctx) do
-    tenant = Map.get_lazy(ctx, :tenant_config, fn -> tenant_config(ctx) end)
-
-    tenant_opts = [
-      electric_instance_id: ctx.electric_instance_id,
-      persistent_kv: ctx.persistent_kv,
-      connection_opts: ctx.db_config,
-      tenant_manager: ctx.tenant_manager,
-      app_config: ctx.app_config
-    ]
-
-    :ok = Electric.TenantManager.store_tenant(tenant, tenant_opts)
-
-    %{tenant: tenant}
-  end
-
-  def with_supervised_tenant(ctx) do
-    tenant =
-      [
-        electric_instance_id: ctx.electric_instance_id,
-        tenant_id: ctx.tenant_id,
-        pg_id: Map.get(ctx, :pg_id, "12345"),
-        registry: ctx.registry,
-        long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
-        max_age: Access.get(ctx, :max_age, 60),
-        stale_age: Access.get(ctx, :stale_age, 300),
-        get_service_status: fn -> :active end
-      ]
-
-    :ok =
-      Electric.TenantManager.create_tenant(ctx.tenant_id, ctx.db_config,
-        pg_id: tenant[:pg_id],
-        registry: tenant[:registry],
-        long_poll_timeout: tenant[:long_poll_timeout],
-        max_age: tenant[:max_age],
-        stale_age: tenant[:stale_age],
-        get_service_status: tenant[:get_service_status],
-        tenant_manager: ctx.tenant_manager,
-        app_config: ctx.app_config,
-        tenant_tables_name: ctx.tenant_tables_name
-      )
-
-    {:via, _, {registry_name, registry_key}} =
-      Electric.Tenant.Supervisor.name(
-        electric_instance_id: ctx.electric_instance_id,
-        tenant_id: ctx.tenant_id
-      )
-
-    [{tenant_supervisor_pid, _}] = Registry.lookup(registry_name, registry_key)
-
-    %{tenant: tenant, tenant_supervisor_pid: tenant_supervisor_pid}
+    %{stack_id: stack_id}
   end
 
   def with_registry(ctx) do
@@ -226,34 +127,6 @@ defmodule Support.ComponentSetup do
     }
   end
 
-  def with_replication_client(ctx) do
-    replication_opts = [
-      publication_name: ctx.publication_name,
-      try_creating_publication?: true,
-      slot_name: ctx.slot_name,
-      transaction_received:
-        {Electric.Replication.ShapeLogCollector, :store_transaction, [ctx.shape_log_collector]},
-      relation_received:
-        {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [ctx.shape_log_collector]},
-      connection_manager: self()
-    ]
-
-    {:ok, pid} =
-      ReplicationClient.start_link(
-        electric_instance_id: ctx.electric_instance_id,
-        tenant_id: ctx.tenant_id,
-        connection_opts: ctx.db_config,
-        replication_opts: replication_opts
-      )
-
-    %{replication_client: pid}
-  end
-
-  def with_tenant_tables(ctx) do
-    Electric.Tenant.Tables.init(ctx.electric_instance_id)
-    %{tenant_tables_name: Electric.Tenant.Tables.name(ctx.electric_instance_id)}
-  end
-
   def with_inspector(ctx) do
     {:ok, server} =
       EtsInspector.start_link(stack_id: ctx.stack_id, pool: ctx.db_conn)
@@ -286,70 +159,55 @@ defmodule Support.ComponentSetup do
     }
   end
 
-  # This is a reduced version of the app config that the tenant manager can use to restore persisted tenants
-  def with_minimal_app_config(ctx) do
-    %{
-      app_config: %Electric.Application.Configuration{
-        persistent_kv: ctx.persistent_kv
-      }
+  def with_complete_stack(ctx) do
+    stack_id = full_test_name(ctx)
+
+    kv = %Electric.PersistentKV.Memory{
+      parent: self(),
+      pid: start_supervised!(Electric.PersistentKV.Memory, restart: :temporary)
     }
-  end
 
-  def with_complete_stack(ctx, opts \\ []) do
-    [
-      Keyword.get(opts, :electric_instance_id, &Support.TestUtils.with_electric_instance_id/1),
-      Keyword.get(opts, :tenant_id, &with_tenant_id/1),
-      Keyword.get(opts, :registry, &with_registry/1),
-      Keyword.get(opts, :inspector, &with_inspector/1),
-      Keyword.get(opts, :persistent_kv, &with_persistent_kv/1),
-      Keyword.get(opts, :log_chunking, &with_log_chunking/1),
-      Keyword.get(opts, :storage, &with_cub_db_storage/1),
-      Keyword.get(opts, :log_collector, &with_shape_log_collector/1),
-      Keyword.get(opts, :shape_cache, &with_shape_cache/1),
-      Keyword.get(opts, :slot_name_and_stream_id, &with_slot_name_and_stream_id/1),
-      Keyword.get(opts, :replication_client, &with_replication_client/1),
-      Keyword.get(opts, :app_config, &with_app_config/1),
-      Keyword.get(opts, :tenant_manager, &with_tenant_manager/1),
-      Keyword.get(opts, :tenant, &with_tenant/1)
-    ]
-    |> Enum.reduce(ctx, &Map.merge(&2, apply(&1, [&2])))
-  end
+    storage = {FileStorage, stack_id: stack_id, storage_dir: ctx.tmp_dir}
 
-  def with_complete_stack_but_no_tenant(ctx, opts \\ []) do
-    [
-      Keyword.get(opts, :electric_instance_id, &Support.TestUtils.with_electric_instance_id/1),
-      Keyword.get(opts, :tenant_id, &with_tenant_id/1),
-      Keyword.get(opts, :registry, &with_registry/1),
-      Keyword.get(opts, :inspector, &with_inspector/1),
-      Keyword.get(opts, :persistent_kv, &with_persistent_kv/1),
-      Keyword.get(opts, :log_chunking, &with_log_chunking/1),
-      Keyword.get(opts, :storage, &with_cub_db_storage/1),
-      Keyword.get(opts, :log_collector, &with_shape_log_collector/1),
-      Keyword.get(opts, :shape_cache, &with_shape_cache/1),
-      Keyword.get(opts, :slot_name_and_stream_id, &with_slot_name_and_stream_id/1),
-      Keyword.get(opts, :replication_client, &with_replication_client/1),
-      Keyword.get(opts, :app_config, &with_app_config/1),
-      Keyword.get(opts, :tenant_manager, &with_tenant_manager/1)
-    ]
-    |> Enum.reduce(ctx, &Map.merge(&2, apply(&1, [&2])))
+    stack_supervisor =
+      start_supervised!(
+        {Electric.StackSupervisor,
+         stack_id: stack_id,
+         persistent_kv: kv,
+         storage: storage,
+         connection_opts: ctx.db_config,
+         replication_opts: [
+           slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
+           publication_name: "electric_test_pub_#{:erlang.phash2(stack_id)}",
+           try_creating_publication?: true,
+           slot_temporary?: true
+         ],
+         pool_opts: [
+           backoff_type: :stop,
+           max_restarts: 0,
+           pool_size: 2
+         ],
+         tweaks: [notify_pid: self(), registry_partitions: 1]},
+        restart: :temporary
+      )
+
+    assert_receive {:startup_progress, ^stack_id, :shape_supervisor_ready}
+
+    # Process.sleep(100)
+
+    %{stack_id: stack_id, persistent_kv: kv, stack_supervisor: stack_supervisor, storage: storage}
   end
 
   def build_router_opts(ctx, overrides \\ []) do
     [
-      electric_instance_id: ctx.electric_instance_id,
-      tenant_manager: ctx.tenant_manager,
-      storage: ctx.storage,
-      registry: ctx.registry,
-      shape_cache: ctx.shape_cache,
-      inspector: ctx.inspector,
-      long_poll_timeout: Access.get(overrides, :long_poll_timeout, 5_000),
-      max_age: Access.get(overrides, :max_age, 60),
-      stale_age: Access.get(overrides, :stale_age, 300),
-      get_service_status: Access.get(overrides, :get_service_status, fn -> :active end),
-      chunk_bytes_threshold:
-        Access.get(overrides, :chunk_bytes_threshold, ctx.chunk_bytes_threshold),
-      allow_shape_deletion: Access.get(overrides, :allow_shape_deletion, true)
+      long_poll_timeout: 4_000,
+      max_age: 60,
+      stale_age: 300,
+      allow_shape_deletion: true
     ]
+    |> Keyword.merge(
+      Electric.StackSupervisor.build_shared_opts(stack_id: ctx.stack_id, storage: ctx.storage)
+    )
     |> Keyword.merge(overrides)
   end
 end

@@ -59,6 +59,7 @@ defmodule Electric.Connection.Manager do
       :pg_timeline_id,
       # ID used for process labeling and sibling discovery
       :stack_id,
+      :tweaks,
       drop_slot_requesters: []
     ]
   end
@@ -80,6 +81,14 @@ defmodule Electric.Connection.Manager do
   @type options :: [option]
 
   @lock_status_logging_interval 10_000
+
+  def child_spec(init_arg) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [init_arg]},
+      type: :supervisor
+    }
+  end
 
   @spec start_link(options) :: GenServer.on_start()
   def start_link(opts) do
@@ -154,7 +163,8 @@ defmodule Electric.Connection.Manager do
         shape_cache_opts: shape_cache_opts,
         pg_lock_acquired: false,
         backoff: {:backoff.init(1000, 10_000), nil},
-        stack_id: Keyword.fetch!(opts, :stack_id)
+        stack_id: Keyword.fetch!(opts, :stack_id),
+        tweaks: Keyword.fetch!(opts, :tweaks)
       }
 
     # Try to acquire the connection lock on the replication slot
@@ -226,6 +236,8 @@ defmodule Electric.Connection.Manager do
       |> Map.take([:stack_id, :replication_opts, :connection_opts])
       |> Map.to_list()
 
+    Logger.debug("Starting replication client for stack #{state.stack_id}")
+
     case start_replication_client(opts) do
       {:ok, pid, connection_opts} ->
         state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
@@ -268,7 +280,8 @@ defmodule Electric.Connection.Manager do
         {:ok, shapes_sup_pid} =
           Electric.Connection.Supervisor.start_shapes_supervisor(
             stack_id: state.stack_id,
-            shape_cache_opts: shape_cache_opts
+            shape_cache_opts: shape_cache_opts,
+            tweaks: state.tweaks
           )
 
         # Everything is ready to start accepting and processing logical messages from Postgres.
@@ -304,11 +317,20 @@ defmodule Electric.Connection.Manager do
     handle_continue(step, state)
   end
 
+  # Special-case the explicit shutdown of the supervision tree
+  def handle_info({:EXIT, _, :shutdown}, state), do: {:noreply, state}
+  def handle_info({:EXIT, _, {:shutdown, _}}, state), do: {:noreply, state}
+
   # When the replication client exits on its own, it can be restarted independently of the lock
   # connection and the DB pool. If any of the latter two shut down, Connection.Manager will
   # itself terminate to be restarted by its supervisor in a clean state.
   def handle_info({:EXIT, pid, reason}, %State{replication_client_pid: pid} = state) do
     halt_if_fatal_error!(reason)
+
+    Logger.debug(
+      "Handling the exit of the replication client #{inspect(pid)} with reason #{inspect(reason)}"
+    )
+
     {:noreply, %{state | replication_client_pid: nil}, {:continue, :start_replication_client}}
   end
 
@@ -324,7 +346,7 @@ defmodule Electric.Connection.Manager do
     {:stop, {:shutdown, reason}, state}
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, _reason}, %{shape_log_collector_pid: pid} = state) do
+  def handle_info({:DOWN, _ref, :process, pid, reason}, %{shape_log_collector_pid: pid} = state) do
     # The replication client would normally exit together with the shape log collector when it
     # is blocked on a call to either `ShapeLogCollector.handle_relation_msg/2` or
     # `ShapeLogCollector.store_transaction/2` and the log collector encounters a storage error.
@@ -338,7 +360,7 @@ defmodule Electric.Connection.Manager do
     # due to a timeout in `:gen_statem.call()`). Hence the wrapping of the function call in a
     # try-catch block.
     try do
-      _ = Electric.Postgres.ReplicationClient.stop(state.replication_client_pid)
+      _ = Electric.Postgres.ReplicationClient.stop(state.replication_client_pid, reason)
     catch
       :exit, _reason ->
         # The replication client has already exited, so nothing else to do here.
