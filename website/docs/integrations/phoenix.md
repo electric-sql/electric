@@ -51,7 +51,7 @@ defmodule MyAppWeb.Router do
 end
 ```
 
-Because the shape is defined in your Router, it can use Plug middleware for authorisation. See [Parameter-based shapes](https://hexdocs.pm/electric_phoenix/0.1.0-dev-2/Electric.Phoenix.Gateway.Plug.html#module-parameter-based-shapes) for more details.
+Because the shape is defined in your Router, it can use Plug middleware for authorization. See [Parameter-based shapes](https://hexdocs.pm/electric_phoenix/0.1.0-dev-2/Electric.Phoenix.Gateway.Plug.html#module-parameter-based-shapes) for more details.
 
 ### LiveView sync
 

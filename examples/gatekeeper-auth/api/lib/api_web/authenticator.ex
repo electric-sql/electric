@@ -17,7 +17,7 @@ defmodule ApiWeb.Authenticator do
     request
   end
 
-  def authorise(shape, request_headers) do
+  def authorize(shape, request_headers) do
     header_map = Enum.into(request_headers, %{})
     header_key = String.downcase(@header_name)
 

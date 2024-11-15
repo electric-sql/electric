@@ -16,7 +16,7 @@ defmodule ApiWeb.AuthenticatorTest do
       {:ok, shape} = Shape.from(%{"table" => "foo"})
 
       headers = Authenticator.authenticate_shape(shape, nil)
-      assert Authenticator.authorise(shape, headers)
+      assert Authenticator.authorize(shape, headers)
     end
 
     test "validate token with params" do
@@ -27,7 +27,7 @@ defmodule ApiWeb.AuthenticatorTest do
         })
 
       headers = Authenticator.authenticate_shape(shape, nil)
-      assert Authenticator.authorise(shape, headers)
+      assert Authenticator.authorize(shape, headers)
     end
   end
 end

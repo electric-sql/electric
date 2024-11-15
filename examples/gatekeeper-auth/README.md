@@ -19,10 +19,10 @@ There are two steps to the gatekeeper pattern:
 1. first a client posts authentication credentials to a gatekeeper endpoint to generate an auth token
 2. the client then makes requests to Electric via an authorising proxy that validates the auth token against the shape request
 
-The auth token can be *shape-scoped* (i.e.: can include a claim containing the shape definition). This allows the proxy to authorise a shape request by comparing the shape claim signed into the token with the [shape defined in the request parameters](https://electric-sql.com/docs/quickstart#http-api). This allows you to:
+The auth token can be *shape-scoped* (i.e.: can include a claim containing the shape definition). This allows the proxy to authorize a shape request by comparing the shape claim signed into the token with the [shape defined in the request parameters](https://electric-sql.com/docs/quickstart#http-api). This allows you to:
 
-- keep your main authorisation logic in your API (in the gatekeeper endpoint) where it's natural to do things like query the database and call external authorisation services; and to
-- run your authorisation logic *once* when generating a token, rather than on the "hot path" of every shape request in your authorising proxy
+- keep your main authorization logic in your API (in the gatekeeper endpoint) where it's natural to do things like query the database and call external authorization services; and to
+- run your authorization logic *once* when generating a token, rather than on the "hot path" of every shape request in your authorising proxy
 
 ### Implementation
 
@@ -232,7 +232,7 @@ Copy the auth token and set it to an env var:
 export AUTH_TOKEN="<token>"
 ```
 
-An unauthorised request to Caddy will get a 401:
+An unauthorized request to Caddy will get a 401:
 
 ```console
 $ curl -sv "http://localhost:8080/v1/shape?table=items&offset=-1"
@@ -242,7 +242,7 @@ $ curl -sv "http://localhost:8080/v1/shape?table=items&offset=-1"
 ...
 ```
 
-An authorised request for the correct shape will succeed:
+An authorized request for the correct shape will succeed:
 
 ```console
 $ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
@@ -252,7 +252,7 @@ $ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
 ...
 ```
 
-Caddy validates the shape request against the shape definition signed into the auth token. So an authorised request *for the wrong shape* will fail:
+Caddy validates the shape request against the shape definition signed into the auth token. So an authorized request *for the wrong shape* will fail:
 
 ```console
 $ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
@@ -266,7 +266,7 @@ Take a look at the [`./caddy/Caddyfile`](./caddy/Caddyfile) for more details.
 
 ### 3. Edge function as proxy
 
-Electric is [designed to run behind a CDN](https://electric-sql.com/docs/api/http#caching). This makes sync faster and more scalable. However, it means that if you want to authorise access to the Electric API using a proxy, you need to run that proxy in-front-of the CDN.
+Electric is [designed to run behind a CDN](https://electric-sql.com/docs/api/http#caching). This makes sync faster and more scalable. However, it means that if you want to authorize access to the Electric API using a proxy, you need to run that proxy in-front-of the CDN.
 
 You can do this with a centralised cloud proxy, such as an API endpoint deployed as part of a backend web service. Or a reverse-proxy like Caddy that's deployed next to your Electric service. However, running these in front of a CDN from a central location reduces the benefit of the CDN &mdash; adding latency and introducing a bottleneck.
 
@@ -299,7 +299,7 @@ Copy the auth token and set it to an env var:
 export AUTH_TOKEN="<token>"
 ```
 
-An unauthorised request to the edge-function proxy will get a 401:
+An unauthorized request to the edge-function proxy will get a 401:
 
 ```console
 $ curl -sv "http://localhost:8000/v1/shape?table=items&offset=-1"
@@ -308,7 +308,7 @@ $ curl -sv "http://localhost:8000/v1/shape?table=items&offset=-1"
 ...
 ```
 
-An authorised request for the correct shape will succeed:
+An authorized request for the correct shape will succeed:
 
 ```console
 $ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
@@ -318,7 +318,7 @@ $ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
 ...
 ```
 
-An authorised request for the wrong shape will fail:
+An authorized request for the wrong shape will fail:
 
 ```console
 $ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \

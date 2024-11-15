@@ -54,7 +54,7 @@ defmodule ApiWeb.GatekeeperTest do
 
       {:ok, shape} = Shape.from(%{"table" => table})
 
-      assert Authenticator.authorise(shape, headers)
+      assert Authenticator.authorize(shape, headers)
     end
   end
 end

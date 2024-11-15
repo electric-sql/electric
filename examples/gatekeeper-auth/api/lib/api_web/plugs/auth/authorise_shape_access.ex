@@ -1,4 +1,4 @@
-defmodule ApiWeb.Plugs.Auth.AuthoriseShapeAccess do
+defmodule ApiWeb.Plugs.Auth.AuthorizeShapeAccess do
   @moduledoc """
   This plug allows the dummy user to access any shape.
 
@@ -11,7 +11,7 @@ defmodule ApiWeb.Plugs.Auth.AuthoriseShapeAccess do
   def init(opts), do: opts
 
   def call(%{assigns: %{current_user: user, shape: shape}} = conn, _opts) do
-    case is_authorised(user, shape) do
+    case is_authorized(user, shape) do
       true ->
         conn
 
@@ -22,9 +22,9 @@ defmodule ApiWeb.Plugs.Auth.AuthoriseShapeAccess do
     end
   end
 
-  defp is_authorised(:dummy, _) do
+  defp is_authorized(:dummy, _) do
     true
   end
 
-  defp is_authorised(_, _), do: false
+  defp is_authorized(_, _), do: false
 end
