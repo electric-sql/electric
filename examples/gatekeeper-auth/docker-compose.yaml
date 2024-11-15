@@ -34,7 +34,7 @@ services:
       AUTH_SECRET: "NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY"
       DATABASE_URL: "postgresql://postgres:password@postgres:5432/electric?sslmode=disable"
       ELECTRIC_URL: "http://electric:3000"
-      ELECTRIC_PROXY_URL: "${ELECTRIC_PROXY_URL:-http://localhost:3000/proxy}"
+      ELECTRIC_PROXY_URL: "${ELECTRIC_PROXY_URL:-http://localhost:4000/proxy}"
       PHX_HOST: "localhost"
       PHX_PORT: 4000
       PHX_SCHEME: "http"
