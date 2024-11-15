@@ -1,7 +1,7 @@
 
-# Electric Gatekeeper Auth Example
+# Electric - Gatekeeper auth example
 
-This example demonstrates a number of ways of implementing the [Gatekeeper auth pattern](https://electric-sql.com/docs/guides/auth#gatekeeper) for securing access to the [Electric sync service](https://electric-sql.com/product/sync).
+This example demonstrates a number of ways of implementing the [gatekeeper auth](https://electric-sql.com/docs/guides/auth#gatekeeper-auth) pattern for [securing access](https://electric-sql.com/docs/guides/auth) to the [Electric sync service](https://electric-sql.com/product/sync).
 
 It includes:
 
@@ -11,6 +11,8 @@ It includes:
     - [`./caddy`](./caddy) a Caddy web server as a reverse proxy
     - [`./edge`](./edge) an edge function that you can run in front of a CDN
 
+> [!TIP]
+> You can see an alternative pattern for auth in the [proxy-auth](../proxy-auth) example.
 
 ## How it works
 
