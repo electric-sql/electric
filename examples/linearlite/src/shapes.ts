@@ -5,7 +5,7 @@ export const issueShape: ShapeStreamOptions = {
   url: `${baseUrl}/v1/shape/`,
   table: `issue`,
   databaseId,
-  headers: {
-    Authorization: `Bearer ${token}`,
+  params: {
+    token,
   },
 }

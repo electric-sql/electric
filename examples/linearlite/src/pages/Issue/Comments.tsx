@@ -20,8 +20,8 @@ function Comments(commentProps: CommentsProps) {
     url: `${baseUrl}/v1/shape`,
     table: `comment`,
     databaseId,
-    headers: {
-      Authorization: `Bearer ${token}`,
+    params: {
+      token,
     },
   })! as Comment[]
 

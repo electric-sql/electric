@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
   const headers = new Headers()
   if (process.env.ELECTRIC_TOKEN) {
-    headers.set(`Authorization`, `Bearer ${process.env.ELECTRIC_TOKEN}`)
+    originUrl.searchParams.set(`token`, process.env.ELECTRIC_TOKEN)
   }
 
   const newRequest = new Request(originUrl.toString(), {
