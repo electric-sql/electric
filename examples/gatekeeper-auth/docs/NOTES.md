@@ -1,6 +1,6 @@
 ### Seperating the concerns
 
-With the [proxy auth pattern](https://electric-sql.com/docs/guides/auth#proxy), the proxy performs authorization logic on the shape request path. Performing this logic can be expensive. You may not want to query the database or call an external service every time you make a shape request [1]. It can also be a security concern. Do you want your database exposed to your edge worker?
+With the [proxy auth pattern](https://electric-sql.com/docs/guides/auth#proxy-auth), the proxy performs authorization logic on the shape request path. Performing this logic can be expensive. You may not want to query the database or call an external service every time you make a shape request [1]. It can also be a security concern. Do you want your database exposed to your edge worker?
 
 The gatekeeper pattern avoids these concerns by separating the steps of:
 
