@@ -80,6 +80,8 @@ jobs:
           script: |
             const linearlite = process.env.linearlite;
             const nextjs = process.env.nextjs;
+
+            const prNumber = context.issue.number;
             const commentBody = `## Examples
             - linearlite: ${linearlite}
             - nextjs: ${nextjs}
