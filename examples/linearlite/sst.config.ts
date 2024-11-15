@@ -46,9 +46,9 @@ export default $config({
         website: website.url,
       }
     } catch (e) {
-      console.error('Failed to deploy linearlite stack', e)
+      console.error(`Failed to deploy linearlite stack`, e)
     }
-  }
+  },
 })
 
 function applyMigrations(uri: string) {
