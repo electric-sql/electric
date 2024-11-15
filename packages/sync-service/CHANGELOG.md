@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 0.8.2
+
+### Patch Changes
+
+- d98d9ed: Fix root table parameter validation to return 400 when missing
+- 90ead4f: Support for managing multiple databases on one Electric (multi tenancy).
+- 5e60e71: Refactored the tenant manager to store tenant information in an ETS table for improved read performance.
+- ae18f4a: Drops the replication slot when `DELETE /v1/admin/database/:database_id` is called
+
 ## 0.8.1
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @electric-sql/client
 
+## 0.7.2
+
+### Patch Changes
+
+- 65af31c: Add params option when creating shapes
+- 90ead4f: Support for managing multiple databases on one Electric (multi tenancy).
+
 ## 0.7.1
 
 ### Patch Changes
