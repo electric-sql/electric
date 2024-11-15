@@ -1,0 +1,62 @@
+name: Teardown Examples PR stack
+
+on:
+  pull_request:
+    paths: ['examples/*/**']
+    types: [closed]
+
+concurrency:
+  group: examples-pr-${{ github.event.number }}
+
+jobs:
+  teardown-pr-stack:
+    name: Teardown Examples PR stack
+    environment: Pull request
+    runs-on: ubuntu-latest
+
+    env:
+      DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+      ELECTRIC_API: ${{ secrets.ELECTRIC_API }}
+      ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
+      # HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }} TODO
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache SST state
+        uses: actions/cache@v4
+        with:
+          path: .sst
+          key: sst-cache-${{ github.event.number }}-${{ runner.os }}
+          restore-keys: |
+            sst-cache-${{ runner.os }}
+
+      - name: Remove Linearlite
+        working-directory: examples/linearlite
+        run: |
+            export PR_NUMBER=${{ github.event.number }}
+            echo "Removing stage pr-$PR_NUMBER"
+            pnpm sst remove --stage "pr-$PR_NUMBER"
+
+      - name: Remove NextJs example
+        working-directory: examples/nextjs-example
+        run: |
+            export PR_NUMBER=${{ github.event.number }}
+            echo "Removing stage pr-$PR_NUMBER"
+            pnpm sst remove --stage "pr-$PR_NUMBER"

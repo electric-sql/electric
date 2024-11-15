@@ -12,8 +12,7 @@
     "dev": "next dev --turbo -p 5173",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "stylecheck": "eslint . --quiet",
+    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -35,6 +34,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "dotenv": "^16.4.5",
     "eslint": "^8.57.0",
+    "sst": "3.3.7",
     "typescript": "^5.5.3",
     "vite": "^5.3.4"
   }

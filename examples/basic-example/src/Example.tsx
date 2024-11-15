@@ -8,7 +8,7 @@ const baseUrl = import.meta.env.ELECTRIC_URL ?? `http://localhost:3000`
 export const Example = () => {
   const { data: items } = useShape<Item>({
     url: `${baseUrl}/v1/shape`,
-    table: `items`
+    table: `items`,
   })
 
   /*

@@ -1,0 +1,115 @@
+name: Deploy Examples
+
+on:
+    push:
+      branches: ['main']
+    pull_request:
+      paths: ['examples/*/**']
+
+concurrency:
+  group: ${{ github.event_name == 'push' && 'prod-deploy-group' || format('examples-pr-{0}', github.event.number) }}
+
+jobs:
+  deploy-examples:
+    name: Deploy Examples
+    environment: ${{ github.event_name == 'push' && 'Production' || 'Pull request' }}
+    runs-on: ubuntu-latest
+
+    env:
+      DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+      ELECTRIC_API: ${{ secrets.ELECTRIC_API }}
+      ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
+      # HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }} TODO
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache SST state
+        uses: actions/cache@v4
+        with:
+          path: .sst
+          key: sst-cache-main-${{ runner.os }}
+          restore-keys: |
+            sst-cache-main-${{ runner.os }}
+
+      - name: Deploy Linearlite
+        working-directory: examples/linearlite
+        run: |
+          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+          if [ -f ".sst/outputs.json" ]; then
+            linearlite=$(jq -r '.website' .sst/outputs.json)
+            echo "linearlite=$linearlite" >> $GITHUB_ENV
+          else
+            echo "sst outputs file not found. Exiting."
+            exit 1
+          fi
+
+
+      - name: Deploy NextJs example
+        working-directory: examples/nextjs-example
+        run: |
+          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+          if [ -f ".sst/outputs.json" ]; then
+            nextjs=$(jq -r '.website' .sst/outputs.json)
+            echo "nextjs=$nextjs" >> $GITHUB_ENV
+          else
+            echo "sst outputs file not found. Exiting."
+            exit 1
+          fi
+
+      - name: Add comment to PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const linearlite = process.env.linearlite;
+            const nextjs = process.env.nextjs;
+
+            const prNumber = context.issue.number;
+            const commentBody = `## Examples
+            - linearlite: ${linearlite}
+            - nextjs: ${nextjs}
+            `;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+
+            const existingComment = comments.find(comment => comment.user.login ==='github-actions[bot]' && comment.body.startsWith("## Examples"));
+
+            if (existingComment) {
+              // Update the existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: commentBody,
+              });
+            } else {
+              // Create a new comment if none exists
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: commentBody,
+              });
+            }
+
