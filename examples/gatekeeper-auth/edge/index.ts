@@ -3,17 +3,24 @@ import jwt from 'jsonwebtoken'
 const AUTH_SECRET = Deno.env.get("AUTH_SECRET") || "NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY"
 const ELECTRIC_URL = Deno.env.get("ELECTRIC_URL") || "http://localhost:3000"
 
+interface ShapeDefinition {
+  table: string
+  columns?: string
+  namespace?: string
+  where?: string
+}
+
 /**
  * Match `GET /v1/shape` requests.
  */
-function isGetShapeRequest(method, path) {
+function isGetShapeRequest(method: string, path: string) {
   return method === 'GET' && path.endsWith('/v1/shape')
 }
 
 /**
  * Allow requests with a valid JWT in the auth header.
  */
-function verifyAuthHeader(headers) {
+function verifyAuthHeader(headers: Headers) {
   const auth_header = headers.get("Authorization")
 
   if (auth_header === null) {
@@ -38,7 +45,7 @@ function verifyAuthHeader(headers) {
  * Allow requests where the signed `shape` definition in the JWT claims
  * matches the shape definition in the request `params`.
  */
-function matchesDefinition(shape, params) {
+function matchesDefinition(shape: ShapeDefinition, params: URLSearchParams) {
   if (shape === null || !shape.hasOwnProperty('table')) {
     return false
   }
