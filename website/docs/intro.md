@@ -22,11 +22,20 @@ You don't need to be an expert in database replication or distributed systems to
 
 ## New to ElectricSQL?
 
-Start with the [Quickstart](/docs/quickstart) to get up-and-running.
+Start with the [Quickstart](/docs/quickstart) to get up-and-running. The guides on [Shapes](/docs/guides/shapes) and [Auth](/docs/guides/auth) are also good entrypoints and helpful to understand how Electric works.
+
+The [HTTP API](/docs/api/http) and [TypeScript Client](/docs/api/clients/typescript) docs show how to sync data. The [React](/docs/integrations/react) page illustrates how to bind these into a reactivity framework.
+
+The easiest way to use Electric in production is the [Electric Cloud](/product/cloud). Alternatively, the [Deployment](/docs/guides/deployment) guide covers how to self host.
+
+> [!warning] Looking for PGlite docs?
+> If you're interested in using [PGlite](/product/pglite), it has it's own docs site at [pglite.dev/docs](https://pglite.dev/docs)
 
 ## Examples
 
-See the [examples folder](https://github.com/electric-sql/electric/tree/main/examples) in the main GitHub repo.
+There are lots of [examples](https://github.com/electric-sql/electric/tree/main/examples) in the main repo on GitHub.
+
+The integration docs also illustrate common patterns, e.g. using Electric with frameworks like [TanStack](/docs/integrations/tanstack) and [Phoenix](/docs/integrations/phoenix) and platforms like [Supabase](/docs/integrations/supabase) and [Cloudflare](/docs/integrations/cloudflare).
 
 ## Source code
 

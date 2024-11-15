@@ -5,11 +5,18 @@ description: >-
 outline: 2
 ---
 
+<p class="intro-zap-container">
+  <img src="/img/home/zap-with-halo.svg"
+      alt="Electric zap with halo"
+      class="intro-zap"
+  />
+</p>
+
 # Quickstart
 
 Let's get you up-and-running with Electric and real-time sync of your Postgres data.
 
-First we'll setup Electric and show you how to use the low-level HTTP API directly. Then we'll create a simple React app using our higher-level TypeScript client.
+First we'll setup Electric and show you how to use the low-level [HTTP API](/docs/api/http) directly. Then we'll create a simple React app using our higher-level [React hooks](http://localhost:5173/docs/integrations/react#useshape).
 
 ## Setup
 
