@@ -14,7 +14,7 @@ defmodule ApiWeb.ProxyController do
   defp proxy_request(%{req_headers: headers} = conn) do
     conn
     |> build_url()
-    |> Req.get!(headers: headers, into: :self)
+    |> Req.get!(headers: headers, into: :self, receive_timeout: 30_000)
   end
 
   defp build_url(%{path_info: [_prefix | segments], query_string: query}) do
