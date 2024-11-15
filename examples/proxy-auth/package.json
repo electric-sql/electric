@@ -1,13 +1,13 @@
 {
-  "name": "@electric-examples/auth-example",
+  "name": "@electric-examples/proxy-auth",
   "private": true,
   "version": "0.0.1",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "backend:up": "PROJECT_NAME=auth-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
-    "backend:down": "PROJECT_NAME=auth-example pnpm -C ../../ run example-backend:down",
+    "backend:up": "PROJECT_NAME=proxy-auth pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=proxy-auth pnpm -C ../../ run example-backend:down",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
     "dev": "next dev --turbo -p 5173",
     "start": "next start",
