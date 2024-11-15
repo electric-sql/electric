@@ -9,7 +9,7 @@ defmodule ApiWeb.Router do
     plug AssignShape
 
     plug Auth.AuthenticateUser
-    plug Auth.AuthoriseShapeAccess
+    plug Auth.AuthorizeShapeAccess
   end
 
   pipeline :proxy do
@@ -22,7 +22,7 @@ defmodule ApiWeb.Router do
     pipe_through :api
 
     # The gatekeeper endpoint at `POST /gatekeeper/:table` authenticates the user,
-    # authorises the shape access, generates a shape-scoped auth token and returns
+    # authorizes the shape access, generates a shape-scoped auth token and returns
     # this along with other config that an Electric client can use to stream the
     # shape directly from Electric.
     scope "/gatekeeper" do

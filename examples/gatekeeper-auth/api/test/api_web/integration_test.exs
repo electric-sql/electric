@@ -17,7 +17,7 @@ defmodule ApiWeb.IntegrationTest do
                |> post("/gatekeeper/#{table}", where: where)
                |> json_response(200)
 
-      # Make an authorised shape request.
+      # Make an authorized shape request.
       assert [] =
                conn
                |> put_req_header("authorization", auth_header)
