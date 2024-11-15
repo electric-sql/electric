@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: MobX - Integrations
+description: >-
+  How to use Electric with MobX.
 image: /img/integrations/electric-mobx.jpg
 ---
 

@@ -31,6 +31,18 @@ import {
   REPLICA_PARAM,
 } from './constants'
 
+const RESERVED_PARAMS = new Set([
+  DATABASE_ID_QUERY_PARAM,
+  COLUMNS_QUERY_PARAM,
+  LIVE_CACHE_BUSTER_QUERY_PARAM,
+  SHAPE_HANDLE_QUERY_PARAM,
+  LIVE_QUERY_PARAM,
+  OFFSET_QUERY_PARAM,
+  TABLE_QUERY_PARAM,
+  WHERE_QUERY_PARAM,
+  REPLICA_PARAM,
+])
+
 type Replica = `full` | `default`
 
 /**
@@ -97,6 +109,12 @@ export interface ShapeStreamOptions<T = never> {
    * Can be used for adding authentication headers.
    */
   headers?: Record<string, string>
+
+  /**
+   * Additional request parameters to attach to the URL.
+   * These will be merged with Electric's standard parameters.
+   */
+  params?: Record<string, string>
 
   /**
    * Automatically fetch updates to the Shape. If you just want to sync the current
@@ -246,6 +264,25 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.options.subscribe
       ) {
         const fetchUrl = new URL(url)
+
+        // Add any custom parameters first
+        if (this.options.params) {
+          // Check for reserved parameter names
+          const reservedParams = Object.keys(this.options.params).filter(
+            (key) => RESERVED_PARAMS.has(key)
+          )
+          if (reservedParams.length > 0) {
+            throw new Error(
+              `Cannot use reserved Electric parameter names in custom params: ${reservedParams.join(`, `)}`
+            )
+          }
+
+          for (const [key, value] of Object.entries(this.options.params)) {
+            fetchUrl.searchParams.set(key, value)
+          }
+        }
+
+        // Add Electric's internal parameters
         if (table) fetchUrl.searchParams.set(TABLE_QUERY_PARAM, table)
         if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
         if (columns && columns.length > 0)

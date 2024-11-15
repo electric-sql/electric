@@ -1,5 +1,9 @@
 ---
 title: Benchmarks - Reference
+description: >-
+  We run benchmarks for the Electric sync engine and the Electric Cloud,
+  which hosts the sync engine behind a CDN.
+image: /img/guides/diverse-shape-fanout.png
 outline: [2, 4]
 ---
 

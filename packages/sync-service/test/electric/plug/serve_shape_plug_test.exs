@@ -152,20 +152,41 @@ defmodule Electric.Plug.ServeShapePlugTest do
       :with_tenant_id
     ]
 
-    test "returns 400 for invalid params", ctx do
+    test "returns 400 for invalid table", ctx do
       conn =
         ctx
-        |> conn(:get, %{"table" => ".invalid_shape"}, "?offset=invalid")
+        |> conn(:get, %{"table" => ".invalid_shape"}, "?offset=-1")
         |> ServeShapePlug.call([])
 
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "offset" => ["has invalid format"],
                "table" => [
                  "Invalid zero-length delimited identifier"
                ]
              }
+    end
+
+    test "returns 400 for invalid offset", ctx do
+      conn =
+        ctx
+        |> conn(:get, %{"table" => "foo"}, "?offset=invalid")
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{"offset" => ["has invalid format"]}
+    end
+
+    test "returns 400 when table param is missing", ctx do
+      conn =
+        ctx
+        |> conn(:get, %{}, "?offset=-1")
+        |> ServeShapePlug.call([])
+
+      assert conn.status == 400
+
+      assert %{"table" => ["can't be blank"]} = Jason.decode!(conn.resp_body)
     end
 
     test "returns 400 when table does not exist", ctx do

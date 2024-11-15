@@ -1,4 +1,9 @@
 ---
+title: Typescript Client
+description: >-
+  Electric provides an Typescript client for streaming Shapes from Postgres
+  into the web browser and other Javascript environments.
+image: /img/integrations/electric-typescript.jpg
 outline: [2, 4]
 ---
 
@@ -121,9 +126,12 @@ export interface ShapeStreamOptions<T = never> {
   headers?: Record<string, string>
 
   /**
-   * Alternatively you can override the fetch function.
+   * Additional request parameters to attach to the URL.
+   * These will be merged with Electric's standard parameters.
+   * Note: You cannot use Electric's reserved parameter names
+   * (table, where, columns, offset, etc.).
    */
-  fetchClient?: typeof fetch
+  params?: Record<string, string>
 
   /**
    * Automatically fetch updates to the Shape. If you just want to sync the current
@@ -131,10 +139,54 @@ export interface ShapeStreamOptions<T = never> {
    */
   subscribe?: boolean
 
-  backoffOptions?: BackoffOptions
-  parser?: Parser<T>
+  /**
+   * Signal to abort the stream.
+   */
   signal?: AbortSignal
+
+  /**
+   * Custom fetch client implementation.
+   */
+  fetchClient?: typeof fetch
+
+  /**
+   * Custom parser for handling specific data types.
+   */
+  parser?: Parser<T>
+
+  backoffOptions?: BackoffOptions
 }
+```
+
+Note that certain parameter names are reserved for Electric's internal use and cannot be used in custom params:
+- `table`
+- `where`
+- `columns`
+- `offset`
+- `handle`
+- `live`
+- `cursor`
+- `database_id`
+- `replica`
+
+Attempting to use these reserved names will throw an error.
+
+Example usage with custom headers and parameters:
+
+```ts
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  table: 'items',
+  // Add authentication header
+  headers: {
+    'Authorization': 'Bearer token'
+  },
+  // Add custom URL parameters
+  params: {
+    'tenant': 'acme-corp',
+    'version': '1.0'
+  }
+})
 ```
 
 #### Messages
@@ -148,7 +200,7 @@ export type ChangeMessage<T extends Row<unknown> = Row> = {
   headers: Header & { operation: `insert` | `update` | `delete` }
   offset: Offset
 }
-````
+```
 
 Or a `ControlMessage`, representing an instruction to the client, as [documented here](../http#control-messages).
 

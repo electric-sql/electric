@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: Phoenix - Integrations
+description: >-
+  How to use Electric with Phoenix.
 image: /img/integrations/electric-phoenix.jpg
 ---
 

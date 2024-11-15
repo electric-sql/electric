@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: React - Integrations
+description: >-
+  How to use Electric with React.
 image: /img/integrations/electric-react.jpg
 ---
 

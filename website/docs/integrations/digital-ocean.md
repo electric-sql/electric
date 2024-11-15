@@ -1,6 +1,8 @@
 ---
 outline: deep
 title: Digital Ocean - Integrations
+description: >-
+  How to deploy Electric on Digital Ocean.
 image: /img/integrations/electric-digital-ocean.jpg
 ---
 
