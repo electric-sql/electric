@@ -131,9 +131,9 @@ Available error classes:
 - `ReservedParamError`: Using reserved parameter names
 - `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
 
-See the [Docs](https://electric-sql.com/docs/api/clients/typescript#error-handling) for more details on error handling.
+See the [typescript client docs on the website](https://electric-sql.com/docs/api/clients/typescript#error-handling) for more details on error handling.
 
-See the [Docs](https://electric-sql.com) and [Examples](https://electric-sql.com/examples/basic) for more information.
+And in general, see the [docs website](https://electric-sql.com) and [examples folder](https://electric-sql.com/examples/basic) for more information.
 
 ## Develop
 
