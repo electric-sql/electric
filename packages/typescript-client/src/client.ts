@@ -11,7 +11,11 @@ import { isUpToDateMessage } from './helpers'
 import {
   FetchError,
   FetchBackoffAbortError,
+  InvalidShapeOptionsError,
+  InvalidSignalError,
+  MissingShapeHandleError,
   MissingHeadersError,
+  ReservedParamError,
 } from './error'
 import {
   BackoffDefaults,
@@ -532,12 +536,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
 function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (!options.url) {
-    throw new Error(`Invalid shape options. It must provide the url`)
+    throw new InvalidShapeOptionsError(
+      `Invalid shape options. It must provide the url`
+    )
   }
   if (options.signal && !(options.signal instanceof AbortSignal)) {
-    throw new Error(
-      `Invalid signal option. It must be an instance of AbortSignal.`
-    )
+    throw new InvalidSignalError()
   }
 
   if (
@@ -545,9 +549,7 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
     options.offset !== `-1` &&
     !options.handle
   ) {
-    throw new Error(
-      `handle is required if this isn't an initial fetch (i.e. offset > -1)`
-    )
+    throw new MissingShapeHandleError()
   }
 
   // Check for reserved parameter names
@@ -556,9 +558,7 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
       RESERVED_PARAMS.has(key)
     )
     if (reservedParams.length > 0) {
-      throw new Error(
-        `Cannot use reserved Electric parameter names in custom params: ${reservedParams.join(`, `)}`
-      )
+      throw new ReservedParamError(reservedParams)
     }
   }
   return

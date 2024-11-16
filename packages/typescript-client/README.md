@@ -93,6 +93,46 @@ shape.subscribe(({ rows }) => {
 }
 ```
 
+### Error Handling
+
+The client provides several specific error classes to help you handle different types of errors:
+
+```typescript
+import { 
+  ShapeStream, 
+  FetchError, 
+  ReservedParamError 
+} from '@electric-sql/client'
+
+try {
+  const stream = new ShapeStream({
+    url: 'http://localhost:3000/v1/shape',
+    table: 'items',
+    params: {
+      // This would throw a ReservedParamError as 'table' is reserved
+      table: 'items'
+    }
+  })
+} catch (error) {
+  if (error instanceof ReservedParamError) {
+    console.error('Cannot use reserved parameter names:', error.message)
+  } else if (error instanceof FetchError) {
+    console.error('HTTP error:', error.status, error.message)
+  }
+}
+```
+
+Available error classes:
+- `FetchError`: HTTP errors during shape fetching
+- `FetchBackoffAbortError`: Fetch aborted using AbortSignal
+- `InvalidShapeOptionsError`: Invalid ShapeStream options
+- `InvalidSignalError`: Invalid AbortSignal instance
+- `MissingShapeHandleError`: Missing required shape handle
+- `ReservedParamError`: Using reserved parameter names
+- `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
+
+See the [Docs](https://electric-sql.com/docs/api/clients/typescript#error-handling) for more details on error handling.
+
 See the [Docs](https://electric-sql.com) and [Examples](https://electric-sql.com/examples/basic) for more information.
 
 ## Develop

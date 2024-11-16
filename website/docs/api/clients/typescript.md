@@ -150,7 +150,7 @@ export interface ShapeStreamOptions<T = never> {
   fetchClient?: typeof fetch
 
   /**
-   * Custom parser for handling specific data types.
+   * Custom parser for handling specific Postgres data types.
    */
   parser?: Parser<T>
 
@@ -274,6 +274,83 @@ await shape.rows
 shape.subscribe(({ rows }) => {
   // rows is an array of the latest value of each row in a shape.
 })
+```
+
+### Error handling
+
+The TypeScript client provides several error classes to help you handle different types of errors that may occur:
+
+```typescript
+import { ShapeStream, FetchError, ReservedParamError } from '@electric-sql/client'
+
+try {
+  const stream = new ShapeStream({
+    url: 'http://localhost:3000/v1/shape',
+    table: 'items',
+    params: {
+      // This would throw a ReservedParamError as 'table' is reserved
+      table: 'items'
+    }
+  })
+} catch (error) {
+  if (error instanceof ReservedParamError) {
+    console.error('Cannot use reserved parameter names:', error.message)
+  } else if (error instanceof FetchError) {
+    console.error('HTTP error:', error.status, error.message)
+  }
+}
+```
+
+#### Error classes
+
+##### `FetchError`
+Thrown when there's an HTTP error during shape fetching. Contains:
+- `status`: HTTP status code
+- `text`: Response text if available
+- `json`: Parsed JSON response if available
+- `headers`: Response headers
+- `url`: Request URL
+
+##### `FetchBackoffAbortError`
+Thrown when a fetch with backoff is aborted using the AbortSignal.
+
+##### `InvalidShapeOptionsError`
+Thrown when the ShapeStream options are invalid (e.g., missing required URL).
+
+##### `InvalidSignalError`
+Thrown when the provided AbortSignal is not a valid AbortSignal instance.
+
+##### `MissingShapeHandleError`
+Thrown when a shape handle is required but not provided (e.g., when offset > -1).
+
+##### `ReservedParamError`
+Thrown when attempting to use Electric's reserved parameter names in custom params. Contains the list of conflicting parameter names.
+
+##### `ParserNullValueError`
+Thrown by the parser when attempting to parse a NULL value in a column that doesn't allow NULL values.
+
+#### Error handling in subscribers
+
+When subscribing to a ShapeStream or Shape, you can provide an error handler:
+
+```typescript
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  table: 'items'
+})
+
+stream.subscribe(
+  (messages) => {
+    // Handle messages
+  },
+  (error) => {
+    if (error instanceof FetchError) {
+      console.error('HTTP error:', error.status, error.message)
+    } else {
+      console.error('Other error:', error)
+    }
+  }
+)
 ```
 
 See the [Examples](https://github.com/electric-sql/electric/tree/main/examples) and [integrations](/docs/integrations/react) for more usage examples.
