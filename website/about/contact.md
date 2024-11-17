@@ -26,5 +26,5 @@ For media enquiries, please contact us on [press@electric-sql.com](mailto:press@
 
 You can download our logo here:
 
-- [logo](/img/identity/logo.svg) for dark backgrounds
-- [inverse logo](/img/identity/logo.inverse.svg) for light backgrounds
+- [logo](/img/brand/logo.svg) for dark backgrounds
+- [inverse logo](/img/brand/logo.inverse.svg) for light backgrounds
