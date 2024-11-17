@@ -320,8 +320,8 @@ Thrown when the ShapeStream options are invalid (e.g., missing required URL).
 ##### `InvalidSignalError`
 Thrown when the provided AbortSignal is not a valid AbortSignal instance.
 
-##### `MissingShapeHandleError`
-Thrown when a shape handle is required but not provided (e.g., when offset > -1).
+##### `MissingShapeUrlError`
+Thrown when creating a ShapeStream without providing the required URL parameter.
 
 ##### `ReservedParamError`
 Thrown when attempting to use Electric's reserved parameter names in custom params. Contains the list of conflicting parameter names.

@@ -11,7 +11,7 @@ import { isUpToDateMessage } from './helpers'
 import {
   FetchError,
   FetchBackoffAbortError,
-  InvalidShapeOptionsError,
+  MissingShapeUrlError,
   InvalidSignalError,
   MissingShapeHandleError,
   MissingHeadersError,
@@ -536,9 +536,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
 function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (!options.url) {
-    throw new InvalidShapeOptionsError(
-      `Invalid shape options. It must provide the url`
-    )
+    throw new MissingShapeUrlError()
   }
   if (options.signal && !(options.signal instanceof AbortSignal)) {
     throw new InvalidSignalError()

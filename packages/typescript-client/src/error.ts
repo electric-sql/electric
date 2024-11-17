@@ -67,6 +67,13 @@ export class InvalidShapeOptionsError extends Error {
   }
 }
 
+export class MissingShapeUrlError extends Error {
+  constructor() {
+    super(`Invalid shape options: missing required url parameter`)
+    this.name = `MissingShapeUrlError`
+  }
+}
+
 export class InvalidSignalError extends Error {
   constructor() {
     super(`Invalid signal option. It must be an instance of AbortSignal.`)

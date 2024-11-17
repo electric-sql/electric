@@ -128,6 +128,7 @@ Available error classes:
 - `InvalidShapeOptionsError`: Invalid ShapeStream options
 - `InvalidSignalError`: Invalid AbortSignal instance
 - `MissingShapeHandleError`: Missing required shape handle
+- `MissingShapeUrlError`: Missing required URL parameter in ShapeStream options
 - `ReservedParamError`: Using reserved parameter names
 - `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
 
