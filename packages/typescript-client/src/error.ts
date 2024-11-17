@@ -101,7 +101,7 @@ export class ReservedParamError extends Error {
 
 export class ParserNullValueError extends Error {
   constructor(columnName: string) {
-    super(`Column ${columnName ?? `unknown`} does not allow NULL values`)
+    super(`Column "${columnName ?? `unknown`}" does not allow NULL values`)
     this.name = `ParserNullValueError`
   }
 }
