@@ -95,42 +95,57 @@ shape.subscribe(({ rows }) => {
 
 ### Error Handling
 
-The client provides several specific error classes to help you handle different types of errors:
+The ShapeStream constructor automatically starts streaming by default. Runtime errors can be handled in two ways:
 
+1. Using try/catch with `autoStart: false`:
 ```typescript
-import { 
-  ShapeStream, 
-  FetchError, 
-  ReservedParamError 
-} from '@electric-sql/client'
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  table: 'issues',
+  autoStart: false
+})
 
 try {
-  const stream = new ShapeStream({
-    url: 'http://localhost:3000/v1/shape',
-    table: 'items',
-    params: {
-      // This would throw a ReservedParamError as 'table' is reserved
-      table: 'items'
-    }
-  })
+  await stream.start()
 } catch (error) {
-  if (error instanceof ReservedParamError) {
-    console.error('Cannot use reserved parameter names:', error.message)
-  } else if (error instanceof FetchError) {
+  if (error instanceof FetchError) {
     console.error('HTTP error:', error.status, error.message)
   }
 }
 ```
 
-Available error classes:
+2. Using the error handler in subscribe:
+```typescript
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  table: 'issues'
+})
+
+stream.subscribe(
+  (messages) => {
+    // Handle messages
+    console.log('Received messages:', messages)
+  },
+  (error) => {
+    // Handle runtime errors
+    console.error('Failure while running stream:', error)
+  }
+)
+```
+
+The following error types may be thrown:
+
+Initialization errors (thrown by constructor):
+- `MissingShapeUrlError`: Missing required URL parameter
+- `InvalidSignalError`: Invalid AbortSignal instance
+- `ReservedParamError`: Using reserved parameter names
+
+Runtime errors (thrown by `start()` or emitted to error handler):
 - `FetchError`: HTTP errors during shape fetching
 - `FetchBackoffAbortError`: Fetch aborted using AbortSignal
-- `InvalidShapeOptionsError`: Invalid ShapeStream options
-- `InvalidSignalError`: Invalid AbortSignal instance
 - `MissingShapeHandleError`: Missing required shape handle
-- `MissingShapeUrlError`: Missing required URL parameter in ShapeStream options
-- `ReservedParamError`: Using reserved parameter names
 - `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
+- `ShapeStreamAlreadyRunningError`: Attempting to start a ShapeStream that is already running
 
 See the [typescript client docs on the website](https://electric-sql.com/docs/api/clients/typescript#error-handling) for more details on error handling.
 

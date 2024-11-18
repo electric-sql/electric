@@ -61,7 +61,6 @@ export class Shape<T extends Row<unknown> = Row> {
       },
       (e) => {
         this.#handleError(e)
-        throw e
       }
     )
   }

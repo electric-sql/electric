@@ -16,6 +16,7 @@ import {
   MissingShapeHandleError,
   MissingHeadersError,
   ReservedParamError,
+  ShapeStreamAlreadyRunningError,
 } from './error'
 import {
   BackoffDefaults,
@@ -151,6 +152,7 @@ export interface ShapeStreamOptions<T = never> {
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
   parser?: Parser<T>
+  autoStart?: boolean
 }
 
 export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
@@ -173,6 +175,8 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   isUpToDate: boolean
   lastOffset: Offset
   shapeHandle?: string
+  start(): void
+  isRunning(): boolean
 }
 
 /**
@@ -214,7 +218,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
     DEFAULT: `default` as Replica,
   }
 
-  readonly options: ShapeStreamOptions<GetExtensions<T>>
+  #isRunning = false
+  #error: unknown = null
 
   readonly #fetchClient: typeof fetch
   readonly #messageParser: MessageParser<T>
@@ -239,12 +244,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #shapeHandle?: string
   #databaseId?: string
   #schema?: Schema
-  #error?: unknown
   #replica?: Replica
 
-  constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
-    validateOptions(options)
-    this.options = { subscribe: true, ...options }
+  constructor(private options: ShapeStreamOptions<GetExtensions<T>>) {
+    this.options = { subscribe: true, autoStart: true, ...options }
+    validateOptions(this.options)
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
     this.#shapeHandle = this.options.handle
@@ -268,7 +272,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
       createFetchWithChunkBuffer(fetchWithBackoffClient)
     )
 
-    this.start()
+    if (this.options.autoStart) {
+      this.start()
+    }
   }
 
   get shapeHandle() {
@@ -288,149 +294,162 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async start() {
-    this.#isUpToDate = false
-
-    const { url, table, where, columns, signal } = this.options
-
+    if (this.#isRunning) {
+      throw new ShapeStreamAlreadyRunningError()
+    }
+    this.#isRunning = true
+    
     try {
       while (
-        (!signal?.aborted && !this.#isUpToDate) ||
+        (!this.options.signal?.aborted && !this.#isUpToDate) ||
         this.options.subscribe
       ) {
-        const fetchUrl = new URL(url)
+        const { url, table, where, columns, signal } = this.options
 
-        // Add any custom parameters first
-        if (this.options.params) {
-          // Check for reserved parameter names
-          const reservedParams = Object.keys(this.options.params).filter(
-            (key) => RESERVED_PARAMS.has(key)
-          )
-          if (reservedParams.length > 0) {
-            throw new Error(
-              `Cannot use reserved Electric parameter names in custom params: ${reservedParams.join(`, `)}`
+        try {
+          const fetchUrl = new URL(url)
+
+          // Add any custom parameters first
+          if (this.options.params) {
+            // Check for reserved parameter names
+            const reservedParams = Object.keys(this.options.params).filter(
+              (key) => RESERVED_PARAMS.has(key)
+            )
+            if (reservedParams.length > 0) {
+              throw new Error(
+                `Cannot use reserved Electric parameter names in custom params: ${reservedParams.join(`, `)}`
+              )
+            }
+
+            for (const [key, value] of Object.entries(this.options.params)) {
+              fetchUrl.searchParams.set(key, value)
+            }
+          }
+
+          // Add Electric's internal parameters
+          if (table) fetchUrl.searchParams.set(TABLE_QUERY_PARAM, table)
+          if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
+          if (columns && columns.length > 0)
+            fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, columns.join(`,`))
+          fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
+
+          if (this.#isUpToDate) {
+            fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
+            fetchUrl.searchParams.set(
+              LIVE_CACHE_BUSTER_QUERY_PARAM,
+              this.#liveCacheBuster
             )
           }
 
-          for (const [key, value] of Object.entries(this.options.params)) {
-            fetchUrl.searchParams.set(key, value)
+          if (this.#shapeHandle) {
+            // This should probably be a header for better cache breaking?
+            fetchUrl.searchParams.set(
+              SHAPE_HANDLE_QUERY_PARAM,
+              this.#shapeHandle!
+            )
           }
-        }
 
-        // Add Electric's internal parameters
-        if (table) fetchUrl.searchParams.set(TABLE_QUERY_PARAM, table)
-        if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
-        if (columns && columns.length > 0)
-          fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, columns.join(`,`))
-        fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
-
-        if (this.#isUpToDate) {
-          fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
-          fetchUrl.searchParams.set(
-            LIVE_CACHE_BUSTER_QUERY_PARAM,
-            this.#liveCacheBuster
-          )
-        }
-
-        if (this.#shapeHandle) {
-          // This should probably be a header for better cache breaking?
-          fetchUrl.searchParams.set(
-            SHAPE_HANDLE_QUERY_PARAM,
-            this.#shapeHandle!
-          )
-        }
-
-        if (this.#databaseId) {
-          fetchUrl.searchParams.set(DATABASE_ID_QUERY_PARAM, this.#databaseId!)
-        }
-
-        if (
-          (this.#replica ?? ShapeStream.Replica.DEFAULT) !=
-          ShapeStream.Replica.DEFAULT
-        ) {
-          fetchUrl.searchParams.set(REPLICA_PARAM, this.#replica as string)
-        }
-
-        let response!: Response
-        try {
-          response = await this.#fetchClient(fetchUrl.toString(), {
-            signal,
-            headers: this.options.headers,
-          })
-          this.#connected = true
-        } catch (e) {
-          if (e instanceof FetchBackoffAbortError) break // interrupted
-          if (e instanceof MissingHeadersError) throw e
-          if (!(e instanceof FetchError)) throw e // should never happen
-          if (e.status == 409) {
-            // Upon receiving a 409, we should start from scratch
-            // with the newly provided shape handle
-            const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
-            this.#reset(newShapeHandle)
-            await this.#publish(e.json as Message<T>[])
-            continue
-          } else if (e.status >= 400 && e.status < 500) {
-            // Notify subscribers
-            this.#sendErrorToUpToDateSubscribers(e)
-            this.#sendErrorToSubscribers(e)
-
-            // 400 errors are not actionable without additional user input,
-            // so we exit the loop
-            throw e
+          if (this.#databaseId) {
+            fetchUrl.searchParams.set(DATABASE_ID_QUERY_PARAM, this.#databaseId!)
           }
-        }
 
-        const { headers, status } = response
-        const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
-        if (shapeHandle) {
-          this.#shapeHandle = shapeHandle
-        }
+          if (
+            (this.#replica ?? ShapeStream.Replica.DEFAULT) !=
+            ShapeStream.Replica.DEFAULT
+          ) {
+            fetchUrl.searchParams.set(REPLICA_PARAM, this.#replica as string)
+          }
 
-        const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
-        if (lastOffset) {
-          this.#lastOffset = lastOffset as Offset
-        }
+          let response!: Response
+          try {
+            response = await this.#fetchClient(fetchUrl.toString(), {
+              signal,
+              headers: this.options.headers,
+            })
+            this.#connected = true
+          } catch (e) {
+            if (e instanceof FetchBackoffAbortError) break // interrupted
+            if (!(e instanceof FetchError)) throw e // should never happen
+            if (e.status == 409) {
+              // Upon receiving a 409, we should start from scratch
+              // with the newly provided shape handle
+              const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
+              this.#reset(newShapeHandle)
+              await this.#publish(e.json as Message<T>[])
+              continue
+            } else if (e.status >= 400 && e.status < 500) {
+              // Notify subscribers
+              this.#sendErrorToUpToDateSubscribers(e)
+              this.#sendErrorToSubscribers(e)
 
-        const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
-        if (liveCacheBuster) {
-          this.#liveCacheBuster = liveCacheBuster
-        }
+              // 400 errors are not actionable without additional user input,
+              // so we exit the loop
+              throw e
+            }
+          }
 
-        const getSchema = (): Schema => {
-          const schemaHeader = headers.get(SHAPE_SCHEMA_HEADER)
-          return schemaHeader ? JSON.parse(schemaHeader) : {}
-        }
-        this.#schema = this.#schema ?? getSchema()
+          const { headers, status } = response
+          const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
+          if (shapeHandle) {
+            this.#shapeHandle = shapeHandle
+          }
 
-        const messages = status === 204 ? `[]` : await response.text()
+          const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
+          if (lastOffset) {
+            this.#lastOffset = lastOffset as Offset
+          }
 
-        if (status === 204) {
-          // There's no content so we are live and up to date
-          this.#lastSyncedAt = Date.now()
-        }
+          const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
+          if (liveCacheBuster) {
+            this.#liveCacheBuster = liveCacheBuster
+          }
 
-        const batch = this.#messageParser.parse(messages, this.#schema)
+          const getSchema = (): Schema => {
+            const schemaHeader = headers.get(SHAPE_SCHEMA_HEADER)
+            return schemaHeader ? JSON.parse(schemaHeader) : {}
+          }
+          this.#schema = this.#schema ?? getSchema()
 
-        // Update isUpToDate
-        if (batch.length > 0) {
-          const prevUpToDate = this.#isUpToDate
-          const lastMessage = batch[batch.length - 1]
-          if (isUpToDateMessage(lastMessage)) {
+          const messages = status === 204 ? `[]` : await response.text()
+
+          if (status === 204) {
+            // There's no content so we are live and up to date
             this.#lastSyncedAt = Date.now()
-            this.#isUpToDate = true
           }
 
-          await this.#publish(batch)
-          if (!prevUpToDate && this.#isUpToDate) {
-            this.#notifyUpToDateSubscribers()
+          const batch = this.#messageParser.parse(messages, this.#schema)
+
+          // Update isUpToDate
+          if (batch.length > 0) {
+            const prevUpToDate = this.#isUpToDate
+            const lastMessage = batch[batch.length - 1]
+            if (isUpToDateMessage(lastMessage)) {
+              this.#lastSyncedAt = Date.now()
+              this.#isUpToDate = true
+            }
+
+            await this.#publish(batch)
+            if (!prevUpToDate && this.#isUpToDate) {
+              this.#notifyUpToDateSubscribers()
+            }
+          }
+        } catch (err) {
+          this.#error = err
+          // Only throw if autoStart is false
+          if (!this.options.autoStart) {
+            throw err
           }
         }
       }
     } catch (err) {
       this.#error = err
-      throw err
     } finally {
       this.#connected = false
     }
+  }
+
+  isRunning(): boolean {
+    return this.#isRunning
   }
 
   subscribe(
@@ -485,7 +504,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   /** True during initial fetch. False afterwise.  */
   isLoading(): boolean {
-    return !this.isUpToDate
+    return !this.#isUpToDate
   }
 
   async #publish(messages: Message<T>[]): Promise<void> {

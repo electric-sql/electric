@@ -154,6 +154,11 @@ export interface ShapeStreamOptions<T = never> {
    */
   parser?: Parser<T>
 
+  /**
+   * Whether to automatically start streaming (default: true)
+   */
+  autoRun?: boolean
+
   backoffOptions?: BackoffOptions
 }
 ```
@@ -171,23 +176,22 @@ Note that certain parameter names are reserved for Electric's internal use and c
 
 Attempting to use these reserved names will throw an error.
 
-Example usage with custom headers and parameters:
+### ShapeStream Configuration
 
-```ts
+The ShapeStream constructor accepts several configuration options:
+
+```typescript
 const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
-  table: 'items',
-  // Add authentication header
-  headers: {
-    'Authorization': 'Bearer token'
-  },
-  // Add custom URL parameters
-  params: {
-    'tenant': 'acme-corp',
-    'version': '1.0'
+  url: 'http://localhost:3000/v1/shape',  // Required: URL to fetch shapes from
+  table: 'issues',                        // Optional: Table to stream shapes for
+  autoStart: true,                        // Optional: Auto-start streaming (default: true)
+  params: {                               // Optional: Custom parameters
+    foo: 'bar'
   }
 })
 ```
+
+Note: When using custom parameters, be careful not to use reserved parameter names as they may conflict with Electric's internal parameters.
 
 #### Messages
 
@@ -278,60 +282,76 @@ shape.subscribe(({ rows }) => {
 
 ### Error handling
 
-The TypeScript client provides several error classes to help you handle different types of errors that may occur:
+The client provides several specific error classes to help you handle different types of errors:
 
+Initialization errors (thrown by constructor):
+- `MissingShapeUrlError`: Missing required URL parameter
+- `InvalidSignalError`: Invalid AbortSignal instance
+- `ReservedParamError`: Using reserved parameter names
+
+Runtime errors (thrown by `start()` or emitted to error handler):
+- `FetchError`: HTTP errors during shape fetching
+- `FetchBackoffAbortError`: Fetch aborted using AbortSignal
+- `MissingShapeHandleError`: Missing required shape handle
+- `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
+- `ShapeStreamAlreadyRunningError`: Attempting to start a ShapeStream that is already running
+
+There are two ways to handle runtime errors:
+
+1. Using try/catch with `autoStart: false`:
 ```typescript
-import { ShapeStream, FetchError, ReservedParamError } from '@electric-sql/client'
-
+let stream: ShapeStream<Issue>
 try {
-  const stream = new ShapeStream({
+  stream = new ShapeStream({
     url: 'http://localhost:3000/v1/shape',
-    table: 'items',
-    params: {
-      // This would throw a ReservedParamError as 'table' is reserved
-      table: 'items'
-    }
+    table: 'issues',
+    autoStart: false
   })
 } catch (error) {
-  if (error instanceof ReservedParamError) {
-    console.error('Cannot use reserved parameter names:', error.message)
+  if (error instanceof MissingShapeUrlError) {
+    console.error('Missing required URL parameter')
+    throw error
+  }
+  throw error
+}
+
+try {
+  await stream.start()
+} catch (error) {
+  if (error instanceof ShapeStreamAlreadyRunningError) {
+    console.error('Stream is already running')
   } else if (error instanceof FetchError) {
-    console.error('HTTP error:', error.status, error.message)
+    console.error('Failed to fetch shape:', error)
+  } else {
+    console.error('Failure while running stream:', error)
   }
 }
 ```
 
-#### Error classes
+2. Using the error handler in subscribe (works with `autoStart: true` or `false`):
+```typescript
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  table: 'issues'
+})
 
-##### `FetchError`
-Thrown when there's an HTTP error during shape fetching. Contains:
-- `status`: HTTP status code
-- `text`: Response text if available
-- `json`: Parsed JSON response if available
-- `headers`: Response headers
-- `url`: Request URL
+stream.subscribe(
+  (messages) => {
+    // Handle messages
+    console.log('Received messages:', messages)
+  },
+  (error) => {
+    // Handle runtime errors
+    if (error instanceof FetchError) {
+      console.error('Failed to fetch shape:', error)
+    } else {
+      console.error('Failure while running stream:', error)
+    }
+  }
+)
+```
 
-##### `FetchBackoffAbortError`
-Thrown when a fetch with backoff is aborted using the AbortSignal.
-
-##### `InvalidShapeOptionsError`
-Thrown when the ShapeStream options are invalid (e.g., missing required URL).
-
-##### `InvalidSignalError`
-Thrown when the provided AbortSignal is not a valid AbortSignal instance.
-
-##### `MissingShapeUrlError`
-Thrown when creating a ShapeStream without providing the required URL parameter.
-
-##### `ReservedParamError`
-Thrown when attempting to use Electric's reserved parameter names in custom params. Contains the list of conflicting parameter names.
-
-##### `ParserNullValueError`
-Thrown by the parser when attempting to parse a NULL value in a column that doesn't allow NULL values.
-
-#### Error handling in subscribers
-
-When subscribing to a ShapeStream or Shape, you can provide an error handler:
+### Subscribing to updates
 
 ```typescript
 const stream = new ShapeStream({
