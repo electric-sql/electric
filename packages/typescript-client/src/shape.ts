@@ -70,6 +70,10 @@ export class Shape<T extends Row<unknown> = Row> {
     return this.#stream.isUpToDate
   }
 
+  get lastOffset(): boolean {
+    return this.#stream.lastOffset
+  }
+
   get rows(): Promise<T[]> {
     return this.value.then((v) => Array.from(v.values()))
   }

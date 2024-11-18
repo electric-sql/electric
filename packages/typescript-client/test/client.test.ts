@@ -339,6 +339,23 @@ describe(`Shape`, () => {
     expect(shapeStream.isLoading()).false
   })
 
+  it(`should expose lastOffset`, async ({ issuesTableUrl }) => {
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
+      fetchClient: async (input, init) => {
+        await sleep(20)
+        return fetch(input, init)
+      },
+    })
+    const shape = new Shape(shapeStream)
+
+    expect(shapeStream.lastOffset).toBe("-1")
+    expect(shape.lastOffset).toBe(shapeStream.lastOffset)
+
+    shape.unsubscribeAll()
+  })
+
   it(`should honour replica: full`, async ({
     insertIssues,
     updateIssue,

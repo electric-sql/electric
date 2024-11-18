@@ -144,6 +144,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   isConnected(): boolean
 
   isUpToDate: boolean
+  lastOffset: Offset
   shapeHandle?: string
 }
 
@@ -247,6 +248,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   get isUpToDate() {
     return this.#isUpToDate
+  }
+
+  get lastOffset() {
+    return this.#lastOffset
   }
 
   get error() {
