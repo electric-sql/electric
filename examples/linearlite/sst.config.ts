@@ -27,6 +27,10 @@ export default $config({
 
     const db = new neon.Database(`linearlite`, {
       ...base,
+      name:
+        $app.stage === `Production`
+          ? `linearlite-production`
+          : `linearlite-${$app.stage}`,
       ownerName: `neondb_owner`,
     })
 
