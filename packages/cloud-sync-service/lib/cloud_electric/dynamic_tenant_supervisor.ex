@@ -4,8 +4,6 @@ defmodule CloudElectric.DynamicTenantSupervisor do
   """
   use DynamicSupervisor
 
-  alias Electric.Tenant
-
   require Logger
 
   def start_link(_opts) do
@@ -30,11 +28,10 @@ defmodule CloudElectric.DynamicTenantSupervisor do
   @doc """
   Stops all tenant processes.
   """
-  @spec stop_tenant(Keyword.t()) :: :ok
-  def stop_tenant(opts) do
-    name = CloudElectric.ProcessRegistry.name(Electric.StackSupervisor, opts[:tenant_id])
-    sup = Access.get(opts, :name, name)
-    :ok = Supervisor.stop(sup)
+  @spec stop_tenant(binary()) :: :ok
+  def stop_tenant(tenant_id) do
+    name = CloudElectric.ProcessRegistry.name(Electric.StackSupervisor, tenant_id)
+    Supervisor.stop(name)
   end
 
   @impl true

@@ -139,14 +139,10 @@ defmodule CloudElectric.TenantManager do
         :ets.delete(tenants, tenant_id)
         state = %{state | dbs: MapSet.delete(dbs, pg_id)}
 
-        drop_replication_slot(tenant_id, state)
+        drop_replication_slot(tenant_id)
 
         # TODO: This leaves orphaned shapes with data on disk
-        :ok =
-          Electric.TenantSupervisor.stop_tenant(
-            tenant_id: tenant_id,
-            electric_instance_id: Access.fetch!(state.init_opts, :electric_instance_id)
-          )
+        :ok = DynamicTenantSupervisor.stop_tenant(tenant_id)
 
         {:ok, state}
 
@@ -158,10 +154,9 @@ defmodule CloudElectric.TenantManager do
     end
   end
 
-  defp drop_replication_slot(tenant_id, state) do
-    state.init_opts
-    |> Keyword.fetch!(:electric_instance_id)
-    |> Electric.Connection.Manager.name(tenant_id)
+  defp drop_replication_slot(tenant_id) do
+    tenant_id
+    |> Electric.Connection.Manager.name()
     |> Electric.Connection.Manager.drop_replication_slot()
   end
 
@@ -195,7 +190,7 @@ defmodule CloudElectric.TenantManager do
   defp initialize_tenants_from_control_plane(state) do
     with {:load, control_plane} <- get_control_plane(state),
          {:ok, to_add, to_remove} <-
-           Electric.ControlPlane.list_tenants(control_plane, state.init_opts) do
+           CloudElectric.ControlPlane.list_tenants(control_plane, state.init_opts) do
       state =
         Enum.reduce(to_remove, state, fn %{"id" => tenant_id}, state ->
           case do_stop_and_delete_tenant(tenant_id, state) do

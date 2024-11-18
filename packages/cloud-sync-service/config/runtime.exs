@@ -1,6 +1,7 @@
 import Config
 import Dotenvy
 
+source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 storage_dir = env!("ELECTRIC_STORAGE_DIR", :string, "./persistent")
 shape_path = Path.join(storage_dir, "./shapes")
 persistent_state_path = Path.join(storage_dir, "./state")
@@ -67,4 +68,5 @@ config :cloud_electric,
   storage: storage,
   pool_opts: pool_opts,
   service_port: env!("ELECTRIC_PORT", :integer, 3000),
-  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false)
+  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false),
+  control_plane: env!("ELECTRIC_CONTROL_PLANE", &CloudElectric.ControlPlane.parse_config/1, nil)

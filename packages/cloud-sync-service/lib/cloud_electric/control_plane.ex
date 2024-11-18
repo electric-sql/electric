@@ -1,4 +1,4 @@
-defmodule Electric.ControlPlane do
+defmodule CloudElectric.ControlPlane do
   @moduledoc """
   Functions that interact with the control plane that exists outside Electric.
   """
@@ -14,7 +14,6 @@ defmodule Electric.ControlPlane do
         "params" => %{
           "offset" => "-1",
           "table" => "databases",
-          "where" => "electric_url LIKE '%%{instance_id}%'",
           "select" => "id,connection_url"
         }
       }
@@ -42,12 +41,9 @@ defmodule Electric.ControlPlane do
 
   @spec list_tenants(t(), keyword()) ::
           {:ok, included :: list(map()), deleted :: list(map())} | {:error, :unreachable}
-  def list_tenants(%__MODULE__{} = plane, opts) do
-    %{electric_instance_id: instance_id} =
-      Keyword.get_lazy(opts, :app_config, fn -> Electric.Application.Configuration.get() end)
-
+  def list_tenants(%__MODULE__{} = plane, _opts) do
     plane
-    |> build_req("tenant_shape", instance_id)
+    |> build_req("tenant_shape")
     |> read_electric_api_until_done()
     |> case do
       {:ok, result} when is_list(result) ->
@@ -96,21 +92,20 @@ defmodule Electric.ControlPlane do
     end
   end
 
-  defp build_req(%__MODULE__{} = plane, path_name, instance_id) do
+  defp build_req(%__MODULE__{} = plane, path_name) do
     %{"url" => url} = path_spec = Map.fetch!(plane.paths, path_name)
-    url = insert_instance_id(url, instance_id)
 
     params =
       path_spec
       |> Map.get("params", [])
-      |> Enum.map(fn {k, v} -> {String.to_atom(k), insert_instance_id(v, instance_id)} end)
+      |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
       # Add a unique cursor to cache bust
       |> Keyword.merge(cursor: "#{System.os_time()}")
 
     headers =
       path_spec
       |> Map.get("headers", [])
-      |> Enum.map(fn {k, v} -> {k, insert_instance_id(v, instance_id)} end)
+      |> Enum.map(fn {k, v} -> {k, v} end)
 
     Req.new(
       base_url: plane.base_url,
@@ -121,9 +116,6 @@ defmodule Electric.ControlPlane do
     )
     |> Req.merge(plane.req_opts)
   end
-
-  defp insert_instance_id(string, instance_id),
-    do: String.replace(string, "%{instance_id}", to_string(instance_id))
 
   @spec collect_ops(Enumerable.t()) :: {map(), map()}
   defp collect_ops(ops) do

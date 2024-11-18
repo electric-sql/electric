@@ -23,8 +23,10 @@ defmodule CloudElectric.MixProject do
   defp deps do
     [
       {:electric, path: "../sync-service"},
+      {:dotenvy, "~> 0.8"},
       {:bandit, "~> 1.5"},
-      {:plug, "~> 1.16"}
+      {:plug, "~> 1.16"},
+      {:req, "~> 0.5"}
     ]
   end
 end
