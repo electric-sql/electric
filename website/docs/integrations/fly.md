@@ -29,7 +29,7 @@ One of Fly's specialities is deploying Elixir applications. So Fly is especially
 
 [Fly Postgres](https://fly.io/docs/postgres) is not a managed Postgres service. See the general advice on [Running Postgres](/docs/guides/deployment#_1-running-postgres) in the deployment guide for information on how to configure Postgres to work with Electric.
 
-Fly's [Supabase Postgres](https://fly.io/docs/supabase) is a managed Postgres service, powered by [Supabase](./supabase). If you use it, make sure to connect on the IPv6 `DATABASE_URL` rather than the `DATABASE_POOLER_URL` and see the [Supabase guide](./supabase#deploy-postgres) for more context.
+Fly's [Supabase Postgres](https://fly.io/docs/supabase) is a managed Postgres service, powered by [Supabase](./supabase). If you use it, make sure to connect on the IPv6 `DATABASE_URL` rather than the `DATABASE_POOLER_URL`. See the [Supabase](./supabase#deploy-postgres) and [troubleshooting](/docs/guides/troubleshooting#ipv6-support) guides for more information about IPv6 support.
 
 ### Deploy Electric
 

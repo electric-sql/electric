@@ -43,9 +43,7 @@ docker run -it \
 
 #### Troubleshooting IPv6
 
-The network where Electric is running must support IPv6. If you're running Electric on your own computer, check if you have IPv6 support by opening [test-ipv6.com](https://test-ipv6.com). If you see "No IPv6 address detected" on that page, consider `ssh`ing into another machine or using a VPN service that works with IPv6 networks.
-
-When running Electric in a Docker container, there's an additional hurdle in that Docker does not enable IPv6 out-of-the-box. Follow the [official guide](https://docs.docker.com/config/daemon/ipv6/#use-ipv6-for-the-default-bridge-network) to configure your Docker daemon for IPv6.
+The network where Electric is running must support IPv6. See the [troubleshooting guide](/docs/guides/troubleshooting#ipv6-support) for more context.
 
 If you're subscribed to the Pro or Team plan on Supabase Platform, you can side-step those hurdles by purchasing the [IPv4 add-on](https://supabase.com/docs/guides/platform/ipv4-address#enabling-the-add-on) to make your database host available at an IPv4 address.
 
