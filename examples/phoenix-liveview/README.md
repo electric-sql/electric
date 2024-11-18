@@ -1,7 +1,7 @@
 # Elixir Phoenix Example Application
 
 This is an example Phoenix LiveView application that uses
-[`Electric.Phoenix.live_stream/4`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.html#live_stream/4)
+[`Electric.Phoenix.LiveView.electric_stream/4`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.LiveView.html#electric_stream/4)
 to sync data from Postgres into a LiveView using
 [Phoenix Streams](https://fly.io/phoenix-files/phoenix-dev-blog-streams/).
 This keeps the LiveView automatically in-sync with Postgres, without having

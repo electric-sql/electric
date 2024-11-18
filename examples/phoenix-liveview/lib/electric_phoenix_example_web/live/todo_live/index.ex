@@ -10,7 +10,7 @@ defmodule Electric.PhoenixExampleWeb.TodoLive.Index do
      socket
      |> assign(:electric_live, false)
      |> assign(:animate_insert, false)
-     |> Electric.Phoenix.live_stream(:todos, Todos.Todo)}
+     |> Electric.Phoenix.LiveView.electric_stream(:todos, Todos.Todo)}
   end
 
   @impl true
@@ -23,19 +23,19 @@ defmodule Electric.PhoenixExampleWeb.TodoLive.Index do
   # - `:loaded` is sent when the initial fetch has completed
   # - `:live` is sent when the client is in `live` mode and waiting for the
   #         latest updates from the server
-  def handle_info({:electric, :loaded}, socket) do
+  def handle_info({:electric, {:todos, :loaded}}, socket) do
     {:noreply, socket}
   end
 
   # here we use the `:live` state to turn on animations for new Todos
-  def handle_info({:electric, :live}, socket) do
+  def handle_info({:electric, {:todos, :live}}, socket) do
     {:noreply, socket |> assign(:electric_live, true) |> assign(:animate_insert, true)}
   end
 
   # Forward all events from the Electric sync stream to the component.
   # This is **required** for the integration.
   def handle_info({:electric, event}, socket) do
-    {:noreply, Electric.Phoenix.stream_update(socket, event, at: 0)}
+    {:noreply, Electric.Phoenix.LiveView.electric_stream_update(socket, event, at: 0)}
   end
 
   @impl true
