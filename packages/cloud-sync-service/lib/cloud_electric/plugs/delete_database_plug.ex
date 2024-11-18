@@ -1,8 +1,8 @@
-defmodule Electric.Plug.RemoveDatabasePlug do
+defmodule CloudElectric.Plugs.DeleteDatabasePlug do
   use Plug.Builder
 
   alias Plug.Conn
-  alias Electric.TenantManager
+  alias CloudElectric.TenantManager
 
   require Logger
 

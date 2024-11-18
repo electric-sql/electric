@@ -1,4 +1,5 @@
-defmodule Electric.TenantManager do
+defmodule CloudElectric.TenantManager do
+  alias CloudElectric.DynamicTenantSupervisor
   use GenServer
   require Logger
 
@@ -6,66 +7,12 @@ defmodule Electric.TenantManager do
 
   # Public API
 
-  def name(electric_instance_id)
-      when is_binary(electric_instance_id) or is_atom(electric_instance_id) do
-    Electric.Application.process_name(electric_instance_id, "no tenant", __MODULE__)
-  end
-
-  def name([]) do
-    __MODULE__
-  end
-
-  def name(opts) do
-    Access.get(opts, :electric_instance_id, [])
-    |> name()
-  end
-
-  def tenants_ets_table_name(electric_instance_id)
-      when is_binary(electric_instance_id) or is_atom(electric_instance_id) do
-    :"tenants_ets_table_#{electric_instance_id}"
-  end
-
-  def tenants_ets_table_name(opts) do
-    Access.fetch!(opts, :electric_instance_id)
-    |> tenants_ets_table_name()
+  def tenants_ets_table_name(_opts) do
+    :tenants_ets_table
   end
 
   def start_link(opts) do
-    {:ok, pid} =
-      GenServer.start_link(__MODULE__, opts,
-        name: Keyword.get_lazy(opts, :name, fn -> name(opts) end)
-      )
-
-    {:ok, pid}
-  end
-
-  @doc """
-  Retrieves the only tenant in the system.
-  If there are no tenants, it returns `{:error, :not_found}`.
-  If there are several tenants, it returns `{:error, :several_tenants}`
-  and we should use `get_tenant` instead.
-  """
-  @spec get_only_tenant(Keyword.t()) ::
-          {:ok, Keyword.t()} | {:error, :not_found} | {:error, :several_tenants}
-  def get_only_tenant(opts) do
-    tenants = tenants_ets_table_name(opts)
-
-    case :ets.first(tenants) do
-      :"$end_of_table" ->
-        # the ETS table does not contain any tenant
-        {:error, :not_found}
-
-      tenant_id ->
-        case :ets.next(tenants, tenant_id) do
-          :"$end_of_table" ->
-            # There is no next key, so this is the only tenant
-            tenant = :ets.lookup_element(tenants, tenant_id, @tenant_info_pos)
-            {:ok, tenant}
-
-          _ ->
-            {:error, :several_tenants}
-        end
-    end
+    GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
   end
 
   @doc """
@@ -75,10 +22,9 @@ defmodule Electric.TenantManager do
   def get_tenant(tenant_id, opts) do
     tenants = tenants_ets_table_name(opts)
 
-    if :ets.member(tenants, tenant_id) do
-      {:ok, :ets.lookup_element(tenants, tenant_id, @tenant_info_pos)}
-    else
-      {:error, :not_found}
+    case :ets.lookup_element(tenants, tenant_id, @tenant_info_pos, :not_found) do
+      :not_found -> {:error, :not_found}
+      result -> {:ok, result}
     end
   end
 
@@ -86,16 +32,16 @@ defmodule Electric.TenantManager do
   Creates a new tenant for the provided database URL.
   """
   @spec create_tenant(String.t(), Keyword.t(), Keyword.t()) ::
-          :ok | {:error, atom()}
+          :ok | {:error, term()}
   def create_tenant(tenant_id, connection_opts, opts \\ []) do
-    server = Keyword.get(opts, :tenant_manager, name(opts))
+    server = Keyword.get(opts, :tenant_manager, __MODULE__)
     GenServer.call(server, {:create_tenant, tenant_id, connection_opts, opts})
   end
 
   if Mix.env() == :test do
     @doc false
     def store_tenant(tenant_conf, tenant_opts) do
-      server = Keyword.get(tenant_opts, :tenant_manager, name(tenant_opts))
+      server = Keyword.get(tenant_opts, :tenant_manager, __MODULE__)
       GenServer.call(server, {:store_tenant, tenant_conf})
     end
   end
@@ -105,7 +51,7 @@ defmodule Electric.TenantManager do
   """
   @spec delete_tenant(String.t(), Keyword.t()) :: :ok | {:error, :not_found}
   def delete_tenant(tenant_id, opts) do
-    server = Keyword.get(opts, :tenant_manager, name(opts))
+    server = Keyword.get(opts, :tenant_manager, __MODULE__)
 
     with {:ok, _} <- get_tenant(tenant_id, opts) do
       GenServer.call(server, {:delete_tenant, tenant_id})
@@ -225,7 +171,9 @@ defmodule Electric.TenantManager do
          opts,
          %{dbs: dbs, tenants_ets: tenants} = state
        ) do
-    {tenant, start_tenant_opts} = create_tenant_spec(tenant_id, connection_opts, opts)
+    {tenant, start_tenant_opts} =
+      create_tenant_spec(tenant_id, connection_opts, Keyword.merge(state.init_opts, opts))
+
     tenant_id = tenant[:tenant_id]
     pg_id = tenant[:pg_id]
 
@@ -237,7 +185,7 @@ defmodule Electric.TenantManager do
         {:error, {:db_already_in_use, pg_id}}
 
       true ->
-        with {:ok, _} <- Electric.TenantSupervisor.start_tenant(start_tenant_opts) do
+        with {:ok, _} <- DynamicTenantSupervisor.start_tenant(start_tenant_opts) do
           true = :ets.insert_new(tenants, {tenant_id, tenant})
           {:ok, %{state | dbs: MapSet.put(dbs, pg_id)}}
         end
@@ -288,104 +236,45 @@ defmodule Electric.TenantManager do
   end
 
   defp get_control_plane(state) do
-    %{control_plane: control_plane} =
-      Keyword.get_lazy(state.init_opts, :app_config, fn ->
-        Electric.Application.Configuration.get()
-      end)
-
+    control_plane = Keyword.get(state.init_opts, :control_plane)
     if is_nil(control_plane), do: {:ok, state}, else: {:load, control_plane}
   end
 
   defp create_tenant_spec(tenant_id, connection_opts, opts) do
-    app_config =
-      %{electric_instance_id: electric_instance_id} =
-      Keyword.get_lazy(opts, :app_config, fn -> Electric.Application.Configuration.get() end)
-
-    # inspector =
-    #   Access.get(
-    #     opts,
-    #     :inspector,
-    #     {Electric.Postgres.Inspector.EtsInspector,
-    #      electric_instance_id: electric_instance_id,
-    #      tenant_id: tenant_id,
-    #      server:
-    #        Electric.Postgres.Inspector.EtsInspector.name(
-    #          electric_instance_id,
-    #          tenant_id
-    #        ),
-    #      tenant_tables_name:
-    #        Electric.Postgres.Inspector.EtsInspector.fetch_tenant_tables_name(opts)}
-    #   )
-
-    # registry = Access.get(opts, :registry, Registry.ShapeChanges)
-
-    # Can't load pg_id here because the connection manager may still be busy
-    # connecting to the DB so it might not be known yet
-    # {pg_id, _} = Electric.Timeline.load_timeline(persistent_kv: persistent_kv)
-    get_pg_id = fn ->
-      hostname = Access.fetch!(connection_opts, :hostname)
-      port = Access.fetch!(connection_opts, :port)
-      database = Access.fetch!(connection_opts, :database)
-      hostname <> ":" <> to_string(port) <> "/" <> database
-    end
-
-    pg_id = Access.get(opts, :pg_id, get_pg_id.())
-
-    # shape_cache =
-    #   Access.get(
-    #     opts,
-    #     :shape_cache,
-    #     {Electric.ShapeCache,
-    #      electric_instance_id: electric_instance_id,
-    #      tenant_id: tenant_id,
-    #      server: Electric.ShapeCache.name(electric_instance_id, tenant_id)}
-    #   )
-
-    get_service_status =
-      Access.get(opts, :get_service_status, fn ->
-        Electric.ServiceStatus.check(electric_instance_id, tenant_id)
-      end)
-
-    long_poll_timeout = Access.get(opts, :long_poll_timeout, 20_000)
-    max_age = Access.get(opts, :max_age, Application.fetch_env!(:electric, :cache_max_age))
-    stale_age = Access.get(opts, :stale_age, Application.fetch_env!(:electric, :cache_stale_age))
-
-    # allow_shape_deletion =
-    #   Access.get(
-    #     opts,
-    #     :allow_shape_deletion,
-    #     Application.get_env(:electric, :allow_shape_deletion, false)
-    #   )
-
     tenant =
-      [
-        electric_instance_id: electric_instance_id,
-        tenant_id: tenant_id,
-        pg_id: pg_id,
-        # registry: registry,
-        # storage: nil,
-        # shape_cache: shape_cache,
-        get_service_status: get_service_status,
-        # inspector: inspector,
-        long_poll_timeout: long_poll_timeout,
-        max_age: max_age,
-        stale_age: stale_age,
-        allow_shape_deletion: true
-      ] ++
-        Electric.Supervisor.build_shared_opts(
+      [tenant_id: tenant_id, pg_id: build_pg_id(connection_opts)]
+      |> Keyword.merge(opts)
+      |> Keyword.merge(
+        Electric.StackSupervisor.build_shared_opts(
           stack_id: tenant_id,
-          storage: Application.fetch_env!(:electric, :storage)
+          storage: opts[:storage]
         )
+      )
+
+    formatted_tenant_id = format_tenant_id(tenant_id)
 
     start_tenant_opts = [
-      stack_id: tenant_id,
+      tenant_id: tenant_id,
       connection_opts: connection_opts,
-      replication_opts: Map.to_list(Map.drop(app_config.replication_opts, [:stream_id])),
-      persistent_kv: app_config.persistent_kv,
-      pool_opts: [pool_size: app_config.pool_opts.size],
-      storage: Application.fetch_env!(:electric, :storage)
+      replication_opts: [
+        publication_name: "cloud_electric_pub_#{formatted_tenant_id}",
+        slot_name: "cloud_electric_slot_#{formatted_tenant_id}"
+      ],
+      persistent_kv: Keyword.fetch!(opts, :persistent_kv),
+      pool_opts: Keyword.fetch!(opts, :pool_opts),
+      storage: Keyword.fetch!(opts, :storage)
     ]
 
     {tenant, start_tenant_opts}
+  end
+
+  defp format_tenant_id(tenant_id) when byte_size(tenant_id) < 40,
+    do: tenant_id |> String.downcase() |> String.replace(~r/[^a-z0-9_]/, "_")
+
+  defp build_pg_id(connection_opts) do
+    hostname = Access.fetch!(connection_opts, :hostname)
+    port = Access.fetch!(connection_opts, :port)
+    database = Access.fetch!(connection_opts, :database)
+    hostname <> ":" <> to_string(port) <> "/" <> database
   end
 end

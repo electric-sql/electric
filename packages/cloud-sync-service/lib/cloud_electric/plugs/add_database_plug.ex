@@ -1,4 +1,4 @@
-defmodule Electric.Plug.AddDatabasePlug do
+defmodule CloudElectric.Plugs.AddDatabasePlug do
   use Plug.Builder
   use Plug.ErrorHandler
 
@@ -10,7 +10,7 @@ defmodule Electric.Plug.AddDatabasePlug do
   alias Electric.Telemetry.OpenTelemetry
   alias Plug.Conn
 
-  alias Electric.TenantManager
+  alias CloudElectric.TenantManager
 
   require Logger
   require SC.Trace
@@ -32,6 +32,8 @@ defmodule Electric.Plug.AddDatabasePlug do
       %__MODULE__{}
       |> cast(params, __schema__(:fields), message: fn _, _ -> "must be %{type}" end)
       |> validate_required([:database_url, :database_id])
+      |> validate_format(:database_id, ~r/^[a-z0-9-_]+$/i)
+      |> validate_length(:database_id, max: 40)
       |> validate_database_url()
       |> apply_action(:validate)
       |> case do
