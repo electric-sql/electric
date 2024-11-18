@@ -1,13 +1,13 @@
 {
-  "name": "@electric-examples/basic-example",
+  "name": "@electric-examples/nextjs-ssr-example",
   "private": true,
   "version": "0.0.1",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "backend:up": "PROJECT_NAME=nextjs-basic-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
-    "backend:down": "PROJECT_NAME=nextjs-basic-example pnpm -C ../../ run example-backend:down",
+    "backend:up": "PROJECT_NAME=nextjs-ssr-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=nextjs-ssr-example pnpm -C ../../ run example-backend:down",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
     "dev": "next dev --turbo -p 5173",
     "build": "next build --experimental-build-mode=compile",
@@ -37,6 +37,7 @@
     "dotenv": "^16.4.5",
     "eslint": "^8.57.0",
     "typescript": "^5.5.3",
+    "sst": "3.3.7",
     "vite": "^5.3.4"
   }
 }
