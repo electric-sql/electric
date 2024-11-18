@@ -298,7 +298,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       throw new ShapeStreamAlreadyRunningError()
     }
     this.#isRunning = true
-    
+
     try {
       while (
         (!this.options.signal?.aborted && !this.#isUpToDate) ||
@@ -350,7 +350,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
           }
 
           if (this.#databaseId) {
-            fetchUrl.searchParams.set(DATABASE_ID_QUERY_PARAM, this.#databaseId!)
+            fetchUrl.searchParams.set(
+              DATABASE_ID_QUERY_PARAM,
+              this.#databaseId!
+            )
           }
 
           if (

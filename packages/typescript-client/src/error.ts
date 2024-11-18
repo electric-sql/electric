@@ -109,7 +109,7 @@ export class ParserNullValueError extends Error {
 
 export class ShapeStreamAlreadyRunningError extends Error {
   constructor() {
-    super('ShapeStream is already running')
-    this.name = 'ShapeStreamAlreadyRunningError'
+    super(`ShapeStream is already running`)
+    this.name = `ShapeStreamAlreadyRunningError`
   }
 }
