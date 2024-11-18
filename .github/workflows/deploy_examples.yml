@@ -64,6 +64,7 @@ jobs:
       - name: Deploy NextJs example
         working-directory: examples/nextjs-example
         run: |
+          pnpm sst install
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
           if [ -f ".sst/outputs.json" ]; then
             nextjs=$(jq -r '.website' .sst/outputs.json)
