@@ -28,6 +28,10 @@ export default $config({
     const db = new neon.Database(`nextjs-ssr-example`, {
       ...base,
       ownerName: `neondb_owner`,
+      name:
+        $app.stage === `Production`
+          ? `nextjs-ssr-production`
+          : `nextjs-ssr-${$app.stage}`,
     })
 
     const databaseUri = getNeonDbUri(project, db)
