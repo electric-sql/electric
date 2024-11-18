@@ -25,7 +25,7 @@ defmodule Electric.Plug.Router do
     to: PassAssignToOptsPlug,
     init_opts: [plug: Electric.Plug.DeleteShapePlug, assign_key: :config]
 
-  match "/v1/shape", via: :options, to: Electric.Plug.OptionsShapePlug
+  options "/v1/shape", to: Electric.Plug.OptionsShapePlug
 
   get "/v1/health", to: Electric.Plug.HealthCheckPlug
 

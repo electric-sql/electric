@@ -3,6 +3,7 @@ defmodule CloudElectric.Support do
     Electric.Tenant.Tables.init(ctx.electric_instance_id)
     %{tenant_tables_name: Electric.Tenant.Tables.name(ctx.electric_instance_id)}
   end
+
   def with_tenant_manager(ctx) do
     {:ok, _} =
       Electric.TenantSupervisor.start_link(electric_instance_id: ctx.electric_instance_id)
@@ -22,15 +23,14 @@ defmodule CloudElectric.Support do
     %{tenant_id: "test_tenant"}
   end
 
-    # This is a reduced version of the app config that the tenant manager can use to restore persisted tenants
-    def with_minimal_app_config(ctx) do
-      %{
-        app_config: %Electric.Application.Configuration{
-          persistent_kv: ctx.persistent_kv
-        }
+  # This is a reduced version of the app config that the tenant manager can use to restore persisted tenants
+  def with_minimal_app_config(ctx) do
+    %{
+      app_config: %Electric.Application.Configuration{
+        persistent_kv: ctx.persistent_kv
       }
-    end
-
+    }
+  end
 
   defp tenant_config(ctx) do
     [
