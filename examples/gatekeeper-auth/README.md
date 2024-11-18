@@ -330,6 +330,11 @@ $ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
 ...
 ```
 
+### Example client
+
+See the [./client](./client) folder for an example that uses the [Typescript client]() with gatekeeper and proxy endpoints.
+
+
 ## More information
 
 See the [Auth guide](https://electric-sql.com/docs/guides/auth).

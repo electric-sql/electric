@@ -86,7 +86,7 @@ For example:
 
 #### Example
 
-When using the [Typescript client](/docs/api/clients/typescript), you can pass in [`headers` option](/docs/api/clients/typescript#options) to add an `Authorization` header.
+When using the [Typescript client](/docs/api/clients/typescript), you can pass in a [`headers` option](/docs/api/clients/typescript#options) to add an `Authorization` header.
 
 ```tsx
 const usersShape = (): ShapeStreamOptions => {
@@ -178,7 +178,7 @@ This keeps your main auth logic:
 - in your API (in the gatekeeper endpoint) where it's natural to do things like query the database and call external services
 - running *once* when generating a token, rather than on the "hot path" of every shape request in your authorising proxy
 
-#### Example
+#### Implementation
 
 The [GitHub example](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth) provides an [`./api`](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth/api) service for generating auth tokens and three options for validating those auth tokens when proxying requests to Electric:
 
@@ -215,6 +215,12 @@ The client can then process the data and make additional requests using the same
 
 > [!Tip] Interactive walkthrough
 > See [How to run](https://github.com/electric-sql/electric/blob/main/examples/gatekeeper-auth/README.md#how-to-run) on GitHub for an interactive walkthrough of the three different gatekeeper-auth example proxy options.
+
+#### Example
+
+See the [./client](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth/client) for an example using the [Typescript client]() with gatekeeper and proxy endpoints:
+
+<<< @../../examples/gatekeeper-auth/client/index.ts{typescript}
 
 ## Notes
 
