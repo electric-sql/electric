@@ -218,7 +218,7 @@ The client can then process the data and make additional requests using the same
 
 #### Example
 
-See the [./client](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth/client) for an example using the [Typescript client]() with gatekeeper and proxy endpoints:
+See the [./client](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth/client) for an example using the [Typescript client](/docs/api/clients/typescript) with gatekeeper and proxy endpoints:
 
 <<< @../../examples/gatekeeper-auth/client/index.ts{typescript}
 
