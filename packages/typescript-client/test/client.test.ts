@@ -23,6 +23,19 @@ describe(`Shape`, () => {
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
   })
 
+  it(`should throw on a reserved parameter`, async () => {
+    expect(() => {
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        table: `foo`,
+        params: {
+          database_id: `foo`,
+        },
+      })
+      new Shape(shapeStream)
+    }).toThrowErrorMatchingSnapshot()
+  })
+
   it(`should notify with the initial value`, async ({
     issuesTableUrl,
     insertIssues,

@@ -45,6 +45,19 @@ const RESERVED_PARAMS = new Set([
 
 type Replica = `full` | `default`
 
+type ReservedParamKeys =
+  | typeof DATABASE_ID_QUERY_PARAM
+  | typeof COLUMNS_QUERY_PARAM
+  | typeof LIVE_CACHE_BUSTER_QUERY_PARAM
+  | typeof SHAPE_HANDLE_QUERY_PARAM
+  | typeof LIVE_QUERY_PARAM
+  | typeof OFFSET_QUERY_PARAM
+  | typeof TABLE_QUERY_PARAM
+  | typeof WHERE_QUERY_PARAM
+  | typeof REPLICA_PARAM
+
+type ParamsRecord = Omit<Record<string, string>, ReservedParamKeys>
+
 /**
  * Options for constructing a ShapeStream.
  */
@@ -113,8 +126,10 @@ export interface ShapeStreamOptions<T = never> {
   /**
    * Additional request parameters to attach to the URL.
    * These will be merged with Electric's standard parameters.
+   * Note: You cannot use Electric's reserved parameter names
+   * (table, where, columns, offset, handle, live, cursor, database_id, replica).
    */
-  params?: Record<string, string>
+  params?: ParamsRecord
 
   /**
    * Automatically fetch updates to the Shape. If you just want to sync the current
@@ -516,6 +531,18 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
     throw new Error(
       `shapeHandle is required if this isn't an initial fetch (i.e. offset > -1)`
     )
+  }
+
+  // Check for reserved parameter names
+  if (options.params) {
+    const reservedParams = Object.keys(options.params).filter((key) =>
+      RESERVED_PARAMS.has(key)
+    )
+    if (reservedParams.length > 0) {
+      throw new Error(
+        `Cannot use reserved Electric parameter names in custom params: ${reservedParams.join(`, `)}`
+      )
+    }
   }
   return
 }
