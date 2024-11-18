@@ -33,14 +33,14 @@ defmodule ApiWeb.Authenticator do
   # implementation to generate signed auth tokens.
   #
   # This is configured in `./router.ex` to work with the
-  # `Electric.Phoenix.Gateway.Plug`:
+  # `Electric.Phoenix.Plug`:
   #
-  #     post "/:table", Electric.Phoenix.Gateway.Plug, client: &Authenticator.client/0
+  #     post "/:table", Electric.Phoenix.Plug, client: &Authenticator.client/0
   #
   # Because `client/0` returns a client that's configured to use our
   # `ApiWeb.Authenticator`, then `ApiWeb.Authenticator.authenticate_shape/2`
   # will be called to generate an auth header that's included in the
-  # response data that the Gateway.Plug returns to the client.
+  # response data that the Electric.Phoenix.Plug returns to the client.
   #
   # I.e.: we basically tie into the `Gateway.Plug` machinery to use our
   # `Authenticator` to generate and return a signed token to the client.
