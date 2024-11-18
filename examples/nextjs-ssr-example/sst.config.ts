@@ -68,7 +68,7 @@ function deployNextJsExample(
   electricInfo: $util.Output<{ id: string; token: string }>,
   uri: $util.Output<string>
 ) {
-  return new sst.aws.Nextjs(`nextjs`, {
+  return new sst.aws.Nextjs(`nextjs-ssr`, {
     environment: {
       ELECTRIC_URL: process.env.ELECTRIC_API!,
       ELECTRIC_TOKEN: electricInfo.token,
@@ -76,7 +76,7 @@ function deployNextJsExample(
       DATABASE_URL: uri,
     },
     domain: {
-      name: `nextjs${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+      name: `nextjs-ssr${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
       dns: sst.cloudflare.dns(),
     },
   })
