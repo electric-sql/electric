@@ -112,6 +112,8 @@ importers:
         specifier: ^5.3.4
         version: 5.4.10(@types/node@20.17.6)
 
+  examples/gatekeeper-auth: {}
+
   examples/linearlite:
     dependencies:
       '@electric-sql/client':
