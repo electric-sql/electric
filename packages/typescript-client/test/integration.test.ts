@@ -859,7 +859,7 @@ describe(`HTTP Sync`, () => {
     expect(invalidIssueStream.isConnected()).false
   })
 
-  it.only(`should be able to catch errors thrown when manually starting a stream with autoStart: false`, async ({
+  it(`should be able to catch errors thrown when manually starting a stream with autoStart: false`, async ({
     expect,
     aborter,
   }) => {
