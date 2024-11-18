@@ -69,7 +69,7 @@ It makes sense to run through these in order.
 
 You need [Docker Compose](https://docs.docker.com/compose/) and [curl](https://curl.se). We also (optionally) use [`psql`](https://www.postgresql.org/docs/current/app-psql.html) and pipe into [`jq`](https://jqlang.github.io/jq/) for JSON formatting.
 
-The instructions below all use the same [`./docker-compose.yaml`](./docker-compose.yaml) file in the root of this repo. With a different set of services and environment variables.
+The instructions below all use the same [`./docker-compose.yaml`](./docker-compose.yaml) file in this folder. With a different set of services and environment variables.
 
 > [!TIP]
 > All of the configurations are based on running Postgres and Electric. This is handled for you by the `./docker-compose.yaml`. However, if you're unfamiliar with how Electric works, it may be useful to go through the [Quickstart](https://electric-sql.com/docs/quickstart) and [Installation](https://electric-sql.com/docs/guides/installation) guides.
@@ -100,7 +100,7 @@ $ curl -sX POST "http://localhost:4000/gatekeeper/items" | jq
   "headers": {
     "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJKb2tlbiIsImV4cCI6MTczMTUwMjM2OSwiaWF0IjoxNzMxNDk1MTY5LCJpc3MiOiJKb2tlbiIsImp0aSI6IjMwM28zYmx0czN2aHYydXNiazAwMDJrMiIsIm5iZiI6MTczMTQ5NTE2OSwic2hhcGUiOnsibmFtZXNwYWNlIjpudWxsLCJ0YWJsZSI6Iml0ZW1zIiwid2hlcmUiOm51bGwsImNvbHVtbnMiOm51bGx9fQ.8UZehIWk1EDQ3dJ4ggCBNkx9vGudfrD9appqs8r6zRI"
   },
-  "url": "http://localhost:3000/proxy/v1/shape",
+  "url": "http://localhost:4000/proxy/v1/shape",
   "table": "items"
 }
 ```
