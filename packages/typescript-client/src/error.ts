@@ -46,6 +46,7 @@ export class FetchError extends Error {
 export class FetchBackoffAbortError extends Error {
   constructor() {
     super(`Fetch with backoff aborted`)
+    this.name = `FetchBackoffAbortError`
   }
 }
 
