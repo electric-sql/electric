@@ -1,6 +1,6 @@
-defmodule Electric.ControlPlaneTest do
-  alias Electric.ControlPlane
-  use ExUnit.Case, async: true
+defmodule CloudElectric.ControlPlaneTest do
+  alias CloudElectric.ControlPlane
+  use ExUnit.Case, async: false
 
   setup ctx do
     %{

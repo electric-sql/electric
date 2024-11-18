@@ -2,6 +2,18 @@ import Config
 import Dotenvy
 
 source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
+
+config :logger, level: env!("LOG_LEVEL", &Electric.ConfigParser.parse_log_level!/1, :info)
+
+# Enable this to get **very noisy** but useful messages from BEAM about
+# processes being started, stopped and crashes.
+# https://www.erlang.org/doc/apps/sasl/error_logging#sasl-reports
+sasl? = env!("ELECTRIC_LOG_OTP_REPORTS", :boolean, false)
+
+config :logger,
+  handle_otp_reports: sasl?,
+  handle_sasl_reports: sasl?
+
 storage_dir = env!("ELECTRIC_STORAGE_DIR", :string, "./persistent")
 shape_path = Path.join(storage_dir, "./shapes")
 persistent_state_path = Path.join(storage_dir, "./state")
@@ -70,3 +82,8 @@ config :cloud_electric,
   service_port: env!("ELECTRIC_PORT", :integer, 3000),
   listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false),
   control_plane: env!("ELECTRIC_CONTROL_PLANE", &CloudElectric.ControlPlane.parse_config/1, nil)
+
+if config_env() == :test do
+  config :cloud_electric,
+    test_db_connection: env!("DATABASE_URL", &Electric.ConfigParser.parse_postgresql_uri!/1)
+end

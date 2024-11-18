@@ -27,7 +27,7 @@ defmodule Electric.StackSupervisor do
       2. `Electric.Replication.ShapeLogCollector` collects transactions from the replication connection, fanning them out to `Electric.Shapes.Consumer` (4.1.1.2)
       3. `Electric.ShapeCache` coordinates shape creation and handle allocation, shape metadata
   """
-  use Supervisor
+  use Supervisor, restart: :transient
 
   @opts_schema NimbleOptions.new!(
                  name: [type: :any, required: false],

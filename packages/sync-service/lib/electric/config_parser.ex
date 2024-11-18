@@ -119,6 +119,13 @@ defmodule Electric.ConfigParser do
     end
   end
 
+  def parse_postgresql_uri!(uri_str) do
+    case parse_postgresql_uri(uri_str) do
+      {:ok, results} -> results
+      {:error, reason} -> raise reason
+    end
+  end
+
   defp validate_url_scheme(scheme) when scheme in ["postgres", "postgresql"], do: :ok
   defp validate_url_scheme(scheme), do: {:error, "has invalid URL scheme: #{inspect(scheme)}"}
 
@@ -191,4 +198,9 @@ defmodule Electric.ConfigParser do
   def parse_log_level(str) do
     {:error, "has invalid value: #{inspect(str)}. Must be one of #{inspect(@public_log_levels)}"}
   end
+
+  def parse_log_level!(str) when str in @log_levels, do: String.to_existing_atom(str)
+
+  def parse_log_level!(_str),
+    do: raise(Dotenvy.Error, message: "Must be one of #{inspect(@public_log_levels)}")
 end

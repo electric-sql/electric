@@ -7,8 +7,8 @@ defmodule CloudElectric.TenantManager do
 
   # Public API
 
-  def tenants_ets_table_name(_opts) do
-    :tenants_ets_table
+  def tenants_ets_table_name(opts) do
+    Keyword.get(opts, :tenant_ets, Keyword.get(opts, :tenant_manager, __MODULE__))
   end
 
   def start_link(opts) do
@@ -38,14 +38,6 @@ defmodule CloudElectric.TenantManager do
     GenServer.call(server, {:create_tenant, tenant_id, connection_opts, opts})
   end
 
-  if Mix.env() == :test do
-    @doc false
-    def store_tenant(tenant_conf, tenant_opts) do
-      server = Keyword.get(tenant_opts, :tenant_manager, __MODULE__)
-      GenServer.call(server, {:store_tenant, tenant_conf})
-    end
-  end
-
   @doc """
   Deletes a tenant by its ID.
   """
@@ -68,7 +60,7 @@ defmodule CloudElectric.TenantManager do
     # the table is protected such that only this genserver can write to it
     # which ensures that all writes are serialised
     tenants_ets_table =
-      :ets.new(tenants_ets_table_name(opts), [
+      :ets.new(Keyword.get(opts, :name, __MODULE__), [
         :named_table,
         :protected,
         :set,
@@ -123,17 +115,8 @@ defmodule CloudElectric.TenantManager do
     end
   end
 
-  if Mix.env() == :test do
-    def handle_call({:store_tenant, tenant}, _, %{dbs: dbs, tenants_ets: tenants} = state) do
-      tenant_id = tenant[:tenant_id]
-      pg_id = tenant[:pg_id]
-      true = :ets.insert_new(tenants, {tenant_id, tenant})
-      {:reply, :ok, %{state | dbs: MapSet.put(dbs, pg_id)}}
-    end
-  end
-
   defp do_stop_and_delete_tenant(tenant_id, %{dbs: dbs, tenants_ets: tenants} = state) do
-    case get_tenant(tenant_id, state.init_opts) do
+    case get_tenant(tenant_id, tenant_manager: tenants) do
       {:ok, tenant} ->
         pg_id = Access.fetch!(tenant, :pg_id)
         :ets.delete(tenants, tenant_id)
@@ -248,17 +231,19 @@ defmodule CloudElectric.TenantManager do
 
     formatted_tenant_id = format_tenant_id(tenant_id)
 
-    start_tenant_opts = [
-      tenant_id: tenant_id,
-      connection_opts: connection_opts,
-      replication_opts: [
-        publication_name: "cloud_electric_pub_#{formatted_tenant_id}",
-        slot_name: "cloud_electric_slot_#{formatted_tenant_id}"
-      ],
-      persistent_kv: Keyword.fetch!(opts, :persistent_kv),
-      pool_opts: Keyword.fetch!(opts, :pool_opts),
-      storage: Keyword.fetch!(opts, :storage)
-    ]
+    start_tenant_opts =
+      Keyword.get(opts, :stack_overrides, []) ++
+        [
+          tenant_id: tenant_id,
+          connection_opts: connection_opts,
+          replication_opts: [
+            publication_name: "cloud_electric_pub_#{formatted_tenant_id}",
+            slot_name: "cloud_electric_slot_#{formatted_tenant_id}"
+          ],
+          persistent_kv: Keyword.fetch!(opts, :persistent_kv),
+          pool_opts: Keyword.fetch!(opts, :pool_opts),
+          storage: Keyword.fetch!(opts, :storage)
+        ]
 
     {tenant, start_tenant_opts}
   end
