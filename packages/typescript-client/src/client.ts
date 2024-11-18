@@ -443,10 +443,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
           if (!this.options.autoStart) {
             throw err
           }
+          break
         }
       }
-    } catch (err) {
-      this.#error = err
     } finally {
       this.#connected = false
     }

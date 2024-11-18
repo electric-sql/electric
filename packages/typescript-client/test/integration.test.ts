@@ -875,13 +875,13 @@ describe(`HTTP Sync`, () => {
     } catch (error) {
       expect(error).toBeInstanceOf(FetchError)
       const fetchError = error as FetchError
-      expect(fetchError.status).toBe(404)
-      expect(fetchError.message).toMatch(/Failed to fetch shape/)
+      expect(fetchError.status).toBe(400)
+      expect(fetchError.message).toMatch(/HTTP Error 400.*invalid_schema_name/)
     }
 
     // Test that the error is stored in the stream
     expect(stream.error).toBeInstanceOf(FetchError)
-    expect((stream.error as FetchError).status).toBe(404)
+    expect((stream.error as FetchError).status).toBe(400)
   })
 
   it(`should detect shape deprecation and restart syncing`, async ({
