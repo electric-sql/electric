@@ -15,64 +15,6 @@ importers:
         specifier: ^7.4.2
         version: 7.4.2
 
-  examples/proxy-auth:
-    dependencies:
-      '@electric-sql/client':
-        specifier: workspace:*
-        version: link:../../packages/typescript-client
-      '@electric-sql/react':
-        specifier: workspace:*
-        version: link:../../packages/react-hooks
-      next:
-        specifier: ^14.2.5
-        version: 14.2.17(@babel/core@7.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      pg:
-        specifier: ^8.12.0
-        version: 8.13.1
-      react:
-        specifier: ^18.3.1
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.3.1
-        version: 18.3.1(react@18.3.1)
-      uuid:
-        specifier: ^10.0.0
-        version: 10.0.0
-      zod:
-        specifier: ^3.23.8
-        version: 3.23.8
-    devDependencies:
-      '@databases/pg-migrations':
-        specifier: ^5.0.3
-        version: 5.0.3(typescript@5.6.3)
-      '@types/pg':
-        specifier: ^8.11.6
-        version: 8.11.10
-      '@types/react':
-        specifier: ^18.3.3
-        version: 18.3.12
-      '@types/react-dom':
-        specifier: ^18.3.0
-        version: 18.3.1
-      '@types/uuid':
-        specifier: '*'
-        version: 10.0.0
-      '@vitejs/plugin-react':
-        specifier: ^4.3.1
-        version: 4.3.3(vite@5.4.10(@types/node@20.17.6))
-      dotenv:
-        specifier: ^16.4.5
-        version: 16.4.5
-      eslint:
-        specifier: ^8.57.0
-        version: 8.57.1
-      typescript:
-        specifier: ^5.5.3
-        version: 5.6.3
-      vite:
-        specifier: ^5.3.4
-        version: 5.4.10(@types/node@20.17.6)
-
   examples/bash-client: {}
 
   examples/basic-example:
