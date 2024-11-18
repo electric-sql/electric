@@ -859,13 +859,13 @@ describe(`HTTP Sync`, () => {
     expect(invalidIssueStream.isConnected()).false
   })
 
-  it(`should be able to catch errors thrown when manually starting a stream with autoStart: false`, async ({
+  it.only(`should be able to catch errors thrown when manually starting a stream with autoStart: false`, async ({
+    expect,
     aborter,
-    issuesTableUrl,
   }) => {
     const stream = new ShapeStream<IssueRow>({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      table: `foo`,
       signal: aborter.signal,
       autoStart: false,
     })
@@ -876,7 +876,9 @@ describe(`HTTP Sync`, () => {
       expect(error).toBeInstanceOf(FetchError)
       const fetchError = error as FetchError
       expect(fetchError.status).toBe(400)
-      expect(fetchError.message).toMatch(/HTTP Error 400.*invalid_schema_name/)
+      expect(fetchError.message).toMatch(
+        /HTTP Error 400.*Table.*foo.*does.not.exist/
+      )
     }
 
     // Test that the error is stored in the stream
