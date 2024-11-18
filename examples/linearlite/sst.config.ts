@@ -27,12 +27,17 @@ export default $config({
 
     const db = new neon.Database(`linearlite`, {
       ...base,
+      name:
+        $app.stage === `Production`
+          ? `linearlite-production`
+          : `linearlite-${$app.stage}`,
       ownerName: `neondb_owner`,
     })
 
     const databaseUri = getNeonDbUri(project, db)
     try {
       databaseUri.apply(applyMigrations)
+      databaseUri.apply(loadData)
 
       const electricInfo = databaseUri.apply((uri) =>
         addDatabaseToElectric(uri)
@@ -53,6 +58,15 @@ export default $config({
 
 function applyMigrations(uri: string) {
   execSync(`pnpm exec pg-migrations apply --directory ./db/migrations`, {
+    env: {
+      ...process.env,
+      DATABASE_URL: uri,
+    },
+  })
+}
+
+function loadData(uri: string) {
+  execSync(`pnpm run db:load-data`, {
     env: {
       ...process.env,
       DATABASE_URL: uri,
