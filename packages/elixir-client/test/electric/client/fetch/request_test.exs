@@ -107,5 +107,26 @@ defmodule Electric.Client.Fetch.RequestTest do
       column_list = Enum.join(columns, ",")
       assert %{"columns" => ^column_list} = params
     end
+
+    test "includes client database_id in params" do
+      database_id = "168d01dc-9e19-4887-99d9-7f5eba1ca434"
+
+      request =
+        Client.request(client!(database_id: database_id),
+          offset: Client.Offset.new(1234, 1),
+          shape_handle: "my-shape",
+          live: true,
+          next_cursor: 123_948,
+          shape: Client.shape!("my_table")
+        )
+
+      url = Request.url(request)
+
+      {:ok, uri} = URI.new(url)
+
+      params = URI.decode_query(uri.query)
+
+      assert %{"database_id" => ^database_id} = params
+    end
   end
 end

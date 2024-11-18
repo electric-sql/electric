@@ -114,15 +114,15 @@ defmodule Electric.Client do
       {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
 
       # Replace the table or `ShapeDefinition` with an `Ecto` query and set
-      # `update_mode` to `:full` to receive full rows for update messages.
+      # `replica` to `:full` to receive full rows for update messages.
       #
-      # The normal `update_mode: :modified` setting will only send the changed
+      # The normal `replica: :default` setting will only send the changed
       # columns, so we'd end up with partial `%Foo{}` instances.
       stream =
         Electric.Client.stream(
           client,
           from(f in Foo, where: ilike(f.name, "a%")),
-          update_mode: :full
+          replica: :full
         )
 
       for %{headers: %{operation: operation}, value: value} <- stream do
@@ -151,6 +151,7 @@ defmodule Electric.Client do
 
   defstruct [
     :base_url,
+    :database_id,
     :fetch,
     :authenticator
   ]
@@ -162,6 +163,11 @@ defmodule Electric.Client do
                      doc:
                        "The URL of the electric server, e.g. for local development this would be `http://localhost:3000`."
                    ],
+                   database_id: [
+                     type: {:or, [nil, :string]},
+                     doc:
+                       "Which database to use, optional unless Electric is used with multiple databases."
+                   ],
                    fetch: [type: :mod_arg, default: {Client.Fetch.HTTP, []}, doc: false],
                    authenticator: [
                      type: :mod_arg,
@@ -172,7 +178,7 @@ defmodule Electric.Client do
 
   @type shape_handle :: String.t()
   @type cursor :: integer()
-  @type update_mode :: :modified | :full
+  @type replica :: :default | :full
   @type column :: %{
           required(:type) => String.t(),
           optional(:pk_index) => non_neg_integer(),
@@ -321,7 +327,7 @@ defmodule Electric.Client do
   @doc false
   @spec request(t(), Fetch.Request.attrs()) :: Fetch.Request.t()
   def request(%Client{} = client, opts) do
-    struct(%Fetch.Request{base_url: client.base_url}, opts)
+    struct(%Fetch.Request{base_url: client.base_url, database_id: client.database_id}, opts)
   end
 
   @doc """

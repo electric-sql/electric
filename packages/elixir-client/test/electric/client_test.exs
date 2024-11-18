@@ -35,6 +35,18 @@ defmodule Electric.ClientTest do
     [bypass: Bypass.open()]
   end
 
+  describe "new" do
+    test "database_id is correctly assigned" do
+      {:ok, %Client{database_id: "1234"}} =
+        Client.new(base_url: "http://localhost:3000", database_id: "1234")
+    end
+
+    test "database_id is optional" do
+      {:ok, %Client{database_id: nil}} =
+        Client.new(base_url: "http://localhost:3000", database_id: nil)
+    end
+  end
+
   describe "stream/1" do
     setup :with_unique_table
 
@@ -168,6 +180,36 @@ defmodule Electric.ClientTest do
       assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id2}}}, 500
       assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id3}}}, 500
       assert_receive {:stream, 2, up_to_date()}
+    end
+
+    test "sends full rows with replica: :full", ctx do
+      {:ok, id1} = insert_item(ctx, title: "Changing item")
+      parent = self()
+      stream = stream(ctx, replica: :full)
+
+      {:ok, _task} =
+        start_supervised(
+          {Task,
+           fn ->
+             stream
+             |> Stream.each(&send(parent, {:stream, 1, &1}))
+             |> Stream.run()
+           end},
+          id: {:stream, 1}
+        )
+
+      assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
+      assert_receive {:stream, 1, up_to_date0()}
+
+      :ok = update_item(ctx, id1, value: 999)
+
+      assert_receive {:stream, 1,
+                      %ChangeMessage{
+                        value: %{"id" => ^id1, "value" => 999, "title" => "Changing item"}
+                      }},
+                     500
+
+      assert_receive {:stream, 1, up_to_date()}
     end
   end
 
