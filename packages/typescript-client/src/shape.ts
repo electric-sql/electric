@@ -1,4 +1,4 @@
-import { Message, Row } from './types'
+import { Message, Offset, Row } from './types'
 import { isChangeMessage, isControlMessage } from './helpers'
 import { FetchError } from './error'
 import { ShapeStreamInterface } from './client'
@@ -70,7 +70,7 @@ export class Shape<T extends Row<unknown> = Row> {
     return this.#stream.isUpToDate
   }
 
-  get lastOffset(): boolean {
+  get lastOffset(): Offset {
     return this.#stream.lastOffset
   }
 

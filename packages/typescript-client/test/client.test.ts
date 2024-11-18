@@ -350,7 +350,7 @@ describe(`Shape`, () => {
     })
     const shape = new Shape(shapeStream)
 
-    expect(shapeStream.lastOffset).toBe("-1")
+    expect(shapeStream.lastOffset).toBe(`-1`)
     expect(shape.lastOffset).toBe(shapeStream.lastOffset)
 
     shape.unsubscribeAll()
