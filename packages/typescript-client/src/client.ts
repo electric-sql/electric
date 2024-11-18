@@ -535,8 +535,8 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
 
   // Check for reserved parameter names
   if (options.params) {
-    const reservedParams = Object.keys(options.params).filter(
-      (key) => RESERVED_PARAMS.has(key)
+    const reservedParams = Object.keys(options.params).filter((key) =>
+      RESERVED_PARAMS.has(key)
     )
     if (reservedParams.length > 0) {
       throw new Error(
