@@ -23,8 +23,7 @@ describe(`Shape`, () => {
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
   })
 
-  it.only(`should throw on a reserved parameter`, async () => {
-    console.log(`hi`)
+  it(`should throw on a reserved parameter`, async () => {
     expect(() => {
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
