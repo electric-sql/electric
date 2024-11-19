@@ -74,7 +74,7 @@ export class Shape<T extends Row<unknown> = Row> {
     return this.#stream.lastOffset
   }
 
-  get handle(): string {
+  get handle(): string | undefined {
     return this.#stream.shapeHandle
   }
 
