@@ -94,3 +94,34 @@ shape.subscribe(({ rows }) => {
 ```
 
 See the [Docs](https://electric-sql.com) and [Examples](https://electric-sql.com/examples/basic) for more information.
+
+## Develop
+
+Install the pnpm workspace at the repo root:
+
+```shell
+pnpm install
+```
+
+Build the package:
+
+```shell
+cd packages/typescript-client
+pnpm build
+```
+
+## Test
+
+In one terminal, start the backend running:
+
+```shell
+cd ../sync-service
+mix deps.get
+mix stop_dev && mix compile && mix start_dev && ies -S mix
+```
+
+Then in this folder:
+
+```shell
+pnpm test
+```
