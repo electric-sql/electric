@@ -63,7 +63,8 @@ defmodule Electric.Application do
              slot_temporary?: Application.fetch_env!(:electric, :replication_slot_temporary?)
            ],
            pool_opts: [pool_size: Application.fetch_env!(:electric, :db_pool_size)],
-           storage: Application.fetch_env!(:electric, :storage)},
+           storage: Application.fetch_env!(:electric, :storage),
+           chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold)},
           {Bandit,
            plug: {Electric.Plug.Router, router_opts},
            port: Application.fetch_env!(:electric, :service_port),
