@@ -49,6 +49,14 @@ defmodule CloudElectric.Plugs.DeleteDatabasePlugTest do
       assert conn.status == 200
       assert Jason.decode!(conn.resp_body) == ctx.tenant_id
 
+      # Ensure the replication slot has been dropped
+      assert %{rows: []} =
+               Postgrex.query!(
+                 ctx.db_conn,
+                 "SELECT slot_name FROM pg_replication_slots where slot_name=$1",
+                 [ctx.slot_name]
+               )
+
       # Ensure the publication has been dropped
       assert %{rows: []} = Postgrex.query!(db_conn, "SELECT pubname FROM pg_publication", [])
     end

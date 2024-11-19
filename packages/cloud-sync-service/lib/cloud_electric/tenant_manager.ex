@@ -122,7 +122,7 @@ defmodule CloudElectric.TenantManager do
         :ets.delete(tenants, tenant_id)
         state = %{state | dbs: MapSet.delete(dbs, pg_id)}
 
-        drop_replication_slot(tenant_id)
+        drop_replication_slot_on_stop(tenant_id)
 
         # TODO: This leaves orphaned shapes with data on disk
         :ok = DynamicTenantSupervisor.stop_tenant(tenant_id)
@@ -137,10 +137,10 @@ defmodule CloudElectric.TenantManager do
     end
   end
 
-  defp drop_replication_slot(tenant_id) do
+  defp drop_replication_slot_on_stop(tenant_id) do
     tenant_id
     |> Electric.Connection.Manager.name()
-    |> Electric.Connection.Manager.drop_replication_slot()
+    |> Electric.Connection.Manager.drop_replication_slot_on_stop()
   end
 
   defp do_create_tenant(
