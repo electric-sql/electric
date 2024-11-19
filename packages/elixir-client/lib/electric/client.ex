@@ -150,18 +150,23 @@ defmodule Electric.Client do
   end
 
   defstruct [
-    :base_url,
+    :endpoint,
     :database_id,
     :fetch,
     :authenticator
   ]
 
+  @api_endpoint_path "/v1/shape"
   @client_schema NimbleOptions.new!(
                    base_url: [
                      type: :string,
-                     required: true,
                      doc:
-                       "The URL of the electric server, e.g. for local development this would be `http://localhost:3000`."
+                       "The URL of the electric server, not including the path. E.g. for local development this would be `http://localhost:3000`."
+                   ],
+                   endpoint: [
+                     type: :string,
+                     doc:
+                       "The full URL of the shape API endpoint. E.g. for local development this would be `http://localhost:3000/v1/shape`. Use this if you need a non-standard API path."
                    ],
                    database_id: [
                      type: {:or, [nil, :string]},
@@ -197,7 +202,7 @@ defmodule Electric.Client do
   @type stream_options :: [stream_option()]
 
   @type t :: %__MODULE__{
-          base_url: URI.t(),
+          endpoint: URI.t(),
           fetch: {module(), term()}
         }
 
@@ -207,12 +212,46 @@ defmodule Electric.Client do
   ## Options
 
   #{NimbleOptions.docs(@client_schema)}
+
+  ### `:base_url` vs. `:endpoint`
+
+  If you configure your client using e.g. `base_url: "http://localhost:3000"`
+  Electric will append the default shape API path
+  `#{inspect(@api_endpoint_path)}` to create the final endpoint configuration,
+  in this case `"http://localhost:3000#{@api_endpoint_path}"`. Note that any
+  trailing path in the `base_url` is ignored.
+
+  If you wish to use a non-standard endpoint path because, for example, you wrap your Shape
+  API calls in an [authentication
+  proxy](https://electric-sql.com/docs/guides/auth), then configure
+  the endpoint directly:
+
+      Client.new(endpoint: "https://my-server.my-domain.com/electric/shape/proxy")
+
   """
   @spec new(client_options()) :: {:ok, t()} | {:error, term()}
   def new(opts) do
     with {:ok, attrs} <- NimbleOptions.validate(Map.new(opts), @client_schema),
-         {:ok, uri} <- URI.new(attrs[:base_url]) do
-      {:ok, struct(__MODULE__, Map.put(attrs, :base_url, uri))}
+         {:ok, endpoint} <- client_endpoint(attrs) do
+      {:ok, struct(__MODULE__, Map.put(attrs, :endpoint, endpoint))}
+    end
+  end
+
+  defp client_endpoint(attrs) when is_map(attrs) do
+    case Map.fetch(attrs, :endpoint) do
+      {:ok, endpoint} ->
+        URI.new(endpoint)
+
+      :error ->
+        case Map.fetch(attrs, :base_url) do
+          {:ok, url} ->
+            with {:ok, uri} <- URI.new(url) do
+              {:ok, %{uri | path: @api_endpoint_path}}
+            end
+
+          :error ->
+            {:error, "Client requires either a :base_url or :endpoint configuration"}
+        end
     end
   end
 
@@ -327,7 +366,7 @@ defmodule Electric.Client do
   @doc false
   @spec request(t(), Fetch.Request.attrs()) :: Fetch.Request.t()
   def request(%Client{} = client, opts) do
-    struct(%Fetch.Request{base_url: client.base_url, database_id: client.database_id}, opts)
+    struct(%Fetch.Request{endpoint: client.endpoint, database_id: client.database_id}, opts)
   end
 
   @doc """
