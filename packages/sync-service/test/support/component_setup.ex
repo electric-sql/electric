@@ -3,7 +3,6 @@ defmodule Support.ComponentSetup do
   import ExUnit.Assertions
   import Support.TestUtils, only: [full_test_name: 1]
 
-  alias Electric.Postgres.ReplicationClient
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
   alias Electric.ShapeCache.FileStorage
@@ -13,7 +12,7 @@ defmodule Support.ComponentSetup do
   def with_stack_id_from_test(ctx) do
     stack_id = full_test_name(ctx)
     registry = start_link_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
-    %{stack_id: stack_id}
+    %{stack_id: stack_id, process_registry: registry}
   end
 
   def with_registry(ctx) do
