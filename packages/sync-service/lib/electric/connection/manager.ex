@@ -60,7 +60,8 @@ defmodule Electric.Connection.Manager do
       # ID used for process labeling and sibling discovery
       :stack_id,
       :tweaks,
-      drop_slot_requesters: []
+      awaiting_active: [],
+      drop_slot_requested: false
     ]
   end
 
@@ -119,8 +120,19 @@ defmodule Electric.Connection.Manager do
     GenServer.call(server, :get_status)
   end
 
-  def drop_replication_slot(server) do
-    GenServer.call(server, :drop_replication_slot)
+  @doc """
+  Only returns once the status is `:active`.
+  If the status is alredy active it returns immediately.
+  This is useful if you need to the connection pool to be running before proceeding.
+  """
+  @spec await_active(GenServer.server()) :: :ok
+  def await_active(server) do
+    GenServer.call(server, :await_active)
+  end
+
+  def drop_replication_slot_on_stop(server) do
+    await_active(server)
+    GenServer.call(server, :drop_replication_slot_on_stop)
   end
 
   def exclusive_connection_lock_acquired(server) do
@@ -197,21 +209,16 @@ defmodule Electric.Connection.Manager do
     {:reply, status, state}
   end
 
-  def handle_call(:drop_replication_slot, _from, %{pool_pid: pool} = state) when pool != nil do
-    {:reply, drop_publication(state), state}
+  def handle_call(:await_active, from, %{pool_pid: nil} = state) do
+    {:noreply, %{state | awaiting_active: [from | state.awaiting_active]}}
   end
 
-  def handle_call(:drop_replication_slot, from, state) do
-    {:noreply, %{state | drop_slot_requesters: [from | state.drop_slot_requesters]}}
+  def handle_call(:await_active, _from, state) do
+    {:reply, :ok, state}
   end
 
-  defp drop_publication(state) do
-    publication_name = Keyword.fetch!(state.replication_opts, :publication_name)
-
-    case Postgrex.query(state.pool_pid, "DROP PUBLICATION #{publication_name}", []) do
-      {:ok, _} -> :ok
-      error -> error
-    end
+  def handle_call(:drop_replication_slot_on_stop, _from, state) do
+    {:reply, :ok, %{state | drop_slot_requested: true}}
   end
 
   @impl true
@@ -294,21 +301,15 @@ defmodule Electric.Connection.Manager do
 
         state = %{state | pool_pid: pool_pid, shape_log_collector_pid: log_collector_pid}
 
-        {:noreply, state, {:continue, :maybe_drop_replication_slot}}
+        for awaiting <- state.awaiting_active do
+          GenServer.reply(awaiting, :ok)
+        end
+
+        {:noreply, %{state | awaiting_active: []}}
 
       {:error, reason} ->
         handle_connection_error(reason, state, "regular")
     end
-  end
-
-  def handle_continue(:maybe_drop_replication_slot, %{drop_slot_requesters: []} = state) do
-    {:noreply, state}
-  end
-
-  def handle_continue(:maybe_drop_replication_slot, %{drop_slot_requesters: requesters} = state) do
-    result = drop_publication(state)
-    Enum.each(requesters, fn requester -> GenServer.reply(requester, result) end)
-    {:noreply, %{state | drop_slot_requesters: []}}
   end
 
   @impl true
@@ -365,6 +366,10 @@ defmodule Electric.Connection.Manager do
       :exit, _reason ->
         # The replication client has already exited, so nothing else to do here.
         state
+    end
+
+    if state.drop_slot_requested do
+      drop_slot(state)
     end
 
     {:noreply, %{state | shape_log_collector_pid: nil}}
@@ -594,5 +599,27 @@ defmodule Electric.Connection.Manager do
       |> List.keyfind(Electric.Replication.ShapeLogCollector, 0)
 
     log_collector_pid
+  end
+
+  defp drop_slot(%{pool_pid: pool} = state) do
+    publication_name = Keyword.fetch!(state.replication_opts, :publication_name)
+    slot_name = Keyword.fetch!(state.replication_opts, :slot_name)
+    slot_temporary? = Keyword.fetch!(state.replication_opts, :slot_temporary?)
+
+    if !slot_temporary? do
+      execute_and_log_errors(pool, "SELECT pg_drop_replication_slot('#{slot_name}');")
+    end
+
+    execute_and_log_errors(pool, "DROP PUBLICATION #{publication_name}")
+  end
+
+  defp execute_and_log_errors(pool, query) do
+    case Postgrex.query(pool, query, []) do
+      {:ok, _} ->
+        :ok
+
+      {:error, error} ->
+        Logger.error("Failed to execute query: #{query}\nError: #{inspect(error)}")
+    end
   end
 end
