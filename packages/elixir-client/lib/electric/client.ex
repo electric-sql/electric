@@ -307,6 +307,11 @@ defmodule Electric.Client do
     end
   end
 
+  # pass through a pre-configured ShapeDefinition as-is so that this is idempotent
+  def shape!(%ShapeDefinition{} = shape) do
+    shape
+  end
+
   @doc """
   A shortcut to [`ShapeDefinition.new!/2`](`Electric.Client.ShapeDefinition.new!/2`).
   """
