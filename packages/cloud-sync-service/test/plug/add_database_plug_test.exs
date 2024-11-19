@@ -1,55 +1,26 @@
-defmodule Electric.Plug.AddDatabasePlugTest do
+defmodule CloudElectric.Plugs.AddDatabasePlugTest do
   use ExUnit.Case, async: false
   import Plug.Conn
 
-  alias Electric.Plug.AddDatabasePlug
+  alias CloudElectric.Plugs.AddDatabasePlug
 
   import Support.ComponentSetup
   import Support.DbSetup
 
-  alias Support.Mock
-
-  import Mox
-
-  setup :verify_on_exit!
   @moduletag :capture_log
   @moduletag :tmp_dir
 
-  @conn_url "postgresql://postgres:password@foo:5432/electric"
-  @other_conn_url "postgresql://postgres:password@bar:5432/electric"
-
-  # setup do
-  #  start_link_supervised!({Registry, keys: :duplicate, name: @registry})
-  #  :ok
-  # end
+  setup_all :with_persistent_kv
+  setup :with_unique_dbs
+  setup :with_tenant_supervisor
+  setup :with_tenant_manager
 
   def conn(ctx, method, body_params \\ nil) do
-    # Pass mock dependencies to the plug
-    config = [
-      storage: {Mock.Storage, []},
-      tenant_manager: Access.fetch!(ctx, :tenant_manager),
-      app_config: ctx.app_config,
-      tenant_tables_name: ctx.tenant_tables_name
-    ]
-
-    conn =
-      if body_params do
-        Plug.Test.conn(method, "/", body_params)
-      else
-        Plug.Test.conn(method, "/")
-      end
-
-    conn
-    |> assign(:config, config)
+    Plug.Test.conn(method, "/", body_params)
+    |> assign(:config, tenant_manager: ctx.tenant_manager)
   end
 
   describe "AddDatabasePlug" do
-    setup :with_unique_db
-    setup :with_publication
-
-    setup :with_complete_stack_but_no_tenant
-    setup :with_app_config
-
     test "returns 400 for invalid params", ctx do
       conn =
         ctx
@@ -64,54 +35,62 @@ defmodule Electric.Plug.AddDatabasePlugTest do
              }
     end
 
-    test "returns 200 when successfully adding a tenant", ctx do
+    @tag db_count: 1
+    test "returns 200 when successfully adding a tenant", %{dbs: [%{url: url}]} = ctx do
       conn =
         ctx
-        |> conn("POST", %{database_id: ctx.tenant_id, database_url: @conn_url})
+        |> conn("POST", %{database_id: "db1", database_url: url})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 200
-      assert Jason.decode!(conn.resp_body) == ctx.tenant_id
+      assert Jason.decode!(conn.resp_body) == "db1"
+      assert_receive {:startup_progress, "db1", :shape_supervisor_ready}, 500
     end
 
-    test "returns 400 when tenant already exists", ctx do
+    @tag db_count: 2
+    test "returns 400 when tenant already exists", %{dbs: [%{url: url1}, %{url: url2}]} = ctx do
+      tenant_id = "new-db"
+
       conn =
         ctx
-        |> conn("POST", %{database_id: ctx.tenant_id, database_url: @conn_url})
+        |> conn("POST", %{database_id: tenant_id, database_url: url1})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 200
-      assert Jason.decode!(conn.resp_body) == ctx.tenant_id
+      assert Jason.decode!(conn.resp_body) == tenant_id
 
       # Now try creating another tenant with the same ID
       conn =
         ctx
-        |> conn("POST", %{database_id: ctx.tenant_id, database_url: @other_conn_url})
+        |> conn("POST", %{database_id: tenant_id, database_url: url2})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 400
-      assert Jason.decode!(conn.resp_body) == "Database #{ctx.tenant_id} already exists."
+      assert Jason.decode!(conn.resp_body) == "Database #{tenant_id} already exists."
     end
 
-    test "returns 400 when database is already in use", ctx do
+    @tag db_count: 1
+    test "returns 400 when database is already in use", %{dbs: [%{url: url}]} = ctx do
+      tenant_id = "new-db"
+
       conn =
         ctx
-        |> conn("POST", %{database_id: ctx.tenant_id, database_url: @conn_url})
+        |> conn("POST", %{database_id: tenant_id, database_url: url})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 200
-      assert Jason.decode!(conn.resp_body) == ctx.tenant_id
+      assert Jason.decode!(conn.resp_body) == tenant_id
 
       # Now try creating another tenant with the same database
       conn =
         ctx
-        |> conn("POST", %{database_id: "other_tenant", database_url: @conn_url})
+        |> conn("POST", %{database_id: "other_tenant", database_url: url})
         |> AddDatabasePlug.call([])
 
       assert conn.status == 400
 
-      assert Jason.decode!(conn.resp_body) ==
-               "The database foo:5432/electric is already in use by another tenant."
+      assert Jason.decode!(conn.resp_body) =~
+               ~r/The database .* is already in use by another tenant./
     end
   end
 end
