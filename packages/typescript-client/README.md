@@ -134,7 +134,6 @@ Runtime errors:
 - `FetchBackoffAbortError`: Fetch aborted using AbortSignal
 - `MissingShapeHandleError`: Missing required shape handle
 - `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
-- `ShapeStreamAlreadyRunningError`: Attempting to start a ShapeStream that is already running
 
 See the [typescript client docs on the website](https://electric-sql.com/docs/api/clients/typescript#error-handling) for more details on error handling.
 

@@ -16,7 +16,6 @@ import {
   MissingShapeHandleError,
   MissingHeadersError,
   ReservedParamError,
-  ShapeStreamAlreadyRunningError,
   MissingHeadersError,
 } from './error'
 import {
@@ -69,10 +68,10 @@ type ReservedParamKeys =
 
 type ParamsRecord = Omit<Record<string, string>, ReservedParamKeys>
 
-type RetryOpts = {
-  params?: ParamsRecord
-  headers?: Record<string, string>
-}
+// type RetryOpts = {
+//   params?: ParamsRecord
+//   headers?: Record<string, string>
+// }
 type ShapeStreamErrorHandler = (error: Error) => void // | RetryOpts
 
 /**

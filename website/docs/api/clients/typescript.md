@@ -380,6 +380,5 @@ The following error types may be encountered:
 - `FetchBackoffAbortError`: Fetch aborted using AbortSignal
 - `MissingShapeHandleError`: Missing required shape handle
 - `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
-- `ShapeStreamAlreadyRunningError`: Attempting to start a ShapeStream that is already running
 
 See the [Examples](https://github.com/electric-sql/electric/tree/main/examples) and [integrations](/docs/integrations/react) for more usage examples.
