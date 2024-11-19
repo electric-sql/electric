@@ -172,7 +172,7 @@ defmodule Electric.Client.Stream do
   #      deleted. We should start from scratch, this will force the shape to be
   #      recreated
   # 409: Upon receiving a 409, we should start from scratch with the newly
-  #      provided shape ID
+  #      provided shape handle
   defp handle_response({:error, %Fetch.Response{status: status} = resp}, stream)
        when status in [400, 409] do
     %{value_mapper_fun: value_mapper_fun} = stream

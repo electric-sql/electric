@@ -110,7 +110,7 @@ defmodule Electric.ShapeCache.FileStorage do
         :ok
 
       {:error, :eexist} ->
-        # file already exists - by virtue of the shape ID being the hash of the
+        # file already exists - by virtue of the shape handle being the hash of the
         # definition we do not need to compare them
         :ok
 

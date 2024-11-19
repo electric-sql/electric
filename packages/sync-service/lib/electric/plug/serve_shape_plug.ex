@@ -22,8 +22,8 @@ defmodule Electric.Plug.ServeShapePlug do
   @must_refetch Jason.encode!([%{headers: %{control: "must-refetch"}}])
   @shape_definition_mismatch Jason.encode!(%{
                                message:
-                                 "The specified shape definition and ID do not match. " <>
-                                   "Please ensure the shape definition is correct or omit the shape ID from the request to obtain a new one."
+                                 "The specified shape definition and handle do not match. " <>
+                                   "Please ensure the shape definition is correct or omit the shape handle from the request to obtain a new one."
                              })
 
   defmodule Params do
