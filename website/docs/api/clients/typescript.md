@@ -134,12 +134,6 @@ export interface ShapeStreamOptions<T = never> {
   params?: Record<string, string>
 
   /**
-   * Automatically fetch updates to the Shape. If you just want to sync the current
-   * shape and stop, pass false.
-   */
-  subscribe?: boolean
-
-  /**
    * Signal to abort the stream.
    */
   signal?: AbortSignal
@@ -155,9 +149,10 @@ export interface ShapeStreamOptions<T = never> {
   parser?: Parser<T>
 
   /**
-   * Whether to automatically start streaming (default: true)
+   * Error handler for stream errors. If provided, all stream errors will be passed to this handler.
+   * If not provided, errors will be thrown.
    */
-  autoRun?: boolean
+  onError?: ShapeStreamErrorHandler
 
   backoffOptions?: BackoffOptions
 }
@@ -184,7 +179,6 @@ The ShapeStream constructor accepts several configuration options:
 const stream = new ShapeStream({
   url: 'http://localhost:3000/v1/shape',  // Required: URL to fetch shapes from
   table: 'issues',                        // Optional: Table to stream shapes for
-  autoStart: true,                        // Optional: Auto-start streaming (default: true)
   params: {                               // Optional: Custom parameters
     foo: 'bar'
   }
@@ -280,97 +274,114 @@ shape.subscribe(({ rows }) => {
 })
 ```
 
-### Error handling
+### Subscribing to updates
 
-The client provides several specific error classes to help you handle different types of errors:
+The `subscribe` method allows you to receive updates whenever the shape changes. It takes two arguments:
+1. A message handler callback (required)
+2. An error handler callback (optional)
 
-Initialization errors (thrown by constructor):
-- `MissingShapeUrlError`: Missing required URL parameter
-- `InvalidSignalError`: Invalid AbortSignal instance
-- `ReservedParamError`: Using reserved parameter names
-
-Runtime errors (thrown by `start()` or emitted to error handler):
-- `FetchError`: HTTP errors during shape fetching
-- `FetchBackoffAbortError`: Fetch aborted using AbortSignal
-- `MissingShapeHandleError`: Missing required shape handle
-- `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
-- `ShapeStreamAlreadyRunningError`: Attempting to start a ShapeStream that is already running
-
-There are two ways to handle runtime errors:
-
-1. Using try/catch with `autoStart: false`:
-```typescript
-let stream: ShapeStream<Issue>
-try {
-  stream = new ShapeStream({
-    url: 'http://localhost:3000/v1/shape',
-    table: 'issues',
-    autoStart: false
-  })
-} catch (error) {
-  if (error instanceof MissingShapeUrlError) {
-    console.error('Missing required URL parameter')
-    throw error
-  }
-  throw error
-}
-
-try {
-  await stream.start()
-} catch (error) {
-  if (error instanceof ShapeStreamAlreadyRunningError) {
-    console.error('Stream is already running')
-  } else if (error instanceof FetchError) {
-    console.error('Failed to fetch shape:', error)
-  } else {
-    console.error('Failure while running stream:', error)
-  }
-}
-```
-
-2. Using the error handler in subscribe (works with `autoStart: true` or `false`):
 ```typescript
 const stream = new ShapeStream({
   url: 'http://localhost:3000/v1/shape',
   table: 'issues'
 })
 
+// Basic subscription with just a message handler
+stream.subscribe((messages) => {
+  for (const msg of messages) {
+    if (msg.type === 'INSERT') {
+      console.log('New row:', msg.value)
+    } else if (msg.type === 'UPDATE') {
+      console.log('Updated row:', msg.value)
+    } else if (msg.type === 'DELETE') {
+      console.log('Deleted row with id:', msg.key)
+    }
+  }
+})
+
+// Subscription with both message and error handlers
 stream.subscribe(
   (messages) => {
-    // Handle messages
+    // Process messages
     console.log('Received messages:', messages)
   },
   (error) => {
-    // Handle runtime errors
-    if (error instanceof FetchError) {
-      console.error('Failed to fetch shape:', error)
-    } else {
-      console.error('Failure while running stream:', error)
-    }
+    // Handle errors specific to this subscription
+    console.error('Error in subscription:', error)
   }
 )
 ```
 
-### Subscribing to updates
+Note that the error handler in `subscribe` is specific to that subscription and is separate from the global `onError` handler. If you need to handle all stream errors, use the `onError` option when creating the stream.
 
+You can have multiple active subscriptions to the same stream. Each subscription will receive the same messages, and the stream will wait for all subscribers to process their messages before proceeding.
+
+To stop receiving updates, you can either:
+- Unsubscribe a specific subscription using the function returned by `subscribe`
+- Unsubscribe all subscriptions using `unsubscribeAll()`
+
+```typescript
+// Store the unsubscribe function
+const unsubscribe = stream.subscribe(messages => {
+  console.log('Received messages:', messages)
+})
+
+// Later, unsubscribe this specific subscription
+unsubscribe()
+
+// Or unsubscribe all subscriptions
+stream.unsubscribeAll()
+```
+
+### Error Handling
+
+The ShapeStream provides two ways to handle errors:
+
+1. Using the `onError` handler (recommended):
 ```typescript
 const stream = new ShapeStream({
   url: 'http://localhost:3000/v1/shape',
-  table: 'items'
-})
-
-stream.subscribe(
-  (messages) => {
-    // Handle messages
-  },
-  (error) => {
+  table: 'issues',
+  onError: (error) => {
+    // Handle all stream errors here
     if (error instanceof FetchError) {
       console.error('HTTP error:', error.status, error.message)
     } else {
-      console.error('Other error:', error)
+      console.error('Stream error:', error)
     }
+  }
+})
+```
+
+If no `onError` handler is provided, the ShapeStream will throw errors that occur during streaming.
+
+2. Individual subscribers can optionally handle errors specific to their subscription:
+```typescript
+stream.subscribe(
+  (messages) => {
+    // Process messages
+  },
+  (error) => {
+    // Handle errors for this specific subscription
+    console.error('Subscription error:', error)
   }
 )
 ```
+
+#### Error Types
+
+The following error types may be encountered:
+
+**Initialization Errors** (thrown by constructor):
+- `MissingShapeUrlError`: Missing required URL parameter
+- `InvalidSignalError`: Invalid AbortSignal instance
+- `ReservedParamError`: Using reserved parameter names
+
+**Runtime Errors** (handled by `onError` or thrown):
+- `FetchError`: HTTP errors during shape fetching
+- `FetchBackoffAbortError`: Fetch aborted using AbortSignal
+- `MissingShapeHandleError`: Missing required shape handle
+- `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
+- `ShapeStreamAlreadyRunningError`: Attempting to start a ShapeStream that is already running
 
 See the [Examples](https://github.com/electric-sql/electric/tree/main/examples) and [integrations](/docs/integrations/react) for more usage examples.

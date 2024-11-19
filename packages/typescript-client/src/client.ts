@@ -186,6 +186,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   isUpToDate: boolean
   lastOffset: Offset
   shapeHandle?: string
+  error?: unknown
   start(): void
   isRunning(): boolean
 }
@@ -260,7 +261,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #replica?: Replica
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
-    this.options = { subscribe: true, autoStart: true, ...options }
+    this.options = { subscribe: true, ...options }
     validateOptions(this.options)
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
@@ -286,13 +287,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
       createFetchWithChunkBuffer(fetchWithBackoffClient)
     )
 
-    if (this.options.autoStart) {
-      this.start()
-    }
+    this.start()
   }
 
   get shapeHandle() {
     return this.#shapeHandle
+  }
+
+  get error() {
+    return this.#error
   }
 
   get isUpToDate() {
@@ -320,142 +323,135 @@ export class ShapeStream<T extends Row<unknown> = Row>
       ) {
         const { url, table, where, columns, signal } = this.options
 
+        const fetchUrl = new URL(url)
+
+        // Add any custom parameters first
+        if (this.options.params) {
+          // Check for reserved parameter names
+          const reservedParams = Object.keys(this.options.params).filter(
+            (key) => RESERVED_PARAMS.has(key)
+          )
+          if (reservedParams.length > 0) {
+            throw new Error(
+              `Cannot use reserved Electric parameter names in custom params: ${reservedParams.join(`, `)}`
+            )
+          }
+
+          for (const [key, value] of Object.entries(this.options.params)) {
+            fetchUrl.searchParams.set(key, value)
+          }
+        }
+
+        // Add Electric's internal parameters
+        if (table) fetchUrl.searchParams.set(TABLE_QUERY_PARAM, table)
+        if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
+        if (columns && columns.length > 0)
+          fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, columns.join(`,`))
+        fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
+
+        if (this.#isUpToDate) {
+          fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
+          fetchUrl.searchParams.set(
+            LIVE_CACHE_BUSTER_QUERY_PARAM,
+            this.#liveCacheBuster
+          )
+        }
+
+        if (this.#shapeHandle) {
+          // This should probably be a header for better cache breaking?
+          fetchUrl.searchParams.set(
+            SHAPE_HANDLE_QUERY_PARAM,
+            this.#shapeHandle!
+          )
+        }
+
+        if (this.#databaseId) {
+          fetchUrl.searchParams.set(DATABASE_ID_QUERY_PARAM, this.#databaseId!)
+        }
+
+        if (
+          (this.#replica ?? ShapeStream.Replica.DEFAULT) !=
+          ShapeStream.Replica.DEFAULT
+        ) {
+          fetchUrl.searchParams.set(REPLICA_PARAM, this.#replica as string)
+        }
+
+        let response!: Response
         try {
-          const fetchUrl = new URL(url)
+          response = await this.#fetchClient(fetchUrl.toString(), {
+            signal,
+            headers: this.options.headers,
+          })
+          this.#connected = true
+        } catch (e) {
+          if (e instanceof FetchBackoffAbortError) break // interrupted
+          if (!(e instanceof FetchError)) throw e // should never happen
+          if (e.status == 409) {
+            // Upon receiving a 409, we should start from scratch
+            // with the newly provided shape handle
+            const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
+            this.#reset(newShapeHandle)
+            await this.#publish(e.json as Message<T>[])
+            continue
+          } else if (e.status >= 400 && e.status < 500) {
+            // Notify subscribers
+            this.#sendErrorToUpToDateSubscribers(e)
+            this.#sendErrorToSubscribers(e)
 
-          // Add any custom parameters first
-          if (this.options.params) {
-            // Check for reserved parameter names
-            const reservedParams = Object.keys(this.options.params).filter(
-              (key) => RESERVED_PARAMS.has(key)
-            )
-            if (reservedParams.length > 0) {
-              throw new Error(
-                `Cannot use reserved Electric parameter names in custom params: ${reservedParams.join(`, `)}`
-              )
-            }
-
-            for (const [key, value] of Object.entries(this.options.params)) {
-              fetchUrl.searchParams.set(key, value)
-            }
+            // 400 errors are not actionable without additional user input,
+            // so we exit the loop
+            throw e
           }
+        }
 
-          // Add Electric's internal parameters
-          if (table) fetchUrl.searchParams.set(TABLE_QUERY_PARAM, table)
-          if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
-          if (columns && columns.length > 0)
-            fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, columns.join(`,`))
-          fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
+        const { headers, status } = response
+        const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
+        if (shapeHandle) {
+          this.#shapeHandle = shapeHandle
+        }
 
-          if (this.#isUpToDate) {
-            fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
-            fetchUrl.searchParams.set(
-              LIVE_CACHE_BUSTER_QUERY_PARAM,
-              this.#liveCacheBuster
-            )
-          }
+        const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
+        if (lastOffset) {
+          this.#lastOffset = lastOffset as Offset
+        }
 
-          if (this.#shapeHandle) {
-            // This should probably be a header for better cache breaking?
-            fetchUrl.searchParams.set(
-              SHAPE_HANDLE_QUERY_PARAM,
-              this.#shapeHandle!
-            )
-          }
+        const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
+        if (liveCacheBuster) {
+          this.#liveCacheBuster = liveCacheBuster
+        }
 
-          if (this.#databaseId) {
-            fetchUrl.searchParams.set(
-              DATABASE_ID_QUERY_PARAM,
-              this.#databaseId!
-            )
-          }
+        const getSchema = (): Schema => {
+          const schemaHeader = headers.get(SHAPE_SCHEMA_HEADER)
+          return schemaHeader ? JSON.parse(schemaHeader) : {}
+        }
+        this.#schema = this.#schema ?? getSchema()
 
-          if (
-            (this.#replica ?? ShapeStream.Replica.DEFAULT) !=
-            ShapeStream.Replica.DEFAULT
-          ) {
-            fetchUrl.searchParams.set(REPLICA_PARAM, this.#replica as string)
-          }
+        const messages = status === 204 ? `[]` : await response.text()
 
-          let response!: Response
-          try {
-            response = await this.#fetchClient(fetchUrl.toString(), {
-              signal,
-              headers: this.options.headers,
-            })
-            this.#connected = true
-          } catch (e) {
-            if (e instanceof FetchBackoffAbortError) break // interrupted
-            if (!(e instanceof FetchError)) throw e // should never happen
-            if (e.status == 409) {
-              // Upon receiving a 409, we should start from scratch
-              // with the newly provided shape handle
-              const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
-              this.#reset(newShapeHandle)
-              await this.#publish(e.json as Message<T>[])
-              continue
-            } else if (e.status >= 400 && e.status < 500) {
-              // 400 errors are not actionable without additional user input,
-              // so we exit the loop
-              throw e
-            }
-          }
+        if (status === 204) {
+          // There's no content so we are live and up to date
+          this.#lastSyncedAt = Date.now()
+        }
 
-          const { headers, status } = response
-          const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
-          if (shapeHandle) {
-            this.#shapeHandle = shapeHandle
-          }
+        const batch = this.#messageParser.parse(messages, this.#schema)
 
-          const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
-          if (lastOffset) {
-            this.#lastOffset = lastOffset as Offset
-          }
-
-          const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
-          if (liveCacheBuster) {
-            this.#liveCacheBuster = liveCacheBuster
-          }
-
-          const getSchema = (): Schema => {
-            const schemaHeader = headers.get(SHAPE_SCHEMA_HEADER)
-            return schemaHeader ? JSON.parse(schemaHeader) : {}
-          }
-          this.#schema = this.#schema ?? getSchema()
-
-          const messages = status === 204 ? `[]` : await response.text()
-
-          if (status === 204) {
-            // There's no content so we are live and up to date
+        // Update isUpToDate
+        if (batch.length > 0) {
+          const prevUpToDate = this.#isUpToDate
+          const lastMessage = batch[batch.length - 1]
+          if (isUpToDateMessage(lastMessage)) {
             this.#lastSyncedAt = Date.now()
+            this.#isUpToDate = true
           }
 
-          const batch = this.#messageParser.parse(messages, this.#schema)
-
-          // Update isUpToDate
-          if (batch.length > 0) {
-            const prevUpToDate = this.#isUpToDate
-            const lastMessage = batch[batch.length - 1]
-            if (isUpToDateMessage(lastMessage)) {
-              this.#lastSyncedAt = Date.now()
-              this.#isUpToDate = true
-            }
-
-            await this.#publish(batch)
-            if (!prevUpToDate && this.#isUpToDate) {
-              this.#notifyUpToDateSubscribers()
-            }
+          await this.#publish(batch)
+          if (!prevUpToDate && this.#isUpToDate) {
+            this.#notifyUpToDateSubscribers()
           }
-        } catch (err) {
-          this.#error = err
-          // Only throw if autoStart is false
-          if (!this.options.autoStart) {
-            throw err
-          }
-          break
         }
       }
     } catch (err) {
+      this.#error = err
       if (this.#onError) {
         const retryOpts = this.#onError(err as Error)
         if (typeof retryOpts === `object`) {
@@ -486,10 +482,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#isRunning
   }
 
-  subscribe(callback: (messages: Message<T>[]) => MaybePromise<void>) {
+  subscribe(
+    callback: (messages: Message<T>[]) => MaybePromise<void>,
+    onError?: (error: FetchError | Error) => void
+  ) {
     const subscriptionId = Math.random()
 
-    this.#subscribers.set(subscriptionId, callback)
+    this.#subscribers.set(subscriptionId, [callback, onError])
 
     return () => {
       this.#subscribers.delete(subscriptionId)
@@ -500,10 +499,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#subscribers.clear()
   }
 
-  subscribeOnceToUpToDate(callback: () => MaybePromise<void>) {
+  subscribeOnceToUpToDate(
+    callback: () => MaybePromise<void>,
+    onError?: (error: FetchError | Error) => void
+  ) {
     const subscriptionId = Math.random()
 
-    this.#upToDateSubscribers.set(subscriptionId, callback)
+    this.#upToDateSubscribers.set(subscriptionId, [callback, onError])
 
     return () => {
       this.#upToDateSubscribers.delete(subscriptionId)
@@ -546,6 +548,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
           })
         }
       })
+    )
+  }
+
+  #sendErrorToSubscribers(error: Error) {
+    this.#subscribers.forEach(([_, errorFn]) => {
+      errorFn?.(error)
+    })
+  }
+
+  #sendErrorToUpToDateSubscribers(error: FetchError | Error) {
+    this.#upToDateSubscribers.forEach(([_, errorCallback]) =>
+      errorCallback(error)
     )
   }
 

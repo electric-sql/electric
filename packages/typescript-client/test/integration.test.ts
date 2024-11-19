@@ -859,33 +859,6 @@ describe(`HTTP Sync`, () => {
     expect(invalidIssueStream.isConnected()).false
   })
 
-  it(`should be able to catch errors thrown when manually starting a stream with autoStart: false`, async ({
-    expect,
-    aborter,
-  }) => {
-    const stream = new ShapeStream<IssueRow>({
-      url: `${BASE_URL}/v1/shape`,
-      table: `foo`,
-      signal: aborter.signal,
-      autoStart: false,
-    })
-
-    try {
-      await stream.start()
-    } catch (error) {
-      expect(error).toBeInstanceOf(FetchError)
-      const fetchError = error as FetchError
-      expect(fetchError.status).toBe(400)
-      expect(fetchError.message).toMatch(
-        /HTTP Error 400.*Table.*foo.*does.not.exist/
-      )
-    }
-
-    // Test that the error is stored in the stream
-    expect(stream.error).toBeInstanceOf(FetchError)
-    expect((stream.error as FetchError).status).toBe(400)
-  })
-
   it(`should detect shape deprecation and restart syncing`, async ({
     expect,
     insertIssues,

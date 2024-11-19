@@ -95,52 +95,41 @@ shape.subscribe(({ rows }) => {
 
 ### Error Handling
 
-The ShapeStream constructor automatically starts streaming by default. Runtime errors can be handled in two ways:
+The ShapeStream provides two ways to handle errors:
 
-1. Using try/catch with `autoStart: false`:
+1. Using the `onError` handler:
 ```typescript
 const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
-  table: 'issues',
-  autoStart: false
-})
-
-try {
-  await stream.start()
-} catch (error) {
-  if (error instanceof FetchError) {
-    console.error('HTTP error:', error.status, error.message)
+  url: `${BASE_URL}/v1/shape`,
+  table: `foo`,
+  onError: (error) => {
+    // Handle all stream errors here
+    console.error('Stream error:', error)
   }
-}
+})
 ```
 
-2. Using the error handler in subscribe:
-```typescript
-const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
-  table: 'issues'
-})
+If no `onError` handler is provided, the ShapeStream will throw errors that occur during streaming.
 
+2. Individual subscribers can optionally handle errors specific to their subscription:
+```typescript
 stream.subscribe(
   (messages) => {
     // Handle messages
-    console.log('Received messages:', messages)
   },
   (error) => {
-    // Handle runtime errors
-    console.error('Failure while running stream:', error)
+    // Handle errors for this specific subscription
+    console.error('Subscription error:', error)
   }
 )
 ```
 
-The following error types may be thrown:
-
-Initialization errors (thrown by constructor):
+Common error types include:
 - `MissingShapeUrlError`: Missing required URL parameter
 - `InvalidSignalError`: Invalid AbortSignal instance
 - `ReservedParamError`: Using reserved parameter names
 
-Runtime errors (thrown by `start()` or emitted to error handler):
+Runtime errors:
 - `FetchError`: HTTP errors during shape fetching
 - `FetchBackoffAbortError`: Fetch aborted using AbortSignal
 - `MissingShapeHandleError`: Missing required shape handle
