@@ -63,6 +63,12 @@ type ReservedParamKeys =
 
 type ParamsRecord = Omit<Record<string, string>, ReservedParamKeys>
 
+type RetryOpts = {
+  params?: ParamsRecord
+  headers?: Record<string, string>
+}
+type ShapeStreamErrorHandler = (error: Error) => void | RetryOpts
+
 /**
  * Options for constructing a ShapeStream.
  */
@@ -144,12 +150,20 @@ export interface ShapeStreamOptions<T = never> {
   signal?: AbortSignal
   fetchClient?: typeof fetch
   parser?: Parser<T>
+
+  /**
+   * A function for handling shapestream errors.
+   * This is optional, when it is not provided any shapestream errors will be thrown.
+   * If the function is provided and returns an object containing parameters and/or headers
+   * the shapestream will apply those changes and try syncing again.
+   * If the function returns void the shapestream is stopped.
+   */
+  onError?: ShapeStreamErrorHandler
 }
 
 export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   subscribe(
-    callback: (messages: Message<T>[]) => MaybePromise<void>,
-    onError?: (error: FetchError | Error) => void
+    callback: (messages: Message<T>[]) => MaybePromise<void>
   ): void
   unsubscribeAllUpToDateSubscribers(): void
   unsubscribeAll(): void
@@ -232,7 +246,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #shapeHandle?: string
   #databaseId?: string
   #schema?: Schema
-  #error?: unknown
+  #onError?: ShapeStreamErrorHandler
   #replica?: Replica
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
@@ -244,6 +258,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#databaseId = this.options.databaseId
     this.#messageParser = new MessageParser<T>(options.parser)
     this.#replica = this.options.replica
+    this.#onError = this.options.onError
 
     const baseFetchClient =
       options.fetchClient ??
@@ -274,10 +289,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   get lastOffset() {
     return this.#lastOffset
-  }
-
-  get error() {
-    return this.#error
   }
 
   async start() {
@@ -362,10 +373,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
             await this.#publish(e.json as Message<T>[])
             continue
           } else if (e.status >= 400 && e.status < 500) {
-            // Notify subscribers
-            this.#sendErrorToUpToDateSubscribers(e)
-            this.#sendErrorToSubscribers(e)
-
             // 400 errors are not actionable without additional user input,
             // so we exit the loop
             throw e
@@ -419,7 +426,27 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
       }
     } catch (err) {
-      this.#error = err
+      if (this.#onError) {
+        const retryOpts = this.#onError(err as Error)
+        if (typeof retryOpts === 'object') {
+          this.#reset()
+          
+          if (Object.hasOwn(retryOpts, 'params')) {
+            this.options.params = retryOpts.params
+          }
+
+          if (Object.hasOwn(retryOpts, 'headers')) {
+            this.options.headers = retryOpts.headers
+          }
+
+          // Restart
+          this.start()
+        }
+        return
+      }
+
+      // If no handler is provided or it
+      throw err
     } finally {
       this.#connected = false
     }
@@ -427,11 +454,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   subscribe(
     callback: (messages: Message<T>[]) => MaybePromise<void>,
-    onError?: (error: FetchError | Error) => void
   ) {
     const subscriptionId = Math.random()
 
-    this.#subscribers.set(subscriptionId, [callback, onError])
+    this.#subscribers.set(subscriptionId, callback)
 
     return () => {
       this.#subscribers.delete(subscriptionId)
@@ -443,12 +469,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   subscribeOnceToUpToDate(
-    callback: () => MaybePromise<void>,
-    error: (err: FetchError | Error) => void
+    callback: () => MaybePromise<void>
   ) {
     const subscriptionId = Math.random()
 
-    this.#upToDateSubscribers.set(subscriptionId, [callback, error])
+    this.#upToDateSubscribers.set(subscriptionId, callback)
 
     return () => {
       this.#upToDateSubscribers.delete(subscriptionId)
@@ -494,22 +519,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     )
   }
 
-  #sendErrorToSubscribers(error: Error) {
-    this.#subscribers.forEach(([_, errorFn]) => {
-      errorFn?.(error)
-    })
-  }
-
   #notifyUpToDateSubscribers() {
     this.#upToDateSubscribers.forEach(([callback]) => {
       callback()
     })
-  }
-
-  #sendErrorToUpToDateSubscribers(error: FetchError | Error) {
-    this.#upToDateSubscribers.forEach(([_, errorCallback]) =>
-      errorCallback(error)
-    )
   }
 
   /**
