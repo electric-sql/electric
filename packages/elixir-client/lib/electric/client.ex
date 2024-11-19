@@ -218,8 +218,7 @@ defmodule Electric.Client do
   If you configure your client using e.g. `base_url: "http://localhost:3000"`
   Electric will append the default shape API path
   `#{inspect(@api_endpoint_path)}` to create the final endpoint configuration,
-  in this case `"http://localhost:3000#{@api_endpoint_path}"`. Note that any
-  trailing path in the `base_url` is ignored.
+  in this case `"http://localhost:3000#{@api_endpoint_path}"`.
 
   If you wish to use a non-standard endpoint path because, for example, you wrap your Shape
   API calls in an [authentication
@@ -246,7 +245,7 @@ defmodule Electric.Client do
         case Map.fetch(attrs, :base_url) do
           {:ok, url} ->
             with {:ok, uri} <- URI.new(url) do
-              {:ok, %{uri | path: @api_endpoint_path}}
+              {:ok, URI.append_path(uri, @api_endpoint_path)}
             end
 
           :error ->
