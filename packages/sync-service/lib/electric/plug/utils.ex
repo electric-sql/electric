@@ -114,6 +114,7 @@ defmodule Electric.Plug.Utils do
         |> to_string()
     }
     |> Map.filter(fn {_k, v} -> not is_nil(v) end)
+    |> Map.merge(Map.get(conn.private, :telemetry_span_attrs, %{}))
     |> Map.merge(query_params_map)
     |> Map.merge(Map.new(conn.req_headers, fn {k, v} -> {"http.request.header.#{k}", v} end))
     |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.response.header.#{k}", v} end))

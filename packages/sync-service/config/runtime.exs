@@ -179,7 +179,6 @@ config :electric,
   cache_stale_age: cache_stale_age,
   chunk_bytes_threshold: chunk_bytes_threshold,
   # Used in telemetry
-  environment: config_env(),
   instance_id: instance_id,
   telemetry_statsd_host: statsd_host,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, 20),

@@ -15,6 +15,7 @@ defmodule CloudElectric.Plugs.LoadTenantToAssignPlug do
       conn
       |> put_resp_header("electric-database-id", id)
       |> assign(assign_key, config)
+      |> put_private(:telemetry_span_attrs, %{"tenant.id" => id})
     else
       :error ->
         conn
