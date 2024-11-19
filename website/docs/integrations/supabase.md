@@ -43,11 +43,7 @@ docker run -it \
 
 #### Troubleshooting IPv6
 
-The network where Electric is running must support IPv6. If you're running Electric on your own computer, check if you have IPv6 support by opening [test-ipv6.com](https://test-ipv6.com). If you see "No IPv6 address detected" on that page, consider `ssh`ing into another machine or using a VPN service that works with IPv6 networks.
-
-When running Electric in a Docker container, there's an additional hurdle in that Docker does not enable IPv6 out-of-the-box. Follow the [official guide](https://docs.docker.com/config/daemon/ipv6/#use-ipv6-for-the-default-bridge-network) to configure your Docker daemon for IPv6.
-
-If you're subscribed to the Pro or Team plan on Supabase Platform, you can side-step those hurdles by purchasing the [IPv4 add-on](https://supabase.com/docs/guides/platform/ipv4-address#enabling-the-add-on) to make your database host available at an IPv4 address.
+When connecting to a Supabase Postgres, you either need to make sure Electric and its network supports IPv6, or you need to be on a Pro or Team plan with Supabase Platform to enable their IPv4 add-on. See the [troubleshooting guide on IPv6](/docs/guides/troubleshooting#ipv6-support) for tips on enabling IPv6 support for Electric. Or see [this Supabase guide](https://supabase.com/docs/guides/platform/ipv4-address#enabling-the-add-on) for information about enabling their IPv4 add-on.
 
 > [!Tip] Need somewhere to host Electric?
 > If you need to deploy Electric, then [Supabase works great](https://supabase.com/blog/postgres-on-fly-by-supabase) with [Fly.io](./fly#deploy-electric).

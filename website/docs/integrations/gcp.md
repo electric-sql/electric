@@ -63,7 +63,7 @@ For example, you can deploy Electric on a [Container-Optimized OS](https://cloud
 > We **don't recommend** that you use [Cloud Run](https://cloud.google.com/run) to deploy the Electric sync service because Cloud Run uses an in-memory filesystem and does not provide persistent file storage for Shape logs.
 
 > [!Warning] IPv6 support
-> If you're connecting to Postgres over IPv6 (for example, if you're [connecting to Supabase Postgres](./supabase#troubleshooting-ipv6)) then you may need to be on a Premium Network Tier to configure IPv6 for your VPC. See [this article](https://cloud.google.com/vpc/docs/subnets#ipv6-ranges) for more details.
+> If you're connecting to Postgres over IPv6, (for example, if you're [connecting to Supabase Postgres](./supabase#deploy-postgres)) then you may need to [enable IPv6 support](/docs/guides/troubleshooting#ipv6-support) and be on a [Premium Network Tier](https://cloud.google.com/vpc/docs/subnets#ipv6-ranges).
 
 ### Deploy your app
 

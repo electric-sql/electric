@@ -41,13 +41,17 @@ EOF
 
 Now change your shape URLs to use port `3001` instead of port 3000 and everything will run much faster 🚀
 
-### Clear data &mdash; how do I clear the server state?
+### Shape logs &mdash; how do I clear the server state?
 
-Electric creates resources, including a logical replication publication and replication slots in your Postgres database. Electric also stores [shape logs](/docs/api/http#shape-log) to disk.
+Electric writes [shape logs](/docs/api/http#shape-log) to disk.
 
-Sometimes in development you may want to clear this state. However, just restarting the services doesn't clear the underlying storage. This can lead to unexpected data in your database or shape logs.
+During development, you may want to clear this state. However, just restarting Electric doesn't clear the underlying storage, which can lead to unexpected behaviour.
 
-##### Solution &mdash; clear the storage volumes
+##### Solution &mdash; clear shape logs
+
+You can remove [```STORAGE_DIR```](https://electric-sql.com/docs/api/config#storage-dir) to delete all shape logs. This will ensure that following shape requests will be re-synced from scratch.
+
+###### Using docker
 
 If you're running using Docker Compose, the simplest solution is to bring the Postgres and Electric services down, using the `--volumes` flag to also clear their mounted storage volumes:
 
@@ -65,10 +69,33 @@ docker compose up
 
 ### WAL growth &mdash; why is my Postgres database storage filling up?
 
-Electric creates a logical replication publication in your Postgres database and adds tables dynamically (as you request shapes) to this publication.
+Electric creates a durable replication slot in Postgres to prevent data loss during downtime. 
 
-If you don't consume this publication, the WAL can fill up and your Postgres database can run out of storage space. A common way for this to happen is that you create an Electric publication and then stop running Electric.
+During normal execution, Electric consumes the WAL file and keeps advancing `confirmed_flush_lsn`. However, if Electric is disconnected, the WAL file accumulates the changes that haven't be delivered to Electric.
 
-##### Solution &mdash; run Electric
+##### Solution &mdash; Remove replication slot after Electric is gone
 
-The simplest way to avoid this is to make sure you're running the Electric sync service against Postgres. This will consume the publication and allow the WAL to be released.
+If you're stopping Electric for the weekend, we recommend removing the ```electric_slot_default``` replication slot to prevent unbounded WAL growth. When Electric restarts, if it doesn't find the replication slot at resume point, it will recreate the replication slot and drop all shape logs.
+
+You can also control the size of the WAL with [```wal_keep_size```](https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-KEEP-SIZE). On restart, Electric will detect if the WAL is past the resume point too.
+
+## IPv6 support
+
+If Electric or Postgres are running behind a IPv6 network, you might have perform additional configurations on your network.
+
+### Postgres running behind Ipv6 network
+
+In order for Electric to connect to Postgres over IPv6, you need to set [`ELECTRIC_DATABASE_USE_IPV6`](/docs/api/config#database-use-ipv6) to `true`.
+
+#### Local development
+If you're running Electric on your own computer, check if you have IPv6 support by opening [test-ipv6.com](https://test-ipv6.com). If you see "No IPv6 address detected" on that page, consider `ssh`ing into another machine or using a VPN service that works with IPv6 networks.
+
+When running Electric in a Docker container, there's an additional hurdle in that Docker does not enable IPv6 out-of-the-box. Follow the [official guide](https://docs.docker.com/config/daemon/ipv6/#use-ipv6-for-the-default-bridge-network) to configure your Docker daemon for IPv6.
+
+#### Cloud
+
+If you're running Electric in a Cloud provider, you need to ensure that your VPC is configured with IPv6 support. Check your Cloud provider documentation to learn how to set it up.
+
+### Electric running behind Ipv6 network
+
+By default Electric only binds to IPv4 addresses. You need to set [`ELECTRIC_LISTEN_ON_IPV6`](/docs/api/config#electric-use-ipv6) to `true` to bind to bind to IPv6 addresses as well.
