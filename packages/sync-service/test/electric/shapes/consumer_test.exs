@@ -11,6 +11,7 @@ defmodule Electric.Shapes.ConsumerTest do
   alias Electric.Shapes
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Consumer
+  alias Electric.Shapes.ShapeRemover
 
   alias Support.Mock
   alias Support.StubInspector
@@ -305,6 +306,12 @@ defmodule Electric.Shapes.ConsumerTest do
         Shapes.Consumer.name(ctx.stack_id, @shape_handle1)
       )
 
+      Mock.ShapeStatus
+      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
+      |> allow(self(), ShapeRemover.name(ctx.stack_id, @shape_handle1))
+      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
+      |> allow(self(), ShapeRemover.name(ctx.stack_id, @shape_handle2))
+
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
         |> Transaction.prepend_change(%Changes.TruncatedRelation{
@@ -357,6 +364,12 @@ defmodule Electric.Shapes.ConsumerTest do
         self(),
         Shapes.Consumer.name(ctx.stack_id, @shape_handle1)
       )
+
+      Mock.ShapeStatus
+      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
+      |> allow(self(), ShapeRemover.name(ctx.stack_id, @shape_handle1))
+      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
+      |> allow(self(), ShapeRemover.name(ctx.stack_id, @shape_handle2))
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -415,9 +428,9 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeStatus
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
+      |> allow(self(), ShapeRemover.name(ctx.stack_id, @shape_handle1))
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle2))
+      |> allow(self(), ShapeRemover.name(ctx.stack_id, @shape_handle2))
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
 
@@ -450,9 +463,9 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeStatus
       |> expect(:remove_shape, 1, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
+      |> allow(self(), ShapeRemover.name(ctx.stack_id, @shape_handle1))
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle2))
+      |> allow(self(), ShapeRemover.name(ctx.stack_id, @shape_handle2))
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
 
@@ -488,9 +501,9 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeStatus
       |> expect(:remove_shape, 1, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
+      |> allow(self(), ShapeRemover.name(ctx.stack_id, @shape_handle1))
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle2))
+      |> allow(self(), ShapeRemover.name(ctx.stack_id, @shape_handle2))
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
 

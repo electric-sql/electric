@@ -1,7 +1,9 @@
 defmodule Electric.Shapes.Consumer do
   use GenStage,
-    restart: :transient,
-    significant: true
+    # Shut down the Consumer.Supervisor if the Consumer process stops
+    significant: true,
+    # ... either by stopping itself or by crashing
+    restart: :temporary
 
   alias Electric.ShapeCache.LogChunker
   alias Electric.LogItems
@@ -9,6 +11,7 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.Replication.Changes.Transaction
   alias Electric.ShapeCache
   alias Electric.Shapes.Shape
+  alias Electric.Shapes.ShapeRemover
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Utils
 
@@ -85,6 +88,10 @@ defmodule Electric.Shapes.Consumer do
         monitors: []
       })
 
+    state
+    |> ShapeRemover.name()
+    |> ShapeRemover.register_shape_process(self())
+
     {:consumer, state,
      subscribe_to: [{producer, [max_demand: 1, selector: &selector(&1, config.shape)]}]}
   end
@@ -112,9 +119,7 @@ defmodule Electric.Shapes.Consumer do
     state =
       reply_to_snapshot_waiters({:error, "Shape terminated before snapshot completed"}, state)
 
-    # TODO: ensure cleanup occurs after snapshot is done/failed/interrupted to avoid
-    # any race conditions and leftover data
-    state = cleanup(state)
+    request_cleanup(state)
     {:stop, :normal, :ok, state}
   end
 
@@ -158,7 +163,7 @@ defmodule Electric.Shapes.Consumer do
         )
 
     state = reply_to_snapshot_waiters({:error, error}, state)
-    state = cleanup(state)
+    request_cleanup(state)
     {:stop, :normal, state}
   end
 
@@ -191,7 +196,7 @@ defmodule Electric.Shapes.Consumer do
         state
       )
 
-    state = cleanup(state)
+    request_cleanup(state)
     {:stop, :normal, state}
   end
 
@@ -264,7 +269,7 @@ defmodule Electric.Shapes.Consumer do
 
         :ok = shape_cache.handle_truncate(shape_handle, shape_cache_opts)
 
-        :ok = ShapeCache.Storage.cleanup!(storage)
+        request_cleanup(state)
 
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
 
@@ -330,11 +335,10 @@ defmodule Electric.Shapes.Consumer do
     reply_to_snapshot_waiters(:started, state)
   end
 
-  defp cleanup(state) do
-    %{shape_status: {shape_status, shape_status_state}} = state
-    shape_status.remove_shape(shape_status_state, state.shape_handle)
-    ShapeCache.Storage.cleanup!(state.storage)
+  defp request_cleanup(state) do
     state
+    |> ShapeRemover.name()
+    |> ShapeRemover.request_shape_removal()
   end
 
   defp reply_to_snapshot_waiters(_reply, %{awaiting_snapshot_start: []} = state) do
