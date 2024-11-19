@@ -33,7 +33,12 @@ defmodule Support.DbSetup do
         updated_config = Keyword.put(base_config, :database, db_name)
         {:ok, pool} = start_db_pool(updated_config)
 
-        %{db_config: updated_config, pool: pool, escaped_db_name: escaped_db_name}
+        %{
+          db_config: updated_config,
+          pool: pool,
+          escaped_db_name: escaped_db_name,
+          url: config_to_url(updated_config)
+        }
       end
 
     Postgrex.query!(
@@ -66,5 +71,9 @@ defmodule Support.DbSetup do
   defp start_db_pool(connection_opts) do
     start_opts = Electric.Utils.deobfuscate_password(connection_opts) ++ @postgrex_start_opts
     Postgrex.start_link(start_opts)
+  end
+
+  defp config_to_url(db) do
+    "postgresql://#{db[:username]}:#{db[:password].()}@#{db[:hostname]}:#{db[:port]}/#{db[:database]}?sslmode=#{db[:sslmode]}"
   end
 end

@@ -1,6 +1,7 @@
 defmodule CloudElectric.TenantManagerTest do
   use ExUnit.Case, async: true
 
+  alias Electric.ShapeCache.FileStorage
   alias CloudElectric.TenantManager
 
   import Support.DbSetup
@@ -139,6 +140,39 @@ defmodule CloudElectric.TenantManagerTest do
   end
 
   describe "start_link/1 with control plane" do
-    test "should load initial tenants from the control plane and start them immediately"
+    @tag db_count: 2
+    test "should load all initial tenants from the control plane and start them immediately",
+         %{dbs: [%{url: url1}, %{url: url2}]} = ctx do
+      control_plane =
+        make_fixed_response_control_plane([
+          %{
+            headers: %{operation: "insert"},
+            key: "id1",
+            value: %{id: "loaded-tenant-1", connection_url: url1}
+          },
+          %{
+            headers: %{operation: "insert"},
+            key: "id2",
+            value: %{id: "loaded-tenant-2", connection_url: url2}
+          }
+        ])
+
+      assert {:ok, _} =
+               TenantManager.start_link(
+                 name: :"TenantManager:#{ctx.test}",
+                 long_poll_timeout: 400,
+                 max_age: 1,
+                 stale_age: 1,
+                 allow_shape_deletion: true,
+                 persistent_kv: ctx.persistent_kv,
+                 storage: {FileStorage, storage_dir: ctx.tmp_dir},
+                 pool_opts: [pool_size: 2],
+                 control_plane: control_plane,
+                 stack_overrides: [tweaks: [notify_pid: self()]]
+               )
+
+      assert_receive {:startup_progress, "loaded-tenant-1", :shape_supervisor_ready}, 500
+      assert_receive {:startup_progress, "loaded-tenant-2", :shape_supervisor_ready}, 500
+    end
   end
 end

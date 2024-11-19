@@ -4,17 +4,7 @@ defmodule CloudElectric.ControlPlaneTest do
 
   setup ctx do
     %{
-      plane: %ControlPlane{
-        base_url: "http://localhost",
-        req_opts: [
-          plug: fn conn ->
-            conn
-            |> Plug.Conn.put_resp_content_type("application/json")
-            |> Plug.Conn.put_resp_header("electric-up-to-date", "true")
-            |> Plug.Conn.send_resp(200, Jason.encode!(ctx.plug_response))
-          end
-        ]
-      }
+      plane: Support.ComponentSetup.make_fixed_response_control_plane(ctx.plug_response)
     }
   end
 
