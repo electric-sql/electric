@@ -134,6 +134,12 @@ export interface ShapeStreamOptions<T = never> {
   params?: Record<string, string>
 
   /**
+   * Automatically fetch updates to the Shape. If you just want to sync the current
+   * shape and stop, pass false.
+   */
+  subscribe?: boolean
+
+  /**
    * Signal to abort the stream.
    */
   signal?: AbortSignal
@@ -177,10 +183,17 @@ The ShapeStream constructor accepts several configuration options:
 
 ```typescript
 const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',  // Required: URL to fetch shapes from
-  table: 'issues',                        // Optional: Table to stream shapes for
-  params: {                               // Optional: Custom parameters
-    foo: 'bar'
+  // Required: URL to fetch shapes from
+  url: 'http://localhost:3000/v1/shape',
+  table: 'items',
+  // E.g. add authentication header
+  headers: {
+    'Authorization': 'Bearer token'
+  },
+  // E.g. add custom URL parameters
+  params: {
+    'tenant': 'acme-corp',
+    'version': '1.0'
   }
 })
 ```
@@ -286,33 +299,18 @@ const stream = new ShapeStream({
   table: 'issues'
 })
 
-// Basic subscription with just a message handler
-stream.subscribe((messages) => {
-  for (const msg of messages) {
-    if (msg.type === 'INSERT') {
-      console.log('New row:', msg.value)
-    } else if (msg.type === 'UPDATE') {
-      console.log('Updated row:', msg.value)
-    } else if (msg.type === 'DELETE') {
-      console.log('Deleted row with id:', msg.key)
-    }
-  }
-})
-
-// Subscription with both message and error handlers
+// Subscribe to both message and error handlers
 stream.subscribe(
   (messages) => {
     // Process messages
     console.log('Received messages:', messages)
   },
   (error) => {
-    // Handle errors specific to this subscription
+    // Get notified about errors
     console.error('Error in subscription:', error)
   }
 )
 ```
-
-Note that the error handler in `subscribe` is specific to that subscription and is separate from the global `onError` handler. If you need to handle all stream errors, use the `onError` option when creating the stream.
 
 You can have multiple active subscriptions to the same stream. Each subscription will receive the same messages, and the stream will wait for all subscribers to process their messages before proceeding.
 

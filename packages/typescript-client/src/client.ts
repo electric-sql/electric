@@ -17,6 +17,7 @@ import {
   MissingHeadersError,
   ReservedParamError,
   ShapeStreamAlreadyRunningError,
+  MissingHeadersError,
 } from './error'
 import {
   BackoffDefaults,
