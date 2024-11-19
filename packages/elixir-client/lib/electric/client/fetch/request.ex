@@ -10,7 +10,7 @@ defmodule Electric.Client.Fetch.Request do
   require Logger
 
   defstruct [
-    :base_url,
+    :endpoint,
     :database_id,
     :shape_handle,
     :live,
@@ -29,7 +29,7 @@ defmodule Electric.Client.Fetch.Request do
 
   fields = [
     method: quote(do: :get | :head | :delete),
-    base_url: quote(do: URI.t()),
+    endpoint: quote(do: URI.t()),
     offset: quote(do: Electric.Client.Offset.t()),
     shape_handle: quote(do: Electric.Client.shape_handle() | nil),
     replica: quote(do: Electric.Client.replica()),
@@ -45,7 +45,7 @@ defmodule Electric.Client.Fetch.Request do
   @type t :: unauthenticated() | authenticated()
 
   # the base url should come from the client
-  attrs = Keyword.delete(fields, :base_url)
+  attrs = Keyword.delete(fields, :endpoint)
 
   attr_types =
     attrs
@@ -63,13 +63,13 @@ defmodule Electric.Client.Fetch.Request do
   end
 
   defp request_id(%Client{fetch: {fetch_impl, _}}, %__MODULE__{shape_handle: nil} = request) do
-    %{base_url: base_url, shape: shape_definition} = request
-    {fetch_impl, base_url, shape_definition}
+    %{endpoint: endpoint, shape: shape_definition} = request
+    {fetch_impl, URI.to_string(endpoint), shape_definition}
   end
 
   defp request_id(%Client{fetch: {fetch_impl, _}}, %__MODULE__{} = request) do
-    %{base_url: base_url, offset: offset, live: live, shape_handle: shape_handle} = request
-    {fetch_impl, base_url, shape_handle, Offset.to_tuple(offset), live}
+    %{endpoint: endpoint, offset: offset, live: live, shape_handle: shape_handle} = request
+    {fetch_impl, URI.to_string(endpoint), shape_handle, Offset.to_tuple(offset), live}
   end
 
   @doc """
@@ -77,16 +77,14 @@ defmodule Electric.Client.Fetch.Request do
   """
   @spec url(t()) :: binary()
   def url(%__MODULE__{} = request, opts \\ []) do
-    %{base_url: base_url} = request
-    path = "/v1/shape"
-    uri = URI.append_path(base_url, path)
+    %{endpoint: endpoint} = request
 
     if Keyword.get(opts, :query, true) do
       query = request |> params() |> URI.encode_query(:rfc3986)
 
-      URI.to_string(%{uri | query: query})
+      URI.to_string(%{endpoint | query: query})
     else
-      URI.to_string(uri)
+      URI.to_string(endpoint)
     end
   end
 
