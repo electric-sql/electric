@@ -296,7 +296,7 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_shape(state, shape_handle) do
-    Electric.Shapes.ConsumerSupervisor.stop_shape_consumer(
+    Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
       state.consumer_supervisor,
       state.stack_id,
       shape_handle
@@ -324,7 +324,7 @@ defmodule Electric.ShapeCache do
 
   defp start_shape(shape_handle, shape, state) do
     with {:ok, pid} <-
-           Electric.Shapes.ConsumerSupervisor.start_shape_consumer(
+           Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
              state.consumer_supervisor,
              stack_id: state.stack_id,
              inspector: state.inspector,

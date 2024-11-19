@@ -132,7 +132,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
           {:ok, consumer} =
             start_supervised(
-              {Shapes.Consumer.Supervisor,
+              {Shapes.ConsumerSupervisor,
                shape_handle: shape_handle,
                shape: shape,
                stack_id: ctx.stack_id,
@@ -151,7 +151,7 @@ defmodule Electric.Shapes.ConsumerTest do
                  Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
                run_with_conn_fn: &run_with_conn_noop/2,
                prepare_tables_fn: &prepare_tables_fn/2},
-              id: {Shapes.Consumer.Supervisor, shape_handle}
+              id: {Shapes.ConsumerSupervisor, shape_handle}
             )
 
           assert_receive {Support.TestStorage, :set_shape_definition, ^shape_handle, ^shape}
@@ -322,7 +322,7 @@ defmodule Electric.Shapes.ConsumerTest do
     defp assert_consumer_shutdown(stack_id, shape_handle, fun) do
       monitors =
         for name <- [
-              Shapes.Consumer.Supervisor.name(stack_id, shape_handle),
+              Shapes.ConsumerSupervisor.name(stack_id, shape_handle),
               Shapes.Consumer.name(stack_id, shape_handle),
               Shapes.Consumer.Snapshotter.name(stack_id, shape_handle)
             ],

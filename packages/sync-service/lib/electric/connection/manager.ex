@@ -37,7 +37,7 @@ defmodule Electric.Connection.Manager do
       :pool_opts,
       # Options specific to `Electric.Timeline`
       :timeline_opts,
-      # Options passed to the Shapes.Supervisor's start_link() function
+      # Options passed to the Replication.Supervisor's start_link() function
       :shape_cache_opts,
       # PID of the replication client
       :replication_client_pid,

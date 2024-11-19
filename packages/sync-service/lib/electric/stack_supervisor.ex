@@ -18,9 +18,9 @@ defmodule Electric.StackSupervisor do
 
       1. `Electric.Postgres.ReplicationClient` - connects to PG in replication mod, sets up slots, _does not start streaming_ until requested
       2. `Postgrex` connection pool is started for querying initial snapshots & info about the DB
-  4. `Electric.Shapes.Supervisor` is a supervisor responsible for taking the replication log from the replication client and shoving it into storage appropriately. It starts 3 things in one-for-all mode:
-      1. `Electric.Shapes.ConsumerSupervisor` is DynamicSupervisor. It oversees a per-shape storage & replication log consumer
-          1. `Electric.Shapes.Consumer.Supervisor` supervises the "consumer" part of the replication process, starting 3 children. These are started for each shape.
+  4. `Electric.Replication.Supervisor` is a supervisor responsible for taking the replication log from the replication client and shoving it into storage appropriately. It starts 3 things in one-for-all mode:
+      1. `Electric.Shapes.DynamicConsumerSupervisor` is DynamicSupervisor. It oversees a per-shape storage & replication log consumer
+          1. `Electric.Shapes.ConsumerSupervisor` supervises the "consumer" part of the replication process, starting 3 children. These are started for each shape.
               1. `Electric.ShapeCache.Storage` is a process that knows how to write to disk. Takes configuration options for the underlying storage, is an end point
               2. `Electric.Shapes.Consumer` is GenStage consumer, subscribing to `LogCollector`, which acts a shared producer for all shapes. It passes any incoming operation along to the storage.
               3. `Electric.Shapes.Consumer.Snapshotter` is a temporary GenServer that executes initial snapshot query and writes that to storage
@@ -164,7 +164,7 @@ defmodule Electric.StackSupervisor do
       prepare_tables_fn: prepare_tables_mfa,
       chunk_bytes_threshold: config.chunk_bytes_threshold,
       log_producer: shape_log_collector,
-      consumer_supervisor: Electric.Shapes.ConsumerSupervisor.name(stack_id),
+      consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
       registry: shape_changes_registry_name
     ]
 

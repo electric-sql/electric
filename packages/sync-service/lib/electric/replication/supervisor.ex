@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.Supervisor do
+defmodule Electric.Replication.Supervisor do
   use Supervisor
 
   require Logger
@@ -27,7 +27,7 @@ defmodule Electric.Shapes.Supervisor do
       Keyword.get(
         opts,
         :consumer_supervisor,
-        {Electric.Shapes.ConsumerSupervisor, [stack_id: stack_id]}
+        {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
       )
 
     children = [consumer_supervisor, log_collector, shape_cache]

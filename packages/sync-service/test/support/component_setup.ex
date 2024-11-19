@@ -83,7 +83,7 @@ defmodule Support.ComponentSetup do
       end)
 
     {:ok, _pid} =
-      Electric.Shapes.ConsumerSupervisor.start_link(
+      Electric.Shapes.DynamicConsumerSupervisor.start_link(
         name: consumer_supervisor,
         stack_id: ctx.stack_id
       )
