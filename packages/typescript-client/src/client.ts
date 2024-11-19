@@ -73,7 +73,7 @@ type RetryOpts = {
   params?: ParamsRecord
   headers?: Record<string, string>
 }
-type ShapeStreamErrorHandler = (error: Error) => void | RetryOpts
+type ShapeStreamErrorHandler = (error: Error) => void // | RetryOpts
 
 /**
  * Options for constructing a ShapeStream.
@@ -171,7 +171,10 @@ export interface ShapeStreamOptions<T = never> {
 }
 
 export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
-  subscribe(callback: (messages: Message<T>[]) => MaybePromise<void>): void
+  subscribe(
+    callback: (messages: Message<T>[]) => MaybePromise<void>,
+    onError?: (error: FetchError | Error) => void
+  ): void
   unsubscribeAllUpToDateSubscribers(): void
   unsubscribeAll(): void
   subscribeOnceToUpToDate(
@@ -188,7 +191,6 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   lastOffset: Offset
   shapeHandle?: string
   error?: unknown
-  start(): void
   isRunning(): boolean
 }
 
@@ -454,26 +456,28 @@ export class ShapeStream<T extends Row<unknown> = Row>
     } catch (err) {
       this.#error = err
       if (this.#onError) {
-        const retryOpts = this.#onError(err as Error)
-        if (typeof retryOpts === `object`) {
-          this.#reset()
-
-          if (Object.hasOwn(retryOpts, `params`)) {
-            this.options.params = retryOpts.params
-          }
-
-          if (Object.hasOwn(retryOpts, `headers`)) {
-            this.options.headers = retryOpts.headers
-          }
-
-          // Restart
-          this.start()
-        }
+        this.#onError(err as Error)
+        // TODO add tests and documentation for this.
+        // const retryOpts = this.#onError(err as Error)
+        // if (typeof retryOpts === `object`) {
+        //   this.#reset()
+        //
+        //   if (Object.hasOwn(retryOpts, `params`)) {
+        //     this.options.params = retryOpts.params
+        //   }
+        //
+        //   if (Object.hasOwn(retryOpts, `headers`)) {
+        //     this.options.headers = retryOpts.headers
+        //   }
+        //
+        //   // Restart
+        //   this.start()
+        // }
         return
       }
 
-      // If no handler is provided or it
-      throw err
+      // If no handler is provided for errors just throw so the error still bubbles up.
+      throw this.#error
     } finally {
       this.#connected = false
     }
@@ -485,7 +489,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   subscribe(
     callback: (messages: Message<T>[]) => MaybePromise<void>,
-    onError?: (error: FetchError | Error) => void
+    onError: (error: FetchError | Error) => void = () => {}
   ) {
     const subscriptionId = Math.random()
 
@@ -502,7 +506,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   subscribeOnceToUpToDate(
     callback: () => MaybePromise<void>,
-    onError?: (error: FetchError | Error) => void
+    onError: (error: FetchError | Error) => void = () => {}
   ) {
     const subscriptionId = Math.random()
 
