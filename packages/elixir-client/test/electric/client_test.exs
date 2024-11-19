@@ -36,14 +36,18 @@ defmodule Electric.ClientTest do
   end
 
   describe "new" do
-    test ":url is used as the base of the endpoint" do
+    test ":base_url is used as the base of the endpoint" do
       endpoint = URI.new!("http://localhost:3000/v1/shape")
 
       {:ok, %Client{endpoint: ^endpoint}} =
         Client.new(base_url: "http://localhost:3000")
 
+      endpoint = URI.new!("http://localhost:3000/proxy/v1/shape")
+
       {:ok, %Client{endpoint: ^endpoint}} =
-        Client.new(base_url: "http://localhost:3000/v1/shape")
+        Client.new(base_url: "http://localhost:3000/proxy")
+
+      endpoint = URI.new!("http://localhost:3000/some/random/path/v1/shape")
 
       {:ok, %Client{endpoint: ^endpoint}} =
         Client.new(base_url: "http://localhost:3000/some/random/path")
