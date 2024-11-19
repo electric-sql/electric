@@ -229,8 +229,9 @@ paths:
             electric-schema:
               schema:
                 type: string
-                example: '":0},"status":{"type":"text","dimensions":0,"max_length":8}}'
+                example: '{"id":{"type":"int4","dimensions":0},"title":{"type":"text","dimensions":0},"status":{"type":"text","dimensions":0,"max_length":8}}'
                 description: |-
+                  Only present on responses to non-live requests.
                   A JSON string of an object that maps column names to the corresponding schema object.
                   The schema object contains the type of the column, the number of dimensions, and possibly additional properties.
                   Non-array types have a dimension of `0`, while array types have a dimension of 1 or more.

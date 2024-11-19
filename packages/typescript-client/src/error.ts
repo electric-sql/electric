@@ -48,3 +48,14 @@ export class FetchBackoffAbortError extends Error {
     super(`Fetch with backoff aborted`)
   }
 }
+
+export class MissingHeadersError extends Error {
+  constructor(url: string, missingHeaders: Array<string>) {
+    let msg = `The response for the shape request to ${url} didn't include the following required headers:\n`
+    missingHeaders.forEach((h) => {
+      msg += `- ${h}\n`
+    })
+    msg += `\nThis is often due to a proxy not setting CORS correctly so that all Electric headers can be read by the client.`
+    super(msg)
+  }
+}

@@ -6,7 +6,11 @@ import {
   SHAPE_HANDLE_HEADER,
   SHAPE_HANDLE_QUERY_PARAM,
 } from './constants'
-import { FetchError, FetchBackoffAbortError } from './error'
+import {
+  FetchError,
+  FetchBackoffAbortError,
+  MissingHeadersError,
+} from './error'
 
 // Some specific 4xx and 5xx HTTP status codes that we definitely
 // want to retry
@@ -144,6 +148,53 @@ export function createFetchWithChunkBuffer(
   }
 
   return prefetchClient
+}
+
+export const requiredElectricResponseHeaders = [
+  `electric-offset`,
+  `electric-handle`,
+]
+
+export const requiredLiveResponseHeaders = [`electric-cursor`]
+
+export const requiredNonLiveResponseHeaders = [`electric-schema`]
+
+export function createFetchWithResponseHeadersCheck(
+  fetchClient: typeof fetch
+): typeof fetch {
+  return async (...args: Parameters<typeof fetchClient>) => {
+    const response = await fetchClient(...args)
+
+    if (response.ok) {
+      // Check that the necessary Electric headers are present on the response
+      const headers = response.headers
+      const missingHeaders: Array<string> = []
+
+      const addMissingHeaders = (requiredHeaders: Array<string>) =>
+        requiredHeaders.filter((h) => !headers.has(h))
+      addMissingHeaders(requiredElectricResponseHeaders)
+
+      const input = args[0]
+      const urlString = input.toString()
+      const url = new URL(urlString)
+      if (url.searchParams.has(LIVE_QUERY_PARAM, `true`)) {
+        addMissingHeaders(requiredLiveResponseHeaders)
+      }
+
+      if (
+        !url.searchParams.has(LIVE_QUERY_PARAM) ||
+        url.searchParams.has(LIVE_QUERY_PARAM, `false`)
+      ) {
+        addMissingHeaders(requiredNonLiveResponseHeaders)
+      }
+
+      if (missingHeaders.length > 0) {
+        throw new MissingHeadersError(urlString, missingHeaders)
+      }
+    }
+
+    return response
+  }
 }
 
 class PrefetchQueue {
