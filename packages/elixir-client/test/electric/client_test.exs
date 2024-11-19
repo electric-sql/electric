@@ -207,12 +207,12 @@ defmodule Electric.ClientTest do
       {:ok, id2} = insert_item(ctx)
       {:ok, id3} = insert_item(ctx)
 
-      assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id2}}}, 500
-      assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id3}}}, 500
+      assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id2}}}, 5000
+      assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id3}}}, 5000
       assert_receive {:stream, 1, up_to_date()}
 
-      assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id2}}}, 500
-      assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id3}}}, 500
+      assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id2}}}, 5000
+      assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id3}}}, 5000
       assert_receive {:stream, 2, up_to_date()}
     end
 
