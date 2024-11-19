@@ -21,6 +21,7 @@
   ext/milestones"><img src="https://img.shields.io/badge/status-alpha-orange" alt="Status - Alpha"></a>
   <a href="https://discord.electric-sql.com"><img src="https://img.shields.io/discord/933657521581858818?color=5969EA&label=discord" alt="Chat - Discord"></a>
   <a href="https://x.com/ElectricSQL" target="_blank"><img src="https://img.shields.io/twitter/follow/ElectricSQL.svg?style=social&label=Follow @ElectricSQL"></a>
+  <a href="https://gurubase.io/g/electric"><img src="https://img.shields.io/badge/Gurubase-Ask%20Electric%20Guru-006BFF" alt="Gurubase - Ask Electric Guru"></a>
 </p>
 
 # Electric
