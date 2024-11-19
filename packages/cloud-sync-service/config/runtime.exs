@@ -86,4 +86,7 @@ config :cloud_electric,
 if config_env() == :test do
   config :cloud_electric,
     test_db_connection: env!("DATABASE_URL", &Electric.ConfigParser.parse_postgresql_uri!/1)
+
+  config :logger, backends: [:console]
+  config :logger, :default_handler, level: :emergency
 end
