@@ -5,6 +5,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # The halt/1 function is redefined further down below
   import Plug.Conn, except: [halt: 1]
 
+  alias Electric.Plug.Utils
   alias Electric.Shapes
   alias Electric.Schema
   alias Electric.Replication.LogOffset
@@ -24,36 +25,6 @@ defmodule Electric.Plug.ServeShapePlug do
                                  "The specified shape definition and ID do not match. " <>
                                    "Please ensure the shape definition is correct or omit the shape ID from the request to obtain a new one."
                              })
-
-  defmodule TimeUtils do
-    @oct9th2024 DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
-    def seconds_since_oct9th_2024_next_interval(conn) do
-      case div(conn.assigns.config[:long_poll_timeout], 1000) do
-        0 ->
-          0
-
-        long_poll_timeout_sec ->
-          now = DateTime.utc_now()
-
-          diff_in_seconds = DateTime.diff(now, @oct9th2024, :second)
-          next_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
-
-          # Check if the generated cursor is the same as what's passed in.
-          cursor = conn.query_params["cursor"]
-
-          next_interval =
-            if cursor && "#{next_interval}" == cursor do
-              # Generate a random integer between 0 and 99999
-              random_integer = :rand.uniform(100_000)
-              next_interval + random_integer
-            else
-              next_interval
-            end
-
-          next_interval
-      end
-    end
-  end
 
   defmodule Params do
     use Ecto.Schema
@@ -414,7 +385,9 @@ defmodule Electric.Plug.ServeShapePlug do
       )
       |> put_resp_header(
         "electric-cursor",
-        TimeUtils.seconds_since_oct9th_2024_next_interval(conn) |> Integer.to_string()
+        conn.assigns.config[:long_poll_timeout]
+        |> Utils.get_next_interval_timestamp(conn.query_params["cursor"])
+        |> Integer.to_string()
       )
 
   # For all other requests use the configured cache lifetimes

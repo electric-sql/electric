@@ -3,7 +3,7 @@ defmodule Electric.Plug.UtilsTest do
   use ExUnit.Case, async: true
   doctest Utils, import: true
 
-  describe "seconds_since_oct9th_2024_next_interval/2" do
+  describe "get_next_interval_timestamp/2" do
     test "returns expected interval" do
       long_poll_timeout_ms = 20000
       long_poll_timeout_sec = div(long_poll_timeout_ms, 1000)
@@ -14,7 +14,7 @@ defmodule Electric.Plug.UtilsTest do
       expected_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
 
       # Assert that the function returns the expected value
-      assert Utils.seconds_since_oct9th_2024_next_interval(long_poll_timeout_ms) ==
+      assert Utils.get_next_interval_timestamp(long_poll_timeout_ms) ==
                expected_interval
     end
 
@@ -29,7 +29,7 @@ defmodule Electric.Plug.UtilsTest do
       expected_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
 
       # Assert that the function returns the expected value
-      assert Utils.seconds_since_oct9th_2024_next_interval(long_poll_timeout_ms) ==
+      assert Utils.get_next_interval_timestamp(long_poll_timeout_ms) ==
                expected_interval
     end
 
@@ -44,7 +44,7 @@ defmodule Electric.Plug.UtilsTest do
       expected_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
 
       # Assert that the function returns a DIFFERENT value due to collision
-      assert Utils.seconds_since_oct9th_2024_next_interval(
+      assert Utils.get_next_interval_timestamp(
                long_poll_timeout_ms,
                "#{expected_interval}"
              ) != expected_interval
