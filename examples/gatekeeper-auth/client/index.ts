@@ -12,7 +12,7 @@ interface Definition {
  * Fetch the shape options and start syncing. When new data is recieved,
  * log the number of rows. When an auth token expires, reconnect.
  */
-async function sync(definition: Definition, handle: string, offset: string = '-1') {
+async function sync(definition: Definition, handle?: string, offset: string = '-1') {
   console.log('sync: ', offset)
 
   const options = await fetchShapeOptions(definition)
