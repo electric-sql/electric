@@ -13,6 +13,7 @@ defmodule Electric.Plug.TraceContextPlug do
       {:ok, span_ctx} ->
         :otel_tracer.set_current_span(span_ctx)
         conn
+
       :error ->
         conn
     end
@@ -21,19 +22,21 @@ defmodule Electric.Plug.TraceContextPlug do
   # Extract trace context using the OpenTelemetry propagator
   defp extract_trace_context(conn) do
     # Get all headers as a list of {key, value} tuples
-    headers = conn
+    headers =
+      conn
       |> Plug.Conn.get_req_header("traceparent")
       |> Enum.map(fn value -> {"traceparent", value} end)
 
     # Create a new context and extract the trace context from headers
-    ctx = :otel_propagator_trace_context.extract(
-      :otel_ctx.new(),
-      headers,
-      :undefined,
-      &header_getter/2,
-      %{}
-    )
-    
+    ctx =
+      :otel_propagator_trace_context.extract(
+        :otel_ctx.new(),
+        headers,
+        :undefined,
+        &header_getter/2,
+        %{}
+      )
+
     # Get the span context from the extracted context
     case :otel_tracer.current_span_ctx(ctx) do
       :undefined -> :error
@@ -49,6 +52,7 @@ defmodule Electric.Plug.TraceContextPlug do
       nil -> []
     end
   end
+
   # Fallback clause for when carrier is not a list
   defp header_getter(_key, _carrier), do: []
 end
