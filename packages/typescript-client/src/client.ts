@@ -191,7 +191,6 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   lastOffset: Offset
   shapeHandle?: string
   error?: unknown
-  isRunning(): boolean
 }
 
 /**
@@ -234,7 +233,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   readonly options: ShapeStreamOptions<GetExtensions<T>>
-  #isRunning = false
   #error: unknown = null
 
   readonly #fetchClient: typeof fetch
@@ -290,7 +288,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       createFetchWithChunkBuffer(fetchWithBackoffClient)
     )
 
-    this.start()
+    this.#start()
   }
 
   get shapeHandle() {
@@ -309,16 +307,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#lastOffset
   }
 
-  get error() {
-    return this.#error
-  }
-
-  async start() {
-    if (this.#isRunning) {
-      throw new ShapeStreamAlreadyRunningError()
-    }
-    this.#isRunning = true
-
+  async #start() {
     try {
       while (
         (!this.options.signal?.aborted && !this.#isUpToDate) ||
@@ -481,10 +470,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     } finally {
       this.#connected = false
     }
-  }
-
-  isRunning(): boolean {
-    return this.#isRunning
   }
 
   subscribe(
