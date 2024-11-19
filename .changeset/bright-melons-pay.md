@@ -2,4 +2,4 @@
 "@core/elixir-client": patch
 ---
 
-Add ability to configure custom endpoint for Elixir client
+Add :endpoint configuration for Elixir client for non-standard API URLs
