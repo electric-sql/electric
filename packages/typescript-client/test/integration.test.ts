@@ -9,14 +9,14 @@ import {
   IssueRow,
   testWithIssuesTable as it,
   testWithMultitypeTable as mit,
-  testWithMultiTenantIssuesTable as multiTenantIt,
+  //testWithMultiTenantIssuesTable as multiTenantIt,
 } from './support/test-context'
 import * as h from './support/test-helpers'
 
 const BASE_URL = inject(`baseUrl`)
-const OTHER_DATABASE_URL = inject(`otherDatabaseUrl`)
-const databaseId = inject(`databaseId`)
-const otherDatabaseId = inject(`otherDatabaseId`)
+//const OTHER_DATABASE_URL = inject(`otherDatabaseUrl`)
+//const databaseId = inject(`databaseId`)
+//const otherDatabaseId = inject(`otherDatabaseId`)
 it(`sanity check`, async ({ dbClient, issuesTableSql }) => {
   const result = await dbClient.query(`SELECT * FROM ${issuesTableSql}`)
 
@@ -970,6 +970,7 @@ describe(`HTTP Sync`, () => {
   })
 })
 
+/*
 describe.sequential(`Multi tenancy sync`, () => {
   it(`should allow new databases to be added`, async () => {
     const url = new URL(`${BASE_URL}/v1/admin/database`)
@@ -1147,3 +1148,4 @@ describe.sequential(`Multi tenancy sync`, () => {
     expect(body).toBe(otherDatabaseId)
   })
 })
+*/

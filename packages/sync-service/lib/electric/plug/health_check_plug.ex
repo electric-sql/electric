@@ -2,10 +2,8 @@ defmodule Electric.Plug.HealthCheckPlug do
   alias Plug.Conn
   require Logger
   use Plug.Builder
-  import Electric.Plug.TenantUtils
 
   plug :fetch_query_params
-  plug :load_tenant
   plug :check_service_status
   plug :put_relevant_headers
   plug :send_response
@@ -13,8 +11,8 @@ defmodule Electric.Plug.HealthCheckPlug do
   # Match service status to a status code and status message,
   # keeping the message name decoupled from the internal representation
   # of the status to ensure the API is stable
-  defp check_service_status(%Conn{assigns: %{config: tenant_config}} = conn, _) do
-    get_service_status = Access.fetch!(tenant_config, :get_service_status)
+  defp check_service_status(%Conn{assigns: %{config: config}} = conn, _) do
+    get_service_status = Access.fetch!(config, :get_service_status)
 
     {status_code, status_text} =
       case get_service_status.() do

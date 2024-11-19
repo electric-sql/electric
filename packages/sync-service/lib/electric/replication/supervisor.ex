@@ -1,21 +1,16 @@
-defmodule Electric.Shapes.Supervisor do
+defmodule Electric.Replication.Supervisor do
   use Supervisor
 
   require Logger
 
-  def name(electric_instance_id, tenant_id) do
-    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
-  end
-
   def name(opts) do
-    electric_instance_id = Access.fetch!(opts, :electric_instance_id)
-    tenant_id = Access.fetch!(opts, :tenant_id)
-    name(electric_instance_id, tenant_id)
+    Electric.ProcessRegistry.name(opts[:stack_id], __MODULE__)
   end
 
   def start_link(opts) do
     name = Access.get(opts, :name, name(opts))
 
+    # TODO: naming this is not necessary
     Supervisor.start_link(__MODULE__, opts, name: name)
   end
 
@@ -23,17 +18,16 @@ defmodule Electric.Shapes.Supervisor do
   def init(opts) do
     Logger.info("Starting shape replication pipeline")
 
+    # TODO: weird to have these without defaults but `consumer_supervisor` with a default
     shape_cache = Keyword.fetch!(opts, :shape_cache)
     log_collector = Keyword.fetch!(opts, :log_collector)
-    electric_instance_id = Keyword.fetch!(opts, :electric_instance_id)
-    tenant_id = Keyword.fetch!(opts, :tenant_id)
+    stack_id = Keyword.fetch!(opts, :stack_id)
 
     consumer_supervisor =
       Keyword.get(
         opts,
         :consumer_supervisor,
-        {Electric.Shapes.ConsumerSupervisor,
-         [electric_instance_id: electric_instance_id, tenant_id: tenant_id]}
+        {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
       )
 
     children = [consumer_supervisor, log_collector, shape_cache]

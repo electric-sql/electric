@@ -9,6 +9,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   alias Electric.ShapeCache.InMemoryStorage
   alias Electric.Utils
 
+  import Support.ComponentSetup
   import Support.TestUtils
 
   @moduletag :tmp_dir
@@ -24,7 +25,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       }
     }
   }
-  @tenant_id "test_tenant"
 
   @snapshot_offset LogOffset.first()
   @snapshot_offset_encoded to_string(@snapshot_offset)
@@ -45,7 +45,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                ]
                |> Enum.map(&Jason.encode_to_iodata!/1)
 
-  setup :with_electric_instance_id
+  setup :with_stack_id_from_test
 
   for module <- [InMemoryStorage, FileStorage] do
     module_name = module |> Module.split() |> List.last()
@@ -535,27 +535,25 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   defp start_storage(%{module: module} = context) do
     opts = module |> opts(context) |> module.shared_opts()
-    shape_opts = module.for_shape(@shape_handle, @tenant_id, opts)
+    shape_opts = module.for_shape(@shape_handle, opts)
     {:ok, _} = module.start_link(shape_opts)
     {:ok, %{module: module, opts: shape_opts}}
   end
 
-  defp opts(InMemoryStorage, %{electric_instance_id: electric_instance_id}) do
+  defp opts(InMemoryStorage, %{stack_id: stack_id}) do
     [
       snapshot_ets_table: String.to_atom("snapshot_ets_table_#{Utils.uuid4()}"),
       log_ets_table: String.to_atom("log_ets_table_#{Utils.uuid4()}"),
       chunk_checkpoint_ets_table: String.to_atom("chunk_checkpoint_ets_table_#{Utils.uuid4()}"),
-      electric_instance_id: electric_instance_id,
-      tenant_id: @tenant_id
+      stack_id: stack_id
     ]
   end
 
-  defp opts(FileStorage, %{tmp_dir: tmp_dir, electric_instance_id: electric_instance_id}) do
+  defp opts(FileStorage, %{tmp_dir: tmp_dir, stack_id: stack_id}) do
     [
       db: String.to_atom("shape_mixed_disk_#{Utils.uuid4()}"),
       storage_dir: tmp_dir,
-      electric_instance_id: electric_instance_id,
-      tenant_id: @tenant_id
+      stack_id: stack_id
     ]
   end
 end

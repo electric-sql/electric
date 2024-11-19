@@ -1,17 +1,15 @@
 defmodule Electric.Plug.DeleteShapePlugTest do
   use ExUnit.Case, async: true
-  import Plug.Conn
 
   alias Electric.Plug.DeleteShapePlug
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [with_electric_instance_id: 1]
-
   alias Support.Mock
 
   import Mox
 
+  setup :with_stack_id_from_test
   setup :verify_on_exit!
   @moduletag :capture_log
 
@@ -41,11 +39,13 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     :ok
   end
 
-  def conn(ctx, method, "?" <> _ = query_string, allow \\ true) do
-    # Pass mock dependencies to the plug
-    tenant = [
-      electric_instance_id: ctx.electric_instance_id,
-      tenant_id: ctx.tenant_id,
+  def conn(_ctx, method, "?" <> _ = query_string) do
+    Plug.Test.conn(method, "/" <> query_string)
+  end
+
+  def call_delete_shape_plug(conn, ctx, allow \\ true) do
+    config = [
+      stack_id: ctx.stack_id,
       pg_id: @test_pg_id,
       shape_cache: {Mock.ShapeCache, []},
       storage: {Mock.Storage, []},
@@ -53,36 +53,19 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       registry: @registry,
       long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
       max_age: Access.get(ctx, :max_age, 60),
-      stale_age: Access.get(ctx, :stale_age, 300)
-    ]
-
-    store_tenant(tenant, ctx)
-
-    config = [
-      electric_instance_id: ctx.electric_instance_id,
-      storage: {Mock.Storage, []},
-      tenant_manager: ctx.tenant_manager,
+      stale_age: Access.get(ctx, :stale_age, 300),
       allow_shape_deletion: allow
     ]
 
-    Plug.Test.conn(method, "/" <> query_string)
-    |> assign(:config, config)
+    DeleteShapePlug.call(conn, config)
   end
 
   describe "DeleteShapePlug" do
-    setup [
-      :with_electric_instance_id,
-      :with_persistent_kv,
-      :with_minimal_app_config,
-      :with_tenant_manager,
-      :with_tenant_id
-    ]
-
     test "returns 404 if shape deletion is not allowed", ctx do
       conn =
         ctx
-        |> conn("DELETE", "?table=.invalid_shape", false)
-        |> DeleteShapePlug.call([])
+        |> conn("DELETE", "?table=.invalid_shape")
+        |> call_delete_shape_plug(ctx, false)
 
       assert conn.status == 404
 
@@ -95,7 +78,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       conn =
         ctx
         |> conn("DELETE", "?table=.invalid_shape")
-        |> DeleteShapePlug.call([])
+        |> call_delete_shape_plug(ctx)
 
       assert conn.status == 400
 
@@ -106,16 +89,6 @@ defmodule Electric.Plug.DeleteShapePlugTest do
              }
     end
 
-    test "returns 404 when database is not found", ctx do
-      conn =
-        ctx
-        |> conn(:delete, "?root_table=public.users&database_id=unknown")
-        |> DeleteShapePlug.call([])
-
-      assert conn.status == 404
-      assert Jason.decode!(conn.resp_body) == ~s|Database not found|
-    end
-
     test "should clean shape based on shape definition", ctx do
       Mock.ShapeCache
       |> expect(:get_or_create_shape_handle, fn @test_shape, _opts -> {@test_shape_handle, 0} end)
@@ -124,7 +97,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       conn =
         ctx
         |> conn(:delete, "?table=public.users")
-        |> DeleteShapePlug.call([])
+        |> call_delete_shape_plug(ctx)
 
       assert conn.status == 202
     end
@@ -136,7 +109,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       conn =
         ctx
         |> conn(:delete, "?table=public.users&handle=#{@test_shape_handle}")
-        |> DeleteShapePlug.call([])
+        |> call_delete_shape_plug(ctx)
 
       assert conn.status == 202
     end

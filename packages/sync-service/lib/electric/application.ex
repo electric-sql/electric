@@ -2,39 +2,38 @@ defmodule Electric.Application do
   use Application
   require Config
 
-  @process_registry_name Electric.Registry.Processes
-  def process_registry, do: @process_registry_name
-
-  @spec process_name(atom(), atom()) :: {:via, atom(), {atom(), term()}}
-  def process_name(electric_instance_id, module) when is_atom(module) do
-    {:via, Registry, {@process_registry_name, {module, electric_instance_id}}}
-  end
-
-  @spec process_name(atom(), String.t(), atom()) :: {:via, atom(), {atom(), term()}}
-  def process_name(electric_instance_id, tenant_id, module) when is_atom(module) do
-    {:via, Registry, {@process_registry_name, {module, electric_instance_id, tenant_id}}}
-  end
-
-  @spec process_name(atom(), String.t(), atom(), term()) :: {:via, atom(), {atom(), term()}}
-  def process_name(electric_instance_id, tenant_id, module, id) when is_atom(module) do
-    {:via, Registry, {@process_registry_name, {module, electric_instance_id, tenant_id, id}}}
-  end
-
+  @doc """
+  This callback starts the entire application, but is configured to run only when
+  this app is started on it's own, not as a library. As such, this should be the only
+  place that actually reads from `Application.get_env/2`, because it's the only context
+  where the `config/runtime.exs` is executed.
+  """
   @impl true
   def start(_type, _args) do
     :erlang.system_flag(:backtrace_depth, 50)
 
-    config = configure()
+    # We have "instance id" identifier as the node ID, however that's generated every runtime,
+    # so isn't stable across restarts. Our storages however scope themselves based on this stack ID
+    # so we're just hardcoding it here.
+    stack_id = "single_stack"
 
-    tenant_id = Application.get_env(:electric, :default_tenant)
-    tenant_opts = [electric_instance_id: config.electric_instance_id]
+    router_opts =
+      [
+        long_poll_timeout: 20_000,
+        max_age: Application.fetch_env!(:electric, :cache_max_age),
+        stale_age: Application.fetch_env!(:electric, :cache_stale_age),
+        allow_shape_deletion: Application.fetch_env!(:electric, :allow_shape_deletion)
+      ] ++
+        Electric.StackSupervisor.build_shared_opts(
+          stack_id: stack_id,
+          storage: Application.fetch_env!(:electric, :storage)
+        )
 
-    router_opts = [
-      electric_instance_id: config.electric_instance_id,
-      tenant_manager: Electric.TenantManager.name(tenant_opts),
-      allow_shape_deletion: Application.get_env(:electric, :allow_shape_deletion, false),
-      registry: Registry.ShapeChanges
-    ]
+    {kv_module, kv_fun, kv_params} = Application.fetch_env!(:electric, :persistent_kv)
+    persistent_kv = apply(kv_module, kv_fun, [kv_params])
+    replication_stream_id = Application.fetch_env!(:electric, :replication_stream_id)
+    publication_name = "electric_publication_#{replication_stream_id}"
+    slot_name = "electric_slot_#{replication_stream_id}"
 
     # The root application supervisor starts the core global processes, including the HTTP
     # server and the database connection manager. The latter is responsible for establishing
@@ -42,7 +41,7 @@ defmodule Electric.Application do
     # replication connection, starting a connection pool).
     #
     # Once there is a DB connection pool running, Connection.Manager will start the singleton
-    # `Electric.Shapes.Supervisor` which is responsible for starting the shape log collector
+    # `Electric.Replication.Supervisor` which is responsible for starting the shape log collector
     # and individual shape consumer process trees.
     #
     # See the moduledoc in `Electric.Connection.Supervisor` for more info.
@@ -50,12 +49,22 @@ defmodule Electric.Application do
       Enum.concat([
         [
           Electric.Telemetry,
-          {Registry,
-           name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()},
-          {Registry,
-           name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
-          {Electric.TenantSupervisor, electric_instance_id: config.electric_instance_id},
-          {Electric.TenantManager, router_opts},
+          # {Registry,
+          #  name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()},
+          # {Registry,
+          #  name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
+          {Electric.StackSupervisor,
+           stack_id: stack_id,
+           connection_opts: Application.fetch_env!(:electric, :connection_opts),
+           persistent_kv: persistent_kv,
+           replication_opts: [
+             publication_name: publication_name,
+             slot_name: slot_name,
+             slot_temporary?: Application.fetch_env!(:electric, :replication_slot_temporary?)
+           ],
+           pool_opts: [pool_size: Application.fetch_env!(:electric, :db_pool_size)],
+           storage: Application.fetch_env!(:electric, :storage),
+           chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold)},
           {Bandit,
            plug: {Electric.Plug.Router, router_opts},
            port: Application.fetch_env!(:electric, :service_port),
@@ -64,52 +73,7 @@ defmodule Electric.Application do
         prometheus_endpoint(Application.fetch_env!(:electric, :prometheus_port))
       ])
 
-    {:ok, sup_pid} =
-      Supervisor.start_link(children,
-        strategy: :one_for_one,
-        name: Electric.Supervisor
-      )
-
-    if tenant_id do
-      connection_opts = Application.fetch_env!(:electric, :default_connection_opts)
-      Electric.TenantManager.create_tenant(tenant_id, connection_opts, tenant_opts)
-    end
-
-    {:ok, sup_pid}
-  end
-
-  # This function is called once in the application's start() callback. It reads configuration
-  # from the OTP application env, runs some pre-processing functions and stores the processed
-  # configuration as a single map using `:persistent_term`.
-  defp configure do
-    electric_instance_id = Application.fetch_env!(:electric, :electric_instance_id)
-
-    Electric.Tenant.Tables.init(electric_instance_id)
-
-    {kv_module, kv_fun, kv_params} = Application.fetch_env!(:electric, :persistent_kv)
-    persistent_kv = apply(kv_module, kv_fun, [kv_params])
-
-    replication_stream_id = Application.fetch_env!(:electric, :replication_stream_id)
-    publication_name = "electric_publication_#{replication_stream_id}"
-    slot_name = "electric_slot_#{replication_stream_id}"
-    slot_temporary? = Application.get_env(:electric, :replication_slot_temporary?, false)
-
-    config = %Electric.Application.Configuration{
-      electric_instance_id: electric_instance_id,
-      persistent_kv: persistent_kv,
-      replication_opts: %{
-        stream_id: replication_stream_id,
-        publication_name: publication_name,
-        slot_name: slot_name,
-        slot_temporary?: slot_temporary?
-      },
-      pool_opts: %{
-        size: Application.fetch_env!(:electric, :db_pool_size)
-      },
-      control_plane: Application.get_env(:electric, :control_plane, nil)
-    }
-
-    Electric.Application.Configuration.save(config)
+    Supervisor.start_link(children, strategy: :one_for_one, name: Electric.Supervisor)
   end
 
   defp prometheus_endpoint(nil), do: []

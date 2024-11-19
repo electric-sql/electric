@@ -8,15 +8,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Replication.LogOffset
 
   alias Support.Mock
-  import Support.ComponentSetup, only: [with_in_memory_storage: 1, with_tenant_id: 1]
-  import Support.TestUtils, only: [with_electric_instance_id: 1]
+  import Support.ComponentSetup, only: [with_in_memory_storage: 1, with_stack_id_from_test: 1]
 
   import Mox
 
   @moduletag :capture_log
 
   setup :verify_on_exit!
-  setup [:with_electric_instance_id, :with_tenant_id, :with_in_memory_storage]
+  setup [:with_stack_id_from_test, :with_in_memory_storage]
 
   setup(ctx) do
     # Start a test Registry
@@ -25,8 +24,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     # Start the ShapeLogCollector process
     opts = [
-      electric_instance_id: ctx.electric_instance_id,
-      tenant_id: ctx.tenant_id,
+      stack_id: ctx.stack_id,
       inspector: {Mock.Inspector, []},
       demand: :forward
     ]
@@ -38,7 +36,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     |> expect(:list_shapes, 1, fn _ -> [] end)
     # allow the ShapeCache to call this mock
     |> allow(self(), fn ->
-      GenServer.whereis(Electric.ShapeCache.name(ctx.electric_instance_id, ctx.tenant_id))
+      GenServer.whereis(Electric.ShapeCache.name(ctx.stack_id))
     end)
 
     shape_cache_opts =
@@ -48,11 +46,9 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         inspector: {Mock.Inspector, []},
         shape_status: Mock.ShapeStatus,
         prepare_tables_fn: fn _, _ -> {:ok, [:ok]} end,
-        log_producer: ShapeLogCollector.name(ctx.electric_instance_id, ctx.tenant_id),
-        electric_instance_id: ctx.electric_instance_id,
-        tenant_id: ctx.tenant_id,
-        consumer_supervisor:
-          Electric.Shapes.ConsumerSupervisor.name(ctx.electric_instance_id, ctx.tenant_id),
+        log_producer: ShapeLogCollector.name(ctx.stack_id),
+        stack_id: ctx.stack_id,
+        consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(ctx.stack_id),
         registry: registry_name
       ]
 

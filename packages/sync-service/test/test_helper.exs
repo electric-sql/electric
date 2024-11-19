@@ -2,6 +2,6 @@
 #
 # Explicitly start the process registry here since the OTP application does not start a
 # supervision tree in the test environment.
-Registry.start_link(name: Electric.Application.process_registry(), keys: :unique)
+# Registry.start_link(name: Electric.Application.process_registry(), keys: :unique)
 
 ExUnit.start(assert_receive_timeout: 400)

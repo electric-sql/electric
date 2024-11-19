@@ -13,8 +13,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   require Logger
 
   @schema NimbleOptions.new!(
-            electric_instance_id: [type: :atom, required: true],
-            tenant_id: [type: :string, required: true],
+            stack_id: [type: :string, required: true],
             inspector: [type: :mod_arg, required: true],
             # see https://hexdocs.pm/gen_stage/GenStage.html#c:init/1-options
             demand: [type: {:in, [:forward, :accumulate]}, default: :accumulate],
@@ -24,14 +23,12 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
-      GenStage.start_link(__MODULE__, Map.new(opts),
-        name: name(opts[:electric_instance_id], opts[:tenant_id])
-      )
+      GenStage.start_link(__MODULE__, Map.new(opts), name: name(opts[:stack_id]))
     end
   end
 
-  def name(electric_instance_id, tenant_id) do
-    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  def name(stack_id) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
   # use `GenStage.call/2` here to make the event processing synchronous.
@@ -46,7 +43,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   # handled at the storage layer, that is this function doesn't
   # assume any aggregate max time for the shape consumers to actually commit
   # the new tx to disk, instead the storage backend is responsible for
-  # determinining how long a write should reasonably take and if that fails
+  # determining how long a write should reasonably take and if that fails
   # it should raise.
   def store_transaction(%Transaction{} = txn, server) do
     ot_span_ctx = OpenTelemetry.get_current_context()

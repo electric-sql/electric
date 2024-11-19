@@ -100,23 +100,24 @@ defmodule Electric.Postgres.ReplicationClient do
     # one test process exiting and the next one starting.
     start_opts =
       [
-        name: name(config.electric_instance_id, config.tenant_id),
+        # TODO: the name is not necessary
+        name: name(config.stack_id),
         auto_reconnect: false
       ] ++ Electric.Utils.deobfuscate_password(config.connection_opts)
 
     Postgrex.ReplicationConnection.start_link(__MODULE__, config.replication_opts, start_opts)
   end
 
-  def name(electric_instance_id, tenant_id) do
-    Electric.Application.process_name(electric_instance_id, tenant_id, __MODULE__)
+  def name(stack_id) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
   def start_streaming(client) do
     send(client, :start_streaming)
   end
 
-  def stop(client) do
-    Postgrex.ReplicationConnection.call(client, :stop)
+  def stop(client, reason) do
+    Postgrex.ReplicationConnection.call(client, {:stop, reason})
   end
 
   # The `Postgrex.ReplicationConnection` behaviour does not follow the gen server conventions and
@@ -133,6 +134,8 @@ defmodule Electric.Postgres.ReplicationClient do
   # TODO(alco): this needs additional info about :noreply and :query return tuples.
   @impl true
   def init(replication_opts) do
+    Process.set_label(__MODULE__)
+
     {:ok, State.new(replication_opts)}
   end
 
@@ -162,8 +165,12 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   @impl true
-  def handle_call(:stop, from, _state) do
-    {:disconnect, "Requested by another process: #{inspect(from)}"}
+  def handle_call({:stop, reason}, from, _state) do
+    Logger.notice(
+      "Replication client #{inspect(self())} is stopping after receiving stop request from #{inspect(elem(from, 0))} with reason #{inspect(reason)}"
+    )
+
+    {:disconnect, reason}
   end
 
   @impl true

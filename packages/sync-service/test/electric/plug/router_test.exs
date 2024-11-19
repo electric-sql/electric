@@ -4,7 +4,7 @@ defmodule Electric.Plug.RouterTest do
 
   Unit tests should be preferred wherever possible because they will run faster.
   """
-  use ExUnit.Case
+  use ExUnit.Case, async: false
 
   import Support.ComponentSetup
   import Support.DbSetup
@@ -46,9 +46,9 @@ defmodule Electric.Plug.RouterTest do
       do: %{opts: Router.init(build_router_opts(ctx, get_service_status: fn -> :active end))}
     )
 
-    test "GET returns health status of service", %{opts: opts, tenant_id: tenant_id} do
+    test "GET returns health status of service", %{opts: opts} do
       conn =
-        conn("GET", "/v1/health?database_id=#{tenant_id}")
+        conn("GET", "/v1/health")
         |> Router.call(opts)
 
       assert %{status: 200} = conn
@@ -58,10 +58,6 @@ defmodule Electric.Plug.RouterTest do
 
   describe "/v1/shapes" do
     setup [:with_unique_db, :with_basic_tables, :with_sql_execute]
-
-    setup do
-      %{publication_name: "electric_test_publication", slot_name: "electric_test_slot"}
-    end
 
     setup :with_complete_stack
 
@@ -682,7 +678,7 @@ defmodule Electric.Plug.RouterTest do
       opts: opts,
       db_conn: db_conn
     } do
-      threshold = Access.fetch!(opts, :chunk_bytes_threshold)
+      threshold = Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
 
       first_val = String.duplicate("a", round(threshold * 0.6))
       second_val = String.duplicate("b", round(threshold * 0.7))

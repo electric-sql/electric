@@ -1,17 +1,14 @@
 defmodule Electric.Plug.DeleteShapePlug do
   require Logger
-  use Plug.Builder
+  use Plug.Builder, copy_opts_to_assign: :config
 
   alias Electric.Shapes
   alias Electric.Plug.ServeShapePlug.Params
-
-  import Electric.Plug.TenantUtils
 
   plug :fetch_query_params
   plug :put_resp_content_type, "application/json"
 
   plug :allow_shape_deletion
-  plug :load_tenant
   plug :validate_query_params
 
   plug :truncate_or_delete_shape

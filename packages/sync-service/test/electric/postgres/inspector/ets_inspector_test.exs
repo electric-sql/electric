@@ -2,13 +2,12 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   use Support.TransactionCase, async: true
   import Support.ComponentSetup
   import Support.DbStructureSetup
-  import Support.TestUtils, only: [with_electric_instance_id: 1]
   alias Electric.Postgres.Inspector.EtsInspector
+
+  setup :with_stack_id_from_test
 
   describe "load_relation/2" do
     setup [
-      :with_electric_instance_id,
-      :with_tenant_id,
       :with_inspector,
       :with_basic_tables,
       :with_sql_execute
@@ -62,25 +61,13 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
 
   describe "clean/2" do
     setup [
-      :with_electric_instance_id,
-      :with_tenant_id,
       :with_inspector,
       :with_basic_tables,
       :with_sql_execute
     ]
 
-    setup %{
-      inspector: {EtsInspector, opts},
-      pg_info_table: pg_info_table,
-      pg_relation_table: pg_relation_table
-    } do
-      {:ok,
-       %{
-         opts: opts,
-         pg_info_table: pg_info_table,
-         pg_relation_table: pg_relation_table,
-         table: {"public", "items"}
-       }}
+    setup %{inspector: {EtsInspector, opts}} do
+      %{opts: opts, table: {"public", "items"}}
     end
 
     @tag with_sql: [
@@ -137,7 +124,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   end
 
   describe "load_column_info/2" do
-    setup [:with_electric_instance_id, :with_tenant_id, :with_inspector, :with_basic_tables]
+    setup [:with_inspector, :with_basic_tables]
 
     setup %{inspector: {EtsInspector, opts}} do
       {:ok, %{opts: opts, table: {"public", "items"}}}

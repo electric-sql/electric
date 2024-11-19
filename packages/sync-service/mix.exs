@@ -53,14 +53,18 @@ defmodule Electric.MixProject do
   def application do
     [
       extra_applications: [:logger, :tls_certificate_check],
-      mod: application_mod(Mix.env())
+      # Using a compile-time flag to select the application module or lack thereof allows
+      # using this app as a dependency with this additional flag
+      mod:
+        application_mod(Mix.env(), Application.get_env(:electric, :start_in_library_mode, false))
     ]
   end
 
   # Empty application module for the test environment because there we skip setting up the root
   # supervision tree and instead start processes as needed for specific tests.
-  defp application_mod(:test), do: []
-  defp application_mod(_), do: {Electric.Application, []}
+  defp application_mod(:test, _), do: []
+  defp application_mod(_, true), do: []
+  defp application_mod(_, _), do: {Electric.Application, []}
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
@@ -84,7 +88,6 @@ defmodule Electric.MixProject do
         {:plug, "~> 1.16"},
         {:postgrex, "~> 0.19"},
         {:retry, "~> 0.18"},
-        {:req, "~> 0.5"},
         {:telemetry_metrics_prometheus_core, "~> 1.1"},
         {:telemetry_metrics_statsd, "~> 0.7"},
         {:telemetry_poller, "~> 1.1"},

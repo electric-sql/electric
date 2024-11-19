@@ -50,31 +50,26 @@ defmodule Electric.Plug.Utils do
   @doc """
   Calculate the next interval that should be used for long polling based on the
   current time and previous interval used.
+
+  Timestamp returned is in seconds and uses a custom epoch of 9th of October 2024, UTC.
   """
-  @oct9th2024 DateTime.from_naive!(~N[2024-10-09 00:00:00], "Etc/UTC")
-  @spec seconds_since_oct9th_2024_next_interval(integer(), binary() | nil) :: integer()
-  def seconds_since_oct9th_2024_next_interval(long_poll_timeout_ms, prev_interval \\ nil) do
-    case div(long_poll_timeout_ms, 1000) do
-      0 ->
-        0
+  @oct9th2024 ~U[2024-10-09 00:00:00Z]
+  @spec get_next_interval_timestamp(integer(), binary() | nil) :: integer()
+  def get_next_interval_timestamp(long_poll_timeout_ms, prev_interval \\ nil)
 
-      long_poll_timeout_sec ->
-        now = DateTime.utc_now()
+  def get_next_interval_timestamp(long_poll_timeout_ms, _)
+      when div(long_poll_timeout_ms, 1000) == 0,
+      do: 0
 
-        diff_in_seconds = DateTime.diff(now, @oct9th2024, :second)
-        next_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
+  def get_next_interval_timestamp(long_poll_timeout_ms, prev_interval) do
+    long_poll_timeout_sec = div(long_poll_timeout_ms, 1000)
+    diff_in_seconds = DateTime.diff(DateTime.utc_now(), @oct9th2024, :second)
+    next_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
 
-        # randomize the interval if previous one is the same
-        next_interval =
-          if prev_interval && "#{next_interval}" == prev_interval do
-            # Generate a random integer between 0 and 99999
-            random_integer = :rand.uniform(100_000)
-            next_interval + random_integer
-          else
-            next_interval
-          end
-
-        next_interval
+    if "#{next_interval}" == prev_interval do
+      next_interval + Enum.random(0..3_600)
+    else
+      next_interval
     end
   end
 
@@ -89,7 +84,6 @@ defmodule Electric.Plug.Utils do
       end
 
     %{
-      "tenant.id" => assigns[:tenant_id],
       "error.type" => assigns[:error_str],
       "http.request_id" => assigns[:plug_request_id],
       "http.query_string" => conn.query_string,
@@ -115,6 +109,7 @@ defmodule Electric.Plug.Utils do
         |> to_string()
     }
     |> Map.filter(fn {_k, v} -> not is_nil(v) end)
+    |> Map.merge(Map.get(conn.private, :telemetry_span_attrs, %{}))
     |> Map.merge(query_params_map)
     |> Map.merge(Map.new(conn.req_headers, fn {k, v} -> {"http.request.header.#{k}", v} end))
     |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.response.header.#{k}", v} end))
@@ -163,5 +158,11 @@ defmodule Electric.Plug.Utils do
         end
       )
     end
+  end
+
+  defmodule PassAssignToOptsPlug do
+    @behaviour Plug
+    def init(plug: plug, assign_key: key) when is_atom(plug), do: {plug, key}
+    def call(conn, {plug, key}), do: plug.call(conn, plug.init(conn.assigns[key]))
   end
 end

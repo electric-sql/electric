@@ -25,14 +25,15 @@ end
 sasl? = env!("ELECTRIC_LOG_OTP_REPORTS", :boolean, false)
 
 config :logger,
-  handle_otp_reports: sasl?,
+  handle_otp_reports: false,
   handle_sasl_reports: sasl?
 
 if config_env() == :test do
   config :electric, pg_version_for_tests: env!("POSTGRES_VERSION", :integer, 150_001)
+  config :logger, backends: [:console]
+  config :logger, :default_handler, level: :error
 end
 
-electric_instance_id = :default
 service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
 instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
 version = Electric.version()
@@ -84,31 +85,16 @@ otel_simple_processor =
 config :opentelemetry,
   processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1)
 
-database_url = env!("DATABASE_URL", :string, nil)
-default_tenant = env!("ELECTRIC_DATABASE_ID", :string, nil)
+database_url = env!("DATABASE_URL", :string!)
 
-case {database_url, default_tenant} do
-  {nil, nil} ->
-    # No default tenant provided
-    :ok
+database_ipv6_config =
+  env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
 
-  {nil, _} ->
-    raise "DATABASE_URL must be provided when ELECTRIC_DATABASE_ID is set"
+{:ok, database_url_config} = Electric.ConfigParser.parse_postgresql_uri(database_url)
 
-  {_, _} ->
-    # A default tenant is provided
-    {:ok, database_url_config} = Electric.ConfigParser.parse_postgresql_uri(database_url)
+connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
 
-    database_ipv6_config =
-      env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
-
-    connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
-
-    config :electric, default_connection_opts: Electric.Utils.obfuscate_password(connection_opts)
-
-    tenant_id = default_tenant || "00000000-0000-0000-0000-000000000000"
-    config :electric, default_tenant: tenant_id
-end
+config :electric, connection_opts: Electric.Utils.obfuscate_password(connection_opts)
 
 enable_integration_testing = env!("ELECTRIC_ENABLE_INTEGRATION_TESTING", :boolean, false)
 cache_max_age = env!("ELECTRIC_CACHE_MAX_AGE", :integer, 60)
@@ -151,27 +137,23 @@ chunk_bytes_threshold =
     fn storage ->
       case String.downcase(storage) do
         "memory" ->
-          {Electric.ShapeCache.InMemoryStorage, electric_instance_id: electric_instance_id}
+          {Electric.ShapeCache.InMemoryStorage, []}
 
         "file" ->
-          {Electric.ShapeCache.FileStorage,
-           storage_dir: shape_path, electric_instance_id: electric_instance_id}
+          {Electric.ShapeCache.FileStorage, storage_dir: shape_path}
 
         "crashing_file" ->
           num_calls_until_crash =
             env!("CRASHING_FILE_ELECTRIC_STORAGE__NUM_CALLS_UNTIL_CRASH", :integer)
 
           {Electric.ShapeCache.CrashingFileStorage,
-           storage_dir: shape_path,
-           electric_instance_id: electric_instance_id,
-           num_calls_until_crash: num_calls_until_crash}
+           storage_dir: shape_path, num_calls_until_crash: num_calls_until_crash}
 
         _ ->
           raise Dotenvy.Error, message: "storage must be one of: MEMORY, FILE"
       end
     end,
-    {Electric.ShapeCache.FileStorage,
-     storage_dir: shape_path, electric_instance_id: electric_instance_id}
+    {Electric.ShapeCache.FileStorage, storage_dir: shape_path}
   )
 
 replication_stream_id =
@@ -197,9 +179,7 @@ config :electric,
   cache_stale_age: cache_stale_age,
   chunk_bytes_threshold: chunk_bytes_threshold,
   # Used in telemetry
-  environment: config_env(),
   instance_id: instance_id,
-  electric_instance_id: electric_instance_id,
   telemetry_statsd_host: statsd_host,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, 20),
   replication_stream_id: replication_stream_id,
@@ -208,6 +188,4 @@ config :electric,
   prometheus_port: prometheus_port,
   storage: storage,
   persistent_kv: persistent_kv,
-  control_plane: env!("ELECTRIC_CONTROL_PLANE", &Electric.ControlPlane.parse_config/1, nil),
-  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false),
-  tenant_tables_name: :tenant_tables
+  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false)

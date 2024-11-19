@@ -1,17 +1,18 @@
 defmodule Electric.TimelineTest do
   use ExUnit.Case, async: true
+  import ExUnit.CaptureLog
 
   alias Electric.Timeline
 
   @moduletag :tmp_dir
-  @tenant_id "test_tenant"
+  @stack_id "test_stack"
 
   describe "load_timeline/1" do
     setup context do
       %{
         opts: [
           persistent_kv: Electric.PersistentKV.Filesystem.new!(root: context.tmp_dir),
-          tenant_id: @tenant_id
+          stack_id: @stack_id
         ]
       }
     end
@@ -26,7 +27,7 @@ defmodule Electric.TimelineTest do
       %{
         opts: [
           persistent_kv: Electric.PersistentKV.Filesystem.new!(root: context.tmp_dir),
-          tenant_id: @tenant_id
+          stack_id: @stack_id
         ]
       }
     end
@@ -42,7 +43,7 @@ defmodule Electric.TimelineTest do
     setup context do
       timeline = context[:electric_timeline]
       kv = Electric.PersistentKV.Filesystem.new!(root: context.tmp_dir)
-      opts = [persistent_kv: kv, shape_cache: {ShapeCache, []}, tenant_id: @tenant_id]
+      opts = [persistent_kv: kv, shape_cache: {ShapeCache, []}, stack_id: @stack_id]
 
       if timeline != nil do
         Timeline.store_timeline(timeline, opts)
@@ -57,7 +58,10 @@ defmodule Electric.TimelineTest do
 
       timeline = {2, 5}
 
-      assert :ok = Timeline.check(timeline, opts)
+      assert capture_log(fn ->
+               assert :ok = Timeline.check(timeline, opts)
+             end) =~ "No previous timeline"
+
       assert ^timeline = Timeline.load_timeline(opts)
     end
 
@@ -67,7 +71,11 @@ defmodule Electric.TimelineTest do
       opts: opts
     } do
       assert ^timeline = Timeline.load_timeline(opts)
-      assert :ok = Timeline.check(timeline, opts)
+
+      assert capture_log(fn ->
+               assert :ok = Timeline.check(timeline, opts)
+             end) =~ "Connected to Postgres"
+
       assert ^timeline = Timeline.load_timeline(opts)
     end
 
@@ -79,7 +87,10 @@ defmodule Electric.TimelineTest do
       assert ^timeline = Timeline.load_timeline(opts)
 
       pg_timeline = {1, 2}
-      assert :timeline_changed = Timeline.check(pg_timeline, opts)
+
+      assert capture_log(fn ->
+               assert :timeline_changed = Timeline.check(pg_timeline, opts)
+             end) =~ "Detected PITR to timeline"
 
       assert ^pg_timeline = Timeline.load_timeline(opts)
     end
@@ -92,7 +103,11 @@ defmodule Electric.TimelineTest do
       assert ^timeline = Timeline.load_timeline(opts)
 
       pg_timeline = {2, 3}
-      assert :timeline_changed = Timeline.check(pg_timeline, opts)
+
+      assert capture_log(fn ->
+               assert :timeline_changed = Timeline.check(pg_timeline, opts)
+             end) =~ "Detected different Postgres DB"
+
       assert ^pg_timeline = Timeline.load_timeline(opts)
     end
   end
