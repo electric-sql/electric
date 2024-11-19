@@ -53,9 +53,14 @@ export default defineConfig({
       'typescript'
     ]
   },
-  rewrites: {
-    'blog/posts/:year(\\d{4})-:month(\\d{2})-:day(\\d{2})-:slug([^/]+).md':
-      'blog/:year/:month/:day/:slug.md'
+  rewrites(id) {
+    if (id.startsWith('blog/posts')) {
+      // 'blog/posts/:year-:month-:day-:slug.md': 'blog/:year/:month/:day/:slug.md'
+      return id.replace(
+        /^blog\/posts\/(2[0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])-(.*)/,
+        'blog/$1/$2/$3/$4'
+      )
+    }
   },
   sitemap: {
     hostname: 'https://electric-sql.com'
