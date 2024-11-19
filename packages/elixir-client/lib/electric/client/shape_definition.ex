@@ -10,6 +10,8 @@ defmodule Electric.Client.ShapeDefinition do
 
   @enforce_keys [:table]
 
+  @derive {Jason.Encoder, except: [:parser]}
+
   defstruct [:namespace, :table, :columns, :where, parser: {Electric.Client.ValueMapper, []}]
 
   @schema NimbleOptions.new!(

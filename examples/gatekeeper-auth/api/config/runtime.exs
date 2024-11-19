@@ -69,5 +69,5 @@ if config_env() == :prod do
   default_proxy_url = URI.parse("https://#{host}:#{port}/proxy") |> URI.to_string()
   proxy_url = System.get_env("ELECTRIC_PROXY_URL") || default_proxy_url
 
-  config :electric_phoenix, electric_url: proxy_url
+  config :electric_phoenix, Electric.Client, base_url: proxy_url
 end

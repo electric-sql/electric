@@ -9,13 +9,13 @@ defmodule ApiWeb.AuthenticatorTest do
       {:ok, shape} = Shape.from(%{"table" => "foo"})
 
       assert %{"Authorization" => "Bearer " <> _token} =
-               Authenticator.authenticate_shape(shape, nil)
+               Authenticator.authentication_headers(nil, shape)
     end
 
     test "validate token" do
       {:ok, shape} = Shape.from(%{"table" => "foo"})
 
-      headers = Authenticator.authenticate_shape(shape, nil)
+      headers = Authenticator.authentication_headers(nil, shape)
       assert Authenticator.authorize(shape, headers)
     end
 
@@ -26,7 +26,7 @@ defmodule ApiWeb.AuthenticatorTest do
           "where" => "value IS NOT NULL"
         })
 
-      headers = Authenticator.authenticate_shape(shape, nil)
+      headers = Authenticator.authentication_headers(nil, shape)
       assert Authenticator.authorize(shape, headers)
     end
   end

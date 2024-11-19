@@ -96,4 +96,7 @@ if config_env() == :prod do
   #       force_ssl: [hsts: true]
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
+
+  config :electric_phoenix, Electric.Client,
+    base_url: System.get_env("ELECTRIC_URL") || raise("ELECTRIC_URL environment variable not set")
 end

@@ -29,7 +29,7 @@ config :api, ApiWeb.Endpoint,
 
 # Configure the Electric.Phoenix.Plug to route electric client requests
 # via this application's `GET /proxy/v1/shape` endpoint.
-config :electric_phoenix, electric_url: "http://localhost:#{port}/proxy"
+config :electric_phoenix, Electric.Client, base_url: "http://localhost:#{port}/proxy"
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :console, format: "[$level] $message\n"

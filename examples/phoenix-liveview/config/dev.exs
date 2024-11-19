@@ -83,5 +83,5 @@ config :phoenix_live_view,
   # Enable helpful, but potentially expensive runtime checks
   enable_expensive_runtime_checks: true
 
-config :electric_phoenix,
-  electric_url: System.get_env("ELECTRIC_URL", "http://localhost:3000/")
+config :electric_phoenix, Electric.Client,
+  base_url: System.get_env("ELECTRIC_URL", "http://localhost:3000/")
