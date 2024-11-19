@@ -10,10 +10,10 @@ export type GeneratedIssueRow = { id?: string; title: string }
 export type UpdateIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type DeleteIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type InsertIssuesFn = (...rows: GeneratedIssueRow[]) => Promise<string[]>
-export type ClearIssuesShapeFn = (shapeHandle?: string) => Promise<void>
+export type ClearIssuesShapeFn = (handle?: string) => Promise<void>
 export type ClearShapeFn = (
   table: string,
-  shapeHandle?: string
+  handle?: string
 ) => Promise<void>
 
 export const testWithDbClient = test.extend<{
@@ -38,10 +38,10 @@ export const testWithDbClient = test.extend<{
   baseUrl: async ({}, use) => use(inject(`baseUrl`)),
   pgSchema: async ({}, use) => use(inject(`testPgSchema`)),
   clearShape: async ({}, use) => {
-    use(async (table: string, shapeHandle?: string) => {
+    use(async (table: string, handle?: string) => {
       const baseUrl = inject(`baseUrl`)
       const resp = await fetch(
-        `${baseUrl}/v1/shape?table=${table}${shapeHandle ? `&handle=${shapeHandle}` : ``}`,
+        `${baseUrl}/v1/shape?table=${table}${handle ? `&handle=${handle}` : ``}`,
         {
           method: `DELETE`,
         }
@@ -54,7 +54,7 @@ export const testWithDbClient = test.extend<{
           )
         )
         throw new Error(
-          `Could not delete shape ${table} with handle ${shapeHandle}`
+          `Could not delete shape ${table} with handle ${handle}`
         )
       }
     })
@@ -118,6 +118,6 @@ export const testWithIssuesTable = testWithDbClient.extend<{
     }),
 
   clearIssuesShape: async ({ clearShape, issuesTableUrl }, use) => {
-    use((shapeHandle?: string) => clearShape(issuesTableUrl, shapeHandle))
+    use((handle?: string) => clearShape(issuesTableUrl, handle))
   },
 })
