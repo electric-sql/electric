@@ -539,7 +539,11 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
     )
   }
 
-  if (options.offset !== undefined && options.offset !== `-1` && !options.handle) {
+  if (
+    options.offset !== undefined &&
+    options.offset !== `-1` &&
+    !options.handle
+  ) {
     throw new Error(
       `handle is required if this isn't an initial fetch (i.e. offset > -1)`
     )
