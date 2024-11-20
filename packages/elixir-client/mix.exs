@@ -1,6 +1,8 @@
 defmodule Electric.Client.MixProject do
   use Mix.Project
 
+  @github_repo "https://github.com/electric-sql/electric"
+
   def project do
     [
       app: :electric_client,
@@ -13,7 +15,7 @@ defmodule Electric.Client.MixProject do
       description: description(),
       docs: docs(),
       package: package(),
-      source_url: "https://github.com/electric-sql/electric/tree/main/packages/elixir-client",
+      source_url: "#{@github_repo}/tree/main/packages/elixir-client",
       homepage_url: "https://electric-sql.com"
     ]
   end
@@ -57,15 +59,22 @@ defmodule Electric.Client.MixProject do
   defp deps_for(_), do: []
 
   defp docs do
+    version = version("main")
+    tag = URI.encode("@core/elixir-client@#{version}", &(&1 != ?@))
+
     [
-      main: "Electric.Client"
+      main: "Electric.Client",
+      source_url_pattern: fn path, line ->
+        "#{@github_repo}/tree/#{tag}/packages/elixir-client/#{path}#L#{line}"
+      end
     ]
   end
 
   defp package do
     [
       links: %{
-        "Electric SQL" => "https://electric-sql.com"
+        "Electric SQL" => "https://electric-sql.com",
+        "Github" => @github_repo
       },
       licenses: ["Apache-2.0"],
       files: ~w(lib .formatter.exs mix.exs README.md LICENSE package.json)
@@ -76,10 +85,10 @@ defmodule Electric.Client.MixProject do
     "Elixir client for ElectricSQL"
   end
 
-  defp version do
+  defp version(default \\ "0.0.0") do
     with :error <- version_from_env(),
          :error <- version_from_package_json() do
-      "0.0.0"
+      default
     end
   end
 
