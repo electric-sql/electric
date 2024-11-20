@@ -116,7 +116,7 @@ defmodule Electric.Shapes.Consumer do
 
     # TODO: ensure cleanup occurs after snapshot is done/failed/interrupted to avoid
     # any race conditions and leftover data
-    state = cleanup(state)
+    cleanup(state)
     {:stop, :normal, :ok, state}
   end
 
@@ -160,7 +160,7 @@ defmodule Electric.Shapes.Consumer do
         )
 
     state = reply_to_snapshot_waiters({:error, error}, state)
-    state = cleanup(state)
+    cleanup(state)
     {:stop, :normal, state}
   end
 
@@ -183,7 +183,7 @@ defmodule Electric.Shapes.Consumer do
           "Error in Shapes.Consumer.handle_events: #{inspect(error)}\n#{Exception.format(:error, error)}"
         )
 
-        state = cleanup(state)
+        cleanup(state)
         {:stop, :normal, state}
     end
   end
@@ -207,7 +207,7 @@ defmodule Electric.Shapes.Consumer do
         state
       )
 
-    state = cleanup(state)
+    cleanup(state)
     {:stop, :normal, state}
   end
 
@@ -350,7 +350,6 @@ defmodule Electric.Shapes.Consumer do
     %{shape_status: {shape_status, shape_status_state}} = state
     shape_status.remove_shape(shape_status_state, state.shape_handle)
     ShapeCache.Storage.cleanup!(state.storage)
-    state
   end
 
   defp reply_to_snapshot_waiters(_reply, %{awaiting_snapshot_start: []} = state) do
