@@ -54,7 +54,8 @@ export default defineConfig({
     ]
   },
   rewrites: {
-    'blog/posts/:year-:month-:day-:slug.md': 'blog/:year/:month/:day/:slug.md'
+    'blog/posts/:year(\\d{4})-:month(\\d{2})-:day(\\d{2})-:slug([^/]+).md':
+      'blog/:year/:month/:day/:slug.md'
   },
   sitemap: {
     hostname: 'https://electric-sql.com'
