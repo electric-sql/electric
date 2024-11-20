@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import path from 'node:path'
 import { parse } from 'yaml'
 
 export default {
@@ -6,7 +7,7 @@ export default {
 
   load (files) {
     return files.map((file) => {
-      const base = file.split('blog/posts/')[1].split('.md')[0]
+      const base = path.basename(file, '.md')
       const parts = base.split('-')
 
       const year = parts[0]

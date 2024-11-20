@@ -17,7 +17,7 @@ Shapes are the core primitive for controlling sync in the ElectricSQL system.
 
 ## What is a Shape?
 
-Electric syncs little subsets of your Postgres data into local apps, services and environments. Those subsets are defined using Shapes.
+Electric syncs little subsets of your Postgres data into local apps and services. Those subsets are defined using Shapes.
 
 ### Little subsets
 
