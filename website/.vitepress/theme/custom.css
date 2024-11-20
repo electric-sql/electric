@@ -151,6 +151,10 @@
   }
 }
 
+.vpi-social-pglite {
+  --icon: url('/img/icons/pglite-social.svg') !important;
+}
+
 .feature-cta a .count {
   margin-left: 0.25rem;
   min-width: 55px;
@@ -283,6 +287,10 @@ a.no-visual:hover {
   }
 }
 
+.VPNavBar .content-body {
+  margin-top: 1px;
+}
+
 .VPNavScreenMenuLink {
   text-align: center;
 }
@@ -303,6 +311,33 @@ a.no-visual:hover {
     content: "";
   }
 }
+@media (min-width: 1200px) {
+  .VPNavBarMenuLink {
+    padding: 0 12px 0 14px !important;
+  }
+  .VPNavBarSocialLinks::before,
+  .VPNavBarSocialLinks::after {
+    margin-left: 10px !important;
+    margin-right: 10px !important;
+  }
+}
+@media (min-width: 960px) and (max-width: 1040px) {
+  .VPNavBarMenuLink {
+    padding: 0 10px !important;
+  }
+  .VPSocialLink {
+    width: 30px !important;
+  }
+}
+@media (min-width: 768px) and (max-width: 959px) {
+  .VPNavBarMenuLink {
+    padding: 0 9px !important;
+  }
+  .VPSocialLink {
+    width: 29px !important;
+  }
+}
+
 .DocSearch-Button-Keys {
   margin-right: 2px;
 }

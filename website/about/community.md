@@ -47,7 +47,7 @@ If you have feature requests or want to post ideas for discussion, please post o
 
 You can also find us on:
 
-- Mastondon as [@electric@fosstodon.org](https://fosstodon.org/@electric)
+- Bluesky as [@electric-sql.com](https://bsky.app/profile/@electric-sql.com) and [@pglite.dev](https://bsky.app/profile/@pglite.dev)
 - Twitter as [@ElectricSQL](https://twitter.com/ElectricSQL)
 - LinkedIn as [company/ElectricSQL](https://www.linkedin.com/company/electric-sql)
 
