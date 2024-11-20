@@ -1,5 +1,12 @@
 # @electric-sql/client
 
+## 0.7.3
+
+### Patch Changes
+
+- 5063314: Exposed `.lastOffset` as a public read only property on `Shape` and `ShapeStream`.
+- 71d61b5: Verify that fetch response contains required Electric headers.
+
 ## 0.7.2
 
 ### Patch Changes
