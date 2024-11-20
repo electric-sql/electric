@@ -332,6 +332,8 @@ describe(`Shape`, () => {
     issuesTableUrl,
   }) => {
     let url: string = ``
+    let error1: Error, error2: Error
+
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       table: issuesTableUrl,
@@ -340,6 +342,9 @@ describe(`Shape`, () => {
         const headers = new Headers()
         headers.set(`electric-offset`, `0_0`)
         return new Response(undefined, { status: 200, headers })
+      },
+      onError: (err) => {
+        error1 = err
       },
     })
 
@@ -351,6 +356,8 @@ describe(`Shape`, () => {
     )
     const expectedErrorMessage = new MissingHeadersError(url, missingHeaders)
       .message
+
+    expect(error1!.message === expectedErrorMessage)
     expect((shapeStream.error as Error).message === expectedErrorMessage)
 
     // Also check that electric-cursor is a required header for responses to live queries
@@ -362,6 +369,9 @@ describe(`Shape`, () => {
         const headers = new Headers()
         headers.set(`electric-offset`, `0_0`)
         return new Response(undefined, { status: 200, headers })
+      },
+      onError: (err) => {
+        error2 = err
       },
     })
 
@@ -375,6 +385,7 @@ describe(`Shape`, () => {
       url,
       missingHeadersLive
     ).message
+    expect(error2!.message === expectedErrorMessageLive)
     expect(
       (shapeStreamLive.error as Error).message === expectedErrorMessageLive
     )
