@@ -257,8 +257,10 @@ export default defineConfig({
     },
     siteTitle: false,
     socialLinks: [
-      { icon: 'discord', link: 'https://discord.electric-sql.com' },
-      { icon: 'github', link: 'https://github.com/electric-sql/electric' }
+      { icon: 'pglite', link: 'https://pglite.dev' },
+      { icon: 'github', link: 'https://github.com/electric-sql/electric' },
+      { icon: 'bluesky', link: 'https://bsky.app/profile/electric-sql.com' },
+      { icon: 'discord', link: 'https://discord.electric-sql.com' }
     ]
   },
   transformHead: ({ pageData, siteData }) => {
