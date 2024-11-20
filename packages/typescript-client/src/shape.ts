@@ -43,14 +43,15 @@ export type ShapeChangedCallback<T extends Row<unknown> = Row> = (data: {
 export class Shape<T extends Row<unknown> = Row> {
   readonly #stream: ShapeStreamInterface<T>
 
-  readonly #data: ShapeData<T> = new Map()
+  readonly #data: ShapeData<T>
   readonly #subscribers = new Map<number, ShapeChangedCallback<T>>()
 
   #hasNotifiedSubscribersUpToDate: boolean = false
   #error: FetchError | false = false
 
-  constructor(stream: ShapeStreamInterface<T>) {
+  constructor(stream: ShapeStreamInterface<T>, shapeData?: ShapeData) {
     this.#stream = stream
+    this.#data = shapeData ?? new Map()
     this.#stream.subscribe(
       this.#process.bind(this),
       this.#handleError.bind(this)

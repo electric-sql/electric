@@ -4,12 +4,19 @@ import {
   ShapeStreamOptions,
   Row,
   GetExtensions,
+  ShapeData,
+  Offset,
 } from '@electric-sql/client'
 import React from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
 
 type UnknownShape = Shape<Row<unknown>>
 type UnknownShapeStream = ShapeStream<Row<unknown>>
+export type SerializedShape = {
+  offset: Offset
+  shapeHandle: string | undefined
+  data?: ShapeData<Row<unknown>>
+}
 
 const streamCache = new Map<string, UnknownShapeStream>()
 const shapeCache = new Map<UnknownShapeStream, UnknownShape>()
@@ -24,7 +31,17 @@ export async function preloadShape<T extends Row<unknown> = Row>(
 }
 
 export function sortedOptionsHash<T>(options: ShapeStreamOptions<T>): string {
-  return JSON.stringify(options, Object.keys(options).sort())
+  // Filter options that uniquely identify the shape.
+  const uniqueShapeOptions = {
+    url: options.url,
+    table: options.table,
+    columns: options.columns,
+    where: options.where,
+    databaseId: options.databaseId,
+    headers: options.headers,
+    replica: options.replica,
+  }
+  return JSON.stringify(uniqueShapeOptions, Object.keys(options).sort())
 }
 
 export function getShapeStream<T extends Row<unknown>>(
@@ -53,7 +70,8 @@ export function getShapeStream<T extends Row<unknown>>(
 }
 
 export function getShape<T extends Row<unknown>>(
-  shapeStream: ShapeStream<T>
+  shapeStream: ShapeStream<T>,
+  shapeData?: ShapeData
 ): Shape<T> {
   // If the stream is already cached, return it if valid
   if (shapeCache.has(shapeStream)) {
@@ -69,7 +87,7 @@ export function getShape<T extends Row<unknown>>(
     shapeCache.delete(shapeStream)
   }
 
-  const newShape = new Shape<T>(shapeStream)
+  const newShape = new Shape<T>(shapeStream, shapeData)
 
   shapeCache.set(shapeStream, newShape)
 
@@ -126,6 +144,7 @@ function identity<T>(arg: T): T {
 interface UseShapeOptions<SourceData extends Row<unknown>, Selection>
   extends ShapeStreamOptions<GetExtensions<SourceData>> {
   selector?: (value: UseShapeResult<SourceData>) => Selection
+  shapeData?: ShapeData
 }
 
 export function useShape<
@@ -160,4 +179,23 @@ export function useShape<
   }, [shape, selector])
 
   return useShapeData()
+}
+export function getSerializedShape(
+  options: ShapeStreamOptions
+): SerializedShape {
+  const shapeStream = getShapeStream(options)
+  const shape = getShape(shapeStream)
+  return {
+    shapeHandle: shapeStream.shapeHandle,
+    offset: shapeStream.offset,
+    data: shape.currentValue,
+  }
+}
+
+export function cacheShapeState(
+  options: ShapeStreamOptions,
+  shapeData: ShapeData
+) {
+  const shapeStream = getShapeStream(options)
+  getShape(shapeStream, shapeData)
 }
