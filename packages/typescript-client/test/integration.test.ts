@@ -582,7 +582,7 @@ describe(`HTTP Sync`, () => {
       {}
     )
     const etag2Header = res2.headers.get(`etag`)
-    expect(etag2Header !== null, `Response should have etag header`)
+    expect(etag2Header, `Response should have etag header`).not.toEqual(null)
     expect(etagHeader).not.toEqual(etag2Header)
   })
 
