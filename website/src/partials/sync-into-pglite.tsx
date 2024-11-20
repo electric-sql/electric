@@ -34,7 +34,5 @@ const Component = () => {
     `SELECT * FROM items;`
   )
 
-  return (
-    <pre>{JSON.stringify(items)}<pre>
-      )
+  return <pre>{JSON.stringify(items)}</pre>
 }
