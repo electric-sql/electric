@@ -837,12 +837,14 @@ describe(`HTTP Sync`, () => {
       if (isUpToDateMessage(msg)) res()
     })
 
+    let error: Error
     const invalidIssueStream = new ShapeStream<IssueRow>({
       url: `${BASE_URL}/v1/shape`,
       table: issuesTableUrl,
       subscribe: true,
       shapeHandle: issueStream.shapeHandle,
       where: `1=1`,
+      onError: (err) => (error = err),
     })
 
     const errorSubscriberPromise = new Promise((_, reject) =>
@@ -857,6 +859,9 @@ describe(`HTTP Sync`, () => {
     expect(invalidIssueStream.error).instanceOf(FetchError)
     expect((invalidIssueStream.error! as FetchError).status).toBe(400)
     expect(invalidIssueStream.isConnected()).false
+    expect(error!.message).contains(
+      `The specified shape definition and handle do not match. Please ensure the shape definition is correct or omit the shape handle from the request to obtain a new one.`
+    )
   })
 
   it(`should detect shape deprecation and restart syncing`, async ({
