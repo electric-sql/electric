@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.9.0
+
+### Minor Changes
+
+- 1497be2: Split out multitenancy and allow Electric to function as a library
+
 ## 0.8.2
 
 ### Patch Changes
