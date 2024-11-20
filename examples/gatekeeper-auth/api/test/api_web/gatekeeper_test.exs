@@ -1,8 +1,9 @@
 defmodule ApiWeb.GatekeeperTest do
   use ApiWeb.ConnCase
 
-  alias Api.Shape
   alias ApiWeb.Authenticator
+
+  import Electric.Phoenix, only: [shape_from_params: 1]
 
   setup %{conn: conn} do
     {:ok, conn: put_req_header(conn, "accept", "application/json")}
@@ -52,7 +53,7 @@ defmodule ApiWeb.GatekeeperTest do
                |> post("/gatekeeper/items")
                |> json_response(200)
 
-      {:ok, shape} = Shape.from(%{"table" => table})
+      {:ok, shape} = shape_from_params(%{"table" => table})
 
       assert Authenticator.authorize(shape, headers)
     end

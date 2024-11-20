@@ -5,7 +5,7 @@ defmodule ApiWeb.Plugs.AssignShape do
   """
   use ApiWeb, :plug
 
-  alias Api.Shape
+  import Electric.Phoenix, only: [shape_from_params: 1]
 
   def init(opts), do: opts
 
@@ -25,8 +25,8 @@ defmodule ApiWeb.Plugs.AssignShape do
     |> call(opts)
   end
 
-  def call(%{params: params} = conn, _opts) do
-    case Shape.from(params) do
+  def call(conn, _opts) do
+    case shape_from_params(conn) do
       {:ok, shape} ->
         conn
         |> assign(:shape, shape)

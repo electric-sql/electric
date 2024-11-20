@@ -1,4 +1,3 @@
-
 # API gatekeeper (and proxy) application
 
 This is a [Phoenix](https://www.phoenixframework.org) web application written in [Elixir](https://elixir-lang.org).
@@ -9,7 +8,7 @@ See the [Implementation](../README.md#implementation) and [How to run](../README
 
 Take a look at [`./lib/api_web/router.ex`](./lib/api_web/router.ex) to see what's exposed and read through the [`./lib/api_web/plugs`](./lib/api_web/plugs) and [`./lib/api_web/authenticator.ex`](./lib/api_web/authenticator.ex) to see how auth is implemented and could be extended.
 
-The gatekeeper endpoint is based on an [`Electric.Phoenix.Gateway.Plug`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.Gateway.Plug.html).
+The gatekeeper endpoint is based on an [`Electric.Phoenix.Plug`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.Plug.html).
 
 ## Run/develop locally without Docker
 

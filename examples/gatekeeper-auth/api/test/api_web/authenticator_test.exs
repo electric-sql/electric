@@ -1,32 +1,33 @@
 defmodule ApiWeb.AuthenticatorTest do
   use Api.DataCase
 
-  alias Api.Shape
   alias ApiWeb.Authenticator
+
+  import Electric.Phoenix, only: [shape_from_params: 1]
 
   describe "authenticator" do
     test "generate token" do
-      {:ok, shape} = Shape.from(%{"table" => "foo"})
+      {:ok, shape} = shape_from_params(%{"table" => "foo"})
 
       assert %{"Authorization" => "Bearer " <> _token} =
-               Authenticator.authenticate_shape(shape, nil)
+               Authenticator.authentication_headers(nil, shape)
     end
 
     test "validate token" do
-      {:ok, shape} = Shape.from(%{"table" => "foo"})
+      {:ok, shape} = shape_from_params(%{"table" => "foo"})
 
-      headers = Authenticator.authenticate_shape(shape, nil)
+      headers = Authenticator.authentication_headers(nil, shape)
       assert Authenticator.authorize(shape, headers)
     end
 
     test "validate token with params" do
       {:ok, shape} =
-        Shape.from(%{
+        shape_from_params(%{
           "table" => "foo",
           "where" => "value IS NOT NULL"
         })
 
-      headers = Authenticator.authenticate_shape(shape, nil)
+      headers = Authenticator.authentication_headers(nil, shape)
       assert Authenticator.authorize(shape, headers)
     end
   end

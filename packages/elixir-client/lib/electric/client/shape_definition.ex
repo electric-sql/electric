@@ -8,9 +8,11 @@ defmodule Electric.Client.ShapeDefinition do
 
   alias Electric.Client.Util
 
+  @public_keys [:namespace, :table, :columns, :where]
+  @derive {Jason.Encoder, only: @public_keys}
   @enforce_keys [:table]
 
-  defstruct [:namespace, :table, :columns, :where, parser: {Electric.Client.ValueMapper, []}]
+  defstruct @public_keys ++ [parser: {Electric.Client.ValueMapper, []}]
 
   @schema NimbleOptions.new!(
             where: [
@@ -47,7 +49,8 @@ defmodule Electric.Client.ShapeDefinition do
           namespace: String.t() | nil,
           table: String.t(),
           columns: [String.t(), ...] | nil,
-          where: nil | String.t()
+          where: nil | String.t(),
+          parser: {atom(), term()}
         }
 
   @type option :: unquote(NimbleOptions.option_typespec(@schema))
@@ -119,6 +122,27 @@ defmodule Electric.Client.ShapeDefinition do
       ?"
     ])
   end
+
+  @doc """
+  Tests if two `%ShapeDefinition{}` instances are equal, ignoring the `parser`
+  setting.
+
+  ## Example
+
+      iex> {:ok, shape1} = Electric.Client.ShapeDefinition.new("items")
+      iex> {:ok, shape2} = Electric.Client.ShapeDefinition.new("items")
+      iex> Electric.Client.ShapeDefinition.matches?(shape1, shape2)
+      true
+      iex> {:ok, shape3} = Electric.Client.ShapeDefinition.new("items", where: "something = 'here'")
+      iex> Electric.Client.ShapeDefinition.matches?(shape1, shape3)
+      false
+  """
+  @spec matches?(t(), t()) :: boolean()
+  def matches?(%__MODULE__{} = shape1, %__MODULE__{} = shape2) do
+    Map.take(shape1, @public_keys) == Map.take(shape2, @public_keys)
+  end
+
+  def matches?(_term1, _term2), do: false
 
   @doc false
   @spec params(t(), [{:format, :query | :json}]) :: Electric.Client.Fetch.Request.params()

@@ -63,11 +63,11 @@ if config_env() == :prod do
     ],
     secret_key_base: secret_key_base
 
-  # Configure the URL that the Electric.Phoenix.Gateway.Plug uses when returning
+  # Configure the URL that the Electric.Phoenix.Plug uses when returning
   # shape config to the client. Defaults to this API, specifically the `/proxy`
   # endpoint configured in `../lib/api_web/router.ex`.
   default_proxy_url = URI.parse("https://#{host}:#{port}/proxy") |> URI.to_string()
   proxy_url = System.get_env("ELECTRIC_PROXY_URL") || default_proxy_url
 
-  config :electric_phoenix, electric_url: proxy_url
+  config :electric_phoenix, Electric.Client, base_url: proxy_url
 end

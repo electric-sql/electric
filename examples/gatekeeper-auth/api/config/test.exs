@@ -25,9 +25,9 @@ config :api, ApiWeb.Endpoint,
   secret_key_base: "FdsTo+z4sPEhsQNsUtBq26K9qn42nkn1OCH2cLURBZkPCvgJ4F3WiVNFo1NVjojw",
   server: false
 
-# Configure the Electric.Phoenix.Gateway.Plug to route electric client requests
+# Configure the Electric.Phoenix.Plug to route electric client requests
 # via this application's `GET /proxy/v1/shape` endpoint.
-config :electric_phoenix, electric_url: "http://localhost:#{port}/proxy"
+config :electric_phoenix, Electric.Client, base_url: "http://localhost:#{port}/proxy"
 
 # Print only warnings and errors during test
 config :logger, level: :warning

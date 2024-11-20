@@ -45,13 +45,13 @@ defmodule MyAppWeb.Router do
   scope "/shapes" do
     pipe_through :browser
 
-    get "/todos", Electric.Phoenix.Gateway.Plug,
+    get "/todos", Electric.Phoenix.Plug,
       shape: Electric.Client.shape!(Todo, where: "visible = true")
   end
 end
 ```
 
-Because the shape is defined in your Router, it can use Plug middleware for authorization. See [Parameter-based shapes](https://hexdocs.pm/electric_phoenix/0.1.0-dev-2/Electric.Phoenix.Gateway.Plug.html#module-parameter-based-shapes) for more details.
+Because the shape is defined in your Router, it can use Plug middleware for authorization. See [Parameter-based shapes](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.Plug.html#module-parameter-based-shapes) for more details.
 
 ### LiveView sync
 
@@ -59,12 +59,12 @@ Because the shape is defined in your Router, it can use Plug middleware for auth
 
 LiveView provides a primitive, called [Phoenix.Streams](https://fly.io/phoenix-files/phoenix-dev-blog-streams) that allows you to stream data into a LiveView. `Electric.Phoenix` provides a wrapper around this to automatically stream a [Shape](/docs/guides/shapes) into a LiveView.
 
-The key primitive is a [`live_stream/4`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.html#live_stream/4) function that wraps [`Phoenix.LiveView.stream/4`](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html#stream/4) to provide a live updating collection of items.
+The key primitive is an [`electric_stream/4`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.LiveView.html#electric_stream/4) function that wraps [`Phoenix.LiveView.stream/4`](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html#stream/4) to provide a live updating collection of items.
 
 ```elixir
 def mount(_params, _session, socket) do
   socket =
-    Electric.Phoenix.live_stream(
+    Electric.Phoenix.LiveView.electric_stream(
       socket,
       :visible_todos,
       from(t in Todo, where: t.visible == true)
@@ -79,6 +79,33 @@ This makes your LiveView applications real-time. In fact, it allows you to build
 ### More details
 
 For more details and full documentation see [hexdocs.pm/electric_phoenix](https://hexdocs.pm/electric_phoenix).
+
+## Examples
+
+### Phoenix LiveView
+
+See the
+[phoenix-liveview example](https://github.com/electric-sql/electric/tree/main/examples/phoenix-liveview)
+on GitHub.
+
+This is an example Phoenix LiveView application that uses
+[`Electric.Phoenix.LiveView.electric_stream/4`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.LiveView.html#electric_stream/4)
+to sync data from Postgres into a LiveView using
+[Phoenix Streams](https://fly.io/phoenix-files/phoenix-dev-blog-streams/).
+This keeps the LiveView automatically in-sync with Postgres, without having
+to re-run queries or trigger any change handling yourself.
+
+See the
+[documentation](https://electric-sql.com/docs/integrations/phoenix#liveview-sync)
+for more details.
+
+### Gatekeeper Auth
+
+The
+[gatekeeper-auth](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth)
+example also contains a Phoenix application that uses
+[`Electric.Phoenix.Plug`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.Plug.html)
+to authorize shape access and issue shape-scoped access tokens.
 
 <HelpWanted issue="1878">
   an equivalent integration for other server-side frameworks, such as Rails, Laravel, Django, etc.

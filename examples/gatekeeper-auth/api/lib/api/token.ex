@@ -2,7 +2,6 @@ defmodule Api.Token do
   @moduledoc """
   Generate and validate JWT Tokens.
   """
-  alias Api.Shape
   alias Electric.Client.ShapeDefinition
 
   defmodule JWT do
@@ -37,11 +36,10 @@ defmodule Api.Token do
   end
 
   defp matches(%ShapeDefinition{} = request_shape, %{} = shape_claim) do
-    with {:ok, token_shape} <- Shape.from(shape_claim) do
-      Shape.matches(request_shape, token_shape)
+    with {:ok, token_shape} <- Electric.Phoenix.shape_from_params(shape_claim) do
+      ShapeDefinition.matches?(request_shape, token_shape)
     else
-      _alt ->
-        false
+      _alt -> false
     end
   end
 end

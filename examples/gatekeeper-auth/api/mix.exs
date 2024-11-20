@@ -26,7 +26,8 @@ defmodule Api.MixProject do
   defp deps do
     [
       {:bandit, "~> 1.5"},
-      {:electric_phoenix, "~> 0.1.2"},
+      {:electric_client, ">= 0.2.3-rc-1"},
+      {:electric_phoenix, "~> 0.2.0"},
       {:ecto_sql, "~> 3.10"},
       {:jason, "~> 1.4"},
       {:joken, "~> 2.6"},
