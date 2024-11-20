@@ -21,9 +21,9 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
-Install Locust
+Install dependencies
 ```bash
-pip3 install locust
+pip3 install -r requirements.txt
 ```
 
 You're ready! 
@@ -49,7 +49,6 @@ We provide a docker file that build an image with Locust and the tasks file, so 
 Check this [guide](https://cloud.google.com/architecture/distributed-load-testing-using-gke) to learn how to run Locusts with Kubernetes.
 
 We provide the deployments for Master and Worker Pods based on the same files used in that guide.
-
 
 
 
