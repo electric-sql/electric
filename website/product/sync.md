@@ -2,7 +2,7 @@
 title: Sync
 description: >-
   Sync little subsets of your Postgres data into
-  local apps, services and environments.
+  local apps and services.
 outline: deep
 ---
 
@@ -46,7 +46,7 @@ onMounted(async () => {
 # Sync
 
 Sync little subsets of your Postgres data into
-local apps, services and environments.
+local apps and services.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
@@ -67,7 +67,7 @@ local apps, services and environments.
 
 ## Electric sync engine
 
-The Electric sync engine syncs [little subsets](/docs/guides/shapes) of data out of Postgres into local apps, services and environments &mdash; wherever you need the data.
+The Electric sync engine syncs [little subsets](/docs/guides/shapes) of data out of Postgres into local apps and services &mdash; wherever you need the data.
 
 <img srcset="/img/about/use-cases.sm.png 1098w, /img/about/use-cases.png 1484w"
     sizes="(max-width: 767px) 600px, 1484px"

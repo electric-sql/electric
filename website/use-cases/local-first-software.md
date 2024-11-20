@@ -69,7 +69,7 @@ Local-first apps are built on sync engine architecture.
 
 ### How does Electric help?
 
-Electric is a sync engine. It syncs little subsets of your Postgres data into local apps, services and environments.
+Electric is a sync engine. It syncs little subsets of your Postgres data into local apps and services.
 
 <div style="width: 100%;">
   <img src="/img/use-cases/local-first-sync-engine.png"

@@ -25,7 +25,7 @@ features:
     details: >-
       <span class="para">
         Sync subsets of your Postgres data into
-        local&nbsp;apps and&nbsp;environments.
+        local&nbsp;apps and&nbsp;services.
       </span>
       <span class="feature-cta electric-star-count">
       </span>
@@ -35,9 +35,8 @@ features:
   - title: Cloud
     details: >-
       <span class="para">
-        Hosted Electric sync that's blazing fast and
-        <span class="no-wrap-lg">scales to</span>
-        millions
+        Hosted sync that's blazing fast and scales
+        <span class="no-wrap-lg">to millions</span>
         <span class="no-wrap">of users</span>.
       </span>
       <span class="feature-cta sign-up-link">
