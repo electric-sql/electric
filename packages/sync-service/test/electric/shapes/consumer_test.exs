@@ -501,22 +501,17 @@ defmodule Electric.Shapes.ConsumerTest do
       refute_receive {:DOWN, ^ref2, :process, _, _}
     end
 
-    test "unexpected error cleans affected shape", ctx do
-      xid = 150
-      lsn = Lsn.from_string("0/10")
-      last_log_offset = LogOffset.new(lsn, 0)
-
+    test "unexpected error stops affected consumer and cleans affected shape", ctx do
       Mock.ShapeCache
       |> expect(:update_shape_latest_offset, fn @shape_handle1, _, _ ->
         raise "The unexpected error"
       end)
       |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
 
-      ref = make_ref()
-      Registry.register(ctx.registry, @shape_handle1, ref)
+      lsn = Lsn.from_string("0/10")
 
       txn =
-        %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
+        %Transaction{xid: 150, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "1"},
