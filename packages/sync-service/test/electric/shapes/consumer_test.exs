@@ -105,17 +105,14 @@ defmodule Electric.Shapes.ConsumerTest do
           ]
         })
 
-      producer =
-        start_supervised!(
-          {ShapeLogCollector,
-           [
-             stack_id: ctx.stack_id,
-             demand: :forward,
-             inspector:
-               Support.StubInspector.new([
-                 %{name: "id", type: "int8", pk_position: 0}
-               ])
-           ]}
+      {:ok, producer} =
+        ShapeLogCollector.start_link(
+          stack_id: ctx.stack_id,
+          demand: :forward,
+          inspector:
+            Support.StubInspector.new([
+              %{name: "id", type: "int8", pk_position: 0}
+            ])
         )
 
       consumers =
