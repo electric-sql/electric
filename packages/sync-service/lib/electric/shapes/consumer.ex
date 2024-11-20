@@ -196,22 +196,7 @@ defmodule Electric.Shapes.Consumer do
 
   # `Shapes.Dispatcher` only works with single-events, so we can safely assert
   # that here
-  def handle_events([event], from, state) do
-    try do
-      handle_event(event, from, state)
-    rescue
-      # TODO: do we need this recue any more?
-      error ->
-        Logger.error(
-          "Error in Shapes.Consumer.handle_events: #{inspect(error)}\n#{Exception.format(:error, error)}"
-        )
-
-        cleanup(state)
-        {:stop, :normal, state}
-    end
-  end
-
-  defp handle_event(%Changes.Relation{}, _from, state) do
+  def handle_events([%Changes.Relation{}], _from, state) do
     %{shape: %{root_table: root_table}, inspector: {inspector, inspector_opts}} = state
 
     Logger.info(
@@ -233,19 +218,19 @@ defmodule Electric.Shapes.Consumer do
   end
 
   # Buffer incoming transactions until we know our xmin
-  defp handle_event(%Transaction{xid: xid} = txn, _from, %{snapshot_xmin: nil} = state) do
+  def handle_events([%Transaction{xid: xid}] = txns, _from, %{snapshot_xmin: nil} = state) do
     Logger.debug(fn ->
       "Consumer for #{state.shape_handle} buffering 1 transaction with xid #{xid}"
     end)
 
-    {:noreply, [], %{state | buffer: state.buffer ++ [txn]}}
+    {:noreply, [], %{state | buffer: state.buffer ++ txns}}
   end
 
-  defp handle_event(%Transaction{} = txn, _from, state) do
+  def handle_events([%Transaction{}] = txns, _from, state) do
     OpenTelemetry.with_span(
       "shape_write.consumer.handle_txns",
       [snapshot_xmin: state.snapshot_xmin],
-      fn -> handle_txns([txn], state) end
+      fn -> handle_txns(txns, state) end
     )
   end
 
