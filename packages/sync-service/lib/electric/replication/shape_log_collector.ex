@@ -56,6 +56,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def init(opts) do
+    Process.set_label({:shape_log_collector, opts.stack_id})
     state = Map.merge(opts, %{producer: nil, subscriptions: {0, MapSet.new()}})
     # start in demand: :accumulate mode so that the ShapeCache is able to start
     # all active consumers before we start sending transactions

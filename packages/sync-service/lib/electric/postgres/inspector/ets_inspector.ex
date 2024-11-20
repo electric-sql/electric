@@ -84,6 +84,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     # when the parent process sends an exit signal
     Process.flag(:trap_exit, true)
 
+    Process.set_label({:ets_inspector, opts.stack_id})
+
     # Name needs to be an atom but we don't want to dynamically create atoms.
     # Instead, we will use the reference to the table that is returned by `:ets.new`
     pg_info_table = :ets.new(opts.pg_info_table, [:named_table, :public, :set])

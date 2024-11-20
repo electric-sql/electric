@@ -134,7 +134,7 @@ defmodule Electric.Postgres.ReplicationClient do
   # TODO(alco): this needs additional info about :noreply and :query return tuples.
   @impl true
   def init(replication_opts) do
-    Process.set_label(__MODULE__)
+    Process.set_label(:replication_client)
 
     {:ok, State.new(replication_opts)}
   end

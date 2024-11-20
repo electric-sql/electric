@@ -13,8 +13,10 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
   end
 
   def start_link(opts) do
-    DynamicSupervisor.start_link(__MODULE__, [],
-      name: Keyword.get(opts, :name, name(Keyword.fetch!(opts, :stack_id)))
+    stack_id = Keyword.fetch!(opts, :stack_id)
+
+    DynamicSupervisor.start_link(__MODULE__, [stack_id: stack_id],
+      name: Keyword.get(opts, :name, name(stack_id))
     )
   end
 
@@ -49,7 +51,8 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
   end
 
   @impl true
-  def init(_opts) do
+  def init(stack_id: stack_id) do
+    Process.set_label({:dynamic_consumer_supervisor, stack_id})
     Logger.debug(fn -> "Starting #{__MODULE__}" end)
     DynamicSupervisor.init(strategy: :one_for_one)
   end

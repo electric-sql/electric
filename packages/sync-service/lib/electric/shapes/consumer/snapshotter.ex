@@ -26,7 +26,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   end
 
   def init(%{stack_id: stack_id} = config) do
-    Process.set_label({:snapshotter, stack_id})
+    Process.set_label({:snapshotter, config.shape_handle})
     Logger.metadata(stack_id: stack_id)
 
     {:ok, config, {:continue, :start_snapshot}}

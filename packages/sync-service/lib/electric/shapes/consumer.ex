@@ -51,6 +51,8 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def init(config) do
+    Process.set_label({:consumer, config.shape_handle})
+
     %{log_producer: producer, storage: storage, shape_status: {shape_status, shape_status_state}} =
       config
 
