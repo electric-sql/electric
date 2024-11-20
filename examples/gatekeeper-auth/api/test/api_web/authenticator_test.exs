@@ -3,7 +3,7 @@ defmodule ApiWeb.AuthenticatorTest do
 
   alias ApiWeb.Authenticator
 
-  import Electric.Phoenix.Plug, only: [shape_from_params: 1]
+  import Electric.Phoenix, only: [shape_from_params: 1]
 
   describe "authenticator" do
     test "generate token" do

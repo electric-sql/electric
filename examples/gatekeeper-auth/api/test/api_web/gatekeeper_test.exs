@@ -3,7 +3,7 @@ defmodule ApiWeb.GatekeeperTest do
 
   alias ApiWeb.Authenticator
 
-  import Electric.Phoenix.Plug, only: [shape_from_params: 1]
+  import Electric.Phoenix, only: [shape_from_params: 1]
 
   setup %{conn: conn} do
     {:ok, conn: put_req_header(conn, "accept", "application/json")}

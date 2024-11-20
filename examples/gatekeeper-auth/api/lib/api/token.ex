@@ -36,7 +36,7 @@ defmodule Api.Token do
   end
 
   defp matches(%ShapeDefinition{} = request_shape, %{} = shape_claim) do
-    with {:ok, token_shape} <- Electric.Phoenix.Plug.shape_from_params(shape_claim) do
+    with {:ok, token_shape} <- Electric.Phoenix.shape_from_params(shape_claim) do
       ShapeDefinition.matches?(request_shape, token_shape)
     else
       _alt -> false

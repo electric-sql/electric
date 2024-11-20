@@ -5,7 +5,7 @@ defmodule ApiWeb.Plugs.AssignShape do
   """
   use ApiWeb, :plug
 
-  import Electric.Phoenix.Plug, only: [shape_from_params: 1]
+  import Electric.Phoenix, only: [shape_from_params: 1]
 
   def init(opts), do: opts
 
