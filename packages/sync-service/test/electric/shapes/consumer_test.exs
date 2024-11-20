@@ -105,14 +105,17 @@ defmodule Electric.Shapes.ConsumerTest do
           ]
         })
 
-      {:ok, producer} =
-        ShapeLogCollector.start_link(
-          stack_id: ctx.stack_id,
-          demand: :forward,
-          inspector:
-            Support.StubInspector.new([
-              %{name: "id", type: "int8", pk_position: 0}
-            ])
+      producer =
+        start_supervised!(
+          {ShapeLogCollector,
+           [
+             stack_id: ctx.stack_id,
+             demand: :forward,
+             inspector:
+               Support.StubInspector.new([
+                 %{name: "id", type: "int8", pk_position: 0}
+               ])
+           ]}
         )
 
       consumers =
@@ -493,6 +496,49 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle2))
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
+
+      assert_receive {:DOWN, ^ref1, :process, _, _}
+      refute_receive {:DOWN, ^ref2, :process, _, _}
+    end
+
+    test "unexpected error cleans affected shape", ctx do
+      xid = 150
+      lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
+
+      Mock.ShapeCache
+      |> expect(:update_shape_latest_offset, fn @shape_handle1, _, _ ->
+        raise "The unexpected error"
+      end)
+      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
+
+      ref = make_ref()
+      Registry.register(ctx.registry, @shape_handle1, ref)
+
+      txn =
+        %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "1"},
+          log_offset: LogOffset.first()
+        })
+
+      ref1 =
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.stack_id, @shape_handle1)))
+
+      ref2 =
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.stack_id, @shape_handle2)))
+
+      Mock.ShapeStatus
+      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
+      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle2))
+
+      :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
+
+      assert_receive {Support.TestStorage, :cleanup!, @shape_handle1}
+      refute_receive {Support.TestStorage, :cleanup!, @shape_handle2}
 
       assert_receive {:DOWN, ^ref1, :process, _, _}
       refute_receive {:DOWN, ^ref2, :process, _, _}
