@@ -1,5 +1,20 @@
 {
-  "name": "@electric-examples/gatekeeper-auth-example",
+  "name": "@electric-examples/gatekeeper-auth",
   "private": true,
-  "version": "0.0.1"
+  "version": "0.0.1",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "client": "npx tsx client/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electric-sql/client": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
 }

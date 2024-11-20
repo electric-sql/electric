@@ -74,6 +74,10 @@ export class Shape<T extends Row<unknown> = Row> {
     return this.#stream.lastOffset
   }
 
+  get handle(): string | undefined {
+    return this.#stream.shapeHandle
+  }
+
   get rows(): Promise<T[]> {
     return this.value.then((v) => Array.from(v.values()))
   }

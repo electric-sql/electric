@@ -33,7 +33,7 @@ Electric's [HTTP API caching](/docs/api/http#caching) will work out of the box.
 
 ### Workers
 
-You can also use [Cloudflare Workers](https://workers.cloudflare.com) in front of the CDN to handle concerns like authorisation and routing.
+You can also use [Cloudflare Workers](https://workers.cloudflare.com) in front of the CDN to handle concerns like authorization and routing.
 
 #### Auth example
 

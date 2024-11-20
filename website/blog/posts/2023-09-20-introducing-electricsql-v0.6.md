@@ -66,7 +66,7 @@ In fact, one way of understanding ElectricSQL is "GraphQL in SQL". Because why w
 
 ### Postgres-centric migrations
 
-Electric replicates data into and out of Postgres using standard built-in logical replication. This allows Postgres to be used as the source of both the [DDL schema for the local-apps](https://legacy.electric-sql.com/docs/usage/data-modelling/migrations) and the [DDLX rules](https://legacy.electric-sql.com/docs/api/ddlx) that authorise data access:
+Electric replicates data into and out of Postgres using standard built-in logical replication. This allows Postgres to be used as the source of both the [DDL schema for the local-apps](https://legacy.electric-sql.com/docs/usage/data-modelling/migrations) and the [DDLX rules](https://legacy.electric-sql.com/docs/api/ddlx) that authorize data access:
 
 ```sql
 -- Define and evolve your DDL schema as normal.

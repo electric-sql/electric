@@ -533,7 +533,7 @@ describe(`HTTP Sync`, () => {
       subscribe: false,
       signal: newAborter.signal,
       offset: lastOffset,
-      shapeHandle: issueStream.shapeHandle,
+      handle: issueStream.shapeHandle,
     })
 
     await h.forEachMessage(newIssueStream, newAborter, (res, msg, nth) => {
@@ -675,7 +675,7 @@ describe(`HTTP Sync`, () => {
       }
     })
 
-    await clearShape(issuesTableUrl, { shapeHandle: issueStream.shapeHandle! })
+    await clearShape(issuesTableUrl, { handle: issueStream.shapeHandle! })
 
     expect(shapeData).toEqual(
       new Map([[`${issuesTableKey}/"${id1}"`, { id: id1, title: `foo1` }]])
@@ -795,7 +795,7 @@ describe(`HTTP Sync`, () => {
       subscribe: false,
       signal: newAborter.signal,
       offset: lastOffset,
-      shapeHandle: issueStream.shapeHandle,
+      handle: issueStream.shapeHandle,
       fetchClient: fetchWrapper,
     })
 
@@ -841,7 +841,7 @@ describe(`HTTP Sync`, () => {
       url: `${BASE_URL}/v1/shape`,
       table: issuesTableUrl,
       subscribe: true,
-      shapeHandle: issueStream.shapeHandle,
+      handle: issueStream.shapeHandle,
       where: `1=1`,
     })
 

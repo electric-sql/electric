@@ -14,10 +14,10 @@ export type GeneratedIssueRow = { id?: string; title: string }
 export type UpdateIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type DeleteIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type InsertIssuesFn = (...rows: GeneratedIssueRow[]) => Promise<string[]>
-export type ClearIssuesShapeFn = (shapeHandle?: string) => Promise<void>
+export type ClearIssuesShapeFn = (handle?: string) => Promise<void>
 export type ClearShapeFn = (
   table: string,
-  options?: { shapeHandle?: string; databaseId?: string }
+  options?: { handle?: string; databaseId?: string }
 ) => Promise<void>
 
 export const testWithDbClient = test.extend<{
@@ -47,7 +47,7 @@ export const testWithDbClient = test.extend<{
         table: string,
         options: {
           databaseId?: string
-          shapeHandle?: string
+          handle?: string
         } = {}
       ) => {
         const baseUrl = inject(`baseUrl`)
@@ -59,8 +59,8 @@ export const testWithDbClient = test.extend<{
 
         url.searchParams.set(DATABASE_ID_QUERY_PARAM, options.databaseId)
 
-        if (options.shapeHandle) {
-          url.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, options.shapeHandle)
+        if (options.handle) {
+          url.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, options.handle)
         }
 
         const resp = await fetch(url.toString(), { method: `DELETE` })
@@ -69,7 +69,7 @@ export const testWithDbClient = test.extend<{
             await FetchError.fromResponse(resp, `DELETE ${url.toString()}`)
           )
           throw new Error(
-            `Could not delete shape ${table} with ID ${options.shapeHandle}`
+            `Could not delete shape ${table} with ID ${options.handle}`
           )
         }
       }
@@ -156,7 +156,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
     }),
 
   clearIssuesShape: async ({ clearShape, issuesTableUrl }, use) => {
-    use((shapeHandle?: string) => clearShape(issuesTableUrl, { shapeHandle }))
+    use((handle?: string) => clearShape(issuesTableUrl, { handle }))
   },
 })
 

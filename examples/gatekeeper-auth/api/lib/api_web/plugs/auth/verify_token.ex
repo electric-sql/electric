@@ -15,7 +15,7 @@ defmodule ApiWeb.Plugs.Auth.VerifyToken do
   def init(opts), do: opts
 
   def call(%{assigns: %{shape: shape}, req_headers: headers} = conn, _opts) do
-    case Authenticator.authorise(shape, headers) do
+    case Authenticator.authorize(shape, headers) do
       {:error, message} when message in [:invalid, :missing] ->
         conn
         |> send_resp(401, "Unauthorized")
