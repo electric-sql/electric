@@ -558,6 +558,21 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {:DOWN, ^ref1, :process, _, _}
       refute_receive {:DOWN, ^ref2, :process, _, _}
     end
+
+    test "consumer exiting normally does not clean up the shape", ctx do
+      ref =
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.stack_id, @shape_handle1)))
+
+      Mock.ShapeStatus
+      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
+
+      GenServer.stop(Consumer.name(ctx.stack_id, @shape_handle1))
+
+      refute_receive {Support.TestStorage, :cleanup!, @shape_handle1}
+
+      assert_receive {:DOWN, ^ref, :process, _, _}
+    end
   end
 
   describe "transaction handling with real storage" do
