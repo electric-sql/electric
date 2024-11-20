@@ -183,9 +183,11 @@ defmodule Electric.Shapes.Consumer do
     reply_to_snapshot_waiters({:error, "Shape terminated before snapshot was ready"}, state)
   end
 
-  def handle_events(events, from, state) do
+  # `Shapes.Dispatcher` only works with single-events, so we can safely assert
+  # that here
+  def handle_events([event], from, state) do
     try do
-      do_handle_events(events, from, state)
+      handle_event(event, from, state)
     rescue
       error ->
         Logger.error(
@@ -197,9 +199,7 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  # `Shapes.Dispatcher` only works with single-events, so we can safely assert
-  # that here
-  defp do_handle_events([%Changes.Relation{}], _from, state) do
+  defp handle_event(%Changes.Relation{}, _from, state) do
     %{shape: %{root_table: root_table}, inspector: {inspector, inspector_opts}} = state
 
     Logger.info(
@@ -221,19 +221,19 @@ defmodule Electric.Shapes.Consumer do
   end
 
   # Buffer incoming transactions until we know our xmin
-  defp do_handle_events([%Transaction{xid: xid}] = txns, _from, %{snapshot_xmin: nil} = state) do
+  defp handle_event(%Transaction{xid: xid} = txn, _from, %{snapshot_xmin: nil} = state) do
     Logger.debug(fn ->
       "Consumer for #{state.shape_handle} buffering 1 transaction with xid #{xid}"
     end)
 
-    {:noreply, [], %{state | buffer: state.buffer ++ txns}}
+    {:noreply, [], %{state | buffer: state.buffer ++ [txn]}}
   end
 
-  defp do_handle_events([%Transaction{}] = txns, _from, state) do
+  defp handle_event(%Transaction{} = txn, _from, state) do
     OpenTelemetry.with_span(
       "shape_write.consumer.handle_txns",
       [snapshot_xmin: state.snapshot_xmin],
-      fn -> handle_txns(txns, state) end
+      fn -> handle_txns([txn], state) end
     )
   end
 
