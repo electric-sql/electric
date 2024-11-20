@@ -501,7 +501,8 @@ defmodule Electric.Shapes.ConsumerTest do
       refute_receive {:DOWN, ^ref2, :process, _, _}
     end
 
-    test "unexpected error stops affected consumer and cleans affected shape", ctx do
+    test "unexpected error while handling events stops affected consumer and cleans affected shape",
+         ctx do
       Mock.ShapeCache
       |> expect(:update_shape_latest_offset, fn @shape_handle1, _, _ ->
         raise "The unexpected error"
@@ -531,6 +532,28 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle2))
 
       :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
+
+      assert_receive {Support.TestStorage, :cleanup!, @shape_handle1}
+      refute_receive {Support.TestStorage, :cleanup!, @shape_handle2}
+
+      assert_receive {:DOWN, ^ref1, :process, _, _}
+      refute_receive {:DOWN, ^ref2, :process, _, _}
+    end
+
+    test "consumer crashing stops affected consumer and cleans affected shape", ctx do
+      ref1 =
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.stack_id, @shape_handle1)))
+
+      ref2 =
+        Process.monitor(GenServer.whereis(Consumer.name(ctx.stack_id, @shape_handle2)))
+
+      Mock.ShapeStatus
+      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
+      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle2))
+
+      GenServer.cast(Consumer.name(ctx.stack_id, @shape_handle1), :unexpected_cast)
 
       assert_receive {Support.TestStorage, :cleanup!, @shape_handle1}
       refute_receive {Support.TestStorage, :cleanup!, @shape_handle2}

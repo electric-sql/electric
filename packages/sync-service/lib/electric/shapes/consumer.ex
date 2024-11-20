@@ -1,6 +1,6 @@
 defmodule Electric.Shapes.Consumer do
   use GenStage,
-    restart: :transient,
+    restart: :temporary,
     significant: true
 
   alias Electric.ShapeCache.LogChunker
@@ -179,8 +179,19 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, [], state}
   end
 
-  def terminate(_reason, state) do
-    reply_to_snapshot_waiters({:error, "Shape terminated before snapshot was ready"}, state)
+  def terminate(reason, state) do
+    state =
+      reply_to_snapshot_waiters({:error, "Shape terminated before snapshot was ready"}, state)
+
+    if is_error?(reason) do
+      cleanup(state)
+    end
+
+    state
+  end
+
+  defp is_error?(reason) do
+    reason not in [:normal, :shutdown, {:shutdown, :truncate}, :killed]
   end
 
   # `Shapes.Dispatcher` only works with single-events, so we can safely assert
@@ -189,6 +200,7 @@ defmodule Electric.Shapes.Consumer do
     try do
       handle_event(event, from, state)
     rescue
+      # TODO: do we need this recue any more?
       error ->
         Logger.error(
           "Error in Shapes.Consumer.handle_events: #{inspect(error)}\n#{Exception.format(:error, error)}"

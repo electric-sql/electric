@@ -16,9 +16,7 @@ defmodule Electric.Replication.ShapeLogCollector do
             stack_id: [type: :string, required: true],
             inspector: [type: :mod_arg, required: true],
             # see https://hexdocs.pm/gen_stage/GenStage.html#c:init/1-options
-            demand: [type: {:in, [:forward, :accumulate]}, default: :accumulate],
-            # should this log collector process shutdown when one of its consumers crashes?
-            link_consumers: [type: :boolean, default: true]
+            demand: [type: {:in, [:forward, :accumulate]}, default: :accumulate]
           )
 
   def start_link(opts) do
@@ -91,29 +89,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:noreply, [], remove_subscription(from, state)}
   end
 
-  def handle_cancel({:down, reason}, from, %{link_consumers: true} = state) do
-    # See: https://hexdocs.pm/elixir/Supervisor.html#module-exit-reasons-and-restarts
-    # If the consumer's shutdown is unexpected, due to some error, then exit with
-    # this error and let the supervisor bring us back up.
-    state = remove_subscription(from, state)
-
-    case reason do
-      {:shutdown, _} ->
-        {:noreply, [], state}
-
-      :shutdown ->
-        {:noreply, [], state}
-
-      :normal ->
-        {:noreply, [], state}
-
-      error ->
-        Logger.warning("Terminating LogCollector due to error from consumer: #{inspect(error)}")
-        {:stop, {:error, error}, state}
-    end
-  end
-
-  def handle_cancel({:down, _reason}, from, %{link_consumers: false} = state) do
+  def handle_cancel({:down, _reason}, from, state) do
     {:noreply, [], remove_subscription(from, state)}
   end
 
