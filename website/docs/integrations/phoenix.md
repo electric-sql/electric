@@ -99,6 +99,14 @@ See the
 [documentation](https://electric-sql.com/docs/integrations/phoenix#liveview-sync)
 for more details.
 
+### Gatekeeper Auth
+
+The
+[gatekeeper-auth](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth)
+example also contains a Phoenix application that uses
+[`Electric.Phoenix.Plug`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.Plug.html)
+to authorize shape access and issue shape-scoped access tokens.
+
 <HelpWanted issue="1878">
   an equivalent integration for other server-side frameworks, such as Rails, Laravel, Django, etc.
 </HelpWanted>
