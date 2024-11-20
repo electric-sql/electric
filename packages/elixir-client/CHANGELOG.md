@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.2.2
+
+### Patch Changes
+
+- 6353810: Fixed versioning in CI
+
 ## 0.2.1
 
 ### Patch Changes
