@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 0.9.1
+
+### Patch Changes
+
+- 090fab5: Fix source links in Hexdocs
+- 598aa28: Improve reliability: Shapes that error while processing the replication stream will now be removed leaving other shapes unaffected
+- 584c4f5: use traceparent header from incoming shape requests to set parent span
+- c5b79a5: Add global stack events registry for receiving updates on the stack status
+
 ## 0.9.0
 
 ### Minor Changes
