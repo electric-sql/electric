@@ -1,7 +1,7 @@
 ---
 title: Client development - Guide
 description: >-
-  How to write your own client for the Electric sync service.
+  How to write an Electric client for any language that speaks HTTP and JSON.
 outline: [2, 3]
 ---
 
