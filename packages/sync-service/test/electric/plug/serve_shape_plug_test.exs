@@ -62,6 +62,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
     config = [
       stack_id: ctx.stack_id,
       pg_id: @test_pg_id,
+      stack_events_registry: Registry.StackEvents,
+      stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
       shape_cache: {Mock.ShapeCache, []},
       storage: {Mock.Storage, []},
       inspector: {__MODULE__, []},
@@ -76,6 +78,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
   describe "serving shape" do
     setup :with_stack_id_from_test
+
+    setup ctx do
+      {:via, _, {registry_name, registry_key}} =
+        Electric.Replication.Supervisor.name(ctx)
+
+      {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      :ok
+    end
 
     test "returns 400 for invalid table", ctx do
       conn =
@@ -96,7 +106,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn =
         ctx
         |> conn(:get, %{"table" => "foo"}, "?offset=invalid")
-        |> ServeShapePlug.call([])
+        |> call_serve_shape_plug(ctx)
 
       assert conn.status == 400
 
@@ -107,7 +117,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn =
         ctx
         |> conn(:get, %{}, "?offset=-1")
-        |> ServeShapePlug.call([])
+        |> call_serve_shape_plug(ctx)
 
       assert conn.status == 400
 
@@ -686,6 +696,39 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
 
       assert Plug.Conn.get_resp_header(conn, "electric-handle") == [test_shape_handle]
+    end
+  end
+
+  describe "stack not ready" do
+    setup :with_stack_id_from_test
+
+    test "returns 503", ctx do
+      conn =
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=-1&replica=full")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 503
+
+      assert Jason.decode!(conn.resp_body) == %{"message" => "Stack not ready"}
+    end
+
+    @tag stack_ready_timeout: 1000
+    test "waits until stack ready and proceeds", ctx do
+      conn_task =
+        Task.async(fn ->
+          ctx
+          |> conn(:get, %{"table" => "public.users", "columns" => "id,invalid"}, "?offset=-1")
+          |> call_serve_shape_plug(ctx)
+        end)
+
+      Process.sleep(50)
+
+      Electric.StackSupervisor.dispatch_stack_event(Registry.StackEvents, ctx.stack_id, :ready)
+
+      conn = Task.await(conn_task)
+
+      assert conn.status == 400
     end
   end
 end

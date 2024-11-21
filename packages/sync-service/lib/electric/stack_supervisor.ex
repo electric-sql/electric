@@ -33,6 +33,7 @@ defmodule Electric.StackSupervisor do
                  name: [type: :any, required: false],
                  stack_id: [type: :string, required: true],
                  persistent_kv: [type: :any, required: true],
+                 stack_events_registry: [type: :atom, required: true],
                  connection_opts: [
                    type: :keyword_list,
                    required: true,
@@ -75,8 +76,7 @@ defmodule Electric.StackSupervisor do
                      "tweaks to the behaviour of parts of the supervision tree, used mostly for tests",
                    default: [],
                    keys: [
-                     registry_partitions: [type: :non_neg_integer, required: false],
-                     notify_pid: [type: :pid, required: false]
+                     registry_partitions: [type: :non_neg_integer, required: false]
                    ]
                  ]
                )
@@ -85,6 +85,18 @@ defmodule Electric.StackSupervisor do
     with {:ok, config} <- NimbleOptions.validate(Map.new(opts), @opts_schema) do
       Supervisor.start_link(__MODULE__, config, Keyword.take(opts, [:name]))
     end
+  end
+
+  def subscribe_to_stack_events(registry, stack_id, value) do
+    Registry.register(registry, {:stack_status, stack_id}, value)
+  end
+
+  def dispatch_stack_event(registry, stack_id, event) do
+    Registry.dispatch(registry, {:stack_status, stack_id}, fn entries ->
+      for {pid, ref} <- entries do
+        send(pid, {:stack_status, ref, event})
+      end
+    end)
   end
 
   def build_shared_opts(opts) do
@@ -113,8 +125,10 @@ defmodule Electric.StackSupervisor do
     [
       shape_cache: shape_cache,
       registry: shape_changes_registry_name,
+      stack_events_registry: opts[:stack_events_registry],
       storage: storage_mod_arg(opts),
       inspector: inspector,
+      stack_id: stack_id,
       get_service_status: fn -> Electric.ServiceStatus.check(stack_id) end
     ]
   end
@@ -174,6 +188,7 @@ defmodule Electric.StackSupervisor do
       stack_id: stack_id,
       # Coming from the outside, need validation
       connection_opts: config.connection_opts,
+      stack_events_registry: config.stack_events_registry,
       replication_opts:
         [
           transaction_received:

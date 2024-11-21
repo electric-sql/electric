@@ -21,4 +21,11 @@ defmodule Electric.ProcessRegistry do
   def name(stack_id, key, sub_key \\ nil) when not is_nil(stack_id) do
     {:via, Registry, {registry_name(stack_id), {key, sub_key}}}
   end
+
+  def alive?(stack_id, key, sub_key \\ nil) do
+    case GenServer.whereis(name(stack_id, key, sub_key)) do
+      nil -> false
+      _ -> true
+    end
+  end
 end

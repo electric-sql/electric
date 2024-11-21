@@ -134,6 +134,29 @@ defmodule Electric.Plug.Utils do
     end
   end
 
+  def hold_conn_until_stack_ready(conn, _opts) do
+    stack_id = conn.assigns.config[:stack_id]
+    stack_ready_timeout = Access.get(conn.assigns.config, :stack_ready_timeout, 5_000)
+    stack_events_registry = conn.assigns.config[:stack_events_registry]
+
+    ref = make_ref()
+    Electric.StackSupervisor.subscribe_to_stack_events(stack_events_registry, stack_id, ref)
+
+    if Electric.ProcessRegistry.alive?(stack_id, Electric.Replication.Supervisor) do
+      conn
+    else
+      receive do
+        {:stack_status, ^ref, :ready} ->
+          conn
+      after
+        stack_ready_timeout ->
+          conn
+          |> Plug.Conn.send_resp(503, Jason.encode!(%{message: "Stack not ready"}))
+          |> Plug.Conn.halt()
+      end
+    end
+  end
+
   defmodule CORSHeaderPlug do
     @behaviour Plug
     import Plug.Conn

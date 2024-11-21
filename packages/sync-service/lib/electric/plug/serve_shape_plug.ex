@@ -6,6 +6,7 @@ defmodule Electric.Plug.ServeShapePlug do
   import Plug.Conn, except: [halt: 1]
 
   alias Electric.Plug.Utils
+  import Electric.Plug.Utils, only: [hold_conn_until_stack_ready: 2]
   alias Electric.Shapes
   alias Electric.Schema
   alias Electric.Replication.LogOffset
@@ -155,6 +156,8 @@ defmodule Electric.Plug.ServeShapePlug do
   # start_telemetry_span needs to always be the first plug after fetching query params.
   plug :start_telemetry_span
   plug :put_resp_content_type, "application/json"
+  plug :hold_conn_until_stack_ready
+
   plug :validate_query_params
   plug :load_shape_info
   plug :put_schema_header

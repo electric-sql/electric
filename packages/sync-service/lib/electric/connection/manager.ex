@@ -59,6 +59,8 @@ defmodule Electric.Connection.Manager do
       :pg_timeline_id,
       # ID used for process labeling and sibling discovery
       :stack_id,
+      # Registry used for stack events
+      :stack_events_registry,
       :tweaks,
       awaiting_active: [],
       drop_slot_requested: false
@@ -178,6 +180,7 @@ defmodule Electric.Connection.Manager do
         pg_lock_acquired: false,
         backoff: {:backoff.init(1000, 10_000), nil},
         stack_id: Keyword.fetch!(opts, :stack_id),
+        stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
         tweaks: Keyword.fetch!(opts, :tweaks)
       }
 
@@ -231,6 +234,12 @@ defmodule Electric.Connection.Manager do
            lock_name: Keyword.fetch!(state.replication_opts, :slot_name)
          ) do
       {:ok, lock_connection_pid} ->
+        Electric.StackSupervisor.dispatch_stack_event(
+          state.stack_events_registry,
+          state.stack_id,
+          :waiting_for_connection_lock
+        )
+
         Process.send_after(self(), :log_lock_connection_status, @lock_status_logging_interval)
         {:noreply, %{state | lock_connection_pid: lock_connection_pid}}
 
@@ -290,6 +299,7 @@ defmodule Electric.Connection.Manager do
           Electric.Connection.Supervisor.start_shapes_supervisor(
             stack_id: state.stack_id,
             shape_cache_opts: shape_cache_opts,
+            stack_events_registry: state.stack_events_registry,
             tweaks: state.tweaks
           )
 
