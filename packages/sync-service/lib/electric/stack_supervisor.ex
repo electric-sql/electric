@@ -92,7 +92,7 @@ defmodule Electric.StackSupervisor do
     opts = Map.new(opts)
     stack_id = opts[:stack_id]
 
-    stack_events_registry_name = :"#{Registry.StackEvents}:#{stack_id}"
+    shape_changes_registry_name = :"#{Registry.ShapeChanges}:#{stack_id}"
 
     shape_cache =
       Access.get(
@@ -112,7 +112,7 @@ defmodule Electric.StackSupervisor do
 
     [
       shape_cache: shape_cache,
-      registry: stack_events_registry_name,
+      registry: shape_changes_registry_name,
       storage: storage_mod_arg(opts),
       inspector: inspector,
       stack_id: stack_id,
@@ -158,7 +158,7 @@ defmodule Electric.StackSupervisor do
         [get_pg_version_fn, config.replication_opts[:publication_name]]
       }
 
-    stack_events_registry_name = :"#{Registry.StackEvents}:#{stack_id}"
+    shape_changes_registry_name = :"#{Registry.ShapeChanges}:#{stack_id}"
 
     shape_cache_opts = [
       stack_id: stack_id,
@@ -168,7 +168,7 @@ defmodule Electric.StackSupervisor do
       chunk_bytes_threshold: config.chunk_bytes_threshold,
       log_producer: shape_log_collector,
       consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
-      registry: stack_events_registry_name
+      registry: shape_changes_registry_name
     ]
 
     new_connection_manager_opts = [
@@ -201,7 +201,7 @@ defmodule Electric.StackSupervisor do
     children = [
       {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
       {Registry,
-       name: stack_events_registry_name, keys: :duplicate, partitions: registry_partitions},
+       name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
       {Electric.Postgres.Inspector.EtsInspector, stack_id: stack_id, pool: db_pool},
       {Electric.Connection.Supervisor, new_connection_manager_opts}
     ]

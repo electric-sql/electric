@@ -419,7 +419,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       Process.sleep(50)
 
       # Simulate new changes arriving
-      Registry.dispatch(@registry, {:shape_handle, @test_shape_handle}, fn [{pid, ref}] ->
+      Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
         send(pid, {ref, :new_changes, next_offset})
       end)
 
@@ -477,7 +477,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       Process.sleep(50)
 
       # Simulate shape rotation
-      Registry.dispatch(@registry, {:shape_handle, @test_shape_handle}, fn [{pid, ref}] ->
+      Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
         send(pid, {ref, :shape_rotation})
       end)
 

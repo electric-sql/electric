@@ -316,7 +316,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp notify_listeners(registry, :new_changes, shape_handle, latest_log_offset) do
-    Registry.dispatch(registry, {:shape_handle, shape_handle}, fn registered ->
+    Registry.dispatch(registry, shape_handle, fn registered ->
       Logger.debug(fn ->
         "Notifying ~#{length(registered)} clients about new changes to #{shape_handle}"
       end)
