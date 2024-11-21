@@ -101,11 +101,7 @@ defmodule Electric.Plug.UtilsTest do
 
       Process.sleep(50)
 
-      Registry.dispatch(Registry.StackEvents, {:stack_status, ctx.stack_id}, fn entries ->
-        for {pid, ref} <- entries do
-          send(pid, {:stack_status, ref, :ready})
-        end
-      end)
+      Electric.StackSupervisor.dispatch_stack_event(Registry.StackEvents, ctx.stack_id, :ready)
 
       conn = Task.await(conn_task)
       refute conn.halted

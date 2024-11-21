@@ -87,6 +87,14 @@ defmodule Electric.StackSupervisor do
     end
   end
 
+  def dispatch_stack_event(registry, stack_id, event) do
+    Registry.dispatch(registry, {:stack_status, stack_id}, fn entries ->
+      for {pid, ref} <- entries do
+        send(pid, {:stack_status, ref, event})
+      end
+    end)
+  end
+
   def build_shared_opts(opts) do
     # needs validation
     opts = Map.new(opts)
