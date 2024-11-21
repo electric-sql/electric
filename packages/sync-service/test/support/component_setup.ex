@@ -195,7 +195,7 @@ defmodule Support.ComponentSetup do
         restart: :temporary
       )
 
-    assert_receive {:stack_status, ^ref, :shape_supervisor_ready}
+    assert_receive {:stack_status, ^ref, :ready}
 
     # Process.sleep(100)
 

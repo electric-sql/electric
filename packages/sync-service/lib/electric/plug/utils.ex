@@ -146,7 +146,7 @@ defmodule Electric.Plug.Utils do
       conn
     else
       receive do
-        {:stack_status, ^ref, :shape_supervisor_ready} ->
+        {:stack_status, ^ref, :ready} ->
           conn
       after
         stack_ready_timeout ->

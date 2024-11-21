@@ -726,7 +726,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       Registry.dispatch(Registry.StackEvents, {:stack_status, ctx.stack_id}, fn entries ->
         for {pid, ref} <- entries do
-          send(pid, {:stack_status, ref, :shape_supervisor_ready})
+          send(pid, {:stack_status, ref, :ready})
         end
       end)
 

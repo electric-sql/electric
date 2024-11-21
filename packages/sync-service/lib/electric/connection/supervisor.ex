@@ -57,7 +57,7 @@ defmodule Electric.Connection.Supervisor do
     with {:ok, pid} <- Supervisor.start_child(name(opts), child_spec) do
       Registry.dispatch(opts[:stack_events_registry], {:stack_status, stack_id}, fn registered ->
         for {pid, ref} <- registered do
-          send(pid, {:stack_status, ref, :shape_supervisor_ready})
+          send(pid, {:stack_status, ref, :ready})
         end
       end)
 
