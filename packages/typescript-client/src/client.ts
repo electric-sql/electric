@@ -473,7 +473,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   subscribe(
     callback: (messages: Message<T>[]) => MaybePromise<void>,
-    onError: (error: FetchError | Error) => void = () => {}
+    onError: (error: Error) => void = () => {}
   ) {
     const subscriptionId = Math.random()
 
@@ -490,7 +490,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   subscribeOnceToUpToDate(
     callback: () => MaybePromise<void>,
-    onError: (error: FetchError | Error) => void = () => {}
+    onError: (error: Error) => void = () => {}
   ) {
     const subscriptionId = Math.random()
 
