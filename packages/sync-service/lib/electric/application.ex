@@ -15,7 +15,7 @@ defmodule Electric.Application do
     # We have "instance id" identifier as the node ID, however that's generated every runtime,
     # so isn't stable across restarts. Our storages however scope themselves based on this stack ID
     # so we're just hardcoding it here.
-    stack_id = "single_stack"
+    stack_id = Application.get_env(:electric, :provided_database_id, "single_stack")
 
     router_opts =
       [

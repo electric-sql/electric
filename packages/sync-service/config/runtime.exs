@@ -172,8 +172,12 @@ replication_stream_id =
 storage = {storage_mod, storage_opts}
 
 prometheus_port = env!("ELECTRIC_PROMETHEUS_PORT", :integer, nil)
+# The provided database id is relevant if you had used v0.8 and want to keep the storage
+# instead of having hanging files. We use a provided value as stack id, but nothing else.
+provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, "single_stack")
 
 config :electric,
+  provided_database_id: provided_database_id,
   allow_shape_deletion: enable_integration_testing,
   cache_max_age: cache_max_age,
   cache_stale_age: cache_stale_age,
