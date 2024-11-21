@@ -848,7 +848,9 @@ describe(`HTTP Sync`, () => {
       subscribe: true,
       handle: issueStream.shapeHandle,
       where: `1=1`,
-      onError: (err) => (error = err),
+      onError: (err) => {
+        error = err
+      },
     })
 
     const errorSubscriberPromise = new Promise((_, reject) =>
