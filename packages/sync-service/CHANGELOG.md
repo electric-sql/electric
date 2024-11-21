@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.9.2
+
+### Patch Changes
+
+- 6a88009: fix: correctly scope the storage based on the tenant and use already-provided tenant id
+
 ## 0.9.1
 
 ### Patch Changes
