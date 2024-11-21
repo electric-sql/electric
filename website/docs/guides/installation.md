@@ -5,6 +5,10 @@ description: >-
 outline: [2, 3]
 ---
 
+<img src="/img/icons/install.svg" class="product-icon"
+    style="width: 72px"
+/>
+
 # Installation
 
 You need to have a [Postgres](https://www.postgresql.org) database and to run the [Electric sync service](/product/electric) in front of it.

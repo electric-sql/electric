@@ -5,6 +5,10 @@ description: >-
 outline: [2, 3]
 ---
 
+<img src="/img/icons/troubleshoot.svg" class="product-icon"
+    style="width: 72px"
+/>
+
 # Troubleshooting
 
 Tips and answers to FAQs about how to run Electric successfully.

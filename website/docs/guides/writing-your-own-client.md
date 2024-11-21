@@ -5,6 +5,10 @@ description: >-
 outline: [2, 3]
 ---
 
+<img src="/img/icons/coding.svg" class="product-icon"
+    style="width: 72px"
+/>
+
 # Writing your own client
 
 How to write an Electric client for any language that speaks HTTP and JSON.
