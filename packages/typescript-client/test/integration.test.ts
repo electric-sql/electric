@@ -846,7 +846,7 @@ describe(`HTTP Sync`, () => {
       url: `${BASE_URL}/v1/shape`,
       table: issuesTableUrl,
       subscribe: true,
-      shapeHandle: issueStream.shapeHandle,
+      handle: issueStream.shapeHandle,
       where: `1=1`,
       onError: (err) => (error = err),
     })

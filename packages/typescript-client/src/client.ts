@@ -14,9 +14,7 @@ import {
   MissingShapeUrlError,
   InvalidSignalError,
   MissingShapeHandleError,
-  MissingHeadersError,
   ReservedParamError,
-  MissingHeadersError,
 } from './error'
 import {
   BackoffDefaults,
