@@ -4,7 +4,6 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
 import { ShapeStream, Shape, FetchError } from '../src'
 import { Message, Row, ChangeMessage } from '../src/types'
-import { requiredElectricResponseHeaders } from '../src/fetch'
 import { MissingHeadersError } from '../src/error'
 
 const BASE_URL = inject(`baseUrl`)
@@ -332,6 +331,8 @@ describe(`Shape`, () => {
     issuesTableUrl,
   }) => {
     let url: string = ``
+    let error1: Error, error2: Error
+
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       table: issuesTableUrl,
@@ -339,19 +340,23 @@ describe(`Shape`, () => {
         url = input.toString()
         const headers = new Headers()
         headers.set(`electric-offset`, `0_0`)
-        return new Response(undefined, { status: 200, headers })
+        return new Response(``, { status: 200, headers })
+      },
+      onError: (err) => {
+        error1 = err
       },
     })
 
     await sleep(10) // give some time for the initial fetch to complete
     expect(shapeStream.isConnected()).false
 
-    const missingHeaders = requiredElectricResponseHeaders.filter(
-      (h) => h !== `electric-offset`
-    )
-    const expectedErrorMessage = new MissingHeadersError(url, missingHeaders)
-      .message
-    expect((shapeStream.error as Error).message === expectedErrorMessage)
+    const expectedErrorMessage = new MissingHeadersError(url, [
+      `electric-handle`,
+      `electric-schema`,
+    ]).message
+
+    expect(error1!.message).equals(expectedErrorMessage)
+    expect((shapeStream.error as Error).message).equals(expectedErrorMessage)
 
     // Also check that electric-cursor is a required header for responses to live queries
     const shapeStreamLive = new ShapeStream({
@@ -363,20 +368,21 @@ describe(`Shape`, () => {
         headers.set(`electric-offset`, `0_0`)
         return new Response(undefined, { status: 200, headers })
       },
+      onError: (err) => {
+        error2 = err
+      },
     })
 
     await sleep(10) // give some time for the initial fetch to complete
     expect(shapeStreamLive.isConnected()).false
 
-    const missingHeadersLive = requiredElectricResponseHeaders
-      .concat([`electric-cursor`])
-      .filter((h) => h !== `electric-offset`)
-    const expectedErrorMessageLive = new MissingHeadersError(
-      url,
-      missingHeadersLive
-    ).message
-    expect(
-      (shapeStreamLive.error as Error).message === expectedErrorMessageLive
+    const expectedErrorMessageLive = new MissingHeadersError(url, [
+      `electric-handle`,
+      `electric-cursor`,
+    ]).message
+    expect(error2!.message).equals(expectedErrorMessageLive)
+    expect((shapeStreamLive.error as Error).message).equals(
+      expectedErrorMessageLive
     )
   })
 

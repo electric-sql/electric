@@ -11,7 +11,10 @@ import { isUpToDateMessage } from './helpers'
 import {
   FetchError,
   FetchBackoffAbortError,
-  MissingHeadersError,
+  MissingShapeUrlError,
+  InvalidSignalError,
+  MissingShapeHandleError,
+  ReservedParamError,
 } from './error'
 import {
   BackoffDefaults,
@@ -62,6 +65,8 @@ type ReservedParamKeys =
   | typeof REPLICA_PARAM
 
 type ParamsRecord = Omit<Record<string, string>, ReservedParamKeys>
+
+type ShapeStreamErrorHandler = (error: Error) => void
 
 /**
  * Options for constructing a ShapeStream.
@@ -147,6 +152,15 @@ export interface ShapeStreamOptions<T = never> {
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
   parser?: Parser<T>
+
+  /**
+   * A function for handling shapestream errors.
+   * This is optional, when it is not provided any shapestream errors will be thrown.
+   * If the function is provided and returns an object containing parameters and/or headers
+   * the shapestream will apply those changes and try syncing again.
+   * If the function returns void the shapestream is stopped.
+   */
+  onError?: ShapeStreamErrorHandler
 }
 
 export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
@@ -164,6 +178,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   isUpToDate: boolean
   lastOffset: Offset
   shapeHandle?: string
+  error?: unknown
 }
 
 /**
@@ -206,6 +221,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   readonly options: ShapeStreamOptions<GetExtensions<T>>
+  #error: unknown = null
 
   readonly #fetchClient: typeof fetch
   readonly #messageParser: MessageParser<T>
@@ -226,18 +242,19 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #shapeHandle?: string
   #databaseId?: string
   #schema?: Schema
-  #error?: unknown
+  #onError?: ShapeStreamErrorHandler
   #replica?: Replica
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
-    validateOptions(options)
     this.options = { subscribe: true, ...options }
+    validateOptions(this.options)
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
     this.#shapeHandle = this.options.handle
     this.#databaseId = this.options.databaseId
     this.#messageParser = new MessageParser<T>(options.parser)
     this.#replica = this.options.replica
+    this.#onError = this.options.onError
 
     const baseFetchClient =
       options.fetchClient ??
@@ -255,11 +272,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
       createFetchWithChunkBuffer(fetchWithBackoffClient)
     )
 
-    this.start()
+    this.#start()
   }
 
   get shapeHandle() {
     return this.#shapeHandle
+  }
+
+  get error() {
+    return this.#error
   }
 
   get isUpToDate() {
@@ -270,20 +291,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#lastOffset
   }
 
-  get error() {
-    return this.#error
-  }
-
-  async start() {
-    this.#isUpToDate = false
-
-    const { url, table, where, columns, signal } = this.options
-
+  async #start() {
     try {
       while (
-        (!signal?.aborted && !this.#isUpToDate) ||
+        (!this.options.signal?.aborted && !this.#isUpToDate) ||
         this.options.subscribe
       ) {
+        const { url, table, where, columns, signal } = this.options
+
         const fetchUrl = new URL(url)
 
         // Add any custom parameters first
@@ -346,7 +361,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
           this.#connected = true
         } catch (e) {
           if (e instanceof FetchBackoffAbortError) break // interrupted
-          if (e instanceof MissingHeadersError) throw e
           if (!(e instanceof FetchError)) throw e // should never happen
           if (e.status == 409) {
             // Upon receiving a 409, we should start from scratch
@@ -409,6 +423,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
     } catch (err) {
       this.#error = err
+      if (this.#onError) {
+        this.#onError(err as Error)
+        return
+      }
+
+      // If no handler is provided for errors just throw so the error still bubbles up.
+      throw this.#error
     } finally {
       this.#connected = false
     }
@@ -416,7 +437,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   subscribe(
     callback: (messages: Message<T>[]) => MaybePromise<void>,
-    onError?: (error: FetchError | Error) => void
+    onError: (error: Error) => void = () => {}
   ) {
     const subscriptionId = Math.random()
 
@@ -449,7 +470,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   /** True during initial fetch. False afterwise.  */
   isLoading(): boolean {
-    return !this.isUpToDate
+    return !this.#isUpToDate
   }
 
   async #publish(messages: Message<T>[]): Promise<void> {
@@ -488,12 +509,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
 function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (!options.url) {
-    throw new Error(`Invalid shape options. It must provide the url`)
+    throw new MissingShapeUrlError()
   }
   if (options.signal && !(options.signal instanceof AbortSignal)) {
-    throw new Error(
-      `Invalid signal option. It must be an instance of AbortSignal.`
-    )
+    throw new InvalidSignalError()
   }
 
   if (
@@ -501,9 +520,7 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
     options.offset !== `-1` &&
     !options.handle
   ) {
-    throw new Error(
-      `handle is required if this isn't an initial fetch (i.e. offset > -1)`
-    )
+    throw new MissingShapeHandleError()
   }
 
   // Check for reserved parameter names
@@ -512,9 +529,7 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
       RESERVED_PARAMS.has(key)
     )
     if (reservedParams.length > 0) {
-      throw new Error(
-        `Cannot use reserved Electric parameter names in custom params: ${reservedParams.join(`, `)}`
-      )
+      throw new ReservedParamError(reservedParams)
     }
   }
   return

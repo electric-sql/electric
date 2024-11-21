@@ -1,7 +1,7 @@
 import { parse } from 'cache-control-parser'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
-import { assert, describe, expect, inject, vi } from 'vitest'
+import { describe, expect, inject, vi } from 'vitest'
 import { FetchError, Shape, ShapeStream } from '../src'
 import { Message, Offset } from '../src/types'
 import { isChangeMessage, isUpToDateMessage } from '../src/helpers'
@@ -556,8 +556,10 @@ describe(`HTTP Sync`, () => {
       {}
     )
     const cacheHeaders = res.headers.get(`cache-control`)
-    assert(cacheHeaders !== null, `Response should have cache-control header`)
-    const directives = parse(cacheHeaders)
+    expect(cacheHeaders, `Response should have cache-control header`).not.toBe(
+      null
+    )
+    const directives = parse(cacheHeaders!)
     expect(directives).toEqual({
       public: true,
       'max-age': 604800,
@@ -565,7 +567,7 @@ describe(`HTTP Sync`, () => {
       'stale-while-revalidate': 2629746,
     })
     const etagHeader = res.headers.get(`etag`)
-    assert(etagHeader !== null, `Response should have etag header`)
+    expect(etagHeader, `Response should have etag header`).not.toBe(null)
 
     await insertIssues(
       { title: `foo4` },
@@ -582,7 +584,7 @@ describe(`HTTP Sync`, () => {
       {}
     )
     const etag2Header = res2.headers.get(`etag`)
-    expect(etag2Header !== null, `Response should have etag header`)
+    expect(etag2Header, `Response should have etag header`).not.toEqual(null)
     expect(etagHeader).not.toEqual(etag2Header)
   })
 
@@ -603,16 +605,16 @@ describe(`HTTP Sync`, () => {
     const messages = (await res.json()) as Message[]
     expect(messages.length).toEqual(9) // 9 inserts
     const midMessage = messages.slice(-6)[0]
-    assert(`offset` in midMessage)
-    const midOffset = midMessage.offset
+    expect(midMessage).to.have.own.property(`offset`)
+    const midOffset = (midMessage as { offset: string }).offset
     const shapeHandle = res.headers.get(`electric-handle`)
     const etag = res.headers.get(`etag`)
-    assert(etag !== null, `Response should have etag header`)
+    expect(etag, `Response should have etag header`).not.toBe(null)
 
     const etagValidation = await fetch(
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {
-        headers: { 'If-None-Match': etag },
+        headers: { 'If-None-Match': etag! },
       }
     )
 
@@ -625,14 +627,16 @@ describe(`HTTP Sync`, () => {
       {}
     )
     const catchupEtag = catchupEtagRes.headers.get(`etag`)
-    assert(catchupEtag !== null, `Response should have catchup etag header`)
+    expect(catchupEtag, `Response should have catchup etag header`).not.toBe(
+      null
+    )
 
     // Catch-up offsets should also use the same etag as they're
     // also working through the end of the current log.
     const catchupEtagValidation = await fetch(
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=${midOffset}&handle=${shapeHandle}`,
       {
-        headers: { 'If-None-Match': catchupEtag },
+        headers: { 'If-None-Match': catchupEtag! },
       }
     )
     const catchupStatus = catchupEtagValidation.status
@@ -837,12 +841,14 @@ describe(`HTTP Sync`, () => {
       if (isUpToDateMessage(msg)) res()
     })
 
+    let error: Error
     const invalidIssueStream = new ShapeStream<IssueRow>({
       url: `${BASE_URL}/v1/shape`,
       table: issuesTableUrl,
       subscribe: true,
       handle: issueStream.shapeHandle,
       where: `1=1`,
+      onError: (err) => (error = err),
     })
 
     const errorSubscriberPromise = new Promise((_, reject) =>
@@ -853,6 +859,9 @@ describe(`HTTP Sync`, () => {
     expect(invalidIssueStream.error).instanceOf(FetchError)
     expect((invalidIssueStream.error! as FetchError).status).toBe(400)
     expect(invalidIssueStream.isConnected()).false
+    expect(error!.message).contains(
+      `The specified shape definition and handle do not match. Please ensure the shape definition is correct or omit the shape handle from the request to obtain a new one.`
+    )
   })
 
   it(`should detect shape deprecation and restart syncing`, async ({

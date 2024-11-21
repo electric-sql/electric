@@ -93,7 +93,51 @@ shape.subscribe(({ rows }) => {
 }
 ```
 
-See the [Docs](https://electric-sql.com) and [Examples](https://electric-sql.com/examples/basic) for more information.
+### Error Handling
+
+The ShapeStream provides two ways to handle errors:
+
+1. Using the `onError` handler:
+```typescript
+const stream = new ShapeStream({
+  url: `${BASE_URL}/v1/shape`,
+  table: `foo`,
+  onError: (error) => {
+    // Handle all stream errors here
+    console.error('Stream error:', error)
+  }
+})
+```
+
+If no `onError` handler is provided, the ShapeStream will throw errors that occur during streaming.
+
+2. Individual subscribers can optionally handle errors specific to their subscription:
+```typescript
+stream.subscribe(
+  (messages) => {
+    // Handle messages
+  },
+  (error) => {
+    // Handle errors for this specific subscription
+    console.error('Subscription error:', error)
+  }
+)
+```
+
+Common error types include:
+- `MissingShapeUrlError`: Missing required URL parameter
+- `InvalidSignalError`: Invalid AbortSignal instance
+- `ReservedParamError`: Using reserved parameter names
+
+Runtime errors:
+- `FetchError`: HTTP errors during shape fetching
+- `FetchBackoffAbortError`: Fetch aborted using AbortSignal
+- `MissingShapeHandleError`: Missing required shape handle
+- `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
+
+See the [typescript client docs on the website](https://electric-sql.com/docs/api/clients/typescript#error-handling) for more details on error handling.
+
+And in general, see the [docs website](https://electric-sql.com) and [examples folder](https://electric-sql.com/examples/basic) for more information.
 
 ## Develop
 

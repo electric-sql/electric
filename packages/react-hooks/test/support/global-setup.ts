@@ -65,7 +65,7 @@ export default async function ({ provide }: GlobalSetupContext) {
   provide(`proxyCachePath`, proxyCachePath)
 
   return async () => {
-    await client.query(`DROP SCHEMA electric_test`)
+    await client.query(`DROP SCHEMA electric_test CASCADE`)
     await client.end()
   }
 }

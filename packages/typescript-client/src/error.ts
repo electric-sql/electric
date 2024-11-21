@@ -46,6 +46,60 @@ export class FetchError extends Error {
 export class FetchBackoffAbortError extends Error {
   constructor() {
     super(`Fetch with backoff aborted`)
+    this.name = `FetchBackoffAbortError`
+  }
+}
+
+export class InvalidShapeOptionsError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = `InvalidShapeOptionsError`
+  }
+}
+
+export class MissingShapeUrlError extends Error {
+  constructor() {
+    super(`Invalid shape options: missing required url parameter`)
+    this.name = `MissingShapeUrlError`
+  }
+}
+
+export class InvalidSignalError extends Error {
+  constructor() {
+    super(`Invalid signal option. It must be an instance of AbortSignal.`)
+    this.name = `InvalidSignalError`
+  }
+}
+
+export class MissingShapeHandleError extends Error {
+  constructor() {
+    super(
+      `shapeHandle is required if this isn't an initial fetch (i.e. offset > -1)`
+    )
+    this.name = `MissingShapeHandleError`
+  }
+}
+
+export class ReservedParamError extends Error {
+  constructor(reservedParams: string[]) {
+    super(
+      `Cannot use reserved Electric parameter names in custom params: ${reservedParams.join(`, `)}`
+    )
+    this.name = `ReservedParamError`
+  }
+}
+
+export class ParserNullValueError extends Error {
+  constructor(columnName: string) {
+    super(`Column "${columnName ?? `unknown`}" does not allow NULL values`)
+    this.name = `ParserNullValueError`
+  }
+}
+
+export class ShapeStreamAlreadyRunningError extends Error {
+  constructor() {
+    super(`ShapeStream is already running`)
+    this.name = `ShapeStreamAlreadyRunningError`
   }
 }
 

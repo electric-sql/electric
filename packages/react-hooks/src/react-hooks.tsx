@@ -35,7 +35,7 @@ export function getShapeStream<T extends Row<unknown>>(
   // If the stream is already cached, return it if valid
   if (streamCache.has(shapeHash)) {
     const stream = streamCache.get(shapeHash)! as ShapeStream<T>
-    if (stream.error === undefined && !stream.options.signal?.aborted) {
+    if (!stream.error && !stream.options.signal?.aborted) {
       return stream
     }
 
@@ -57,10 +57,7 @@ export function getShape<T extends Row<unknown>>(
 ): Shape<T> {
   // If the stream is already cached, return it if valid
   if (shapeCache.has(shapeStream)) {
-    if (
-      shapeStream.error === undefined &&
-      !shapeStream.options.signal?.aborted
-    ) {
+    if (!shapeStream.error && !shapeStream.options.signal?.aborted) {
       return shapeCache.get(shapeStream)! as Shape<T>
     }
 

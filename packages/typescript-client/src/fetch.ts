@@ -171,7 +171,7 @@ export function createFetchWithResponseHeadersCheck(
       const missingHeaders: Array<string> = []
 
       const addMissingHeaders = (requiredHeaders: Array<string>) =>
-        requiredHeaders.filter((h) => !headers.has(h))
+        missingHeaders.push(...requiredHeaders.filter((h) => !headers.has(h)))
       addMissingHeaders(requiredElectricResponseHeaders)
 
       const input = args[0]
