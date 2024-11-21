@@ -71,7 +71,7 @@ docker compose up
 
 Electric creates a durable replication slot in Postgres to prevent data loss during downtime. 
 
-During normal execution, Electric consumes the WAL file and keeps advancing `confirmed_flush_lsn`. However, if Electric is disconnected, the WAL file accumulates the changes that haven't be delivered to Electric.
+During normal execution, Electric consumes the WAL file and keeps advancing `confirmed_flush_lsn`. However, if Electric is disconnected, the WAL file accumulates the changes that haven't been delivered to Electric.
 
 ##### Solution &mdash; Remove replication slot after Electric is gone
 
@@ -81,9 +81,9 @@ You can also control the size of the WAL with [```wal_keep_size```](https://www.
 
 ## IPv6 support
 
-If Electric or Postgres are running behind a IPv6 network, you might have perform additional configurations on your network.
+If Electric or Postgres are running behind an IPv6 network, you might have to perform additional configurations on your network.
 
-### Postgres running behind Ipv6 network
+### Postgres running behind IPv6 network
 
 In order for Electric to connect to Postgres over IPv6, you need to set [`ELECTRIC_DATABASE_USE_IPV6`](/docs/api/config#database-use-ipv6) to `true`.
 
@@ -96,6 +96,16 @@ When running Electric in a Docker container, there's an additional hurdle in tha
 
 If you're running Electric in a Cloud provider, you need to ensure that your VPC is configured with IPv6 support. Check your Cloud provider documentation to learn how to set it up.
 
-### Electric running behind Ipv6 network
+### Electric running behind IPv6 network
 
 By default Electric only binds to IPv4 addresses. You need to set [`ELECTRIC_LISTEN_ON_IPV6`](/docs/api/config#electric-use-ipv6) to `true` to bind to bind to IPv6 addresses as well.
+
+### Missing headers &mdash; why is the client complaining about missing headers?
+
+When Electric responds to shape requests it includes headers that are required by the client to follow the shape log.
+It is common to run Electric behind a proxy to authenticate users and authorise shape requests.
+However, the proxy might not keep the response headers in which case the client may complain about missing headers.
+
+##### Solution &mdash; configure proxy to keep headers
+
+Verify the proxy configuration and make sure it doesn't remove any of the `electric-...` headers.
