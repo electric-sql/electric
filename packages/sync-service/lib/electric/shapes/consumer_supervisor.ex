@@ -61,6 +61,8 @@ defmodule Electric.Shapes.ConsumerSupervisor do
     %{shape_handle: shape_handle, storage: {_, _} = storage} =
       config
 
+    Process.set_label({:consumer_supervisor, shape_handle})
+
     shape_storage = Electric.ShapeCache.Storage.for_shape(shape_handle, storage)
 
     shape_config = %{config | storage: shape_storage}

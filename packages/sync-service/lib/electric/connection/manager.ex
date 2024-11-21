@@ -150,6 +150,8 @@ defmodule Electric.Connection.Manager do
     # implement our custom error handling logic.
     Process.flag(:trap_exit, true)
 
+    Process.set_label({:connection_manager, opts[:stack_id]})
+
     connection_opts =
       opts
       |> Keyword.fetch!(:connection_opts)
