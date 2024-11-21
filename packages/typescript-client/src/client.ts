@@ -66,11 +66,7 @@ type ReservedParamKeys =
 
 type ParamsRecord = Omit<Record<string, string>, ReservedParamKeys>
 
-// type RetryOpts = {
-//   params?: ParamsRecord
-//   headers?: Record<string, string>
-// }
-type ShapeStreamErrorHandler = (error: Error) => void // | RetryOpts
+type ShapeStreamErrorHandler = (error: Error) => void
 
 /**
  * Options for constructing a ShapeStream.
@@ -443,22 +439,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
       this.#error = err
       if (this.#onError) {
         this.#onError(err as Error)
-        // TODO add tests and documentation for this.
-        // const retryOpts = this.#onError(err as Error)
-        // if (typeof retryOpts === `object`) {
-        //   this.#reset()
-        //
-        //   if (Object.hasOwn(retryOpts, `params`)) {
-        //     this.options.params = retryOpts.params
-        //   }
-        //
-        //   if (Object.hasOwn(retryOpts, `headers`)) {
-        //     this.options.headers = retryOpts.headers
-        //   }
-        //
-        //   // Restart
-        //   this.start()
-        // }
         return
       }
 
