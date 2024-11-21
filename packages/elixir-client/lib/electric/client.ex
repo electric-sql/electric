@@ -126,7 +126,7 @@ defmodule Electric.Client do
         )
 
       for %{headers: %{operation: operation}, value: value} <- stream do
-        # The message `value` will now be a `%Foo{}` struct 
+        # The message `value` will now be a `%Foo{}` struct
         IO.inspect([{operation, value}], pretty: true, syntax_colors: IO.ANSI.syntax_colors())
       end
 
@@ -159,12 +159,12 @@ defmodule Electric.Client do
   @api_endpoint_path "/v1/shape"
   @client_schema NimbleOptions.new!(
                    base_url: [
-                     type: :string,
+                     type: {:or, [:string, {:struct, URI}]},
                      doc:
                        "The URL of the electric server, not including the path. E.g. for local development this would be `http://localhost:3000`."
                    ],
                    endpoint: [
-                     type: :string,
+                     type: {:or, [:string, {:struct, URI}]},
                      doc:
                        "The full URL of the shape API endpoint. E.g. for local development this would be `http://localhost:3000/v1/shape`. Use this if you need a non-standard API path."
                    ],

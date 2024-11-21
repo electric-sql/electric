@@ -53,6 +53,23 @@ defmodule Electric.ClientTest do
         Client.new(base_url: "http://localhost:3000/some/random/path")
     end
 
+    test ":base_url is used as the base of the endpoint and accepts a URI" do
+      endpoint = URI.new!("http://localhost:3000/v1/shape")
+
+      {:ok, %Client{endpoint: ^endpoint}} =
+        Client.new(base_url: URI.new!("http://localhost:3000"))
+
+      endpoint = URI.new!("http://localhost:3000/proxy/v1/shape")
+
+      {:ok, %Client{endpoint: ^endpoint}} =
+        Client.new(base_url: URI.new!("http://localhost:3000/proxy"))
+
+      endpoint = URI.new!("http://localhost:3000/some/random/path/v1/shape")
+
+      {:ok, %Client{endpoint: ^endpoint}} =
+        Client.new(base_url: URI.new!("http://localhost:3000/some/random/path"))
+    end
+
     test ":endpoint is used as-is" do
       endpoint = URI.new!("http://localhost:3000")
 
@@ -68,6 +85,20 @@ defmodule Electric.ClientTest do
 
       {:ok, %Client{endpoint: ^endpoint}} =
         Client.new(endpoint: "http://localhost:3000/some/random/path")
+    end
+
+    test ":endpoint is used as-is and accepts a URI" do
+      endpoint = URI.new!("http://localhost:3000")
+
+      {:ok, %Client{endpoint: ^endpoint}} = Client.new(endpoint: endpoint)
+
+      endpoint = URI.new!("http://localhost:3000/v1/shape")
+
+      {:ok, %Client{endpoint: ^endpoint}} = Client.new(endpoint: endpoint)
+
+      endpoint = URI.new!("http://localhost:3000/some/random/path")
+
+      {:ok, %Client{endpoint: ^endpoint}} = Client.new(endpoint: endpoint)
     end
 
     test "returns an error if neither :base_url or :endpoint is given" do
