@@ -40,6 +40,8 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   def call_delete_shape_plug(conn, ctx, allow \\ true) do
     config = [
       stack_id: ctx.stack_id,
+      stack_events_registry: Registry.StackEvents,
+      stack_ready_timeout: 100,
       pg_id: @test_pg_id,
       shape_cache: {Mock.ShapeCache, []},
       storage: {Mock.Storage, []},

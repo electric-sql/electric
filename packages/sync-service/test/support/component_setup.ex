@@ -199,7 +199,13 @@ defmodule Support.ComponentSetup do
 
     # Process.sleep(100)
 
-    %{stack_id: stack_id, persistent_kv: kv, stack_supervisor: stack_supervisor, storage: storage}
+    %{
+      stack_id: stack_id,
+      stack_events_registry: stack_events_registry,
+      persistent_kv: kv,
+      stack_supervisor: stack_supervisor,
+      storage: storage
+    }
   end
 
   def build_router_opts(ctx, overrides \\ []) do
@@ -210,7 +216,11 @@ defmodule Support.ComponentSetup do
       allow_shape_deletion: true
     ]
     |> Keyword.merge(
-      Electric.StackSupervisor.build_shared_opts(stack_id: ctx.stack_id, storage: ctx.storage)
+      Electric.StackSupervisor.build_shared_opts(
+        stack_id: ctx.stack_id,
+        stack_events_registry: ctx.stack_events_registry,
+        storage: ctx.storage
+      )
     )
     |> Keyword.merge(overrides)
   end

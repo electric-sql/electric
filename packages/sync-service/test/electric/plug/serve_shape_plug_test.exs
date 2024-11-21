@@ -62,6 +62,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
     config = [
       stack_id: ctx.stack_id,
       pg_id: @test_pg_id,
+      stack_events_registry: Registry.StackEvents,
+      stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
       shape_cache: {Mock.ShapeCache, []},
       storage: {Mock.Storage, []},
       inspector: {__MODULE__, []},
@@ -709,6 +711,28 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 503
 
       assert Jason.decode!(conn.resp_body) == %{"message" => "Stack not ready"}
+    end
+
+    @tag stack_ready_timeout: 1000
+    test "waits until stack ready and proceeds", ctx do
+      conn_task =
+        Task.async(fn ->
+          ctx
+          |> conn(:get, %{"table" => "public.users", "columns" => "id,invalid"}, "?offset=-1")
+          |> call_serve_shape_plug(ctx)
+        end)
+
+      Process.sleep(50)
+
+      Registry.dispatch(Registry.StackEvents, {:stack_status, ctx.stack_id}, fn entries ->
+        for {pid, ref} <- entries do
+          send(pid, {:stack_status, ref, :shape_supervisor_ready})
+        end
+      end)
+
+      conn = Task.await(conn_task)
+
+      assert conn.status == 400
     end
   end
 end
