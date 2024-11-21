@@ -4,9 +4,12 @@ defmodule Electric.Plug.DeleteShapePlug do
 
   alias Electric.Shapes
   alias Electric.Plug.ServeShapePlug.Params
+  import Electric.Plug.Utils, only: [hold_conn_until_stack_ready: 2]
 
   plug :fetch_query_params
   plug :put_resp_content_type, "application/json"
+
+  plug :hold_conn_until_stack_ready
 
   plug :allow_shape_deletion
   plug :validate_query_params

@@ -134,6 +134,18 @@ defmodule Electric.Plug.Utils do
     end
   end
 
+  def hold_conn_until_stack_ready(conn, _opts) do
+    stack_id = conn.assigns.config[:stack_id]
+
+    if Electric.ProcessRegistry.alive?(stack_id, Electric.Replication.Supervisor) do
+      conn
+    else
+      conn
+      |> Plug.Conn.send_resp(503, Jason.encode!(%{message: "Stack not ready"}))
+      |> Plug.Conn.halt()
+    end
+  end
+
   defmodule CORSHeaderPlug do
     @behaviour Plug
     import Plug.Conn
