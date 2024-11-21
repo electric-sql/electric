@@ -84,7 +84,7 @@
 [endmacro]
 
 [macro setup_electric]
-  [invoke setup_electric_with_env "ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url"]
+  [invoke setup_electric_with_env "DATABASE_URL=$database_url"]
 [endmacro]
 
 [macro setup_multi_tenant_electric]
@@ -96,7 +96,7 @@
 [endmacro]
 
 [macro setup_electric_with_env_and_tenant env]
-  [invoke setup_electric_with_env "ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url $env"]
+  [invoke setup_electric_with_env "DATABASE_URL=$database_url $env"]
 [endmacro]
 
 [macro setup_electric_shell shell_name port env]
@@ -107,7 +107,7 @@
 [endmacro]
 
 [macro setup_electric_shell_with_tenant shell_name port]
-  [invoke setup_electric_shell $shell_name $port "ELECTRIC_DATABASE_ID=integration_test_tenant DATABASE_URL=$database_url"]
+  [invoke setup_electric_shell $shell_name $port "DATABASE_URL=$database_url"]
 [endmacro]
 
 [macro add_tenant tenant_id electric_port]

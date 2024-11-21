@@ -33,9 +33,10 @@ defmodule Electric.ShapeCache.FileStorage do
   @impl Electric.ShapeCache.Storage
   def shared_opts(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
-    storage_dir = Keyword.get(opts, :storage_dir, "./shapes/#{stack_id}")
+    storage_dir = Keyword.get(opts, :storage_dir, "./shapes")
 
-    %{base_path: storage_dir, stack_id: stack_id}
+    # Always scope the provided storage dir by stack id
+    %{base_path: Path.join(storage_dir, stack_id), stack_id: stack_id}
   end
 
   @impl Electric.ShapeCache.Storage
