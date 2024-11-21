@@ -104,6 +104,18 @@ export interface ShapeStreamOptions<T = never> {
   columns?: string[]
 
   /**
+   * If `replica` is `default` (the default) then Electric will only send the
+   * changed columns in an update.
+   *
+   * If it's `full` Electric will send the entire row with both changed and
+   * unchanged values.
+   *
+   * Setting `replica` to `full` will obviously result in higher bandwidth
+   * usage and so is not recommended.
+   */
+  replica?: Replica
+
+  /**
    * The "offset" on the shape log. This is typically not set as the ShapeStream
    * will handle this automatically. A common scenario where you might pass an offset
    * is if you're maintaining a local cache of the log. If you've gone offline
@@ -154,8 +166,26 @@ export interface ShapeStreamOptions<T = never> {
    */
   parser?: Parser<T>
 
+  /**
+   * A function for handling errors.
+   * This is optional, when it is not provided any shapestream errors will be thrown.
+   * If the function is provided and returns an object containing parameters and/or headers
+   * the shapestream will apply those changes and try syncing again.
+   * If the function returns void the shapestream is stopped.
+   */
+  onError?: ShapeStreamErrorHandler
+
   backoffOptions?: BackoffOptions
 }
+
+type RetryOpts = {
+  params?: ParamsRecord
+  headers?: Record<string, string>
+}
+
+type ShapeStreamErrorHandler = (
+  error: Error
+) => void | RetryOpts | Promise<void | RetryOpts>
 ```
 
 Note that certain parameter names are reserved for Electric's internal use and cannot be used in custom params:
@@ -251,6 +281,35 @@ const stream = new ShapeStream({
 ```
 
 This is less efficient and will use more bandwidth for the same shape (especially for tables with large static column values). Note also that shapes with different `replica` settings are distinct, even for the same table and where clause combination.
+
+#### Custom error handler
+
+You can provide a custom error handler to recover from 4xx HTTP errors. 
+Using a custom error handler we can for instance refresh the authorization token when a request is rejected with a `401 Unauthorized` status code because the token expired:
+
+```ts
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  table: 'items',
+  // Add authentication header
+  headers: {
+    'Authorization': 'Bearer token'
+  },
+  // Add custom URL parameters
+  onError: async (error) => {
+    if (error instanceof FetchError && error.status === 401) {
+      const token = await getToken()
+      return {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    }
+    // Rethrow errors we can't handle
+    throw error
+  }
+})
+```
 
 ### Shape
 
