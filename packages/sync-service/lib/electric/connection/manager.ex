@@ -59,8 +59,6 @@ defmodule Electric.Connection.Manager do
       :pg_timeline_id,
       # ID used for process labeling and sibling discovery
       :stack_id,
-      # Stack event registry
-      :registry,
       :tweaks,
       awaiting_active: [],
       drop_slot_requested: false
@@ -180,7 +178,6 @@ defmodule Electric.Connection.Manager do
         pg_lock_acquired: false,
         backoff: {:backoff.init(1000, 10_000), nil},
         stack_id: Keyword.fetch!(opts, :stack_id),
-        registry: Keyword.fetch!(opts, :registry),
         tweaks: Keyword.fetch!(opts, :tweaks)
       }
 
@@ -293,8 +290,7 @@ defmodule Electric.Connection.Manager do
           Electric.Connection.Supervisor.start_shapes_supervisor(
             stack_id: state.stack_id,
             shape_cache_opts: shape_cache_opts,
-            tweaks: state.tweaks,
-            registry: state.registry
+            tweaks: state.tweaks
           )
 
         # Everything is ready to start accepting and processing logical messages from Postgres.
