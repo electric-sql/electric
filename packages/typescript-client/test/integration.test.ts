@@ -848,12 +848,8 @@ describe(`HTTP Sync`, () => {
     const errorSubscriberPromise = new Promise((_, reject) =>
       invalidIssueStream.subscribe(() => {}, reject)
     )
-    const errorUpToDateSubscriberPromise = new Promise((_, reject) =>
-      invalidIssueStream.subscribeOnceToUpToDate(() => {}, reject)
-    )
 
     await expect(errorSubscriberPromise).rejects.toThrow(FetchError)
-    await expect(errorUpToDateSubscriberPromise).rejects.toThrow(FetchError)
     expect(invalidIssueStream.error).instanceOf(FetchError)
     expect((invalidIssueStream.error! as FetchError).status).toBe(400)
     expect(invalidIssueStream.isConnected()).false

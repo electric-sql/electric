@@ -55,15 +55,6 @@ export class Shape<T extends Row<unknown> = Row> {
       this.#process.bind(this),
       this.#handleError.bind(this)
     )
-    const unsubscribe = this.#stream.subscribeOnceToUpToDate(
-      () => {
-        unsubscribe()
-      },
-      (e) => {
-        this.#handleError(e)
-        throw e
-      }
-    )
   }
 
   get isUpToDate(): boolean {
