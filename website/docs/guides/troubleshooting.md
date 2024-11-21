@@ -83,7 +83,7 @@ You can also control the size of the WAL with [```wal_keep_size```](https://www.
 
 If Electric or Postgres are running behind an IPv6 network, you might have to perform additional configurations on your network.
 
-### Postgres running behind Ipv6 network
+### Postgres running behind IPv6 network
 
 In order for Electric to connect to Postgres over IPv6, you need to set [`ELECTRIC_DATABASE_USE_IPV6`](/docs/api/config#database-use-ipv6) to `true`.
 
@@ -96,7 +96,7 @@ When running Electric in a Docker container, there's an additional hurdle in tha
 
 If you're running Electric in a Cloud provider, you need to ensure that your VPC is configured with IPv6 support. Check your Cloud provider documentation to learn how to set it up.
 
-### Electric running behind Ipv6 network
+### Electric running behind IPv6 network
 
 By default Electric only binds to IPv4 addresses. You need to set [`ELECTRIC_LISTEN_ON_IPV6`](/docs/api/config#electric-use-ipv6) to `true` to bind to bind to IPv6 addresses as well.
 
