@@ -38,9 +38,10 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 
 # Shortpaths for nice links
 
-/docs                           /docs/intro
-/intro                          /docs/intro
-/examples                       https://github.com/electric-sql/electric/tree/main/examples
+/docs                                        /docs/intro
+/intro                                       /docs/intro
+/examples                                    https://github.com/electric-sql/electric/tree/main/examples
+/docs/guides/troubleshooting/missing-headers /docs/guides/troubleshooting#missing-headers-mdash-why-is-the-client-complaining-about-missing-headers
 
 # More links from legacy site
 
