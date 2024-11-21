@@ -115,6 +115,7 @@ defmodule Electric.StackSupervisor do
       registry: shape_changes_registry_name,
       storage: storage_mod_arg(opts),
       inspector: inspector,
+      stack_id: stack_id,
       get_service_status: fn -> Electric.ServiceStatus.check(stack_id) end
     ]
   end
