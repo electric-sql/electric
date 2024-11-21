@@ -1,6 +1,8 @@
 defmodule Electric.MixProject do
   use Mix.Project
 
+  @github_repo "https://github.com/electric-sql/electric"
+
   def project do
     [
       app: :electric,
@@ -45,7 +47,7 @@ defmodule Electric.MixProject do
       description: description(),
       package: package(),
       docs: docs(),
-      source_url: "https://github.com/electric-sql/electric",
+      source_url: "#{@github_repo}/tree/main/packages/sync-service",
       homepage_url: "https://electric-sql.com"
     ]
   end
@@ -114,10 +116,10 @@ defmodule Electric.MixProject do
     ]
   end
 
-  defp version do
+  defp version(default \\ "0.0.0") do
     with :error <- version_from_env(),
          :error <- version_from_package_json() do
-      "0.0.0"
+      default
     end
   end
 
@@ -145,15 +147,21 @@ defmodule Electric.MixProject do
       licenses: ["Apache-2.0"],
       links: %{
         "Electric SQL" => "https://electric-sql.com",
-        "Github" => "https://github.com/electric-sql/electric"
+        "Github" => @github_repo
       }
     ]
   end
 
   defp docs do
+    version = version("main")
+    tag = URI.encode("@core/sync-service@#{version}", &(&1 != ?@))
+
     [
       main: "readme",
-      extras: ["README.md"]
+      extras: ["README.md"],
+      source_url_pattern: fn path, line ->
+        "#{@github_repo}/tree/#{tag}/packages/sync-service/#{path}#L#{line}"
+      end
     ]
   end
 end
