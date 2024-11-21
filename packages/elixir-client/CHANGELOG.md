@@ -1,5 +1,14 @@
 # @core/elixir-client
 
+## 0.2.3
+
+### Patch Changes
+
+- 090fab5: Fix source links in Hexdocs
+- fed0761: feat: accept URI structs as endpoint/base_url options
+- 9718ccc: feat: allow http1 protocotol on Electric client by default
+- 5b25505: Derive Jason.Encoder for Client.ShapeDefinition
+
 ## 0.2.2
 
 ### Patch Changes

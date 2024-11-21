@@ -1,5 +1,29 @@
 # @electric-sql/client
 
+## 0.8.0
+
+### Minor Changes
+
+- 12fd091: [BREAKING] Remove subscribeOnceToUpToDate method from ShapeStream. Instead, you should subscribe to the stream and check for the up-to-date control message.
+
+### Patch Changes
+
+- 5a7866f: refactor: improve error handling with new error classes & stream control
+
+  - Add `onError` handler to ShapeStream for centralized error handling
+  - Add new error classes:
+    - MissingShapeUrlError
+    - InvalidSignalError
+    - MissingShapeHandleError
+    - ReservedParamError
+    - ParserNullValueError
+    - ShapeStreamAlreadyRunningError
+  - Improve error propagation through ShapeStream lifecycle
+
+- de204fc: Allow error handler to modify HTTP query parameters and headers to retry failed HTTP request.
+- 1faa79b: Add link to troubleshooting guide in the MissingHeadersError.
+- c748ec7: Exposed `shape.handle` getter on `Shape` and rename `shapeHandle` to `handle` in the `ShapeStreamOptions`.
+
 ## 0.7.3
 
 ### Patch Changes
