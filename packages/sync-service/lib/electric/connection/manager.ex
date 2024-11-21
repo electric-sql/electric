@@ -234,6 +234,16 @@ defmodule Electric.Connection.Manager do
            lock_name: Keyword.fetch!(state.replication_opts, :slot_name)
          ) do
       {:ok, lock_connection_pid} ->
+        Registry.dispatch(
+          state.stack_events_registry,
+          {:stack_status, state.stack_id},
+          fn registered ->
+            for {pid, ref} <- registered do
+              send(pid, {:stack_status, ref, :waiting_for_connection_lock})
+            end
+          end
+        )
+
         Process.send_after(self(), :log_lock_connection_status, @lock_status_logging_interval)
         {:noreply, %{state | lock_connection_pid: lock_connection_pid}}
 
