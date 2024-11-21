@@ -154,6 +154,7 @@ export default defineConfig({
           items: [
             { text: 'Auth', link: '/docs/guides/auth' },
             { text: 'Shapes', link: '/docs/guides/shapes' },
+            { text: 'Writes', link: '/docs/guides/writes' },
             { text: 'Installation', link: '/docs/guides/installation' },
             { text: 'Deployment', link: '/docs/guides/deployment' },
             { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
