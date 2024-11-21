@@ -9,7 +9,6 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
   import Mox
 
-  setup :with_stack_id_from_test
   setup :verify_on_exit!
   @moduletag :capture_log
 
@@ -34,11 +33,6 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   def load_relation(tbl, _),
     do: Support.StubInspector.load_relation(tbl, nil)
 
-  setup do
-    start_link_supervised!({Registry, keys: :duplicate, name: @registry})
-    :ok
-  end
-
   def conn(_ctx, method, "?" <> _ = query_string) do
     Plug.Test.conn(method, "/" <> query_string)
   end
@@ -46,6 +40,8 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   def call_delete_shape_plug(conn, ctx, allow \\ true) do
     config = [
       stack_id: ctx.stack_id,
+      stack_events_registry: Registry.StackEvents,
+      stack_ready_timeout: 100,
       pg_id: @test_pg_id,
       shape_cache: {Mock.ShapeCache, []},
       storage: {Mock.Storage, []},
@@ -61,6 +57,19 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   end
 
   describe "DeleteShapePlug" do
+    setup :with_stack_id_from_test
+
+    setup ctx do
+      start_link_supervised!({Registry, keys: :duplicate, name: @registry})
+
+      {:via, _, {registry_name, registry_key}} =
+        Electric.Replication.Supervisor.name(ctx)
+
+      {:ok, _} = Registry.register(registry_name, registry_key, nil)
+
+      :ok
+    end
+
     test "returns 404 if shape deletion is not allowed", ctx do
       conn =
         ctx
@@ -112,6 +121,21 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         |> call_delete_shape_plug(ctx)
 
       assert conn.status == 202
+    end
+  end
+
+  describe "stack not ready" do
+    setup :with_stack_id_from_test
+
+    test "returns 503", ctx do
+      conn =
+        ctx
+        |> conn(:delete, "?table=public.users")
+        |> call_delete_shape_plug(ctx)
+
+      assert conn.status == 503
+
+      assert Jason.decode!(conn.resp_body) == %{"message" => "Stack not ready"}
     end
   end
 end

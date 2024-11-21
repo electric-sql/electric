@@ -4,7 +4,6 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
 import { ShapeStream, Shape, FetchError } from '../src'
 import { Message, Row, ChangeMessage } from '../src/types'
-import { requiredElectricResponseHeaders } from '../src/fetch'
 import { MissingHeadersError } from '../src/error'
 
 const BASE_URL = inject(`baseUrl`)
@@ -328,10 +327,156 @@ describe(`Shape`, () => {
     expect(shapeStream.isConnected()).true
   })
 
+  it(`should not throw error if an error handler is provided`, async ({
+    issuesTableUrl,
+  }) => {
+    const mockErrorHandler = vi.fn()
+    new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
+      fetchClient: async (_input, _init) => {
+        return new Response(undefined, {
+          status: 401,
+        })
+      },
+      onError: mockErrorHandler,
+    })
+
+    await sleep(10) // give some time for the initial fetch to complete
+    expect(mockErrorHandler.mock.calls.length).toBe(1)
+    expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
+  })
+
+  it(`should retry on error if error handler returns modified params`, async ({
+    issuesTableUrl,
+  }) => {
+    // This test creates a shapestream but provides wrong query params
+    // the fetch client therefore returns a 401 status code
+    // the custom error handler handles it by correcting the query param
+    // after which the fetch succeeds
+
+    const mockErrorHandler = vi.fn().mockImplementation((error) => {
+      if (error instanceof FetchError && error.status === 401) {
+        return {
+          params: {
+            todo: `pass`,
+          },
+        }
+      }
+    })
+
+    new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
+      params: {
+        todo: `fail`,
+      },
+      fetchClient: async (input, _init) => {
+        const url = new URL(input)
+        if (url.searchParams.get(`todo`) === `fail`) {
+          return new Response(undefined, {
+            status: 401,
+          })
+        }
+
+        return new Response(`[]`, { status: 204 })
+      },
+      onError: mockErrorHandler,
+    })
+
+    await sleep(50) // give some time for the fetches to complete
+    expect(mockErrorHandler.mock.calls.length).toBe(1)
+    expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
+  })
+
+  it(`should retry on error if error handler returns modified headers`, async ({
+    issuesTableUrl,
+  }) => {
+    // This test creates a shapestream but provides invalid auth credentials
+    // the fetch client therefore returns a 401 status code
+    // the custom error handler handles it by replacing the credentials with valid credentials
+    // after which the fetch succeeds
+
+    const mockErrorHandler = vi.fn().mockImplementation((error) => {
+      if (error instanceof FetchError && error.status === 401) {
+        return {
+          headers: {
+            Authorization: `valid credentials`,
+          },
+        }
+      }
+    })
+
+    new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
+      headers: {
+        Authorization: `invalid credentials`,
+      },
+      fetchClient: async (input, init) => {
+        const headers = init?.headers as Record<string, string>
+        if (headers && headers.Authorization === `valid credentials`) {
+          return fetch(input, init)
+        }
+
+        return new Response(undefined, {
+          status: 401,
+        })
+      },
+      onError: mockErrorHandler,
+    })
+
+    await sleep(50) // give some time for the fetches to complete
+    expect(mockErrorHandler.mock.calls.length).toBe(1)
+    expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
+  })
+
+  it(`should support async error handler`, async ({ issuesTableUrl }) => {
+    const mockErrorHandler = vi.fn().mockImplementation(async (error) => {
+      if (error instanceof FetchError && error.status === 401) {
+        await sleep(200)
+        return {
+          headers: {
+            Authorization: `valid credentials`,
+          },
+        }
+      }
+    })
+
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      table: issuesTableUrl,
+      headers: {
+        Authorization: `invalid credentials`,
+      },
+      fetchClient: async (input, init) => {
+        const headers = init?.headers as Record<string, string>
+        if (headers && headers.Authorization === `valid credentials`) {
+          return fetch(input, init)
+        }
+
+        return new Response(undefined, {
+          status: 401,
+        })
+      },
+      onError: mockErrorHandler,
+    })
+
+    await sleep(50) // give some time for the first fetch to complete
+    expect(mockErrorHandler.mock.calls.length).toBe(1)
+    expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
+    expect(shapeStream.isConnected()).toBe(false)
+
+    await sleep(200) // give some time for the error handler to modify the authorization header
+    expect(shapeStream.isConnected()).toBe(true)
+  })
+
   it(`should stop fetching and report an error if response is missing required headers`, async ({
     issuesTableUrl,
   }) => {
     let url: string = ``
+    let error1: Error, error2: Error
+
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       table: issuesTableUrl,
@@ -339,19 +484,23 @@ describe(`Shape`, () => {
         url = input.toString()
         const headers = new Headers()
         headers.set(`electric-offset`, `0_0`)
-        return new Response(undefined, { status: 200, headers })
+        return new Response(``, { status: 200, headers })
+      },
+      onError: (err) => {
+        error1 = err
       },
     })
 
     await sleep(10) // give some time for the initial fetch to complete
     expect(shapeStream.isConnected()).false
 
-    const missingHeaders = requiredElectricResponseHeaders.filter(
-      (h) => h !== `electric-offset`
-    )
-    const expectedErrorMessage = new MissingHeadersError(url, missingHeaders)
-      .message
-    expect((shapeStream.error as Error).message === expectedErrorMessage)
+    const expectedErrorMessage = new MissingHeadersError(url, [
+      `electric-handle`,
+      `electric-schema`,
+    ]).message
+
+    expect(error1!.message).equals(expectedErrorMessage)
+    expect((shapeStream.error as Error).message).equals(expectedErrorMessage)
 
     // Also check that electric-cursor is a required header for responses to live queries
     const shapeStreamLive = new ShapeStream({
@@ -363,20 +512,21 @@ describe(`Shape`, () => {
         headers.set(`electric-offset`, `0_0`)
         return new Response(undefined, { status: 200, headers })
       },
+      onError: (err) => {
+        error2 = err
+      },
     })
 
     await sleep(10) // give some time for the initial fetch to complete
     expect(shapeStreamLive.isConnected()).false
 
-    const missingHeadersLive = requiredElectricResponseHeaders
-      .concat([`electric-cursor`])
-      .filter((h) => h !== `electric-offset`)
-    const expectedErrorMessageLive = new MissingHeadersError(
-      url,
-      missingHeadersLive
-    ).message
-    expect(
-      (shapeStreamLive.error as Error).message === expectedErrorMessageLive
+    const expectedErrorMessageLive = new MissingHeadersError(url, [
+      `electric-handle`,
+      `electric-cursor`,
+    ]).message
+    expect(error2!.message).equals(expectedErrorMessageLive)
+    expect((shapeStreamLive.error as Error).message).equals(
+      expectedErrorMessageLive
     )
   })
 

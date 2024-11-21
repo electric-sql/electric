@@ -55,8 +55,11 @@ defmodule Electric.Connection.Supervisor do
       )
 
     with {:ok, pid} <- Supervisor.start_child(name(opts), child_spec) do
-      if notify_pid = get_in(opts, [:tweaks, :notify_pid]),
-        do: send(notify_pid, {:startup_progress, stack_id, :shape_supervisor_ready})
+      Electric.StackSupervisor.dispatch_stack_event(
+        opts[:stack_events_registry],
+        stack_id,
+        :ready
+      )
 
       {:ok, pid}
     end

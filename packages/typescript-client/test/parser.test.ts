@@ -177,13 +177,13 @@ describe(`Message parser`, () => {
       // If it's not nullable it should throw
       expect(() =>
         parser.parse(messages, { a: { type: `int2`, dims, not_null: true } })
-      ).toThrowError(`Column a is not nullable`)
+      ).toThrowError(`Column "a" does not allow NULL values`)
 
       expect(() =>
         parser.parse(messages, {
           value: { type: `int2`, dims, not_null: true },
         })
-      ).toThrowError(`Column value is not nullable`)
+      ).toThrowError(`Column "value" does not allow NULL value`)
 
       // Otherwise, it should parse as null
       expect(parser.parse(messages, schema(`int2`, dims))).toEqual(

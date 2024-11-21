@@ -26,6 +26,7 @@ defmodule Electric.Application do
       ] ++
         Electric.StackSupervisor.build_shared_opts(
           stack_id: stack_id,
+          stack_events_registry: Registry.StackEvents,
           storage: Application.fetch_env!(:electric, :storage)
         )
 
@@ -49,12 +50,10 @@ defmodule Electric.Application do
       Enum.concat([
         [
           Electric.Telemetry,
-          # {Registry,
-          #  name: @process_registry_name, keys: :unique, partitions: System.schedulers_online()},
-          # {Registry,
-          #  name: Registry.ShapeChanges, keys: :duplicate, partitions: System.schedulers_online()},
+          {Registry, name: Registry.StackEvents, keys: :duplicate},
           {Electric.StackSupervisor,
            stack_id: stack_id,
+           stack_events_registry: Registry.StackEvents,
            connection_opts: Application.fetch_env!(:electric, :connection_opts),
            persistent_kv: persistent_kv,
            replication_opts: [

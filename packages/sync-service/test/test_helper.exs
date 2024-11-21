@@ -4,4 +4,6 @@
 # supervision tree in the test environment.
 # Registry.start_link(name: Electric.Application.process_registry(), keys: :unique)
 
+Registry.start_link(name: Registry.StackEvents, keys: :duplicate)
+
 ExUnit.start(assert_receive_timeout: 400)

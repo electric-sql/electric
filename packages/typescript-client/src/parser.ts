@@ -1,4 +1,5 @@
 import { ColumnInfo, GetExtensions, Message, Row, Schema, Value } from './types'
+import { ParserNullValueError } from './error'
 
 type NullToken = null | `NULL`
 type Token = Exclude<string, NullToken>
@@ -162,7 +163,7 @@ function makeNullableParser<Extensions>(
   return (value: NullableToken) => {
     if (isPgNull(value)) {
       if (!isNullable) {
-        throw new Error(`Column ${columnName ?? `unknown`} is not nullable`)
+        throw new ParserNullValueError(columnName ?? `unknown`)
       }
       return null
     }
