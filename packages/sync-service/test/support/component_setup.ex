@@ -185,11 +185,13 @@ defmodule Support.ComponentSetup do
            max_restarts: 0,
            pool_size: 2
          ],
-         tweaks: [notify_pid: self(), registry_partitions: 1]},
+         tweaks: [registry_partitions: 1]},
         restart: :temporary
       )
 
-    assert_receive {:startup_progress, ^stack_id, :shape_supervisor_ready}
+    ref = make_ref()
+    Registry.register(Electric.StackSupervisor.event_registry_name(stack_id), :stack_status, ref)
+    assert_receive {:stack_status, ^ref, :shape_supervisor_ready}
 
     # Process.sleep(100)
 

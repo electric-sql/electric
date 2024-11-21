@@ -75,8 +75,7 @@ defmodule Electric.StackSupervisor do
                      "tweaks to the behaviour of parts of the supervision tree, used mostly for tests",
                    default: [],
                    keys: [
-                     registry_partitions: [type: :non_neg_integer, required: false],
-                     notify_pid: [type: :pid, required: false]
+                     registry_partitions: [type: :non_neg_integer, required: false]
                    ]
                  ]
                )
@@ -92,7 +91,7 @@ defmodule Electric.StackSupervisor do
     opts = Map.new(opts)
     stack_id = opts[:stack_id]
 
-    stack_events_registry_name = :"#{Registry.StackEvents}:#{stack_id}"
+    stack_events_registry_name = event_registry_name(stack_id)
 
     shape_cache =
       Access.get(
@@ -123,6 +122,8 @@ defmodule Electric.StackSupervisor do
   defp storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}}) do
     {mod, arg |> Keyword.put(:stack_id, stack_id) |> mod.shared_opts()}
   end
+
+  def event_registry_name(stack_id), do: :"#{Registry.StackEvents}:#{stack_id}"
 
   @impl true
   def init(%{stack_id: stack_id} = config) do
@@ -158,7 +159,7 @@ defmodule Electric.StackSupervisor do
         [get_pg_version_fn, config.replication_opts[:publication_name]]
       }
 
-    stack_events_registry_name = :"#{Registry.StackEvents}:#{stack_id}"
+    stack_events_registry_name = event_registry_name(stack_id)
 
     shape_cache_opts = [
       stack_id: stack_id,
@@ -175,6 +176,7 @@ defmodule Electric.StackSupervisor do
       stack_id: stack_id,
       # Coming from the outside, need validation
       connection_opts: config.connection_opts,
+      registry: stack_events_registry_name,
       replication_opts:
         [
           transaction_received:
