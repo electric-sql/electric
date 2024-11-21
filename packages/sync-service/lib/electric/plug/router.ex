@@ -10,6 +10,7 @@ defmodule Electric.Plug.Router do
   plug Plug.Head
   plug :match
   plug Electric.Plug.LabelProcessPlug
+  plug Electric.Plug.TraceContextPlug
   plug Plug.Telemetry, event_prefix: [:electric, :routing]
   plug Plug.Logger
   plug :put_cors_headers
