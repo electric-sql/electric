@@ -190,9 +190,11 @@ defmodule Electric.Shapes.Consumer do
     state
   end
 
-  defp is_error?(reason) do
-    reason not in [:normal, :shutdown, {:shutdown, :truncate}, :killed]
-  end
+  defp is_error?(:normal), do: false
+  defp is_error?(:killed), do: false
+  defp is_error?(:shutdown), do: false
+  defp is_error?({:shutdown, _}), do: false
+  defp is_error?(_), do: true
 
   # `Shapes.Dispatcher` only works with single-events, so we can safely assert
   # that here
