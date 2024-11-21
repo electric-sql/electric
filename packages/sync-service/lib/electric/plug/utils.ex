@@ -140,7 +140,7 @@ defmodule Electric.Plug.Utils do
     stack_events_registry = conn.assigns.config[:stack_events_registry]
 
     ref = make_ref()
-    Registry.register(stack_events_registry, {:stack_status, stack_id}, ref)
+    Electric.StackSupervisor.subscribe_to_stack_events(stack_events_registry, stack_id, ref)
 
     if Electric.ProcessRegistry.alive?(stack_id, Electric.Replication.Supervisor) do
       conn

@@ -87,6 +87,10 @@ defmodule Electric.StackSupervisor do
     end
   end
 
+  def subscribe_to_stack_events(registry, stack_id, value) do
+    Registry.register(registry, {:stack_status, stack_id}, value)
+  end
+
   def dispatch_stack_event(registry, stack_id, event) do
     Registry.dispatch(registry, {:stack_status, stack_id}, fn entries ->
       for {pid, ref} <- entries do

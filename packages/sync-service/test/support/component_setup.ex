@@ -170,7 +170,7 @@ defmodule Support.ComponentSetup do
     stack_events_registry = Registry.StackEvents
 
     ref = make_ref()
-    Registry.register(stack_events_registry, {:stack_status, stack_id}, ref)
+    Electric.StackSupervisor.subscribe_to_stack_events(stack_events_registry, stack_id, ref)
 
     stack_supervisor =
       start_supervised!(
