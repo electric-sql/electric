@@ -14,6 +14,10 @@ import GatekeeperFlow from '/static/img/docs/guides/auth/gatekeeper-flow.dark.pn
 import GatekeeperFlowJPG from '/static/img/docs/guides/auth/gatekeeper-flow.jpg?url'
 </script>
 
+<img src="/img/icons/auth.svg" class="product-icon"
+    style="width: 72px"
+/>
+
 # Auth
 
 <div class="hidden-xs">

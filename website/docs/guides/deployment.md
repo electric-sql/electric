@@ -5,6 +5,10 @@ description: >-
 outline: [2, 3]
 ---
 
+<img src="/img/icons/deploy.png" class="product-icon"
+    style="width: 72px"
+/>
+
 # Deployment
 
 How to deploy the [Electric sync engine](/product/electric), with links to integration docs for specific platforms like [Supabase](/docs/integrations/supabase), [Neon](/docs/integrations/neon), [Render](/docs/integrations/render) and [AWS](/docs/integrations/aws).
