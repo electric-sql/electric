@@ -167,10 +167,16 @@ defmodule Support.ComponentSetup do
 
     storage = {FileStorage, stack_id: stack_id, storage_dir: ctx.tmp_dir}
 
+    stack_events_registry = Registry.StackEvents
+
+    ref = make_ref()
+    Registry.register(stack_events_registry, {:stack_status, stack_id}, ref)
+
     stack_supervisor =
       start_supervised!(
         {Electric.StackSupervisor,
          stack_id: stack_id,
+         stack_events_registry: stack_events_registry,
          persistent_kv: kv,
          storage: storage,
          connection_opts: ctx.db_config,
@@ -185,11 +191,11 @@ defmodule Support.ComponentSetup do
            max_restarts: 0,
            pool_size: 2
          ],
-         tweaks: [notify_pid: self(), registry_partitions: 1]},
+         tweaks: [registry_partitions: 1]},
         restart: :temporary
       )
 
-    assert_receive {:startup_progress, ^stack_id, :shape_supervisor_ready}
+    assert_receive {:stack_status, ^ref, :shape_supervisor_ready}
 
     # Process.sleep(100)
 
