@@ -16,12 +16,12 @@ defmodule Electric.Client.Fetch.HTTP do
       retry_delay: &retry_delay/1,
       max_retries: 6,
       # finch: Electric.Client.Finch,
-      # we use long polling with a timeout of 20s so we don't want Req to error before 
+      # we use long polling with a timeout of 20s so we don't want Req to error before
       # Electric has returned something
       receive_timeout: 60_000,
       connect_options:
         Keyword.merge(
-          [protocols: [:http2]],
+          [protocols: [:http2, :http1]],
           connect_options
         )
     ]
