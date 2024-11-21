@@ -1,6 +1,6 @@
 defmodule Electric.Shapes.Consumer do
   use GenStage,
-    restart: :transient,
+    restart: :temporary,
     significant: true
 
   alias Electric.ShapeCache.LogChunker
@@ -91,13 +91,22 @@ defmodule Electric.Shapes.Consumer do
      subscribe_to: [{producer, [max_demand: 1, selector: &selector(&1, config.shape)]}]}
   end
 
-  defp selector(%Transaction{changes: changes}, shape) do
+  defp selector(event, shape) do
+    process_event?(event, shape)
+  rescue
+    # Swallow errors here to avoid crashing the ShapeLogCollector.
+    # Return `true` so the event is processed, which will then error
+    # for the same reason and cleanup the shape.
+    _ -> true
+  end
+
+  defp process_event?(%Transaction{changes: changes}, shape) do
     changes
     |> Stream.flat_map(&Shape.convert_change(shape, &1))
     |> Enum.any?()
   end
 
-  defp selector(%Changes.Relation{} = relation_change, shape) do
+  defp process_event?(%Changes.Relation{} = relation_change, shape) do
     Shape.is_affected_by_relation_change?(shape, relation_change)
   end
 
@@ -116,7 +125,7 @@ defmodule Electric.Shapes.Consumer do
 
     # TODO: ensure cleanup occurs after snapshot is done/failed/interrupted to avoid
     # any race conditions and leftover data
-    state = cleanup(state)
+    cleanup(state)
     {:stop, :normal, :ok, state}
   end
 
@@ -160,7 +169,7 @@ defmodule Electric.Shapes.Consumer do
         )
 
     state = reply_to_snapshot_waiters({:error, error}, state)
-    state = cleanup(state)
+    cleanup(state)
     {:stop, :normal, state}
   end
 
@@ -170,9 +179,22 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, [], state}
   end
 
-  def terminate(_reason, state) do
-    reply_to_snapshot_waiters({:error, "Shape terminated before snapshot was ready"}, state)
+  def terminate(reason, state) do
+    state =
+      reply_to_snapshot_waiters({:error, "Shape terminated before snapshot was ready"}, state)
+
+    if is_error?(reason) do
+      cleanup(state)
+    end
+
+    state
   end
+
+  defp is_error?(:normal), do: false
+  defp is_error?(:killed), do: false
+  defp is_error?(:shutdown), do: false
+  defp is_error?({:shutdown, _}), do: false
+  defp is_error?(_), do: true
 
   # `Shapes.Dispatcher` only works with single-events, so we can safely assert
   # that here
@@ -193,7 +215,7 @@ defmodule Electric.Shapes.Consumer do
         state
       )
 
-    state = cleanup(state)
+    cleanup(state)
     {:stop, :normal, state}
   end
 
@@ -336,7 +358,6 @@ defmodule Electric.Shapes.Consumer do
     %{shape_status: {shape_status, shape_status_state}} = state
     shape_status.remove_shape(shape_status_state, state.shape_handle)
     ShapeCache.Storage.cleanup!(state.storage)
-    state
   end
 
   defp reply_to_snapshot_waiters(_reply, %{awaiting_snapshot_start: []} = state) do

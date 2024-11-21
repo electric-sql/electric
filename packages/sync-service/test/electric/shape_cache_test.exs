@@ -795,8 +795,6 @@ defmodule Electric.ShapeCacheTest do
 
     setup do
       %{
-        # don't crash the log collector when the shape consumers get killed by our tests
-        link_log_collector: false,
         inspector: Support.StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
       }
     end

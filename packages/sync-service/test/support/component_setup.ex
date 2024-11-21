@@ -111,8 +111,7 @@ defmodule Support.ComponentSetup do
     {:ok, _} =
       ShapeLogCollector.start_link(
         stack_id: ctx.stack_id,
-        inspector: ctx.inspector,
-        link_consumers: Map.get(ctx, :link_log_collector, true)
+        inspector: ctx.inspector
       )
 
     %{shape_log_collector: ShapeLogCollector.name(ctx.stack_id)}
