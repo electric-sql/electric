@@ -31,7 +31,6 @@ We list a selection of projects below, including for example:
 - [Ampli-sync](https://ampliapps.com/sqlite-sync)
 - [Convex](https://www.convex.dev)
 - [Debezium](https://debezium.io/)
-- [DriftDB](https://driftdb.com)
 - [EDB BDR](https://www.enterprisedb.com/docs/pgd/4/bdr)
 - [Fanout](https://www.fastly.com/products/fanout)
 - [Feldera](https://www.feldera.com)
@@ -54,6 +53,7 @@ We list a selection of projects below, including for example:
 - [SQLSync](https://github.com/orbitinghail/sqlsync)
 - [Supabase Realtime](https://supabase.com/docs/guides/realtime)
 - [Turso](https://turso.tech)
+- [Y-Sweet by Jamsocket](https://jamsocket.com/y-sweet)
 
 ### Embedded databases
 
@@ -93,6 +93,7 @@ Electric and PGlite are *components* that can be composed, with other tools, int
 - [Vlcn](https://vlcn.io) / [cr-sqlite](https://github.com/vlcn-io/cr-sqlite)
 - [Watermelon](https://nozbe.github.io/WatermelonDB)
 - [Yjs](https://yjs.dev)
+- [Y-Sweet by Jamsocket](https://jamsocket.com/y-sweet)
 - [Zero](https://zerosync.dev)
 
 You can also find out more about local-first software development and discover other projects from a range of communities, including:
