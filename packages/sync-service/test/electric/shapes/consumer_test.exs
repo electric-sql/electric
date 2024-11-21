@@ -178,7 +178,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       ref = make_ref()
 
-      Registry.register(ctx.registry, @shape_handle1, ref)
+      Registry.register(ctx.registry, {:shape_handle, @shape_handle1}, ref)
 
       txn =
         %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
@@ -218,8 +218,8 @@ defmodule Electric.Shapes.ConsumerTest do
       ref1 = make_ref()
       ref2 = make_ref()
 
-      Registry.register(ctx.registry, @shape_handle1, ref1)
-      Registry.register(ctx.registry, @shape_handle2, ref2)
+      Registry.register(ctx.registry, {:shape_handle, @shape_handle1}, ref1)
+      Registry.register(ctx.registry, {:shape_handle, @shape_handle2}, ref2)
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -383,7 +383,7 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
 
       ref = make_ref()
-      Registry.register(ctx.registry, @shape_handle1, ref)
+      Registry.register(ctx.registry, {:shape_handle, @shape_handle1}, ref)
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}

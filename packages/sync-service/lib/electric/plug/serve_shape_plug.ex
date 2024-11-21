@@ -532,7 +532,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
       ref = make_ref()
       registry = conn.assigns.config[:registry]
-      Registry.register(registry, shape_handle, ref)
+      Registry.register(registry, {:shape_handle, shape_handle}, ref)
 
       Logger.debug("Client #{inspect(self())} is registered for changes to #{shape_handle}")
 
