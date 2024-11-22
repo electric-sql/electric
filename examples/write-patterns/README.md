@@ -70,7 +70,7 @@ Start the dev server:
 pnpm dev
 ```
 
-When done, tear down the backend containers
+When done, tear down the backend containers:
 
 ```shell
 pnpm backend:down
