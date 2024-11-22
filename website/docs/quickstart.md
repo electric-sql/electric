@@ -16,7 +16,7 @@ outline: 2
 
 Let's get you up-and-running with Electric and real-time sync of your Postgres data.
 
-First we'll setup Electric and show you how to use the low-level [HTTP API](/docs/api/http) directly. Then we'll create a simple React app using our higher-level [React hooks](http://localhost:5173/docs/integrations/react#useshape).
+First we'll setup Electric and show you how to use the low-level [HTTP API](/docs/api/http) directly. Then we'll create a simple React app using our higher-level [React hooks](/docs/integrations/react#useshape).
 
 ## Setup
 
