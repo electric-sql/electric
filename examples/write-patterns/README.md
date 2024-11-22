@@ -19,7 +19,7 @@ All of the patterns [use Electric for read-path sync](https://electric-sql.com/p
 
 - [`1-online-writes`](./patterns/1-online-writes) uses simple online writes through the backend API
 - [`2-optimistic-state`](./patterns/2-optimistic-state) supports offline writes with simple optimistic state (no persistence)
-- [`3-immutable-with-optimistic`](./patterns/3-immutable-with-optimistic) syncs into an immutable table, persists optimistic state in a shadow table and combines the two on read
+- [`3-combine-on-read`](./patterns/3-combine-on-read) syncs into an immutable table, persists optimistic state in a shadow table and combines the two on read
 - [`4-through-the-db`](./patterns/4-through-the-db) uses the local database as a unified mutable store, monitors changes, syncs them to the server &mdash; and keeps enough history and bookkeeping data around to be able to revert local changes when necessary
 
 For more context about the patterns and their benefits and trade-offs, see the [Writes](https://electric-sql.com/docs/guides/writes#patterns) guide.
