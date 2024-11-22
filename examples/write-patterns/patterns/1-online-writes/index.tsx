@@ -1,3 +1,4 @@
+import React from 'react'
 import { useShape } from '@electric-sql/react'
 
 import * as client from '../../shared/app/client'
@@ -27,22 +28,22 @@ export default function OnlineWrites() {
     ? data.sort((a, b) => a.created_at - b.created_at)
     : []
 
-  async function handleChange(id, completed) {
+  async function handleChange(id: string, completed: boolean) {
     await client.updateTodo(id, {completed: !completed})
   }
 
-  async function handleDelete(event, id) {
+  async function handleDelete(event: React.MouseEvent, id: string) {
     event.preventDefault()
 
     await client.deleteTodo(id)
   }
 
-  async function handleSubmit(event) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
 
     const form = event.target as HTMLFormElement
     const formData = new FormData(form)
-    const title = formData.get('todo')
+    const title = formData.get('todo') as string
 
     await client.createTodo(title)
 
