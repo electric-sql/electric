@@ -32,7 +32,7 @@ Electric **does not** provide built-in write-path sync. I.e.: it does not sync d
 
 ### So how do you handle local writes with Electric?
 
-The [design philosophy](/blog/2024/07/17/electric-next) behind Electric is to be agnostic to the client. So you can sync into [any client you like](/docs/writing-your-own-client) and implement any pattern you like for handling writes.
+The [design philosophy](/blog/2024/07/17/electric-next) behind Electric is to be agnostic to the client. So you can sync into [any client you like](/docs/guides/writing-your-own-client) and implement any pattern you like for handling writes.
 
 This guide outlines those patterns, in order of simplicity. So the most simple, functional, patterns first and the more powerful but more complex patterns further down. Where you may prefer to reach for a framework rather than implement yourself.
 
