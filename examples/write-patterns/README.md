@@ -43,8 +43,6 @@ In this directory:
 
 3. Start the dev server
 
-In this directory in another terminal:
-
 `pnpm run dev`
 
 Open [localhost:5173](http://localhost:5173) in your web browser.

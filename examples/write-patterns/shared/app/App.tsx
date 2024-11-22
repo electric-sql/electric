@@ -1,26 +1,14 @@
 import './style.css'
 
+import { OnlineWrites } from '../../patterns'
+
 const App = () => {
   return (
-    <div className="App">
-      <table>
-        <tr>
-          <td>
-            A
-          </td>
-          <td>
-            B
-          </td>
-        </tr>
-        <tr>
-          <td>
-            C
-          </td>
-          <td>
-            D
-          </td>
-        </tr>
-      </table>
+    <div className="app">
+      <OnlineWrites />
+      <OnlineWrites />
+      <div className="example"></div>
+      <div className="example"></div>
     </div>
   )
 }

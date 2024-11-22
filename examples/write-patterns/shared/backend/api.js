@@ -24,49 +24,36 @@ const createSchema = z.object({
   title: z.string(),
 })
 const updateSchema = z.object({
-  completed: z.boolean().optional(),
-  title: z.string().optional(),
+  completed: z.boolean()
 })
 
 // Define functions to create, update and delete todos
 // using the `db` client.
 
 const createTodo = async (id, title) => {
-  sql = `
+  const sql = `
     INSERT INTO todos (id, title, completed, created_at)
     VALUES ($1, $2, false, $3)
   `
 
-  now = new Date()
-  params = [id, title, now]
+  const now = new Date()
+  const params = [id, title, now]
 
   return await db.query(sql, params)
 }
 
-const updateTodo = async (id, data) => {
-  const [sql, params] = updateQuery('todos', id, data)
-
-  return await db.query(sql, params)
-}
-
-const updateQuery = (table, id, updates) => {
-  const setClauses = []
-  const params = []
-
-  let index = 1
-  for (const [key, value] of Object.entries(updates)) {
-    setClauses.push(`'${key}' = $${index}`)
-    params.push(value)
-    index++
-  }
-
+const updateTodo = async (id, completed) => {
   const sql = `
-    UPDATE '${table}'
-    SET ${setClauses.join(`, `)}
-    WHERE id == '${id}'
+    UPDATE todos SET completed = $1
+    WHERE id::text = $2
   `
 
-  return [sql, params]
+  const params = [
+    completed ? '1' : '0',
+    id
+  ]
+
+  return await db.query(sql, params)
 }
 
 const deleteTodo = async (id) => {
@@ -108,7 +95,7 @@ app.put(`/todos/:id`, async (req, res) => {
   }
 
   try {
-    await createTodo(id, data)
+    await updateTodo(id, data.completed)
   }
   catch (err) {
     return res.status(500).json({ errors: err })
