@@ -12,12 +12,11 @@ INSERT INTO todos (
   completed,
   created_at
 )
-VALUES (
+SELECT
   gen_random_uuid(),
   'Get stuff done',
   '0',
   CURRENT_TIMESTAMP
-)
 WHERE NOT EXISTS (
   SELECT * FROM todos
 );
