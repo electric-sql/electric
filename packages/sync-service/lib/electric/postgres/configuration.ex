@@ -3,6 +3,7 @@ defmodule Electric.Postgres.Configuration do
   Module for functions that configure Postgres in some way using
   a provided connection.
   """
+  require Logger
   alias Electric.Utils
   alias Electric.Shapes.Shape
 
@@ -103,7 +104,17 @@ defmodule Electric.Postgres.Configuration do
   defp set_replica_identity!(conn, relations) do
     for {relation, _} <- relations,
         table = Utils.relation_to_sql(relation) do
-      Postgrex.query!(conn, "ALTER TABLE #{table} REPLICA IDENTITY FULL", [])
+      %Postgrex.Result{rows: [[correct_identity?]]} =
+        Postgrex.query!(
+          conn,
+          "SELECT relreplident = 'f' FROM pg_class JOIN pg_namespace ON relnamespace = pg_namespace.oid WHERE nspname = $1 AND relname = $2;",
+          Tuple.to_list(relation)
+        )
+
+      if not correct_identity? do
+        Logger.info("Altering identity of #{table} to FULL")
+        Postgrex.query!(conn, "ALTER TABLE #{table} REPLICA IDENTITY FULL", [])
+      end
     end
   end
 
