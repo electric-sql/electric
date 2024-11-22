@@ -1,5 +1,6 @@
 defmodule Electric.Postgres.ConfigurationTest do
   use ExUnit.Case, async: true
+  import ExUnit.CaptureLog
 
   alias Electric.Postgres.Configuration
 
@@ -70,6 +71,32 @@ defmodule Electric.Postgres.ConfigurationTest do
                  ],
                  pg_version
                )
+    end
+
+    test "doesn't execute `ALTER TABLE` if table identity is already full",
+         %{pool: conn, publication_name: publication, get_pg_version: get_pg_version} do
+      assert get_table_identity(conn, {"public", "items"}) == "d"
+      assert list_tables_in_publication(conn, publication) == []
+
+      assert capture_log(fn ->
+               Configuration.configure_tables_for_replication!(
+                 conn,
+                 [{{"public", "items"}, "(value ILIKE 'yes%')"}],
+                 get_pg_version,
+                 publication
+               )
+             end) =~ "Altering identity"
+
+      assert get_table_identity(conn, {"public", "items"}) == "f"
+
+      refute capture_log(fn ->
+               Configuration.configure_tables_for_replication!(
+                 conn,
+                 [{{"public", "items"}, "(value ILIKE 'no%')"}],
+                 get_pg_version,
+                 publication
+               )
+             end) =~ "Altering identity"
     end
 
     test "works with multiple tables", %{
