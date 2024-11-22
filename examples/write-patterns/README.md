@@ -69,3 +69,9 @@ Start the dev server:
 ```shell
 pnpm dev
 ```
+
+When done, tear down the backend containers
+
+```shell
+pnpm backend:down
+```
