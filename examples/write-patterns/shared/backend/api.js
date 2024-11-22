@@ -29,9 +29,6 @@ const updateSchema = z.object({
   completed: z.boolean(),
   write_id: z.string().optional()
 })
-const deleteSchema = z.object({
-  write_id: z.string().optional()
-})
 
 // Define functions to create, update and delete todos
 // using the `db` client.
