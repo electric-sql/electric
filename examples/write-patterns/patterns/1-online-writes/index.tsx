@@ -19,17 +19,13 @@ export default function OnlineWrites() {
   })
 
   if (isLoading) {
-    return (
-      <div className="loading">Loading &hellip;</div>
-    )
+    return <div className="loading">Loading &hellip;</div>
   }
 
-  const todos = data
-    ? data.sort((a, b) => a.created_at - b.created_at)
-    : []
+  const todos = data ? data.sort((a, b) => a.created_at - b.created_at) : []
 
   async function handleChange(id: string, completed: boolean) {
-    await client.updateTodo(id, {completed: !completed})
+    await client.updateTodo(id, { completed: !completed })
   }
 
   async function handleDelete(event: React.MouseEvent, id: string) {
@@ -50,6 +46,7 @@ export default function OnlineWrites() {
     form.reset()
   }
 
+  // prettier-ignore
   return (
     <div id="online-writes" className="example">
       <h3>Online writes</h3>

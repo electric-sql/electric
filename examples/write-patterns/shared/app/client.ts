@@ -12,8 +12,8 @@ async function request(url: string, method: string, data?: object) {
   const options: RequestOptions = {
     method: method,
     headers: {
-      'Content-Type': `application/json`
-    }
+      'Content-Type': 'application/json',
+    },
   }
 
   if (data) {
@@ -27,7 +27,7 @@ export async function createTodo(title: string) {
   const url = `${API_URL}/todos`
   const data = {
     id: uuidv4(),
-    title: title
+    title: title,
   }
 
   return await request(url, 'POST', data)
