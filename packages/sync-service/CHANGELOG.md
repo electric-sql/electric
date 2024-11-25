@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.9.3
+
+### Patch Changes
+
+- 72c7c46: fix: don't execute `ALTER TABLE` statements if not necessary
+
 ## 0.9.2
 
 ### Patch Changes
