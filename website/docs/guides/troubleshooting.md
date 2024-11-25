@@ -84,7 +84,7 @@ sec: 0.003023737 seconds
 status: 200
 ```
 
-This indicates that your client library or proxy layer is caching requests to Electric and responding to them without actually hitting Electric for the correct response.
+This indicates that your client library or proxy layer is caching requests to Electric and responding to them without actually hitting Electric for the correct response. For example, when running unit tests your library may be maintaining an unexpected global HTTP cache.
 
 ##### Solution &mdash; clear your cache
 
