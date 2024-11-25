@@ -148,6 +148,18 @@ defmodule Electric.ClientTest do
       assert [%ControlMessage{control: :up_to_date, offset: offset0()}] = stream(ctx, 1)
     end
 
+    test "generates a unique id for the stream", ctx do
+      n = 100
+
+      ids =
+        for _ <- 1..n do
+          %{id: id} = client_stream(ctx, [])
+          id
+        end
+
+      assert length(Enum.uniq(ids)) == n
+    end
+
     test "streams a non empty shape", ctx do
       %{tablename: table} = ctx
 

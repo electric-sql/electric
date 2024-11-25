@@ -22,6 +22,17 @@ defmodule Electric.Client.Fetch.Response do
         }
 
   @doc false
+  @spec decode!(t()) :: t()
+  def decode!(%__MODULE__{headers: headers} = resp) do
+    resp
+    |> Map.put(:shape_handle, decode_shape_handle(headers))
+    |> Map.put(:last_offset, decode_offset(headers))
+    |> Map.put(:schema, decode_schema(headers))
+    |> Map.put(:next_cursor, decode_next_cursor(headers))
+  end
+
+  @doc false
+  @spec decode!(pos_integer(), %{optional(binary()) => binary()}, [term()]) :: t()
   def decode!(status, headers, body) when is_integer(status) and is_map(headers) do
     %__MODULE__{
       status: status,
