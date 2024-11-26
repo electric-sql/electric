@@ -8,7 +8,7 @@ This is an example of an application using:
 
 It's the simplest of the [write-patterns](https://electric-sql.com/docs/guides/writes#patterns) introduced in the [Writes](https://electric-sql.com/docs/guides/writes#patterns) guide.
 
-> [!Tip] Other examples
+> [!TIP] Other examples
 > The [Phoenix LiveView example](../../../phoenix-liveview) also implements this pattern &mdash; using Electric to stream data into the LiveView client and normal Phoenix APIs to handle writes.
 
 ## Benefits
@@ -23,25 +23,10 @@ Good use-cases include:
 
 ## Drawbacks
 
+You have the network on the write path — slow, laggy, loading spinners.
+
 Interactive applications won't work offline without implementing [optimistic writes with local optimistic state](../../optimistic-state).
 
 ## How to run
 
-1. Make sure you've installed all dependencies for the monorepo and built the packages:
-
-From the root directory:
-
-- `pnpm i`
-- `pnpm run -r build`
-
-2. Start the backend services:
-
-`pnpm run backend:up`
-
-3. Start the client app:
-
-`pnpm run dev`
-
-4. When done, tear down the backend containers so you can run other examples
-
-`pnpm run backend:down`
+See the [How to run](../../README.md#how-to-run) section in the example README.
