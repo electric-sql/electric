@@ -49,7 +49,6 @@ defmodule Electric.Application do
     children =
       Enum.concat([
         [
-          Electric.Telemetry,
           {Registry, name: Registry.StackEvents, keys: :duplicate},
           {Electric.StackSupervisor,
            stack_id: stack_id,
@@ -64,6 +63,7 @@ defmodule Electric.Application do
            pool_opts: [pool_size: Application.fetch_env!(:electric, :db_pool_size)],
            storage: Application.fetch_env!(:electric, :storage),
            chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold)},
+          {Electric.Telemetry, stack_id: stack_id},
           {Bandit,
            plug: {Electric.Plug.Router, router_opts},
            port: Application.fetch_env!(:electric, :service_port),

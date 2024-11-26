@@ -63,7 +63,8 @@ defmodule Electric.Connection.Manager do
       :stack_events_registry,
       :tweaks,
       awaiting_active: [],
-      drop_slot_requested: false
+      drop_slot_requested: false,
+      monitoring_started?: false
     ]
   end
 
@@ -145,6 +146,10 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(server, {:pg_info_looked_up, pg_info})
   end
 
+  def query_replication_lag(server) do
+    GenServer.call(server, :query_replication_lag)
+  end
+
   @impl true
   def init(opts) do
     # Because child processes are started via `start_link()` functions and due to how Postgrex
@@ -224,6 +229,11 @@ defmodule Electric.Connection.Manager do
 
   def handle_call(:drop_replication_slot_on_stop, _from, state) do
     {:reply, :ok, %{state | drop_slot_requested: true}}
+  end
+
+  def handle_call(:query_replication_lag, _from, state) do
+    report_replication_lag(state)
+    {:reply, :ok, state}
   end
 
   @impl true
@@ -311,7 +321,12 @@ defmodule Electric.Connection.Manager do
         log_collector_pid = lookup_log_collector_pid(shapes_sup_pid)
         Process.monitor(log_collector_pid)
 
-        state = %{state | pool_pid: pool_pid, shape_log_collector_pid: log_collector_pid}
+        state = %{
+          state
+          | pool_pid: pool_pid,
+            shape_log_collector_pid: log_collector_pid,
+            monitoring_started?: true
+        }
 
         for awaiting <- state.awaiting_active do
           GenServer.reply(awaiting, :ok)
@@ -633,5 +648,24 @@ defmodule Electric.Connection.Manager do
       {:error, error} ->
         Logger.error("Failed to execute query: #{query}\nError: #{inspect(error)}")
     end
+  end
+
+  defp report_replication_lag(%{monitoring_started?: false}), do: :ok
+
+  defp report_replication_lag(%{pool_pid: pool} = state) do
+    slot_name = Keyword.fetch!(state.replication_opts, :slot_name)
+
+    query =
+      "SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn) AS replication_lag_size FROM pg_replication_slots WHERE slot_name = $1;"
+
+    case Postgrex.query(pool, query, [slot_name]) do
+      {:ok, %Postgrex.Result{rows: [[lag]]}} ->
+        :telemetry.execute([:electric, :postgres, :replication], %{lag: lag})
+
+      {:error, error} ->
+        Logger.warning("Failed to query replication lag\nError: #{inspect(error)}")
+    end
+
+    :ok
   end
 end
