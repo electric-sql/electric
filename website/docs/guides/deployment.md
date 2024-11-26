@@ -108,13 +108,21 @@ You can deploy it anywhere you can run a container with a filesystem and exposed
 
 Images are deployed to Docker Hub at [electricsql/electric](https://hub.docker.com/r/electricsql/electric).
 
-### Disk storage
+### Optimizing for disk
 
-Electric caches [Shape logs](/docs/api/http#shape-log) and metadata on the filesystem. Your web hosting should provide a locally mounted, persistent filesystem.
+Electric caches [Shape logs](/docs/api/http#shape-log) and metadata on the filesystem. Your Electric host must provide a persistent filesystem. Ideally this should be large, fast and locally mounted, such as a NVMe SSD. If you're configuring a machine and you want to optimise it for Electric, the factors to optimise for, in order of important, are:
+
+1. disk speed &mdash; low latency, high throughout reads and writes
+2. memory
+3. CPU
+
+For example, on AWS, [Storage Optimized](https://aws.amazon.com/ec2/instance-types/#Storage_Optimized) instances such as the `i3en.large`, or on Hetzner the [SX-line](https://www.hetzner.com/dedicated-rootserver/matrix-sx/) of dedicated servers would both be great choices.
+
+### Configuring storage
 
 The path to Electric's persistent storage can be configured via the [`ELECTRIC_STORAGE_DIR`](/docs/api/config#electric-storage-dir) environment variable, e.g. `ELECTRIC_STORAGE_DIR=/var/lib/electric/persistent`. Electric will create the directory at that path if it doesn't exist yet. However, you need to make sure that the OS user that Electric is running as has the necessary permissions in the parent directory.
 
-Naturally, the file system location configured via `ELECTRIC_STORAGE_DIR` and the data Electric stores there must survive sync service's restarts. For example, when using Kubernetes, you'll want to create a persistent volume and attach it to your Electric deployment.
+The file system location configured via `ELECTRIC_STORAGE_DIR` and the data Electric stores there must survive sync service's restarts. For example, when using Kubernetes, you'll want to create a persistent volume and attach it to your Electric deployment.
 
 > [!Tip] Clear one, clear the other
 > The persistent state that Electric maintains in Postgres (via the logical replication publication and replication slot) **must** stay in sync with the shape data cached on disk by Electric.
