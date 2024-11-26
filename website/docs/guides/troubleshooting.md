@@ -88,7 +88,7 @@ This indicates that your client library or proxy layer is caching requests to El
 
 ##### Solution &mdash; clear your cache
 
-Clear your client or proxy cache.
+The problem will resolve itself as client/proxy caches empty. You can force this by clearing your client or proxy cache. See https://electric-sql.com/docs/api/http#control-messages for context on 409 messages.
 
 ## Production
 
