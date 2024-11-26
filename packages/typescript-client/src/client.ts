@@ -358,6 +358,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
           fetchUrl.searchParams.set(REPLICA_PARAM, this.#replica as string)
         }
 
+        // sort query params in-place for stable URLs and improved cache hits
+        fetchUrl.searchParams.sort()
+
         let response!: Response
         try {
           response = await this.#fetchClient(fetchUrl.toString(), {

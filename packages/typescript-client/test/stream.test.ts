@@ -45,4 +45,35 @@ describe(`ShapeStream`, () => {
       },
     })
   })
+
+  it(`should sort query parameters for stable URLs`, async () => {
+    const eventTarget = new EventTarget()
+    const requestedUrls: Array<string> = []
+    const fetchWrapper = (
+      ...args: Parameters<typeof fetch>
+    ): Promise<Response> => {
+      requestedUrls.push(args[0].toString())
+      eventTarget.dispatchEvent(new Event(`fetch`))
+      return Promise.resolve(Response.error())
+    }
+
+    const aborter = new AbortController()
+    new ShapeStream({
+      url: shapeUrl,
+      table: `foo`,
+      where: `a=1`,
+      columns: [`id`],
+      handle: `potato`,
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+    })
+
+    await new Promise((resolve) =>
+      eventTarget.addEventListener(`fetch`, resolve, { once: true })
+    )
+
+    expect(requestedUrls[0].split(`?`)[1]).toEqual(
+      `columns=id&handle=potato&offset=-1&table=foo&where=a%3D1`
+    )
+  })
 })
