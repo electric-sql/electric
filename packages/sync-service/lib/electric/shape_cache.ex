@@ -318,7 +318,11 @@ defmodule Electric.ShapeCache do
     state.shape_status_state
     |> state.shape_status.list_shapes()
     |> Enum.each(fn {shape_handle, shape} ->
-      {:ok, _pid, _snapshot_xmin, _latest_offset} = start_shape(shape_handle, shape, state)
+      try do
+        {:ok, _pid, _snapshot_xmin, _latest_offset} = start_shape(shape_handle, shape, state)
+      rescue
+        e -> Logger.error("Failed to recover shape #{shape_handle}: #{inspect(e)}")
+      end
     end)
   end
 
