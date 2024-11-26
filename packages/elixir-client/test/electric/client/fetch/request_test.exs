@@ -31,6 +31,9 @@ defmodule Electric.Client.Fetch.RequestTest do
 
       params = URI.decode_query(query)
 
+      # should have sorted parameters
+      assert query == "cursor=123948&handle=my-shape&live=true&offset=1234_1&table=my_table"
+
       assert %{
                "table" => "my_table",
                "cursor" => "123948",
