@@ -27,5 +27,9 @@ defmodule Electric.ProcessRegistry do
       nil -> false
       _ -> true
     end
+  rescue
+    # if the registry is not started, whereis will raise - we can
+    # assume that the process is not alive
+    ArgumentError -> false
   end
 end
