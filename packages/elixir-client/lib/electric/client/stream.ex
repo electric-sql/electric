@@ -19,7 +19,7 @@ defmodule Electric.Client.Stream do
     replica: :default,
     offset: Offset.before_all(),
     shape_handle: nil,
-    next_cursor: System.os_time(),
+    next_cursor: nil,
     state: :init,
     opts: %{}
   ]
