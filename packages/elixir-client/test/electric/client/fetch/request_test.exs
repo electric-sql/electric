@@ -31,6 +31,14 @@ defmodule Electric.Client.Fetch.RequestTest do
 
       params = URI.decode_query(query)
 
+      # should have sorted parameters
+      assert query ==
+               params
+               |> Map.to_list()
+               |> Enum.sort(fn {key1, _}, {key2, _} -> key1 <= key2 end)
+               |> Enum.map(fn {key, value} -> "#{key}=#{value}" end)
+               |> Enum.join("&")
+
       assert %{
                "table" => "my_table",
                "cursor" => "123948",
