@@ -323,8 +323,10 @@ defmodule Electric.ShapeCache do
       rescue
         e ->
           Logger.error("Failed to recover shape #{shape_handle}: #{inspect(e)}")
-          shape_opts = Electric.ShapeCache.Storage.for_shape(shape_handle, state.storage)
-          Electric.ShapeCache.Storage.unsafe_cleanup!({state.storage, shape_opts})
+
+          # clean up corrupted data to avoid persisting bad state
+          Electric.ShapeCache.Storage.for_shape(shape_handle, state.storage)
+          |> Electric.ShapeCache.Storage.unsafe_cleanup!()
       end
     end)
   end
