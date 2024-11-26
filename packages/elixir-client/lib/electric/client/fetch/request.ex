@@ -80,12 +80,13 @@ defmodule Electric.Client.Fetch.Request do
     %{endpoint: endpoint} = request
 
     if Keyword.get(opts, :query, true) do
-      # Convert map to ordered list of tuples
+      # Convert map to _ordered_ list of query parameters
+      # to ensure consistent caching
       query =
         request
         |> params()
         |> Map.to_list()
-        |> Enum.sort(fn {key1, _}, {key2, _} -> key1 <= key2 end)
+        |> List.keysort(0)
         |> URI.encode_query(:rfc3986)
 
       URI.to_string(%{endpoint | query: query})
