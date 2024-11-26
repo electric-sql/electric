@@ -12,6 +12,44 @@ type Todo = {
   created_at: Date
 }
 
+async function createTodo(event: React.FormEvent) {
+  event.preventDefault()
+
+  const form = event.target as HTMLFormElement
+  const formData = new FormData(form)
+  const title = formData.get('todo') as string
+
+  const path = '/todos'
+  const data = {
+    id: uuidv4(),
+    title: title
+  }
+
+  await api.request(path, 'POST', data)
+
+  form.reset()
+}
+
+async function updateTodo(todo: ToDo) {
+  const path = `/todos/${todo.id}`
+
+  const data = {
+    completed: !todo.completed
+  }
+
+  await api.request(path, 'PUT', data)
+}
+
+async function deleteTodo(event: React.MouseEvent, todo: ToDo) {
+  event.preventDefault()
+
+  const path = `/todos/${todo.id}`
+
+  await api.request(path, 'DELETE')
+}
+
+const ELECTRIC_URL = import.meta.env.ELECTRIC_URL || 'http://localhost:3000'
+
 export default function OnlineWrites() {
   // Use Electric's `useShape` hook to sync data from Postgres
   // into a React state variable.
