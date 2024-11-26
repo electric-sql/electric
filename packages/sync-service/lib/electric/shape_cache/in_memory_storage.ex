@@ -252,7 +252,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def force_cleanup!(%MS{} = opts), do: cleanup!(opts)
+  def unsafe_cleanup!(%MS{} = opts), do: cleanup!(opts)
 
   # Turns a LogOffset into a tuple representation
   # for storing in the ETS table

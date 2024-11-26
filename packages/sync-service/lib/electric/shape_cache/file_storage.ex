@@ -339,7 +339,7 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def force_cleanup!(%FS{} = opts) do
+  def unsafe_cleanup!(%FS{} = opts) do
     {:ok, _} = File.rm_rf(opts.data_dir)
   end
 
