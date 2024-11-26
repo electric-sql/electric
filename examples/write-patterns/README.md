@@ -37,18 +37,18 @@ pnpm run -r build
 
 Start the docker containers (in this directory):
 
-```shell]
-pnpm run backend:up
+```shell
+pnpm backend:up
 ```
 
 Start the dev server:
 
 ```shell
-pnpm run dev
+pnpm dev
 ```
 
 When done, tear down the backend containers so you can run other examples:
 
 ```shell
-pnpm run backend:down
+pnpm backend:down
 ```
