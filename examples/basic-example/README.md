@@ -39,6 +39,20 @@ Now start the dev server:
 pnpm dev
 ```
 
+You should see three items listed in the page. These are created when first running the [`./db/migrations`](./db/migrations).
+
+Now let's connect to Postgres, e.g.: using `psql`:
+
+```shell
+psql "postgresql://postgres:password@localhost:54321/electric"
+```
+
+Insert new data and watch it sync into the page in real time:
+
+```sql
+insert into items (id) values (gen_random_uuid());
+```
+
 When you're done, stop the backend services using:
 
 ```shell
