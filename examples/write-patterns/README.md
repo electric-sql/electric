@@ -28,25 +28,27 @@ For more context about the patterns and their benefits and trade-offs, see the [
 
 ## How to run
 
-1. Make sure you've installed all dependencies for the monorepo and built the packages:
+Make sure you've installed all dependencies for the monorepo and built the packages (from the monorepo root directory):
 
-From the monorepo root directory:
+```shell
+pnpm install
+pnpm run -r build
+```
 
-- `pnpm i`
-- `pnpm run -r build`
+Start the docker containers (in this directory):
 
-2. Start the docker containers
+```shell]
+pnpm run backend:up
+```
 
-In this directory:
+Start the dev server:
 
-`pnpm run backend:up`
+```shell
+pnpm run dev
+```
 
-3. Start the dev server
+When done, tear down the backend containers so you can run other examples:
 
-`pnpm run dev`
-
-Open [localhost:5173](http://localhost:5173) in your web browser.
-
-4. When done, tear down the backend containers so you can run other examples
-
-`pnpm run backend:down`
+```shell
+pnpm run backend:down
+```
