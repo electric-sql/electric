@@ -181,7 +181,12 @@ defmodule Electric.Shapes.ConsumerTest do
       Registry.register(ctx.registry, @shape_handle1, ref)
 
       txn =
-        %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
+        %Transaction{
+          xid: xmin,
+          lsn: lsn,
+          last_log_offset: last_log_offset,
+          commit_timestamp: DateTime.utc_now()
+        }
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "1"},
@@ -222,7 +227,12 @@ defmodule Electric.Shapes.ConsumerTest do
       Registry.register(ctx.registry, @shape_handle2, ref2)
 
       txn =
-        %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
+        %Transaction{
+          xid: xid,
+          lsn: lsn,
+          last_log_offset: last_log_offset,
+          commit_timestamp: DateTime.utc_now()
+        }
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "1"},
@@ -277,7 +287,12 @@ defmodule Electric.Shapes.ConsumerTest do
       )
 
       txn =
-        %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
+        %Transaction{
+          xid: xid,
+          lsn: lsn,
+          last_log_offset: last_log_offset,
+          commit_timestamp: DateTime.utc_now()
+        }
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "1"},
@@ -359,7 +374,12 @@ defmodule Electric.Shapes.ConsumerTest do
       )
 
       txn =
-        %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
+        %Transaction{
+          xid: xid,
+          lsn: lsn,
+          last_log_offset: last_log_offset,
+          commit_timestamp: DateTime.utc_now()
+        }
         |> Transaction.prepend_change(%Changes.TruncatedRelation{
           relation: {"public", "test_table"}
         })
@@ -509,7 +529,12 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
 
       txn =
-        %Transaction{xid: 150, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
+        %Transaction{
+          xid: 150,
+          lsn: lsn,
+          last_log_offset: LogOffset.new(lsn, 0),
+          commit_timestamp: DateTime.utc_now()
+        }
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "1"},
@@ -632,7 +657,12 @@ defmodule Electric.Shapes.ConsumerTest do
       ref = Shapes.Consumer.monitor(ctx.stack_id, shape_handle)
 
       txn =
-        %Transaction{xid: 11, lsn: lsn, last_log_offset: LogOffset.new(lsn, 2)}
+        %Transaction{
+          xid: 11,
+          lsn: lsn,
+          last_log_offset: LogOffset.new(lsn, 2),
+          commit_timestamp: DateTime.utc_now()
+        }
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "2"},
@@ -679,7 +709,12 @@ defmodule Electric.Shapes.ConsumerTest do
       ref = Shapes.Consumer.monitor(ctx.stack_id, shape_handle)
 
       txn1 =
-        %Transaction{xid: 9, lsn: lsn1, last_log_offset: LogOffset.new(lsn1, 2)}
+        %Transaction{
+          xid: 9,
+          lsn: lsn1,
+          last_log_offset: LogOffset.new(lsn1, 2),
+          commit_timestamp: DateTime.utc_now()
+        }
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "2"},
@@ -692,7 +727,12 @@ defmodule Electric.Shapes.ConsumerTest do
         })
 
       txn2 =
-        %Transaction{xid: 10, lsn: lsn2, last_log_offset: LogOffset.new(lsn2, 2)}
+        %Transaction{
+          xid: 10,
+          lsn: lsn2,
+          last_log_offset: LogOffset.new(lsn2, 2),
+          commit_timestamp: DateTime.utc_now()
+        }
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "2"},

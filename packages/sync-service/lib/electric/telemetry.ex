@@ -6,9 +6,9 @@ defmodule Electric.Telemetry do
     Supervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
 
-  def init(_) do
+  def init(stack_id: stack_id) do
     children = [
-      {:telemetry_poller, measurements: periodic_measurements(), period: 2_000}
+      {:telemetry_poller, measurements: periodic_measurements(stack_id), period: 2_000}
     ]
 
     children
@@ -72,7 +72,8 @@ defmodule Electric.Telemetry do
       last_value("vm.memory.ets", unit: :byte),
       last_value("vm.total_run_queue_lengths.total"),
       last_value("vm.total_run_queue_lengths.cpu"),
-      last_value("vm.total_run_queue_lengths.io")
+      last_value("vm.total_run_queue_lengths.io"),
+      last_value("electric.postgres.replication.lag", unit: :byte)
       # distribution("plug.router_dispatch.stop.duration",
       #   tags: [:route],
       #   unit: {:native, :millisecond}
@@ -88,10 +89,12 @@ defmodule Electric.Telemetry do
     ]
   end
 
-  defp periodic_measurements do
+  defp periodic_measurements(stack_id) do
     [
       # A module, function and arguments to be invoked periodically.
-      {__MODULE__, :uptime_event, []}
+      {__MODULE__, :uptime_event, []},
+      {Electric.Connection.Manager, :query_replication_lag,
+       [Electric.Connection.Manager.name(stack_id)]}
     ]
   end
 
