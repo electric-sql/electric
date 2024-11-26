@@ -84,6 +84,12 @@ Build the local API image:
 docker compose build api
 ```
 
+Make sure you're starting with a clean slate:
+
+```shell
+docker compose down --volumes
+```
+
 Run `postgres`, `electric` and the `api` services:
 
 ```console
@@ -209,6 +215,12 @@ Build the local docker images:
 docker compose build api caddy
 ```
 
+Make sure you're starting with a clean slate:
+
+```shell
+docker compose down --volumes
+```
+
 Run `postgres`, `electric`, `api` and `caddy` services with the `.env.caddy` env file:
 
 ```shell
@@ -277,6 +289,14 @@ It's often better (faster, more scalable and a more natural topology) to run you
 The example in the [`./edge`](./edge) folder contains a small [Deno HTTP server](https://docs.deno.com/runtime/fundamentals/http_server/) in the [`index.ts`](./edge/index.ts) file that's designed to work as a [Supabase Edge Function](https://supabase.com/docs/guides/functions/quickstart). See the README in the folder for more information about deploying to Supabase.
 
 Here, we'll run it locally using Docker in order to demonstrate it working with the other services:
+
+Make sure you're starting with a clean slate:
+
+```shell
+docker compose down --volumes
+```
+
+Then:
 
 ```shell
 docker compose --env-file .env.edge up postgres electric api edge
