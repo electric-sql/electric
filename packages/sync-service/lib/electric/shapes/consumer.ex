@@ -434,6 +434,6 @@ defmodule Electric.Shapes.Consumer do
     now = DateTime.utc_now()
     lag = Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
 
-    OpenTelemetry.add_span_attributes(lag: lag)
+    OpenTelemetry.add_span_attributes(replication_lag: lag)
   end
 end
