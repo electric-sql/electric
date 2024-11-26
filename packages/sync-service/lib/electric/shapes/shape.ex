@@ -51,6 +51,7 @@ defmodule Electric.Shapes.Shape do
 
   def generate_id(%__MODULE__{} = shape) do
     hash = hash(shape)
+
     {hash, "#{hash}-#{DateTime.utc_now() |> DateTime.to_unix(:millisecond)}"}
   end
 

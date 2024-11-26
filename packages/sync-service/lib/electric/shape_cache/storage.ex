@@ -94,6 +94,9 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Clean up snapshots/logs for a shape handle"
   @callback cleanup!(shape_opts()) :: :ok
 
+  @doc "Clean up snapshots/logs for a shape handle by deleting whole directory"
+  @callback force_cleanup!(shape_opts()) :: :ok
+
   @behaviour __MODULE__
 
   @last_log_offset LogOffset.last()
@@ -186,5 +189,10 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def cleanup!({mod, shape_opts}) do
     mod.cleanup!(shape_opts)
+  end
+
+  @impl __MODULE__
+  def force_cleanup!({mod, shape_opts}) do
+    mod.force_cleanup!(shape_opts)
   end
 end

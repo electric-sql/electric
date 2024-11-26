@@ -22,8 +22,8 @@ defmodule Electric.ShapeCache.FileStorage do
     :base_path,
     :shape_handle,
     :db,
+    :data_dir,
     :cubdb_dir,
-    :shape_definition_dir,
     :snapshot_dir,
     :stack_id,
     :extra_opts,
@@ -48,13 +48,15 @@ defmodule Electric.ShapeCache.FileStorage do
         shape_handle,
         %{base_path: base_path, stack_id: stack_id} = opts
       ) do
+    data_dir = Path.join([base_path, shape_handle])
+
     %FS{
       base_path: base_path,
       shape_handle: shape_handle,
       db: name(stack_id, shape_handle),
-      cubdb_dir: Path.join([base_path, shape_handle, "cubdb"]),
-      snapshot_dir: Path.join([base_path, shape_handle, "snapshots"]),
-      shape_definition_dir: Path.join([base_path, shape_handle]),
+      data_dir: data_dir,
+      cubdb_dir: Path.join([data_dir, "cubdb"]),
+      snapshot_dir: Path.join([data_dir, "snapshots"]),
       stack_id: stack_id,
       extra_opts: Map.get(opts, :extra_opts, %{})
     }
@@ -81,7 +83,7 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   defp initialise_filesystem(opts) do
-    with :ok <- File.mkdir_p(opts.shape_definition_dir),
+    with :ok <- File.mkdir_p(opts.data_dir),
          :ok <- File.mkdir_p(opts.cubdb_dir),
          :ok <- File.mkdir_p(opts.snapshot_dir) do
       :ok
@@ -129,7 +131,7 @@ defmodule Electric.ShapeCache.FileStorage do
         Enum.reduce(shape_handles, %{}, fn shape_handle, acc ->
           shape_def_path =
             shape_definition_path(%{
-              shape_definition_dir: Path.join([opts.base_path, shape_handle])
+              data_dir: Path.join([opts.base_path, shape_handle])
             })
 
           with {:ok, shape_def_encoded} <- File.read(shape_def_path),
@@ -330,8 +332,12 @@ defmodule Electric.ShapeCache.FileStorage do
     :ok
   end
 
-  defp shape_definition_path(%{shape_definition_dir: shape_definition_dir} = _opts) do
-    Path.join(shape_definition_dir, @shape_definition_file_name)
+  def force_cleanup!(%FS{} = opts) do
+    {:ok, _} = File.rm_rf(opts.data_dir)
+  end
+
+  defp shape_definition_path(%{data_dir: data_dir} = _opts) do
+    Path.join(data_dir, @shape_definition_file_name)
   end
 
   defp keys_from_range(min_key, max_key, opts) do
