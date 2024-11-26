@@ -857,7 +857,8 @@ defmodule Electric.ShapeCacheTest do
           xid: @xid,
           last_log_offset: @change_offset,
           lsn: @lsn,
-          affected_relations: MapSet.new([{"public", "items"}])
+          affected_relations: MapSet.new([{"public", "items"}]),
+          commit_timestamp: DateTime.utc_now()
         },
         context.shape_log_collector
       )
