@@ -312,6 +312,7 @@ function getNextChunkUrl(url: string, res: Response): string | void {
 
   nextUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, shapeHandle)
   nextUrl.searchParams.set(OFFSET_QUERY_PARAM, lastOffset)
+  nextUrl.searchParams.sort()
   return nextUrl.toString()
 }
 

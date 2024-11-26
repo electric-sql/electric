@@ -218,7 +218,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(result).toBe(initialResponse)
 
     // Check if the next chunk was prefetched
-    const nextUrl = `${baseUrl}&handle=123&offset=456`
+    const nextUrl = sortUrlParams(`${baseUrl}&handle=123&offset=456`)
     expect(mockFetch).toHaveBeenCalledWith(nextUrl, expect.anything())
   })
 
@@ -250,23 +250,23 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledTimes(1 + maxPrefetchNum)
     expect(mockFetch).toHaveBeenNthCalledWith(
       2,
-      `${baseUrl}&handle=123&offset=0`,
+      sortUrlParams(`${baseUrl}&handle=123&offset=0`),
       expect.anything()
     )
     expect(mockFetch).toHaveBeenNthCalledWith(
       3,
-      `${baseUrl}&handle=123&offset=1`,
+      sortUrlParams(`${baseUrl}&handle=123&offset=1`),
       expect.anything()
     )
 
     // Second request consumes one of the prefetched responses and
     // next one fires up
-    await fetchWrapper(`${baseUrl}&handle=123&offset=0`)
+    await fetchWrapper(sortUrlParams(`${baseUrl}&handle=123&offset=0`))
     await sleep()
     expect(mockFetch).toHaveBeenCalledTimes(1 + maxPrefetchNum + 1)
     expect(mockFetch).toHaveBeenNthCalledWith(
       4,
-      `${baseUrl}&handle=123&offset=2`,
+      sortUrlParams(`${baseUrl}&handle=123&offset=2`),
       expect.anything()
     )
   })
@@ -297,7 +297,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(result).toBe(initialResponse)
 
     // fetch the next chunk as well
-    const nextUrl = `${baseUrl}&handle=123&offset=456`
+    const nextUrl = sortUrlParams(`${baseUrl}&handle=123&offset=456`)
     const nextResult = await fetchWrapper(nextUrl)
     expect(nextResult).toBe(nextResponse)
 
@@ -339,7 +339,8 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(result).toBe(initialResponse)
 
     // Prefetch should have been attempted but failed
-    const nextUrl = `${baseUrl}&handle=123&offset=456`
+    const nextUrl = sortUrlParams(`${baseUrl}&handle=123&offset=456`)
+
     expect(mockFetch).toHaveBeenCalledWith(nextUrl, expect.anything())
 
     // One for the main request, one for the prefetch
@@ -381,7 +382,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenNthCalledWith(1, baseUrl)
     expect(mockFetch).toHaveBeenNthCalledWith(
       2,
-      `${baseUrl}&handle=123&offset=0`,
+      sortUrlParams(`${baseUrl}&handle=123&offset=0`),
       expect.anything()
     )
 
@@ -389,12 +390,12 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenNthCalledWith(3, altUrl)
     expect(mockFetch).toHaveBeenNthCalledWith(
       4,
-      `${altUrl}&handle=123&offset=2`,
+      sortUrlParams(`${altUrl}&handle=123&offset=2`),
       expect.anything()
     )
     expect(mockFetch).toHaveBeenNthCalledWith(
       5,
-      `${altUrl}&handle=123&offset=3`,
+      sortUrlParams(`${altUrl}&handle=123&offset=3`),
       expect.anything()
     )
   })
@@ -429,3 +430,9 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledTimes(2)
   })
 })
+
+function sortUrlParams(url: string): string {
+  const parsedUrl = new URL(url)
+  parsedUrl.searchParams.sort()
+  return parsedUrl.toString()
+}
