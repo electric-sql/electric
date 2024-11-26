@@ -97,7 +97,7 @@ defmodule Electric.ShapeCache.FileStorage do
     if stored_version != opts.version || snapshot_xmin(opts) == nil ||
          not File.exists?(shape_definition_path(opts)) ||
          not CubDB.has_key?(opts.db, @snapshot_meta_key) do
-      cleanup!(opts)
+      cleanup_internals!(opts)
     end
 
     CubDB.put(opts.db, @version_key, @version)
@@ -314,8 +314,7 @@ defmodule Electric.ShapeCache.FileStorage do
     |> Enum.at(0)
   end
 
-  @impl Electric.ShapeCache.Storage
-  def cleanup!(%FS{} = opts) do
+  defp cleanup_internals!(%FS{} = opts) do
     [
       @snapshot_meta_key,
       @xmin_key,
@@ -332,6 +331,14 @@ defmodule Electric.ShapeCache.FileStorage do
     :ok
   end
 
+  @impl Electric.ShapeCache.Storage
+  def cleanup!(%FS{} = opts) do
+    :ok = cleanup_internals!(opts)
+    {:ok, _} = File.rm_rf(opts.data_dir)
+    :ok
+  end
+
+  @impl Electric.ShapeCache.Storage
   def force_cleanup!(%FS{} = opts) do
     {:ok, _} = File.rm_rf(opts.data_dir)
   end
