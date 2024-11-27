@@ -531,13 +531,49 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                  Electric.ShapeCache.Storage.get_all_stored_shapes({storage, opts})
       end
     end
+
+    describe "#{module_name}.unsafe_cleanup/1" do
+      setup do
+        {:ok, %{module: unquote(module)}}
+      end
+
+      setup :start_storage
+
+      test "should remove entire data directory without requiring process to run", %{
+        module: storage,
+        opts: opts,
+        pid: pid
+      } do
+        lsn = Lsn.from_integer(1000)
+
+        log_items =
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "123", "name" => "Test"},
+              log_offset: LogOffset.new(lsn, 0)
+            }
+          ]
+          |> changes_to_log_items()
+
+        storage.append_to_log!(log_items, opts)
+
+        Process.exit(pid, :normal)
+
+        assert File.exists?(opts.data_dir)
+
+        storage.unsafe_cleanup!(opts)
+
+        refute File.exists?(opts.data_dir)
+      end
+    end
   end
 
   defp start_storage(%{module: module} = context) do
     opts = module |> opts(context) |> module.shared_opts()
     shape_opts = module.for_shape(@shape_handle, opts)
-    {:ok, _} = module.start_link(shape_opts)
-    {:ok, %{module: module, opts: shape_opts}}
+    {:ok, pid} = module.start_link(shape_opts)
+    {:ok, %{module: module, opts: shape_opts, pid: pid}}
   end
 
   defp opts(InMemoryStorage, %{stack_id: stack_id}) do
