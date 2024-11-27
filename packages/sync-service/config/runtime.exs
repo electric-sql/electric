@@ -82,8 +82,11 @@ otel_simple_processor =
     {:otel_simple_processor, %{exporter: {:otel_exporter_stdout, []}}}
   end
 
+otel_sampling_ratio = env!("ELECTRIC_OTEL_SAMPLING_RATIO", :float, 0.01)
+
 config :opentelemetry,
-  processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1)
+  processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1),
+  sampler: {Electric.Telemetry.Sampler, %{ratio: otel_sampling_ratio}}
 
 database_url = env!("DATABASE_URL", :string!)
 
