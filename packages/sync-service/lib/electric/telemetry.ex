@@ -83,15 +83,23 @@ defmodule Electric.Telemetry do
         active_shapes:
           summary("electric.plug.serve_shape.monotonic_time",
             unit: :unique,
-            reporter_options: [count_unique: :shape_handle]
+            reporter_options: [count_unique: :shape_handle],
+            keep: &(&1.status < 300)
           ),
         unique_clients:
           summary("electric.plug.serve_shape.monotonic_time",
             unit: :unique,
-            reporter_options: [count_unique: :client_ip]
+            reporter_options: [count_unique: :client_ip],
+            keep: &(&1.status < 300)
           ),
-        sync_requests: counter("electric.plug.serve_shape.monotonic_time", drop: & &1[:live]),
-        live_requests: counter("electric.plug.serve_shape.monotonic_time", keep: & &1[:live]),
+        sync_requests:
+          counter("electric.plug.serve_shape.monotonic_time",
+            drop: &(Map.get(&1, :live, false) || false)
+          ),
+        live_requests:
+          counter("electric.plug.serve_shape.monotonic_time",
+            keep: &(Map.get(&1, :live, false) || false)
+          ),
         served_bytes: sum("electric.plug.serve_shape.bytes", unit: :byte)
       ]
     ]
