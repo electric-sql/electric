@@ -254,9 +254,9 @@ defmodule Electric.Shapes.Shape do
 
   defp filtered_columns_changed(_), do: true
 
-  defp record_in_shape?(nil, _record), do: true
+  def record_in_shape?(nil, _record), do: true
 
-  defp record_in_shape?(where, record) do
+  def record_in_shape?(where, record) do
     with {:ok, refs} <- Runner.record_to_ref_values(where.used_refs, record),
          {:ok, evaluated} <- Runner.execute(where, refs) do
       if is_nil(evaluated), do: false, else: evaluated
