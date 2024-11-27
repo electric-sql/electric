@@ -173,6 +173,7 @@ defmodule Electric.Telemetry do
     [
       # A module, function and arguments to be invoked periodically.
       {__MODULE__, :uptime_event, []},
+      {__MODULE__, :count_shapes, [stack_id]},
       {Electric.Connection.Manager, :report_retained_wal_size,
        [Electric.Connection.Manager.name(stack_id)]}
     ]
@@ -182,5 +183,13 @@ defmodule Electric.Telemetry do
     :telemetry.execute([:vm, :uptime], %{
       total: :erlang.monotonic_time() - :erlang.system_info(:start_time)
     })
+  end
+
+  def count_shapes(stack_id) do
+    Electric.ShapeCache.list_shapes(stack_id: stack_id)
+    |> length()
+    |> then(
+      &:telemetry.execute([:electric, :shapes, :total_shapes], %{count: &1}, %{stack_id: stack_id})
+    )
   end
 end
