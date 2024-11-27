@@ -1,16 +1,20 @@
 defmodule Electric.Shapes.Filter do
-  alias Electric.Shapes.Shape
-  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes.NewRecord
+  alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Eval.Expr
+  alias Electric.Replication.Eval.Parser.Const
+  alias Electric.Replication.Eval.Parser.Func
+  alias Electric.Replication.Eval.Parser.Ref
+  alias Electric.Shapes.Shape
 
   def new(shapes), do: new(shapes, empty())
-  def new([shape | shapes], filter), do: new(shapes, add_shape(shape, filter))
+  def new([shape | shapes], filter), do: new(shapes, add_shape(filter, shape))
   def new([], filter), do: filter
 
   defp empty, do: %{tables: %{}}
   defp empty_table_filter, do: %{fields: %{}, other_shapes: []}
 
-  defp add_shape(shape, %{tables: tables}) do
+  def add_shape(%{tables: tables}, shape) do
     %{
       tables:
         Map.update(
@@ -52,11 +56,6 @@ defmodule Electric.Shapes.Filter do
       fn shapes -> [%{handle: shape.handle, and_where: and_where} | shapes] end
     )
   end
-
-  alias Electric.Replication.Eval.Expr
-  alias Electric.Replication.Eval.Parser.Func
-  alias Electric.Replication.Eval.Parser.Ref
-  alias Electric.Replication.Eval.Parser.Const
 
   defp optimise_where(%Expr{
          eval: %Func{
