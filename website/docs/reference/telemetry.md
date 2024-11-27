@@ -7,7 +7,7 @@ outline: deep
 
 # Telemetry
 
-Electric provides telemetry data — such as traces, logs, and metrics — for real-time system monitoring. 
+Electric provides telemetry data — such as traces, logs, and metrics — for real-time system monitoring. Self-hosted Electric instances also send anonymous usage data to electric-sql.com to help us understand how the software is being used - see [Anonymous Usage Data](#anonymous-usage-data) for more details.
 
 ## Metrics
 
@@ -56,3 +56,9 @@ Set `ELECTRIC_HNY_DATASET` and `ELECTRIC_HNY_API_KEY` environment variables in a
 ```shell
 docker compose -f docker-compose-otel.yml up
 ```
+
+## Anonymous Usage Data
+
+Electric instances are configured to send anonymized usage data to checkpoint.electric-sql.com to help us understand how the software is being used. This data includes the disk usage by the shape cache, CPU/memory information about the running Electric instance, Postgres version, number of shapes, amount of distinct shape requests, and numerical information about processed transactions: byte size and amount of operations. No information about transaction content is sent. Aggregated statistics are sent every 30 minutes.
+
+To disable anonymous usage data, set the `ELECTRIC_CALL_HOME_TELEMETRY` environment variable to `false`. We encourage everyone to keep this enabled so we can get a better understanding of how Electric is used.
