@@ -77,6 +77,12 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def get_total_disk_usage({parent, _init, storage}) do
+    send(parent, {__MODULE__, :get_total_disk_usage})
+    Storage.get_total_disk_usage(storage)
+  end
+
+  @impl Electric.ShapeCache.Storage
   def get_current_position({parent, shape_handle, _, storage}) do
     send(parent, {__MODULE__, :get_current_position, shape_handle})
     Storage.get_current_position(storage)

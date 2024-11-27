@@ -39,6 +39,9 @@ defmodule Electric.ShapeCache.Storage do
   @callback get_all_stored_shapes(compiled_opts()) ::
               {:ok, %{shape_handle() => Shape.t()}} | {:error, term()}
 
+  @doc "Get the total disk usage for all shapes"
+  @callback get_total_disk_usage(compiled_opts()) :: non_neg_integer()
+
   @doc """
   Get the current xmin and offset for the shape storage.
 
@@ -142,6 +145,11 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def get_all_stored_shapes({mod, opts}) do
     mod.get_all_stored_shapes(opts)
+  end
+
+  @impl __MODULE__
+  def get_total_disk_usage({mod, opts}) do
+    mod.get_total_disk_usage(opts)
   end
 
   @impl __MODULE__
