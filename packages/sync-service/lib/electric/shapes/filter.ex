@@ -1,23 +1,23 @@
 defmodule Electric.Shapes.Filter do
   alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
-  alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.Eval.Parser.Const
   alias Electric.Replication.Eval.Parser.Func
   alias Electric.Replication.Eval.Parser.Ref
+  alias Electric.Shapes.Filter
   alias Electric.Shapes.Shape
 
-  def new(shapes), do: new(shapes, empty())
-  def new([shape | shapes], filter), do: new(shapes, add_shape(filter, shape))
-  def new([], filter), do: filter
+  defstruct tables: %{}
 
-  defp empty, do: %{tables: %{}}
-  defp empty_table_filter, do: %{fields: %{}, other_shapes: []}
+  def new(shapes), do: new(shapes, %Filter{})
+  defp new([shape | shapes], filter), do: new(shapes, add_shape(filter, shape))
+  defp new([], filter), do: filter
 
-  def add_shape(%{tables: tables}, shape) do
-    %{
+  def add_shape(%Filter{tables: tables}, shape) do
+    %Filter{
       tables:
         Map.update(
           tables,
@@ -27,6 +27,8 @@ defmodule Electric.Shapes.Filter do
         )
     }
   end
+
+  defp empty_table_filter, do: %{fields: %{}, other_shapes: []}
 
   defp add_shape_to_table_filter(%{shape: %{where: where}} = shape, table_filter) do
     case optimise_where(where) do
@@ -76,7 +78,7 @@ defmodule Electric.Shapes.Filter do
   defp const_to_string(%Const{value: value, type: :int4}), do: Integer.to_string(value)
   defp const_to_string(%Const{value: value, type: :int8}), do: Integer.to_string(value)
 
-  def affected_shapes(filter, %Transaction{changes: changes}) do
+  def affected_shapes(%Filter{} = filter, %Transaction{changes: changes}) do
     changes
     |> Enum.map(&affected_shapes(filter, &1))
     |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
@@ -84,22 +86,22 @@ defmodule Electric.Shapes.Filter do
 
   # TODO: Optimisation: each time a shape is affected, take it out of `other_shapes`
 
-  def affected_shapes(filter, %NewRecord{relation: relation, record: record}) do
+  def affected_shapes(%Filter{} = filter, %NewRecord{relation: relation, record: record}) do
     affected_shapes_by_record(filter, relation, record)
   end
 
-  def affected_shapes(filter, %DeletedRecord{relation: relation, old_record: record}) do
+  def affected_shapes(%Filter{} = filter, %DeletedRecord{relation: relation, old_record: record}) do
     affected_shapes_by_record(filter, relation, record)
   end
 
-  def affected_shapes(filter, %UpdatedRecord{relation: relation} = change) do
+  def affected_shapes(%Filter{} = filter, %UpdatedRecord{relation: relation} = change) do
     MapSet.union(
       affected_shapes_by_record(filter, relation, change.record),
       affected_shapes_by_record(filter, relation, change.old_record)
     )
   end
 
-  def affected_shapes_by_record(filter, table, record) do
+  defp affected_shapes_by_record(filter, table, record) do
     case Map.get(filter.tables, table) do
       nil -> MapSet.new()
       table_filter -> affected_shapes_by_table(table_filter, record)

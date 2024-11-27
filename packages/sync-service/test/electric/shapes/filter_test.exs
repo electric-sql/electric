@@ -17,7 +17,7 @@ defmodule Electric.Shapes.FilterTest do
                  handle: "shape1",
                  shape: Shape.new!("the_table", where: "id = 1", inspector: @inspector)
                }
-             ]) == %{
+             ]) == %Filter{
                tables: %{
                  {"public", "the_table"} => %{
                    fields: %{
@@ -39,7 +39,7 @@ defmodule Electric.Shapes.FilterTest do
         shape: Shape.new!("the_table", where: "id > 1", inspector: @inspector)
       }
 
-      assert Filter.new([shape]) == %{
+      assert Filter.new([shape]) == %Filter{
                tables: %{
                  {"public", "the_table"} => %{
                    fields: %{},
@@ -54,7 +54,7 @@ defmodule Electric.Shapes.FilterTest do
 
   describe "affected_shapes/2" do
     test "shapes with same table and id are returned" do
-      filter = %{
+      filter = %Filter{
         tables: %{
           {"public", "the_table"} => %{
             fields: %{
@@ -98,7 +98,7 @@ defmodule Electric.Shapes.FilterTest do
     end
 
     test "shapes with same table but different id are not returned" do
-      filter = %{
+      filter = %Filter{
         tables: %{
           {"public", "the_table"} => %{
             fields: %{
@@ -128,7 +128,7 @@ defmodule Electric.Shapes.FilterTest do
     end
 
     test "shapes with more complicated where clauses are evaluated" do
-      filter = %{
+      filter = %Filter{
         tables: %{
           {"public", "the_table"} => %{
             fields: %{},
@@ -164,7 +164,7 @@ defmodule Electric.Shapes.FilterTest do
     end
 
     test "returns shapes affected by delete" do
-      filter = %{
+      filter = %Filter{
         tables: %{
           {"public", "the_table"} => %{
             fields: %{
@@ -193,7 +193,7 @@ defmodule Electric.Shapes.FilterTest do
     end
 
     test "returns shapes affected by update" do
-      filter = %{
+      filter = %Filter{
         tables: %{
           {"public", "the_table"} => %{
             fields: %{
