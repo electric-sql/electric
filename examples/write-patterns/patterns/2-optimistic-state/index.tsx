@@ -1,7 +1,7 @@
 import React, { useOptimistic, useTransition } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { matchBy, matchStream, type ChangeMessage } from '@electric-sql/client'
-import { getShapeStream, useShape } from '@electric-sql/react'
+import { matchBy, matchStream } from '@electric-sql/client'
+import { useShape } from '@electric-sql/react'
 import api from '../../shared/app/client'
 
 const ELECTRIC_URL = import.meta.env.ELECTRIC_URL || 'http://localhost:3000'
@@ -10,7 +10,7 @@ type Todo = {
   id: string
   title: string
   completed: boolean
-  created_at?: number
+  created_at: string
 }
 
 type OptimisticState = {
@@ -32,7 +32,7 @@ export default function OptimisticState() {
     table: 'todos',
   })
 
-  const sorted = data ? data.sort((a, b) => a.created_at - b.created_at) : []
+  const sorted = data ? data.sort((a, b) => a.created_at.localeCompare(b.created_at)) : []
 
   // Use React's built in `useOptimistic` hook. This provides
   // a mechanism to apply local optimistic state whilst writes
@@ -83,13 +83,13 @@ export default function OptimisticState() {
     startTransition(async () => {
       addOptimisticState({
         operation: 'insert',
-        value: {...data, completed: false}
+        value: {...data, completed: false, created_at: new Date().toISOString()}
       })
 
       const fetchPromise = api.request(path, 'POST', data)
       const syncPromise = matchStream(stream, [`insert`], matchBy('id', data.id))
 
-      return await Promise.all([fetchPromise, syncPromise])
+      await Promise.all([fetchPromise, syncPromise])
     })
 
     form.reset()
@@ -112,7 +112,7 @@ export default function OptimisticState() {
       const fetchPromise = api.request(path, 'PUT', data)
       const syncPromise = matchStream(stream, [`update`], matchBy('id', todo.id))
 
-      return await Promise.all([fetchPromise, syncPromise])
+      await Promise.all([fetchPromise, syncPromise])
     })
   }
 
@@ -131,7 +131,7 @@ export default function OptimisticState() {
       const fetchPromise = api.request(path, 'DELETE')
       const syncPromise = matchStream(stream, [`delete`], matchBy('id', todo.id))
 
-      return await Promise.all([fetchPromise, syncPromise])
+      await Promise.all([fetchPromise, syncPromise])
     })
   }
 
