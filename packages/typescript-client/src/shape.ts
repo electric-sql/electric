@@ -62,6 +62,10 @@ export class Shape<T extends Row<unknown> = Row> {
     )
   }
 
+  get stream(): ShapeStreamInterface<T> {
+    return this.#stream
+  }
+
   get isUpToDate(): boolean {
     return this.#stream.isUpToDate
   }
