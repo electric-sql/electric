@@ -401,8 +401,9 @@ defmodule Electric.Shapes.Consumer do
       |> Enum.flat_map_reduce(log_state, fn log_item,
                                             %{current_chunk_byte_size: chunk_size} = state ->
         json_log_item = Jason.encode!(log_item)
+        item_byte_size = byte_size(json_log_item)
 
-        case LogChunker.add_to_chunk(json_log_item, chunk_size, chunk_bytes_threshold) do
+        case LogChunker.fit_into_chunk(item_byte_size, chunk_size, chunk_bytes_threshold) do
           {:ok, new_chunk_size} ->
             {[{log_item.offset, json_log_item}],
              %{state | current_chunk_byte_size: new_chunk_size}}
