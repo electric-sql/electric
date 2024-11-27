@@ -25,7 +25,7 @@ Good use-cases include:
 
 You have the network on the write path — slow, laggy, loading spinners.
 
-Interactive applications won't work offline without implementing [optimistic writes with local optimistic state](../../optimistic-state).
+Interactive applications won't work offline without implementing [optimistic writes with local optimistic state](../2-optimistic-state).
 
 ## How to run
 
