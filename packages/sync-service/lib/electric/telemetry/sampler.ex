@@ -8,11 +8,8 @@ defmodule Electric.Telemetry.Sampler do
   @behaviour :otel_sampler
 
   # Span names that are sampled probabilistically
-  @ratio_span_names [
-    "pg_txn.replication_client.decode_message",
-    "pg_txn.replication_client.process_x_log_data",
-    "pg_txn.replication_client.transaction_received",
-    "shape_write.log_collector.handle_txn"
+  @probabilistic_span_names [
+    "pg_txn.replication_client.process_x_log_data"
   ]
 
   @impl :otel_sampler
@@ -31,7 +28,7 @@ defmodule Electric.Telemetry.Sampler do
       }) do
     tracestate = Tracer.current_span_ctx(ctx) |> OpenTelemetry.Span.tracestate()
 
-    if span_name in @ratio_span_names do
+    if span_name in @probabilistic_span_names do
       if :rand.uniform() <= sampling_probability do
         {:record_and_sample, [], tracestate}
       else
