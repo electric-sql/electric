@@ -1,8 +1,9 @@
 defmodule Electric.Shapes.Filter do
   alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
-  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes.Relation
+  alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.TruncatedRelation
   alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.Eval.Parser.Const
@@ -88,8 +89,6 @@ defmodule Electric.Shapes.Filter do
   defp const_to_string(%Const{value: value, type: :int4}), do: Integer.to_string(value)
   defp const_to_string(%Const{value: value, type: :int8}), do: Integer.to_string(value)
 
-  # TODO: TruncateRelation and any others?
-
   def affected_shapes(%Filter{} = filter, %Relation{} = relation) do
     for {handle, shape} <- all_shapes_for_table(filter, {relation.schema, relation.table}),
         Shape.is_affected_by_relation_change?(shape, relation),
@@ -119,6 +118,15 @@ defmodule Electric.Shapes.Filter do
       affected_shapes_by_record(filter, relation, change.record),
       affected_shapes_by_record(filter, relation, change.old_record)
     )
+  end
+
+  # TODO: Optimisation: Do TruncatedRelations first and then just process other changes for other tables
+
+  def affected_shapes(%Filter{} = filter, %TruncatedRelation{relation: table}) do
+    for {handle, _shape} <- all_shapes_for_table(filter, table),
+        into: MapSet.new() do
+      handle
+    end
   end
 
   defp affected_shapes_by_record(filter, table, record) do

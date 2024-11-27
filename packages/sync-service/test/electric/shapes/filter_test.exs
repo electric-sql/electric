@@ -2,8 +2,9 @@ defmodule Electric.Shapes.FilterTest do
   use ExUnit.Case
   alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
-  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes.Relation
+  alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.TruncatedRelation
   alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Shape
@@ -266,6 +267,60 @@ defmodule Electric.Shapes.FilterTest do
         }
 
       assert Filter.affected_shapes(filter, relation) ==
+               MapSet.new(["shape1", "shape2", "shape3", "shape4"])
+    end
+
+    test "returns shapes affected by truncation" do
+      filter = %Filter{
+        tables: %{
+          {"public", "the_table"} => %{
+            fields: %{
+              "id" => %{
+                "1" => [
+                  %{
+                    handle: "shape1",
+                    and_where: nil,
+                    shape: Shape.new!("the_table", where: "id = 1", inspector: @inspector)
+                  }
+                ],
+                "2" => [
+                  %{
+                    handle: "shape2",
+                    and_where: nil,
+                    shape: Shape.new!("the_table", where: "id = 2", inspector: @inspector)
+                  }
+                ]
+              }
+            },
+            other_shapes: %{
+              "shape3" => Shape.new!("the_table", where: "id > 7", inspector: @inspector),
+              "shape4" => Shape.new!("the_table", where: "id > 6", inspector: @inspector)
+            }
+          },
+          {"public", "another_table"} => %{
+            fields: %{
+              "id" => %{
+                "1" => [
+                  %{handle: "not-this-shape-1", and_where: nil}
+                ]
+              }
+            },
+            other_shapes: %{
+              "not-this-shape-1" =>
+                Shape.new!("another_table", where: "id > 7", inspector: @inspector),
+              "not-this-shape-2" =>
+                Shape.new!("another_table", where: "id > 6", inspector: @inspector)
+            }
+          }
+        }
+      }
+
+      transaction =
+        %TruncatedRelation{
+          relation: {"public", "the_table"}
+        }
+
+      assert Filter.affected_shapes(filter, transaction) ==
                MapSet.new(["shape1", "shape2", "shape3", "shape4"])
     end
   end
