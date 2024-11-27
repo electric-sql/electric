@@ -206,4 +206,6 @@ config :electric,
   prometheus_port: prometheus_port,
   storage: storage,
   persistent_kv: persistent_kv,
-  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false)
+  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false),
+  call_home_telemetry: env!("ELECTRIC_CALL_HOME_TELEMETRY", :boolean, Mix.env() == :prod),
+  telemetry_url: "https://checkpoint.electric-sql.com"

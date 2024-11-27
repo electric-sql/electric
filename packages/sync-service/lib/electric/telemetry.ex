@@ -14,7 +14,87 @@ defmodule Electric.Telemetry do
     children
     |> add_statsd_reporter(Application.fetch_env!(:electric, :telemetry_statsd_host))
     |> add_prometheus_reporter(Application.fetch_env!(:electric, :prometheus_port))
+    |> add_call_home_reporter(Application.fetch_env!(:electric, :call_home_telemetry))
     |> Supervisor.init(strategy: :one_for_one)
+  end
+
+  defp add_call_home_reporter(children, false), do: children
+
+  defp add_call_home_reporter(children, true) do
+    children ++
+      [
+        {Electric.Telemetry.CallHomeReporter,
+         static_info: static_info(),
+         metrics: call_home_metrics(),
+         first_report_in: {5, :minute},
+         reporting_period: {4 * 60, :minute},
+         reporter_fn: &Electric.Telemetry.CallHomeReporter.report_home/1}
+      ]
+  end
+
+  def static_info() do
+    {total_mem, _, _} = :memsup.get_memory_data()
+    processors = :erlang.system_info(:logical_processors)
+    {os_family, os_name} = :os.type()
+    arch = :erlang.system_info(:system_architecture)
+
+    %{
+      electric_version: to_string(Electric.version()),
+      environment: %{
+        os: %{family: os_family, name: os_name},
+        arch: to_string(arch),
+        cores: processors,
+        ram: total_mem,
+        electric_instance_id: Electric.instance_id()
+      }
+    }
+  end
+
+  def call_home_metrics() do
+    [
+      environment: [
+        pg_version:
+          last_value("electric.postgres.replication.start.from_metadata",
+            measurement: fn _, x -> x.short_version end,
+            reporter_options: [persist_between_sends: true]
+          )
+      ],
+      resources: [
+        uptime:
+          last_value("vm.uptime.total",
+            unit: :second,
+            measurement: &:erlang.convert_time_unit(&1.total, :native, :second)
+          ),
+        used_memory: summary("vm.memory.total", unit: :byte),
+        run_queue_total: summary("vm.total_run_queue_lengths.total"),
+        run_queue_cpu: summary("vm.total_run_queue_lengths.cpu"),
+        run_queue_io: summary("vm.total_run_queue_lengths.io")
+      ],
+      usage: [
+        inbound_bytes:
+          sum("electric.postgres.replication.transaction_received.bytes", unit: :byte),
+        inbound_transactions: sum("electric.postgres.replication.transaction_received.count"),
+        inbound_operations: sum("electric.postgres.replication.transaction_received.operations"),
+        stored_bytes: sum("electric.storage.transaction_stored.bytes", unit: :byte),
+        stored_transactions: sum("electric.storage.transaction_stored.count"),
+        stored_operations: sum("electric.storage.transaction_stored.operations"),
+        used_storage: last_value("electric.storage.used_bytes", unit: :byte),
+        total_shapes: last_value("electric.shapes.total_shapes.count"),
+        active_shapes:
+          summary("electric.plug.serve_shape.monotonic_time",
+            unit: :unique,
+            reporter_options: [count_unique: :shape_handle]
+          ),
+        unique_clients:
+          summary("electric.plug.serve_shape.monotonic_time",
+            unit: :unique,
+            reporter_options: [count_unique: :client_ip]
+          ),
+        sync_requests: counter("electric.plug.serve_shape.monotonic_time", drop: & &1[:live]),
+        live_requests: counter("electric.plug.serve_shape.monotonic_time", keep: & &1[:live]),
+        served_bytes: sum("electric.plug.serve_shape.bytes", unit: :byte)
+      ]
+    ]
   end
 
   defp add_statsd_reporter(children, nil), do: children
