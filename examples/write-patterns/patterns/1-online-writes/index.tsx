@@ -35,7 +35,7 @@ export default function OnlineWrites() {
     const path = '/todos'
     const data = {
       id: uuidv4(),
-      title: title
+      title: title,
     }
 
     await api.request(path, 'POST', data)
@@ -48,7 +48,7 @@ export default function OnlineWrites() {
 
     const data = {
       ...todo,
-      completed: !todo.completed
+      completed: !todo.completed,
     }
 
     await api.request(path, 'PUT', data)

@@ -12,7 +12,11 @@ const maxRetries = 32
 const backoffMultiplier = 1.1
 const initialDelayMs = 1_000
 
-async function retryFetch(url: string, options: RequestOptions, retryCount: number) {
+async function retryFetch(
+  url: string,
+  options: RequestOptions,
+  retryCount: number
+) {
   if (retryCount > maxRetries) {
     return
   }
@@ -20,16 +24,17 @@ async function retryFetch(url: string, options: RequestOptions, retryCount: numb
   const delay = retryCount * backoffMultiplier * initialDelayMs
 
   return await new Promise((resolve) => {
-    setTimeout(
-      async () => {
-        resolve(await resilientFetch(url, options, retryCount))
-      },
-      delay
-    )
+    setTimeout(async () => {
+      resolve(await resilientFetch(url, options, retryCount))
+    }, delay)
   })
 }
 
-async function resilientFetch(url: string, options: RequestOptions, retryCount: number) {
+async function resilientFetch(
+  url: string,
+  options: RequestOptions,
+  retryCount: number
+) {
   try {
     const response = await fetch(url, options)
 
@@ -39,8 +44,7 @@ async function resilientFetch(url: string, options: RequestOptions, retryCount: 
 
     // Could also retry here if you want to be resilient
     // to 4xx and 5xx responses as well as network errors
-  }
-  catch (err) {
+  } catch (err) {
     return await retryFetch(url, options, retryCount + 1)
   }
 }
