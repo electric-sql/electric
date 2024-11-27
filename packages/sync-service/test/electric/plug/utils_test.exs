@@ -99,7 +99,7 @@ defmodule Electric.Plug.UtilsTest do
           |> Electric.Plug.Utils.hold_conn_until_stack_ready([])
         end)
 
-      Process.sleep(50)
+      Process.sleep(100)
 
       Electric.StackSupervisor.dispatch_stack_event(Registry.StackEvents, ctx.stack_id, :ready)
 
