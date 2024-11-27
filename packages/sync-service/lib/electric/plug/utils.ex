@@ -87,7 +87,7 @@ defmodule Electric.Plug.Utils do
       "error.type" => assigns[:error_str],
       "http.request_id" => assigns[:plug_request_id],
       "http.query_string" => conn.query_string,
-      SC.ClientAttributes.client_address() => client_ip(conn),
+      SC.ClientAttributes.client_address() => conn.remote_ip,
       SC.ServerAttributes.server_address() => conn.host,
       SC.ServerAttributes.server_port() => conn.port,
       SC.HTTPAttributes.http_request_method() => conn.method,
@@ -113,18 +113,6 @@ defmodule Electric.Plug.Utils do
     |> Map.merge(query_params_map)
     |> Map.merge(Map.new(conn.req_headers, fn {k, v} -> {"http.request.header.#{k}", v} end))
     |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.response.header.#{k}", v} end))
-  end
-
-  defp client_ip(%Plug.Conn{remote_ip: remote_ip} = conn) do
-    case Plug.Conn.get_req_header(conn, "x-forwarded-for") do
-      [] ->
-        remote_ip
-        |> :inet_parse.ntoa()
-        |> to_string()
-
-      [ip_address | _] ->
-        ip_address
-    end
   end
 
   defp user_agent(%Plug.Conn{} = conn) do
