@@ -12,26 +12,24 @@ const maxRetries = 32
 const backoffMultiplier = 1.1
 const initialDelayMs = 1_000
 
-async function retryFetch(url: string, options: RequestOptions, retryCount) {
+async function retryFetch(url: string, options: RequestOptions, retryCount: number) {
   if (retryCount > maxRetries) {
     return
   }
 
   const delay = retryCount * backoffMultiplier * initialDelayMs
 
-  return await new Promise((resolve, reject) => {
+  return await new Promise((resolve) => {
     setTimeout(
       async () => {
-        const returnValue = await resilientFetch(url, options, retryCount)
-
-        resolve(returnValue)
+        resolve(await resilientFetch(url, options, retryCount))
       },
       delay
     )
   })
 }
 
-async function resilientFetch(url: string, options: RequestOptions, retryCount) {
+async function resilientFetch(url: string, options: RequestOptions, retryCount: number) {
   try {
     const response = await fetch(url, options)
 
