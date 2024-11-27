@@ -13,15 +13,15 @@ defmodule Electric.Shapes.FilterTest do
 
   describe "new/1" do
     test "with `field = constant` where clause" do
-      assert Filter.new(%{
-               "shape1" => Shape.new!("the_table", where: "id = 1", inspector: @inspector)
-             }) == %Filter{
+      shape = Shape.new!("the_table", where: "id = 1", inspector: @inspector)
+
+      assert Filter.new(%{"shape1" => shape}) == %Filter{
                tables: %{
                  {"public", "the_table"} => %{
                    fields: %{
                      "id" => %{
                        "1" => [
-                         %{handle: "shape1", and_where: nil}
+                         %{handle: "shape1", and_where: nil, shape: shape}
                        ]
                      }
                    },
@@ -214,7 +214,6 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.affected_shapes(filter, transaction) == MapSet.new(["shape1", "shape2"])
     end
 
-    @tag :skip
     test "returns shapes affected by relation change" do
       filter = %Filter{
         tables: %{
@@ -222,10 +221,18 @@ defmodule Electric.Shapes.FilterTest do
             fields: %{
               "id" => %{
                 "1" => [
-                  %{handle: "shape1", and_where: nil}
+                  %{
+                    handle: "shape1",
+                    and_where: nil,
+                    shape: Shape.new!("the_table", where: "id = 1", inspector: @inspector)
+                  }
                 ],
                 "2" => [
-                  %{handle: "shape2", and_where: nil}
+                  %{
+                    handle: "shape2",
+                    and_where: nil,
+                    shape: Shape.new!("the_table", where: "id = 2", inspector: @inspector)
+                  }
                 ]
               }
             },
@@ -254,7 +261,6 @@ defmodule Electric.Shapes.FilterTest do
 
       relation =
         %Relation{
-          id: "TODO",
           schema: "public",
           table: "the_table"
         }

@@ -62,11 +62,11 @@ defmodule Electric.Shapes.Filter do
     )
   end
 
-  defp add_shape_to_value_filter(value, {handle, _}, and_where, value_filter) do
+  defp add_shape_to_value_filter(value, {handle, shape}, and_where, value_filter) do
     Map.update(
       value_filter,
       value,
-      [%{handle: handle, and_where: and_where}],
+      [%{handle: handle, and_where: and_where, shape: shape}],
       fn shapes -> [%{handle: handle, and_where: and_where} | shapes] end
     )
   end
