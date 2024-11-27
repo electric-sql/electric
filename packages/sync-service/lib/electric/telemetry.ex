@@ -6,9 +6,9 @@ defmodule Electric.Telemetry do
     Supervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
 
-  def init(stack_id: stack_id) do
+  def init(opts) do
     children = [
-      {:telemetry_poller, measurements: periodic_measurements(stack_id), period: 2_000}
+      {:telemetry_poller, measurements: periodic_measurements(opts), period: 2_000}
     ]
 
     children
@@ -77,7 +77,7 @@ defmodule Electric.Telemetry do
         stored_bytes: sum("electric.storage.transaction_stored.bytes", unit: :byte),
         stored_transactions: sum("electric.storage.transaction_stored.count"),
         stored_operations: sum("electric.storage.transaction_stored.operations"),
-        used_storage: last_value("electric.storage.used_bytes", unit: :byte),
+        total_used_storage_kb: last_value("electric.storage.used", unit: {:byte, :kilobyte}),
         total_shapes: last_value("electric.shapes.total_shapes.count"),
         active_shapes:
           summary("electric.plug.serve_shape.monotonic_time",
@@ -176,11 +176,14 @@ defmodule Electric.Telemetry do
     ]
   end
 
-  defp periodic_measurements(stack_id) do
+  defp periodic_measurements(opts) do
+    stack_id = Keyword.fetch!(opts, :stack_id)
+
     [
       # A module, function and arguments to be invoked periodically.
       {__MODULE__, :uptime_event, []},
       {__MODULE__, :count_shapes, [stack_id]},
+      {__MODULE__, :get_total_disk_usage, [opts]},
       {Electric.Connection.Manager, :report_retained_wal_size,
        [Electric.Connection.Manager.name(stack_id)]}
     ]
@@ -198,5 +201,19 @@ defmodule Electric.Telemetry do
     |> then(
       &:telemetry.execute([:electric, :shapes, :total_shapes], %{count: &1}, %{stack_id: stack_id})
     )
+  end
+
+  def get_total_disk_usage(opts) do
+    storage = Electric.StackSupervisor.storage_mod_arg(Map.new(opts))
+
+    Electric.ShapeCache.Storage.get_total_disk_usage(storage)
+    |> then(
+      &:telemetry.execute([:electric, :storage], %{used: &1}, %{
+        stack_id: opts[:stack_id]
+      })
+    )
+  catch
+    :exit, {:noproc, _} ->
+      :ok
   end
 end
