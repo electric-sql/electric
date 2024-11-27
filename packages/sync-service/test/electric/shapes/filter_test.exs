@@ -70,6 +70,16 @@ defmodule Electric.Shapes.FilterTest do
               }
             },
             other_shapes: []
+          },
+          {"public", "another_table"} => %{
+            fields: %{
+              "id" => %{
+                "1" => [
+                  %{handle: "shape5", and_where: nil}
+                ]
+              }
+            },
+            other_shapes: []
           }
         }
       }
@@ -85,6 +95,36 @@ defmodule Electric.Shapes.FilterTest do
         }
 
       assert Filter.affected_shapes(filter, transaction) == MapSet.new(["shape1", "shape2"])
+    end
+
+    test "shapes with same table but different id are not returned" do
+      filter = %{
+        tables: %{
+          {"public", "the_table"} => %{
+            fields: %{
+              "id" => %{
+                "1" => [
+                  %{handle: "shape1", and_where: nil},
+                  %{handle: "shape2", and_where: nil}
+                ]
+              }
+            },
+            other_shapes: []
+          }
+        }
+      }
+
+      transaction =
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"public", "the_table"},
+              record: %{"id" => "2"}
+            }
+          ]
+        }
+
+      assert Filter.affected_shapes(filter, transaction) == MapSet.new([])
     end
 
     test "shapes with more complicated where clauses are evaluated" do
