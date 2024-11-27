@@ -93,7 +93,7 @@ defmodule Electric.Telemetry do
     [
       # A module, function and arguments to be invoked periodically.
       {__MODULE__, :uptime_event, []},
-      {Electric.Connection.Manager, :query_replication_lag,
+      {Electric.Connection.Manager, :report_retained_wal_size,
        [Electric.Connection.Manager.name(stack_id)]}
     ]
   end
