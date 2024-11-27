@@ -319,6 +319,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   test "correctly responds to a status update request message from PG", ctx do
     state =
       ReplicationClient.State.new(
+        stack_id: ctx.stack_id,
         transaction_received: nil,
         relation_received: nil,
         publication_name: "",
