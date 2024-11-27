@@ -54,8 +54,7 @@ defmodule Electric.Telemetry do
     [
       environment: [
         pg_version:
-          last_value("electric.postgres.replication.start.from_metadata",
-            measurement: fn _, x -> x.short_version end,
+          last_value("electric.postgres.info_looked_up.pg_version",
             reporter_options: [persist_between_sends: true]
           )
       ],

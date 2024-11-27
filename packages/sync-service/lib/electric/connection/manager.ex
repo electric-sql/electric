@@ -234,7 +234,7 @@ defmodule Electric.Connection.Manager do
   def handle_call(:report_retained_wal_size, _from, state) do
     if state.monitoring_started? do
       slot_name = Keyword.fetch!(state.replication_opts, :slot_name)
-      query_and_report_retained_wal_size(state.pool_pid, slot_name)
+      query_and_report_retained_wal_size(state.pool_pid, slot_name, state.stack_id)
     end
 
     {:reply, :ok, state}
@@ -426,6 +426,16 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_cast({:pg_info_looked_up, {server_version, system_identifier, timeline_id}}, state) do
+    :telemetry.execute(
+      [:electric, :postgres, :info_looked_up],
+      %{
+        pg_version: server_version,
+        pg_system_identifier: system_identifier,
+        pg_timeline_id: timeline_id
+      },
+      %{stack_id: state.stack_id}
+    )
+
     {:noreply,
      %{
        state
@@ -654,7 +664,7 @@ defmodule Electric.Connection.Manager do
     end
   end
 
-  defp query_and_report_retained_wal_size(pool, slot_name) do
+  defp query_and_report_retained_wal_size(pool, slot_name, stack_id) do
     query = """
     SELECT
       pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)
@@ -666,7 +676,9 @@ defmodule Electric.Connection.Manager do
 
     case Postgrex.query(pool, query, [slot_name]) do
       {:ok, %Postgrex.Result{rows: [[wal_size]]}} ->
-        :telemetry.execute([:electric, :postgres, :replication], %{wal_size: wal_size})
+        :telemetry.execute([:electric, :postgres, :replication], %{wal_size: wal_size}, %{
+          stack_id: stack_id
+        })
 
       {:error, error} ->
         Logger.warning("Failed to query retained WAL size\nError: #{inspect(error)}")
