@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.Relation
   alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.Eval.Parser.Const
@@ -12,52 +13,61 @@ defmodule Electric.Shapes.Filter do
 
   defstruct tables: %{}
 
-  def new(shapes), do: new(shapes, %Filter{})
+  def new(shapes), do: shapes |> Map.to_list() |> new(%Filter{})
   defp new([shape | shapes], filter), do: new(shapes, add_shape(filter, shape))
   defp new([], filter), do: filter
 
-  def add_shape(%Filter{tables: tables}, shape) do
+  def add_shape(%Filter{tables: tables}, {handle, shape}) do
     %Filter{
       tables:
         Map.update(
           tables,
-          shape.shape.root_table,
-          add_shape_to_table_filter(shape, empty_table_filter()),
-          fn table_filter -> add_shape_to_table_filter(shape, table_filter) end
+          shape.root_table,
+          add_shape_to_table_filter({handle, shape}, empty_table_filter()),
+          fn table_filter -> add_shape_to_table_filter({handle, shape}, table_filter) end
         )
     }
   end
 
-  defp empty_table_filter, do: %{fields: %{}, other_shapes: []}
+  defp empty_table_filter, do: %{fields: %{}, other_shapes: %{}}
 
-  defp add_shape_to_table_filter(%{shape: %{where: where}} = shape, table_filter) do
-    case optimise_where(where) do
+  defp add_shape_to_table_filter({handle, shape} = shape_instance, table_filter) do
+    case optimise_where(shape.where) do
       %{operation: "=", field: field, value: value, and_where: and_where} ->
         %{
           table_filter
-          | fields: add_shape_to_field_filter(field, value, shape, table_filter.fields, and_where)
+          | fields:
+              add_shape_to_field_filter(
+                field,
+                value,
+                shape_instance,
+                table_filter.fields,
+                and_where
+              )
         }
 
       :not_optimised ->
-        %{table_filter | other_shapes: [shape | table_filter.other_shapes]}
+        %{table_filter | other_shapes: Map.put(table_filter.other_shapes, handle, shape)}
     end
   end
 
-  defp add_shape_to_field_filter(field, value, shape, fields, and_where) do
+  defp add_shape_to_field_filter(field, value, shape_instance, fields, and_where) do
     Map.update(
       fields,
       field,
-      add_shape_to_value_filter(value, shape, and_where, %{}),
-      fn value_filter -> add_shape_to_value_filter(value, shape, and_where, value_filter) end
+      add_shape_to_value_filter(value, shape_instance, and_where, %{}),
+      fn value_filter ->
+        add_shape_to_value_filter(value, shape_instance, and_where, value_filter)
+      end
     )
   end
 
-  defp add_shape_to_value_filter(value, shape, and_where, value_filter) do
+  defp add_shape_to_value_filter(value, {handle, _}, and_where, value_filter) do
     Map.update(
       value_filter,
       value,
-      [%{handle: shape.handle, and_where: and_where}],
-      fn shapes -> [%{handle: shape.handle, and_where: and_where} | shapes] end
+      [%{handle: handle, and_where: and_where}],
+      fn shapes -> [%{handle: handle, and_where: and_where} | shapes] end
     )
   end
 
@@ -77,6 +87,16 @@ defmodule Electric.Shapes.Filter do
 
   defp const_to_string(%Const{value: value, type: :int4}), do: Integer.to_string(value)
   defp const_to_string(%Const{value: value, type: :int8}), do: Integer.to_string(value)
+
+  # TODO: TruncateRelation and any others?
+
+  def affected_shapes(%Filter{} = filter, %Relation{} = relation) do
+    for {handle, shape} <- all_shapes_for_table(filter, {relation.schema, relation.table}),
+        Shape.is_affected_by_relation_change?(shape, relation),
+        into: MapSet.new() do
+      handle
+    end
+  end
 
   def affected_shapes(%Filter{} = filter, %Transaction{changes: changes}) do
     changes
@@ -128,10 +148,26 @@ defmodule Electric.Shapes.Filter do
   end
 
   defp other_shapes_affected(%{other_shapes: shapes}, record) do
-    for %{handle: handle, shape: shape} <- shapes,
+    for {handle, shape} <- shapes,
         Shape.record_in_shape?(shape, record),
         into: MapSet.new() do
       handle
+    end
+  end
+
+  defp all_shapes_for_table(%Filter{} = filter, table) do
+    case Map.get(filter.tables, table) do
+      nil ->
+        %{}
+
+      %{fields: fields, other_shapes: other_shapes} ->
+        for {_field, values} <- fields,
+            {_value, shapes} <- values,
+            %{handle: handle, shape: shape} <- shapes,
+            into: %{} do
+          {handle, shape}
+        end
+        |> Map.merge(other_shapes)
     end
   end
 end

@@ -3,6 +3,7 @@ defmodule Electric.Shapes.FilterTest do
   alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.Relation
   alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Shape
@@ -12,12 +13,9 @@ defmodule Electric.Shapes.FilterTest do
 
   describe "new/1" do
     test "with `field = constant` where clause" do
-      assert Filter.new([
-               %{
-                 handle: "shape1",
-                 shape: Shape.new!("the_table", where: "id = 1", inspector: @inspector)
-               }
-             ]) == %Filter{
+      assert Filter.new(%{
+               "shape1" => Shape.new!("the_table", where: "id = 1", inspector: @inspector)
+             }) == %Filter{
                tables: %{
                  {"public", "the_table"} => %{
                    fields: %{
@@ -27,23 +25,20 @@ defmodule Electric.Shapes.FilterTest do
                        ]
                      }
                    },
-                   other_shapes: []
+                   other_shapes: %{}
                  }
                }
              }
     end
 
     test "with more complicated where clause" do
-      shape = %{
-        handle: "shape1",
-        shape: Shape.new!("the_table", where: "id > 1", inspector: @inspector)
-      }
+      shapes = %{"shape1" => Shape.new!("the_table", where: "id > 1", inspector: @inspector)}
 
-      assert Filter.new([shape]) == %Filter{
+      assert Filter.new(shapes) == %Filter{
                tables: %{
                  {"public", "the_table"} => %{
                    fields: %{},
-                   other_shapes: [shape]
+                   other_shapes: shapes
                  }
                }
              }
@@ -69,7 +64,7 @@ defmodule Electric.Shapes.FilterTest do
                 ]
               }
             },
-            other_shapes: []
+            other_shapes: %{}
           },
           {"public", "another_table"} => %{
             fields: %{
@@ -79,7 +74,7 @@ defmodule Electric.Shapes.FilterTest do
                 ]
               }
             },
-            other_shapes: []
+            other_shapes: %{}
           }
         }
       }
@@ -109,7 +104,7 @@ defmodule Electric.Shapes.FilterTest do
                 ]
               }
             },
-            other_shapes: []
+            other_shapes: %{}
           }
         }
       }
@@ -132,20 +127,11 @@ defmodule Electric.Shapes.FilterTest do
         tables: %{
           {"public", "the_table"} => %{
             fields: %{},
-            other_shapes: [
-              %{
-                handle: "shape1",
-                shape: Shape.new!("the_table", where: "id > 7", inspector: @inspector)
-              },
-              %{
-                handle: "shape2",
-                shape: Shape.new!("the_table", where: "id > 6", inspector: @inspector)
-              },
-              %{
-                handle: "shape3",
-                shape: Shape.new!("the_table", where: "id > 5", inspector: @inspector)
-              }
-            ]
+            other_shapes: %{
+              "shape1" => Shape.new!("the_table", where: "id > 7", inspector: @inspector),
+              "shape2" => Shape.new!("the_table", where: "id > 6", inspector: @inspector),
+              "shape3" => Shape.new!("the_table", where: "id > 5", inspector: @inspector)
+            }
           }
         }
       }
@@ -174,7 +160,7 @@ defmodule Electric.Shapes.FilterTest do
                 ]
               }
             },
-            other_shapes: []
+            other_shapes: %{}
           }
         }
       }
@@ -209,7 +195,7 @@ defmodule Electric.Shapes.FilterTest do
                 ]
               }
             },
-            other_shapes: []
+            other_shapes: %{}
           }
         }
       }
@@ -226,6 +212,55 @@ defmodule Electric.Shapes.FilterTest do
         }
 
       assert Filter.affected_shapes(filter, transaction) == MapSet.new(["shape1", "shape2"])
+    end
+
+    @tag :skip
+    test "returns shapes affected by relation change" do
+      filter = %Filter{
+        tables: %{
+          {"public", "the_table"} => %{
+            fields: %{
+              "id" => %{
+                "1" => [
+                  %{handle: "shape1", and_where: nil}
+                ],
+                "2" => [
+                  %{handle: "shape2", and_where: nil}
+                ]
+              }
+            },
+            other_shapes: %{
+              "shape3" => Shape.new!("the_table", where: "id > 7", inspector: @inspector),
+              "shape4" => Shape.new!("the_table", where: "id > 6", inspector: @inspector)
+            }
+          },
+          {"public", "another_table"} => %{
+            fields: %{
+              "id" => %{
+                "1" => [
+                  %{handle: "not-this-shape-1", and_where: nil}
+                ]
+              }
+            },
+            other_shapes: %{
+              "not-this-shape-1" =>
+                Shape.new!("another_table", where: "id > 7", inspector: @inspector),
+              "not-this-shape-2" =>
+                Shape.new!("another_table", where: "id > 6", inspector: @inspector)
+            }
+          }
+        }
+      }
+
+      relation =
+        %Relation{
+          id: "TODO",
+          schema: "public",
+          table: "the_table"
+        }
+
+      assert Filter.affected_shapes(filter, relation) ==
+               MapSet.new(["shape1", "shape2", "shape3", "shape4"])
     end
   end
 end
