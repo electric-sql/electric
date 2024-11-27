@@ -42,7 +42,7 @@ defmodule Electric.Shapes do
   @doc """
   Get the shape that corresponds to this shape definition and return it along with the latest offset of the shape
   """
-  @spec get_shape(keyword(), Shape.t()) :: {shape_handle(), LogOffset.t()}
+  @spec get_shape(keyword(), Shape.t()) :: {shape_handle(), LogOffset.t()} | nil
   def get_shape(config, shape_def) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
 

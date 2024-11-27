@@ -13,14 +13,14 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback update_shape_latest_offset(shape_handle(), LogOffset.t(), keyword()) :: :ok
 
   @callback get_shape(shape_def(), opts :: keyword()) ::
-              {shape_handle(), current_snapshot_offset :: LogOffset.t()}
+              {shape_handle(), current_snapshot_offset :: LogOffset.t()} | nil
   @callback get_or_create_shape_handle(shape_def(), opts :: keyword()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()}
-  @callback list_shapes(Electric.ShapeCache.ShapeStatus.t()) :: [{shape_handle(), Shape.t()}]
+  @callback list_shapes(keyword() | map()) :: [{shape_handle(), Shape.t()}]
   @callback await_snapshot_start(shape_handle(), opts :: keyword()) :: :started | {:error, term()}
   @callback handle_truncate(shape_handle(), keyword()) :: :ok
   @callback clean_shape(shape_handle(), keyword()) :: :ok
-  @callback clean_all_shapes(GenServer.name()) :: :ok
+  @callback clean_all_shapes(keyword()) :: :ok
   @callback has_shape?(shape_handle(), keyword()) :: boolean()
 end
 
@@ -132,10 +132,12 @@ defmodule Electric.ShapeCache do
   end
 
   @impl Electric.ShapeCacheBehaviour
-  @spec list_shapes(Electric.ShapeCache.ShapeStatus.t()) :: [{shape_handle(), Shape.t()}]
+  @spec list_shapes(keyword()) :: [{shape_handle(), Shape.t()}]
   def list_shapes(opts) do
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
-    shape_status.list_shapes(opts)
+    shape_status.list_shapes(%ShapeStatus{shape_meta_table: get_shape_meta_table(opts)})
+  rescue
+    ArgumentError -> []
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -364,5 +366,6 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  def get_shape_meta_table(opts), do: :"#{opts[:stack_id]}:shape_meta_table"
+  def get_shape_meta_table(opts),
+    do: opts[:shape_meta_table] || :"#{opts[:stack_id]}:shape_meta_table"
 end
