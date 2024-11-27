@@ -139,24 +139,6 @@ defmodule Support.ComponentSetup do
     }
   end
 
-  def with_app_config(ctx) do
-    %{
-      app_config: %Electric.Application.Configuration{
-        electric_instance_id: ctx.electric_instance_id,
-        persistent_kv: ctx.persistent_kv,
-        replication_opts: %{
-          stream_id: ctx.stream_id,
-          publication_name: ctx.publication_name,
-          slot_name: ctx.slot_name,
-          slot_temporary?: false
-        },
-        pool_opts: %{
-          size: 20
-        }
-      }
-    }
-  end
-
   def with_complete_stack(ctx) do
     stack_id = full_test_name(ctx)
 
