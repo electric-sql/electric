@@ -106,3 +106,28 @@ code {
   font-size: 14.5px;
   cursor: pointer;
 }
+
+span.title {
+  display: inline;
+}
+
+span.pending {
+  display: inline;
+  opacity: 1;
+
+  width: 50px;
+  height: 50px;
+  position: absolute;
+  margin: -14px 0 0 -7px;
+
+  background-image: url(/shared/app/icons/spinner.gif);
+  background-repeat: no-repeat;
+  background-size: 50px 50px;
+
+  -webkit-transition: opacity 0.5s ease-in-out;
+  -moz-transition: opacity 0.5s ease-in-out;
+  transition: opacity 0.5s ease-in-out;
+}
+span.pending.hidden {
+  opacity: 0;
+}

@@ -6,6 +6,47 @@ type RequestOptions = {
   body?: string
 }
 
+// Keeps trying for 3 minutes, with the delay
+// increasing slowly from 1 to 20 seconds.
+const maxRetries = 32
+const backoffMultiplier = 1.1
+const initialDelayMs = 1_000
+
+async function retryFetch(url: string, options: RequestOptions, retryCount) {
+  if (retryCount > maxRetries) {
+    return
+  }
+
+  const delay = retryCount * backoffMultiplier * initialDelayMs
+
+  return await new Promise((resolve, reject) => {
+    setTimeout(
+      async () => {
+        const returnValue = await resilientFetch(url, options, retryCount)
+
+        resolve(returnValue)
+      },
+      delay
+    )
+  })
+}
+
+async function resilientFetch(url: string, options: RequestOptions, retryCount) {
+  try {
+    const response = await fetch(url, options)
+
+    if (response.ok) {
+      return await response.json()
+    }
+
+    // Could also retry here if you want to be resilient
+    // to 4xx and 5xx responses as well as network errors
+  }
+  catch (err) {
+    return await retryFetch(url, options, retryCount + 1)
+  }
+}
+
 async function request(path: string, method: string, data?: object) {
   const url = `${API_URL}${path}`
 
@@ -20,7 +61,7 @@ async function request(path: string, method: string, data?: object) {
     options.body = JSON.stringify(data)
   }
 
-  return await fetch(url, options)
+  return await resilientFetch(url, options, 0)
 }
 
 export default { request }
