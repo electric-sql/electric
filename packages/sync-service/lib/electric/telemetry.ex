@@ -99,7 +99,8 @@ defmodule Electric.Telemetry do
           counter("electric.plug.serve_shape.monotonic_time",
             keep: &(Map.get(&1, :live, false) || false)
           ),
-        served_bytes: sum("electric.plug.serve_shape.bytes", unit: :byte)
+        served_bytes: sum("electric.plug.serve_shape.bytes", unit: :byte),
+        replication_lag: summary("electric.postgres.replication.lag", unit: :byte)
       ]
     ]
   end
