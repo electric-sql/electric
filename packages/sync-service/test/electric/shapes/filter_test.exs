@@ -32,6 +32,25 @@ defmodule Electric.Shapes.FilterTest do
              }
     end
 
+    test "with `constant = field` where clause" do
+      shape = Shape.new!("the_table", where: "1 = id", inspector: @inspector)
+
+      assert Filter.new(%{"shape1" => shape}) == %Filter{
+               tables: %{
+                 {"public", "the_table"} => %{
+                   fields: %{
+                     "id" => %{
+                       "1" => [
+                         %{handle: "shape1", and_where: nil, shape: shape}
+                       ]
+                     }
+                   },
+                   other_shapes: %{}
+                 }
+               }
+             }
+    end
+
     test "with more complicated where clause" do
       shapes = %{"shape1" => Shape.new!("the_table", where: "id > 1", inspector: @inspector)}
 

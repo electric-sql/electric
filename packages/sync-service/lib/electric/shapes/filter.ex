@@ -76,8 +76,21 @@ defmodule Electric.Shapes.Filter do
          eval: %Func{
            name: ~s("="),
            args: [
+             # TODO: Is path really [field]?
              %Ref{path: [field]},
              %Const{} = const
+           ]
+         }
+       }) do
+    %{operation: "=", field: field, value: const_to_string(const), and_where: nil}
+  end
+
+  defp optimise_where(%Expr{
+         eval: %Func{
+           name: ~s("="),
+           args: [
+             %Const{} = const,
+             %Ref{path: [field]}
            ]
          }
        }) do
