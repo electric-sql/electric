@@ -190,7 +190,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   subscribe(
     callback: (messages: Message<T>[]) => MaybePromise<void>,
     onError?: (error: FetchError | Error) => void
-  ): void
+  ): () => void
   unsubscribeAll(): void
 
   isLoading(): boolean
