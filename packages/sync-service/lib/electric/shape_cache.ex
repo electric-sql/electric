@@ -321,7 +321,12 @@ defmodule Electric.ShapeCache do
       try do
         {:ok, _pid, _snapshot_xmin, _latest_offset} = start_shape(shape_handle, shape, state)
       rescue
-        e -> Logger.error("Failed to recover shape #{shape_handle}: #{inspect(e)}")
+        e ->
+          Logger.error("Failed to recover shape #{shape_handle}: #{inspect(e)}")
+
+          # clean up corrupted data to avoid persisting bad state
+          Electric.ShapeCache.Storage.for_shape(shape_handle, state.storage)
+          |> Electric.ShapeCache.Storage.unsafe_cleanup!()
       end
     end)
   end

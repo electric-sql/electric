@@ -135,4 +135,10 @@ defmodule Support.TestStorage do
     send(parent, {__MODULE__, :cleanup!, shape_handle})
     Storage.cleanup!(storage)
   end
+
+  @impl Electric.ShapeCache.Storage
+  def unsafe_cleanup!({parent, shape_handle, _, storage}) do
+    send(parent, {__MODULE__, :unsafe_cleanup!, shape_handle})
+    Storage.unsafe_cleanup!(storage)
+  end
 end

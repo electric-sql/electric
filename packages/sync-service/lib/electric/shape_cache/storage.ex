@@ -94,6 +94,14 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Clean up snapshots/logs for a shape handle"
   @callback cleanup!(shape_opts()) :: :ok
 
+  @doc """
+  Clean up snapshots/logs for a shape handle by deleting whole directory.
+
+  Does not require any extra storage processes to be running, but should only
+  be used if the shape is known to not be in use to avoid concurrency issues.
+  """
+  @callback unsafe_cleanup!(shape_opts()) :: :ok
+
   @behaviour __MODULE__
 
   @last_log_offset LogOffset.last()
@@ -186,5 +194,10 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def cleanup!({mod, shape_opts}) do
     mod.cleanup!(shape_opts)
+  end
+
+  @impl __MODULE__
+  def unsafe_cleanup!({mod, shape_opts}) do
+    mod.unsafe_cleanup!(shape_opts)
   end
 end
