@@ -9,11 +9,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       devOptions: {
-        enabled: true
+        enabled: true,
       },
-      includeAssets: [
-        'shared/app/icons/*'
-      ],
+      includeAssets: ['shared/app/icons/*'],
       manifest: {
         name: 'Write Patterns Example - ElectricSQL ',
         short_name: 'Writes',
@@ -23,15 +21,15 @@ export default defineConfig({
           {
             src: './shared/app/icons/icon-192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
           },
           {
             src: './shared/app/icons/icon-512.png',
             sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
-      }
-    })
+            type: 'image/png',
+          },
+        ],
+      },
+    }),
   ],
 })

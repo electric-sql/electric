@@ -32,7 +32,9 @@ export default function OptimisticState() {
     table: 'todos',
   })
 
-  const sorted = data ? data.sort((a, b) => a.created_at.localeCompare(b.created_at)) : []
+  const sorted = data
+    ? data.sort((a, b) => a.created_at.localeCompare(b.created_at))
+    : []
 
   // Use React's built in `useOptimistic` hook. This provides
   // a mechanism to apply local optimistic state whilst writes
@@ -47,7 +49,9 @@ export default function OptimisticState() {
             : [...syncedTodos, value]
 
         case 'update':
-          return syncedTodos.map((todo) => todo.id === value.id ? value : todo)
+          return syncedTodos.map((todo) =>
+            todo.id === value.id ? value : todo
+          )
 
         case 'delete':
           return syncedTodos.filter((todo) => todo.id !== value.id)
@@ -77,17 +81,25 @@ export default function OptimisticState() {
     const path = '/todos'
     const data = {
       id: uuidv4(),
-      title: title
+      title: title,
     }
 
     startTransition(async () => {
       addOptimisticState({
         operation: 'insert',
-        value: {...data, completed: false, created_at: new Date().toISOString()}
+        value: {
+          ...data,
+          completed: false,
+          created_at: new Date().toISOString(),
+        },
       })
 
       const fetchPromise = api.request(path, 'POST', data)
-      const syncPromise = matchStream(stream, [`insert`], matchBy('id', data.id))
+      const syncPromise = matchStream(
+        stream,
+        ['insert'],
+        matchBy('id', data.id)
+      )
 
       await Promise.all([fetchPromise, syncPromise])
     })
@@ -100,17 +112,21 @@ export default function OptimisticState() {
 
     const data = {
       ...todo,
-      completed: !todo.completed
+      completed: !todo.completed,
     }
 
     startTransition(async () => {
       addOptimisticState({
         operation: 'update',
-        value: data
+        value: data,
       })
 
       const fetchPromise = api.request(path, 'PUT', data)
-      const syncPromise = matchStream(stream, [`update`], matchBy('id', todo.id))
+      const syncPromise = matchStream(
+        stream,
+        ['update'],
+        matchBy('id', todo.id)
+      )
 
       await Promise.all([fetchPromise, syncPromise])
     })
@@ -120,16 +136,20 @@ export default function OptimisticState() {
     event.preventDefault()
 
     const path = `/todos/${todo.id}`
-    const data = {...todo}
+    const data = { ...todo }
 
     startTransition(async () => {
       addOptimisticState({
         operation: 'delete',
-        value: data
+        value: data,
       })
 
       const fetchPromise = api.request(path, 'DELETE')
-      const syncPromise = matchStream(stream, [`delete`], matchBy('id', todo.id))
+      const syncPromise = matchStream(
+        stream,
+        ['delete'],
+        matchBy('id', todo.id)
+      )
 
       await Promise.all([fetchPromise, syncPromise])
     })
