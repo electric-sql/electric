@@ -35,11 +35,24 @@ async function resilientFetch(
   url: string,
   options: RequestOptions,
   retryCount: number
+<<<<<<< HEAD
 ): Promise<Response | undefined> {
   try {
     // Could also check the status and retry before returning if you want to be
     // resilient to 4xx and 5xx responses as well as network errors
     return await fetch(url, options)
+=======
+) {
+  try {
+    const response = await fetch(url, options)
+
+    if (response.ok) {
+      return await response.json()
+    }
+
+    // Could also retry here if you want to be resilient
+    // to 4xx and 5xx responses as well as network errors
+>>>>>>> d6a41c34 (examples: format.)
   } catch (err) {
     return await retryFetch(url, options, retryCount + 1)
   }
