@@ -30,7 +30,7 @@ describe(`Shape`, () => {
         url: `${BASE_URL}/v1/shape`,
         table: `foo`,
         params: {
-          database_id: `foo`,
+          live: `false`,
         },
       })
       new Shape(shapeStream)

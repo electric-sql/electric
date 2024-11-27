@@ -34,13 +34,11 @@ import {
   SHAPE_HANDLE_QUERY_PARAM,
   SHAPE_SCHEMA_HEADER,
   WHERE_QUERY_PARAM,
-  DATABASE_ID_QUERY_PARAM,
   TABLE_QUERY_PARAM,
   REPLICA_PARAM,
 } from './constants'
 
 const RESERVED_PARAMS = new Set([
-  DATABASE_ID_QUERY_PARAM,
   COLUMNS_QUERY_PARAM,
   LIVE_CACHE_BUSTER_QUERY_PARAM,
   SHAPE_HANDLE_QUERY_PARAM,
@@ -54,7 +52,6 @@ const RESERVED_PARAMS = new Set([
 type Replica = `full` | `default`
 
 type ReservedParamKeys =
-  | typeof DATABASE_ID_QUERY_PARAM
   | typeof COLUMNS_QUERY_PARAM
   | typeof LIVE_CACHE_BUSTER_QUERY_PARAM
   | typeof SHAPE_HANDLE_QUERY_PARAM
@@ -83,12 +80,6 @@ export interface ShapeStreamOptions<T = never> {
    * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape`
    */
   url: string
-
-  /**
-   * Which database to use.
-   * This is optional unless Electric is used with multiple databases.
-   */
-  databaseId?: string
 
   /**
    * The root table for the shape. Passed as a query parameter. Not required if you set the table in your proxy.
@@ -144,7 +135,7 @@ export interface ShapeStreamOptions<T = never> {
    * Additional request parameters to attach to the URL.
    * These will be merged with Electric's standard parameters.
    * Note: You cannot use Electric's reserved parameter names
-   * (table, where, columns, offset, handle, live, cursor, database_id, replica).
+   * (table, where, columns, offset, handle, live, cursor, replica).
    */
   params?: ParamsRecord
 
@@ -246,7 +237,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #isUpToDate: boolean = false
   #connected: boolean = false
   #shapeHandle?: string
-  #databaseId?: string
   #schema?: Schema
   #onError?: ShapeStreamErrorHandler
   #replica?: Replica
@@ -257,7 +247,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
     this.#shapeHandle = this.options.handle
-    this.#databaseId = this.options.databaseId
     this.#messageParser = new MessageParser<T>(options.parser)
     this.#replica = this.options.replica
     this.#onError = this.options.onError
@@ -345,10 +334,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
             SHAPE_HANDLE_QUERY_PARAM,
             this.#shapeHandle!
           )
-        }
-
-        if (this.#databaseId) {
-          fetchUrl.searchParams.set(DATABASE_ID_QUERY_PARAM, this.#databaseId!)
         }
 
         if (
