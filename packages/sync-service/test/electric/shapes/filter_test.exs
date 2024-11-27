@@ -1,7 +1,9 @@
 defmodule Electric.Shapes.FilterTest do
   use ExUnit.Case
+  alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Shape
   alias Support.StubInspector
@@ -60,6 +62,10 @@ defmodule Electric.Shapes.FilterTest do
                 "1" => [
                   %{handle: "shape1", and_where: nil},
                   %{handle: "shape2", and_where: nil}
+                ],
+                "2" => [
+                  %{handle: "shape3", and_where: nil},
+                  %{handle: "shape4", and_where: nil}
                 ]
               }
             },
@@ -115,6 +121,71 @@ defmodule Electric.Shapes.FilterTest do
         }
 
       assert Filter.affected_shapes(filter, transaction) == MapSet.new(["shape2", "shape3"])
+    end
+
+    test "returns shapes affected by delete" do
+      filter = %{
+        tables: %{
+          {"public", "the_table"} => %{
+            fields: %{
+              "id" => %{
+                "1" => [
+                  %{handle: "the-shape", and_where: nil}
+                ]
+              }
+            },
+            other_shapes: []
+          }
+        }
+      }
+
+      transaction =
+        %Transaction{
+          changes: [
+            %DeletedRecord{
+              relation: {"public", "the_table"},
+              old_record: %{"id" => "1"}
+            }
+          ]
+        }
+
+      assert Filter.affected_shapes(filter, transaction) == MapSet.new(["the-shape"])
+    end
+
+    test "returns shapes affected by update" do
+      filter = %{
+        tables: %{
+          {"public", "the_table"} => %{
+            fields: %{
+              "id" => %{
+                "1" => [
+                  %{handle: "shape1", and_where: nil}
+                ],
+                "2" => [
+                  %{handle: "shape2", and_where: nil}
+                ],
+                "3" => [
+                  %{handle: "shape3", and_where: nil}
+                ]
+              }
+            },
+            other_shapes: []
+          }
+        }
+      }
+
+      transaction =
+        %Transaction{
+          changes: [
+            %UpdatedRecord{
+              relation: {"public", "the_table"},
+              record: %{"id" => "1"},
+              old_record: %{"id" => "2"}
+            }
+          ]
+        }
+
+      assert Filter.affected_shapes(filter, transaction) == MapSet.new(["shape1", "shape2"])
     end
   end
 end
