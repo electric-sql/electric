@@ -109,7 +109,7 @@ defmodule Electric.Shapes.Filter do
 
   defp other_shapes_affected(%{other_shapes: shapes}, record) do
     for %{handle: handle, shape: shape} <- shapes,
-        Shape.record_in_shape?(shape.where, record),
+        Shape.record_in_shape?(shape, record),
         into: MapSet.new() do
       handle
     end

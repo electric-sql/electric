@@ -213,22 +213,22 @@ defmodule Electric.Shapes.Shape do
 
   def convert_change(%__MODULE__{}, %Changes.TruncatedRelation{} = change), do: [change]
 
-  def convert_change(%__MODULE__{where: where, selected_columns: selected_columns}, change)
+  def convert_change(%__MODULE__{selected_columns: selected_columns} = shape, change)
       when is_struct(change, Changes.NewRecord)
       when is_struct(change, Changes.DeletedRecord) do
     record = if is_struct(change, Changes.NewRecord), do: change.record, else: change.old_record
 
-    if record_in_shape?(where, record),
+    if record_in_shape?(shape, record),
       do: [filter_change_columns(selected_columns, change)],
       else: []
   end
 
   def convert_change(
-        %__MODULE__{where: where, selected_columns: selected_columns},
+        %__MODULE__{selected_columns: selected_columns} = shape,
         %Changes.UpdatedRecord{old_record: old_record, record: record} = change
       ) do
-    old_record_in_shape = record_in_shape?(where, old_record)
-    new_record_in_shape = record_in_shape?(where, record)
+    old_record_in_shape = record_in_shape?(shape, old_record)
+    new_record_in_shape = record_in_shape?(shape, record)
 
     converted_changes =
       case {old_record_in_shape, new_record_in_shape} do
@@ -254,9 +254,9 @@ defmodule Electric.Shapes.Shape do
 
   defp filtered_columns_changed(_), do: true
 
-  def record_in_shape?(nil, _record), do: true
+  def record_in_shape?(%{where: nil}, _record), do: true
 
-  def record_in_shape?(where, record) do
+  def record_in_shape?(%{where: where}, record) do
     with {:ok, refs} <- Runner.record_to_ref_values(where.used_refs, record),
          {:ok, evaluated} <- Runner.execute(where, refs) do
       if is_nil(evaluated), do: false, else: evaluated
