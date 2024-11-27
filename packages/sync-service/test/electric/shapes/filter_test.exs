@@ -6,6 +6,9 @@ defmodule Electric.Shapes.FilterTest do
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes.TruncatedRelation
   alias Electric.Replication.Changes.UpdatedRecord
+  alias Electric.Replication.Eval.Parser.Const
+  alias Electric.Replication.Eval.Parser.Func
+  alias Electric.Replication.Eval.Parser.Ref
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Shape
   alias Support.StubInspector
@@ -51,6 +54,64 @@ defmodule Electric.Shapes.FilterTest do
              }
     end
 
+    test "with `field = constant AND another_condition` where clause" do
+      shape = Shape.new!("the_table", where: "id = 1 AND id > 0", inspector: @inspector)
+
+      assert %Filter{
+               tables: %{
+                 {"public", "the_table"} => %{
+                   fields: %{
+                     "id" => %{
+                       "1" => [
+                         %{
+                           handle: "shape1",
+                           and_where: %Func{
+                             name: ~s(">"),
+                             args: [
+                               %Ref{path: ["id"], type: :int8},
+                               %Const{value: 0, type: :int4}
+                             ]
+                           },
+                           shape: ^shape
+                         }
+                       ]
+                     }
+                   },
+                   other_shapes: %{}
+                 }
+               }
+             } = Filter.new(%{"shape1" => shape})
+    end
+
+    test "with `some_condition AND field = constant` where clause" do
+      shape = Shape.new!("the_table", where: "id > 0 AND id = 1", inspector: @inspector)
+
+      assert %Filter{
+               tables: %{
+                 {"public", "the_table"} => %{
+                   fields: %{
+                     "id" => %{
+                       "1" => [
+                         %{
+                           handle: "shape1",
+                           and_where: %Func{
+                             name: ~s(">"),
+                             args: [
+                               %Ref{path: ["id"], type: :int8},
+                               %Const{value: 0, type: :int4}
+                             ]
+                           },
+                           shape: ^shape
+                         }
+                       ]
+                     }
+                   },
+                   other_shapes: %{}
+                 }
+               }
+             } = Filter.new(%{"shape1" => shape})
+    end
+
     test "with more complicated where clause" do
       shapes = %{"shape1" => Shape.new!("the_table", where: "id > 1", inspector: @inspector)}
 
@@ -64,8 +125,6 @@ defmodule Electric.Shapes.FilterTest do
              }
     end
   end
-
-  # TODO: relations
 
   describe "affected_shapes/2" do
     test "shapes with same table and id are returned" do
@@ -341,6 +400,49 @@ defmodule Electric.Shapes.FilterTest do
 
       assert Filter.affected_shapes(filter, transaction) ==
                MapSet.new(["shape1", "shape2", "shape3", "shape4"])
+    end
+  end
+
+  describe "where clause filtering" do
+    for test <- [
+          %{where: "id = 7", record: %{"id" => "7"}, affected: true},
+          %{where: "id = 7", record: %{"id" => "8"}, affected: false},
+          %{where: "id = 7", record: %{"id" => nil}, affected: false},
+          %{where: "7 = id", record: %{"id" => "7"}, affected: true},
+          %{where: "7 = id", record: %{"id" => "8"}, affected: false},
+          %{where: "7 = id", record: %{"id" => nil}, affected: false},
+          %{where: "id = 7 AND id > 1", record: %{"id" => "7"}, affected: true},
+          %{where: "id = 7 AND id > 1", record: %{"id" => "8"}, affected: false},
+          %{where: "id = 7 AND id > 8", record: %{"id" => "7"}, affected: false},
+          %{where: "id > 1 AND id = 7", record: %{"id" => "7"}, affected: true},
+          %{where: "id > 1 AND id = 7", record: %{"id" => "8"}, affected: false},
+          %{where: "id > 8 AND id = 7", record: %{"id" => "7"}, affected: false}
+        ] do
+      test "where: #{test.where}, record: #{inspect(test.record)}" do
+        %{where: where, record: record, affected: affected} = unquote(Macro.escape(test))
+
+        shape = Shape.new!("the_table", where: where, inspector: @inspector)
+
+        transaction =
+          %Transaction{
+            changes: [
+              %NewRecord{
+                relation: {"public", "the_table"},
+                record: record
+              }
+            ]
+          }
+
+        expected_affected_shapes =
+          if affected do
+            MapSet.new(["the-shape"])
+          else
+            MapSet.new([])
+          end
+
+        assert Filter.new(%{"the-shape" => shape})
+               |> Filter.affected_shapes(transaction) == expected_affected_shapes
+      end
     end
   end
 end

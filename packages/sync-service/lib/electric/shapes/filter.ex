@@ -6,6 +6,7 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Replication.Changes.TruncatedRelation
   alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Replication.Eval.Expr
+  alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Parser.Const
   alias Electric.Replication.Eval.Parser.Func
   alias Electric.Replication.Eval.Parser.Ref
@@ -72,33 +73,34 @@ defmodule Electric.Shapes.Filter do
     )
   end
 
-  defp optimise_where(%Expr{
-         eval: %Func{
-           name: ~s("="),
-           args: [
-             # TODO: Is path really [field]?
-             %Ref{path: [field]},
-             %Const{} = const
-           ]
-         }
-       }) do
+  defp optimise_where(%Expr{eval: eval}), do: optimise_where(eval)
+
+  # TODO: Is this really ~s("=") or is it just "="?
+  # TODO: Is path really [field]?
+  defp optimise_where(%Func{name: ~s("="), args: [%Ref{path: [field]}, %Const{} = const]}) do
     %{operation: "=", field: field, value: const_to_string(const), and_where: nil}
   end
 
-  defp optimise_where(%Expr{
-         eval: %Func{
-           name: ~s("="),
-           args: [
-             %Const{} = const,
-             %Ref{path: [field]}
-           ]
-         }
-       }) do
+  defp optimise_where(%Func{name: ~s("="), args: [%Const{} = const, %Ref{path: [field]}]}) do
     %{operation: "=", field: field, value: const_to_string(const), and_where: nil}
+  end
+
+  defp optimise_where(%Func{name: "and", args: [arg1, arg2]}) do
+    case {optimise_where(arg1), optimise_where(arg2)} do
+      {%{operation: "=", field: field, value: value, and_where: nil}, _} ->
+        %{operation: "=", field: field, value: value, and_where: arg2}
+
+      {_, %{operation: "=", field: field, value: value, and_where: nil}} ->
+        %{operation: "=", field: field, value: value, and_where: arg1}
+
+      _ ->
+        :not_optimised
+    end
   end
 
   defp optimise_where(_), do: :not_optimised
 
+  # TODO: Impliment other types, or is this not implimented elsewhere?
   defp const_to_string(%Const{value: value, type: :int4}), do: Integer.to_string(value)
   defp const_to_string(%Const{value: value, type: :int8}), do: Integer.to_string(value)
 
@@ -163,13 +165,26 @@ defmodule Electric.Shapes.Filter do
 
       shapes ->
         shapes
+        |> Enum.filter(&record_in_where(&1.and_where, record))
         |> Enum.map(& &1.handle)
         |> MapSet.new()
     end
   end
 
+  defp record_in_where(nil, _), do: true
+
+  defp record_in_where(where_clause, record) do
+    # TODO: Move record_in_shape? out of shapes into Where module
+    # Keep full Expr in shape
+    Shape.record_in_shape?(
+      %{where: %Expr{eval: where_clause, used_refs: Parser.find_refs(where_clause)}},
+      record
+    )
+  end
+
   defp other_shapes_affected(%{other_shapes: shapes}, record) do
     for {handle, shape} <- shapes,
+        # TODO: Test Shape.record_in_shape? is called
         Shape.record_in_shape?(shape, record),
         into: MapSet.new() do
       handle
