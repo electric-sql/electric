@@ -14,7 +14,11 @@ defmodule Electric.Shapes.Consumer do
 
   require Logger
 
-  @initial_log_state %{current_chunk_byte_size: 0}
+  @initial_log_state %{current_chunk_byte_size: 0, current_txn_bytes: 0}
+  @type log_state :: %{
+          current_chunk_byte_size: non_neg_integer(),
+          current_txn_bytes: non_neg_integer()
+        }
 
   def name(%{
         stack_id: stack_id,
@@ -252,7 +256,7 @@ defmodule Electric.Shapes.Consumer do
 
   defp handle_txn(%Transaction{} = txn, state) do
     ot_attrs =
-      [xid: txn.xid, num_changes: length(txn.changes)] ++
+      [xid: txn.xid, total_num_changes: txn.num_changes] ++
         shape_attrs(state.shape_handle, state.shape)
 
     OpenTelemetry.with_span("shape_write.consumer.handle_txn", ot_attrs, fn ->
@@ -275,10 +279,20 @@ defmodule Electric.Shapes.Consumer do
 
     %{xid: xid, changes: changes, lsn: _lsn, last_log_offset: last_log_offset} = txn
 
-    relevant_changes = Enum.flat_map(changes, &Shape.convert_change(shape, &1))
+    {relevant_changes, {num_changes, has_truncate?}} =
+      Enum.flat_map_reduce(changes, {0, false}, fn
+        %Changes.TruncatedRelation{}, _ ->
+          {:halt, {0, true}}
+
+        change, {ops, false} ->
+          case Shape.convert_change(shape, change) do
+            [] -> {[], {ops, false}}
+            [change] -> {[change], {ops + 1, false}}
+          end
+      end)
 
     cond do
-      Enum.any?(relevant_changes, &is_struct(&1, Changes.TruncatedRelation)) ->
+      has_truncate? ->
         # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
         #       present in the transaction, we're considering the whole transaction empty, and
         #       just rotate the shape handle. "Correct" way to handle truncates is to be designed.
@@ -292,13 +306,31 @@ defmodule Electric.Shapes.Consumer do
 
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
 
-      relevant_changes != [] ->
+      num_changes > 0 ->
         {log_entries, new_log_state} =
           prepare_log_entries(relevant_changes, xid, shape, log_state, chunk_bytes_threshold)
+
+        timestamp = System.monotonic_time()
 
         # TODO: what's a graceful way to handle failure to append to log?
         #       Right now we'll just fail everything
         :ok = ShapeCache.Storage.append_to_log!(log_entries, storage)
+
+        OpenTelemetry.add_span_attributes(%{
+          num_bytes: new_log_state.current_txn_bytes,
+          actual_num_changes: num_changes
+        })
+
+        :telemetry.execute(
+          [:electric, :storage, :transaction_stored],
+          %{
+            duration: System.monotonic_time() - timestamp,
+            bytes: new_log_state.current_txn_bytes,
+            count: 1,
+            operations: num_changes
+          },
+          Map.new(shape_attrs(state.shape_handle, state.shape))
+        )
 
         shape_cache.update_shape_latest_offset(shape_handle, last_log_offset, shape_cache_opts)
 
@@ -383,9 +415,9 @@ defmodule Electric.Shapes.Consumer do
           Enumerable.t(Electric.Replication.Changes.data_change()),
           non_neg_integer() | nil,
           Shape.t(),
-          ShapeCache.Storage.log_state(),
+          log_state(),
           non_neg_integer()
-        ) :: {Enumerable.t(ShapeCache.Storage.log_item()), ShapeCache.Storage.log_state()}
+        ) :: {Enumerable.t(ShapeCache.Storage.log_item()), log_state()}
   defp prepare_log_entries(
          changes,
          xid,
@@ -393,15 +425,25 @@ defmodule Electric.Shapes.Consumer do
          log_state,
          chunk_bytes_threshold
        ) do
+    log_state = %{
+      current_chunk_byte_size: log_state.current_chunk_byte_size,
+      current_txn_bytes: 0
+    }
+
     {log_items, new_log_state} =
       changes
       |> Stream.flat_map(
         &LogItems.from_change(&1, xid, Shape.pk(shape, &1.relation), shape.replica)
       )
       |> Enum.flat_map_reduce(log_state, fn log_item,
-                                            %{current_chunk_byte_size: chunk_size} = state ->
+                                            %{
+                                              current_chunk_byte_size: chunk_size,
+                                              current_txn_bytes: txn_bytes
+                                            } = state ->
         json_log_item = Jason.encode!(log_item)
         item_byte_size = byte_size(json_log_item)
+
+        state = %{state | current_txn_bytes: txn_bytes + item_byte_size}
 
         case LogChunker.fit_into_chunk(item_byte_size, chunk_size, chunk_bytes_threshold) do
           {:ok, new_chunk_size} ->
