@@ -26,6 +26,7 @@ defmodule Electric.ShapeCache.FileStorage do
     :cubdb_dir,
     :snapshot_dir,
     :stack_id,
+    :otel_attrs,
     :extra_opts,
     version: @version
   ]
@@ -34,9 +35,10 @@ defmodule Electric.ShapeCache.FileStorage do
   def shared_opts(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     storage_dir = Keyword.get(opts, :storage_dir, "./shapes")
+    otel_attrs = Keyword.get(opts, :otel_attrs, [])
 
     # Always scope the provided storage dir by stack id
-    %{base_path: Path.join(storage_dir, stack_id), stack_id: stack_id}
+    %{base_path: Path.join(storage_dir, stack_id), stack_id: stack_id, otel_attrs: otel_attrs}
   end
 
   @impl Electric.ShapeCache.Storage
@@ -58,6 +60,7 @@ defmodule Electric.ShapeCache.FileStorage do
       cubdb_dir: Path.join([data_dir, "cubdb"]),
       snapshot_dir: Path.join([data_dir, "snapshots"]),
       stack_id: stack_id,
+      otel_attrs: Map.get(opts, :otel_attrs, []),
       extra_opts: Map.get(opts, :extra_opts, %{})
     }
   end
@@ -200,7 +203,7 @@ defmodule Electric.ShapeCache.FileStorage do
   def make_new_snapshot!(data_stream, %FS{} = opts) do
     OpenTelemetry.with_span(
       "storage.make_new_snapshot",
-      [storage_impl: "mixed_disk", "shape.handle": opts.shape_handle],
+      opts.otel_attrs ++ [storage_impl: "mixed_disk", "shape.handle": opts.shape_handle],
       fn ->
         data_stream
         |> Stream.map(&[&1, ?\n])

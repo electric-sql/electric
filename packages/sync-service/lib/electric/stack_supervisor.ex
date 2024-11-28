@@ -134,6 +134,14 @@ defmodule Electric.StackSupervisor do
     ]
   end
 
+  defp storage_mod_arg(%{stack_id: stack_id, otel_attrs: otel_attrs, storage: {mod, arg}}) do
+    {mod,
+     arg
+     |> Keyword.put(:stack_id, stack_id)
+     |> Keyword.put(:otel_attrs, otel_attrs)
+     |> mod.shared_opts()}
+  end
+
   defp storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}}) do
     {mod, arg |> Keyword.put(:stack_id, stack_id) |> mod.shared_opts()}
   end

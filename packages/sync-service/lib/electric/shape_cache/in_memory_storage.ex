@@ -19,17 +19,20 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     :log_table,
     :chunk_checkpoint_table,
     :shape_handle,
-    :stack_id
+    :stack_id,
+    :otel_attrs
   ]
 
   @impl Electric.ShapeCache.Storage
   def shared_opts(opts) do
     stack_id = Access.fetch!(opts, :stack_id)
     table_base_name = Access.get(opts, :table_base_name, __MODULE__)
+    otel_attrs = Keyword.get(opts, :otel_attrs, [])
 
     %{
       table_base_name: table_base_name,
-      stack_id: stack_id
+      stack_id: stack_id,
+      otel_attrs: otel_attrs
     }
   end
 
@@ -42,10 +45,13 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     opts
   end
 
-  def for_shape(shape_handle, %{
-        table_base_name: table_base_name,
-        stack_id: stack_id
-      }) do
+  def for_shape(
+        shape_handle,
+        %{
+          table_base_name: table_base_name,
+          stack_id: stack_id
+        } = opts
+      ) do
     snapshot_table_name = :"#{table_base_name}.Snapshot_#{shape_handle}"
     log_table_name = :"#{table_base_name}.Log_#{shape_handle}"
 
@@ -58,7 +64,8 @@ defmodule Electric.ShapeCache.InMemoryStorage do
       snapshot_table: snapshot_table_name,
       log_table: log_table_name,
       chunk_checkpoint_table: chunk_checkpoint_table_name,
-      stack_id: stack_id
+      stack_id: stack_id,
+      otel_attrs: Map.get(opts, :otel_attrs, [])
     }
   end
 
@@ -200,7 +207,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def make_new_snapshot!(data_stream, %MS{} = opts) do
     OpenTelemetry.with_span(
       "storage.make_new_snapshot",
-      [storage_impl: "in_memory", "shape.handle": opts.shape_handle],
+      opts.otel_attrs ++ [storage_impl: "in_memory", "shape.handle": opts.shape_handle],
       fn ->
         table = opts.snapshot_table
 
