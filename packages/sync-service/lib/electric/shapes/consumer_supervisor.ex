@@ -7,6 +7,7 @@ defmodule Electric.Shapes.ConsumerSupervisor do
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   # TODO: unify these with ShapeCache
   @schema NimbleOptions.new!(
+            otel_attrs: [type: :keyword_list, required: true],
             stack_id: [type: :any, required: true],
             shape_handle: [type: :string, required: true],
             shape: [type: {:struct, Electric.Shapes.Shape}, required: true],
@@ -58,14 +59,14 @@ defmodule Electric.Shapes.ConsumerSupervisor do
   end
 
   def init(config) when is_map(config) do
-    %{shape_handle: shape_handle, storage: {_, _} = storage} =
+    %{shape_handle: shape_handle, storage: {_, _} = storage, otel_attrs: otel_attrs} =
       config
 
     Process.set_label({:consumer_supervisor, shape_handle})
 
     shape_storage = Electric.ShapeCache.Storage.for_shape(shape_handle, storage)
 
-    shape_config = %{config | storage: shape_storage}
+    shape_config = %{config | storage: shape_storage, otel_attrs: otel_attrs}
 
     children = [
       {Electric.ShapeCache.Storage, shape_storage},

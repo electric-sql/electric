@@ -32,6 +32,7 @@ defmodule Electric.StackSupervisor do
   @opts_schema NimbleOptions.new!(
                  name: [type: :any, required: false],
                  stack_id: [type: :string, required: true],
+                 otel_attrs: [type: :keyword_list, default: []],
                  persistent_kv: [type: :any, required: true],
                  stack_events_registry: [type: :atom, required: true],
                  connection_opts: [
@@ -138,7 +139,7 @@ defmodule Electric.StackSupervisor do
   end
 
   @impl true
-  def init(%{stack_id: stack_id} = config) do
+  def init(%{stack_id: stack_id, otel_attrs: otel_attrs} = config) do
     Process.set_label({:stack_supervisor, stack_id})
 
     inspector =
@@ -175,6 +176,7 @@ defmodule Electric.StackSupervisor do
 
     shape_cache_opts = [
       stack_id: stack_id,
+      otel_attrs: otel_attrs,
       storage: storage,
       inspector: inspector,
       prepare_tables_fn: prepare_tables_mfa,
@@ -186,6 +188,7 @@ defmodule Electric.StackSupervisor do
 
     new_connection_manager_opts = [
       stack_id: stack_id,
+      otel_attrs: otel_attrs,
       # Coming from the outside, need validation
       connection_opts: config.connection_opts,
       stack_events_registry: config.stack_events_registry,

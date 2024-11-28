@@ -46,6 +46,7 @@ defmodule Electric.ShapeCache do
               required: false
             ],
             stack_id: [type: :string, required: true],
+            otel_attrs: [type: :keyword_list, required: true],
             log_producer: [type: @genserver_name_schema, required: true],
             consumer_supervisor: [type: @genserver_name_schema, required: true],
             storage: [type: :mod_arg, required: true],
@@ -206,6 +207,7 @@ defmodule Electric.ShapeCache do
     state = %{
       name: opts.name,
       stack_id: opts.stack_id,
+      otel_attrs: opts.otel_attrs,
       storage: opts.storage,
       chunk_bytes_threshold: opts.chunk_bytes_threshold,
       inspector: opts.inspector,
@@ -335,6 +337,7 @@ defmodule Electric.ShapeCache do
     with {:ok, pid} <-
            Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
              state.consumer_supervisor,
+             otel_attrs: state.otel_attrs,
              stack_id: state.stack_id,
              inspector: state.inspector,
              shape_handle: shape_handle,
