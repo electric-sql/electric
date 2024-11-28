@@ -569,7 +569,7 @@ iframe {
 .VPFeature h2.title {
   font-size: 20px;
 }
-.VPFeature.link[href="/product/sync"]:hover {
+.VPFeature.link[href="/product/electric"]:hover {
   border-color: var(--electric-color);
 }
 .VPFeature.link[href="/product/pglite"]:hover {

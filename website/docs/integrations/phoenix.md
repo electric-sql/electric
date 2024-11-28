@@ -18,7 +18,7 @@ image: /img/integrations/electric-phoenix.jpg
 
 ## Electric and Phoenix
 
-Electric is [developed in Elixir](/product/sync#how-does-it-work) and provides [an Elixir client](/docs/api/clients/elixir). We've leveraged this to develop a batteries-included Phoenix integration for:
+Electric is [developed in Elixir](/product/electric#how-does-it-work) and provides [an Elixir client](/docs/api/clients/elixir). We've leveraged this to develop a batteries-included Phoenix integration for:
 
 - [front-end sync](#front-end-sync): into a front-end client from a Postgres-backed Phoenix application
 - [LiveView sync](#liveview-sync): into Phoenix LiveView from Postgres in realtime via [Phoenix.Streams](/docs/integrations/phoenix#liveview-sync)
