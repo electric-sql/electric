@@ -19,6 +19,10 @@ case log_level_config do
     raise message
 end
 
+if !env!("LOG_COLORS", :boolean, true) do
+  config :logger, :default_formatter, colors: [enabled: false]
+end
+
 # Enable this to get **very noisy** but useful messages from BEAM about
 # processes being started, stopped and crashes.
 # https://www.erlang.org/doc/apps/sasl/error_logging#sasl-reports
