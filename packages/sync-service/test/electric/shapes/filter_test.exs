@@ -126,6 +126,89 @@ defmodule Electric.Shapes.FilterTest do
     end
   end
 
+  describe "remove_shape/2" do
+    test "removes all shapes with the specified handle" do
+      filter = %Filter{
+        tables: %{
+          {"public", "the_table"} => %{
+            fields: %{
+              "id" => %{
+                "1" => [
+                  %{
+                    handle: "shape1",
+                    and_where: nil
+                  }
+                ],
+                "2" => [
+                  %{
+                    handle: "shape2",
+                    and_where: nil
+                  }
+                ]
+              },
+              "name" => %{
+                "bill" => [
+                  %{
+                    handle: "shape1",
+                    and_where: nil
+                  },
+                  %{
+                    handle: "shape2",
+                    and_where: nil
+                  }
+                ]
+              }
+            },
+            other_shapes: %{
+              "shape1" => Shape.new!("the_table", where: "id = 1", inspector: @inspector),
+              "shape2" => Shape.new!("the_table", where: "id = 2", inspector: @inspector)
+            }
+          },
+          {"public", "another_table"} => %{
+            fields: %{
+              "id" => %{
+                "1" => [
+                  %{handle: "shape1", and_where: nil}
+                ]
+              }
+            },
+            other_shapes: %{
+              "shape1" => Shape.new!("another_table", where: "id = 1", inspector: @inspector)
+            }
+          }
+        }
+      }
+
+      assert Filter.remove_shape(filter, "shape1") == %Filter{
+               tables: %{
+                 {"public", "the_table"} => %{
+                   fields: %{
+                     "id" => %{
+                       "2" => [
+                         %{
+                           handle: "shape2",
+                           and_where: nil
+                         }
+                       ]
+                     },
+                     "name" => %{
+                       "bill" => [
+                         %{
+                           handle: "shape2",
+                           and_where: nil
+                         }
+                       ]
+                     }
+                   },
+                   other_shapes: %{
+                     "shape2" => Shape.new!("the_table", where: "id = 2", inspector: @inspector)
+                   }
+                 }
+               }
+             }
+    end
+  end
+
   describe "affected_shapes/2" do
     test "shapes with same table and id are returned" do
       filter = %Filter{

@@ -11,15 +11,16 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Replication.Eval.Parser.Func
   alias Electric.Replication.Eval.Parser.Ref
   alias Electric.Shapes.Filter
+  alias Electric.Shapes.Filter.TableFilter
   alias Electric.Shapes.Shape
 
   defstruct tables: %{}
 
-  def new(shapes), do: shapes |> Map.to_list() |> new(%Filter{})
-  defp new([shape | shapes], filter), do: new(shapes, add_shape(filter, shape))
+  def new(shapes), do: shapes |> Map.to_list() |> new(empty())
+  defp new([{handle, shape} | shapes], filter), do: new(shapes, add_shape(filter, handle, shape))
   defp new([], filter), do: filter
 
-  def add_shape(%Filter{tables: tables}, {handle, shape}) do
+  def add_shape(%Filter{tables: tables}, handle, shape) do
     %Filter{
       tables:
         Map.update(
@@ -31,6 +32,19 @@ defmodule Electric.Shapes.Filter do
     }
   end
 
+  def remove_shape(%Filter{tables: tables}, handle) do
+    %Filter{
+      tables:
+        tables
+        |> Enum.map(fn {table, table_filter} ->
+          {table, TableFilter.remove_shape(table_filter, handle)}
+        end)
+        |> Enum.reject(fn {_table, table_filter} -> map_size(table_filter.fields) == 0 end)
+        |> Map.new()
+    }
+  end
+
+  def empty, do: %Filter{}
   defp empty_table_filter, do: %{fields: %{}, other_shapes: %{}}
 
   defp add_shape_to_table_filter({handle, shape} = shape_instance, table_filter) do
