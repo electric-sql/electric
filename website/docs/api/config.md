@@ -180,7 +180,7 @@ Default `max-age` for the cache headers of the HTTP API.
 
 </EnvVarConfig>
 
-### ElECTRIC_CACHE_STALE_AGE
+### ELECTRIC_CACHE_STALE_AGE
 
 <EnvVarConfig
     name="ELECTRIC_CACHE_STALE_AGE"
