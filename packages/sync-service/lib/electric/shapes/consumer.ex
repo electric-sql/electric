@@ -87,27 +87,7 @@ defmodule Electric.Shapes.Consumer do
         monitors: []
       })
 
-    {:consumer, state,
-     subscribe_to: [{producer, [max_demand: 1, selector: &selector(&1, config.shape)]}]}
-  end
-
-  defp selector(event, shape) do
-    process_event?(event, shape)
-  rescue
-    # Swallow errors here to avoid crashing the ShapeLogCollector.
-    # Return `true` so the event is processed, which will then error
-    # for the same reason and cleanup the shape.
-    _ -> true
-  end
-
-  defp process_event?(%Transaction{changes: changes}, shape) do
-    changes
-    |> Stream.flat_map(&Shape.convert_change(shape, &1))
-    |> Enum.any?()
-  end
-
-  defp process_event?(%Changes.Relation{} = relation_change, shape) do
-    Shape.is_affected_by_relation_change?(shape, relation_change)
+    {:consumer, state, subscribe_to: [{producer, [max_demand: 1, shape: config.shape]}]}
   end
 
   def handle_call(:initial_state, _from, %{snapshot_xmin: xmin, latest_offset: offset} = state) do
