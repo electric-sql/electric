@@ -46,7 +46,7 @@ and scales to millions of users
 
 ## Hosted Electric
 
-Electric Cloud is a hosted Electric service. It provisions, runs and operates the [Electric sync engine](/product/sync) for you.
+Electric Cloud is a hosted Electric service. It provisions, runs and operates the [Electric sync engine](/product/electric) for you.
 
 ## Data delivery network
 

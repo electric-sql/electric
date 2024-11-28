@@ -25,7 +25,7 @@ You can create a client for Electric by:
 
 ## Consume the HTTP API
 
-The [Electric sync service](/product/sync) syncs data over an [HTTP API](/docs/api/http). The primary job of a client is to consume this API using HTTP requests.
+The [Electric sync service](/product/electric) syncs data over an [HTTP API](/docs/api/http). The primary job of a client is to consume this API using HTTP requests.
 
 The HTTP API exposes [Shapes](/docs/guides/shapes). There are two phases to syncing a shape:
 

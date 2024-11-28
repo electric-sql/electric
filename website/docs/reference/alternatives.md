@@ -25,7 +25,7 @@ We list a selection of projects below, including for example:
 
 ### Real-time and sync
 
-[Electric](/product/sync) is a sync-engine. It syncs subsets of data from Postgres, in real-time, into local apps and services. Other real-time streaming systems and sync engines include:
+[Electric](/product/electric) is a sync-engine. It syncs subsets of data from Postgres, in real-time, into local apps and services. Other real-time streaming systems and sync engines include:
 
 - [Ably](https://ably.com)
 - [Ampli-sync](https://ampliapps.com/sqlite-sync)

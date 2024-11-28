@@ -1,5 +1,5 @@
 ---
-title: Sync
+title: Electric
 description: >-
   Sync little subsets of your Postgres data into
   local apps and services.
@@ -43,7 +43,7 @@ onMounted(async () => {
 
 <img src="/img/icons/electric.svg" class="product-icon" />
 
-# Sync
+# Electric
 
 Sync little subsets of your Postgres data into
 local apps and services.

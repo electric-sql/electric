@@ -21,7 +21,7 @@ hero:
       target: '_blank'
       link: https://github.com/electric-sql/electric
 features:
-  - title: Sync
+  - title: Electric
     details: >-
       <span class="para">
         Sync subsets of your Postgres data into
@@ -31,7 +31,7 @@ features:
       </span>
     icon:
       src: '/img/icons/electric.svg'
-    link: '/product/sync'
+    link: '/product/electric'
   - title: Cloud
     details: >-
       <span class="para">
