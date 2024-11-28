@@ -147,17 +147,6 @@ See [#1581](https://github.com/electric-sql/electric/issues/1581) for context.
 
 </EnvVarConfig>
 
-### ELECTRIC_LOG_OTP_REPORTS
-
-<EnvVarConfig
-    name="ELECTRIC_LOG_OTP_REPORTS"
-    defaultValue="false"
-    example="true">
-
-Enable [OTP SASL](https://www.erlang.org/doc/apps/sasl/sasl_app.html) reporting at runtime.
-
-</EnvVarConfig>
-
 ### ELECTRIC_PORT
 
 <EnvVarConfig
@@ -302,6 +291,51 @@ Enable sending telemetry data to a StatsD reporting endpoint.
 
 </EnvVarConfig>
 
+## Logging
+
+### ELECTRIC_LOGGING_LEVEL
+
+<EnvVarConfig
+    name="ELECTRIC_LOGGING_LEVEL"
+    optional="true"
+    example="debug">
+
+Verbosity of Electric's log output.
+
+Available levels, in the order of increasing verbosity:
+- `error`
+- `warning`
+- `info`
+- `debug`
+
+</EnvVarConfig>
+
+### ELECTRIC_LOGGING_COLORS
+
+<EnvVarConfig
+    name="ELECTRIC_LOGGING_COLORS"
+    optional="true"
+    example="false">
+
+Enable or disable ANSI coloring of Electric's log output.
+
+By default, coloring is enabled when Electric's stdout is connected to a terminal. This may be undesirable in certain runtime environments, such as AWS which displays ANSI color codes using escape sequences and may incorrectly split log entries into multiple lines.
+
+</EnvVarConfig>
+
+### ELECTRIC_LOGGING_OTP_REPORTS
+
+<EnvVarConfig
+    name="ELECTRIC_LOGGING_OTP_REPORTS"
+    defaultValue="false"
+    example="true">
+
+Enable [OTP SASL](https://www.erlang.org/doc/apps/sasl/sasl_app.html) reporting at runtime.
+>>>>>>> 9aefc80ff (Document logging-related config options)
+
+</EnvVarConfig>
+
+
 ## Usage reporting
 
 ### ELECTRIC_USAGE_REPORTING
@@ -314,5 +348,3 @@ These environment variables allow configuration of anonymous usage data reportin
     example="true">
 
 Configure anonymous usage data about the instance being sent to a central checkpoint service. Collected information is anonymised and doesn't contain any information from the replicated data. You can read more about it in our [telemetry docs](../reference/telemetry.md#anonymous-usage-data).
-
-</EnvVarConfig>
