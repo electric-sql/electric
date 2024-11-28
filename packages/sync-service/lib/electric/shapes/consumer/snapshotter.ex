@@ -55,7 +55,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
           OpenTelemetry.with_span(
             "shape_snapshot.create_snapshot_task",
-            shape_attrs(shape_handle, shape),
+            state.otel_attrs ++ shape_attrs(shape_handle, shape),
             fn ->
               try do
                 # Grab the same connection from the pool for both operations to
@@ -65,7 +65,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                   fn pool_conn ->
                     OpenTelemetry.with_span(
                       "shape_snapshot.prepare_tables",
-                      shape_attrs(shape_handle, shape),
+                      state.otel_attrs ++ shape_attrs(shape_handle, shape),
                       fn ->
                         Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [
                           pool_conn,
@@ -74,7 +74,14 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                       end
                     )
 
-                    apply(create_snapshot_fn, [consumer, shape_handle, shape, pool_conn, storage])
+                    apply(create_snapshot_fn, [
+                      consumer,
+                      shape_handle,
+                      shape,
+                      pool_conn,
+                      storage,
+                      state.otel_attrs
+                    ])
                   end
                 ])
               rescue
@@ -115,7 +122,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   end
 
   @doc false
-  def query_in_readonly_txn(parent, shape_handle, shape, db_pool, storage) do
+  def query_in_readonly_txn(parent, shape_handle, shape, db_pool, storage, otel_attrs) do
     shape_attrs = shape_attrs(shape_handle, shape)
 
     Postgrex.transaction(
@@ -123,12 +130,12 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
       fn conn ->
         OpenTelemetry.with_span(
           "shape_snapshot.query_in_readonly_txn",
-          shape_attrs,
+          otel_attrs ++ shape_attrs,
           fn ->
             query_span!(
               conn,
               "shape_snapshot.start_readonly_txn",
-              shape_attrs,
+              otel_attrs ++ shape_attrs,
               "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
               []
             )
@@ -137,7 +144,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               query_span!(
                 conn,
                 "shape_snapshot.get_snapshot_xmin",
-                shape_attrs,
+                otel_attrs ++ shape_attrs,
                 "SELECT pg_snapshot_xmin(pg_current_snapshot())",
                 []
               )
@@ -148,7 +155,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             # formatting between snapshot and live log entries.
             OpenTelemetry.with_span(
               "shape_snapshot.set_display_settings",
-              shape_attrs,
+              otel_attrs ++ shape_attrs,
               fn ->
                 Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
               end
