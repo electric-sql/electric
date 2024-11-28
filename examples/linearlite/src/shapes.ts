@@ -4,8 +4,8 @@ import { baseUrl, databaseId, token } from './electric'
 export const issueShape: ShapeStreamOptions = {
   url: `${baseUrl}/v1/shape/`,
   table: `issue`,
-  databaseId,
   params: {
     token,
+    database_id: databaseId,
   },
 }
