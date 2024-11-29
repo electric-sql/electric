@@ -119,7 +119,8 @@ defmodule Electric.Shapes.Filter do
   defp const_to_string(%Const{value: value, type: :int8}), do: Integer.to_string(value)
 
   def affected_shapes(%Filter{} = filter, %Relation{} = relation) do
-    for {handle, shape} <- all_shapes_for_table(filter, {relation.schema, relation.table}),
+    # Check all shapes is all tables becuase the table may have been renamed
+    for {handle, shape} <- all_shapes_in_filter(filter),
         Shape.is_affected_by_relation_change?(shape, relation),
         into: MapSet.new() do
       handle
@@ -205,19 +206,31 @@ defmodule Electric.Shapes.Filter do
     end
   end
 
+  defp all_shapes_in_filter(%Filter{} = filter) do
+    for {_table, table_filter} <- filter.tables,
+        {handle, shape} <- all_shapes_in_table_filter(table_filter),
+        into: %{} do
+      {handle, shape}
+    end
+  end
+
+  defp all_shapes_in_table_filter(%{fields: fields, other_shapes: other_shapes}) do
+    for {_field, values} <- fields,
+        {_value, shapes} <- values,
+        %{handle: handle, shape: shape} <- shapes,
+        into: %{} do
+      {handle, shape}
+    end
+    |> Map.merge(other_shapes)
+  end
+
   defp all_shapes_for_table(%Filter{} = filter, table) do
     case Map.get(filter.tables, table) do
       nil ->
         %{}
 
-      %{fields: fields, other_shapes: other_shapes} ->
-        for {_field, values} <- fields,
-            {_value, shapes} <- values,
-            %{handle: handle, shape: shape} <- shapes,
-            into: %{} do
-          {handle, shape}
-        end
-        |> Map.merge(other_shapes)
+      table_filter ->
+        all_shapes_in_table_filter(table_filter)
     end
   end
 end

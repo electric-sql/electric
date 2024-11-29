@@ -431,7 +431,6 @@ defmodule Electric.Shapes.FilterTest do
                MapSet.new(["shape1", "shape2", "shape3", "shape4"])
     end
 
-    #TODO: Relation renames
     #TODO: Also go through Shape.is_affected_by_relation_change? tests to see if all scenarious are covered here
     #TODO: Also go through Shape.convert_change tests to see if all scenarious are covered here
 
