@@ -50,6 +50,7 @@ defmodule Electric.Shapes.Dispatcher do
        subs: [],
        filter: Filter.empty(),
        pids: MapSet.new(),
+       # TODO: remove inspector as we don't need it anymore
        inspector: Keyword.fetch!(opts, :inspector)
      }}
   end
