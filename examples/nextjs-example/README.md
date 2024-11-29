@@ -1,22 +1,46 @@
 # Basic Next.js example
 
+This is an example Next.js application developed using ElectricSQL.
+
 ## Setup
 
-1. Make sure you've installed all dependencies for the monorepo and built packages
+This example is part of the [ElectricSQL monorepo](../..) and is designed to be built and run as part of the [pnpm workspace](https://pnpm.io/workspaces) defined in [`../../pnpm-workspace.yaml`](../../pnpm-workspace.yaml).
 
-From the root directory:
+Navigate to the root directory of the monorepo, e.g.:
 
-- `pnpm i`
-- `pnpm run -r build`
+```shell
+cd ../../
+```
 
-2. Start the docker containers
+Install and build all of the workspace packages and examples:
 
-`pnpm run backend:up`
+```shell
+pnpm install
+pnpm run -r build
+```
 
-3. Start the dev server
+Navigate back to this directory:
 
-`pnpm run dev`
+```shell
+cd examples/nextjs-example
+```
 
-4. When done, tear down the backend containers so you can run other examples
+Start the example backend services using [Docker Compose](https://docs.docker.com/compose/):
 
-`pnpm run backend:down`
+```shell
+pnpm backend:up
+```
+
+> Note that this always stops and deletes the volumes mounted by any other example backend containers that are running or have been run before. This ensures that the example always starts with a clean database and clean disk.
+
+Now start the dev server:
+
+```shell
+pnpm dev
+```
+
+When you're done, stop the backend services using:
+
+```shell
+pnpm backend:down
+```

@@ -11,24 +11,6 @@ export const Example = () => {
     table: `items`,
   })
 
-  /*
-  const addItem = async () => {
-    console.log(`'addItem' is not implemented`)
-  }
-
-  const clearItems = async () => {
-    console.log(`'clearItems' is not implemented`)
-  }
-
-      <div className="controls">
-        <button className="button" onClick={addItem}>
-          Add
-        </button>
-        <button className="button" onClick={clearItems}>
-          Clear
-        </button>
-      </div>
-      */
   return (
     <div>
       {items.map((item: Item, index: number) => (
