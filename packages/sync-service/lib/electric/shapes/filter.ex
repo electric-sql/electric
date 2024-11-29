@@ -83,7 +83,7 @@ defmodule Electric.Shapes.Filter do
       value_filter,
       value,
       [%{handle: handle, and_where: and_where, shape: shape}],
-      fn shapes -> [%{handle: handle, and_where: and_where} | shapes] end
+      fn shapes -> [%{handle: handle, and_where: and_where, shape: shape} | shapes] end
     )
   end
 

@@ -6,8 +6,10 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Replication.Changes.{Transaction, Relation}
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
+  alias Electric.Shapes.Shape
 
   alias Support.Mock
+  alias Support.StubInspector
   import Support.ComponentSetup, only: [with_in_memory_storage: 1, with_stack_id_from_test: 1]
 
   import Mox
@@ -58,13 +60,21 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   end
 
   describe "store_transaction/2" do
+    @inspector StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+    @shape Shape.new!("test_table", where: "id = 2", inspector: @inspector)
+
     setup ctx do
       parent = self()
 
       consumers =
         Enum.map(1..3, fn id ->
           {:ok, consumer} =
-            Support.TransactionConsumer.start_link(id: id, parent: parent, producer: ctx.server)
+            Support.TransactionConsumer.start_link(
+              id: id,
+              parent: parent,
+              producer: ctx.server,
+              shape: @shape
+            )
 
           {id, consumer}
         end)
@@ -88,7 +98,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "1"}
+          record: %{"id" => "2", "name" => "foo"}
         })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
@@ -102,7 +112,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "2"}
+          record: %{"id" => "2", "name" => "bar"}
         })
 
       assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.server)
@@ -120,7 +130,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       consumers =
         Enum.map(1..3, fn id ->
           {:ok, consumer} =
-            Support.TransactionConsumer.start_link(id: id, parent: parent, producer: ctx.server)
+            Support.TransactionConsumer.start_link(
+              id: id,
+              parent: parent,
+              producer: ctx.server,
+              shape: @shape
+            )
 
           {id, consumer}
         end)
@@ -129,11 +144,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
 
     test "should handle new relations", ctx do
-      relation1 = %Relation{id: 1, table: "test_table", schema: "public"}
+      id = @shape.root_table_id
+
+      relation1 = %Relation{id: id, table: "test_table", schema: "public", columns: []}
 
       assert :ok = ShapeLogCollector.handle_relation_msg(relation1, ctx.server)
 
-      relation2 = %Relation{id: 2, table: "bar", schema: "public"}
+      relation2 = %Relation{id: id, table: "bar", schema: "public", columns: []}
 
       assert :ok = ShapeLogCollector.handle_relation_msg(relation2, ctx.server)
 
