@@ -24,9 +24,12 @@ defmodule Electric.Shapes.FilterTest do
                  {"public", "the_table"} => %{
                    fields: %{
                      "id" => %{
-                       "1" => [
-                         %{handle: "shape1", and_where: nil, shape: shape}
-                       ]
+                       type: :int8,
+                       values: %{
+                         1 => [
+                           %{handle: "shape1", and_where: nil, shape: shape}
+                         ]
+                       }
                      }
                    },
                    other_shapes: %{}
@@ -43,9 +46,12 @@ defmodule Electric.Shapes.FilterTest do
                  {"public", "the_table"} => %{
                    fields: %{
                      "id" => %{
-                       "1" => [
-                         %{handle: "shape1", and_where: nil, shape: shape}
-                       ]
+                       type: :int8,
+                       values: %{
+                         1 => [
+                           %{handle: "shape1", and_where: nil, shape: shape}
+                         ]
+                       }
                      }
                    },
                    other_shapes: %{}
@@ -62,19 +68,22 @@ defmodule Electric.Shapes.FilterTest do
                  {"public", "the_table"} => %{
                    fields: %{
                      "id" => %{
-                       "1" => [
-                         %{
-                           handle: "shape1",
-                           and_where: %Func{
-                             name: ~s(">"),
-                             args: [
-                               %Ref{path: ["id"], type: :int8},
-                               %Const{value: 0, type: :int4}
-                             ]
-                           },
-                           shape: ^shape
-                         }
-                       ]
+                       type: :int8,
+                       values: %{
+                         1 => [
+                           %{
+                             handle: "shape1",
+                             and_where: %Func{
+                               name: ~s(">"),
+                               args: [
+                                 %Ref{path: ["id"], type: :int8},
+                                 %Const{value: 0, type: :int4}
+                               ]
+                             },
+                             shape: ^shape
+                           }
+                         ]
+                       }
                      }
                    },
                    other_shapes: %{}
@@ -91,19 +100,22 @@ defmodule Electric.Shapes.FilterTest do
                  {"public", "the_table"} => %{
                    fields: %{
                      "id" => %{
-                       "1" => [
-                         %{
-                           handle: "shape1",
-                           and_where: %Func{
-                             name: ~s(">"),
-                             args: [
-                               %Ref{path: ["id"], type: :int8},
-                               %Const{value: 0, type: :int4}
-                             ]
-                           },
-                           shape: ^shape
-                         }
-                       ]
+                       type: :int8,
+                       values: %{
+                         1 => [
+                           %{
+                             handle: "shape1",
+                             and_where: %Func{
+                               name: ~s(">"),
+                               args: [
+                                 %Ref{path: ["id"], type: :int8},
+                                 %Const{value: 0, type: :int4}
+                               ]
+                             },
+                             shape: ^shape
+                           }
+                         ]
+                       }
                      }
                    },
                    other_shapes: %{}
@@ -133,30 +145,36 @@ defmodule Electric.Shapes.FilterTest do
           {"public", "the_table"} => %{
             fields: %{
               "id" => %{
-                "1" => [
-                  %{
-                    handle: "shape1",
-                    and_where: nil
-                  }
-                ],
-                "2" => [
-                  %{
-                    handle: "shape2",
-                    and_where: nil
-                  }
-                ]
+                type: :int8,
+                values: %{
+                  1 => [
+                    %{
+                      handle: "shape1",
+                      and_where: nil
+                    }
+                  ],
+                  2 => [
+                    %{
+                      handle: "shape2",
+                      and_where: nil
+                    }
+                  ]
+                }
               },
               "name" => %{
-                "bill" => [
-                  %{
-                    handle: "shape1",
-                    and_where: nil
-                  },
-                  %{
-                    handle: "shape2",
-                    and_where: nil
-                  }
-                ]
+                type: :text,
+                values: %{
+                  "bill" => [
+                    %{
+                      handle: "shape1",
+                      and_where: nil
+                    },
+                    %{
+                      handle: "shape2",
+                      and_where: nil
+                    }
+                  ]
+                }
               }
             },
             other_shapes: %{
@@ -167,9 +185,12 @@ defmodule Electric.Shapes.FilterTest do
           {"public", "another_table"} => %{
             fields: %{
               "id" => %{
-                "1" => [
-                  %{handle: "shape1", and_where: nil}
-                ]
+                type: :int8,
+                values: %{
+                  1 => [
+                    %{handle: "shape1", and_where: nil}
+                  ]
+                }
               }
             },
             other_shapes: %{
@@ -184,20 +205,26 @@ defmodule Electric.Shapes.FilterTest do
                  {"public", "the_table"} => %{
                    fields: %{
                      "id" => %{
-                       "2" => [
-                         %{
-                           handle: "shape2",
-                           and_where: nil
-                         }
-                       ]
+                       type: :int8,
+                       values: %{
+                         2 => [
+                           %{
+                             handle: "shape2",
+                             and_where: nil
+                           }
+                         ]
+                       }
                      },
                      "name" => %{
-                       "bill" => [
-                         %{
-                           handle: "shape2",
-                           and_where: nil
-                         }
-                       ]
+                       type: :text,
+                       values: %{
+                         "bill" => [
+                           %{
+                             handle: "shape2",
+                             and_where: nil
+                           }
+                         ]
+                       }
                      }
                    },
                    other_shapes: %{
@@ -216,14 +243,17 @@ defmodule Electric.Shapes.FilterTest do
           {"public", "the_table"} => %{
             fields: %{
               "id" => %{
-                "1" => [
-                  %{handle: "shape1", and_where: nil},
-                  %{handle: "shape2", and_where: nil}
-                ],
-                "2" => [
-                  %{handle: "shape3", and_where: nil},
-                  %{handle: "shape4", and_where: nil}
-                ]
+                type: :int8,
+                values: %{
+                  1 => [
+                    %{handle: "shape1", and_where: nil},
+                    %{handle: "shape2", and_where: nil}
+                  ],
+                  2 => [
+                    %{handle: "shape3", and_where: nil},
+                    %{handle: "shape4", and_where: nil}
+                  ]
+                }
               }
             },
             other_shapes: %{}
@@ -231,9 +261,12 @@ defmodule Electric.Shapes.FilterTest do
           {"public", "another_table"} => %{
             fields: %{
               "id" => %{
-                "1" => [
-                  %{handle: "shape5", and_where: nil}
-                ]
+                type: :int8,
+                values: %{
+                  1 => [
+                    %{handle: "shape5", and_where: nil}
+                  ]
+                }
               }
             },
             other_shapes: %{}
@@ -260,10 +293,13 @@ defmodule Electric.Shapes.FilterTest do
           {"public", "the_table"} => %{
             fields: %{
               "id" => %{
-                "1" => [
-                  %{handle: "shape1", and_where: nil},
-                  %{handle: "shape2", and_where: nil}
-                ]
+                type: :int8,
+                values: %{
+                  1 => [
+                    %{handle: "shape1", and_where: nil},
+                    %{handle: "shape2", and_where: nil}
+                  ]
+                }
               }
             },
             other_shapes: %{}
@@ -317,9 +353,12 @@ defmodule Electric.Shapes.FilterTest do
           {"public", "the_table"} => %{
             fields: %{
               "id" => %{
-                "1" => [
-                  %{handle: "the-shape", and_where: nil}
-                ]
+                type: :int8,
+                values: %{
+                  1 => [
+                    %{handle: "the-shape", and_where: nil}
+                  ]
+                }
               }
             },
             other_shapes: %{}
@@ -346,15 +385,18 @@ defmodule Electric.Shapes.FilterTest do
           {"public", "the_table"} => %{
             fields: %{
               "id" => %{
-                "1" => [
-                  %{handle: "shape1", and_where: nil}
-                ],
-                "2" => [
-                  %{handle: "shape2", and_where: nil}
-                ],
-                "3" => [
-                  %{handle: "shape3", and_where: nil}
-                ]
+                type: :int8,
+                values: %{
+                  1 => [
+                    %{handle: "shape1", and_where: nil}
+                  ],
+                  2 => [
+                    %{handle: "shape2", and_where: nil}
+                  ],
+                  3 => [
+                    %{handle: "shape3", and_where: nil}
+                  ]
+                }
               }
             },
             other_shapes: %{}
@@ -382,20 +424,23 @@ defmodule Electric.Shapes.FilterTest do
           {"public", "the_table"} => %{
             fields: %{
               "id" => %{
-                "1" => [
-                  %{
-                    handle: "shape1",
-                    and_where: nil,
-                    shape: Shape.new!("the_table", where: "id = 1", inspector: @inspector)
-                  }
-                ],
-                "2" => [
-                  %{
-                    handle: "shape2",
-                    and_where: nil,
-                    shape: Shape.new!("the_table", where: "id = 2", inspector: @inspector)
-                  }
-                ]
+                type: :int8,
+                values: %{
+                  1 => [
+                    %{
+                      handle: "shape1",
+                      and_where: nil,
+                      shape: Shape.new!("the_table", where: "id = 1", inspector: @inspector)
+                    }
+                  ],
+                  2 => [
+                    %{
+                      handle: "shape2",
+                      and_where: nil,
+                      shape: Shape.new!("the_table", where: "id = 2", inspector: @inspector)
+                    }
+                  ]
+                }
               }
             },
             other_shapes: %{
@@ -406,9 +451,12 @@ defmodule Electric.Shapes.FilterTest do
           {"public", "another_table"} => %{
             fields: %{
               "id" => %{
-                "1" => [
-                  %{handle: "not-this-shape-1", and_where: nil}
-                ]
+                type: :int8,
+                values: %{
+                  1 => [
+                    %{handle: "not-this-shape-1", and_where: nil}
+                  ]
+                }
               }
             },
             other_shapes: %{
@@ -431,8 +479,8 @@ defmodule Electric.Shapes.FilterTest do
                MapSet.new(["shape1", "shape2", "shape3", "shape4"])
     end
 
-    #TODO: Also go through Shape.is_affected_by_relation_change? tests to see if all scenarious are covered here
-    #TODO: Also go through Shape.convert_change tests to see if all scenarious are covered here
+    # TODO: Also go through Shape.is_affected_by_relation_change? tests to see if all scenarious are covered here
+    # TODO: Also go through Shape.convert_change tests to see if all scenarious are covered here
 
     test "returns shapes affected by truncation" do
       filter = %Filter{
@@ -440,20 +488,23 @@ defmodule Electric.Shapes.FilterTest do
           {"public", "the_table"} => %{
             fields: %{
               "id" => %{
-                "1" => [
-                  %{
-                    handle: "shape1",
-                    and_where: nil,
-                    shape: Shape.new!("the_table", where: "id = 1", inspector: @inspector)
-                  }
-                ],
-                "2" => [
-                  %{
-                    handle: "shape2",
-                    and_where: nil,
-                    shape: Shape.new!("the_table", where: "id = 2", inspector: @inspector)
-                  }
-                ]
+                type: :int8,
+                values: %{
+                  1 => [
+                    %{
+                      handle: "shape1",
+                      and_where: nil,
+                      shape: Shape.new!("the_table", where: "id = 1", inspector: @inspector)
+                    }
+                  ],
+                  2 => [
+                    %{
+                      handle: "shape2",
+                      and_where: nil,
+                      shape: Shape.new!("the_table", where: "id = 2", inspector: @inspector)
+                    }
+                  ]
+                }
               }
             },
             other_shapes: %{
@@ -463,10 +514,13 @@ defmodule Electric.Shapes.FilterTest do
           },
           {"public", "another_table"} => %{
             fields: %{
-              "id" => %{
-                "1" => [
-                  %{handle: "not-this-shape-1", and_where: nil}
-                ]
+              type: :int8,
+              values: %{
+                "id" => %{
+                  1 => [
+                    %{handle: "not-this-shape-1", and_where: nil}
+                  ]
+                }
               }
             },
             other_shapes: %{

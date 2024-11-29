@@ -5,6 +5,7 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes.TruncatedRelation
   alias Electric.Replication.Changes.UpdatedRecord
+  alias Electric.Replication.Eval.Env
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Parser.Const
@@ -46,15 +47,17 @@ defmodule Electric.Shapes.Filter do
 
   def empty, do: %Filter{}
   defp empty_table_filter, do: %{fields: %{}, other_shapes: %{}}
+  defp init_field_filter(type), do: %{type: type, values: %{}}
 
   defp add_shape_to_table_filter({handle, shape} = shape_instance, table_filter) do
     case optimise_where(shape.where) do
-      %{operation: "=", field: field, value: value, and_where: and_where} ->
+      %{operation: "=", field: field, type: type, value: value, and_where: and_where} ->
         %{
           table_filter
           | fields:
-              add_shape_to_field_filter(
+              add_shape_to_fields(
                 field,
+                type,
                 value,
                 shape_instance,
                 table_filter.fields,
@@ -67,45 +70,55 @@ defmodule Electric.Shapes.Filter do
     end
   end
 
-  defp add_shape_to_field_filter(field, value, shape_instance, fields, and_where) do
+  defp add_shape_to_fields(field, type, value, shape_instance, fields, and_where) do
     Map.update(
       fields,
       field,
-      add_shape_to_value_filter(value, shape_instance, and_where, %{}),
-      fn value_filter ->
-        add_shape_to_value_filter(value, shape_instance, and_where, value_filter)
+      add_shape_to_field_filter(value, shape_instance, and_where, init_field_filter(type)),
+      fn field_filter ->
+        add_shape_to_field_filter(value, shape_instance, and_where, field_filter)
       end
     )
   end
 
-  defp add_shape_to_value_filter(value, {handle, shape}, and_where, value_filter) do
-    Map.update(
-      value_filter,
-      value,
-      [%{handle: handle, and_where: and_where, shape: shape}],
-      fn shapes -> [%{handle: handle, and_where: and_where, shape: shape} | shapes] end
-    )
+  # TODO: Renmame handle to shape_id
+  defp add_shape_to_field_filter(value, {handle, shape}, and_where, field_filter) do
+    %{
+      field_filter
+      | values:
+          Map.update(
+            field_filter.values,
+            value,
+            [%{handle: handle, and_where: and_where, shape: shape}],
+            fn shapes -> [%{handle: handle, and_where: and_where, shape: shape} | shapes] end
+          )
+    }
   end
 
   defp optimise_where(%Expr{eval: eval}), do: optimise_where(eval)
 
   # TODO: Is this really ~s("=") or is it just "="?
-  # TODO: Is path really [field]?
-  defp optimise_where(%Func{name: ~s("="), args: [%Ref{path: [field]}, %Const{} = const]}) do
-    %{operation: "=", field: field, value: const_to_string(const), and_where: nil}
+  defp optimise_where(%Func{
+         name: ~s("="),
+         args: [%Ref{path: [field], type: type}, %Const{value: value}]
+       }) do
+    %{operation: "=", field: field, type: type, value: value, and_where: nil}
   end
 
-  defp optimise_where(%Func{name: ~s("="), args: [%Const{} = const, %Ref{path: [field]}]}) do
-    %{operation: "=", field: field, value: const_to_string(const), and_where: nil}
+  defp optimise_where(%Func{
+         name: ~s("="),
+         args: [%Const{value: value}, %Ref{path: [field], type: type}]
+       }) do
+    %{operation: "=", field: field, type: type, value: value, and_where: nil}
   end
 
   defp optimise_where(%Func{name: "and", args: [arg1, arg2]}) do
     case {optimise_where(arg1), optimise_where(arg2)} do
-      {%{operation: "=", field: field, value: value, and_where: nil}, _} ->
-        %{operation: "=", field: field, value: value, and_where: arg2}
+      {%{operation: "=", and_where: nil} = params, _} ->
+        %{params | and_where: arg2}
 
-      {_, %{operation: "=", field: field, value: value, and_where: nil}} ->
-        %{operation: "=", field: field, value: value, and_where: arg1}
+      {_, %{operation: "=", and_where: nil} = params} ->
+        %{params | and_where: arg1}
 
       _ ->
         :not_optimised
@@ -113,10 +126,6 @@ defmodule Electric.Shapes.Filter do
   end
 
   defp optimise_where(_), do: :not_optimised
-
-  # TODO: Impliment other types, or is this not implimented elsewhere?
-  defp const_to_string(%Const{value: value, type: :int4}), do: Integer.to_string(value)
-  defp const_to_string(%Const{value: value, type: :int8}), do: Integer.to_string(value)
 
   def affected_shapes(%Filter{} = filter, %Relation{} = relation) do
     # Check all shapes is all tables becuase the table may have been renamed
@@ -173,22 +182,28 @@ defmodule Electric.Shapes.Filter do
     |> MapSet.union(other_shapes_affected(table_filter, record))
   end
 
-  def affected_shapes_by_field({field, values}, record) do
-    case values[record[field]] do
+  def affected_shapes_by_field({field, %{values: values, type: type}}, record) do
+    case values[value_from_record(record, field, type)] do
       nil ->
         MapSet.new()
 
       shapes ->
         shapes
-        |> Enum.filter(&record_in_where(&1.and_where, record))
+        |> Enum.filter(&record_in_where?(&1.and_where, record))
         |> Enum.map(& &1.handle)
         |> MapSet.new()
     end
   end
 
-  defp record_in_where(nil, _), do: true
+  defp value_from_record(record, field, type) do
+    # TODO: should we expect this to be ok?
+    {:ok, value} = Env.parse_const(Env.new(), record[field], type)
+    value
+  end
 
-  defp record_in_where(where_clause, record) do
+  defp record_in_where?(nil, _), do: true
+
+  defp record_in_where?(where_clause, record) do
     # TODO: Move record_in_shape? out of shapes into Where module
     # Keep full Expr in shape
     Shape.record_in_shape?(
@@ -215,7 +230,7 @@ defmodule Electric.Shapes.Filter do
   end
 
   defp all_shapes_in_table_filter(%{fields: fields, other_shapes: other_shapes}) do
-    for {_field, values} <- fields,
+    for {_field, %{values: values}} <- fields,
         {_value, shapes} <- values,
         %{handle: handle, shape: shape} <- shapes,
         into: %{} do

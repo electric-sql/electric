@@ -8,10 +8,10 @@ defmodule Electric.Shapes.Filter.TableFilter do
 
   defp remove_shape_from_fields(fields, handle) do
     fields
-    |> Map.new(fn {field, value_filter} ->
-      {field, remove_shape_from_value_filter(value_filter, handle)}
+    |> Map.new(fn {field, %{values: value_filter} = field_filter} ->
+      {field, %{field_filter | values: remove_shape_from_value_filter(value_filter, handle)}}
     end)
-    |> Enum.reject(fn {_field, value_filter} -> map_size(value_filter) == 0 end)
+    |> Enum.reject(fn {_field, %{values: value_filter}} -> map_size(value_filter) == 0 end)
     |> Map.new()
   end
 
