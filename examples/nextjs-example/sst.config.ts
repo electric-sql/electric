@@ -25,8 +25,12 @@ export default $config({
       branchId: project.defaultBranchId,
     }
 
-    const db = new neon.Database(`nextjs-example`, {
+    const db = new neon.Database(`nextjs`, {
       ...base,
+      name:
+        $app.stage === `Production`
+          ? `nextjs-production`
+          : `nextjs-${$app.stage}`,
       ownerName: `neondb_owner`,
     })
 
