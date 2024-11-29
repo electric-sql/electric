@@ -20,8 +20,8 @@ defmodule Electric.Shapes.DispatcherTest do
     ]
   }
 
-  defp dispatcher(opts \\ []) do
-    {:ok, state} = D.init(opts)
+  defp dispatcher() do
+    {:ok, state} = D.init(inspector: @inspector)
     state
   end
 

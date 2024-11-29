@@ -34,20 +34,24 @@ defmodule Electric.Shapes.Dispatcher do
   alias Electric.Shapes.Filter
 
   defmodule State do
-    defstruct n: 0,
-              waiting: 0,
-              pending: nil,
-              subs: [],
-              filter: Filter.empty(),
-              pids: MapSet.new()
+    defstruct [:n, :waiting, :pending, :subs, :filter, :pids, :inspector]
   end
 
   @behaviour GenStage.Dispatcher
 
   @impl GenStage.Dispatcher
 
-  def init(_opts) do
-    {:ok, %State{}}
+  def init(opts) do
+    {:ok,
+     %State{
+       n: 0,
+       waiting: 0,
+       pending: nil,
+       subs: [],
+       filter: Filter.empty(),
+       pids: MapSet.new(),
+       inspector: Keyword.fetch!(opts, :inspector)
+     }}
   end
 
   @impl GenStage.Dispatcher
