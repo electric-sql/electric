@@ -120,7 +120,7 @@ defmodule Electric.LogItems do
     }
   end
 
-  # We're assuming the the postgres query casts every column to string
+  # We're assuming that the postgres query casts every column to string
   defp value(row, %Postgrex.Query{columns: columns}) do
     [columns, row]
     |> Enum.zip()
