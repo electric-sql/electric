@@ -6,6 +6,7 @@ defmodule Electric.Shapes.FilterTest do
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes.TruncatedRelation
   alias Electric.Replication.Changes.UpdatedRecord
+  alias Electric.Replication.Eval.Expr
   alias Electric.Replication.Eval.Parser.Const
   alias Electric.Replication.Eval.Parser.Func
   alias Electric.Replication.Eval.Parser.Ref
@@ -73,12 +74,16 @@ defmodule Electric.Shapes.FilterTest do
                          1 => [
                            %{
                              handle: "shape1",
-                             and_where: %Func{
-                               name: ~s(">"),
-                               args: [
-                                 %Ref{path: ["id"], type: :int8},
-                                 %Const{value: 0, type: :int4}
-                               ]
+                             and_where: %Expr{
+                               eval: %Func{
+                                 name: ~s(">"),
+                                 args: [
+                                   %Ref{path: ["id"], type: :int8},
+                                   %Const{value: 0, type: :int4}
+                                 ]
+                               },
+                               used_refs: %{["id"] => :int8},
+                               returns: :bool
                              },
                              shape: ^shape
                            }
@@ -105,12 +110,16 @@ defmodule Electric.Shapes.FilterTest do
                          1 => [
                            %{
                              handle: "shape1",
-                             and_where: %Func{
-                               name: ~s(">"),
-                               args: [
-                                 %Ref{path: ["id"], type: :int8},
-                                 %Const{value: 0, type: :int4}
-                               ]
+                             and_where: %Expr{
+                               eval: %Func{
+                                 name: ~s(">"),
+                                 args: [
+                                   %Ref{path: ["id"], type: :int8},
+                                   %Const{value: 0, type: :int4}
+                                 ]
+                               },
+                               used_refs: %{["id"] => :int8},
+                               returns: :bool
                              },
                              shape: ^shape
                            }

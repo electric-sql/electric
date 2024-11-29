@@ -115,10 +115,10 @@ defmodule Electric.Shapes.Filter do
   defp optimise_where(%Func{name: "and", args: [arg1, arg2]}) do
     case {optimise_where(arg1), optimise_where(arg2)} do
       {%{operation: "=", and_where: nil} = params, _} ->
-        %{params | and_where: arg2}
+        %{params | and_where: where_expr(arg2)}
 
       {_, %{operation: "=", and_where: nil} = params} ->
-        %{params | and_where: arg1}
+        %{params | and_where: where_expr(arg1)}
 
       _ ->
         :not_optimised
@@ -126,6 +126,10 @@ defmodule Electric.Shapes.Filter do
   end
 
   defp optimise_where(_), do: :not_optimised
+
+  defp where_expr(eval) do
+    %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
+  end
 
   def affected_shapes(%Filter{} = filter, %Relation{} = relation) do
     # Check all shapes is all tables becuase the table may have been renamed
@@ -195,9 +199,10 @@ defmodule Electric.Shapes.Filter do
     end
   end
 
+  @env Env.new()
   defp value_from_record(record, field, type) do
     # TODO: should we expect this to be ok?
-    {:ok, value} = Env.parse_const(Env.new(), record[field], type)
+    {:ok, value} = Env.parse_const(@env, record[field], type)
     value
   end
 
@@ -205,11 +210,7 @@ defmodule Electric.Shapes.Filter do
 
   defp record_in_where?(where_clause, record) do
     # TODO: Move record_in_shape? out of shapes into Where module
-    # Keep full Expr in shape
-    Shape.record_in_shape?(
-      %{where: %Expr{eval: where_clause, used_refs: Parser.find_refs(where_clause)}},
-      record
-    )
+    Shape.record_in_shape?(%{where: where_clause}, record)
   end
 
   defp other_shapes_affected(%{other_shapes: shapes}, record) do
