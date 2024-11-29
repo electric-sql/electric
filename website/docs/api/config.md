@@ -133,15 +133,17 @@ By default, Electric binds to IPv4. Enable this to listen on IPv6 addresses as w
 
 </EnvVarConfig>
 
-### ELECTRIC_LOG_CHUNK_BYTES_THRESHOLD
+### ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD
 
 <EnvVarConfig
-    name="ELECTRIC_LOG_CHUNK_BYTES_THRESHOLD"
+    name="ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD"
     defaultValue="10485760"
     example="20971520">
 
 Limit the maximum size of a shape log response, to ensure they are cached by
-upstream caches. Defaults to 10MB (10 * 1024 * 1024). See [#1581](https://github.com/electric-sql/electric/issues/1581) for context.
+upstream caches. Defaults to 10MB (10 * 1024 * 1024).
+
+See [#1581](https://github.com/electric-sql/electric/issues/1581) for context.
 
 </EnvVarConfig>
 
