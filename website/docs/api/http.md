@@ -86,7 +86,7 @@ The client will then receive an `up-to-date` control message at the end of the r
 This indicates that the client has all the data that the server was aware of when fulfilling the request. The client can then switch into live mode to receive real-time updates.
 
 ::: info Must-refetch
-Note that the other control message is `must-refetch` which indicates that the client must throwaway their local shape data and re-sync from scratch:
+Note that the other control message is `must-refetch` which indicates that the client must throw away their local shape data and re-sync from scratch:
 
 ```json
 {"headers": {"control": "must-refetch"}}
