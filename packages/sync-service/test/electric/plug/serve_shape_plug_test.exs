@@ -68,9 +68,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
       storage: {Mock.Storage, []},
       inspector: {__MODULE__, []},
       registry: @registry,
-      long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
-      max_age: Access.get(ctx, :max_age, 60),
-      stale_age: Access.get(ctx, :stale_age, 300)
+      long_poll_timeout: long_poll_timeout(ctx),
+      max_age: max_age(ctx),
+      stale_age: stale_age(ctx)
     ]
 
     ServeShapePlug.call(conn, config)
@@ -364,21 +364,42 @@ defmodule Electric.Plug.ServeShapePlugTest do
         @test_offset
       end)
 
-      conn =
-        ctx
-        |> conn(
-          :get,
-          %{"table" => "public.users"},
-          "?offset=#{@start_offset_50}&handle=#{@test_shape_handle}"
-        )
-        |> put_req_header(
-          "if-none-match",
-          ~s("#{@test_shape_handle}:#{@start_offset_50}:#{@test_offset}")
-        )
-        |> call_serve_shape_plug(ctx)
-
+      conn = get_shape_with_etag(ctx, @start_offset_50)
       assert conn.status == 304
       assert conn.resp_body == ""
+    end
+
+    test "the 304 response includes caching headers that are appropriate for the offset", ctx do
+      Mock.ShapeCache
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      |> expect(:get_shape, 3, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ -> @test_offset end)
+      |> expect(:get_chunk_end_log_offset, 2, fn @start_offset_50, _ -> @test_offset end)
+
+      conn = get_shape_with_etag(ctx, @before_all_offset)
+      assert conn.status == 304
+      cache_control = "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746"
+      assert {"cache-control", cache_control} in conn.resp_headers
+
+      conn = get_shape_with_etag(ctx, @start_offset_50)
+      assert conn.status == 304
+      cache_control = "public, max-age=#{max_age(ctx)}, stale-while-revalidate=#{stale_age(ctx)}"
+      assert {"cache-control", cache_control} in conn.resp_headers
+
+      conn = get_shape_with_etag(ctx, @start_offset_50, live: true)
+      assert conn.status == 304
+
+      cache_control = "public, max-age=5, stale-while-revalidate=5"
+      assert {"cache-control", cache_control} in conn.resp_headers
+
+      expected_cursor =
+        Electric.Plug.Utils.get_next_interval_timestamp(long_poll_timeout(ctx), nil)
+        |> to_string()
+
+      assert {"electric-cursor", expected_cursor} in conn.resp_headers
     end
 
     test "handles live updates", ctx do
@@ -731,4 +752,21 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 400
     end
   end
+
+  defp get_shape_with_etag(ctx, offset, extra_query_params \\ []) do
+    query_str =
+      URI.encode_query([offset: offset, handle: @test_shape_handle] ++ extra_query_params)
+
+    ctx
+    |> conn(:get, %{"table" => "public.users"}, "?" <> query_str)
+    |> put_req_header(
+      "if-none-match",
+      ~s("#{@test_shape_handle}:#{offset}:#{@test_offset}")
+    )
+    |> call_serve_shape_plug(ctx)
+  end
+
+  defp max_age(ctx), do: Access.get(ctx, :max_age, 60)
+  defp stale_age(ctx), do: Access.get(ctx, :stale_age, 300)
+  defp long_poll_timeout(ctx), do: Access.get(ctx, :long_poll_timeout, 20_000)
 end

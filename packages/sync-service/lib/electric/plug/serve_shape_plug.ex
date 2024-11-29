@@ -166,9 +166,9 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :listen_for_new_changes
   plug :determine_log_chunk_offset
   plug :determine_up_to_date
+  plug :put_resp_cache_headers
   plug :generate_etag
   plug :validate_and_put_etag
-  plug :put_resp_cache_headers
   plug :serve_log_or_snapshot
 
   # end_telemetry_span needs to always be the last plug here.
@@ -351,7 +351,7 @@ defmodule Electric.Plug.ServeShapePlug do
       get_req_header(conn, "if-none-match")
       |> Enum.flat_map(&String.split(&1, ","))
       |> Enum.map(&String.trim/1)
-      |> Enum.map(&String.trim(&1, ~S|"|))
+      |> Enum.map(&String.trim(&1, <<?">>))
 
     cond do
       conn.assigns.etag in if_none_match ->
@@ -378,7 +378,7 @@ defmodule Electric.Plug.ServeShapePlug do
         "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746"
       )
 
-  # For live requests we want shorrt cache lifetimes and to update the live cursor
+  # For live requests we want short cache lifetimes and to update the live cursor
   defp put_resp_cache_headers(%Conn{assigns: %{live: true}} = conn, _),
     do:
       conn
