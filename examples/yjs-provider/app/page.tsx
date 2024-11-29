@@ -6,8 +6,8 @@ import { getAwarenessData, getDocData } from "./ydoc-shape"
 
 const Page = async () => (
   <ElectricEditor
-    docShape={await getDocData()}
-    awarenessShape={await getAwarenessData()}
+  // docShape={await getDocData()}
+  // awarenessShape={await getAwarenessData()}
   />
 )
 
