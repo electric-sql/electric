@@ -39,9 +39,13 @@ function getDocAsBase64(ydoc: Y.Doc) {
   syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(ydoc))
   return toBase64(encoding.toUint8Array(encoder))
 }
+const url = process.env.ELECTRIC_URL
+  ? `${process.env.ELECTRIC_URL}/v1/shape`
+  : `http://localhost:3000/v1/shape/`
+
 
 const doc: ShapeStreamOptions<Uint8Array> = {
-  url: `http://localhost:3000/v1/shape/`,
+  url,
   table: `ydoc_operations`,
   where: `room = '${room}'`,
   parser,
@@ -61,7 +65,7 @@ export const getDocData = async () => {
 }
 
 const awareness: ShapeStreamOptions = {
-  url: `http://localhost:3000/v1/shape/`,
+  url,
   table: `ydoc_awareness`,
   where: `room = '${room}'`,
   parser: parseToBase64,

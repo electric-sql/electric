@@ -44,6 +44,7 @@ const setupShapeStream = (provider) => {
     })
 
     const handleSyncMessage = (messages) => {
+      console.log(messages)
       provider.lastMessageReceived = time.getUnixTime()
       messages.forEach((message) => {
         if (isChangeMessage(message) && message.value.op) {

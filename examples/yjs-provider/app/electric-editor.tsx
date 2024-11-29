@@ -37,8 +37,8 @@ export default function ElectricEditor({
   docShape,
   awarenessShape,
 }: {
-  docShape: ShapeData
-  awarenessShape: ShapeData
+  docShape?: ShapeData
+  awarenessShape?: ShapeData
 }) {
   const editor = useRef(null)
 
@@ -60,17 +60,17 @@ export default function ElectricEditor({
     }
 
     if (typeof window !== `undefined` && network === null) {
-      initDoc(ydoc, docShape.data)
+      // initDoc(ydoc, docShape.data)
       const awareness = new Awareness(ydoc)
-      initAwareness(awareness, awarenessShape.data)
+      // initAwareness(awareness, awarenessShape.data)
 
       const opts = {
         connect: true,
         awareness,
-        resume: {
-          operations: docShape.resume,
-          awareness: awarenessShape.resume,
-        },
+        // resume: {
+        //   operations: docShape.resume,
+        //   awareness: awarenessShape.resume,
+        // },
       }
 
       network = new ElectricProvider(

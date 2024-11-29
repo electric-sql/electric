@@ -1,12 +1,10 @@
-import { Pool } from "pg"
+import pgPkg from "pg"
+const { Pool } = pgPkg
+
+console.log(`POOLED_DATABASE_URL: ${process.env.POOLED_DATABASE_URL}`)
 
 const pool = new Pool({
-  host: `localhost`,
-  port: 54321,
-  password: `password`,
-  user: `postgres`,
-  database: `electric`,
-  max: 1,
+  connectionString: process.env.POOLED_DATABASE_URL,
 })
 
 export { pool }
