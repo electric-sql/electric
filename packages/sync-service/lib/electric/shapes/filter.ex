@@ -22,8 +22,8 @@ defmodule Electric.Shapes.Filter do
           tables,
           shape.root_table,
           Table.add_shape({handle, shape}, Table.empty()),
-          fn table_filter ->
-            Table.add_shape({handle, shape}, table_filter)
+          fn table ->
+            Table.add_shape({handle, shape}, table)
           end
         )
     }
@@ -33,10 +33,10 @@ defmodule Electric.Shapes.Filter do
     %Filter{
       tables:
         tables
-        |> Enum.map(fn {table, table_filter} ->
-          {table, Table.remove_shape(table_filter, handle)}
+        |> Enum.map(fn {table_name, table} ->
+          {table_name, Table.remove_shape(table, handle)}
         end)
-        |> Enum.reject(fn {_table, table_filter} -> map_size(table_filter.fields) == 0 end)
+        |> Enum.reject(fn {_table, table} -> map_size(table.fields) == 0 end)
         |> Map.new()
     }
   end
@@ -77,29 +77,29 @@ defmodule Electric.Shapes.Filter do
 
   # TODO: Optimisation: Do TruncatedRelations first and then just process other changes for other tables
 
-  def affected_shapes(%Filter{} = filter, %TruncatedRelation{relation: table}) do
-    for {handle, _shape} <- all_shapes_for_table(filter, table),
+  def affected_shapes(%Filter{} = filter, %TruncatedRelation{relation: table_name}) do
+    for {handle, _shape} <- all_shapes_for_table(filter, table_name),
         into: MapSet.new() do
       handle
     end
   end
 
-  defp affected_shapes_by_record(filter, table, record) do
-    case Map.get(filter.tables, table) do
+  defp affected_shapes_by_record(filter, table_name, record) do
+    case Map.get(filter.tables, table_name) do
       nil -> MapSet.new()
-      table_filter -> Table.affected_shapes(table_filter, record)
+      table -> Table.affected_shapes(table, record)
     end
   end
 
   defp all_shapes_in_filter(%Filter{} = filter) do
-    for {_table, table_filter} <- filter.tables,
-        {handle, shape} <- all_shapes_in_table_filter(table_filter),
+    for {_table, table} <- filter.tables,
+        {handle, shape} <- all_shapes_in_table(table),
         into: %{} do
       {handle, shape}
     end
   end
 
-  defp all_shapes_in_table_filter(%{fields: fields, other_shapes: other_shapes}) do
+  defp all_shapes_in_table(%{fields: fields, other_shapes: other_shapes}) do
     for {_field, %{values: values}} <- fields,
         {_value, shapes} <- values,
         %{handle: handle, shape: shape} <- shapes,
@@ -109,13 +109,13 @@ defmodule Electric.Shapes.Filter do
     |> Map.merge(other_shapes)
   end
 
-  defp all_shapes_for_table(%Filter{} = filter, table) do
-    case Map.get(filter.tables, table) do
+  defp all_shapes_for_table(%Filter{} = filter, table_name) do
+    case Map.get(filter.tables, table_name) do
       nil ->
         %{}
 
-      table_filter ->
-        all_shapes_in_table_filter(table_filter)
+      table ->
+        all_shapes_in_table(table)
     end
   end
 end
