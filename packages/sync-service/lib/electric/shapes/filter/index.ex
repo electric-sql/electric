@@ -6,6 +6,8 @@ defmodule Electric.Shapes.Filter.Index do
 
   def new(type), do: %{type: type, values: %{}}
 
+  def empty?(%{values: values}), do: values == %{}
+
   # TODO: Renmame handle to shape_id
   def add_shape(value, {handle, shape}, and_where, index) do
     %{
@@ -20,11 +22,17 @@ defmodule Electric.Shapes.Filter.Index do
     }
   end
 
-  def remove_shape_from_value_filter(value_filter, handle) do
-    value_filter
-    |> Map.new(fn {value, shapes} -> {value, shapes |> Enum.reject(&(&1.handle == handle))} end)
-    |> Enum.reject(fn {_value, shapes} -> shapes == [] end)
-    |> Map.new()
+  def remove_shape(index, handle) do
+    %{
+      index
+      | values:
+          index.values
+          |> Map.new(fn {value, shapes} ->
+            {value, shapes |> Enum.reject(&(&1.handle == handle))}
+          end)
+          |> Enum.reject(fn {_value, shapes} -> shapes == [] end)
+          |> Map.new()
+    }
   end
 
   def affected_shapes({field, %{values: values, type: type}}, record) do

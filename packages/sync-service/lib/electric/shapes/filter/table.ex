@@ -89,11 +89,8 @@ defmodule Electric.Shapes.Filter.Table do
 
   defp remove_shape_from_indexes(indexes, handle) do
     indexes
-    |> Map.new(fn {field, %{values: value_filter} = field_filter} ->
-      {field,
-       %{field_filter | values: Index.remove_shape_from_value_filter(value_filter, handle)}}
-    end)
-    |> Enum.reject(fn {_field, %{values: value_filter}} -> map_size(value_filter) == 0 end)
+    |> Map.new(fn {field, index} -> {field, Index.remove_shape(index, handle)} end)
+    |> Enum.reject(fn {_field, index} -> Index.empty?(index) end)
     |> Map.new()
   end
 
