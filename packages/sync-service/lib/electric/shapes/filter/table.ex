@@ -96,7 +96,7 @@ defmodule Electric.Shapes.Filter.Table do
 
   def affected_shapes(%Table{indexes: indexes} = table, record) do
     indexes
-    |> Enum.map(&Index.affected_shapes(&1, record))
+    |> Enum.map(fn {field, index} -> Index.affected_shapes(index, field, record) end)
     |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
     |> MapSet.union(other_shapes_affected(table, record))
   end

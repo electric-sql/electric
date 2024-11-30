@@ -35,7 +35,7 @@ defmodule Electric.Shapes.Filter.Index do
     }
   end
 
-  def affected_shapes({field, %{values: values, type: type}}, record) do
+  def affected_shapes(%{values: values, type: type}, field, record) do
     case values[value_from_record(record, field, type)] do
       nil ->
         MapSet.new()
