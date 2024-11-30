@@ -11,6 +11,7 @@ defmodule Electric.Shapes.FilterTest do
   alias Electric.Replication.Eval.Parser.Func
   alias Electric.Replication.Eval.Parser.Ref
   alias Electric.Shapes.Filter
+  alias Electric.Shapes.Filter.Table
   alias Electric.Shapes.Shape
   alias Support.StubInspector
 
@@ -22,7 +23,7 @@ defmodule Electric.Shapes.FilterTest do
 
       assert Filter.new(%{"shape1" => shape}) == %Filter{
                tables: %{
-                 {"public", "the_table"} => %{
+                 {"public", "the_table"} => %Table{
                    fields: %{
                      "id" => %{
                        type: :int8,
@@ -44,7 +45,7 @@ defmodule Electric.Shapes.FilterTest do
 
       assert Filter.new(%{"shape1" => shape}) == %Filter{
                tables: %{
-                 {"public", "the_table"} => %{
+                 {"public", "the_table"} => %Table{
                    fields: %{
                      "id" => %{
                        type: :int8,
@@ -66,7 +67,7 @@ defmodule Electric.Shapes.FilterTest do
 
       assert %Filter{
                tables: %{
-                 {"public", "the_table"} => %{
+                 {"public", "the_table"} => %Table{
                    fields: %{
                      "id" => %{
                        type: :int8,
@@ -102,7 +103,7 @@ defmodule Electric.Shapes.FilterTest do
 
       assert %Filter{
                tables: %{
-                 {"public", "the_table"} => %{
+                 {"public", "the_table"} => %Table{
                    fields: %{
                      "id" => %{
                        type: :int8,
@@ -138,7 +139,7 @@ defmodule Electric.Shapes.FilterTest do
 
       assert Filter.new(shapes) == %Filter{
                tables: %{
-                 {"public", "the_table"} => %{
+                 {"public", "the_table"} => %Table{
                    fields: %{},
                    other_shapes: shapes
                  }
@@ -151,7 +152,7 @@ defmodule Electric.Shapes.FilterTest do
     test "removes all shapes with the specified handle" do
       filter = %Filter{
         tables: %{
-          {"public", "the_table"} => %{
+          {"public", "the_table"} => %Table{
             fields: %{
               "id" => %{
                 type: :int8,
@@ -191,7 +192,7 @@ defmodule Electric.Shapes.FilterTest do
               "shape2" => Shape.new!("the_table", where: "id = 2", inspector: @inspector)
             }
           },
-          {"public", "another_table"} => %{
+          {"public", "another_table"} => %Table{
             fields: %{
               "id" => %{
                 type: :int8,
@@ -211,7 +212,7 @@ defmodule Electric.Shapes.FilterTest do
 
       assert Filter.remove_shape(filter, "shape1") == %Filter{
                tables: %{
-                 {"public", "the_table"} => %{
+                 {"public", "the_table"} => %Table{
                    fields: %{
                      "id" => %{
                        type: :int8,
@@ -249,7 +250,7 @@ defmodule Electric.Shapes.FilterTest do
     test "shapes with same table and id are returned" do
       filter = %Filter{
         tables: %{
-          {"public", "the_table"} => %{
+          {"public", "the_table"} => %Table{
             fields: %{
               "id" => %{
                 type: :int8,
@@ -267,7 +268,7 @@ defmodule Electric.Shapes.FilterTest do
             },
             other_shapes: %{}
           },
-          {"public", "another_table"} => %{
+          {"public", "another_table"} => %Table{
             fields: %{
               "id" => %{
                 type: :int8,
@@ -299,7 +300,7 @@ defmodule Electric.Shapes.FilterTest do
     test "shapes with same table but different id are not returned" do
       filter = %Filter{
         tables: %{
-          {"public", "the_table"} => %{
+          {"public", "the_table"} => %Table{
             fields: %{
               "id" => %{
                 type: :int8,
@@ -332,7 +333,7 @@ defmodule Electric.Shapes.FilterTest do
     test "shapes with more complicated where clauses are evaluated" do
       filter = %Filter{
         tables: %{
-          {"public", "the_table"} => %{
+          {"public", "the_table"} => %Table{
             fields: %{},
             other_shapes: %{
               "shape1" => Shape.new!("the_table", where: "id > 7", inspector: @inspector),
@@ -359,7 +360,7 @@ defmodule Electric.Shapes.FilterTest do
     test "returns shapes affected by delete" do
       filter = %Filter{
         tables: %{
-          {"public", "the_table"} => %{
+          {"public", "the_table"} => %Table{
             fields: %{
               "id" => %{
                 type: :int8,
@@ -391,7 +392,7 @@ defmodule Electric.Shapes.FilterTest do
     test "returns shapes affected by update" do
       filter = %Filter{
         tables: %{
-          {"public", "the_table"} => %{
+          {"public", "the_table"} => %Table{
             fields: %{
               "id" => %{
                 type: :int8,
@@ -430,7 +431,7 @@ defmodule Electric.Shapes.FilterTest do
     test "returns shapes affected by relation change" do
       filter = %Filter{
         tables: %{
-          {"public", "the_table"} => %{
+          {"public", "the_table"} => %Table{
             fields: %{
               "id" => %{
                 type: :int8,
@@ -457,7 +458,7 @@ defmodule Electric.Shapes.FilterTest do
               "shape4" => Shape.new!("the_table", where: "id > 6", inspector: @inspector)
             }
           },
-          {"public", "another_table"} => %{
+          {"public", "another_table"} => %Table{
             fields: %{
               "id" => %{
                 type: :int8,
@@ -494,7 +495,7 @@ defmodule Electric.Shapes.FilterTest do
     test "returns shapes affected by truncation" do
       filter = %Filter{
         tables: %{
-          {"public", "the_table"} => %{
+          {"public", "the_table"} => %Table{
             fields: %{
               "id" => %{
                 type: :int8,
@@ -521,7 +522,7 @@ defmodule Electric.Shapes.FilterTest do
               "shape4" => Shape.new!("the_table", where: "id > 6", inspector: @inspector)
             }
           },
-          {"public", "another_table"} => %{
+          {"public", "another_table"} => %Table{
             fields: %{
               type: :int8,
               values: %{

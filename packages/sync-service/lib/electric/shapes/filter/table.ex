@@ -5,29 +5,32 @@ defmodule Electric.Shapes.Filter.Table do
   alias Electric.Replication.Eval.Parser.Const
   alias Electric.Replication.Eval.Parser.Func
   alias Electric.Replication.Eval.Parser.Ref
+  alias Electric.Shapes.Filter.Table
   alias Electric.Shapes.Shape
 
-  def empty, do: %{fields: %{}, other_shapes: %{}}
+  defstruct fields: %{}, other_shapes: %{}
+
+  def empty, do: %Table{}
   def init_field_filter(type), do: %{type: type, values: %{}}
 
-  def add_shape({handle, shape} = shape_instance, table_filter) do
+  def add_shape({handle, shape} = shape_instance, table) do
     case optimise_where(shape.where) do
       %{operation: "=", field: field, type: type, value: value, and_where: and_where} ->
         %{
-          table_filter
+          table
           | fields:
               add_shape_to_fields(
                 field,
                 type,
                 value,
                 shape_instance,
-                table_filter.fields,
+                table.fields,
                 and_where
               )
         }
 
       :not_optimised ->
-        %{table_filter | other_shapes: Map.put(table_filter.other_shapes, handle, shape)}
+        %{table | other_shapes: Map.put(table.other_shapes, handle, shape)}
     end
   end
 
@@ -93,7 +96,7 @@ defmodule Electric.Shapes.Filter.Table do
   end
 
   def remove_shape(%{fields: fields, other_shapes: other_shapes}, handle) do
-    %{
+    %Table{
       fields: remove_shape_from_fields(fields, handle),
       other_shapes: Map.delete(other_shapes, handle)
     }
@@ -115,11 +118,11 @@ defmodule Electric.Shapes.Filter.Table do
     |> Map.new()
   end
 
-  def affected_shapes(%{fields: fields} = table_filter, record) do
+  def affected_shapes(%{fields: fields} = table, record) do
     fields
     |> Enum.map(&affected_shapes_by_field(&1, record))
     |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
-    |> MapSet.union(other_shapes_affected(table_filter, record))
+    |> MapSet.union(other_shapes_affected(table, record))
   end
 
   def affected_shapes_by_field({field, %{values: values, type: type}}, record) do
