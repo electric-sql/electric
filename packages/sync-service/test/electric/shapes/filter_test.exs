@@ -24,7 +24,7 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.new(%{"shape1" => shape}) == %Filter{
                tables: %{
                  {"public", "the_table"} => %Table{
-                   fields: %{
+                   indexes: %{
                      "id" => %{
                        type: :int8,
                        values: %{
@@ -46,7 +46,7 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.new(%{"shape1" => shape}) == %Filter{
                tables: %{
                  {"public", "the_table"} => %Table{
-                   fields: %{
+                   indexes: %{
                      "id" => %{
                        type: :int8,
                        values: %{
@@ -68,7 +68,7 @@ defmodule Electric.Shapes.FilterTest do
       assert %Filter{
                tables: %{
                  {"public", "the_table"} => %Table{
-                   fields: %{
+                   indexes: %{
                      "id" => %{
                        type: :int8,
                        values: %{
@@ -104,7 +104,7 @@ defmodule Electric.Shapes.FilterTest do
       assert %Filter{
                tables: %{
                  {"public", "the_table"} => %Table{
-                   fields: %{
+                   indexes: %{
                      "id" => %{
                        type: :int8,
                        values: %{
@@ -140,7 +140,7 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.new(shapes) == %Filter{
                tables: %{
                  {"public", "the_table"} => %Table{
-                   fields: %{},
+                   indexes: %{},
                    other_shapes: shapes
                  }
                }
@@ -153,7 +153,7 @@ defmodule Electric.Shapes.FilterTest do
       filter = %Filter{
         tables: %{
           {"public", "the_table"} => %Table{
-            fields: %{
+            indexes: %{
               "id" => %{
                 type: :int8,
                 values: %{
@@ -193,7 +193,7 @@ defmodule Electric.Shapes.FilterTest do
             }
           },
           {"public", "another_table"} => %Table{
-            fields: %{
+            indexes: %{
               "id" => %{
                 type: :int8,
                 values: %{
@@ -213,7 +213,7 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.remove_shape(filter, "shape1") == %Filter{
                tables: %{
                  {"public", "the_table"} => %Table{
-                   fields: %{
+                   indexes: %{
                      "id" => %{
                        type: :int8,
                        values: %{
@@ -251,7 +251,7 @@ defmodule Electric.Shapes.FilterTest do
       filter = %Filter{
         tables: %{
           {"public", "the_table"} => %Table{
-            fields: %{
+            indexes: %{
               "id" => %{
                 type: :int8,
                 values: %{
@@ -269,7 +269,7 @@ defmodule Electric.Shapes.FilterTest do
             other_shapes: %{}
           },
           {"public", "another_table"} => %Table{
-            fields: %{
+            indexes: %{
               "id" => %{
                 type: :int8,
                 values: %{
@@ -301,7 +301,7 @@ defmodule Electric.Shapes.FilterTest do
       filter = %Filter{
         tables: %{
           {"public", "the_table"} => %Table{
-            fields: %{
+            indexes: %{
               "id" => %{
                 type: :int8,
                 values: %{
@@ -334,7 +334,7 @@ defmodule Electric.Shapes.FilterTest do
       filter = %Filter{
         tables: %{
           {"public", "the_table"} => %Table{
-            fields: %{},
+            indexes: %{},
             other_shapes: %{
               "shape1" => Shape.new!("the_table", where: "id > 7", inspector: @inspector),
               "shape2" => Shape.new!("the_table", where: "id > 6", inspector: @inspector),
@@ -361,7 +361,7 @@ defmodule Electric.Shapes.FilterTest do
       filter = %Filter{
         tables: %{
           {"public", "the_table"} => %Table{
-            fields: %{
+            indexes: %{
               "id" => %{
                 type: :int8,
                 values: %{
@@ -393,7 +393,7 @@ defmodule Electric.Shapes.FilterTest do
       filter = %Filter{
         tables: %{
           {"public", "the_table"} => %Table{
-            fields: %{
+            indexes: %{
               "id" => %{
                 type: :int8,
                 values: %{
@@ -432,7 +432,7 @@ defmodule Electric.Shapes.FilterTest do
       filter = %Filter{
         tables: %{
           {"public", "the_table"} => %Table{
-            fields: %{
+            indexes: %{
               "id" => %{
                 type: :int8,
                 values: %{
@@ -459,7 +459,7 @@ defmodule Electric.Shapes.FilterTest do
             }
           },
           {"public", "another_table"} => %Table{
-            fields: %{
+            indexes: %{
               "id" => %{
                 type: :int8,
                 values: %{
@@ -496,7 +496,7 @@ defmodule Electric.Shapes.FilterTest do
       filter = %Filter{
         tables: %{
           {"public", "the_table"} => %Table{
-            fields: %{
+            indexes: %{
               "id" => %{
                 type: :int8,
                 values: %{
@@ -523,7 +523,7 @@ defmodule Electric.Shapes.FilterTest do
             }
           },
           {"public", "another_table"} => %Table{
-            fields: %{
+            indexes: %{
               type: :int8,
               values: %{
                 "id" => %{

@@ -36,7 +36,7 @@ defmodule Electric.Shapes.Filter do
         |> Enum.map(fn {table_name, table} ->
           {table_name, Table.remove_shape(table, handle)}
         end)
-        |> Enum.reject(fn {_table, table} -> map_size(table.fields) == 0 end)
+        |> Enum.reject(fn {_table, table} -> map_size(table.indexes) == 0 end)
         |> Map.new()
     }
   end
@@ -99,8 +99,8 @@ defmodule Electric.Shapes.Filter do
     end
   end
 
-  defp all_shapes_in_table(%{fields: fields, other_shapes: other_shapes}) do
-    for {_field, %{values: values}} <- fields,
+  defp all_shapes_in_table(%{indexes: indexes, other_shapes: other_shapes}) do
+    for {_field, %{values: values}} <- indexes,
         {_value, shapes} <- values,
         %{handle: handle, shape: shape} <- shapes,
         into: %{} do

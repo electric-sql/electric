@@ -1,18 +1,18 @@
-defmodule Electric.Shapes.Filter.Field do
+defmodule Electric.Shapes.Filter.Index do
   alias Electric.Replication.Eval.Env
   alias Electric.Shapes.Shape
 
-  defstruct fields: %{}, other_shapes: %{}
+  defstruct indexes: %{}, other_shapes: %{}
 
   def new(type), do: %{type: type, values: %{}}
 
   # TODO: Renmame handle to shape_id
-  def add_shape(value, {handle, shape}, and_where, field_filter) do
+  def add_shape(value, {handle, shape}, and_where, index) do
     %{
-      field_filter
+      index
       | values:
           Map.update(
-            field_filter.values,
+            index.values,
             value,
             [%{handle: handle, and_where: and_where, shape: shape}],
             fn shapes -> [%{handle: handle, and_where: and_where, shape: shape} | shapes] end

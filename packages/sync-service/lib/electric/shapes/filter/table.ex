@@ -4,11 +4,11 @@ defmodule Electric.Shapes.Filter.Table do
   alias Electric.Replication.Eval.Parser.Const
   alias Electric.Replication.Eval.Parser.Func
   alias Electric.Replication.Eval.Parser.Ref
-  alias Electric.Shapes.Filter.Field
+  alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.Filter.Table
   alias Electric.Shapes.Shape
 
-  defstruct fields: %{}, other_shapes: %{}
+  defstruct indexes: %{}, other_shapes: %{}
 
   def empty, do: %Table{}
 
@@ -17,13 +17,13 @@ defmodule Electric.Shapes.Filter.Table do
       %{operation: "=", field: field, type: type, value: value, and_where: and_where} ->
         %{
           table
-          | fields:
-              add_shape_to_fields(
+          | indexes:
+              add_shape_to_indexes(
                 field,
                 type,
                 value,
                 shape_instance,
-                table.fields,
+                table.indexes,
                 and_where
               )
         }
@@ -33,13 +33,13 @@ defmodule Electric.Shapes.Filter.Table do
     end
   end
 
-  defp add_shape_to_fields(field, type, value, shape_instance, fields, and_where) do
+  defp add_shape_to_indexes(field, type, value, shape_instance, indexes, and_where) do
     Map.update(
-      fields,
+      indexes,
       field,
-      Field.add_shape(value, shape_instance, and_where, Field.new(type)),
+      Index.add_shape(value, shape_instance, and_where, Index.new(type)),
       fn field_filter ->
-        Field.add_shape(value, shape_instance, and_where, field_filter)
+        Index.add_shape(value, shape_instance, and_where, field_filter)
       end
     )
   end
@@ -80,26 +80,26 @@ defmodule Electric.Shapes.Filter.Table do
     %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
   end
 
-  def remove_shape(%{fields: fields, other_shapes: other_shapes}, handle) do
+  def remove_shape(%{indexes: indexes, other_shapes: other_shapes}, handle) do
     %Table{
-      fields: remove_shape_from_fields(fields, handle),
+      indexes: remove_shape_from_indexes(indexes, handle),
       other_shapes: Map.delete(other_shapes, handle)
     }
   end
 
-  defp remove_shape_from_fields(fields, handle) do
-    fields
+  defp remove_shape_from_indexes(indexes, handle) do
+    indexes
     |> Map.new(fn {field, %{values: value_filter} = field_filter} ->
       {field,
-       %{field_filter | values: Field.remove_shape_from_value_filter(value_filter, handle)}}
+       %{field_filter | values: Index.remove_shape_from_value_filter(value_filter, handle)}}
     end)
     |> Enum.reject(fn {_field, %{values: value_filter}} -> map_size(value_filter) == 0 end)
     |> Map.new()
   end
 
-  def affected_shapes(%{fields: fields} = table, record) do
-    fields
-    |> Enum.map(&Field.affected_shapes(&1, record))
+  def affected_shapes(%{indexes: indexes} = table, record) do
+    indexes
+    |> Enum.map(&Index.affected_shapes(&1, record))
     |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
     |> MapSet.union(other_shapes_affected(table, record))
   end
