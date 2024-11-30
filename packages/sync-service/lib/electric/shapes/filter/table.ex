@@ -7,10 +7,10 @@ defmodule Electric.Shapes.Filter.Table do
   alias Electric.Replication.Eval.Parser.Ref
   alias Electric.Shapes.Shape
 
-  def empty_table_filter, do: %{fields: %{}, other_shapes: %{}}
+  def empty, do: %{fields: %{}, other_shapes: %{}}
   def init_field_filter(type), do: %{type: type, values: %{}}
 
-  def add_shape_to_table_filter({handle, shape} = shape_instance, table_filter) do
+  def add_shape({handle, shape} = shape_instance, table_filter) do
     case optimise_where(shape.where) do
       %{operation: "=", field: field, type: type, value: value, and_where: and_where} ->
         %{
@@ -115,7 +115,7 @@ defmodule Electric.Shapes.Filter.Table do
     |> Map.new()
   end
 
-  def affected_shapes_by_table(%{fields: fields} = table_filter, record) do
+  def affected_shapes(%{fields: fields} = table_filter, record) do
     fields
     |> Enum.map(&affected_shapes_by_field(&1, record))
     |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))

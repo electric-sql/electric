@@ -21,12 +21,9 @@ defmodule Electric.Shapes.Filter do
         Map.update(
           tables,
           shape.root_table,
-          Table.add_shape_to_table_filter(
-            {handle, shape},
-            Table.empty_table_filter()
-          ),
+          Table.add_shape({handle, shape}, Table.empty()),
           fn table_filter ->
-            Table.add_shape_to_table_filter({handle, shape}, table_filter)
+            Table.add_shape({handle, shape}, table_filter)
           end
         )
     }
@@ -90,7 +87,7 @@ defmodule Electric.Shapes.Filter do
   defp affected_shapes_by_record(filter, table, record) do
     case Map.get(filter.tables, table) do
       nil -> MapSet.new()
-      table_filter -> Table.affected_shapes_by_table(table_filter, record)
+      table_filter -> Table.affected_shapes(table_filter, record)
     end
   end
 
