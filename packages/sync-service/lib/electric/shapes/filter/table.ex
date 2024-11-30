@@ -12,7 +12,7 @@ defmodule Electric.Shapes.Filter.Table do
 
   def empty, do: %Table{}
 
-  def add_shape({handle, shape} = shape_instance, table) do
+  def add_shape(%Table{} = table, {handle, shape} = shape_instance) do
     case optimise_where(shape.where) do
       %{operation: "=", field: field, type: type, value: value, and_where: and_where} ->
         %{
@@ -80,7 +80,7 @@ defmodule Electric.Shapes.Filter.Table do
     %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
   end
 
-  def remove_shape(%{indexes: indexes, other_shapes: other_shapes}, handle) do
+  def remove_shape(%Table{indexes: indexes, other_shapes: other_shapes}, handle) do
     %Table{
       indexes: remove_shape_from_indexes(indexes, handle),
       other_shapes: Map.delete(other_shapes, handle)
@@ -97,7 +97,7 @@ defmodule Electric.Shapes.Filter.Table do
     |> Map.new()
   end
 
-  def affected_shapes(%{indexes: indexes} = table, record) do
+  def affected_shapes(%Table{indexes: indexes} = table, record) do
     indexes
     |> Enum.map(&Index.affected_shapes(&1, record))
     |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))

@@ -21,9 +21,9 @@ defmodule Electric.Shapes.Filter do
         Map.update(
           tables,
           shape.root_table,
-          Table.add_shape({handle, shape}, Table.empty()),
+          Table.add_shape(Table.empty(), {handle, shape}),
           fn table ->
-            Table.add_shape({handle, shape}, table)
+            Table.add_shape(table, {handle, shape})
           end
         )
     }
