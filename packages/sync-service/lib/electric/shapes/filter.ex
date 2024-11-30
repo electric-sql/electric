@@ -6,7 +6,7 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Replication.Changes.TruncatedRelation
   alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Shapes.Filter
-  alias Electric.Shapes.Filter.TableFilter
+  alias Electric.Shapes.Filter.Table
   alias Electric.Shapes.Shape
 
   defstruct tables: %{}
@@ -21,12 +21,12 @@ defmodule Electric.Shapes.Filter do
         Map.update(
           tables,
           shape.root_table,
-          TableFilter.add_shape_to_table_filter(
+          Table.add_shape_to_table_filter(
             {handle, shape},
-            TableFilter.empty_table_filter()
+            Table.empty_table_filter()
           ),
           fn table_filter ->
-            TableFilter.add_shape_to_table_filter({handle, shape}, table_filter)
+            Table.add_shape_to_table_filter({handle, shape}, table_filter)
           end
         )
     }
@@ -37,7 +37,7 @@ defmodule Electric.Shapes.Filter do
       tables:
         tables
         |> Enum.map(fn {table, table_filter} ->
-          {table, TableFilter.remove_shape(table_filter, handle)}
+          {table, Table.remove_shape(table_filter, handle)}
         end)
         |> Enum.reject(fn {_table, table_filter} -> map_size(table_filter.fields) == 0 end)
         |> Map.new()
@@ -90,7 +90,7 @@ defmodule Electric.Shapes.Filter do
   defp affected_shapes_by_record(filter, table, record) do
     case Map.get(filter.tables, table) do
       nil -> MapSet.new()
-      table_filter -> TableFilter.affected_shapes_by_table(table_filter, record)
+      table_filter -> Table.affected_shapes_by_table(table_filter, record)
     end
   end
 

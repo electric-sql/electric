@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.Filter.TableFilter do
+defmodule Electric.Shapes.Filter.Table do
   alias Electric.Replication.Eval.Env
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.Eval.Parser
