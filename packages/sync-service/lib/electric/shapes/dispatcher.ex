@@ -1,4 +1,5 @@
 defmodule Electric.Shapes.Dispatcher do
+  # TODO : Update @moduledoc
   @moduledoc """
   Dispatches transactions and relations to consumers filtered according to the
   subscriber's `selector` function.
@@ -34,14 +35,14 @@ defmodule Electric.Shapes.Dispatcher do
   alias Electric.Shapes.Filter
 
   defmodule State do
-    defstruct [:n, :waiting, :pending, :subs, :filter, :pids, :inspector]
+    defstruct [:n, :waiting, :pending, :subs, :filter, :pids]
   end
 
   @behaviour GenStage.Dispatcher
 
   @impl GenStage.Dispatcher
 
-  def init(opts) do
+  def init(_opts) do
     {:ok,
      %State{
        n: 0,
@@ -49,9 +50,7 @@ defmodule Electric.Shapes.Dispatcher do
        pending: nil,
        subs: [],
        filter: Filter.empty(),
-       pids: MapSet.new(),
-       # TODO: remove inspector as we don't need it anymore
-       inspector: Keyword.fetch!(opts, :inspector)
+       pids: MapSet.new()
      }}
   end
 
