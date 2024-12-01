@@ -11,6 +11,7 @@ defmodule Electric.Shapes.FilterTest do
   alias Electric.Replication.Eval.Parser.Func
   alias Electric.Replication.Eval.Parser.Ref
   alias Electric.Shapes.Filter
+  alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.Filter.Table
   alias Electric.Shapes.Shape
   alias Support.StubInspector
@@ -25,7 +26,7 @@ defmodule Electric.Shapes.FilterTest do
                tables: %{
                  {"public", "the_table"} => %Table{
                    indexes: %{
-                     "id" => %{
+                     "id" => %Index{
                        type: :int8,
                        values: %{
                          1 => [
@@ -47,7 +48,7 @@ defmodule Electric.Shapes.FilterTest do
                tables: %{
                  {"public", "the_table"} => %Table{
                    indexes: %{
-                     "id" => %{
+                     "id" => %Index{
                        type: :int8,
                        values: %{
                          1 => [
@@ -69,7 +70,7 @@ defmodule Electric.Shapes.FilterTest do
                tables: %{
                  {"public", "the_table"} => %Table{
                    indexes: %{
-                     "id" => %{
+                     "id" => %Index{
                        type: :int8,
                        values: %{
                          1 => [
@@ -105,7 +106,7 @@ defmodule Electric.Shapes.FilterTest do
                tables: %{
                  {"public", "the_table"} => %Table{
                    indexes: %{
-                     "id" => %{
+                     "id" => %Index{
                        type: :int8,
                        values: %{
                          1 => [
@@ -154,7 +155,7 @@ defmodule Electric.Shapes.FilterTest do
         tables: %{
           {"public", "the_table"} => %Table{
             indexes: %{
-              "id" => %{
+              "id" => %Index{
                 type: :int8,
                 values: %{
                   1 => [
@@ -171,7 +172,7 @@ defmodule Electric.Shapes.FilterTest do
                   ]
                 }
               },
-              "name" => %{
+              "name" => %Index{
                 type: :text,
                 values: %{
                   "bill" => [
@@ -194,7 +195,7 @@ defmodule Electric.Shapes.FilterTest do
           },
           {"public", "another_table"} => %Table{
             indexes: %{
-              "id" => %{
+              "id" => %Index{
                 type: :int8,
                 values: %{
                   1 => [
@@ -214,7 +215,7 @@ defmodule Electric.Shapes.FilterTest do
                tables: %{
                  {"public", "the_table"} => %Table{
                    indexes: %{
-                     "id" => %{
+                     "id" => %Index{
                        type: :int8,
                        values: %{
                          2 => [
@@ -225,7 +226,7 @@ defmodule Electric.Shapes.FilterTest do
                          ]
                        }
                      },
-                     "name" => %{
+                     "name" => %Index{
                        type: :text,
                        values: %{
                          "bill" => [
@@ -252,7 +253,7 @@ defmodule Electric.Shapes.FilterTest do
         tables: %{
           {"public", "the_table"} => %Table{
             indexes: %{
-              "id" => %{
+              "id" => %Index{
                 type: :int8,
                 values: %{
                   1 => [
@@ -270,7 +271,7 @@ defmodule Electric.Shapes.FilterTest do
           },
           {"public", "another_table"} => %Table{
             indexes: %{
-              "id" => %{
+              "id" => %Index{
                 type: :int8,
                 values: %{
                   1 => [
@@ -302,7 +303,7 @@ defmodule Electric.Shapes.FilterTest do
         tables: %{
           {"public", "the_table"} => %Table{
             indexes: %{
-              "id" => %{
+              "id" => %Index{
                 type: :int8,
                 values: %{
                   1 => [
@@ -362,7 +363,7 @@ defmodule Electric.Shapes.FilterTest do
         tables: %{
           {"public", "the_table"} => %Table{
             indexes: %{
-              "id" => %{
+              "id" => %Index{
                 type: :int8,
                 values: %{
                   1 => [
@@ -394,7 +395,7 @@ defmodule Electric.Shapes.FilterTest do
         tables: %{
           {"public", "the_table"} => %Table{
             indexes: %{
-              "id" => %{
+              "id" => %Index{
                 type: :int8,
                 values: %{
                   1 => [
@@ -433,7 +434,7 @@ defmodule Electric.Shapes.FilterTest do
         tables: %{
           {"public", "the_table"} => %Table{
             indexes: %{
-              "id" => %{
+              "id" => %Index{
                 type: :int8,
                 values: %{
                   1 => [
@@ -460,7 +461,7 @@ defmodule Electric.Shapes.FilterTest do
           },
           {"public", "another_table"} => %Table{
             indexes: %{
-              "id" => %{
+              "id" => %Index{
                 type: :int8,
                 values: %{
                   1 => [
@@ -497,7 +498,7 @@ defmodule Electric.Shapes.FilterTest do
         tables: %{
           {"public", "the_table"} => %Table{
             indexes: %{
-              "id" => %{
+              "id" => %Index{
                 type: :int8,
                 values: %{
                   1 => [
@@ -526,10 +527,13 @@ defmodule Electric.Shapes.FilterTest do
             indexes: %{
               type: :int8,
               values: %{
-                "id" => %{
-                  1 => [
-                    %{handle: "not-this-shape-1", and_where: nil}
-                  ]
+                "id" => %Index{
+                  type: :int8,
+                  values: %{
+                    1 => [
+                      %{handle: "not-this-shape-1", and_where: nil}
+                    ]
+                  }
                 }
               }
             },

@@ -1,15 +1,16 @@
 defmodule Electric.Shapes.Filter.Index do
   alias Electric.Replication.Eval.Env
+  alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.Shape
 
-  defstruct indexes: %{}, other_shapes: %{}
+  defstruct [:type, :values]
 
-  def new(type), do: %{type: type, values: %{}}
+  def new(type), do: %Index{type: type, values: %{}}
 
-  def empty?(%{values: values}), do: values == %{}
+  def empty?(%Index{values: values}), do: values == %{}
 
   # TODO: Renmame handle to shape_id
-  def add_shape(value, {handle, shape}, and_where, index) do
+  def add_shape(value, {handle, shape}, and_where, %Index{} = index) do
     %{
       index
       | values:
@@ -22,7 +23,7 @@ defmodule Electric.Shapes.Filter.Index do
     }
   end
 
-  def remove_shape(index, handle) do
+  def remove_shape(%Index{} = index, handle) do
     %{
       index
       | values:
@@ -35,7 +36,7 @@ defmodule Electric.Shapes.Filter.Index do
     }
   end
 
-  def affected_shapes(%{values: values, type: type}, field, record) do
+  def affected_shapes(%Index{values: values, type: type}, field, record) do
     case values[value_from_record(record, field, type)] do
       nil ->
         MapSet.new()
