@@ -36,7 +36,7 @@ defmodule Electric.Shapes.Filter do
         |> Enum.map(fn {table_name, table} ->
           {table_name, Table.remove_shape(table, handle)}
         end)
-        |> Enum.reject(fn {_table, table} -> map_size(table.indexes) == 0 end)
+        |> Enum.reject(fn {_table, table} -> Table.empty?(table) end)
         |> Map.new()
     }
   end

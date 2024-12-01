@@ -12,6 +12,10 @@ defmodule Electric.Shapes.Filter.Table do
 
   def empty, do: %Table{}
 
+  def empty?(%Table{indexes: indexes, other_shapes: other_shapes}) do
+    indexes == %{} && other_shapes == %{}
+  end
+
   def add_shape(%Table{} = table, {handle, shape} = shape_instance) do
     case optimise_where(shape.where) do
       %{operation: "=", field: field, type: type, value: value, and_where: and_where} ->
