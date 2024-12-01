@@ -12,29 +12,32 @@ defmodule Electric.Shapes.Filter do
   defstruct tables: %{}
 
   def new(shapes), do: shapes |> Map.to_list() |> new(empty())
-  defp new([{handle, shape} | shapes], filter), do: new(shapes, add_shape(filter, handle, shape))
+
+  defp new([{shape_id, shape} | shapes], filter),
+    do: new(shapes, add_shape(filter, shape_id, shape))
+
   defp new([], filter), do: filter
 
-  def add_shape(%Filter{tables: tables}, handle, shape) do
+  def add_shape(%Filter{tables: tables}, shape_id, shape) do
     %Filter{
       tables:
         Map.update(
           tables,
           shape.root_table,
-          Table.add_shape(Table.empty(), {handle, shape}),
+          Table.add_shape(Table.empty(), {shape_id, shape}),
           fn table ->
-            Table.add_shape(table, {handle, shape})
+            Table.add_shape(table, {shape_id, shape})
           end
         )
     }
   end
 
-  def remove_shape(%Filter{tables: tables}, handle) do
+  def remove_shape(%Filter{tables: tables}, shape_id) do
     %Filter{
       tables:
         tables
         |> Enum.map(fn {table_name, table} ->
-          {table_name, Table.remove_shape(table, handle)}
+          {table_name, Table.remove_shape(table, shape_id)}
         end)
         |> Enum.reject(fn {_table, table} -> Table.empty?(table) end)
         |> Map.new()
@@ -45,10 +48,10 @@ defmodule Electric.Shapes.Filter do
 
   def affected_shapes(%Filter{} = filter, %Relation{} = relation) do
     # Check all shapes is all tables becuase the table may have been renamed
-    for {handle, shape} <- all_shapes_in_filter(filter),
+    for {shape_id, shape} <- all_shapes_in_filter(filter),
         Shape.is_affected_by_relation_change?(shape, relation),
         into: MapSet.new() do
-      handle
+      shape_id
     end
   end
 
@@ -78,9 +81,9 @@ defmodule Electric.Shapes.Filter do
   # TODO: Optimisation: Do TruncatedRelations first and then just process other changes for other tables
 
   def affected_shapes(%Filter{} = filter, %TruncatedRelation{relation: table_name}) do
-    for {handle, _shape} <- all_shapes_for_table(filter, table_name),
+    for {shape_id, _shape} <- all_shapes_for_table(filter, table_name),
         into: MapSet.new() do
-      handle
+      shape_id
     end
   end
 
@@ -93,18 +96,18 @@ defmodule Electric.Shapes.Filter do
 
   defp all_shapes_in_filter(%Filter{} = filter) do
     for {_table, table} <- filter.tables,
-        {handle, shape} <- all_shapes_in_table(table),
+        {shape_id, shape} <- all_shapes_in_table(table),
         into: %{} do
-      {handle, shape}
+      {shape_id, shape}
     end
   end
 
   defp all_shapes_in_table(%{indexes: indexes, other_shapes: other_shapes}) do
     for {_field, %{values: values}} <- indexes,
         {_value, shapes} <- values,
-        %{handle: handle, shape: shape} <- shapes,
+        %{shape_id: shape_id, shape: shape} <- shapes,
         into: %{} do
-      {handle, shape}
+      {shape_id, shape}
     end
     |> Map.merge(other_shapes)
   end

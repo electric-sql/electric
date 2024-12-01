@@ -9,27 +9,26 @@ defmodule Electric.Shapes.Filter.Index do
 
   def empty?(%Index{values: values}), do: values == %{}
 
-  # TODO: Renmame handle to shape_id
-  def add_shape(%Index{} = index, value, {handle, shape}, and_where) do
+  def add_shape(%Index{} = index, value, {shape_id, shape}, and_where) do
     %{
       index
       | values:
           Map.update(
             index.values,
             value,
-            [%{handle: handle, and_where: and_where, shape: shape}],
-            fn shapes -> [%{handle: handle, and_where: and_where, shape: shape} | shapes] end
+            [%{shape_id: shape_id, and_where: and_where, shape: shape}],
+            fn shapes -> [%{shape_id: shape_id, and_where: and_where, shape: shape} | shapes] end
           )
     }
   end
 
-  def remove_shape(%Index{} = index, handle) do
+  def remove_shape(%Index{} = index, shape_id) do
     %{
       index
       | values:
           index.values
           |> Map.new(fn {value, shapes} ->
-            {value, shapes |> Enum.reject(&(&1.handle == handle))}
+            {value, shapes |> Enum.reject(&(&1.shape_id == shape_id))}
           end)
           |> Enum.reject(fn {_value, shapes} -> shapes == [] end)
           |> Map.new()
@@ -44,7 +43,7 @@ defmodule Electric.Shapes.Filter.Index do
       shapes ->
         shapes
         |> Enum.filter(&record_in_where?(&1.and_where, record))
-        |> Enum.map(& &1.handle)
+        |> Enum.map(& &1.shape_id)
         |> MapSet.new()
     end
   end
