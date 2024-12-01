@@ -41,9 +41,9 @@ defmodule Electric.Shapes.Filter.Table do
     Map.update(
       indexes,
       field,
-      Index.add_shape(value, shape_instance, and_where, Index.new(type)),
-      fn field_filter ->
-        Index.add_shape(value, shape_instance, and_where, field_filter)
+      Index.add_shape(Index.new(type), value, shape_instance, and_where),
+      fn index ->
+        Index.add_shape(index, value, shape_instance, and_where)
       end
     )
   end

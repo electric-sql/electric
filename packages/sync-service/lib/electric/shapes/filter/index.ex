@@ -10,7 +10,7 @@ defmodule Electric.Shapes.Filter.Index do
   def empty?(%Index{values: values}), do: values == %{}
 
   # TODO: Renmame handle to shape_id
-  def add_shape(value, {handle, shape}, and_where, %Index{} = index) do
+  def add_shape(%Index{} = index, value, {handle, shape}, and_where) do
     %{
       index
       | values:
