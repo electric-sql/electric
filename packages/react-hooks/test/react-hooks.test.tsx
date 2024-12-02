@@ -28,6 +28,26 @@ describe(`sortedOptionsHash`, () => {
       expect(hash1).toEqual(hash2)
     }
   )
+  bareIt(
+    `should create the different hashes from options with different params`,
+    () => {
+      const hash1 = sortedOptionsHash({
+        url: `http://whatever`,
+        params: {
+          table: `foo`,
+          where: `1=1`
+        },
+      })
+      const hash2 = sortedOptionsHash({
+        params: {
+          table: `foo`,
+          where: `2=2`
+        },
+        url: `http://whatever`,
+      })
+      expect(hash1).not.toEqual(hash2)
+    }
+  )
 })
 
 describe(`useShape`, () => {
