@@ -51,17 +51,19 @@ import { ShapeStream } from '@electric-sql/client'
 // Passes subscribers rows as they're inserted, updated, or deleted
 const stream = new ShapeStream({
   url: `${BASE_URL}/v1/shape`,
-  table: `foo`,
+  params: {
+    table: `foo`
+  }
 })
 
 // You can also add custom headers and URL parameters
 const streamWithParams = new ShapeStream({
   url: `${BASE_URL}/v1/shape`,
-  table: `foo`,
   headers: {
     'Authorization': 'Bearer token'
   },
   params: {
+    table: `foo`,
     'custom-param': 'value'
   }
 })
@@ -80,7 +82,9 @@ import { ShapeStream, Shape } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: `${BASE_URL}/v1/shape`,
-  table: `foo`,
+  params: {
+    table: `foo`
+  }
 })
 const shape = new Shape(stream)
 
@@ -101,7 +105,9 @@ The ShapeStream provides two ways to handle errors:
 ```typescript
 const stream = new ShapeStream({
   url: `${BASE_URL}/v1/shape`,
-  table: `foo`,
+  params: {
+    table: `foo`
+  },
   onError: (error) => {
     // Handle all stream errors here
     console.error('Stream error:', error)
