@@ -194,6 +194,9 @@ defmodule Electric.StackSupervisor do
       registry: shape_changes_registry_name
     ]
 
+    dbg(otel_attrs)
+    dbg(config.replication_opts)
+
     new_connection_manager_opts = [
       stack_id: stack_id,
       otel_attrs: otel_attrs,
@@ -205,7 +208,8 @@ defmodule Electric.StackSupervisor do
           transaction_received:
             {Electric.Replication.ShapeLogCollector, :store_transaction, [shape_log_collector]},
           relation_received:
-            {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [shape_log_collector]}
+            {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [shape_log_collector]},
+          otel_attrs: otel_attrs
         ] ++ config.replication_opts,
       pool_opts:
         [

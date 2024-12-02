@@ -35,6 +35,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :slot_name,
       :slot_temporary?,
       :display_settings,
+      :otel_attrs,
       origin: "postgres",
       txn_collector: %Collector{},
       step: :disconnected,
@@ -62,7 +63,8 @@ defmodule Electric.Postgres.ReplicationClient do
             txn_collector: Collector.t(),
             step: Electric.Postgres.ReplicationClient.step(),
             display_settings: [String.t()],
-            applied_wal: non_neg_integer
+            applied_wal: non_neg_integer,
+            otel_attrs: keyword()
           }
 
     @opts_schema NimbleOptions.new!(
@@ -73,7 +75,8 @@ defmodule Electric.Postgres.ReplicationClient do
                    try_creating_publication?: [required: true, type: :boolean],
                    start_streaming?: [type: :boolean, default: true],
                    slot_name: [required: true, type: :string],
-                   slot_temporary?: [type: :boolean, default: false]
+                   slot_temporary?: [type: :boolean, default: false],
+                   otel_attrs: [type: :keyword_list, required: true]
                  )
 
     @spec new(Access.t()) :: t()
@@ -192,7 +195,7 @@ defmodule Electric.Postgres.ReplicationClient do
       ) do
     OpenTelemetry.with_span(
       "pg_txn.replication_client.process_x_log_data",
-      [msg_size: byte_size(rest)],
+      state.otel_attrs ++ [msg_size: byte_size(rest)],
       fn -> process_x_log_data(rest, wal_end, state) end
     )
   end
@@ -214,7 +217,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
   defp process_x_log_data(data, wal_end, %State{} = state) do
     data
-    |> decode_message()
+    |> decode_message(state.otel_attrs)
     # # Useful for debugging:
     # |> tap(fn %struct{} = msg ->
     #   message_type = struct |> to_string() |> String.split(".") |> List.last()
@@ -235,7 +238,8 @@ defmodule Electric.Postgres.ReplicationClient do
 
         OpenTelemetry.with_span(
           "pg_txn.replication_client.relation_received",
-          ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
+          state.otel_attrs ++
+            ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
           fn -> apply(m, f, [rel | args]) end
         )
 
@@ -260,7 +264,8 @@ defmodule Electric.Postgres.ReplicationClient do
         # individual storage write can timeout the entire batch.
         OpenTelemetry.with_span(
           "pg_txn.replication_client.transaction_received",
-          [num_changes: length(txn.changes), num_relations: MapSet.size(txn.affected_relations)],
+          state.otel_attrs ++
+            [num_changes: length(txn.changes), num_relations: MapSet.size(txn.affected_relations)],
           fn -> apply(m, f, [txn | args]) end
         )
         |> case do
@@ -283,10 +288,10 @@ defmodule Electric.Postgres.ReplicationClient do
     end
   end
 
-  defp decode_message(data) do
+  defp decode_message(data, otel_attrs) do
     OpenTelemetry.with_span(
       "pg_txn.replication_client.decode_message",
-      [msg_size: byte_size(data)],
+      otel_attrs ++ [msg_size: byte_size(data)],
       fn -> Decoder.decode(data) end
     )
   end
