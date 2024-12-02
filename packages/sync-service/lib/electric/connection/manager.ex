@@ -64,8 +64,7 @@ defmodule Electric.Connection.Manager do
       :tweaks,
       awaiting_active: [],
       drop_slot_requested: false,
-      monitoring_started?: false,
-      otel_attrs: []
+      monitoring_started?: false
     ]
   end
 
@@ -187,8 +186,7 @@ defmodule Electric.Connection.Manager do
         backoff: {:backoff.init(1000, 10_000), nil},
         stack_id: Keyword.fetch!(opts, :stack_id),
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
-        tweaks: Keyword.fetch!(opts, :tweaks),
-        otel_attrs: Keyword.fetch!(opts, :otel_attrs)
+        tweaks: Keyword.fetch!(opts, :tweaks)
       }
 
     # Try to acquire the connection lock on the replication slot
@@ -316,8 +314,7 @@ defmodule Electric.Connection.Manager do
             stack_id: state.stack_id,
             shape_cache_opts: shape_cache_opts,
             stack_events_registry: state.stack_events_registry,
-            tweaks: state.tweaks,
-            otel_attrs: state.otel_attrs
+            tweaks: state.tweaks
           )
 
         # Everything is ready to start accepting and processing logical messages from Postgres.

@@ -37,13 +37,11 @@ defmodule Electric.Connection.Supervisor do
     stack_id = Keyword.fetch!(opts, :stack_id)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
     inspector = Keyword.fetch!(shape_cache_opts, :inspector)
-    otel_attrs = Keyword.fetch!(opts, :otel_attrs)
 
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
     shape_log_collector_spec =
-      {Electric.Replication.ShapeLogCollector,
-       stack_id: stack_id, inspector: inspector}
+      {Electric.Replication.ShapeLogCollector, stack_id: stack_id, inspector: inspector}
 
     child_spec =
       Supervisor.child_spec(

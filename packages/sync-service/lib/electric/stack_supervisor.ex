@@ -196,7 +196,6 @@ defmodule Electric.StackSupervisor do
 
     new_connection_manager_opts = [
       stack_id: stack_id,
-      otel_attrs: otel_attrs,
       # Coming from the outside, need validation
       connection_opts: config.connection_opts,
       stack_events_registry: config.stack_events_registry,
