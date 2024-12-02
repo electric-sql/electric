@@ -67,9 +67,8 @@ describe(`useShape`, () => {
       })
     )
 
-    await waitFor(
-      () =>
-        expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+    await waitFor(() =>
+      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
     )
   })
 
@@ -105,9 +104,8 @@ describe(`useShape`, () => {
       })
     )
 
-    await waitFor(
-      () =>
-        expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+    await waitFor(() =>
+      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
     )
   })
 
