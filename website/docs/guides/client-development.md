@@ -1,5 +1,5 @@
 ---
-title: Writing your own client - Guide
+title: Client development - Guide
 description: >-
   How to write your own client for the Electric sync service.
 outline: [2, 3]
@@ -9,7 +9,7 @@ outline: [2, 3]
     style="width: 72px"
 />
 
-# Writing your own client
+# Client development
 
 How to write an Electric client for any language that speaks HTTP and JSON.
 
