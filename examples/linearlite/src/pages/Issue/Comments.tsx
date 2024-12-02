@@ -21,7 +21,7 @@ function Comments(commentProps: CommentsProps) {
     params: {
       token,
       database_id: databaseId,
-      table: 'comment',
+      table: `comment`,
     },
   })! as Comment[]
 
