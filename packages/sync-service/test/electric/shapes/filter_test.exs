@@ -1,5 +1,6 @@
 defmodule Electric.Shapes.FilterTest do
   use ExUnit.Case
+  import ExUnit.CaptureLog
   alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.Relation
@@ -570,35 +571,39 @@ defmodule Electric.Shapes.FilterTest do
           %{where: "id = 7 AND id > 8", record: %{"id" => "7"}, affected: false},
           %{where: "id > 1 AND id = 7", record: %{"id" => "7"}, affected: true},
           %{where: "id > 1 AND id = 7", record: %{"id" => "8"}, affected: false},
-          %{where: "id > 8 AND id = 7", record: %{"id" => "7"}, affected: false},
-          %{where: "id = 7", record: %{"id" => "invalid_value"}, affected: true}
+          %{where: "id > 8 AND id = 7", record: %{"id" => "7"}, affected: false}
         ] do
-      @tag :capture_log
       test "where: #{test.where}, record: #{inspect(test.record)}" do
         %{where: where, record: record, affected: affected} = unquote(Macro.escape(test))
 
-        shape = Shape.new!("the_table", where: where, inspector: @inspector)
-
-        transaction =
-          %Transaction{
-            changes: [
-              %NewRecord{
-                relation: {"public", "the_table"},
-                record: record
-              }
-            ]
-          }
-
-        expected_affected_shapes =
-          if affected do
-            MapSet.new(["the-shape"])
-          else
-            MapSet.new([])
-          end
-
-        assert Filter.new(%{"the-shape" => shape})
-               |> Filter.affected_shapes(transaction) == expected_affected_shapes
+        assert affected?(where, record) == affected
       end
+    end
+
+    test "Invalid record value logs an error and says all shapes are affected" do
+      log =
+        capture_log(fn ->
+          assert affected?("id = 7", %{"id" => "invalid_value"})
+        end)
+
+      assert log =~ ~s(Could not parse value for field "id" of type :int8)
+    end
+
+    defp affected?(where, record) do
+      shape = Shape.new!("the_table", where: where, inspector: @inspector)
+
+      transaction =
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"public", "the_table"},
+              record: record
+            }
+          ]
+        }
+
+      Filter.new(%{"the-shape" => shape})
+      |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"])
     end
   end
 end
