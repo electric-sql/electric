@@ -35,13 +35,13 @@ describe(`sortedOptionsHash`, () => {
         url: `http://whatever`,
         params: {
           table: `foo`,
-          where: `1=1`
+          where: `1=1`,
         },
       })
       const hash2 = sortedOptionsHash({
         params: {
           table: `foo`,
-          where: `2=2`
+          where: `2=2`,
         },
         url: `http://whatever`,
       })
