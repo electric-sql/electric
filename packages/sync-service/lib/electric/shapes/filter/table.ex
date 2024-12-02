@@ -1,4 +1,12 @@
 defmodule Electric.Shapes.Filter.Table do
+  @moduledoc """
+  Responsible for knowing which shapes are affected by a change to a specific table.
+
+  The `%Table{}` struct contains `indexes`, a map of indexes for shapes that have been optimised, and `other_shapes` for shapes
+  that have not been optimised. The logic for specific indexes is delegated to the `Filter.Index` module.
+
+  """
+
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Parser.Const

@@ -1,4 +1,14 @@
 defmodule Electric.Shapes.Filter.Index do
+  @moduledoc """
+  Responsible for knowing which shapes are affected by a change to a specific field.
+
+  The `%Table{}` struct contains `values` a map of values for a specific field to shapes that are affected by that field value.
+  This acts as an index for the shapes, providing a fast way to know which shapes have been affected without having to
+  iterate over all the shapes.
+
+  Currently only `=` operations are indexed.
+  """
+
   alias Electric.Replication.Eval.Env
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.WhereClause

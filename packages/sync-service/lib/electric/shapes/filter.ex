@@ -2,7 +2,12 @@ defmodule Electric.Shapes.Filter do
   @moduledoc """
   Responsible for knowing which shapes are affected by a change.
 
-  `affected_shapes(filter, change)` will return a set shape IDs that are affected by a change.
+  `affected_shapes(filter, change)` will return a set of IDs for the shapes that are affected by the change
+  considering all the shapes that have been added to the filter using `add_shape/3`.
+
+
+  The `Filter` module keeps track of what tables are referenced by the shapes and changes and delegates
+  the table specific logic to the `Filter.Table` module.
   """
 
   alias Electric.Replication.Changes.DeletedRecord
