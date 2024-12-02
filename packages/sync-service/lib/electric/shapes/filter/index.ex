@@ -61,4 +61,12 @@ defmodule Electric.Shapes.Filter.Index do
     # TODO: Move record_in_shape? out of shapes into Where module
     Shape.record_in_shape?(%{where: where_clause}, record)
   end
+
+  def all_shapes(%Index{values: values}) do
+    for {_value, shapes} <- values,
+        %{shape_id: shape_id, shape: shape} <- shapes,
+        into: %{} do
+      {shape_id, shape}
+    end
+  end
 end

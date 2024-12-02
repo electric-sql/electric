@@ -96,29 +96,16 @@ defmodule Electric.Shapes.Filter do
 
   defp all_shapes_in_filter(%Filter{} = filter) do
     for {_table, table} <- filter.tables,
-        {shape_id, shape} <- all_shapes_in_table(table),
+        {shape_id, shape} <- Table.all_shapes(table),
         into: %{} do
       {shape_id, shape}
     end
-  end
-
-  defp all_shapes_in_table(%{indexes: indexes, other_shapes: other_shapes}) do
-    for {_field, %{values: values}} <- indexes,
-        {_value, shapes} <- values,
-        %{shape_id: shape_id, shape: shape} <- shapes,
-        into: %{} do
-      {shape_id, shape}
-    end
-    |> Map.merge(other_shapes)
   end
 
   defp all_shapes_for_table(%Filter{} = filter, table_name) do
     case Map.get(filter.tables, table_name) do
-      nil ->
-        %{}
-
-      table ->
-        all_shapes_in_table(table)
+      nil -> %{}
+      table -> Table.all_shapes(table)
     end
   end
 end

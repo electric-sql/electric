@@ -113,4 +113,11 @@ defmodule Electric.Shapes.Filter.Table do
       shape_id
     end
   end
+
+  def all_shapes(%Table{indexes: indexes, other_shapes: other_shapes}) do
+    for {_field, index} <- indexes, {shape_id, shape} <- Index.all_shapes(index), into: %{} do
+      {shape_id, shape}
+    end
+    |> Map.merge(other_shapes)
+  end
 end
