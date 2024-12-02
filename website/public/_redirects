@@ -81,6 +81,7 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /docs/usage/installation/*      /docs/quickstart
 
 # Renamed pages on new site
-/product/ddn                    /product/cloud
-/product/sync                   /product/electric
-/docs/api/integrations/react    /docs/integrations/react
+/product/ddn                          /product/cloud
+/product/sync                         /product/electric
+/docs/api/integrations/react          /docs/integrations/react
+/docs/guides/writing-your-own-client  /docs/guides/client-development

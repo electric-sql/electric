@@ -158,7 +158,7 @@ export default defineConfig({
             { text: 'Installation', link: '/docs/guides/installation' },
             { text: 'Deployment', link: '/docs/guides/deployment' },
             { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
-            { text: 'Writing your own client', link: '/docs/guides/writing-your-own-client' },
+            { text: 'Client development', link: '/docs/guides/client-development' },
           ]
         },
         {
