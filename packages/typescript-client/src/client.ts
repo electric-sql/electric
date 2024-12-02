@@ -51,7 +51,7 @@ type Replica = `full` | `default`
  * PostgreSQL-specific shape parameters that can be provided externally
  */
 type PostgresParams = {
-  /** The root table for the shape */
+  /** The root table for the shape. Not required if you set the table in your proxy. */
   table?: string
 
   /**
@@ -64,8 +64,14 @@ type PostgresParams = {
   where?: string
 
   /**
-   * If `default`, Electric will only send changed columns in an update.
-   * If `full`, Electric will send the entire row with both changed and unchanged values.
+   * If `replica` is `default` (the default) then Electric will only send the
+   * changed columns in an update.
+   *
+   * If it's `full` Electric will send the entire row with both changed and
+   * unchanged values.
+   *
+   * Setting `replica` to `full` will result in higher bandwidth
+   * usage and so is not generally recommended.
    */
   replica?: Replica
 }
