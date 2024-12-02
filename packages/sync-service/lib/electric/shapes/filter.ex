@@ -19,6 +19,7 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Filter.Table
   alias Electric.Shapes.Shape
+  require Logger
 
   defstruct tables: %{}
 
@@ -50,51 +51,72 @@ defmodule Electric.Shapes.Filter do
     }
   end
 
-  def affected_shapes(%Filter{} = filter, %Relation{} = relation) do
+  def affected_shapes(%Filter{} = filter, change) do
+    shapes_affected_by_change(filter, change)
+  rescue
+    error ->
+      Logger.error("""
+      Unexpected error in Filter.affected_shapes:
+      #{Exception.format(:error, error, __STACKTRACE__)}
+      """)
+
+      # We can't tell which shapes are affected, the safest thing to do is return all shapes
+      filter
+      |> all_shapes()
+      |> MapSet.new(fn {shape_id, _shape} -> shape_id end)
+  end
+
+  defp shapes_affected_by_change(%Filter{} = filter, %Relation{} = relation) do
     # Check all shapes is all tables becuase the table may have been renamed
-    for {shape_id, shape} <- all_shapes_in_filter(filter),
+    for {shape_id, shape} <- all_shapes(filter),
         Shape.is_affected_by_relation_change?(shape, relation),
         into: MapSet.new() do
       shape_id
     end
   end
 
-  def affected_shapes(%Filter{} = filter, %Transaction{changes: changes}) do
+  defp shapes_affected_by_change(%Filter{} = filter, %Transaction{changes: changes}) do
     changes
     |> Enum.map(&affected_shapes(filter, &1))
     |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
   end
 
-  def affected_shapes(%Filter{} = filter, %NewRecord{relation: relation, record: record}) do
-    affected_shapes_by_record(filter, relation, record)
+  defp shapes_affected_by_change(%Filter{} = filter, %NewRecord{
+         relation: relation,
+         record: record
+       }) do
+    shapes_affected_by_record(filter, relation, record)
   end
 
-  def affected_shapes(%Filter{} = filter, %DeletedRecord{relation: relation, old_record: record}) do
-    affected_shapes_by_record(filter, relation, record)
+  defp shapes_affected_by_change(%Filter{} = filter, %DeletedRecord{
+         relation: relation,
+         old_record: record
+       }) do
+    shapes_affected_by_record(filter, relation, record)
   end
 
-  def affected_shapes(%Filter{} = filter, %UpdatedRecord{relation: relation} = change) do
+  defp shapes_affected_by_change(%Filter{} = filter, %UpdatedRecord{relation: relation} = change) do
     MapSet.union(
-      affected_shapes_by_record(filter, relation, change.record),
-      affected_shapes_by_record(filter, relation, change.old_record)
+      shapes_affected_by_record(filter, relation, change.record),
+      shapes_affected_by_record(filter, relation, change.old_record)
     )
   end
 
-  def affected_shapes(%Filter{} = filter, %TruncatedRelation{relation: table_name}) do
+  defp shapes_affected_by_change(%Filter{} = filter, %TruncatedRelation{relation: table_name}) do
     for {shape_id, _shape} <- all_shapes_for_table(filter, table_name),
         into: MapSet.new() do
       shape_id
     end
   end
 
-  defp affected_shapes_by_record(filter, table_name, record) do
+  defp shapes_affected_by_record(filter, table_name, record) do
     case Map.get(filter.tables, table_name) do
       nil -> MapSet.new()
       table -> Table.affected_shapes(table, record)
     end
   end
 
-  defp all_shapes_in_filter(%Filter{} = filter) do
+  defp all_shapes(%Filter{} = filter) do
     for {_table, table} <- filter.tables,
         {shape_id, shape} <- Table.all_shapes(table),
         into: %{} do
