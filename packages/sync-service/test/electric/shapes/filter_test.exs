@@ -562,6 +562,24 @@ defmodule Electric.Shapes.FilterTest do
   end
 
   describe "where clause filtering" do
+    test "shape with no where clause is always affected" do
+      shape = Shape.new!("the_table", inspector: @inspector)
+
+      transaction =
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"public", "the_table"},
+              record: %{"id" => "7"}
+            }
+          ]
+        }
+
+      assert Filter.empty()
+             |> Filter.add_shape("the-shape", shape)
+             |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"])
+    end
+
     for test <- [
           %{where: "id = 7", record: %{"id" => "7"}, affected: true},
           %{where: "id = 7", record: %{"id" => "8"}, affected: false},
