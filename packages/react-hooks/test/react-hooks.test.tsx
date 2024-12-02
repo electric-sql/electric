@@ -13,12 +13,16 @@ describe(`sortedOptionsHash`, () => {
     () => {
       const hash1 = sortedOptionsHash({
         url: `http://whatever`,
-        table: `foo`,
+        params: {
+          table: `foo`,
+        },
         offset: `-1`,
       })
       const hash2 = sortedOptionsHash({
         offset: `-1`,
-        table: `foo`,
+        params: {
+          table: `foo`,
+        },
         url: `http://whatever`,
       })
       expect(hash1).toEqual(hash2)
@@ -31,7 +35,9 @@ describe(`useShape`, () => {
     const { result } = renderHook(() =>
       useShape({
         url: `${BASE_URL}/v1/shape`,
-        table: issuesTableUrl,
+        params: {
+          table: issuesTableUrl,
+        },
         signal: aborter.signal,
         subscribe: false,
       })
@@ -53,14 +59,17 @@ describe(`useShape`, () => {
     const { result } = renderHook(() =>
       useShape({
         url: `${BASE_URL}/v1/shape`,
-        table: issuesTableUrl,
+        params: {
+          table: issuesTableUrl,
+        },
         signal: aborter?.signal,
         subscribe: false,
       })
     )
 
-    await waitFor(() =>
-      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+    await waitFor(
+      () =>
+        expect(result.current.data).toEqual([{ id: id, title: `test row` }])
     )
   })
 
@@ -73,7 +82,9 @@ describe(`useShape`, () => {
     renderHook(() =>
       useShape({
         url: `${BASE_URL}/v1/shape`,
-        table: issuesTableUrl,
+        params: {
+          table: issuesTableUrl,
+        },
         signal: manualAborter.signal,
         subscribe: false,
       })
@@ -86,14 +97,17 @@ describe(`useShape`, () => {
     const { result } = renderHook(() =>
       useShape({
         url: `${BASE_URL}/v1/shape`,
-        table: issuesTableUrl,
+        params: {
+          table: issuesTableUrl,
+        },
         signal: aborter?.signal,
         subscribe: false,
       })
     )
 
-    await waitFor(() =>
-      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+    await waitFor(
+      () =>
+        expect(result.current.data).toEqual([{ id: id, title: `test row` }])
     )
   })
 
@@ -101,7 +115,9 @@ describe(`useShape`, () => {
     const { result } = renderHook(() =>
       useShape({
         url: `${BASE_URL}/v1/shape`,
-        table: issuesTableUrl,
+        params: {
+          table: issuesTableUrl,
+        },
         fetchClient: async (input, init) => {
           await sleep(10)
           return fetch(input, init)
@@ -120,7 +136,9 @@ describe(`useShape`, () => {
     const { result } = renderHook(() =>
       useShape({
         url: `${BASE_URL}/v1/shape`,
-        table: issuesTableUrl,
+        params: {
+          table: issuesTableUrl,
+        },
         fetchClient: async (input, init) => {
           await sleep(50)
           return fetch(input, init)
@@ -148,7 +166,9 @@ describe(`useShape`, () => {
     const { result } = renderHook(() =>
       useShape({
         url: `${BASE_URL}/v1/shape`,
-        table: issuesTableUrl,
+        params: {
+          table: issuesTableUrl,
+        },
         signal: aborter.signal,
         subscribe: true,
       })
@@ -181,8 +201,10 @@ describe(`useShape`, () => {
     const { result, rerender } = renderHook((options) => useShape(options), {
       initialProps: {
         url: `${BASE_URL}/v1/shape`,
-        table: issuesTableUrl,
-        where: `id = '${id}'`,
+        params: {
+          table: issuesTableUrl,
+          where: `id = '${id}'`,
+        },
         signal: aborter.signal,
         subscribe: true,
       },
@@ -194,8 +216,10 @@ describe(`useShape`, () => {
 
     rerender({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
-      where: `id = '${id2}'`,
+      params: {
+        table: issuesTableUrl,
+        where: `id = '${id2}'`,
+      },
       signal: aborter.signal,
       subscribe: true,
     })
@@ -216,7 +240,9 @@ describe(`useShape`, () => {
     const { result } = renderHook(() =>
       useShape({
         url: `${BASE_URL}/v1/shape`,
-        table: issuesTableUrl,
+        params: {
+          table: issuesTableUrl,
+        },
         signal: aborter.signal,
         subscribe: true,
         selector: (result) => {
@@ -263,7 +289,9 @@ describe(`useShape`, () => {
       ({ selector }) =>
         useShape({
           url: `${BASE_URL}/v1/shape`,
-          table: issuesTableUrl,
+          params: {
+            table: issuesTableUrl,
+          },
           signal: aborter.signal,
           subscribe: true,
           selector: selector,
@@ -292,7 +320,9 @@ describe(`useShape`, () => {
     const { result, unmount } = renderHook(() =>
       useShape({
         url: `${BASE_URL}/v1/shape`,
-        table: issuesTableUrl,
+        params: {
+          table: issuesTableUrl,
+        },
         signal: aborter.signal,
         subscribe: true,
       })
