@@ -161,7 +161,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               end
             )
 
-            stream = Querying.stream_initial_data(conn, shape)
+            stream = Querying.stream_initial_data(conn, shape, otel_attrs)
 
             GenServer.cast(parent, {:snapshot_started, shape_handle})
 
