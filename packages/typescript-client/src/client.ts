@@ -84,8 +84,26 @@ type ReservedParamKeys =
   | typeof WHERE_QUERY_PARAM
   | typeof REPLICA_PARAM
 
-type ParamsRecord = Omit<Record<string, string>, ReservedParamKeys> &
-  Partial<PostgresShapeParams>
+/**
+ * Type for additional string parameters that can be passed to the shape API.
+ * Uses a mapped type to:
+ * 1. Allow any string key except:
+ *    - Reserved parameter names (like 'offset', 'live', etc.)
+ *    - Keys already defined in PostgresShapeParams (like 'table', 'columns')
+ * 2. Ensure these additional parameters must be strings
+ */
+type AdditionalParams = {
+  [K in string as K extends ReservedParamKeys | keyof PostgresShapeParams
+    ? never
+    : K]: string
+}
+
+/**
+ * Complete type for shape API parameters combining:
+ * 1. PostgreSQL-specific parameters (table, columns, etc.) which can be optional
+ * 2. Additional string parameters for custom query parameters
+ */
+type ParamsRecord = Partial<PostgresShapeParams> & AdditionalParams
 
 type RetryOpts = {
   params?: ParamsRecord

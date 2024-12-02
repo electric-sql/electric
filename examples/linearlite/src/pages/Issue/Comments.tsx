@@ -18,9 +18,9 @@ function Comments(commentProps: CommentsProps) {
   const [newCommentBody, setNewCommentBody] = useState<string>(``)
   const allComments = useShape({
     url: `${baseUrl}/v1/shape`,
-    databaseId,
     params: {
       token,
+      database_id: databaseId,
       table: 'comment',
     },
   })! as Comment[]

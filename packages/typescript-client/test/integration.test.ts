@@ -596,8 +596,7 @@ describe(`HTTP Sync`, () => {
     await sleep(40)
 
     const res2 = await fetch(
-      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
-      {}
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`
     )
     const etag2Header = res2.headers.get(`etag`)
     expect(etag2Header, `Response should have etag header`).not.toEqual(null)
