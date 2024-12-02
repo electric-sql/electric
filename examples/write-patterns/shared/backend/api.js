@@ -22,6 +22,7 @@ const idSchema = z.string().uuid()
 const createSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
+  created_at: z.string(),
 })
 const updateSchema = z.object({
   completed: z.boolean()
@@ -30,14 +31,13 @@ const updateSchema = z.object({
 // Define functions to create, update and delete todos
 // using the `db` client.
 
-const createTodo = async (id, title) => {
+const createTodo = async (id, title, created_at) => {
   const sql = `
     INSERT INTO todos (id, title, completed, created_at)
     VALUES ($1, $2, false, $3)
   `
 
-  const now = new Date()
-  const params = [id, title, now]
+  const params = [id, title, created_at]
 
   return await db.query(sql, params)
 }
@@ -75,7 +75,7 @@ app.post(`/todos`, async (req, res) => {
   }
 
   try {
-    await createTodo(data.id, data.title)
+    await createTodo(data.id, data.title, data.created_at)
   }
   catch (err) {
     return res.status(500).json({ errors: err })
