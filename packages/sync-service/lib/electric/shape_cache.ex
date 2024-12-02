@@ -46,7 +46,7 @@ defmodule Electric.ShapeCache do
               required: false
             ],
             stack_id: [type: :string, required: true],
-            otel_attrs: [type: :keyword_list, required: true],
+            otel_attrs: [type: :keyword_list, default: []],
             log_producer: [type: @genserver_name_schema, required: true],
             consumer_supervisor: [type: @genserver_name_schema, required: true],
             storage: [type: :mod_arg, required: true],

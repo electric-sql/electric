@@ -7,7 +7,7 @@ defmodule Electric.Shapes.ConsumerSupervisor do
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   # TODO: unify these with ShapeCache
   @schema NimbleOptions.new!(
-            otel_attrs: [type: :keyword_list, required: true],
+            otel_attrs: [type: :keyword_list, default: []],
             stack_id: [type: :any, required: true],
             shape_handle: [type: :string, required: true],
             shape: [type: {:struct, Electric.Shapes.Shape}, required: true],

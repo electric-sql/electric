@@ -76,7 +76,7 @@ defmodule Electric.Postgres.ReplicationClient do
                    start_streaming?: [type: :boolean, default: true],
                    slot_name: [required: true, type: :string],
                    slot_temporary?: [type: :boolean, default: false],
-                   otel_attrs: [type: :keyword_list, required: true]
+                   otel_attrs: [type: :keyword_list, default: []]
                  )
 
     @spec new(Access.t()) :: t()
