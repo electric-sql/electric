@@ -19,11 +19,11 @@ defmodule Electric.Shapes.FilterTest do
 
   @inspector StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
 
-  describe "new/1" do
+  describe "add_shape/2" do
     test "with `field = constant` where clause" do
       shape = Shape.new!("the_table", where: "id = 1", inspector: @inspector)
 
-      assert Filter.new(%{"shape1" => shape}) == %Filter{
+      assert Filter.add_shape(Filter.empty(), "shape1", shape) == %Filter{
                tables: %{
                  {"public", "the_table"} => %Table{
                    indexes: %{
@@ -45,7 +45,7 @@ defmodule Electric.Shapes.FilterTest do
     test "with `constant = field` where clause" do
       shape = Shape.new!("the_table", where: "1 = id", inspector: @inspector)
 
-      assert Filter.new(%{"shape1" => shape}) == %Filter{
+      assert Filter.add_shape(Filter.empty(), "shape1", shape) == %Filter{
                tables: %{
                  {"public", "the_table"} => %Table{
                    indexes: %{
@@ -97,7 +97,7 @@ defmodule Electric.Shapes.FilterTest do
                    other_shapes: %{}
                  }
                }
-             } = Filter.new(%{"shape1" => shape})
+             } = Filter.add_shape(Filter.empty(), "shape1", shape)
     end
 
     test "with `some_condition AND field = constant` where clause" do
@@ -133,17 +133,17 @@ defmodule Electric.Shapes.FilterTest do
                    other_shapes: %{}
                  }
                }
-             } = Filter.new(%{"shape1" => shape})
+             } = Filter.add_shape(Filter.empty(), "shape1", shape)
     end
 
     test "with more complicated where clause" do
-      shapes = %{"shape1" => Shape.new!("the_table", where: "id > 1", inspector: @inspector)}
+      shape = Shape.new!("the_table", where: "id > 1", inspector: @inspector)
 
-      assert Filter.new(shapes) == %Filter{
+      assert Filter.add_shape(Filter.empty(), "the-shape", shape) == %Filter{
                tables: %{
                  {"public", "the_table"} => %Table{
                    indexes: %{},
-                   other_shapes: shapes
+                   other_shapes: %{"the-shape" => shape}
                  }
                }
              }
@@ -602,7 +602,8 @@ defmodule Electric.Shapes.FilterTest do
           ]
         }
 
-      Filter.new(%{"the-shape" => shape})
+      Filter.empty()
+      |> Filter.add_shape("the-shape", shape)
       |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"])
     end
   end

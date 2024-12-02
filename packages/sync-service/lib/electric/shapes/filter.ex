@@ -11,12 +11,7 @@ defmodule Electric.Shapes.Filter do
 
   defstruct tables: %{}
 
-  def new(shapes), do: shapes |> Map.to_list() |> new(empty())
-
-  defp new([{shape_id, shape} | shapes], filter),
-    do: new(shapes, add_shape(filter, shape_id, shape))
-
-  defp new([], filter), do: filter
+  def empty, do: %Filter{}
 
   def add_shape(%Filter{tables: tables}, shape_id, shape) do
     %Filter{
@@ -43,8 +38,6 @@ defmodule Electric.Shapes.Filter do
         |> Map.new()
     }
   end
-
-  def empty, do: %Filter{}
 
   def affected_shapes(%Filter{} = filter, %Relation{} = relation) do
     # Check all shapes is all tables becuase the table may have been renamed
