@@ -57,17 +57,17 @@ type Replica = `full` | `default`
 type PostgresShapeParams = {
   /** The root table for the shape */
   table?: string
-  
+
   /** The where clauses for the shape */
   where?: string
-  
-  /** 
+
+  /**
    * The columns to include in the shape.
    * Must include primary keys, and can only include valid columns.
    */
   columns?: string[]
-  
-  /** 
+
+  /**
    * If `default`, Electric will only send changed columns in an update.
    * If `full`, Electric will send the entire row with both changed and unchanged values.
    */
@@ -84,7 +84,8 @@ type ReservedParamKeys =
   | typeof WHERE_QUERY_PARAM
   | typeof REPLICA_PARAM
 
-type ParamsRecord = Omit<Record<string, string>, ReservedParamKeys> & Partial<PostgresShapeParams>
+type ParamsRecord = Omit<Record<string, string>, ReservedParamKeys> &
+  Partial<PostgresShapeParams>
 
 type RetryOpts = {
   params?: ParamsRecord
@@ -132,7 +133,7 @@ export interface ShapeStreamOptions<T = never> {
    * These will be merged with Electric's standard parameters.
    * Note: You cannot use Electric's reserved parameter names
    * (offset, handle, live, cursor).
-   * 
+   *
    * PostgreSQL-specific options like table, where, columns, and replica
    * should be specified here.
    */
@@ -238,7 +239,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #shapeHandle?: string
   #schema?: Schema
   #onError?: ShapeStreamErrorHandler
-  #replica?: Replica
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -247,7 +247,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#liveCacheBuster = ``
     this.#shapeHandle = this.options.handle
     this.#messageParser = new MessageParser<T>(options.parser)
-    this.#replica = this.options.replica
     this.#onError = this.options.onError
 
     const baseFetchClient =
@@ -307,19 +306,32 @@ export class ShapeStream<T extends Row<unknown> = Row>
             )
           }
 
-          for (const [key, value] of Object.entries(this.options.params)) {
-            fetchUrl.searchParams.set(key, value)
-          }
-        }
+          // Add PostgreSQL-specific parameters from params
+          const params = this.options.params || {}
+          if (params.table)
+            fetchUrl.searchParams.set(TABLE_QUERY_PARAM, params.table)
+          if (params.where)
+            fetchUrl.searchParams.set(WHERE_QUERY_PARAM, params.where)
+          if (params.columns && params.columns.length > 0)
+            fetchUrl.searchParams.set(
+              COLUMNS_QUERY_PARAM,
+              params.columns.join(`,`)
+            )
+          if (params.replica)
+            fetchUrl.searchParams.set(REPLICA_PARAM, params.replica)
 
-        // Add PostgreSQL-specific parameters from params
-        const params = this.options.params || {}
-        if (params.table) fetchUrl.searchParams.set(TABLE_QUERY_PARAM, params.table)
-        if (params.where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, params.where)
-        if (params.columns && params.columns.length > 0)
-          fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, params.columns.join(`,`))
-        if (params.replica && params.replica !== ShapeStream.Replica.DEFAULT) {
-          fetchUrl.searchParams.set(REPLICA_PARAM, params.replica)
+          // Add any remaining custom parameters
+          const customParams = { ...params }
+          delete customParams.table
+          delete customParams.where
+          delete customParams.columns
+          delete customParams.replica
+
+          for (const [key, value] of Object.entries(customParams)) {
+            if (typeof value === `string`) {
+              fetchUrl.searchParams.set(key, value)
+            }
+          }
         }
 
         // Add Electric's internal parameters
