@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Filter.Index do
   alias Electric.Replication.Eval.Env
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.Shape
+  require Logger
 
   defstruct [:type, :values]
 
@@ -35,8 +36,22 @@ defmodule Electric.Shapes.Filter.Index do
     }
   end
 
-  def affected_shapes(%Index{values: values, type: type}, field, record) do
-    case values[value_from_record(record, field, type)] do
+  def affected_shapes(%Index{values: values, type: type} = index, field, record) do
+    case value_from_record(record, field, type) do
+      {:ok, value} ->
+        shapes_for_value(value, values, record)
+
+      :error ->
+        Logger.error("Could not parse value for field #{inspect(field)} of type #{inspect(type)}")
+        # We can't tell which shapes are affected, the safest thing to do is return all shapes
+        index
+        |> all_shapes()
+        |> MapSet.new(fn {shape_id, _shape} -> shape_id end)
+    end
+  end
+
+  defp shapes_for_value(value, values, record) do
+    case values[value] do
       nil ->
         MapSet.new()
 
@@ -50,9 +65,7 @@ defmodule Electric.Shapes.Filter.Index do
 
   @env Env.new()
   defp value_from_record(record, field, type) do
-    # TODO: should we expect this to be ok?
-    {:ok, value} = Env.parse_const(@env, record[field], type)
-    value
+    Env.parse_const(@env, record[field], type)
   end
 
   defp record_in_where?(nil, _), do: true
