@@ -44,13 +44,11 @@ defmodule Electric.Replication.ShapeLogCollector do
   # determining how long a write should reasonably take and if that fails
   # it should raise.
   def store_transaction(%Transaction{} = txn, server) do
-    ot_span_ctx = OpenTelemetry.get_current_context()
-    GenStage.call(server, {:new_txn, txn, ot_span_ctx}, :infinity)
+    GenStage.call(server, {:new_txn, txn}, :infinity)
   end
 
   def handle_relation_msg(%Changes.Relation{} = rel, server) do
-    ot_span_ctx = OpenTelemetry.get_current_context()
-    GenServer.call(server, {:relation_msg, rel, ot_span_ctx}, :infinity)
+    GenServer.call(server, {:relation_msg, rel}, :infinity)
   end
 
   def init(opts) do
@@ -93,26 +91,18 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:noreply, [], remove_subscription(from, state)}
   end
 
-  def handle_call({:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, ot_span_ctx}, from, state) do
-    OpenTelemetry.set_current_context(ot_span_ctx)
-
+  def handle_call({:new_txn, %Transaction{xid: xid, lsn: lsn} = txn}, from, state) do
     Logger.info("Received transaction #{xid} from Postgres at #{lsn}")
     Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
 
-    OpenTelemetry.with_span("shape_write.log_collector.handle_txn", [], fn ->
-      handle_transaction(txn, from, state)
-    end)
+    handle_transaction(txn, from, state)
   end
 
-  def handle_call({:relation_msg, %Relation{} = rel, ot_span_ctx}, from, state) do
-    OpenTelemetry.set_current_context(ot_span_ctx)
-
+  def handle_call({:relation_msg, %Relation{} = rel}, from, state) do
     Logger.info("Received relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
     Logger.debug(fn -> "Relation received in ShapeLogCollector: #{inspect(rel)}" end)
 
-    OpenTelemetry.with_span("shape_write.log_collector.handle_relation", [], fn ->
-      handle_relation(rel, from, state)
-    end)
+    handle_relation(rel, from, state)
   end
 
   # If no-one is listening to the replication stream, then just return without
