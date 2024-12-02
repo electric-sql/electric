@@ -735,6 +735,15 @@ importers:
       '@electric-sql/client':
         specifier: workspace:*
         version: link:../../packages/typescript-client
+      '@electric-sql/pglite':
+        specifier: ^0.2.14
+        version: 0.2.14
+      '@electric-sql/pglite-react':
+        specifier: ^0.2.14
+        version: 0.2.14(@electric-sql/pglite@0.2.14)(react@19.0.0-rc.1)
+      '@electric-sql/pglite-sync':
+        specifier: ^0.2.16
+        version: 0.2.16(@electric-sql/pglite@0.2.14)
       '@electric-sql/react':
         specifier: workspace:*
         version: link:../../packages/react-hooks
@@ -1720,6 +1729,23 @@ packages:
         optional: true
       search-insights:
         optional: true
+
+  '@electric-sql/client@0.8.0':
+    resolution: {integrity: sha512-M4VnuL2q2i1yhsjc9DEQtf4GEkXoaMjlfm0Lq7KqLDjj2nqPhbUTo8IeWhf3OJSZ7j+GyFd/YlLg4rlBDrE/6Q==}
+
+  '@electric-sql/pglite-react@0.2.14':
+    resolution: {integrity: sha512-QseE5Y2a7+9G1gj0Xffg3nKpKQ0KIN/6euofmRMMwTUWxK8eok6sVus2XtUY+Hy8TkzhoLa8boEOJ+xTU8/bZQ==}
+    peerDependencies:
+      '@electric-sql/pglite': ^0.2.14
+      react: ^18.0.0
+
+  '@electric-sql/pglite-sync@0.2.16':
+    resolution: {integrity: sha512-jv/86TRBAPHA273Dt0af/mf/kARHkzsmjTMVhmSs8FAn6UKR1fcqIIAeC3EyI0ihP2H3E2M3ivpMMvO8DULGxQ==}
+    peerDependencies:
+      '@electric-sql/pglite': ^0.2.14
+
+  '@electric-sql/pglite@0.2.14':
+    resolution: {integrity: sha512-ZMYZL/yFu5sCewYecdX4OjyOPcrI2OmQ6598e/tyke4Rpgeekd4+pINf9jjzJNJk1Kq5dtuB6buqZsBQf0sx8A==}
 
   '@emotion/hash@0.9.2':
     resolution: {integrity: sha512-MyqliTZGuOm3+5ZRSaaBGP3USLw6+EGykkwZns2EPC5g8jJ4z9OrdZY9apkl3+UP9+sdz76YYkwCKP5gh8iY3g==}
@@ -10142,6 +10168,22 @@ snapshots:
       search-insights: 2.17.2
     transitivePeerDependencies:
       - '@algolia/client-search'
+
+  '@electric-sql/client@0.8.0':
+    optionalDependencies:
+      '@rollup/rollup-darwin-arm64': 4.24.4
+
+  '@electric-sql/pglite-react@0.2.14(@electric-sql/pglite@0.2.14)(react@19.0.0-rc.1)':
+    dependencies:
+      '@electric-sql/pglite': 0.2.14
+      react: 19.0.0-rc.1
+
+  '@electric-sql/pglite-sync@0.2.16(@electric-sql/pglite@0.2.14)':
+    dependencies:
+      '@electric-sql/client': 0.8.0
+      '@electric-sql/pglite': 0.2.14
+
+  '@electric-sql/pglite@0.2.14': {}
 
   '@emotion/hash@0.9.2': {}
 

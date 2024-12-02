@@ -1,3 +1,4 @@
+-- Basic todos table.
 CREATE TABLE IF NOT EXISTS todos (
   id UUID PRIMARY KEY,
   title TEXT NOT NULL,

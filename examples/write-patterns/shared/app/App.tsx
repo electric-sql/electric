@@ -1,14 +1,13 @@
 import './style.css'
 
-import { OnlineWrites } from '../../patterns'
-import { OptimisticState } from '../../patterns'
+import { CombineOnRead, OnlineWrites, OptimisticState } from '../../patterns'
 
 const App = () => {
   return (
     <div className="app">
       <OnlineWrites />
       <OptimisticState />
-      <div className="example"></div>
+      <CombineOnRead />
       <div className="example"></div>
     </div>
   )
