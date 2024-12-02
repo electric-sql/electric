@@ -48,20 +48,20 @@ const RESERVED_PARAMS = new Set([
 type Replica = `full` | `default`
 
 /**
- * PostgreSQL-specific shape parameters
+ * PostgreSQL-specific shape parameters that can be provided externally
  */
-type PostgresShapeParams = {
+type PostgresParams = {
   /** The root table for the shape */
   table?: string
-
-  /** The where clauses for the shape */
-  where?: string
 
   /**
    * The columns to include in the shape.
    * Must include primary keys, and can only include valid columns.
    */
   columns?: string[]
+
+  /** The where clauses for the shape */
+  where?: string
 
   /**
    * If `default`, Electric will only send changed columns in an update.
@@ -81,28 +81,34 @@ type ReservedParamKeys =
   | typeof REPLICA_PARAM
 
 /**
- * Type for additional string parameters that can be passed to the shape API.
- * Uses a mapped type to:
- * 1. Allow any string key except:
- *    - Reserved parameter names (like 'offset', 'live', etc.)
- *    - Keys already defined in PostgresShapeParams (like 'table', 'columns')
- * 2. Ensure these additional parameters must be strings
+ * External params type - what users provide.
+ * Includes documented PostgreSQL params and allows string or string[] values for any additional params.
  */
-type AdditionalParams = {
-  [K in string as K extends ReservedParamKeys | keyof PostgresShapeParams
-    ? never
-    : K]: string
+type ExternalParamsRecord = Partial<PostgresParams> & {
+  [K in string as K extends ReservedParamKeys ? never : K]: string | string[]
 }
 
 /**
- * Complete type for shape API parameters combining:
- * 1. PostgreSQL-specific parameters (table, columns, etc.) which can be optional
- * 2. Additional string parameters for custom query parameters
+ * Internal params type - used within the library.
+ * All values are converted to strings.
  */
-type ParamsRecord = Partial<PostgresShapeParams> & AdditionalParams
+type InternalParamsRecord = {
+  [K in string as K extends ReservedParamKeys ? never : K]: string
+}
+
+/**
+ * Helper function to convert external params to internal format
+ */
+function toInternalParams(params: ExternalParamsRecord): InternalParamsRecord {
+  const result: InternalParamsRecord = {}
+  for (const [key, value] of Object.entries(params)) {
+    result[key] = Array.isArray(value) ? value.join(`,`) : value
+  }
+  return result
+}
 
 type RetryOpts = {
-  params?: ParamsRecord
+  params?: ExternalParamsRecord
   headers?: Record<string, string>
 }
 
@@ -151,7 +157,7 @@ export interface ShapeStreamOptions<T = never> {
    * PostgreSQL-specific options like table, where, columns, and replica
    * should be specified here.
    */
-  params?: ParamsRecord
+  params?: ExternalParamsRecord
 
   /**
    * Automatically fetch updates to the Shape. If you just want to sync the current
@@ -167,7 +173,7 @@ export interface ShapeStreamOptions<T = never> {
   /**
    * A function for handling shapestream errors.
    * This is optional, when it is not provided any shapestream errors will be thrown.
-   * If the function is provided and returns an object containing parameters and/or headers
+   * If the function returns an object containing parameters and/or headers
    * the shapestream will apply those changes and try syncing again.
    * If the function returns void the shapestream is stopped.
    */
@@ -321,16 +327,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
           }
 
           // Add PostgreSQL-specific parameters from params
-          const params = this.options.params || {}
+          const params = toInternalParams(this.options.params)
           if (params.table)
             fetchUrl.searchParams.set(TABLE_QUERY_PARAM, params.table)
           if (params.where)
             fetchUrl.searchParams.set(WHERE_QUERY_PARAM, params.where)
-          if (params.columns && params.columns.length > 0)
-            fetchUrl.searchParams.set(
-              COLUMNS_QUERY_PARAM,
-              params.columns.join(`,`)
-            )
+          if (params.columns)
+            fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, params.columns)
           if (params.replica)
             fetchUrl.searchParams.set(REPLICA_PARAM, params.replica)
 
@@ -342,9 +345,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           delete customParams.replica
 
           for (const [key, value] of Object.entries(customParams)) {
-            if (typeof value === `string`) {
-              fetchUrl.searchParams.set(key, value)
-            }
+            fetchUrl.searchParams.set(key, value as string)
           }
         }
 
