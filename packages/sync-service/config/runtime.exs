@@ -82,8 +82,22 @@ otel_simple_processor =
     {:otel_simple_processor, %{exporter: {:otel_exporter_stdout, []}}}
   end
 
+otel_sampling_ratio = env!("ELECTRIC_OTEL_SAMPLING_RATIO", :float, 0.01)
+
 config :opentelemetry,
-  processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1)
+  processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1),
+  # sampler: {Electric.Telemetry.Sampler, %{ratio: otel_sampling_ratio}}
+  # Sample root spans based on our custom sampler
+  # and inherit sampling decision from remote parents
+  sampler:
+    {:parent_based,
+     %{
+       root: {Electric.Telemetry.Sampler, %{ratio: otel_sampling_ratio}},
+       remote_parent_sampled: :always_on,
+       remote_parent_not_sampled: :always_off,
+       local_parent_sampled: :always_on,
+       local_parent_not_sampled: :always_off
+     }}
 
 database_url = env!("DATABASE_URL", :string!)
 
