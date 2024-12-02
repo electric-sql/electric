@@ -10,6 +10,7 @@ defmodule Electric.Shapes.Filter do
   the table specific logic to the `Filter.Table` module.
   """
 
+  alias Electric.Replication.Changes
   alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.Relation
@@ -23,8 +24,13 @@ defmodule Electric.Shapes.Filter do
 
   defstruct tables: %{}
 
+  @type t :: %Filter{}
+  @type shape_id :: any()
+
+  @spec empty() :: Filter.t()
   def empty, do: %Filter{}
 
+  @spec add_shape(Filter.t(), shape_id(), Shape.t()) :: Filter.t()
   def add_shape(%Filter{tables: tables}, shape_id, shape) do
     %Filter{
       tables:
@@ -39,6 +45,7 @@ defmodule Electric.Shapes.Filter do
     }
   end
 
+  @spec remove_shape(Filter.t(), shape_id()) :: Filter.t()
   def remove_shape(%Filter{tables: tables}, shape_id) do
     %Filter{
       tables:
@@ -51,6 +58,7 @@ defmodule Electric.Shapes.Filter do
     }
   end
 
+  @spec affected_shapes(Filter.t(), Changes.change()) :: MapSet.t(shape_id())
   def affected_shapes(%Filter{} = filter, change) do
     shapes_affected_by_change(filter, change)
   rescue
