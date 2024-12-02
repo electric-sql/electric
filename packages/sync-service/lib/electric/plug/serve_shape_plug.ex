@@ -152,8 +152,9 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   plug :fetch_query_params
+  plug :init_otel_attrs
 
-  # start_telemetry_span needs to always be the first plug after fetching query params.
+  # start_telemetry_span needs to always be the first plug after fetching query params and OTEL attributes
   plug :start_telemetry_span
   plug :put_resp_content_type, "application/json"
   plug :hold_conn_until_stack_ready
@@ -174,6 +175,18 @@ defmodule Electric.Plug.ServeShapePlug do
   # end_telemetry_span needs to always be the last plug here.
   plug :end_telemetry_span
 
+  # Set an empty keyword list of OTEL attributes if none are provided
+  defp init_attrs(nil), do: []
+  defp init_attrs(attrs), do: attrs
+
+  defp init_otel_attrs(%Conn{} = conn, _) do
+    conn
+    |> assign(
+      :config,
+      conn.assigns.config ++ [otel_attrs: init_attrs(conn.assigns.config[:otel_attrs])]
+    )
+  end
+
   defp validate_query_params(%Conn{} = conn, _) do
     Logger.info("Query String: #{conn.query_string}")
 
@@ -193,10 +206,14 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp load_shape_info(%Conn{} = conn, _) do
-    OpenTelemetry.with_span("shape_get.plug.load_shape_info", [], fn ->
-      shape_info = get_or_create_shape_handle(conn.assigns)
-      handle_shape_info(conn, shape_info)
-    end)
+    OpenTelemetry.with_span(
+      "shape_get.plug.load_shape_info",
+      conn.assigns.config[:otel_attrs],
+      fn ->
+        shape_info = get_or_create_shape_handle(conn.assigns)
+        handle_shape_info(conn, shape_info)
+      end
+    )
   end
 
   # No handle is provided so we can get the existing one for this shape
@@ -404,12 +421,20 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # If offset is -1, we're serving a snapshot
   defp serve_log_or_snapshot(%Conn{assigns: %{offset: @before_all_offset}} = conn, _) do
-    OpenTelemetry.with_span("shape_get.plug.serve_snapshot", [], fn -> serve_snapshot(conn) end)
+    OpenTelemetry.with_span(
+      "shape_get.plug.serve_snapshot",
+      conn.assigns.config[:otel_attrs],
+      fn -> serve_snapshot(conn) end
+    )
   end
 
   # Otherwise, serve log since that offset
   defp serve_log_or_snapshot(conn, _) do
-    OpenTelemetry.with_span("shape_get.plug.serve_shape_log", [], fn -> serve_shape_log(conn) end)
+    OpenTelemetry.with_span(
+      "shape_get.plug.serve_shape_log",
+      conn.assigns.config[:otel_attrs],
+      fn -> serve_shape_log(conn) end
+    )
   end
 
   defp serve_snapshot(
@@ -501,23 +526,27 @@ defmodule Electric.Plug.ServeShapePlug do
       Enum.reduce_while(stream, {conn, 0}, fn chunk, {conn, bytes_sent} ->
         chunk_size = IO.iodata_length(chunk)
 
-        OpenTelemetry.with_span("shape_get.plug.stream_chunk", [chunk_size: chunk_size], fn ->
-          case chunk(conn, chunk) do
-            {:ok, conn} ->
-              {:cont, {conn, bytes_sent + chunk_size}}
+        OpenTelemetry.with_span(
+          "shape_get.plug.stream_chunk",
+          conn.assigns.config[:otel_attrs] ++ [chunk_size: chunk_size],
+          fn ->
+            case chunk(conn, chunk) do
+              {:ok, conn} ->
+                {:cont, {conn, bytes_sent + chunk_size}}
 
-            {:error, "closed"} ->
-              error_str = "Connection closed unexpectedly while streaming response"
-              conn = assign(conn, :error_str, error_str)
-              {:halt, {conn, bytes_sent}}
+              {:error, "closed"} ->
+                error_str = "Connection closed unexpectedly while streaming response"
+                conn = assign(conn, :error_str, error_str)
+                {:halt, {conn, bytes_sent}}
 
-            {:error, reason} ->
-              error_str = "Error while streaming response: #{inspect(reason)}"
-              Logger.error(error_str)
-              conn = assign(conn, :error_str, error_str)
-              {:halt, {conn, bytes_sent}}
+              {:error, reason} ->
+                error_str = "Error while streaming response: #{inspect(reason)}"
+                Logger.error(error_str)
+                conn = assign(conn, :error_str, error_str)
+                {:halt, {conn, bytes_sent}}
+            end
           end
-        end)
+        )
       end)
 
     assign(conn, :streaming_bytes_sent, bytes_sent)
@@ -585,7 +614,10 @@ defmodule Electric.Plug.ServeShapePlug do
 
     maybe_up_to_date = if up_to_date = assigns[:up_to_date], do: up_to_date != []
 
+    otel_attrs = assigns.config[:otel_attrs] |> Enum.into(%{})
+
     Electric.Plug.Utils.common_open_telemetry_attrs(conn)
+    |> Map.merge(otel_attrs)
     |> Map.merge(%{
       "shape.handle" => shape_handle,
       "shape.where" => assigns[:where],

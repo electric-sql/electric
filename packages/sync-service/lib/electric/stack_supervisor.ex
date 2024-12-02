@@ -194,9 +194,6 @@ defmodule Electric.StackSupervisor do
       registry: shape_changes_registry_name
     ]
 
-    dbg(otel_attrs)
-    dbg(config.replication_opts)
-
     new_connection_manager_opts = [
       stack_id: stack_id,
       otel_attrs: otel_attrs,
