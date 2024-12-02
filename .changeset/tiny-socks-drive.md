@@ -46,17 +46,3 @@ const stream = new ShapeStream({
   }
 })
 ```
-
-## Benefits
-
-1. **Future-proofing**: The client is now better prepared for supporting multiple data sources beyond PostgreSQL
-2. **Clean separation**: Protocol-level options (`offset`, `handle`) are now clearly separated from source-specific options
-3. **Extensibility**: Makes it easier to add support for new data sources in the future
-4. **Type safety**: Source-specific options are now properly typed through the `PostgresShapeParams` type
-
-## Implementation Notes
-
-- The changes are backwards compatible as the existing code paths are maintained
-- Protocol-level options like `offset` and `handle` remain at the top level
-- Documentation has been updated to reflect the new parameter structure
-- The `params` object now has proper TypeScript types for PostgreSQL-specific options
