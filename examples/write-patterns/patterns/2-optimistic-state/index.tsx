@@ -97,7 +97,7 @@ export default function OptimisticState() {
 
       const fetchPromise = api.request(path, 'POST', data)
       const syncPromise = matchStream(
-        stream,
+        stream as ShapeStreamInterface<Row>,
         ['insert'],
         matchBy('id', data.id)
       )

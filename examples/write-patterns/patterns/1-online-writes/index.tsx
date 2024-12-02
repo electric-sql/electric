@@ -53,7 +53,6 @@ export default function OnlineWrites() {
     const path = `/todos/${todo.id}`
 
     const data = {
-      ...todo,
       completed: !todo.completed,
     }
 
