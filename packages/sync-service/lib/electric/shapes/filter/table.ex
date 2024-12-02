@@ -6,7 +6,7 @@ defmodule Electric.Shapes.Filter.Table do
   alias Electric.Replication.Eval.Parser.Ref
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.Filter.Table
-  alias Electric.Shapes.Shape
+  alias Electric.Shapes.WhereClause
 
   defstruct indexes: %{}, other_shapes: %{}
 
@@ -107,7 +107,7 @@ defmodule Electric.Shapes.Filter.Table do
 
   defp other_shapes_affected(%{other_shapes: shapes}, record) do
     for {shape_id, shape} <- shapes,
-        Shape.record_in_shape?(shape, record),
+        WhereClause.includes_record?(shape.where, record),
         into: MapSet.new() do
       shape_id
     end

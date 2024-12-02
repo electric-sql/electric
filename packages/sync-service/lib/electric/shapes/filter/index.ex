@@ -1,7 +1,7 @@
 defmodule Electric.Shapes.Filter.Index do
   alias Electric.Replication.Eval.Env
   alias Electric.Shapes.Filter.Index
-  alias Electric.Shapes.Shape
+  alias Electric.Shapes.WhereClause
   require Logger
 
   defstruct [:type, :values]
@@ -57,7 +57,7 @@ defmodule Electric.Shapes.Filter.Index do
 
       shapes ->
         shapes
-        |> Enum.filter(&record_in_where?(&1.and_where, record))
+        |> Enum.filter(&WhereClause.includes_record?(&1.and_where, record))
         |> Enum.map(& &1.shape_id)
         |> MapSet.new()
     end
@@ -66,13 +66,6 @@ defmodule Electric.Shapes.Filter.Index do
   @env Env.new()
   defp value_from_record(record, field, type) do
     Env.parse_const(@env, record[field], type)
-  end
-
-  defp record_in_where?(nil, _), do: true
-
-  defp record_in_where?(where_clause, record) do
-    # TODO: Move record_in_shape? out of shapes into Where module
-    Shape.record_in_shape?(%{where: where_clause}, record)
   end
 
   def all_shapes(%Index{values: values}) do
