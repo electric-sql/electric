@@ -10,7 +10,7 @@ Electric's TypeScript client is currently tightly coupled to PostgreSQL-specific
 
 ## Changes
 
-1. Created a new `PostgresShapeParams` type to define PostgreSQL-specific parameters:
+1. Created a new `PostgresParams` type to define PostgreSQL-specific parameters:
    - `table`: The root table for the shape
    - `where`: Where clauses for the shape
    - `columns`: Columns to include in the shape
