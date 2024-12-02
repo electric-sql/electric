@@ -1,7 +1,4 @@
-export async function GET(
-  request: Request,
-  { params }: { params: { table: string } }
-) {
+export async function GET(request: Request) {
   const url = new URL(request.url)
   const originUrl = new URL(
     process.env.ELECTRIC_URL
@@ -22,6 +19,8 @@ export async function GET(
     originUrl.searchParams.set(`token`, process.env.ELECTRIC_TOKEN)
   }
 
+  console.log(originUrl.toString())
+
   const newRequest = new Request(originUrl.toString(), {
     method: `GET`,
     headers,
@@ -32,7 +31,7 @@ export async function GET(
   // them to avoid content decoding errors in the browser.
   //
   // Similar-ish problem to https://github.com/wintercg/fetch/issues/23
-  let resp = await fetch(originUrl.toString())
+  let resp = await fetch(newRequest)
   if (resp.headers.get(`content-encoding`)) {
     const headers = new Headers(resp.headers)
     headers.delete(`content-encoding`)

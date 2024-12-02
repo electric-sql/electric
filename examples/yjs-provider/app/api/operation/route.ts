@@ -19,15 +19,10 @@ export async function POST(request: Request) {
 }
 
 async function saveOperation(room: string, op: string) {
-  const db = await pool.connect()
-  try {
-    await db.query(
-      `INSERT INTO ydoc_operations (room, op) VALUES ($1, decode($2, 'base64'))`,
-      [room, op]
-    )
-  } finally {
-    db.release()
-  }
+  pool.query(
+    `INSERT INTO ydoc_operations (room, op) VALUES ($1, decode($2, 'base64'))`,
+    [room, op]
+  )
 }
 
 async function saveAwarenessOperation(
@@ -35,17 +30,12 @@ async function saveAwarenessOperation(
   op: string,
   clientId: string
 ) {
-  const db = await pool.connect()
-  try {
-    await db.query(
-      `INSERT INTO ydoc_awareness (room, clientId, op) VALUES ($1, $2, decode($3, 'base64')) 
+  await pool.query(
+    `INSERT INTO ydoc_awareness (room, clientId, op) VALUES ($1, $2, decode($3, 'base64')) 
        ON CONFLICT (clientId, room)
        DO UPDATE SET op = decode($3, 'base64')`,
-      [room, clientId, op]
-    )
-  } finally {
-    db.release()
-  }
+    [room, clientId, op]
+  )
 }
 
 async function getRequestParams(

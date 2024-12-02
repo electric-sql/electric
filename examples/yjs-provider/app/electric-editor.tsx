@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react"
 import * as Y from "yjs"
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next"
 import { ElectricProvider } from "./y-electric"
-import { Awareness, applyAwarenessUpdate } from "y-protocols/awareness"
+import { Awareness } from "y-protocols/awareness"
 
 import { EditorState } from "@codemirror/state"
 import { EditorView, basicSetup } from "codemirror"
@@ -13,10 +13,6 @@ import { keymap } from "@codemirror/view"
 import { javascript } from "@codemirror/lang-javascript"
 
 import * as random from "lib0/random"
-import * as decoding from "lib0/decoding"
-
-import { ShapeData } from "./ydoc-shape"
-import { fromBase64 } from "lib0/buffer"
 
 const room = `electric-demo`
 
@@ -31,15 +27,10 @@ const usercolors = [
 
 const userColor = usercolors[random.uint32() % usercolors.length]
 const ydoc = new Y.Doc()
-let network: ElectricProvider | null = null
+let network: ElectricProvider | undefined
+let awareness: Awareness | undefined
 
-export default function ElectricEditor({
-  docShape,
-  awarenessShape,
-}: {
-  docShape?: ShapeData
-  awarenessShape?: ShapeData
-}) {
+export default function ElectricEditor() {
   const editor = useRef(null)
 
   const [connect, setConnect] = useState(`connected`)
@@ -59,35 +50,25 @@ export default function ElectricEditor({
       return
     }
 
-    if (typeof window !== `undefined` && network === null) {
-      // initDoc(ydoc, docShape.data)
-      const awareness = new Awareness(ydoc)
-      // initAwareness(awareness, awarenessShape.data)
-
-      const opts = {
-        connect: true,
-        awareness,
-        // resume: {
-        //   operations: docShape.resume,
-        //   awareness: awarenessShape.resume,
-        // },
-      }
-
+    if (typeof window !== `undefined` && !network) {
+      awareness = new Awareness(ydoc)
       network = new ElectricProvider(
-        `${process.env.ELECTRIC_URL || `http://localhost:3000`}`,
+        new URL(`/shape-proxy`, window?.location.origin).href,
         room,
         ydoc,
-        opts
+        {
+          connect: true,
+          awareness,
+        }
       )
+      awareness?.setLocalStateField(`user`, {
+        name: userColor.color,
+        color: userColor.color,
+        colorLight: userColor.light,
+      })
     }
 
     const ytext = ydoc.getText(room)
-
-    network?.awareness.setLocalStateField(`user`, {
-      name: userColor.color,
-      color: userColor.color,
-      colorLight: userColor.light,
-    })
 
     const state = EditorState.create({
       doc: ytext.toString(),
@@ -96,7 +77,7 @@ export default function ElectricEditor({
         basicSetup,
         javascript(),
         EditorView.lineWrapping,
-        yCollab(ytext, network?.awareness),
+        yCollab(ytext, awareness),
       ],
     })
 
@@ -114,27 +95,10 @@ export default function ElectricEditor({
       </form>
       <p>
         This is a demo of <a href="https://github.com/yjs/yjs">Yjs</a> shared
-        editor synching with {` `}
+        editor syncing with {` `}
         <a href="https://github.com/electric-sql/electric">Electric</a>.
       </p>
       <div ref={editor}></div>
     </div>
   )
-}
-
-const initDoc = (ydoc: Y.Doc, data: string) => {
-  const decoder = decoding.createDecoder(fromBase64(data))
-  decoding.readVarUint(decoder)
-  Y.applyUpdate(ydoc, decoding.readVarUint8Array(decoder), `server`)
-}
-
-const initAwareness = (awareness: Awareness, data: string) => {
-  for (const client of JSON.parse(data)) {
-    const decoder = decoding.createDecoder(fromBase64(client))
-    applyAwarenessUpdate(
-      awareness,
-      decoding.readVarUint8Array(decoder),
-      `server`
-    )
-  }
 }
