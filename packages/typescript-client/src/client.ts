@@ -39,14 +39,10 @@ import {
 } from './constants'
 
 const RESERVED_PARAMS = new Set([
-  COLUMNS_QUERY_PARAM,
   LIVE_CACHE_BUSTER_QUERY_PARAM,
   SHAPE_HANDLE_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
-  TABLE_QUERY_PARAM,
-  WHERE_QUERY_PARAM,
-  REPLICA_PARAM,
 ])
 
 type Replica = `full` | `default`
