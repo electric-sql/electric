@@ -1,6 +1,11 @@
 import React, { useOptimistic, useTransition } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { matchBy, matchStream } from '@electric-sql/client'
+import {
+  Row,
+  ShapeStreamInterface,
+  matchBy,
+  matchStream,
+} from '@electric-sql/client'
 import { useShape } from '@electric-sql/react'
 import api from '../../shared/app/client'
 
@@ -10,7 +15,7 @@ type Todo = {
   id: string
   title: string
   completed: boolean
-  created_at: string
+  created_at: Date
 }
 
 type OptimisticState = {
@@ -30,11 +35,12 @@ export default function OptimisticState() {
   const { isLoading, data, stream } = useShape<Todo>({
     url: `${ELECTRIC_URL}/v1/shape`,
     table: 'todos',
+    parser: {
+      timestamptz: (value: string) => new Date(value),
+    },
   })
 
-  const sorted = data
-    ? data.sort((a, b) => a.created_at.localeCompare(b.created_at))
-    : []
+  const sorted = data ? data.sort((a, b) => +a.created_at - +b.created_at) : []
 
   // Use React's built in `useOptimistic` hook. This provides
   // a mechanism to apply local optimistic state whilst writes
@@ -82,6 +88,7 @@ export default function OptimisticState() {
     const data = {
       id: uuidv4(),
       title: title,
+      created_at: new Date(),
     }
 
     startTransition(async () => {
@@ -90,13 +97,12 @@ export default function OptimisticState() {
         value: {
           ...data,
           completed: false,
-          created_at: new Date().toISOString(),
         },
       })
 
       const fetchPromise = api.request(path, 'POST', data)
       const syncPromise = matchStream(
-        stream,
+        stream as ShapeStreamInterface<Row>,
         ['insert'],
         matchBy('id', data.id)
       )
@@ -108,24 +114,27 @@ export default function OptimisticState() {
   }
 
   async function updateTodo(todo: Todo) {
-    const path = `/todos/${todo.id}`
+    const { id, completed } = todo
 
+    const path = `/todos/${id}`
     const data = {
-      ...todo,
-      completed: !todo.completed,
+      completed: !completed,
     }
 
     startTransition(async () => {
       addOptimisticState({
         operation: 'update',
-        value: data,
+        value: {
+          ...todo,
+          completed: !completed,
+        },
       })
 
       const fetchPromise = api.request(path, 'PUT', data)
       const syncPromise = matchStream(
-        stream,
+        stream as ShapeStreamInterface<Row>,
         ['update'],
-        matchBy('id', todo.id)
+        matchBy('id', id)
       )
 
       await Promise.all([fetchPromise, syncPromise])
@@ -135,20 +144,23 @@ export default function OptimisticState() {
   async function deleteTodo(event: React.MouseEvent, todo: Todo) {
     event.preventDefault()
 
-    const path = `/todos/${todo.id}`
-    const data = { ...todo }
+    const { id } = todo
+
+    const path = `/todos/${id}`
 
     startTransition(async () => {
       addOptimisticState({
         operation: 'delete',
-        value: data,
+        value: {
+          ...todo,
+        },
       })
 
       const fetchPromise = api.request(path, 'DELETE')
       const syncPromise = matchStream(
-        stream,
+        stream as ShapeStreamInterface<Row>,
         ['delete'],
-        matchBy('id', todo.id)
+        matchBy('id', id)
       )
 
       await Promise.all([fetchPromise, syncPromise])
@@ -177,8 +189,8 @@ export default function OptimisticState() {
               <input type="checkbox" checked={todo.completed}
                   onChange={() => updateTodo(todo)}
               />
-              <span className={`title ${todo.completed ? 'completed' : ''}`}>
-                { todo.title }
+              <span className={`title ${ todo.completed ? 'completed' : '' }`}>
+                { todo.title }: { todo.created_at.toISOString() }
               </span>
             </label>
             <a href="#delete" className="close"

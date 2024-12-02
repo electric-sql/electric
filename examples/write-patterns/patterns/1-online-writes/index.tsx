@@ -9,7 +9,7 @@ type Todo = {
   id: string
   title: string
   completed: boolean
-  created_at: number
+  created_at: Date
 }
 
 export default function OnlineWrites() {
@@ -18,9 +18,12 @@ export default function OnlineWrites() {
   const { isLoading, data } = useShape<Todo>({
     url: `${ELECTRIC_URL}/v1/shape`,
     table: 'todos',
+    parser: {
+      timestamptz: (value: string) => new Date(value),
+    },
   })
 
-  const todos = data ? data.sort((a, b) => a.created_at - b.created_at) : []
+  const todos = data ? data.sort((a, b) => +a.created_at - +b.created_at) : []
 
   // Handle user input events by making requests to the backend
   // API to create, update and delete todos.
@@ -36,6 +39,7 @@ export default function OnlineWrites() {
     const data = {
       id: uuidv4(),
       title: title,
+      created_at: new Date(),
     }
 
     await api.request(path, 'POST', data)
@@ -47,7 +51,6 @@ export default function OnlineWrites() {
     const path = `/todos/${todo.id}`
 
     const data = {
-      ...todo,
       completed: !todo.completed,
     }
 
@@ -77,8 +80,8 @@ export default function OnlineWrites() {
               <input type="checkbox" checked={todo.completed}
                   onChange={() => updateTodo(todo)}
               />
-              <span className={`title ${todo.completed ? 'completed' : ''}`}>
-                { todo.title }
+              <span className={`title ${ todo.completed ? 'completed' : '' }`}>
+                { todo.title }: { todo.created_at.toISOString() }
               </span>
             </label>
             <a href="#delete" className="close"
