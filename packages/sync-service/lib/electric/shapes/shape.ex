@@ -213,22 +213,22 @@ defmodule Electric.Shapes.Shape do
 
   def convert_change(%__MODULE__{}, %Changes.TruncatedRelation{} = change), do: [change]
 
-  def convert_change(%__MODULE__{selected_columns: selected_columns} = shape, change)
+  def convert_change(%__MODULE__{where: where, selected_columns: selected_columns}, change)
       when is_struct(change, Changes.NewRecord)
       when is_struct(change, Changes.DeletedRecord) do
     record = if is_struct(change, Changes.NewRecord), do: change.record, else: change.old_record
 
-    if WhereClause.includes_record?(shape.where, record),
+    if WhereClause.includes_record?(where, record),
       do: [filter_change_columns(selected_columns, change)],
       else: []
   end
 
   def convert_change(
-        %__MODULE__{selected_columns: selected_columns} = shape,
+        %__MODULE__{where: where, selected_columns: selected_columns},
         %Changes.UpdatedRecord{old_record: old_record, record: record} = change
       ) do
-    old_record_in_shape = WhereClause.includes_record?(shape.where, old_record)
-    new_record_in_shape = WhereClause.includes_record?(shape.where, record)
+    old_record_in_shape = WhereClause.includes_record?(where, old_record)
+    new_record_in_shape = WhereClause.includes_record?(where, record)
 
     converted_changes =
       case {old_record_in_shape, new_record_in_shape} do
