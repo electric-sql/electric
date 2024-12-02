@@ -1,17 +1,7 @@
 defmodule Electric.Shapes.Dispatcher do
-  # TODO : Update @moduledoc
   @moduledoc """
-  Dispatches transactions and relations to consumers filtered according to the
-  subscriber's `selector` function.
-
-  To receive all messages, don't pass a selector function or use `nil`, e.g.
-
-  ```
-  def init(producer) do
-    {:consumer, :nostate, subscribe_to: [{producer, [max_demand: 1, selector: nil]}]}
-  end
-
-  ```
+  Dispatches transactions and relations to consumers filtered using `Filter`
+  and the consumer's shape.
 
   The essential behaviour is that the dispatcher only asks the producer for
   more demand once all relevant subscribers have processed the last message and
