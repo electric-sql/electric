@@ -45,7 +45,6 @@ defmodule Electric.Shapes.FilterTest do
              }
     end
 
-    # TODO optimise nil where clause
     test "with `constant = field` where clause" do
       shape = Shape.new!("the_table", where: "1 = id", inspector: @inspector)
 
@@ -494,8 +493,6 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.affected_shapes(filter, relation) ==
                MapSet.new(["shape1", "shape2", "shape3", "shape4"])
     end
-
-    # TODO: Also go through Shape.convert_change tests to see if all scenarious are covered here
 
     test "returns shapes affected by truncation" do
       filter = %Filter{
