@@ -10,7 +10,7 @@ export const Example = () => {
     url: `${baseUrl}/v1/shape`,
     params: {
       table: `items`,
-    }
+    },
   })
 
   return (
