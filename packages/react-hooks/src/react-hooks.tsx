@@ -23,8 +23,8 @@ export async function preloadShape<T extends Row<unknown> = Row>(
   return shape
 }
 
-function sortObjectKeys(obj) {
-  if (typeof obj !== 'object' || obj === null) return obj
+function sortObjectKeys(obj: any): any {
+  if (typeof obj !== `object` || obj === null) return obj
 
   if (Array.isArray(obj)) {
     return obj.map(sortObjectKeys)
@@ -32,7 +32,7 @@ function sortObjectKeys(obj) {
 
   return Object.keys(obj)
     .sort()
-    .reduce((sorted, key) => {
+    .reduce<Record<string, any>>((sorted, key) => {
       sorted[key] = sortObjectKeys(obj[key])
       return sorted
     }, {})
