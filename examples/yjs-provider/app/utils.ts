@@ -1,14 +1,12 @@
 import { toBase64 } from "lib0/buffer"
 import * as decoding from "lib0/decoding"
 
-export const room = `electric-demo`
-
-const hexStringToUint8Array = (hexString) => {
+const hexStringToUint8Array = (hexString: string) => {
   const cleanHexString = hexString.startsWith(`\\x`)
     ? hexString.slice(2)
     : hexString
   return new Uint8Array(
-    cleanHexString.match(/.{1,2}/g).map((byte) => parseInt(byte, 16))
+    cleanHexString.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16))
   )
 }
 
@@ -17,14 +15,14 @@ export const parseToUint8Array = {
 }
 
 export const parseToBase64 = {
-  bytea: (hexString) => {
+  bytea: (hexString: string) => {
     const uint8Array = hexStringToUint8Array(hexString)
     return toBase64(uint8Array)
   },
 }
 
 export const parseToDecoder = {
-  bytea: (hexString) => {
+  bytea: (hexString: string) => {
     const uint8Array = hexStringToUint8Array(hexString)
     return decoding.createDecoder(uint8Array)
   },
