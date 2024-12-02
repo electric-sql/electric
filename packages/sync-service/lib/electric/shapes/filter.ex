@@ -61,8 +61,6 @@ defmodule Electric.Shapes.Filter do
     |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
   end
 
-  # TODO: Optimisation: each time a shape is affected, take it out of `other_shapes`
-
   def affected_shapes(%Filter{} = filter, %NewRecord{relation: relation, record: record}) do
     affected_shapes_by_record(filter, relation, record)
   end
@@ -77,8 +75,6 @@ defmodule Electric.Shapes.Filter do
       affected_shapes_by_record(filter, relation, change.old_record)
     )
   end
-
-  # TODO: Optimisation: Do TruncatedRelations first and then just process other changes for other tables
 
   def affected_shapes(%Filter{} = filter, %TruncatedRelation{relation: table_name}) do
     for {shape_id, _shape} <- all_shapes_for_table(filter, table_name),

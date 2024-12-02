@@ -107,7 +107,6 @@ defmodule Electric.Shapes.Filter.Table do
 
   defp other_shapes_affected(%{other_shapes: shapes}, record) do
     for {shape_id, shape} <- shapes,
-        # TODO: Test Shape.record_in_shape? is called
         Shape.record_in_shape?(shape, record),
         into: MapSet.new() do
       shape_id
