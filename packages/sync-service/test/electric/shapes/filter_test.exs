@@ -17,7 +17,10 @@ defmodule Electric.Shapes.FilterTest do
   alias Electric.Shapes.Shape
   alias Support.StubInspector
 
-  @inspector StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+  @inspector StubInspector.new([
+               %{name: "id", type: "int8", pk_position: 0},
+               %{name: "an_array", array_type: "int8"}
+             ])
 
   describe "add_shape/2" do
     test "with `field = constant` where clause" do
@@ -42,6 +45,7 @@ defmodule Electric.Shapes.FilterTest do
              }
     end
 
+    # TODO optimise nil where clause
     test "with `constant = field` where clause" do
       shape = Shape.new!("the_table", where: "1 = id", inspector: @inspector)
 
@@ -491,7 +495,6 @@ defmodule Electric.Shapes.FilterTest do
                MapSet.new(["shape1", "shape2", "shape3", "shape4"])
     end
 
-    # TODO: Also go through Shape.is_affected_by_relation_change? tests to see if all scenarious are covered here
     # TODO: Also go through Shape.convert_change tests to see if all scenarious are covered here
 
     test "returns shapes affected by truncation" do
@@ -571,7 +574,10 @@ defmodule Electric.Shapes.FilterTest do
           %{where: "id = 7 AND id > 8", record: %{"id" => "7"}, affected: false},
           %{where: "id > 1 AND id = 7", record: %{"id" => "7"}, affected: true},
           %{where: "id > 1 AND id = 7", record: %{"id" => "8"}, affected: false},
-          %{where: "id > 8 AND id = 7", record: %{"id" => "7"}, affected: false}
+          %{where: "id > 8 AND id = 7", record: %{"id" => "7"}, affected: false},
+          %{where: "an_array = '{1}'", record: %{"an_array" => "{1}"}, affected: true},
+          %{where: "an_array = '{1}'", record: %{"an_array" => "{2}"}, affected: false},
+          %{where: "an_array = '{1}'", record: %{"an_array" => "{1,2}"}, affected: false}
         ] do
       test "where: #{test.where}, record: #{inspect(test.record)}" do
         %{where: where, record: record, affected: affected} = unquote(Macro.escape(test))
