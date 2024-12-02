@@ -6,7 +6,7 @@ defmodule Electric.Plug.ServeShapePlug do
   import Plug.Conn, except: [halt: 1]
 
   alias Electric.Plug.Utils
-  import Electric.Plug.Utils, only: [hold_conn_until_stack_ready: 2]
+  import Electric.Plug.Utils, only: [hold_conn_until_stack_ready: 2, otel_attrs: 1]
   alias Electric.Shapes
   alias Electric.Schema
   alias Electric.Replication.LogOffset
@@ -152,7 +152,6 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   plug :fetch_query_params
-  plug :init_otel_attrs
 
   # start_telemetry_span needs to always be the first plug after fetching query params and OTEL attributes
   plug :start_telemetry_span
@@ -175,18 +174,6 @@ defmodule Electric.Plug.ServeShapePlug do
   # end_telemetry_span needs to always be the last plug here.
   plug :end_telemetry_span
 
-  # Set an empty keyword list of OTEL attributes if none are provided
-  defp init_attrs(nil), do: []
-  defp init_attrs(attrs), do: attrs
-
-  defp init_otel_attrs(%Conn{} = conn, _) do
-    conn
-    |> assign(
-      :config,
-      conn.assigns.config ++ [otel_attrs: init_attrs(conn.assigns.config[:otel_attrs])]
-    )
-  end
-
   defp validate_query_params(%Conn{} = conn, _) do
     Logger.info("Query String: #{conn.query_string}")
 
@@ -208,7 +195,7 @@ defmodule Electric.Plug.ServeShapePlug do
   defp load_shape_info(%Conn{} = conn, _) do
     OpenTelemetry.with_span(
       "shape_get.plug.load_shape_info",
-      conn.assigns.config[:otel_attrs],
+      otel_attrs(conn),
       fn ->
         shape_info = get_or_create_shape_handle(conn.assigns)
         handle_shape_info(conn, shape_info)
@@ -423,7 +410,7 @@ defmodule Electric.Plug.ServeShapePlug do
   defp serve_log_or_snapshot(%Conn{assigns: %{offset: @before_all_offset}} = conn, _) do
     OpenTelemetry.with_span(
       "shape_get.plug.serve_snapshot",
-      conn.assigns.config[:otel_attrs],
+      otel_attrs(conn),
       fn -> serve_snapshot(conn) end
     )
   end
@@ -432,7 +419,7 @@ defmodule Electric.Plug.ServeShapePlug do
   defp serve_log_or_snapshot(conn, _) do
     OpenTelemetry.with_span(
       "shape_get.plug.serve_shape_log",
-      conn.assigns.config[:otel_attrs],
+      otel_attrs(conn),
       fn -> serve_shape_log(conn) end
     )
   end
@@ -528,7 +515,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
         OpenTelemetry.with_span(
           "shape_get.plug.stream_chunk",
-          conn.assigns.config[:otel_attrs] ++ [chunk_size: chunk_size],
+          Map.merge(otel_attrs(conn), %{chunk_size: chunk_size}),
           fn ->
             case chunk(conn, chunk) do
               {:ok, conn} ->
@@ -614,10 +601,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
     maybe_up_to_date = if up_to_date = assigns[:up_to_date], do: up_to_date != []
 
-    otel_attrs = assigns.config[:otel_attrs] |> Enum.into(%{})
-
     Electric.Plug.Utils.common_open_telemetry_attrs(conn)
-    |> Map.merge(otel_attrs)
     |> Map.merge(%{
       "shape.handle" => shape_handle,
       "shape.where" => assigns[:where],

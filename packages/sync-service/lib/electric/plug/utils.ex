@@ -75,6 +75,8 @@ defmodule Electric.Plug.Utils do
 
   alias OpenTelemetry.SemConv, as: SC
 
+  def otel_attrs(%Plug.Conn{} = conn), do: Map.get(conn.private, :telemetry_span_attrs, %{})
+
   def common_open_telemetry_attrs(%Plug.Conn{assigns: assigns} = conn) do
     query_params_map =
       if is_struct(conn.query_params, Plug.Conn.Unfetched) do
@@ -109,7 +111,7 @@ defmodule Electric.Plug.Utils do
         |> to_string()
     }
     |> Map.filter(fn {_k, v} -> not is_nil(v) end)
-    |> Map.merge(Map.get(conn.private, :telemetry_span_attrs, %{}))
+    |> Map.merge(otel_attrs(conn))
     |> Map.merge(query_params_map)
     |> Map.merge(Map.new(conn.req_headers, fn {k, v} -> {"http.request.header.#{k}", v} end))
     |> Map.merge(Map.new(conn.resp_headers, fn {k, v} -> {"http.response.header.#{k}", v} end))
