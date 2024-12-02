@@ -51,6 +51,29 @@ const RESERVED_PARAMS = new Set([
 
 type Replica = `full` | `default`
 
+/**
+ * PostgreSQL-specific shape parameters
+ */
+type PostgresShapeParams = {
+  /** The root table for the shape */
+  table?: string
+  
+  /** The where clauses for the shape */
+  where?: string
+  
+  /** 
+   * The columns to include in the shape.
+   * Must include primary keys, and can only include valid columns.
+   */
+  columns?: string[]
+  
+  /** 
+   * If `default`, Electric will only send changed columns in an update.
+   * If `full`, Electric will send the entire row with both changed and unchanged values.
+   */
+  replica?: Replica
+}
+
 type ReservedParamKeys =
   | typeof COLUMNS_QUERY_PARAM
   | typeof LIVE_CACHE_BUSTER_QUERY_PARAM
@@ -61,12 +84,13 @@ type ReservedParamKeys =
   | typeof WHERE_QUERY_PARAM
   | typeof REPLICA_PARAM
 
-type ParamsRecord = Omit<Record<string, string>, ReservedParamKeys>
+type ParamsRecord = Omit<Record<string, string>, ReservedParamKeys> & Partial<PostgresShapeParams>
 
 type RetryOpts = {
   params?: ParamsRecord
   headers?: Record<string, string>
 }
+
 type ShapeStreamErrorHandler = (
   error: Error
 ) => void | RetryOpts | Promise<void | RetryOpts>
@@ -80,34 +104,6 @@ export interface ShapeStreamOptions<T = never> {
    * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape`
    */
   url: string
-
-  /**
-   * The root table for the shape. Passed as a query parameter. Not required if you set the table in your proxy.
-   */
-  table?: string
-
-  /**
-   * The where clauses for the shape.
-   */
-  where?: string
-
-  /**
-   * The columns to include in the shape.
-   * Must include primary keys, and can only inlude valid columns.
-   */
-  columns?: string[]
-
-  /**
-   * If `replica` is `default` (the default) then Electric will only send the
-   * changed columns in an update.
-   *
-   * If it's `full` Electric will send the entire row with both changed and
-   * unchanged values.
-   *
-   * Setting `replica` to `full` will obviously result in higher bandwidth
-   * usage and so is not recommended.
-   */
-  replica?: Replica
 
   /**
    * The "offset" on the shape log. This is typically not set as the ShapeStream
@@ -135,7 +131,10 @@ export interface ShapeStreamOptions<T = never> {
    * Additional request parameters to attach to the URL.
    * These will be merged with Electric's standard parameters.
    * Note: You cannot use Electric's reserved parameter names
-   * (table, where, columns, offset, handle, live, cursor, replica).
+   * (offset, handle, live, cursor).
+   * 
+   * PostgreSQL-specific options like table, where, columns, and replica
+   * should be specified here.
    */
   params?: ParamsRecord
 
@@ -292,7 +291,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         (!this.options.signal?.aborted && !this.#isUpToDate) ||
         this.options.subscribe
       ) {
-        const { url, table, where, columns, signal } = this.options
+        const { url, signal } = this.options
 
         const fetchUrl = new URL(url)
 
@@ -313,11 +312,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
           }
         }
 
+        // Add PostgreSQL-specific parameters from params
+        const params = this.options.params || {}
+        if (params.table) fetchUrl.searchParams.set(TABLE_QUERY_PARAM, params.table)
+        if (params.where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, params.where)
+        if (params.columns && params.columns.length > 0)
+          fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, params.columns.join(`,`))
+        if (params.replica && params.replica !== ShapeStream.Replica.DEFAULT) {
+          fetchUrl.searchParams.set(REPLICA_PARAM, params.replica)
+        }
+
         // Add Electric's internal parameters
-        if (table) fetchUrl.searchParams.set(TABLE_QUERY_PARAM, table)
-        if (where) fetchUrl.searchParams.set(WHERE_QUERY_PARAM, where)
-        if (columns && columns.length > 0)
-          fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, columns.join(`,`))
         fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
 
         if (this.#isUpToDate) {
@@ -334,13 +339,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
             SHAPE_HANDLE_QUERY_PARAM,
             this.#shapeHandle!
           )
-        }
-
-        if (
-          (this.#replica ?? ShapeStream.Replica.DEFAULT) !=
-          ShapeStream.Replica.DEFAULT
-        ) {
-          fetchUrl.searchParams.set(REPLICA_PARAM, this.#replica as string)
         }
 
         // sort query params in-place for stable URLs and improved cache hits
