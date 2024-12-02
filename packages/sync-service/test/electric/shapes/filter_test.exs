@@ -573,6 +573,7 @@ defmodule Electric.Shapes.FilterTest do
           %{where: "id > 8 AND id = 7", record: %{"id" => "7"}, affected: false},
           %{where: "id = 7", record: %{"id" => "invalid_value"}, affected: true}
         ] do
+      @tag :capture_log
       test "where: #{test.where}, record: #{inspect(test.record)}" do
         %{where: where, record: record, affected: affected} = unquote(Macro.escape(test))
 
