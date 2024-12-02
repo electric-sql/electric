@@ -58,7 +58,6 @@ defmodule Electric.Shapes.Filter.Table do
 
   defp optimise_where(%Expr{eval: eval}), do: optimise_where(eval)
 
-  # TODO: Is this really ~s("=") or is it just "="?
   defp optimise_where(%Func{
          name: ~s("="),
          args: [%Ref{path: [field], type: type}, %Const{value: value}]
