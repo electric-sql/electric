@@ -30,6 +30,12 @@ defmodule Electric.Shapes.Filter do
   @spec empty() :: Filter.t()
   def empty, do: %Filter{}
 
+  @doc """
+  Add a shape for the filter to track.
+
+  The `shape_id` can be any term you like to identify the shape. Whatever you use will be returned
+  by `affected_shapes/2` when the shape is affected by a change.
+  """
   @spec add_shape(Filter.t(), shape_id(), Shape.t()) :: Filter.t()
   def add_shape(%Filter{tables: tables}, shape_id, shape) do
     %Filter{
@@ -45,6 +51,9 @@ defmodule Electric.Shapes.Filter do
     }
   end
 
+  @doc """
+  Remove a shape from the filter.
+  """
   @spec remove_shape(Filter.t(), shape_id()) :: Filter.t()
   def remove_shape(%Filter{tables: tables}, shape_id) do
     %Filter{
@@ -58,6 +67,10 @@ defmodule Electric.Shapes.Filter do
     }
   end
 
+  @doc """
+  Returns the shape IDs for all shapes that have been added to the filter
+  that are affected by the given change.
+  """
   @spec affected_shapes(Filter.t(), Changes.change()) :: MapSet.t(shape_id())
   def affected_shapes(%Filter{} = filter, change) do
     shapes_affected_by_change(filter, change)
