@@ -196,14 +196,14 @@ type ShapeStreamErrorHandler = (
 ) => void | RetryOpts | Promise<void | RetryOpts>
 ```
 
-Note that certain parameter names are reserved for Electric's internal use and cannot be used in custom params outside of the `params` object:
+Note that certain parameter names are reserved for Electric's internal use and cannot be used in custom params:
 - `offset`
 - `handle`
 - `live`
 - `cursor`
 - `database_id`
 
-The following PostgreSQL-specific parameters should now be included within the `params` object:
+The following PostgreSQL-specific parameters should be included within the `params` object:
 - `table` - The root table for the shape
 - `where` - SQL where clause for filtering rows
 - `columns` - List of columns to include
@@ -456,81 +456,3 @@ The following error types may be encountered:
 - `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
 
 See the [Examples](https://github.com/electric-sql/electric/tree/main/examples) and [integrations](/docs/integrations/react) for more usage examples.
-
-#### Authentication
-
-You can add authentication headers to the requests:
-
-```typescript
-const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
-  params: {
-    table: 'users'
-  },
-  headers: {
-    'Authorization': 'Bearer token'
-  }
-})
-```
-
-#### Custom Parsing
-
-The client provides basic parsing for common Postgres types. You can override this with your own parsing logic:
-
-```typescript
-const stream = new ShapeStream({
-  url: `http://localhost:3000/v1/shape`,
-  params: {
-    table: `users`
-  },
-  parser: {
-    bool: (value: string) => value === `true` ? 1 : 0
-  }
-})
-```
-
-#### Error Handling
-
-The ShapeStream provides several ways to handle errors:
-
-```typescript
-const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
-  params: {
-    table: 'users'
-  },
-  onError: (error) => {
-    if (error instanceof FetchError) {
-      // Handle fetch errors
-      console.error('Fetch error:', error.message)
-      
-      // Optionally return new params or headers to retry with
-      return {
-        params: {
-          table: 'users_backup'
-        },
-        headers: {
-          'Authorization': 'new-token'
-        }
-      }
-    }
-    
-    // Handle other errors
-    console.error('Stream error:', error)
-  }
-})
-```
-
-#### Offline Support
-
-For offline support, you can use the `offset` and `shapeId` parameters:
-
-```typescript
-const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
-  params: {
-    table: 'users'
-  },
-  offset: lastKnownOffset,
-  shapeId: lastKnownShapeId
-})
