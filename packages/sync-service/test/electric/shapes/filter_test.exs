@@ -251,7 +251,13 @@ defmodule Electric.Shapes.FilterTest do
     # 1μs per change is a desirable and achievable target for replication stream processing.
     # If optimised processing becomes slower than this we should discuss as a team to see if
     # the performance is acceptable.
-    @shape_count 300
+    #
+    # @shape_count is set to 1000. This is somewhat arbitrary but is a reasonable number of shapes.
+    # The main point is we don't want to linearly scale with the number of shapes, we want
+    # O(1) or at worst O(log n) performance, so if we have that 1000 or 10_000 shapes should be easy
+    # to keep to a microsecond per change. 10_000 shapes makes for a slow test though as the setup
+    # time (n Filter.add_shape calls) is slow.
+    @shape_count 1000
     @max_reductions 400
 
     test "where clause in the form `field = const` is optimised" do
