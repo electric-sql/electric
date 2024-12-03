@@ -1,5 +1,22 @@
 # @core/sync-service
 
+## 0.9.4
+
+### Patch Changes
+
+- 3584f67: Validate that user provided offset is not bigger than the shape's latest offset.
+- 0dc844f: Remove redundant spans in open telemetry tracing.
+- a16ab24: feat: add more telemetry
+- 3c24208: Clean up directories when removing shapes.
+  Remove corrupted shapes from store when recovery fails.
+- 4e50204: Telemetry for reporting replication lag.
+- 704ac91: Include caching headers on 304 responses to prevent client from rechecking the previously cached ones over and over again.
+- ceec2d4: Assume process is not alive if registry is not alive.
+- 37b4256: Improved replication steam processing for where clauses in the form `field = const` or `field = const AND another_condition`
+- 64fe275: Restore the automatic fallback to unencrypted database connections when SSL isn't available.
+- 5b1c3e6: Resolve naming confusion between `ELECTRIC_LOG_CHUNK_BYTES_THRESHOLD` and logging-related configuration options. Add `ELECTRIC_` prefix to `LOG_LEVEL` to `LOG_OTP_REPORTS` config options. Introduce a new config option named `ELECTRIC_LOG_COLORS`.
+- e815b91: Log error but don't fall over if failing to initialise recovered shape
+
 ## 0.9.3
 
 ### Patch Changes
