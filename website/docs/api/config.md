@@ -347,3 +347,5 @@ These environment variables allow configuration of anonymous usage data reportin
     example="true">
 
 Configure anonymous usage data about the instance being sent to a central checkpoint service. Collected information is anonymised and doesn't contain any information from the replicated data. You can read more about it in our [telemetry docs](../reference/telemetry.md#anonymous-usage-data).
+
+</EnvVarConfig>
