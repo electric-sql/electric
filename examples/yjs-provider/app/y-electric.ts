@@ -9,6 +9,7 @@ import * as Y from "yjs"
 import {
   FetchError,
   isChangeMessage,
+  isControlMessage,
   Message,
   ShapeStream,
 } from "@electric-sql/client"
@@ -237,12 +238,11 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
               this.doc,
               this
             )
-            if (
-              syncMessageType === syncProtocol.messageYjsSyncStep2 &&
-              !this.synced
-            ) {
-              this.synced = true
-            }
+          } else if (
+            isControlMessage(message) &&
+            message.headers.control === "up-to-date"
+          ) {
+            this.synced = true
           }
         })
       }
