@@ -100,7 +100,7 @@ defmodule Electric.Telemetry do
             keep: &(Map.get(&1, :live, false) || false)
           ),
         served_bytes: sum("electric.plug.serve_shape.bytes", unit: :byte),
-        replication_lag: summary("electric.postgres.replication.lag", unit: :byte)
+        wal_size: summary("electric.postgres.replication.wal_size", unit: :byte)
       ]
     ]
   end
