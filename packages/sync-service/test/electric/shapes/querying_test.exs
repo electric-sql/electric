@@ -51,7 +51,7 @@ defmodule Electric.Shapes.QueryingTest do
                headers: %{operation: "insert", relation: ["public", "items"]},
                offset: "0_0"
              }
-           ] == decode_stream(Querying.stream_initial_data(conn, shape))
+           ] == decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
   end
 
   test "respects the where clauses", %{db_conn: conn} do
@@ -72,7 +72,7 @@ defmodule Electric.Shapes.QueryingTest do
     assert [
              %{key: ~S["public"."items"/"4"], value: %{value: "4"}},
              %{key: ~S["public"."items"/"5"], value: %{value: "5"}}
-           ] = decode_stream(Querying.stream_initial_data(conn, shape))
+           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
   end
 
   test "allows column names to have special characters", %{db_conn: conn} do
@@ -97,7 +97,7 @@ defmodule Electric.Shapes.QueryingTest do
 
     assert [
              %{key: ~S["public"."items"/"1"], value: %{"col with \"' in it": "1"}}
-           ] = decode_stream(Querying.stream_initial_data(conn, shape))
+           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
   end
 
   test "works with composite PKs", %{db_conn: conn} do
@@ -125,7 +125,7 @@ defmodule Electric.Shapes.QueryingTest do
     assert [
              %{key: ~S["public"."items"/"1"/"2"], value: %{test: "1"}},
              %{key: ~S["public"."items"/"3"/"4"], value: %{test: "2"}}
-           ] = decode_stream(Querying.stream_initial_data(conn, shape))
+           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
   end
 
   test "works with null values & values with special characters", %{db_conn: conn} do
@@ -152,7 +152,7 @@ defmodule Electric.Shapes.QueryingTest do
              %{key: ~S["public"."items"/"1"], value: %{value: "1"}},
              %{key: ~S["public"."items"/"2"], value: %{value: nil}},
              %{key: ~S["public"."items"/"3"], value: %{value: ~s["test\\x0001\n"]}}
-           ] = decode_stream(Querying.stream_initial_data(conn, shape))
+           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
   end
 
   defp decode_stream(stream),
