@@ -1,5 +1,12 @@
 # @core/elixir-client
 
+## 0.2.4
+
+### Patch Changes
+
+- ea5d03f: Fix mishandling of 400s - should terminate
+- af0c0bf: Always use sorted query parameters in official clients to ensure Shape URLs are cached consistently.
+
 ## 0.2.3
 
 ### Patch Changes
