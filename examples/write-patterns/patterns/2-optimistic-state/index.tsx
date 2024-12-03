@@ -1,11 +1,6 @@
 import React, { useOptimistic, useTransition } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import {
-  Row,
-  ShapeStreamInterface,
-  matchBy,
-  matchStream,
-} from '@electric-sql/client'
+import { matchBy, matchStream } from '@electric-sql/client'
 import { useShape } from '@electric-sql/react'
 import api from '../../shared/app/client'
 
@@ -102,7 +97,7 @@ export default function OptimisticState() {
 
       const fetchPromise = api.request(path, 'POST', data)
       const syncPromise = matchStream(
-        stream as ShapeStreamInterface<Row>,
+        stream,
         ['insert'],
         matchBy('id', data.id)
       )
@@ -132,7 +127,7 @@ export default function OptimisticState() {
 
       const fetchPromise = api.request(path, 'PUT', data)
       const syncPromise = matchStream(
-        stream as ShapeStreamInterface<Row>,
+        stream,
         ['update'],
         matchBy('id', id)
       )
@@ -158,7 +153,7 @@ export default function OptimisticState() {
 
       const fetchPromise = api.request(path, 'DELETE')
       const syncPromise = matchStream(
-        stream as ShapeStreamInterface<Row>,
+        stream,
         ['delete'],
         matchBy('id', id)
       )
