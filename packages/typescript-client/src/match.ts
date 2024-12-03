@@ -1,9 +1,14 @@
 import { isChangeMessage } from './helpers'
-
 import { type ShapeStreamInterface } from './client'
-import { type ChangeMessage, type Operation, type Row } from './types'
+import {
+  type ChangeMessage,
+  type GetExtensions,
+  type Operation,
+  type Row,
+  type Value
+} from './types'
 
-export function matchStream<T extends Row>(
+export function matchStream<T extends Row<unknown>>(
   stream: ShapeStreamInterface<T>,
   operations: Array<Operation>,
   matchFn: (message: ChangeMessage<T>) => boolean,
@@ -40,6 +45,9 @@ export function matchStream<T extends Row>(
   })
 }
 
-export function matchBy(column: string, value: any): (message: ChangeMessage) => boolean {
+export function matchBy<T extends Row<unknown>>(
+  column: string,
+  value: Value<GetExtensions<T>>,
+): (message: ChangeMessage<T>) => boolean {
   return (message) => message.value[column] === value
 }
