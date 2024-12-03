@@ -8,7 +8,7 @@ if config_env() in [:dev, :test] do
 end
 
 log_level_config =
-  env!("LOG_LEVEL", :string, "info")
+  env!("ELECTRIC_LOG_LEVEL", :string, "info")
   |> Electric.ConfigParser.parse_log_level()
 
 case log_level_config do
@@ -17,6 +17,10 @@ case log_level_config do
 
   {:error, message} ->
     raise message
+end
+
+if !env!("ELECTRIC_LOG_COLORS", :boolean, true) do
+  config :logger, :default_formatter, colors: [enabled: false]
 end
 
 # Enable this to get **very noisy** but useful messages from BEAM about
@@ -140,7 +144,7 @@ persistent_kv =
 
 chunk_bytes_threshold =
   env!(
-    "ELECTRIC_LOG_CHUNK_BYTES_THRESHOLD",
+    "ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD",
     :integer,
     Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
   )
