@@ -19,10 +19,6 @@ export async function GET(request: Request) {
     originUrl.searchParams.set(`token`, process.env.ELECTRIC_TOKEN)
   }
 
-  console.log("database_id", process.env.DATABASE_ID)
-  console.log("electric_token", process.env.ELECTRIC_TOKEN)
-  console.log(originUrl.toString())
-
   const newRequest = new Request(originUrl.toString(), {
     method: `GET`,
     headers,
