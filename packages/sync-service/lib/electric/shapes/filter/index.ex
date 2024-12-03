@@ -46,22 +46,8 @@ defmodule Electric.Shapes.Filter.Index do
     }
   end
 
-  def affected_shapes(%Index{values: values, type: type} = index, field, record) do
-    case value_from_record(record, field, type) do
-      {:ok, value} ->
-        shapes_for_value(value, values, record)
-
-      :error ->
-        Logger.error("Could not parse value for field #{inspect(field)} of type #{inspect(type)}")
-        # We can't tell which shapes are affected, the safest thing to do is return all shapes
-        index
-        |> all_shapes()
-        |> MapSet.new(fn {shape_id, _shape} -> shape_id end)
-    end
-  end
-
-  defp shapes_for_value(value, values, record) do
-    case values[value] do
+  def affected_shapes(%Index{values: values, type: type}, field, record) do
+    case Map.get(values, value_from_record(record, field, type)) do
       nil ->
         MapSet.new()
 
@@ -75,7 +61,14 @@ defmodule Electric.Shapes.Filter.Index do
 
   @env Env.new()
   defp value_from_record(record, field, type) do
-    Env.parse_const(@env, record[field], type)
+    case Env.parse_const(@env, record[field], type) do
+      {:ok, value} ->
+        value
+
+      :error ->
+        raise RuntimeError,
+          message: "Could not parse value for field #{inspect(field)} of type #{inspect(type)}"
+    end
   end
 
   def all_shapes(%Index{values: values}) do

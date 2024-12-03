@@ -16,6 +16,8 @@ defmodule Electric.Shapes.Filter.Table do
   alias Electric.Shapes.Filter.Table
   alias Electric.Shapes.WhereClause
 
+  require Logger
+
   defstruct indexes: %{}, other_shapes: %{}
 
   def empty, do: %Table{}
@@ -110,6 +112,17 @@ defmodule Electric.Shapes.Filter.Table do
     |> Enum.map(fn {field, index} -> Index.affected_shapes(index, field, record) end)
     |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
     |> MapSet.union(other_shapes_affected(table, record))
+  rescue
+    error ->
+      Logger.error("""
+      Unexpected error in Filter.Table.affected_shapes:
+      #{Exception.format(:error, error, __STACKTRACE__)}
+      """)
+
+      # We can't tell which shapes are affected, the safest thing to do is return all shapes
+      table
+      |> all_shapes()
+      |> MapSet.new(fn {shape_id, _shape} -> shape_id end)
   end
 
   defp other_shapes_affected(%{other_shapes: shapes}, record) do
