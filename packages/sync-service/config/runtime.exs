@@ -8,7 +8,7 @@ if config_env() in [:dev, :test] do
 end
 
 log_level_config =
-  env!("ELECTRIC_LOG_LEVEL", :string, "info")
+  env!("ELECTRIC_LOGGING_LEVEL", :string, "info")
   |> Electric.ConfigParser.parse_log_level()
 
 case log_level_config do

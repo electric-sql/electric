@@ -331,7 +331,6 @@ By default, coloring is enabled when Electric's stdout is connected to a termina
     example="true">
 
 Enable [OTP SASL](https://www.erlang.org/doc/apps/sasl/sasl_app.html) reporting at runtime.
->>>>>>> 9aefc80ff (Document logging-related config options)
 
 </EnvVarConfig>
 
