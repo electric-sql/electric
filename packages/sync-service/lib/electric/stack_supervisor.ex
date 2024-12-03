@@ -231,7 +231,7 @@ defmodule Electric.StackSupervisor do
 
     if telemetry_span_attrs != %{},
       do:
-        Electric.Telemetry.OpenTelemetry.set_stack_telemetry_span_attrs(
+        Electric.Telemetry.OpenTelemetry.set_stack_span_attrs(
           stack_id,
           telemetry_span_attrs
         )

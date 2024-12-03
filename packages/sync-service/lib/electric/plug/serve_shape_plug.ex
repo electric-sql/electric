@@ -594,7 +594,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
     maybe_up_to_date = if up_to_date = assigns[:up_to_date], do: up_to_date != []
 
-    Electric.Telemetry.OpenTelemetry.get_stack_telemetry_span_attrs(assigns.config[:stack_id])
+    Electric.Telemetry.OpenTelemetry.get_stack_span_attrs(assigns.config[:stack_id])
     |> Map.merge(Electric.Plug.Utils.common_open_telemetry_attrs(conn))
     |> Map.merge(%{
       "shape.handle" => shape_handle,
