@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS todos (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
--- Insert a todo to get started.
+-- Insert some todos to get started.
 INSERT INTO todos (
   id,
   title,

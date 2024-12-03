@@ -22,7 +22,7 @@ const idSchema = z.string().uuid()
 const createSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
-  created_at: z.string(),
+  created_at: z.string()
 })
 const updateSchema = z.object({
   completed: z.boolean()
@@ -37,7 +37,11 @@ const createTodo = async (id, title, created_at) => {
     VALUES ($1, $2, false, $3)
   `
 
-  const params = [id, title, created_at]
+  const params = [
+    id,
+    title,
+    created_at
+  ]
 
   return await db.query(sql, params)
 }
@@ -63,7 +67,7 @@ const deleteTodo = async (id) => {
   return await db.query(sql, params)
 }
 
-// Expose the API.
+// Expose the shared REST API to create, update and delete todos.
 
 app.post(`/todos`, async (req, res) => {
   let data
@@ -117,6 +121,67 @@ app.delete(`/todos/:id`, async (req, res) => {
     await deleteTodo(id)
   }
   catch (err) {
+    return res.status(500).json({ errors: err })
+  }
+
+  return res.status(200).json({ status: 'OK' })
+})
+
+// And expose a `POST /changes` route specifically to support the
+// through the DB sync pattern.
+
+const transactionsSchema = z.array(
+  z.object({
+    id: z.string(),
+    changes: z.array(
+      z.object({
+        operation: z.string(),
+        value: z.object({
+          id: z.string().uuid(),
+          title: z.string().optional(),
+          completed: z.boolean().optional(),
+          created_at: z.string().optional()
+        })
+      })
+    )
+  })
+)
+
+app.post(`/changes`, async (req, res) => {
+  let data
+  try {
+    data = transactionsSchema.parse(req.body)
+  }
+  catch (err) {
+    return res.status(400).json({ errors: err.errors })
+  }
+
+  try {
+    await db.query('BEGIN')
+
+    data.forEach((tx) => {
+      tx.changes.forEach(({operation, value}) => {
+        switch (operation) {
+          case 'insert':
+            createTodo(value.id, value.title, value.created_at)
+            break
+
+          case 'update':
+            updateTodo(value.id, value.completed)
+            break
+
+          case 'delete':
+            deleteTodo(value.id)
+            break
+        }
+      })
+    })
+
+    await db.query('COMMIT')
+  }
+  catch (err) {
+    await db.query('ROLLBACK')
+
     return res.status(500).json({ errors: err })
   }
 

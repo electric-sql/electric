@@ -49,6 +49,8 @@ export default class LocalChangeSynchronizer {
     console.log('start')
 
     this.#unsubscribe = await this.#db.listen('p4_changes', this.handle.bind(this))
+
+    this.process()
   }
 
   /*
