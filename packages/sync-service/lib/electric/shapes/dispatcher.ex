@@ -38,7 +38,7 @@ defmodule Electric.Shapes.Dispatcher do
        waiting: 0,
        pending: nil,
        subscribers: [],
-       filter: Filter.empty(),
+       filter: Filter.new(),
        pids: MapSet.new()
      }}
   end

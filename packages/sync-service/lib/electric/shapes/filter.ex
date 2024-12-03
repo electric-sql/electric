@@ -27,8 +27,8 @@ defmodule Electric.Shapes.Filter do
   @type t :: %Filter{}
   @type shape_id :: any()
 
-  @spec empty() :: Filter.t()
-  def empty, do: %Filter{}
+  @spec new() :: Filter.t()
+  def new, do: %Filter{}
 
   @doc """
   Add a shape for the filter to track.
@@ -43,7 +43,7 @@ defmodule Electric.Shapes.Filter do
         Map.update(
           tables,
           shape.root_table,
-          Table.add_shape(Table.empty(), {shape_id, shape}),
+          Table.add_shape(Table.new(), {shape_id, shape}),
           fn table ->
             Table.add_shape(table, {shape_id, shape})
           end

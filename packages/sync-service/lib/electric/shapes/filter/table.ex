@@ -20,7 +20,7 @@ defmodule Electric.Shapes.Filter.Table do
 
   defstruct indexes: %{}, other_shapes: %{}
 
-  def empty, do: %Table{}
+  def new, do: %Table{}
 
   def empty?(%Table{indexes: indexes, other_shapes: other_shapes}) do
     indexes == %{} && other_shapes == %{}

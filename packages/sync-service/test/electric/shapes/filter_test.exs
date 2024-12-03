@@ -21,7 +21,7 @@ defmodule Electric.Shapes.FilterTest do
   describe "affected_shapes/2" do
     test "returns shapes affected by insert" do
       filter =
-        Filter.empty()
+        Filter.new()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
@@ -42,7 +42,7 @@ defmodule Electric.Shapes.FilterTest do
 
     test "returns shapes affected by delete" do
       filter =
-        Filter.empty()
+        Filter.new()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
@@ -63,7 +63,7 @@ defmodule Electric.Shapes.FilterTest do
 
     test "returns shapes affected by update" do
       filter =
-        Filter.empty()
+        Filter.new()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
@@ -86,7 +86,7 @@ defmodule Electric.Shapes.FilterTest do
 
     test "returns shapes affected by relation change" do
       filter =
-        Filter.empty()
+        Filter.new()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id > 7", inspector: @inspector))
@@ -108,7 +108,7 @@ defmodule Electric.Shapes.FilterTest do
       s3 = Shape.new!("t3", inspector: @inspector)
 
       filter =
-        Filter.empty()
+        Filter.new()
         |> Filter.add_shape("s1", s1)
         |> Filter.add_shape("s2", s2)
         |> Filter.add_shape("s3", s3)
@@ -120,7 +120,7 @@ defmodule Electric.Shapes.FilterTest do
 
     test "returns shapes affected by truncation" do
       filter =
-        Filter.empty()
+        Filter.new()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id > 7", inspector: @inspector))
@@ -138,7 +138,7 @@ defmodule Electric.Shapes.FilterTest do
     test "where clause in the form `field = const` is optimised" do
       filter =
         1..1000
-        |> Enum.reduce(Filter.empty(), fn i, filter ->
+        |> Enum.reduce(Filter.new(), fn i, filter ->
           Filter.add_shape(filter, i, Shape.new!("t1", where: "id = #{i}", inspector: @inspector))
         end)
 
@@ -153,7 +153,7 @@ defmodule Electric.Shapes.FilterTest do
     test "where clause in the form `field = const AND another_condition` is optimised" do
       filter =
         1..1000
-        |> Enum.reduce(Filter.empty(), fn i, filter ->
+        |> Enum.reduce(Filter.new(), fn i, filter ->
           Filter.add_shape(
             filter,
             i,
@@ -172,7 +172,7 @@ defmodule Electric.Shapes.FilterTest do
     test "where clause in the form `a_condition AND field = const` is optimised" do
       filter =
         1..1000
-        |> Enum.reduce(Filter.empty(), fn i, filter ->
+        |> Enum.reduce(Filter.new(), fn i, filter ->
           Filter.add_shape(
             filter,
             i,
@@ -191,7 +191,7 @@ defmodule Electric.Shapes.FilterTest do
 
   test "shape with no where clause is affected by all changes for the same table" do
     shape = Shape.new!("t1", inspector: @inspector)
-    filter = Filter.empty() |> Filter.add_shape("s", shape)
+    filter = Filter.new() |> Filter.add_shape("s", shape)
 
     assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
     assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new(["s"])
@@ -200,7 +200,7 @@ defmodule Electric.Shapes.FilterTest do
 
   test "shape with a where clause is affected by changes that match that where clause" do
     shape = Shape.new!("t1", where: "id = 7", inspector: @inspector)
-    filter = Filter.empty() |> Filter.add_shape("s", shape)
+    filter = Filter.new() |> Filter.add_shape("s", shape)
 
     assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
     assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new([])
@@ -209,7 +209,7 @@ defmodule Electric.Shapes.FilterTest do
 
   test "invalid record value logs an error and says all shapes for the table are affected" do
     filter =
-      Filter.empty()
+      Filter.new()
       |> Filter.add_shape("shape1", Shape.new!("table", inspector: @inspector))
       |> Filter.add_shape("shape2", Shape.new!("table", where: "id = 7", inspector: @inspector))
       |> Filter.add_shape("shape3", Shape.new!("table", where: "id = 8", inspector: @inspector))
@@ -226,8 +226,10 @@ defmodule Electric.Shapes.FilterTest do
   end
 
   test "Filter.remove_shape/2" do
+    empty = Filter.new()
+
     filter1 =
-      Filter.empty()
+      empty
       |> Filter.add_shape("shape1", Shape.new!("table", inspector: @inspector))
 
     filter2 =
@@ -255,7 +257,7 @@ defmodule Electric.Shapes.FilterTest do
     assert Filter.remove_shape(filter4, "shape4") == filter3
     assert Filter.remove_shape(filter3, "shape3") == filter2
     assert Filter.remove_shape(filter2, "shape2") == filter1
-    assert Filter.remove_shape(filter1, "shape1") == Filter.empty()
+    assert Filter.remove_shape(filter1, "shape1") == empty
   end
 
   for test <- [
@@ -282,7 +284,7 @@ defmodule Electric.Shapes.FilterTest do
 
       transaction = change("the_table", record)
 
-      assert Filter.empty()
+      assert Filter.new()
              |> Filter.add_shape("the-shape", shape)
              |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"]) == affected
     end
