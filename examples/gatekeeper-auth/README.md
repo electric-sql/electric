@@ -157,7 +157,7 @@ $ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
 Note that we got an empty response when successfully proxied through to Electric above because there are no `items` in the database. If you like, you can create some, e.g. using `psql`:
 
 ```console
-$ psql "postgresql://postgres:password@localhost:54321/electric?sslmode=disable"
+$ psql "postgresql://postgres:password@localhost:54321/electric"
 psql (16.4)
 Type "help" for help.
 
