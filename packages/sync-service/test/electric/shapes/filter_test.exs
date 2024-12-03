@@ -254,7 +254,7 @@ defmodule Electric.Shapes.FilterTest do
     #
     # @shape_count is set to 1000. This is somewhat arbitrary but is a reasonable number of shapes.
     # The main point is we don't want to linearly scale with the number of shapes, we want
-    # O(1) or at worst O(log n) performance, so if we have that 1000 or 10_000 shapes should be easy
+    # O(1) or at worst O(log n) performance, so if we have that, 1000 or 10_000 shapes should be easy
     # to keep to a microsecond per change. 10_000 shapes makes for a slow test though as the setup
     # time (n Filter.add_shape calls) is slow.
     @shape_count 1000
