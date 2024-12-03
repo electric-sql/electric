@@ -29,7 +29,9 @@ describe(`HTTP Sync`, () => {
     const shapeData = new Map()
     const issueStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      params: {
+        table: issuesTableUrl,
+      },
       subscribe: false,
       signal: aborter.signal,
     })
@@ -67,7 +69,9 @@ describe(`HTTP Sync`, () => {
     const shapeData = new Map()
     const issueStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      params: {
+        table: issuesTableUrl,
+      },
       signal: aborter.signal,
       fetchClient: fetchWrapper,
     })
@@ -149,7 +153,9 @@ describe(`HTTP Sync`, () => {
     const shapeData = new Map()
     const issueStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      params: {
+        table: issuesTableUrl,
+      },
       signal: aborter.signal,
     })
 
@@ -225,7 +231,9 @@ describe(`HTTP Sync`, () => {
       // Now fetch the data from the HTTP endpoint
       const issueStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
-        table: tableUrl,
+        params: {
+          table: tableUrl,
+        },
         signal: aborter.signal,
       })
       const client = new Shape(issueStream)
@@ -355,7 +363,9 @@ describe(`HTTP Sync`, () => {
     const shapeData = new Map()
     const issueStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      params: {
+        table: issuesTableUrl,
+      },
       signal: aborter.signal,
     })
     let secondRowId = ``
@@ -388,7 +398,6 @@ describe(`HTTP Sync`, () => {
   it(`should wait for processing before advancing stream`, async ({
     aborter,
     issuesTableUrl,
-
     insertIssues,
   }) => {
     // With initial data
@@ -403,7 +412,9 @@ describe(`HTTP Sync`, () => {
     const shapeData = new Map()
     const issueStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      params: {
+        table: issuesTableUrl,
+      },
       signal: aborter.signal,
       fetchClient: fetchWrapper,
     })
@@ -446,7 +457,9 @@ describe(`HTTP Sync`, () => {
     const aborter1 = new AbortController()
     const issueStream1 = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      params: {
+        table: issuesTableUrl,
+      },
       signal: aborter1.signal,
     })
 
@@ -454,7 +467,9 @@ describe(`HTTP Sync`, () => {
     const aborter2 = new AbortController()
     const issueStream2 = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      params: {
+        table: issuesTableUrl,
+      },
       signal: aborter2.signal,
     })
 
@@ -495,9 +510,11 @@ describe(`HTTP Sync`, () => {
     let lastOffset: Offset = `-1`
     const issueStream = new ShapeStream<IssueRow>({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
-      signal: aborter.signal,
+      params: {
+        table: issuesTableUrl,
+      },
       subscribe: false,
+      signal: aborter.signal,
     })
 
     await h.forEachMessage(issueStream, aborter, (res, msg) => {
@@ -526,7 +543,9 @@ describe(`HTTP Sync`, () => {
     const newAborter = new AbortController()
     const newIssueStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      params: {
+        table: issuesTableUrl,
+      },
       subscribe: false,
       signal: newAborter.signal,
       offset: lastOffset,
@@ -577,8 +596,7 @@ describe(`HTTP Sync`, () => {
     await sleep(40)
 
     const res2 = await fetch(
-      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
-      {}
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`
     )
     const etag2Header = res2.headers.get(`etag`)
     expect(etag2Header, `Response should have etag header`).not.toEqual(null)
@@ -658,9 +676,10 @@ describe(`HTTP Sync`, () => {
     const shapeData = new Map()
     const issueStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
-      where: `title LIKE 'foo%'`,
-      subscribe: true,
+      params: {
+        table: issuesTableUrl,
+        where: `title LIKE 'foo%'`,
+      },
       signal: aborter.signal,
     })
 
@@ -695,8 +714,10 @@ describe(`HTTP Sync`, () => {
       const shapeData = new Map()
       const issueStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
-        table: tableUrl,
-        columns: [`txt`, `i2`, `i4`],
+        params: {
+          table: tableUrl,
+          columns: [`txt`, `i2`, `i4`],
+        },
         signal: aborter.signal,
       })
       await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
@@ -740,7 +761,9 @@ describe(`HTTP Sync`, () => {
     let lastOffset: Offset = `-1`
     const issueStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      params: {
+        table: issuesTableUrl,
+      },
       subscribe: true,
       signal: aborter.signal,
     })
@@ -792,7 +815,9 @@ describe(`HTTP Sync`, () => {
     const newAborter = new AbortController()
     const newIssueStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      params: {
+        table: issuesTableUrl,
+      },
       subscribe: false,
       signal: newAborter.signal,
       offset: lastOffset,
@@ -800,7 +825,7 @@ describe(`HTTP Sync`, () => {
       fetchClient: fetchWrapper,
     })
 
-    await h.forEachMessage(newIssueStream, aborter, (res, msg) => {
+    await h.forEachMessage(newIssueStream, newAborter, (res, msg) => {
       if (isUpToDateMessage(msg)) {
         res()
       }
@@ -829,7 +854,9 @@ describe(`HTTP Sync`, () => {
   }) => {
     const issueStream = new ShapeStream<IssueRow>({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      params: {
+        table: issuesTableUrl,
+      },
       subscribe: true,
       signal: aborter.signal,
     })
@@ -841,10 +868,11 @@ describe(`HTTP Sync`, () => {
     let error: Error
     const invalidIssueStream = new ShapeStream<IssueRow>({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
-      subscribe: true,
+      params: {
+        table: issuesTableUrl,
+        where: `1=1`,
+      },
       handle: issueStream.shapeHandle,
-      where: `1=1`,
       onError: (err) => {
         error = err
       },
@@ -871,8 +899,8 @@ describe(`HTTP Sync`, () => {
     clearIssuesShape,
   }) => {
     // With initial data
-    const rowId = uuidv4()
-    const secondRowId = uuidv4()
+    const rowId = uuidv4(),
+      rowId2 = uuidv4()
     await insertIssues({ id: rowId, title: `foo1` })
 
     const statusCodesReceived: number[] = []
@@ -882,7 +910,7 @@ describe(`HTTP Sync`, () => {
       // before any subsequent requests after the initial one, ensure
       // that the existing shape is deleted and some more data is inserted
       if (numRequests === 2) {
-        await insertIssues({ id: secondRowId, title: `foo2` })
+        await insertIssues({ id: rowId2, title: `foo2` })
         await clearIssuesShape(issueStream.shapeHandle)
       }
 
@@ -898,7 +926,9 @@ describe(`HTTP Sync`, () => {
 
     const issueStream = new ShapeStream<IssueRow>({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      params: {
+        table: issuesTableUrl,
+      },
       subscribe: true,
       signal: aborter.signal,
       fetchClient: fetchWrapper,
@@ -960,7 +990,7 @@ describe(`HTTP Sync`, () => {
           } else {
             // should get the second row as well with the new shape handle
             expect(msg.value).toEqual({
-              id: secondRowId,
+              id: rowId2,
               title: `foo2`,
               priority: 10,
             })

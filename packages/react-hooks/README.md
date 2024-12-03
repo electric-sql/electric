@@ -22,7 +22,9 @@ import { useShape } from "@electric-sql/react"
 export default function MyComponent () {
   const { isLoading, data } = useShape({
     url: "http://my-api.com/shape",
-    table: `foo`,
+    params: {
+      table: `foo`
+    }
   })
 
   if (isLoading) {

@@ -34,7 +34,9 @@ client.connect().then(async () => {
 
   const itemsStream = new ShapeStream({
     url: `http://localhost:3000/v1/shape`,
-    table: `items`,
+    params: {
+      table: `items`,
+    },
   })
   itemsStream.subscribe(async (messages: Message[]) => {
     // Begin a Redis transaction

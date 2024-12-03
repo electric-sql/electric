@@ -5,17 +5,22 @@ import { useOptimistic } from "react"
 import { useShape, getShapeStream } from "@electric-sql/react"
 import "./Example.css"
 import { matchStream } from "./match-stream"
+import { ShapeStreamOptions } from "@electric-sql/client/*"
 
-const itemShape = () => {
+const itemShape = (): ShapeStreamOptions => {
   if (typeof window !== `undefined`) {
     return {
       url: new URL(`/shape-proxy`, window?.location.origin).href,
-      table: `items`,
+      params: {
+        table: `items`,
+      },
     }
   } else {
     return {
       url: new URL(`https://not-sure-how-this-works.com/shape-proxy`).href,
-      table: `items`,
+      params: {
+        table: `items`,
+      },
     }
   }
 }

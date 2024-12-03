@@ -22,7 +22,9 @@ const usersShape = (): ShapeStreamOptions => {
     return {
       url: new URL(`/shape-proxy?org_id=${org_id}`, window.location.origin)
         .href,
-      table: `users`,
+      params: {
+        table: `users`,
+      },
       headers: {
         Authorization: org_id || ``,
       },
@@ -30,7 +32,9 @@ const usersShape = (): ShapeStreamOptions => {
   } else {
     return {
       url: new URL(`https://not-sure-how-this-works.com/shape-proxy`).href,
-      table: `items`,
+      params: {
+        table: `items`,
+      },
     }
   }
 }

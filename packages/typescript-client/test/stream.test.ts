@@ -25,7 +25,9 @@ describe(`ShapeStream`, () => {
     const aborter = new AbortController()
     new ShapeStream({
       url: shapeUrl,
-      table: `foo`,
+      params: {
+        table: `foo`,
+      },
       signal: aborter.signal,
       fetchClient: fetchWrapper,
       headers: {
@@ -60,9 +62,11 @@ describe(`ShapeStream`, () => {
     const aborter = new AbortController()
     new ShapeStream({
       url: shapeUrl,
-      table: `foo`,
-      where: `a=1`,
-      columns: [`id`],
+      params: {
+        table: `foo`,
+        where: `a=1`,
+        columns: [`id`],
+      },
       handle: `potato`,
       signal: aborter.signal,
       fetchClient: fetchWrapper,

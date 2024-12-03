@@ -20,7 +20,9 @@ type ToDo = {
 export default function Index() {
   const { data: todos } = useShape<ToDo>({
     url: `http://localhost:3000/v1/shape`,
-    table: `todos`,
+    params: {
+      table: `todos`,
+    }
   })
   todos.sort((a, b) => a.created_at - b.created_at)
   console.log({ todos })

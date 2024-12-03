@@ -35,7 +35,9 @@ import { ShapeStream } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
-  table: 'items'
+  params: {
+    table: 'items'
+  }
 })
 const shape = new Shape(stream)
 
@@ -55,7 +57,9 @@ import { ShapeStream } from '@electric-sql/client'
 // Passes subscribers rows as they're inserted, updated, or deleted
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
-  table: `foo`,
+  params: {
+    table: `foo`
+  }
 })
 
 stream.subscribe(messages => {
@@ -88,32 +92,44 @@ export interface ShapeStreamOptions<T = never> {
   databaseId?: string
 
   /**
-   * The root table for the shape. Passed as a query parameter. Not required if you set the table in your proxy.
+   * PostgreSQL-specific parameters for the shape.
+   * This includes table, where clause, columns, and replica settings.
    */
-  table?: string
+  params: {
+    /**
+     * The root table for the shape.
+     */
+    table: string
 
-  /**
-   * The where clauses for the shape.
-   */
-  where?: string
+    /**
+     * The where clauses for the shape.
+     */
+    where?: string
 
-  /**
-   * The columns to include in the shape.
-   * Must include primary keys, and can only inlude valid columns.
-   */
-  columns?: string[]
+    /**
+     * The columns to include in the shape.
+     * Must include primary keys, and can only include valid columns.
+     */
+    columns?: string[]
 
-  /**
-   * If `replica` is `default` (the default) then Electric will only send the
-   * changed columns in an update.
-   *
-   * If it's `full` Electric will send the entire row with both changed and
-   * unchanged values.
-   *
-   * Setting `replica` to `full` will obviously result in higher bandwidth
-   * usage and so is not recommended.
-   */
-  replica?: Replica
+    /**
+     * If `replica` is `default` (the default) then Electric will only send the
+     * changed columns in an update.
+     *
+     * If it's `full` Electric will send the entire row with both changed and
+     * unchanged values.
+     *
+     * Setting `replica` to `full` will obviously result in higher bandwidth
+     * usage and so is not recommended.
+     */
+    replica?: Replica
+
+    /**
+     * Additional request parameters to attach to the URL.
+     * These will be merged with Electric's standard parameters.
+     */
+    [key: string]: string | string[] | undefined
+  }
 
   /**
    * The "offset" on the shape log. This is typically not set as the ShapeStream
@@ -136,14 +152,6 @@ export interface ShapeStreamOptions<T = never> {
    * Can be used for adding authentication headers.
    */
   headers?: Record<string, string>
-
-  /**
-   * Additional request parameters to attach to the URL.
-   * These will be merged with Electric's standard parameters.
-   * Note: You cannot use Electric's reserved parameter names
-   * (table, where, columns, offset, etc.).
-   */
-  params?: Record<string, string>
 
   /**
    * Automatically fetch updates to the Shape. If you just want to sync the current
@@ -169,7 +177,7 @@ export interface ShapeStreamOptions<T = never> {
   /**
    * A function for handling errors.
    * This is optional, when it is not provided any shapestream errors will be thrown.
-   * If the function is provided and returns an object containing parameters and/or headers
+   * If the function returns an object containing parameters and/or headers
    * the shapestream will apply those changes and try syncing again.
    * If the function returns void the shapestream is stopped.
    */
@@ -189,40 +197,41 @@ type ShapeStreamErrorHandler = (
 ```
 
 Note that certain parameter names are reserved for Electric's internal use and cannot be used in custom params:
-- `table`
-- `where`
-- `columns`
 - `offset`
 - `handle`
 - `live`
 - `cursor`
 - `database_id`
-- `replica`
 
-Attempting to use these reserved names will throw an error.
+The following PostgreSQL-specific parameters should be included within the `params` object:
+- `table` - The root table for the shape
+- `where` - SQL where clause for filtering rows
+- `columns` - List of columns to include
+- `replica` - Controls whether to send full or partial row updates
 
-### ShapeStream Configuration
-
-The ShapeStream constructor accepts several configuration options:
-
+Example with PostgreSQL-specific parameters:
 ```typescript
 const stream = new ShapeStream({
-  // Required: URL to fetch shapes from
   url: 'http://localhost:3000/v1/shape',
-  table: 'items',
-  // E.g. add authentication header
-  headers: {
-    'Authorization': 'Bearer token'
-  },
-  // E.g. add custom URL parameters
   params: {
-    'tenant': 'acme-corp',
-    'version': '1.0'
+    table: 'users',
+    where: 'age > 18',
+    columns: ['id', 'name', 'email'],
+    replica: 'full'
   }
 })
 ```
 
-Note: When using custom parameters, be careful not to use reserved parameter names as they may conflict with Electric's internal parameters.
+You can also include additional custom parameters in the `params` object alongside the PostgreSQL-specific ones:
+```typescript
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  params: {
+    table: 'users',
+    customParam: 'value'
+  }
+})
+```
 
 #### Messages
 
@@ -258,7 +267,9 @@ You can extend this behaviour by configuring a custom parser. This is an object 
 ```ts
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
-  table: `foo`,
+  params: {
+    table: `foo`
+  },
   parser: {
     bool: (value: string) => value === `true` ? 1 : 0
   }
@@ -280,8 +291,10 @@ import { ShapeStream } from "@electric-sql/client"
 
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
-  table: `foo`,
-  replica: `full`,
+  params: {
+    table: `foo`,
+    replica: `full`
+  }
 })
 ```
 
@@ -295,7 +308,9 @@ Using a custom error handler we can for instance refresh the authorization token
 ```ts
 const stream = new ShapeStream({
   url: 'http://localhost:3000/v1/shape',
-  table: 'items',
+  params: {
+    table: 'items'
+  },
   // Add authentication header
   headers: {
     'Authorization': 'Bearer token'
@@ -327,7 +342,9 @@ import { ShapeStream, Shape } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
-  table: `foo`,
+  params: {
+    table: `foo`
+  }
 })
 const shape = new Shape(stream)
 
@@ -349,7 +366,9 @@ The `subscribe` method allows you to receive updates whenever the shape changes.
 ```typescript
 const stream = new ShapeStream({
   url: 'http://localhost:3000/v1/shape',
-  table: 'issues'
+  params: {
+    table: 'issues'
+  }
 })
 
 // Subscribe to both message and error handlers
@@ -392,7 +411,9 @@ The ShapeStream provides two ways to handle errors:
 ```typescript
 const stream = new ShapeStream({
   url: 'http://localhost:3000/v1/shape',
-  table: 'issues',
+  params: {
+    table: 'issues'
+  },
   onError: (error) => {
     // Handle all stream errors here
     if (error instanceof FetchError) {

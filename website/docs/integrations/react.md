@@ -36,7 +36,9 @@ import { useShape } from '@electric-sql/react'
 const MyComponent = () => {
   const { isLoading, data } = useShape<{title: string}>({
     url: `http://localhost:3000/v1/shape`,
-    table: 'items'
+    params: {
+      table: 'items'
+    }
   })
 
   if (isLoading) {
@@ -48,6 +50,22 @@ const MyComponent = () => {
       {data.map(item => <div>{item.title}</div>)}
     </div>
   )
+}
+```
+
+You can also include additional PostgreSQL-specific parameters:
+
+```tsx
+const MyFilteredComponent = () => {
+  const { isLoading, data } = useShape<{id: number, title: string}>({
+    url: `http://localhost:3000/v1/shape`,
+    params: {
+      table: 'items',
+      where: 'status = \'active\'',
+      columns: ['id', 'title']
+    }
+  })
+  // ...
 }
 ```
 
@@ -88,7 +106,24 @@ export interface UseShapeResult<T extends Row<unknown> = Row> {
 export const clientLoader = async () => {
   return await preloadShape({
     url: `http://localhost:3000/v1/shape`,
-    table: 'items'
+    params: {
+      table: 'items'
+    }
+  })
+}
+```
+
+You can also preload filtered data:
+
+```tsx
+export const filteredLoader = async () => {
+  return await preloadShape({
+    url: `http://localhost:3000/v1/shape`,
+    params: {
+      table: 'items',
+      where: 'category = \'electronics\'',
+      columns: ['id', 'name', 'price']
+    }
   })
 }
 ```
@@ -102,7 +137,9 @@ It takes the same options as [ShapeStream](/docs/api/clients/typescript#options)
 ```tsx
 const itemsStream = getShapeStream<Item>({
   url: `http://localhost:3000/v1/shape`,
-  table: 'items'
+  params: {
+    table: 'items'
+  }
 })
 ```
 
@@ -113,7 +150,12 @@ This allows you to avoid consuming multiple streams for the same shape log.
 [`getShape<T>`](https://github.com/electric-sql/electric/blob/main/packages/react-hooks/src/react-hooks.tsx#L49) get-or-creates a `Shape` off the global cache.
 
 ```tsx
-const itemsShape = getShape<Item>(stream)
+const itemsShape = getShape<Item>({
+  url: `http://localhost:3000/v1/shape`,
+  params: {
+    table: 'items'
+  }
+})
 ```
 
 This allows you to avoid materialising multiple shapes for the same stream.

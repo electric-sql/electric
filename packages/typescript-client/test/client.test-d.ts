@@ -19,8 +19,10 @@ describe(`client`, () => {
   describe(`ShapeStream`, () => {
     it(`should infer generic row return type when no type is provided`, () => {
       const shapeStream = new ShapeStream({
-        table: ``,
         url: ``,
+        params: {
+          table: ``,
+        },
       })
 
       expectTypeOf(shapeStream).toEqualTypeOf<ShapeStream<Row>>()
@@ -31,8 +33,10 @@ describe(`client`, () => {
 
     it(`should infer correct return type when provided`, () => {
       const shapeStream = new ShapeStream<CustomRow>({
-        table: ``,
         url: ``,
+        params: {
+          table: ``,
+        },
         parser: {
           timestampz: (date: string) => {
             return new Date(date)
@@ -52,8 +56,10 @@ describe(`client`, () => {
   describe(`Shape`, () => {
     it(`should infer generic row return type when no type is provided`, async () => {
       const shapeStream = new ShapeStream({
-        table: ``,
         url: ``,
+        params: {
+          table: ``,
+        },
       })
       const shape = new Shape(shapeStream)
 
@@ -70,8 +76,10 @@ describe(`client`, () => {
 
     it(`should infer correct return type when provided`, async () => {
       const shapeStream = new ShapeStream<CustomRow>({
-        table: ``,
         url: ``,
+        params: {
+          table: ``,
+        },
         parser: {
           timestampz: (date: string) => {
             return new Date(date)
