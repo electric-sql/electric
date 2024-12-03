@@ -190,7 +190,7 @@ export default function OptimisticState() {
                   onChange={() => updateTodo(todo)}
               />
               <span className={`title ${ todo.completed ? 'completed' : '' }`}>
-                { todo.title }: { todo.created_at.toISOString() }
+                { todo.title }
               </span>
             </label>
             <a href="#delete" className="close"
