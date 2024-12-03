@@ -65,6 +65,31 @@ You can then bring a fresh backend up from scratch:
 docker compose up
 ```
 
+### Unexpected 409 &mdash; why is my shape handle invalid?
+
+If, when you request a shape, you get an unexpected `409` status despite the shape existing (for example, straight after you've created it), e.g.:
+
+```
+url: http://localhost:3000/v1/shape?table=projects&offset=-1
+sec: 0.086570622 seconds
+status: 200
+
+url: http://localhost:3000/v1/shape?table=projects&offset=0_0&handle=17612588-1732280609822
+sec: 1.153542301 seconds
+status: 409
+conflict reading Location
+
+url: http://localhost:3000/v1/shape?table=projects&offset=0_0&handle=51930383-1732543076951
+sec: 0.003023737 seconds
+status: 200
+```
+
+This indicates that your client library or proxy layer is caching requests to Electric and responding to them without actually hitting Electric for the correct response. For example, when running unit tests your library may be maintaining an unexpected global HTTP cache.
+
+##### Solution &mdash; clear your cache
+
+The problem will resolve itself as client/proxy caches empty. You can force this by clearing your client or proxy cache. See https://electric-sql.com/docs/api/http#control-messages for context on 409 messages.
+
 ## Production
 
 ### WAL growth &mdash; why is my Postgres database storage filling up?
