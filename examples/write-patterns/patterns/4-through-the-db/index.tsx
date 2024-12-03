@@ -31,7 +31,7 @@ await pglite.electric.syncShapeToTable({
     url: `${ELECTRIC_URL}/v1/shape`,
     table: 'todos',
   },
-  shapeKey: 'todos',
+  shapeKey: 'p4_todos',
   table: 'p4_todos_synced',
   primaryKey: ['id'],
 })
@@ -110,7 +110,7 @@ function ThroughTheDB() {
     <div id="optimistic-state" className="example">
       <h3>
         <span className="title">
-          4. Through the DB sync
+          4. Through the DB
         </span>
       </h3>
       <ul>
