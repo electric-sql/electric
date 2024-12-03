@@ -110,10 +110,16 @@ function CombineOnRead() {
     setPendingState((keys) => [...keys, key])
 
     const localWritePromise = db.sql`
-      INSERT todos_local
-        SET completed = ${!completed}
-        WHERE id = ${id}
-      ON CONFLICT (id) DO UPDATE
+      INSERT INTO todos_local (
+        id,
+        completed
+      )
+      VALUES (
+        ${id},
+        ${!completed}
+      )
+      ON CONFLICT (id)
+      DO UPDATE
         SET completed = ${!completed}
     `
 
@@ -137,10 +143,16 @@ function CombineOnRead() {
     setPendingState((keys) => [...keys, key])
 
     const localWritePromise = db.sql`
-      INSERT todos_local
-        SET deleted = ${true}
-        WHERE id = ${id}
-      ON CONFLICT (id) DO UPDATE
+      INSERT INTO todos_local (
+        id,
+        deleted
+      )
+      VALUES (
+        ${id},
+        ${true}
+      )
+      ON CONFLICT (id)
+      DO UPDATE
         SET deleted = ${true}
     `
 
