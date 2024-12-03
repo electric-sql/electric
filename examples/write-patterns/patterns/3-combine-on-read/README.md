@@ -14,11 +14,6 @@ In this implementation, we use Electric together with [PGlite](https://electric-
 2. persist optimistic state in a shadow table
 3. combine the two on read using a view
 
-We also show how to use triggers in the local PGlite data model to:
-
-- automatically manage optimistic state lifecycle
-- present a single table interface for reads and writes
-
 ## Benefits
 
 This is a powerful and pragmatic pattern, occupying a compelling point in the design space. It's relatively simple to implement. Persisting optimistic state makes local writes more resilient.
@@ -40,6 +35,25 @@ Combining data on-read makes local reads slightly slower.
 Using a local embedded database adds a relatively-heavy dependency to your app. This impacts build/bundle size, initialization speed and memory use. The shadow table and trigger machinery complicate your client side schema definition.
 
 Whilst the database is used for local optimistic state, writes are still made via an API. This can often be helpful and pragmatic, allowing you to [re-use your existing API](https://electric-sql.com/blog/2024/11/21/local-first-with-your-existing-api). However, you may want to avoid running an API and leverage [through the DB sync](../../3-through-the-db) for a purer local-first approach.
+
+## Complexities
+
+This implementation simplifies two key complexities:
+
+1. merge logic when recieving synced state from the server
+2. handling rollbacks when writes are rejected
+
+### 1. Merge logic
+
+The entrypoint in the code for merge logic is the very blunt `delete_local_on_synced_trigger` defined in the [`./local-schema.sql`](./local-schema.sql). The current implementation just wipes any local state for a row when any insert, updater or delete to that row syncs in from the server.
+
+This approach works and is simple to reason about. However, it won't preserve local changes on top of concurrent changes by other users (or tabs or devices). More sophisticated implementations could do more sophisticated merge logic here. Such as rebasing the local changes on the new server state. This typically involved maintaining more bookkeeping info and having more complex triggers.
+
+### 2. Rollbacks
+
+The entrypoint for handling rollbacks is handling the fetchPromise return values in the `createTodo`, `updateTodo`, `deleteTodo` event handler functions in [`./index.tsx`](./index.tsx). At the moment, in this implementation, we simply ignore the return value and assume that the write succeeded.
+
+More sophisticated applications could revert the local state for that write if the write is rejected. The benefits of still using HTTP requests to the API for writes instead of syncing [through the DB](../4-through-the-db) is that the write context is still available when handling the rollback.
 
 ## How to run
 

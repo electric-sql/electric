@@ -35,14 +35,11 @@ await pglite.electric.syncShapeToTable({
     url: `${ELECTRIC_URL}/v1/shape`,
     table: 'todos',
   },
+  shapeKey: `todos`,
   table: 'todos_synced',
   primaryKey: ['id'],
 })
 
-/*
- * Wrap the `<CombineOnRead />` component with a `PGliteProvider` that provides
- * access to a PGlite database, with local schema migrations applied.
- */
 export default function Wrapper() {
   return (
     <PGliteProvider db={pglite}>
@@ -53,17 +50,11 @@ export default function Wrapper() {
 
 function CombineOnRead() {
   const db = usePGlite()
-
-  const [pendingState, setPendingState] = useState<number[]>([])
-  const isPending = pendingState.length === 0 ? false : true
-
   const results = useLiveQuery<Todo>('SELECT * FROM todos ORDER BY created_at')
 
-  if (results === undefined) {
-    return <div className="loading">Loading &hellip;</div>
-  }
-
-  const todos = results.rows
+  // Allows us to track when writes are being made to the server.
+  const [pendingState, setPendingState] = useState<number[]>([])
+  const isPending = pendingState.length === 0 ? false : true
 
   // These are the same event handler functions from the online and
   // optimistic state examples, revised to write local optimistic
@@ -85,7 +76,7 @@ function CombineOnRead() {
     const created_at = new Date()
 
     const localWritePromise = db.sql`
-      INSERT INTO todos (
+      INSERT INTO todos_local (
         id,
         title,
         completed,
@@ -119,9 +110,11 @@ function CombineOnRead() {
     setPendingState((keys) => [...keys, key])
 
     const localWritePromise = db.sql`
-      UPDATE todos
-      SET completed = ${!completed}
-      WHERE id = ${id}
+      INSERT todos_local
+        SET completed = ${!completed}
+        WHERE id = ${id}
+      ON CONFLICT (id) DO UPDATE
+        SET completed = ${!completed}
     `
 
     const path = `/todos/${id}`
@@ -143,7 +136,13 @@ function CombineOnRead() {
     const key = Math.random()
     setPendingState((keys) => [...keys, key])
 
-    const localWritePromise = db.sql`DELETE FROM todos WHERE id = ${id}`
+    const localWritePromise = db.sql`
+      INSERT todos_local
+        SET deleted = ${true}
+        WHERE id = ${id}
+      ON CONFLICT (id) DO UPDATE
+        SET deleted = ${true}
+    `
 
     const path = `/todos/${id}`
     const fetchPromise = api.request(path, 'DELETE')
@@ -153,7 +152,13 @@ function CombineOnRead() {
     setPendingState((keys) => keys.filter((k) => k !== key))
   }
 
-  // The template below the heading is identical to the online example.
+  if (results === undefined) {
+    return <div className="loading">Loading &hellip;</div>
+  }
+
+  const todos = results.rows
+
+  // The template below the heading is identical to the other patterns.
 
   // prettier-ignore
   return (
@@ -172,7 +177,7 @@ function CombineOnRead() {
                   onChange={() => updateTodo(todo)}
               />
               <span className={`title ${ todo.completed ? 'completed' : '' }`}>
-                { todo.title }: { todo.created_at.toISOString() }
+                { todo.title }
               </span>
             </label>
             <a href="#delete" className="close"
