@@ -1,5 +1,6 @@
 ---
 "@electric-sql/client": minor
+"@electric-sql/react": minor
 ---
 
 [BREAKING]: Move non-protocol options like table & where to the params sub-key
