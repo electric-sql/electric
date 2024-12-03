@@ -36,6 +36,18 @@ defmodule Electric.Application do
     publication_name = "electric_publication_#{replication_stream_id}"
     slot_name = "electric_slot_#{replication_stream_id}"
 
+    replication_connection_opts = Application.fetch_env!(:electric, :connection_opts)
+    pool_connection_opts = Application.get_env(:electric, :pool_connection_opts)
+
+    connection_opts = pool_connection_opts || replication_connection_opts
+
+    replication_opts = [
+      connection_opts: replication_connection_opts,
+      publication_name: publication_name,
+      slot_name: slot_name,
+      slot_temporary?: Application.fetch_env!(:electric, :replication_slot_temporary?)
+    ]
+
     # The root application supervisor starts the core global processes, including the HTTP
     # server and the database connection manager. The latter is responsible for establishing
     # all needed connections to the database (acquiring the exclusive access lock, opening a
@@ -53,13 +65,9 @@ defmodule Electric.Application do
           {Electric.StackSupervisor,
            stack_id: stack_id,
            stack_events_registry: Registry.StackEvents,
-           connection_opts: Application.fetch_env!(:electric, :connection_opts),
            persistent_kv: persistent_kv,
-           replication_opts: [
-             publication_name: publication_name,
-             slot_name: slot_name,
-             slot_temporary?: Application.fetch_env!(:electric, :replication_slot_temporary?)
-           ],
+           connection_opts: connection_opts,
+           replication_opts: replication_opts,
            pool_opts: [pool_size: Application.fetch_env!(:electric, :db_pool_size)],
            storage: Application.fetch_env!(:electric, :storage),
            chunk_bytes_threshold: Application.fetch_env!(:electric, :chunk_bytes_threshold)},

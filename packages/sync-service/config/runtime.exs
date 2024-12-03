@@ -105,10 +105,14 @@ database_ipv6_config =
   env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
 
 {:ok, database_url_config} = Electric.ConfigParser.parse_postgresql_uri(database_url)
-
 connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
-
 config :electric, connection_opts: Electric.Utils.obfuscate_password(connection_opts)
+
+if database_pool_url = env!("DATABASE_POOL_URL", :string, nil) do
+  {:ok, database_pool_url_config} = Electric.ConfigParser.parse_postgresql_uri(database_pool_url)
+  connection_opts = database_pool_url_config ++ [ipv6: database_ipv6_config]
+  config :electric, pool_connection_opts: Electric.Utils.obfuscate_password(connection_opts)
+end
 
 enable_integration_testing = env!("ELECTRIC_ENABLE_INTEGRATION_TESTING", :boolean, false)
 cache_max_age = env!("ELECTRIC_CACHE_MAX_AGE", :integer, 60)

@@ -267,16 +267,20 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_continue(:start_replication_client, %State{replication_client_pid: nil} = state) do
-    opts =
-      state
-      |> Map.take([:stack_id, :replication_opts, :connection_opts])
-      |> Map.to_list()
-
     Logger.debug("Starting replication client for stack #{state.stack_id}")
+
+    {connection_opts, replication_opts} = Keyword.pop(state.replication_opts, :connection_opts)
+
+    opts = [
+      connection_opts: connection_opts,
+      replication_opts: replication_opts,
+      stack_id: state.stack_id
+    ]
 
     case start_replication_client(opts) do
       {:ok, pid, connection_opts} ->
-        state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
+        replication_opts = Keyword.put(replication_opts, :connection_opts, connection_opts)
+        state = %{state | replication_client_pid: pid, replication_opts: replication_opts}
 
         if is_nil(state.pool_pid) do
           # This is the case where Connection.Manager starts connections from the initial state.
