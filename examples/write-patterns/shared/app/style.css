@@ -31,7 +31,7 @@ code {
   background-color: #262628;
   border-radius:10px;
 
-  min-height: calc(50vh - 80px);
+  min-height: calc(50vh - 115px);
 
   background-image: url(/shared/app/icons/icon.svg);
   background-position: 17px 23px;

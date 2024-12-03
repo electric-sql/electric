@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
 import {
@@ -7,9 +7,9 @@ import {
   usePGlite,
 } from '@electric-sql/pglite-react'
 
-import api from '../../shared/app/client'
 import pglite from '../../shared/app/db'
 
+import SyncChanges from './sync'
 import localSchemaMigrations from './local-schema.sql?raw'
 
 const ELECTRIC_URL = import.meta.env.ELECTRIC_URL || 'http://localhost:3000'
@@ -21,6 +21,8 @@ type Todo = {
   created_at: Date
 }
 
+// Note that the resources defined in the schema for this pattern
+// are all suffixed with `p4_`.
 await pglite.exec(localSchemaMigrations)
 
 // This starts the read path sync using Electric.
@@ -30,29 +32,26 @@ await pglite.electric.syncShapeToTable({
     table: 'todos',
   },
   shapeKey: 'todos',
-  table: 'todos_synced',
+  table: 'p4_todos_synced',
   primaryKey: ['id'],
 })
+
+// This starts the write path sync of changes captured in the triggers from
+// writes to the local DB.
+const syncChanges = new SyncChanges(pglite)
+syncChanges.start()
 
 export default function Wrapper() {
   return (
     <PGliteProvider db={pglite}>
-      <CombineOnRead />
+      <ThroughTheDB />
     </PGliteProvider>
   )
 }
 
-function CombineOnRead() {
+function ThroughTheDB() {
   const db = usePGlite()
-  const results = useLiveQuery<Todo>('SELECT * FROM todos ORDER BY created_at')
-
-  // Allows us to track when writes are being made to the server.
-  const [pendingState, setPendingState] = useState<number[]>([])
-  const isPending = pendingState.length === 0 ? false : true
-
-  // These are the same event handler functions from the online and
-  // optimistic state examples, revised to write local optimistic
-  // state to the database.
+  const results = useLiveQuery<Todo>('SELECT * FROM p4_todos ORDER BY created_at')
 
   async function createTodo(event: React.FormEvent) {
     event.preventDefault()
@@ -61,101 +60,41 @@ function CombineOnRead() {
     const formData = new FormData(form)
     const title = formData.get('todo') as string
 
-    form.reset()
-
-    const key = Math.random()
-    setPendingState((keys) => [...keys, key])
-
-    const id = uuidv4()
-    const created_at = new Date()
-
-    const localWritePromise = db.sql`
-      INSERT INTO todos_local (
+    await db.sql`
+      INSERT INTO p4_todos (
         id,
         title,
         completed,
         created_at
       )
       VALUES (
-        ${id},
+        ${uuidv4()},
         ${title},
         ${false},
-        ${created_at}
+        ${new Date()}
       )
     `
 
-    const path = '/todos'
-    const data = {
-      id: id,
-      title: title,
-      created_at: created_at,
-    }
-    const fetchPromise = api.request(path, 'POST', data)
-
-    await Promise.all([localWritePromise, fetchPromise])
-
-    setPendingState((keys) => keys.filter((k) => k !== key))
+    form.reset()
   }
 
   async function updateTodo(todo: Todo) {
     const { id, completed } = todo
 
-    const key = Math.random()
-    setPendingState((keys) => [...keys, key])
-
-    const localWritePromise = db.sql`
-      INSERT INTO todos_local (
-        id,
-        completed
-      )
-      VALUES (
-        ${id},
-        ${!completed}
-      )
-      ON CONFLICT (id)
-      DO UPDATE
+    await db.sql`
+      UPDATE p4_todos
         SET completed = ${!completed}
+        WHERE id = ${id}
     `
-
-    const path = `/todos/${id}`
-    const data = {
-      completed: !completed,
-    }
-    const fetchPromise = api.request(path, 'PUT', data)
-
-    await Promise.all([localWritePromise, fetchPromise])
-
-    setPendingState((keys) => keys.filter((k) => k !== key))
   }
 
   async function deleteTodo(event: React.MouseEvent, todo: Todo) {
     event.preventDefault()
 
-    const { id } = todo
-
-    const key = Math.random()
-    setPendingState((keys) => [...keys, key])
-
-    const localWritePromise = db.sql`
-      INSERT INTO todos_local (
-        id,
-        deleted
-      )
-      VALUES (
-        ${id},
-        ${true}
-      )
-      ON CONFLICT (id)
-      DO UPDATE
-        SET deleted = ${true}
+    await db.sql`
+      DELETE FROM p4_todos
+        WHERE id = ${todo.id}
     `
-
-    const path = `/todos/${id}`
-    const fetchPromise = api.request(path, 'DELETE')
-
-    await Promise.all([localWritePromise, fetchPromise])
-
-    setPendingState((keys) => keys.filter((k) => k !== key))
   }
 
   if (results === undefined) {
@@ -171,9 +110,8 @@ function CombineOnRead() {
     <div id="optimistic-state" className="example">
       <h3>
         <span className="title">
-          3. Combine on read
+          4. Through the DB sync
         </span>
-        <span className={isPending ? 'pending' : 'pending hidden'} />
       </h3>
       <ul>
         {todos.map((todo: Todo) => (

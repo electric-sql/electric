@@ -1,6 +1,11 @@
 import './style.css'
 
-import { CombineOnRead, OnlineWrites, OptimisticState } from '../../patterns'
+import {
+  CombineOnRead,
+  OnlineWrites,
+  OptimisticState,
+  ThroughTheDB
+} from '../../patterns'
 
 const App = () => {
   return (
@@ -8,7 +13,7 @@ const App = () => {
       <OnlineWrites />
       <OptimisticState />
       <CombineOnRead />
-      <div className="example"></div>
+      <ThroughTheDB />
     </div>
   )
 }
