@@ -222,10 +222,11 @@ defmodule Electric.ShapeCache.FileStorage do
   defp offset({_, tuple_offset}), do: LogOffset.new(tuple_offset)
 
   @impl Electric.ShapeCache.Storage
-  def make_new_snapshot!(data_stream, %FS{} = opts) do
+  def make_new_snapshot!(data_stream, %FS{stack_id: stack_id} = opts) do
     OpenTelemetry.with_span(
       "storage.make_new_snapshot",
       [storage_impl: "mixed_disk", "shape.handle": opts.shape_handle],
+      stack_id,
       fn ->
         data_stream
         |> Stream.map(&[&1, ?\n])

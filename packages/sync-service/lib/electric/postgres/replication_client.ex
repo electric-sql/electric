@@ -196,11 +196,12 @@ defmodule Electric.Postgres.ReplicationClient do
           {:noreply, State.t()} | {:noreply, list(binary()), State.t()}
   def handle_data(
         <<@repl_msg_x_log_data, _wal_start::64, wal_end::64, _clock::64, rest::binary>>,
-        %State{} = state
+        %State{stack_id: stack_id} = state
       ) do
     OpenTelemetry.with_span(
       "pg_txn.replication_client.process_x_log_data",
       [msg_size: byte_size(rest)],
+      stack_id,
       fn -> process_x_log_data(rest, wal_end, state) end
     )
   end
@@ -243,6 +244,7 @@ defmodule Electric.Postgres.ReplicationClient do
         OpenTelemetry.with_span(
           "pg_txn.replication_client.relation_received",
           ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
+          stack_id,
           fn -> apply(m, f, [rel | args]) end
         )
 
@@ -279,6 +281,7 @@ defmodule Electric.Postgres.ReplicationClient do
         OpenTelemetry.with_span(
           "pg_txn.replication_client.transaction_received",
           [num_changes: txn.num_changes, num_relations: MapSet.size(txn.affected_relations)],
+          stack_id,
           fn -> apply(m, f, [txn | args]) end
         )
         |> case do

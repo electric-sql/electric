@@ -78,6 +78,10 @@ defmodule Electric.StackSupervisor do
                    keys: [
                      registry_partitions: [type: :non_neg_integer, required: false]
                    ]
+                 ],
+                 telemetry_span_attrs: [
+                   type: {:map, :string, {:or, [:string, :integer, :float, :boolean]}},
+                   required: false
                  ]
                )
 
@@ -133,8 +137,24 @@ defmodule Electric.StackSupervisor do
     ]
   end
 
+  @doc """
+  Store the telemetry span attributes in the persistent term for this stack.
+  """
+  @spec set_telemetry_span_attrs(String.t(), Electric.Telemetry.OpenTelemetry.span_attrs()) :: :ok
+  def set_telemetry_span_attrs(stack_id, attrs) do
+    :persistent_term.put(:"electric_otel_attributes_#{stack_id}", Map.new(attrs))
+  end
+
+  @doc """
+  Retrieve the telemetry span attributes from the persistent term for this stack.
+  """
+  @spec get_telemetry_span_attrs(String.t()) :: map()
+  def get_telemetry_span_attrs(stack_id) do
+    :persistent_term.get(:"electric_otel_attributes_#{stack_id}", %{})
+  end
+
   @doc false
-  def storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}}) do
+  defp storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}}) do
     {mod, arg |> Keyword.put(:stack_id, stack_id) |> mod.shared_opts()}
   end
 
@@ -192,6 +212,7 @@ defmodule Electric.StackSupervisor do
       stack_events_registry: config.stack_events_registry,
       replication_opts:
         [
+          stack_id: stack_id,
           transaction_received:
             {Electric.Replication.ShapeLogCollector, :store_transaction, [shape_log_collector]},
           relation_received:
@@ -220,6 +241,10 @@ defmodule Electric.StackSupervisor do
       {Electric.Postgres.Inspector.EtsInspector, stack_id: stack_id, pool: db_pool},
       {Electric.Connection.Supervisor, new_connection_manager_opts}
     ]
+
+    # Store the telemetry span attributes in the persistent term for this stack
+    telemetry_span_attrs = Access.get(config, :telemetry_span_attrs, %{})
+    if telemetry_span_attrs != %{}, do: set_telemetry_span_attrs(stack_id, telemetry_span_attrs)
 
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
   end

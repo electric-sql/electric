@@ -11,9 +11,9 @@ defmodule Electric.Shapes.Querying do
 
   @type json_result_stream :: Enumerable.t(json_iodata())
 
-  @spec stream_initial_data(DBConnection.t(), Shape.t()) :: json_result_stream()
-  def stream_initial_data(conn, %Shape{root_table: root_table} = shape) do
-    OpenTelemetry.with_span("shape_read.stream_initial_data", [], fn ->
+  @spec stream_initial_data(DBConnection.t(), String.t(), Shape.t()) :: json_result_stream()
+  def stream_initial_data(conn, stack_id, %Shape{root_table: root_table} = shape) do
+    OpenTelemetry.with_span("shape_read.stream_initial_data", [], stack_id, fn ->
       table = Utils.relation_to_sql(root_table)
 
       where =
