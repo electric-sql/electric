@@ -35,7 +35,7 @@ await pglite.electric.syncShapeToTable({
     url: `${ELECTRIC_URL}/v1/shape`,
     table: 'todos',
   },
-  shapeKey: `todos`,
+  shapeKey: 'todos',
   table: 'todos_synced',
   primaryKey: ['id'],
 })
