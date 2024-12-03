@@ -133,26 +133,17 @@ By default, Electric binds to IPv4. Enable this to listen on IPv6 addresses as w
 
 </EnvVarConfig>
 
-### ELECTRIC_LOG_CHUNK_BYTES_THRESHOLD
+### ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD
 
 <EnvVarConfig
-    name="ELECTRIC_LOG_CHUNK_BYTES_THRESHOLD"
+    name="ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD"
     defaultValue="10485760"
     example="20971520">
 
 Limit the maximum size of a shape log response, to ensure they are cached by
-upstream caches. Defaults to 10MB (10 * 1024 * 1024). See [#1581](https://github.com/electric-sql/electric/issues/1581) for context.
+upstream caches. Defaults to 10MB (10 * 1024 * 1024).
 
-</EnvVarConfig>
-
-### ELECTRIC_LOG_OTP_REPORTS
-
-<EnvVarConfig
-    name="ELECTRIC_LOG_OTP_REPORTS"
-    defaultValue="false"
-    example="true">
-
-Enable [OTP SASL](https://www.erlang.org/doc/apps/sasl/sasl_app.html) reporting at runtime.
+See [#1581](https://github.com/electric-sql/electric/issues/1581) for context.
 
 </EnvVarConfig>
 
@@ -180,7 +171,7 @@ Default `max-age` for the cache headers of the HTTP API.
 
 </EnvVarConfig>
 
-### ElECTRIC_CACHE_STALE_AGE
+### ELECTRIC_CACHE_STALE_AGE
 
 <EnvVarConfig
     name="ELECTRIC_CACHE_STALE_AGE"
@@ -300,6 +291,50 @@ Enable sending telemetry data to a StatsD reporting endpoint.
 
 </EnvVarConfig>
 
+## Logging
+
+### ELECTRIC_LOGGING_LEVEL
+
+<EnvVarConfig
+    name="ELECTRIC_LOGGING_LEVEL"
+    optional="true"
+    example="debug">
+
+Verbosity of Electric's log output.
+
+Available levels, in the order of increasing verbosity:
+- `error`
+- `warning`
+- `info`
+- `debug`
+
+</EnvVarConfig>
+
+### ELECTRIC_LOGGING_COLORS
+
+<EnvVarConfig
+    name="ELECTRIC_LOGGING_COLORS"
+    optional="true"
+    example="false">
+
+Enable or disable ANSI coloring of Electric's log output.
+
+By default, coloring is enabled when Electric's stdout is connected to a terminal. This may be undesirable in certain runtime environments, such as AWS which displays ANSI color codes using escape sequences and may incorrectly split log entries into multiple lines.
+
+</EnvVarConfig>
+
+### ELECTRIC_LOGGING_OTP_REPORTS
+
+<EnvVarConfig
+    name="ELECTRIC_LOGGING_OTP_REPORTS"
+    defaultValue="false"
+    example="true">
+
+Enable [OTP SASL](https://www.erlang.org/doc/apps/sasl/sasl_app.html) reporting at runtime.
+
+</EnvVarConfig>
+
+
 ## Usage reporting
 
 ### ELECTRIC_USAGE_REPORTING
@@ -312,5 +347,3 @@ These environment variables allow configuration of anonymous usage data reportin
     example="true">
 
 Configure anonymous usage data about the instance being sent to a central checkpoint service. Collected information is anonymised and doesn't contain any information from the replicated data. You can read more about it in our [telemetry docs](../reference/telemetry.md#anonymous-usage-data).
-
-</EnvVarConfig>
