@@ -50,6 +50,8 @@ async function resilientFetch(
       return await response.json()
     }
 
+    return response
+
     // Could also retry here if you want to be resilient
     // to 4xx and 5xx responses as well as network errors
 >>>>>>> d6a41c34 (examples: format.)

@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS todos_synced (
   write_id UUID
 );
 
--- The `todos_local` table for local optimistic state.
-CREATE TABLE IF NOT EXISTS todos_local (
+-- The `p4_todos_local` table for local optimistic state.
+CREATE TABLE IF NOT EXISTS p4_todos_local (
   id UUID PRIMARY KEY,
   title TEXT,
   completed BOOLEAN,
@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS todos_local (
   write_id UUID NOT NULL
 );
 
--- The `todos` view to combine the two tables on read.
-CREATE OR REPLACE VIEW todos AS
+-- The `p4_todos` view to combine the two tables on read.
+CREATE OR REPLACE VIEW p4_todos AS
   SELECT
     COALESCE(local.id, synced.id) AS id,
     CASE
@@ -46,8 +46,8 @@ CREATE OR REPLACE VIEW todos AS
         THEN local.created_at
         ELSE synced.created_at
       END AS created_at
-  FROM todos_synced AS synced
-  FULL OUTER JOIN todos_local AS local
+  FROM p4_todos_synced AS synced
+  FULL OUTER JOIN p4_todos_local AS local
     ON synced.id = local.id
     WHERE local.id IS NULL OR local.is_deleted = FALSE;
 
@@ -89,7 +89,7 @@ EXECUTE FUNCTION delete_local_on_synced_insert_and_update_trigger();
 
 -- The local `changes` table for capturing and persisting a log
 -- of local write operations that we want to sync to the server.
-CREATE TABLE IF NOT EXISTS changes (
+CREATE TABLE IF NOT EXISTS p4_changes (
   id BIGSERIAL PRIMARY KEY,
   operation TEXT NOT NULL,
   value JSONB NOT NULL,
@@ -102,15 +102,15 @@ CREATE TABLE IF NOT EXISTS changes (
 -- 2. to capture write operations and write change messages into the
 
 -- The insert trigger
-CREATE OR REPLACE FUNCTION todos_insert_trigger()
+CREATE OR REPLACE FUNCTION p4_todos_insert_trigger()
 RETURNS TRIGGER AS $$
 DECLARE
   local_write_id UUID := gen_random_uuid();
 BEGIN
-  IF EXISTS (SELECT 1 FROM todos_synced WHERE id = NEW.id) THEN
+  IF EXISTS (SELECT 1 FROM p4_todos_synced WHERE id = NEW.id) THEN
     RAISE EXCEPTION 'Cannot insert: id already exists in the synced table';
   END IF;
-  IF EXISTS (SELECT 1 FROM todos_local WHERE id = NEW.id) THEN
+  IF EXISTS (SELECT 1 FROM p4_todos_local WHERE id = NEW.id) THEN
     RAISE EXCEPTION 'Cannot insert: id already exists in the local table';
   END IF;
 
@@ -156,17 +156,17 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- The update trigger
-CREATE OR REPLACE FUNCTION todos_update_trigger()
+CREATE OR REPLACE FUNCTION p4_todos_update_trigger()
 RETURNS TRIGGER AS $$
 DECLARE
-  synced todos_synced%ROWTYPE;
-  local todos_local%ROWTYPE;
+  synced p4_todos_synced%ROWTYPE;
+  local p4_todos_local%ROWTYPE;
   changed_cols TEXT[] := '{}';
   local_write_id UUID := gen_random_uuid();
 BEGIN
   -- Fetch the corresponding rows from the synced and local tables
-  SELECT * INTO synced FROM todos_synced WHERE id = NEW.id;
-  SELECT * INTO local FROM todos_local WHERE id = NEW.id;
+  SELECT * INTO synced FROM p4_todos_synced WHERE id = NEW.id;
+  SELECT * INTO local FROM p4_todos_local WHERE id = NEW.id;
 
   -- If the row is not present in the local table, insert it
   IF NOT FOUND THEN
@@ -181,7 +181,7 @@ BEGIN
       changed_cols := array_append(changed_cols, 'created_at');
     END IF;
 
-    INSERT INTO todos_local (
+    INSERT INTO p4_todos_local (
       id,
       title,
       completed,
@@ -201,7 +201,7 @@ BEGIN
   -- Otherwise, if the row is already in the local table, update it and adjust
   -- the changed_columns
   ELSE
-    UPDATE todos_local
+    UPDATE p4_todos_local
       SET
         title =
           CASE
@@ -270,7 +270,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- The delete trigger
-CREATE OR REPLACE FUNCTION todos_delete_trigger()
+CREATE OR REPLACE FUNCTION p4_todos_delete_trigger()
 RETURNS TRIGGER AS $$
 DECLARE
   local_write_id UUID := gen_random_uuid();
@@ -283,7 +283,7 @@ BEGIN
       write_id = local_write_id
     WHERE id = OLD.id;
   ELSE
-    INSERT INTO todos_local (
+    INSERT INTO p4_todos_local (
       id,
       is_deleted,
       write_id
@@ -315,18 +315,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER todos_insert
-INSTEAD OF INSERT ON todos
+CREATE OR REPLACE TRIGGER p4_todos_insert
+INSTEAD OF INSERT ON p4_todos
 FOR EACH ROW
-EXECUTE FUNCTION todos_insert_trigger();
+EXECUTE FUNCTION p4_todos_insert_trigger();
 
-CREATE OR REPLACE TRIGGER todos_update
-INSTEAD OF UPDATE ON todos
+CREATE OR REPLACE TRIGGER p4_todos_update
+INSTEAD OF UPDATE ON p4_todos
 FOR EACH ROW
-EXECUTE FUNCTION todos_update_trigger();
+EXECUTE FUNCTION p4_todos_update_trigger();
 
-CREATE OR REPLACE TRIGGER todos_delete
-INSTEAD OF DELETE ON todos
+CREATE OR REPLACE TRIGGER p4_todos_delete
+INSTEAD OF DELETE ON p4_todos
 FOR EACH ROW
 EXECUTE FUNCTION todos_delete_trigger();
 

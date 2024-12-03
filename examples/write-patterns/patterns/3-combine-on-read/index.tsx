@@ -1,16 +1,15 @@
 import React, { useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
-import { PGlite } from '@electric-sql/pglite'
-import { PGliteWithLive, live } from '@electric-sql/pglite/live'
 import {
   PGliteProvider,
   useLiveQuery,
   usePGlite,
 } from '@electric-sql/pglite-react'
-import { electricSync } from '@electric-sql/pglite-sync'
 
 import api from '../../shared/app/client'
+import pglite from '../../shared/app/db'
+
 import localSchemaMigrations from './local-schema.sql?raw'
 
 const ELECTRIC_URL = import.meta.env.ELECTRIC_URL || 'http://localhost:3000'
@@ -22,14 +21,9 @@ type Todo = {
   created_at: Date
 }
 
-const pglite: PGliteWithLive = await PGlite.create({
-  extensions: {
-    electric: electricSync(),
-    live,
-  },
-})
 await pglite.exec(localSchemaMigrations)
 
+// This starts the read path sync using Electric.
 await pglite.electric.syncShapeToTable({
   shape: {
     url: `${ELECTRIC_URL}/v1/shape`,
