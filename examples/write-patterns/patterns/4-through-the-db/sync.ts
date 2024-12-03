@@ -16,10 +16,7 @@ type Change = {
   transaction_id: TransactionId
 }
 
-type SendResult =
-  'accepted' |
-  'rejected' |
-  'retry'
+type SendResult = 'accepted' | 'rejected' | 'retry'
 
 /*
  * Minimal, naive synchronization utility, just to illustrate the pattern of
@@ -48,7 +45,10 @@ export default class LocalChangeSynchronizer {
   async start(): Promise<void> {
     console.log('start')
 
-    this.#unsubscribe = await this.#db.listen('p4_changes', this.handle.bind(this))
+    this.#unsubscribe = await this.#db.listen(
+      'p4_changes',
+      this.handle.bind(this)
+    )
 
     this.process()
   }
@@ -86,17 +86,17 @@ export default class LocalChangeSynchronizer {
         case 'accepted':
           await this.proceed(position)
 
-          break;
+          break
 
         case 'rejected':
           await this.rollback()
 
-          break;
+          break
 
         case 'retry':
           this.#hasChangedWhileProcessing = true
 
-          break;
+          break
       }
     }
 
@@ -110,7 +110,7 @@ export default class LocalChangeSynchronizer {
   /*
    * Fetch the current batch of changes
    */
-  async query(): Promise<{ changes: Change[], position: TransactionId}> {
+  async query(): Promise<{ changes: Change[]; position: TransactionId }> {
     console.log('query')
 
     const { rows } = await this.#db.sql<Change>`
@@ -123,13 +123,11 @@ export default class LocalChangeSynchronizer {
 
     console.log('rows', rows)
 
-    const position = rows.length
-      ? rows.at(-1)!.transaction_id
-      : this.#position
+    const position = rows.length ? rows.at(-1)!.transaction_id : this.#position
 
     return {
       changes: rows,
-      position
+      position,
     }
   }
 
@@ -141,12 +139,14 @@ export default class LocalChangeSynchronizer {
 
     const path = '/changes'
 
-    const groups = Object.groupBy(changes, x => x.transaction_id)
-    const sorted = Object.entries(groups).sort((a,b) => b[0].localeCompare(a[0]))
+    const groups = Object.groupBy(changes, (x) => x.transaction_id)
+    const sorted = Object.entries(groups).sort((a, b) =>
+      b[0].localeCompare(a[0])
+    )
     const transactions = sorted.map(([transaction_id, changes]) => {
       return {
         id: transaction_id,
-        changes: changes
+        changes: changes,
       }
     })
 
