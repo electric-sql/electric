@@ -4,7 +4,7 @@ import {
   CombineOnRead,
   OnlineWrites,
   OptimisticState,
-  ThroughTheDB
+  ThroughTheDB,
 } from '../../patterns'
 
 const App = () => {

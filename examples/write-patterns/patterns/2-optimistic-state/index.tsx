@@ -126,11 +126,7 @@ export default function OptimisticState() {
       })
 
       const fetchPromise = api.request(path, 'PUT', data)
-      const syncPromise = matchStream(
-        stream,
-        ['update'],
-        matchBy('id', id)
-      )
+      const syncPromise = matchStream(stream, ['update'], matchBy('id', id))
 
       await Promise.all([fetchPromise, syncPromise])
     })
@@ -152,11 +148,7 @@ export default function OptimisticState() {
       })
 
       const fetchPromise = api.request(path, 'DELETE')
-      const syncPromise = matchStream(
-        stream,
-        ['delete'],
-        matchBy('id', id)
-      )
+      const syncPromise = matchStream(stream, ['delete'], matchBy('id', id))
 
       await Promise.all([fetchPromise, syncPromise])
     })

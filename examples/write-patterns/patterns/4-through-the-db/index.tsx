@@ -51,7 +51,9 @@ export default function Wrapper() {
 
 function ThroughTheDB() {
   const db = usePGlite()
-  const results = useLiveQuery<Todo>('SELECT * FROM p4_todos ORDER BY created_at')
+  const results = useLiveQuery<Todo>(
+    'SELECT * FROM p4_todos ORDER BY created_at'
+  )
 
   async function createTodo(event: React.FormEvent) {
     event.preventDefault()

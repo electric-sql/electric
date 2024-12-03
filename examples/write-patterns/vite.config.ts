@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   build: {
-    target: 'esnext'
+    target: 'esnext',
   },
   optimizeDeps: {
     exclude: ['@electric-sql/pglite'],
@@ -15,7 +15,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
-        maximumFileSizeToCacheInBytes: 10 * 1024 ** 2
+        maximumFileSizeToCacheInBytes: 10 * 1024 ** 2,
       },
       devOptions: {
         enabled: false,
