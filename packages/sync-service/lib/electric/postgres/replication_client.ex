@@ -213,8 +213,7 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   defp process_x_log_data(data, wal_end, %State{} = state) do
-    data
-    |> decode_message()
+    OpenTelemetry.timed_fun("decode_message_duration", fn -> decode_message(data) end)
     # # Useful for debugging:
     # |> tap(fn %struct{} = msg ->
     #   message_type = struct |> to_string() |> String.split(".") |> List.last()
@@ -284,11 +283,7 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   defp decode_message(data) do
-    OpenTelemetry.with_span(
-      "pg_txn.replication_client.decode_message",
-      [msg_size: byte_size(data)],
-      fn -> Decoder.decode(data) end
-    )
+    Decoder.decode(data)
   end
 
   defp encode_standby_status_update(state) do

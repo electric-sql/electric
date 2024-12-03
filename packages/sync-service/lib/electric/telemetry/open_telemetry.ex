@@ -33,6 +33,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   require OpenTelemetry.SemanticConventions.Trace
 
   @typep span_name :: String.t()
+  @typep attr_name :: String.t()
   @typep span_attrs :: :opentelemetry.attributes_map()
   @typep span_ctx :: :opentelemetry.span_ctx()
 
@@ -67,6 +68,17 @@ defmodule Electric.Telemetry.OpenTelemetry do
       fun_result = :otel_tracer.with_span(tracer(), name, span_opts, fn _span_ctx -> fun.() end)
       {fun_result, %{}}
     end)
+  end
+
+  @doc """
+  Executes the provided function and records its duration in microseconds.
+  The duration is added to the current span as a span attribute named with the given `name`.
+  """
+  @spec timed_fun(span_ctx() | nil, attr_name(), (-> term)) :: term
+  def timed_fun(span_ctx \\ nil, name, fun) when is_binary(name) do
+    {duration, result} = :timer.tc(fun)
+    add_span_attributes(span_ctx, %{name => duration})
+    result
   end
 
   @doc """
