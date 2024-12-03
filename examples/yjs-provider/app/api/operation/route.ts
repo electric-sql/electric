@@ -1,5 +1,10 @@
 import { pool } from "../../db"
 import { NextResponse } from "next/server"
+import { neon } from "@neondatabase/serverless"
+
+const sql = process.env.POOLED_DATABASE_URL
+  ? neon(process.env.POOLED_DATABASE_URL)
+  : undefined
 
 export async function POST(request: Request) {
   try {
@@ -19,10 +24,16 @@ export async function POST(request: Request) {
 }
 
 async function saveOperation(room: string, op: string) {
-  pool.query(
-    `INSERT INTO ydoc_operations (room, op) VALUES ($1, decode($2, 'base64'))`,
-    [room, op]
-  )
+  if (sql) {
+    await sql`
+      INSERT INTO ydoc_operations (room, op) VALUES (${room}, decode(${op}, 'base64'))
+    `
+  } else {
+    await pool!.query(
+      `INSERT INTO ydoc_operations (room, op) VALUES ($1, decode($2, 'base64'))`,
+      [room, op]
+    )
+  }
 }
 
 async function saveAwarenessOperation(
@@ -30,12 +41,20 @@ async function saveAwarenessOperation(
   op: string,
   clientId: string
 ) {
-  await pool.query(
-    `INSERT INTO ydoc_awareness (room, clientId, op) VALUES ($1, $2, decode($3, 'base64')) 
+  if (sql) {
+    await sql`
+      INSERT INTO ydoc_awareness (room, clientId, op) VALUES (${room}, ${clientId}, decode(${op}, 'base64'))
+      ON CONFLICT (clientId, room)
+      DO UPDATE SET op = decode(${op}, 'base64')
+    `
+  } else {
+    await pool!.query(
+      `INSERT INTO ydoc_awareness (room, clientId, op) VALUES ($1, $2, decode($3, 'base64'))
        ON CONFLICT (clientId, room)
        DO UPDATE SET op = decode($3, 'base64')`,
-    [room, clientId, op]
-  )
+      [room, clientId, op]
+    )
+  }
 }
 
 async function getRequestParams(
