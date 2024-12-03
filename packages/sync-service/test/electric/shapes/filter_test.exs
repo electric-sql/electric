@@ -1,0 +1,310 @@
+defmodule Electric.Shapes.FilterTest do
+  use ExUnit.Case
+
+  import ExUnit.CaptureLog
+
+  alias Electric.Replication.Changes.DeletedRecord
+  alias Electric.Replication.Changes.NewRecord
+  alias Electric.Replication.Changes.Relation
+  alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.TruncatedRelation
+  alias Electric.Replication.Changes.UpdatedRecord
+  alias Electric.Shapes.Filter
+  alias Electric.Shapes.Shape
+  alias Support.StubInspector
+
+  @inspector StubInspector.new([
+               %{name: "id", type: "int8", pk_position: 0},
+               %{name: "an_array", array_type: "int8"}
+             ])
+
+  describe "affected_shapes/2" do
+    test "returns shapes affected by insert" do
+      filter =
+        Filter.new()
+        |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
+        |> Filter.add_shape("s4", Shape.new!("t2", where: "id = 2", inspector: @inspector))
+
+      insert =
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"public", "t1"},
+              record: %{"id" => "2"}
+            }
+          ]
+        }
+
+      assert Filter.affected_shapes(filter, insert) == MapSet.new(["s2"])
+    end
+
+    test "returns shapes affected by delete" do
+      filter =
+        Filter.new()
+        |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
+        |> Filter.add_shape("s4", Shape.new!("t2", where: "id = 2", inspector: @inspector))
+
+      delete =
+        %Transaction{
+          changes: [
+            %DeletedRecord{
+              relation: {"public", "t1"},
+              old_record: %{"id" => "2"}
+            }
+          ]
+        }
+
+      assert Filter.affected_shapes(filter, delete) == MapSet.new(["s2"])
+    end
+
+    test "returns shapes affected by update" do
+      filter =
+        Filter.new()
+        |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
+        |> Filter.add_shape("s4", Shape.new!("t1", where: "id = 4", inspector: @inspector))
+        |> Filter.add_shape("s2", Shape.new!("t2", where: "id = 2", inspector: @inspector))
+
+      update =
+        %Transaction{
+          changes: [
+            %UpdatedRecord{
+              relation: {"public", "t1"},
+              record: %{"id" => "2"},
+              old_record: %{"id" => "3"}
+            }
+          ]
+        }
+
+      assert Filter.affected_shapes(filter, update) == MapSet.new(["s2", "s3"])
+    end
+
+    test "returns shapes affected by relation change" do
+      filter =
+        Filter.new()
+        |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape("s3", Shape.new!("t1", where: "id > 7", inspector: @inspector))
+        |> Filter.add_shape("s4", Shape.new!("t1", where: "id > 8", inspector: @inspector))
+        |> Filter.add_shape("s5", Shape.new!("t2", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape("s6", Shape.new!("t2", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape("s7", Shape.new!("t2", where: "id > 7", inspector: @inspector))
+        |> Filter.add_shape("s8", Shape.new!("t2", where: "id > 8", inspector: @inspector))
+
+      relation = %Relation{schema: "public", table: "t1"}
+
+      assert Filter.affected_shapes(filter, relation) == MapSet.new(["s1", "s2", "s3", "s4"])
+    end
+
+    test "returns shapes affected by relation rename" do
+      table_id = 123
+      s1 = Shape.new!("t1", inspector: @inspector)
+      s2 = Shape.new!("t2", inspector: @inspector) |> Map.put(:root_table_id, table_id)
+      s3 = Shape.new!("t3", inspector: @inspector)
+
+      filter =
+        Filter.new()
+        |> Filter.add_shape("s1", s1)
+        |> Filter.add_shape("s2", s2)
+        |> Filter.add_shape("s3", s3)
+
+      rename = %Relation{schema: "public", table: "new_name", id: table_id}
+
+      assert Filter.affected_shapes(filter, rename) == MapSet.new(["s2"])
+    end
+
+    test "returns shapes affected by truncation" do
+      filter =
+        Filter.new()
+        |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape("s3", Shape.new!("t1", where: "id > 7", inspector: @inspector))
+        |> Filter.add_shape("s4", Shape.new!("t1", where: "id > 8", inspector: @inspector))
+        |> Filter.add_shape("s5", Shape.new!("t2", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape("s6", Shape.new!("t2", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape("s7", Shape.new!("t2", where: "id > 7", inspector: @inspector))
+        |> Filter.add_shape("s8", Shape.new!("t2", where: "id > 8", inspector: @inspector))
+
+      truncation = %Transaction{changes: [%TruncatedRelation{relation: {"public", "t1"}}]}
+
+      assert Filter.affected_shapes(filter, truncation) == MapSet.new(["s1", "s2", "s3", "s4"])
+    end
+
+    test "where clause in the form `field = const` is optimised" do
+      filter =
+        1..1000
+        |> Enum.reduce(Filter.new(), fn i, filter ->
+          Filter.add_shape(filter, i, Shape.new!("t1", where: "id = #{i}", inspector: @inspector))
+        end)
+
+      reductions =
+        reductions(fn ->
+          assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
+        end)
+
+      assert reductions < 500
+    end
+
+    test "where clause in the form `field = const AND another_condition` is optimised" do
+      filter =
+        1..1000
+        |> Enum.reduce(Filter.new(), fn i, filter ->
+          Filter.add_shape(
+            filter,
+            i,
+            Shape.new!("t1", where: "id = #{i} AND id > 6", inspector: @inspector)
+          )
+        end)
+
+      reductions =
+        reductions(fn ->
+          assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
+        end)
+
+      assert reductions < 500
+    end
+
+    test "where clause in the form `a_condition AND field = const` is optimised" do
+      filter =
+        1..1000
+        |> Enum.reduce(Filter.new(), fn i, filter ->
+          Filter.add_shape(
+            filter,
+            i,
+            Shape.new!("t1", where: "id > 6 AND id = #{i}", inspector: @inspector)
+          )
+        end)
+
+      reductions =
+        reductions(fn ->
+          assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
+        end)
+
+      assert reductions < 500
+    end
+  end
+
+  test "shape with no where clause is affected by all changes for the same table" do
+    shape = Shape.new!("t1", inspector: @inspector)
+    filter = Filter.new() |> Filter.add_shape("s", shape)
+
+    assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
+    assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new(["s"])
+    assert Filter.affected_shapes(filter, change("t2", %{"id" => "8"})) == MapSet.new([])
+  end
+
+  test "shape with a where clause is affected by changes that match that where clause" do
+    shape = Shape.new!("t1", where: "id = 7", inspector: @inspector)
+    filter = Filter.new() |> Filter.add_shape("s", shape)
+
+    assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
+    assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new([])
+    assert Filter.affected_shapes(filter, change("t2", %{"id" => "8"})) == MapSet.new([])
+  end
+
+  test "invalid record value logs an error and says all shapes for the table are affected" do
+    filter =
+      Filter.new()
+      |> Filter.add_shape("shape1", Shape.new!("table", inspector: @inspector))
+      |> Filter.add_shape("shape2", Shape.new!("table", where: "id = 7", inspector: @inspector))
+      |> Filter.add_shape("shape3", Shape.new!("table", where: "id = 8", inspector: @inspector))
+      |> Filter.add_shape("shape4", Shape.new!("table", where: "id > 9", inspector: @inspector))
+      |> Filter.add_shape("shape5", Shape.new!("another_table", inspector: @inspector))
+
+    log =
+      capture_log(fn ->
+        assert Filter.affected_shapes(filter, change("table", %{"id" => "invalid_value"})) ==
+                 MapSet.new(["shape1", "shape2", "shape3", "shape4"])
+      end)
+
+    assert log =~ ~s(Could not parse value for field "id" of type :int8)
+  end
+
+  test "Filter.remove_shape/2" do
+    empty = Filter.new()
+
+    filter1 =
+      empty
+      |> Filter.add_shape("shape1", Shape.new!("table", inspector: @inspector))
+
+    filter2 =
+      filter1
+      |> Filter.add_shape("shape2", Shape.new!("another_table", inspector: @inspector))
+
+    filter3 =
+      filter2
+      |> Filter.add_shape("shape3", Shape.new!("table", where: "id = 1", inspector: @inspector))
+
+    filter4 =
+      filter3
+      |> Filter.add_shape("shape4", Shape.new!("table", where: "id = 2", inspector: @inspector))
+
+    filter5 =
+      filter4
+      |> Filter.add_shape("shape5", Shape.new!("table", where: "id > 2", inspector: @inspector))
+
+    filter6 =
+      filter5
+      |> Filter.add_shape("shape6", Shape.new!("table", where: "id > 7", inspector: @inspector))
+
+    assert Filter.remove_shape(filter6, "shape6") == filter5
+    assert Filter.remove_shape(filter5, "shape5") == filter4
+    assert Filter.remove_shape(filter4, "shape4") == filter3
+    assert Filter.remove_shape(filter3, "shape3") == filter2
+    assert Filter.remove_shape(filter2, "shape2") == filter1
+    assert Filter.remove_shape(filter1, "shape1") == empty
+  end
+
+  for test <- [
+        %{where: "id = 7", record: %{"id" => "7"}, affected: true},
+        %{where: "id = 7", record: %{"id" => "8"}, affected: false},
+        %{where: "id = 7", record: %{"id" => nil}, affected: false},
+        %{where: "7 = id", record: %{"id" => "7"}, affected: true},
+        %{where: "7 = id", record: %{"id" => "8"}, affected: false},
+        %{where: "7 = id", record: %{"id" => nil}, affected: false},
+        %{where: "id = 7 AND id > 1", record: %{"id" => "7"}, affected: true},
+        %{where: "id = 7 AND id > 1", record: %{"id" => "8"}, affected: false},
+        %{where: "id = 7 AND id > 8", record: %{"id" => "7"}, affected: false},
+        %{where: "id > 1 AND id = 7", record: %{"id" => "7"}, affected: true},
+        %{where: "id > 1 AND id = 7", record: %{"id" => "8"}, affected: false},
+        %{where: "id > 8 AND id = 7", record: %{"id" => "7"}, affected: false},
+        %{where: "an_array = '{1}'", record: %{"an_array" => "{1}"}, affected: true},
+        %{where: "an_array = '{1}'", record: %{"an_array" => "{2}"}, affected: false},
+        %{where: "an_array = '{1}'", record: %{"an_array" => "{1,2}"}, affected: false}
+      ] do
+    test "where: #{test.where}, record: #{inspect(test.record)}" do
+      %{where: where, record: record, affected: affected} = unquote(Macro.escape(test))
+
+      shape = Shape.new!("the_table", where: where, inspector: @inspector)
+
+      transaction = change("the_table", record)
+
+      assert Filter.new()
+             |> Filter.add_shape("the-shape", shape)
+             |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"]) == affected
+    end
+  end
+
+  defp change(table, record) do
+    %Transaction{
+      changes: [
+        %NewRecord{
+          relation: {"public", table},
+          record: record
+        }
+      ]
+    }
+  end
+
+  defp reductions(fun) do
+    {:reductions, reductions_before} = :erlang.process_info(self(), :reductions)
+    fun.()
+    {:reductions, reductions_after} = :erlang.process_info(self(), :reductions)
+    reductions_after - reductions_before
+  end
+end

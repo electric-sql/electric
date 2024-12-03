@@ -1,10 +1,27 @@
 defmodule Electric.Shapes.DispatcherTest do
   use ExUnit.Case, async: true
 
+  alias Electric.Shapes.Shape
+  alias Electric.Replication.Changes.NewRecord
+  alias Electric.Replication.Changes.Transaction
   alias Electric.Shapes.Dispatcher, as: D
+  alias Support.StubInspector
 
-  defp dispatcher(opts \\ []) do
-    {:ok, state} = D.init(opts)
+  @inspector StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+  @shape Shape.new!("the_table", where: "id = 1", inspector: @inspector)
+  @other_shape Shape.new!("the_table", where: "id = 2", inspector: @inspector)
+
+  @transaction %Transaction{
+    changes: [
+      %NewRecord{
+        relation: {"public", "the_table"},
+        record: %{"id" => "1"}
+      }
+    ]
+  }
+
+  defp dispatcher() do
+    {:ok, state} = D.init([])
     state
   end
 
@@ -32,9 +49,6 @@ defmodule Electric.Shapes.DispatcherTest do
     {pid, ref}
   end
 
-  defp is_even(n), do: rem(n, 2) == 0
-  defp is_odd(n), do: rem(n, 2) == 1
-
   test "demand is only sent to producer once all subscribers have processed the message" do
     dispatcher = dispatcher()
 
@@ -43,11 +57,11 @@ defmodule Electric.Shapes.DispatcherTest do
     c3 = {_pid3, ref3} = consumer(3)
 
     # we only want to send a single event for any number of consumers
-    {:ok, 1, dispatcher} = D.subscribe([selector: &is_even/1], c1, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c2, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c3, dispatcher)
+    {:ok, 1, dispatcher} = D.subscribe([shape: @shape], c1, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([shape: @shape], c2, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([shape: @shape], c3, dispatcher)
 
-    event = 2
+    event = @transaction
 
     {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
@@ -68,11 +82,11 @@ defmodule Electric.Shapes.DispatcherTest do
     c2 = {_pid2, ref2} = consumer(2)
     c3 = {_pid3, ref3} = consumer(3)
 
-    {:ok, 1, dispatcher} = D.subscribe([selector: &is_odd/1], c1, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c2, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c3, dispatcher)
+    {:ok, 1, dispatcher} = D.subscribe([shape: @other_shape], c1, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([shape: @shape], c2, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([shape: @shape], c3, dispatcher)
 
-    event = 2
+    event = @transaction
 
     {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
@@ -91,11 +105,11 @@ defmodule Electric.Shapes.DispatcherTest do
     c2 = {_pid2, ref2} = consumer(2)
     c3 = {_pid3, ref3} = consumer(3)
 
-    {:ok, 1, dispatcher} = D.subscribe([selector: &is_even/1], c1, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c2, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c3, dispatcher)
+    {:ok, 1, dispatcher} = D.subscribe([shape: @shape], c1, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([shape: @shape], c2, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([shape: @shape], c3, dispatcher)
 
-    event = 2
+    event = @transaction
 
     {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
@@ -117,11 +131,11 @@ defmodule Electric.Shapes.DispatcherTest do
     c2 = {_pid2, ref2} = consumer(2)
     c3 = {_pid3, ref3} = consumer(3)
 
-    {:ok, 1, dispatcher} = D.subscribe([], c1, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c2, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c3, dispatcher)
+    {:ok, 1, dispatcher} = D.subscribe([shape: @shape], c1, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([shape: @shape], c2, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([shape: @shape], c3, dispatcher)
 
-    event = 2
+    event = @transaction
 
     {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
@@ -146,11 +160,11 @@ defmodule Electric.Shapes.DispatcherTest do
     c3 = {_pid3, _ref3} = consumer(3)
 
     # we only want to send a single event for any number of consumers
-    {:ok, 1, dispatcher} = D.subscribe([], c1, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c2, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c3, dispatcher)
+    {:ok, 1, dispatcher} = D.subscribe([shape: @shape], c1, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([shape: @shape], c2, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([shape: @shape], c3, dispatcher)
 
-    event = 2
+    event = @transaction
 
     {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
@@ -168,11 +182,11 @@ defmodule Electric.Shapes.DispatcherTest do
     c2 = {_pid2, ref2} = consumer(2)
     c3 = {_pid3, ref3} = consumer(3)
 
-    {:ok, 1, dispatcher} = D.subscribe([selector: &is_even/1], c1, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c2, dispatcher)
-    {:ok, 0, dispatcher} = D.subscribe([selector: &is_even/1], c3, dispatcher)
+    {:ok, 1, dispatcher} = D.subscribe([shape: @other_shape], c1, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([shape: @other_shape], c2, dispatcher)
+    {:ok, 0, dispatcher} = D.subscribe([shape: @other_shape], c3, dispatcher)
 
-    event = 3
+    event = @transaction
 
     {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
     refute_receive {C, ^ref1, [^event]}

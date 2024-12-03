@@ -1063,14 +1063,14 @@ defmodule Electric.Replication.Eval.Parser do
   defp internal_node_to_error(%Func{type: type, name: name}),
     do: "function #{name} returning #{type}"
 
-  defp find_refs(tree, acc \\ %{})
-  defp find_refs(%Const{}, acc), do: acc
-  defp find_refs(%Ref{path: path, type: type}, acc), do: Map.put_new(acc, path, type)
+  def find_refs(tree, acc \\ %{})
+  def find_refs(%Const{}, acc), do: acc
+  def find_refs(%Ref{path: path, type: type}, acc), do: Map.put_new(acc, path, type)
 
-  defp find_refs(%Func{args: args, variadic_arg: nil}, acc),
+  def find_refs(%Func{args: args, variadic_arg: nil}, acc),
     do: Enum.reduce(args, acc, &find_refs/2)
 
-  defp find_refs(%Func{args: args, variadic_arg: position}, acc),
+  def find_refs(%Func{args: args, variadic_arg: position}, acc),
     do:
       Enum.reduce(Enum.with_index(args), acc, fn
         {arg, ^position}, acc -> Enum.reduce(arg, acc, &find_refs/2)

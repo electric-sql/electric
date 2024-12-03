@@ -5,8 +5,8 @@ defmodule Electric.Shapes.Shape do
   require Logger
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Eval.Parser
-  alias Electric.Replication.Eval.Runner
   alias Electric.Replication.Changes
+  alias Electric.Shapes.WhereClause
 
   @enforce_keys [:root_table, :root_table_id]
   defstruct [
@@ -218,7 +218,7 @@ defmodule Electric.Shapes.Shape do
       when is_struct(change, Changes.DeletedRecord) do
     record = if is_struct(change, Changes.NewRecord), do: change.record, else: change.old_record
 
-    if record_in_shape?(where, record),
+    if WhereClause.includes_record?(where, record),
       do: [filter_change_columns(selected_columns, change)],
       else: []
   end
@@ -227,8 +227,8 @@ defmodule Electric.Shapes.Shape do
         %__MODULE__{where: where, selected_columns: selected_columns},
         %Changes.UpdatedRecord{old_record: old_record, record: record} = change
       ) do
-    old_record_in_shape = record_in_shape?(where, old_record)
-    new_record_in_shape = record_in_shape?(where, record)
+    old_record_in_shape = WhereClause.includes_record?(where, old_record)
+    new_record_in_shape = WhereClause.includes_record?(where, record)
 
     converted_changes =
       case {old_record_in_shape, new_record_in_shape} do
@@ -253,17 +253,6 @@ defmodule Electric.Shapes.Shape do
     do: false
 
   defp filtered_columns_changed(_), do: true
-
-  defp record_in_shape?(nil, _record), do: true
-
-  defp record_in_shape?(where, record) do
-    with {:ok, refs} <- Runner.record_to_ref_values(where.used_refs, record),
-         {:ok, evaluated} <- Runner.execute(where, refs) do
-      if is_nil(evaluated), do: false, else: evaluated
-    else
-      _ -> false
-    end
-  end
 
   # If relation OID matches, but qualified table name does not, then shape is affected
   def is_affected_by_relation_change?(
