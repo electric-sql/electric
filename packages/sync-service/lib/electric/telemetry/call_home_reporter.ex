@@ -49,7 +49,7 @@ defmodule Electric.Telemetry.CallHomeReporter do
     Process.set_label({:call_home_reporter, name})
 
     Logger.notice(
-      "Starting telemetry reporter. Electric will send anonymous usage data to #{Application.fetch_env!(:electric, :telemetry_url)}. You can configure this with `ELECTRIC_CALL_HOME_TELEMETRY` environment variable, see https://electric-sql.com/docs/reference/telemetry for more information."
+      "Starting telemetry reporter. Electric will send anonymous usage data to #{Application.fetch_env!(:electric, :telemetry_url)}. You can configure this with `ELECTRIC_USAGE_REPORTING` environment variable, see https://electric-sql.com/docs/reference/telemetry for more information."
     )
 
     metrics = save_target_path_to_options(metrics)
