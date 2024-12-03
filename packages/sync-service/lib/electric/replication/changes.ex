@@ -41,6 +41,7 @@ defmodule Electric.Replication.Changes do
     @type t() :: %__MODULE__{
             xid: Changes.xid() | nil,
             changes: [Changes.change()],
+            num_changes: non_neg_integer(),
             affected_relations: MapSet.t(Changes.relation_name()),
             commit_timestamp: DateTime.t(),
             lsn: Electric.Postgres.Lsn.t(),
@@ -53,6 +54,7 @@ defmodule Electric.Replication.Changes do
       :lsn,
       :last_log_offset,
       changes: [],
+      num_changes: 0,
       affected_relations: MapSet.new()
     ]
 
@@ -70,6 +72,7 @@ defmodule Electric.Replication.Changes do
       %{
         txn
         | changes: [change | changes],
+          num_changes: txn.num_changes + 1,
           affected_relations: MapSet.put(rels, rel)
       }
     end
@@ -82,7 +85,7 @@ defmodule Electric.Replication.Changes do
             relation: Changes.relation_name(),
             record: Changes.record(),
             log_offset: LogOffset.t(),
-            key: String.t()
+            key: String.t() | nil
           }
   end
 
@@ -103,8 +106,8 @@ defmodule Electric.Replication.Changes do
             old_record: Changes.record() | nil,
             record: Changes.record(),
             log_offset: LogOffset.t(),
-            key: String.t(),
-            old_key: String.t(),
+            key: String.t() | nil,
+            old_key: String.t() | nil,
             tags: [Changes.tag()],
             changed_columns: MapSet.t()
           }
@@ -148,7 +151,7 @@ defmodule Electric.Replication.Changes do
             relation: Changes.relation_name(),
             old_record: Changes.record(),
             log_offset: LogOffset.t(),
-            key: String.t(),
+            key: String.t() | nil,
             tags: [Changes.tag()]
           }
   end

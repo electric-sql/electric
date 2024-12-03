@@ -16,13 +16,12 @@ defmodule Electric.ShapeCache.Storage do
   @type shape_storage :: {module(), shape_opts()}
 
   @type log_item :: {LogOffset.t(), Querying.json_iodata()} | {:chunk_boundary | LogOffset.t()}
-  @type log_state :: %{current_chunk_byte_size: non_neg_integer()}
   @type log :: Enumerable.t(Querying.json_iodata())
 
   @type row :: list()
 
   @doc "Validate and initialise storage base configuration from application configuration"
-  @callback shared_opts(Keyword.t()) :: compiled_opts()
+  @callback shared_opts(term()) :: compiled_opts()
 
   @doc "Initialise shape-specific opts from the shared, global, configuration"
   @callback for_shape(shape_handle(), compiled_opts()) :: shape_opts()
@@ -39,6 +38,9 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Retrieve all stored shapes"
   @callback get_all_stored_shapes(compiled_opts()) ::
               {:ok, %{shape_handle() => Shape.t()}} | {:error, term()}
+
+  @doc "Get the total disk usage for all shapes"
+  @callback get_total_disk_usage(compiled_opts()) :: non_neg_integer()
 
   @doc """
   Get the current xmin and offset for the shape storage.
@@ -143,6 +145,11 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def get_all_stored_shapes({mod, opts}) do
     mod.get_all_stored_shapes(opts)
+  end
+
+  @impl __MODULE__
+  def get_total_disk_usage({mod, opts}) do
+    mod.get_total_disk_usage(opts)
   end
 
   @impl __MODULE__

@@ -8,6 +8,7 @@ defmodule Electric.Plug.Router do
   plug :server_header, Electric.version()
   # converts HEAD requests to GET requests
   plug Plug.Head
+  plug RemoteIp
   plug :match
   plug Electric.Plug.LabelProcessPlug
   plug Electric.Plug.TraceContextPlug

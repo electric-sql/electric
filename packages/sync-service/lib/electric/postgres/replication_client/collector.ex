@@ -31,7 +31,7 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
   Handle incoming logical replication message by either building up a transaction or
   returning a complete built up transaction.
   """
-  @spec handle_message(LR.message(), t()) :: t() | {Transaction.t(), t()}
+  @spec handle_message(LR.message(), t()) :: t() | {Transaction.t() | Relation.t(), t()}
   def handle_message(%LR.Message{} = msg, state) do
     Logger.info("Got a message from PG via logical replication: #{inspect(msg)}")
 

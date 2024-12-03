@@ -133,7 +133,8 @@ defmodule Electric.StackSupervisor do
     ]
   end
 
-  defp storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}}) do
+  @doc false
+  def storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}}) do
     {mod, arg |> Keyword.put(:stack_id, stack_id) |> mod.shared_opts()}
   end
 

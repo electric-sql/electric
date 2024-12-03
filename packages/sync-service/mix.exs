@@ -54,7 +54,7 @@ defmodule Electric.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, :tls_certificate_check],
+      extra_applications: [:logger, :tls_certificate_check, :os_mon, :runtime_tools],
       # Using a compile-time flag to select the application module or lack thereof allows
       # using this app as a dependency with this additional flag
       mod:
@@ -90,6 +90,8 @@ defmodule Electric.MixProject do
         {:plug, "~> 1.16"},
         {:postgrex, "~> 0.19"},
         {:retry, "~> 0.18"},
+        {:remote_ip, "~> 1.2"},
+        {:req, "~> 0.5"},
         {:telemetry_metrics_prometheus_core, "~> 1.1"},
         {:telemetry_metrics_statsd, "~> 0.7"},
         {:telemetry_poller, "~> 1.1"},

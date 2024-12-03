@@ -124,6 +124,11 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def get_total_disk_usage(_opts) do
+    0
+  end
+
+  @impl Electric.ShapeCache.Storage
   def snapshot_started?(%MS{} = opts) do
     try do
       :ets.member(opts.snapshot_table, snapshot_start())

@@ -7,7 +7,7 @@ outline: deep
 
 # Telemetry
 
-Electric provides telemetry data — such as traces, logs, and metrics — for real-time system monitoring. 
+Electric provides telemetry data — such as traces, logs, and metrics — for real-time system monitoring. Self-hosted Electric instances are also configured by default to send aggregated, anonymous usage data to ElectricSQL to help us understand how our software is being used. You can opt-out of this reporting by setting an environment variable. See the [Anonymous usage data](#anonymous-usage-data) section below for more details.
 
 ## Metrics
 
@@ -22,7 +22,7 @@ You can get the current status of the service by calling the `http://electric-ho
 
 ## OpenTelemetry
 
-Metrics, traces and logs are exported using the OpenTelemetry Protocol (OTLP). You can configure the OpenTelemetry Exporter for Electric using the following environment variables.
+Traces are exported using the OpenTelemetry Protocol (OTLP). You can configure the OpenTelemetry Exporter for Electric using the following environment variables.
 
 | VARIABLE      | Type      | Description     |
 |---------------|-----------|-----------------|
@@ -56,3 +56,11 @@ Set `ELECTRIC_HNY_DATASET` and `ELECTRIC_HNY_API_KEY` environment variables in a
 ```shell
 docker compose -f docker-compose-otel.yml up
 ```
+
+## Anonymous usage data
+
+Electric instances are configured by default to send anonymized usage data to checkpoint.electric-sql.com to help us understand how the software is being used. Absolutely no information about transaction contents is sent. I.e.: none of your data that you're using Electric to replicate is captured in the telemetry information or shared with the Electric checkpoint service. Captured data includes the disk usage by the shape cache, CPU/memory information about the running Electric instance, Postgres version, number of shapes, amount of distinct shape requests, and numerical information about processed transactions: byte size, amount of operations, and percentiles of response times. Essentially, what kind of load Electric was under, and how did it cope.
+
+Aggregated statistics are sent every 30 minutes.
+
+To disable anonymous usage data, set the `ELECTRIC_USAGE_REPORTING` environment variable to `false`. We encourage everyone to keep this enabled so we can get a better understanding of how Electric is used. If you have any further questions about what we collect, feel free to ask on our [open community Discord](https://discord.electric-sql.com) or reach out to us via email at [info@electric-sql.com](mailto:info@electric-sql.com).

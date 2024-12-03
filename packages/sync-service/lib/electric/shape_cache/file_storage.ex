@@ -155,6 +155,31 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def get_total_disk_usage(%{base_path: shapes_dir} = opts) do
+    case File.ls(shapes_dir) do
+      {:ok, shape_handles} ->
+        shape_handles
+        |> Enum.map(&for_shape(&1, opts))
+        |> Enum.map(fn fs ->
+          maybe_get_size(shape_definition_path(fs)) +
+            maybe_get_size(shape_snapshot_path(fs)) +
+            maybe_get_size(CubDB.current_db_file(fs.db))
+        end)
+        |> Enum.sum()
+
+      _ ->
+        0
+    end
+  end
+
+  defp maybe_get_size(path) do
+    case File.stat(path) do
+      {:ok, stat} -> stat.size
+      {:error, _} -> 0
+    end
+  end
+
+  @impl Electric.ShapeCache.Storage
   def get_current_position(%FS{} = opts) do
     {:ok, latest_offset(opts), snapshot_xmin(opts)}
   end

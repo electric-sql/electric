@@ -230,6 +230,8 @@ Path to root folder for storing data on the filesystem.
 
 ## Telemetry
 
+These environment variables allow configuration of metric and trace export for visibility into performance of the Electric instance.
+
 ### ELECTRIC_OTLP_ENDPOINT
 
 <EnvVarConfig
@@ -295,5 +297,20 @@ Expose a prometheus reporter for telemetry data on the specified port.
     example="https://example.com">
 
 Enable sending telemetry data to a StatsD reporting endpoint.
+
+</EnvVarConfig>
+
+## Usage reporting
+
+### ELECTRIC_USAGE_REPORTING
+
+These environment variables allow configuration of anonymous usage data reporting back to https://electric-sql.com
+
+<EnvVarConfig
+    name="ELECTRIC_USAGE_REPORTING"
+    defaultValue="true"
+    example="true">
+
+Configure anonymous usage data about the instance being sent to a central checkpoint service. Collected information is anonymised and doesn't contain any information from the replicated data. You can read more about it in our [telemetry docs](../reference/telemetry.md#anonymous-usage-data).
 
 </EnvVarConfig>

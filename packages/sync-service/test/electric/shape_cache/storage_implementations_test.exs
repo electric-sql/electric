@@ -567,13 +567,34 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         refute File.exists?(opts.data_dir)
       end
     end
+
+    describe "#{module_name}.get_total_disk_usage/1" do
+      setup do
+        {:ok, %{module: unquote(module)}}
+      end
+
+      test "returns 0 if no shapes exist", %{module: module} = context do
+        opts = module |> opts(context) |> module.shared_opts()
+
+        assert 0 = Electric.ShapeCache.Storage.get_total_disk_usage({module, opts})
+      end
+
+      test "returns the total disk usage for all shapes", %{module: storage} = context do
+        {:ok, %{opts: shape_opts, shared_opts: opts}} = start_storage(context)
+
+        storage.initialise(shape_opts)
+        storage.set_shape_definition(@shape, shape_opts)
+
+        assert 2274 = Electric.ShapeCache.Storage.get_total_disk_usage({storage, opts})
+      end
+    end
   end
 
   defp start_storage(%{module: module} = context) do
     opts = module |> opts(context) |> module.shared_opts()
     shape_opts = module.for_shape(@shape_handle, opts)
     {:ok, pid} = module.start_link(shape_opts)
-    {:ok, %{module: module, opts: shape_opts, pid: pid}}
+    {:ok, %{opts: shape_opts, shared_opts: opts, pid: pid}}
   end
 
   defp opts(InMemoryStorage, %{stack_id: stack_id}) do

@@ -577,11 +577,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do
     shape_handle =
-      if is_struct(conn.query_params, Plug.Conn.Unfetched) do
-        assigns[:active_shape_handle] || assigns[:shape_handle]
-      else
-        conn.query_params["handle"] || assigns[:active_shape_handle] || assigns[:shape_handle]
-      end
+      conn.query_params["handle"] || assigns[:active_shape_handle] || assigns[:handle]
 
     maybe_up_to_date = if up_to_date = assigns[:up_to_date], do: up_to_date != []
 
@@ -626,7 +622,24 @@ defmodule Electric.Plug.ServeShapePlug do
   # We want to have all the relevant HTTP and shape request attributes on the root span. This
   # is the place to assign them because we keep this plug last in the "plug pipeline" defined
   # in this module.
-  defp end_telemetry_span(conn, _ \\ nil) do
+  defp end_telemetry_span(%Conn{assigns: assigns} = conn, _ \\ nil) do
+    :telemetry.execute(
+      [:electric, :plug, :serve_shape],
+      %{
+        count: 1,
+        bytes: assigns[:streaming_bytes_sent] || 0,
+        monotonic_time: System.monotonic_time()
+      },
+      %{
+        live: assigns[:live],
+        shape_handle:
+          conn.query_params["handle"] || assigns[:active_shape_handle] || assigns[:handle],
+        client_ip: conn.remote_ip,
+        status: conn.status,
+        stack_id: assigns.config[:stack_id]
+      }
+    )
+
     add_span_attrs_from_conn(conn)
     OpentelemetryTelemetry.end_telemetry_span(OpenTelemetry, %{})
     conn
