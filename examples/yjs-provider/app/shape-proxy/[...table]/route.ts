@@ -2,8 +2,8 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const originUrl = new URL(
     process.env.ELECTRIC_URL
-      ? `${process.env.ELECTRIC_URL}/v1/shape`
-      : `http://localhost:3000/v1/shape`
+      ? `${process.env.ELECTRIC_URL}/v1/shape/`
+      : `http://localhost:3000/v1/shape/`
   )
 
   url.searchParams.forEach((value, key) => {
@@ -19,6 +19,8 @@ export async function GET(request: Request) {
     originUrl.searchParams.set(`token`, process.env.ELECTRIC_TOKEN)
   }
 
+  console.log("database_id", process.env.DATABASE_ID)
+  console.log("electric_token", process.env.ELECTRIC_TOKEN)
   console.log(originUrl.toString())
 
   const newRequest = new Request(originUrl.toString(), {

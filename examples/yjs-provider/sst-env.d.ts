@@ -6,5 +6,17 @@ import "sst"
 export {}
 declare module "sst" {
   export interface Resource {
+    "yjs": {
+      "type": "sst.aws.Nextjs"
+      "url": string
+    }
+    "yjs-service-vbalegas": {
+      "service": string
+      "type": "sst.aws.Service"
+      "url": string
+    }
+    "yjs-vpc-vbalegas": {
+      "type": "sst.aws.Vpc"
+    }
   }
 }

@@ -120,7 +120,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
   }
 
   private get awarenessUrl() {
-    return this.serverUrl + `/v1/shape/`
+    return this.serverUrl + `/v1/shape`
   }
 
   get synced() {

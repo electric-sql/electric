@@ -33,7 +33,6 @@ export default $config({
     })
 
     const databaseUri = getNeonDbUri(project, db)
-    const pooledDatabaseUri = getNeonDbUri(project, db, true)
     try {
       databaseUri.apply(applyMigrations)
 
@@ -41,13 +40,19 @@ export default $config({
         addDatabaseToElectric(uri)
       )
 
-      const website = deployApp(electricInfo, databaseUri, pooledDatabaseUri)
+      const website = deployServerlessApp(
+        electricInfo,
+        databaseUri,
+        databaseUri
+      )
+
+      const server = deployApp(electricInfo, databaseUri)
       return {
         databaseUri,
-        pooledUri: pooledDatabaseUri,
         database_id: electricInfo.id,
         electric_token: electricInfo.token,
         website: website.url,
+        server: server.url,
       }
     } catch (e) {
       console.error(`Failed to deploy yjs example stack`, e)
@@ -65,6 +70,39 @@ function applyMigrations(uri: string) {
 }
 
 function deployApp(
+  { id, token }: $util.Output<{ id: string; token: string }>,
+  uri: $util.Output<string>
+) {
+  const vpc = new sst.aws.Vpc(`yjs-vpc-${$app.stage}`)
+  const cluster = new sst.aws.Cluster(`yjs-cluster-${$app.stage}`, { vpc })
+
+  const service = cluster.addService(`yjs-service-${$app.stage}`, {
+    loadBalancer: {
+      ports: [{ listen: "443/https", forward: "3000/http" }],
+      domain: {
+        name: `yjs-server-${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+        dns: sst.cloudflare.dns(),
+      },
+    },
+    environment: {
+      ELECTRIC_URL: process.env.ELECTRIC_API!,
+      DATABASE_URL: uri,
+      DATABASE_ID: id,
+      ELECTRIC_TOKEN: token,
+    },
+    image: {
+      context: "../..",
+      dockerfile: "Dockerfile",
+    },
+    dev: {
+      command: "npm run dev",
+    },
+  })
+
+  return service
+}
+
+function deployServerlessApp(
   electricInfo: $util.Output<{ id: string; token: string }>,
   uri: $util.Output<string>,
   pooledUri: $util.Output<string>
@@ -75,7 +113,7 @@ function deployApp(
       ELECTRIC_TOKEN: electricInfo.token,
       DATABASE_ID: electricInfo.id,
       DATABASE_URL: uri,
-      POOLED_DATABASE_URL: pooledUri,
+      //  POOLED_DATABASE_URL: TODO
     },
     domain: {
       name: `yjs${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
@@ -86,8 +124,7 @@ function deployApp(
 
 function getNeonDbUri(
   project: $util.Output<neon.GetProjectResult>,
-  db: neon.Database,
-  pool: boolean = false
+  db: neon.Database
 ) {
   const passwordOutput = neon.getBranchRolePasswordOutput({
     projectId: project.id,
@@ -95,17 +132,7 @@ function getNeonDbUri(
     roleName: db.ownerName,
   })
 
-  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${project.databaseHost}/${db.name}?sslmode=require`.apply(
-    (v) => {
-      if (pool) {
-        return v.replace(
-          process.env.NEON_PROJECT_ID!,
-          process.env.NEON_PROJECT_ID + `-pooler`
-        )
-      }
-      return v
-    }
-  )
+  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${project.databaseHost}/${db.name}?sslmode=require`
 }
 
 async function addDatabaseToElectric(
