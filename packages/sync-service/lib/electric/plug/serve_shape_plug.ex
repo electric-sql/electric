@@ -4,6 +4,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # The halt/1 function is redefined further down below
   import Plug.Conn, except: [halt: 1]
+  import Electric.Replication.LogOffset, only: [is_log_offset_lt: 2]
 
   alias Electric.Plug.Utils
   import Electric.Plug.Utils, only: [hold_conn_until_stack_ready: 2]
@@ -26,6 +27,9 @@ defmodule Electric.Plug.ServeShapePlug do
                                  "The specified shape definition and handle do not match. " <>
                                    "Please ensure the shape definition is correct or omit the shape handle from the request to obtain a new one."
                              })
+  @offset_out_of_bounds Jason.encode!(%{
+                          offset: ["out of bounds for this shape"]
+                        })
 
   defmodule Params do
     use Ecto.Schema
@@ -232,6 +236,20 @@ defmodule Electric.Plug.ServeShapePlug do
       shape_info = Shapes.get_or_create_shape_handle(config, shape)
       handle_shape_info(conn, shape_info)
     end
+  end
+
+  defp handle_shape_info(
+         %Conn{assigns: %{handle: shape_handle, offset: offset}} = conn,
+         {active_shape_handle, last_offset}
+       )
+       when (is_nil(shape_handle) or shape_handle == active_shape_handle) and
+              is_log_offset_lt(last_offset, offset) do
+    # We found a shape that matches the shape definition
+    # and the shape has the same ID as the shape handle provided by the user
+    # but the provided offset is wrong as it is greater than the last offset for this shape
+    conn
+    |> send_resp(400, @offset_out_of_bounds)
+    |> halt()
   end
 
   defp handle_shape_info(
