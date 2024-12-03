@@ -5,7 +5,7 @@ import {
   type GetExtensions,
   type Operation,
   type Row,
-  type Value
+  type Value,
 } from './types'
 
 export function matchStream<T extends Row<unknown>>(
@@ -47,7 +47,7 @@ export function matchStream<T extends Row<unknown>>(
 
 export function matchBy<T extends Row<unknown>>(
   column: string,
-  value: Value<GetExtensions<T>>,
+  value: Value<GetExtensions<T>>
 ): (message: ChangeMessage<T>) => boolean {
   return (message) => message.value[column] === value
 }

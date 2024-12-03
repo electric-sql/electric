@@ -1,4 +1,4 @@
-import { describe, expect, inject, vi } from 'vitest'
+import { describe, expect, inject } from 'vitest'
 import { v4 as uuidv4 } from 'uuid'
 import { testWithIssuesTable as it } from './support/test-context'
 import { ShapeStream, matchBy, matchStream } from '../src'
@@ -22,7 +22,7 @@ describe(`matchStream`, () => {
       insertIssues(issue)
     }, 10)
 
-    const matchFn = matchBy('id', id)
+    const matchFn = matchBy(`id`, id)
     const result = await matchStream(stream, [`insert`], matchFn, 200)
 
     expect(result.value.title).toEqual(`test title`)
