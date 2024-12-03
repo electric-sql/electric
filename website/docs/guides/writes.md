@@ -26,7 +26,7 @@ Includes patterns for [online writes](#), [local optimistic state](#), [combinin
 
 ## Local writes with Electric
 
-Electric provides [read-path sync](/product/sync). I.e.: it syncs [little subsets](/docs/guides/shapes) of your data out of Postgres into local apps and services.
+Electric provides [read-path sync](/product/electric). I.e.: it syncs [little subsets](/docs/guides/shapes) of your data out of Postgres into local apps and services.
 
 Electric **does not** provide built-in write-path sync. I.e.: it does not sync data back into Postgres from your local apps and services.
 
