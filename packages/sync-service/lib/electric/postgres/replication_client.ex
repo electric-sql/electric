@@ -221,7 +221,7 @@ defmodule Electric.Postgres.ReplicationClient do
     end
   end
 
-  defp process_x_log_data(data, wal_end, %State{} = state) do
+  defp process_x_log_data(data, wal_end, %State{stack_id: stack_id} = state) do
     OpenTelemetry.timed_fun("decode_message_duration", fn -> decode_message(data) end)
     # # Useful for debugging:
     # |> tap(fn %struct{} = msg ->

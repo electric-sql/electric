@@ -137,22 +137,6 @@ defmodule Electric.StackSupervisor do
     ]
   end
 
-  @doc """
-  Store the telemetry span attributes in the persistent term for this stack.
-  """
-  @spec set_telemetry_span_attrs(String.t(), Electric.Telemetry.OpenTelemetry.span_attrs()) :: :ok
-  def set_telemetry_span_attrs(stack_id, attrs) do
-    :persistent_term.put(:"electric_otel_attributes_#{stack_id}", Map.new(attrs))
-  end
-
-  @doc """
-  Retrieve the telemetry span attributes from the persistent term for this stack.
-  """
-  @spec get_telemetry_span_attrs(String.t()) :: map()
-  def get_telemetry_span_attrs(stack_id) do
-    :persistent_term.get(:"electric_otel_attributes_#{stack_id}", %{})
-  end
-
   @doc false
   defp storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}}) do
     {mod, arg |> Keyword.put(:stack_id, stack_id) |> mod.shared_opts()}
@@ -244,7 +228,13 @@ defmodule Electric.StackSupervisor do
 
     # Store the telemetry span attributes in the persistent term for this stack
     telemetry_span_attrs = Access.get(config, :telemetry_span_attrs, %{})
-    if telemetry_span_attrs != %{}, do: set_telemetry_span_attrs(stack_id, telemetry_span_attrs)
+
+    if telemetry_span_attrs != %{},
+      do:
+        Electric.Telemetry.OpenTelemetry.set_stack_telemetry_span_attrs(
+          stack_id,
+          telemetry_span_attrs
+        )
 
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
   end

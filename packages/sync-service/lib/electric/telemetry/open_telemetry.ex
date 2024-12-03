@@ -49,7 +49,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @spec with_span(span_name(), span_attrs(), String.t(), (-> t)) :: t when t: term
   def with_span(name, attributes, stack_id, fun)
       when is_binary(name) and (is_list(attributes) or is_map(attributes)) do
-    stack_attributes = Electric.StackSupervisor.get_telemetry_span_attrs(stack_id)
+    stack_attributes = get_stack_telemetry_span_attrs(stack_id)
     all_attributes = stack_attributes |> Map.merge(Map.new(attributes))
 
     # This map is populated with default values that `:otel_tracer.with_span()` whould have set
@@ -109,6 +109,22 @@ defmodule Electric.Telemetry.OpenTelemetry do
   def add_span_attributes(span_ctx \\ nil, attributes) do
     span_ctx = span_ctx || get_current_context()
     :otel_span.set_attributes(span_ctx, attributes)
+  end
+
+  @doc """
+  Store the telemetry span attributes in the persistent term for this stack.
+  """
+  @spec set_stack_telemetry_span_attrs(String.t(), span_attrs()) :: :ok
+  def set_stack_telemetry_span_attrs(stack_id, attrs) do
+    :persistent_term.put(:"electric_otel_attributes_#{stack_id}", Map.new(attrs))
+  end
+
+  @doc """
+  Retrieve the telemetry span attributes from the persistent term for this stack.
+  """
+  @spec get_stack_telemetry_span_attrs(String.t()) :: map()
+  def get_stack_telemetry_span_attrs(stack_id) do
+    :persistent_term.get(:"electric_otel_attributes_#{stack_id}", %{})
   end
 
   @doc """
