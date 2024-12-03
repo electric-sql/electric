@@ -161,7 +161,7 @@ defmodule Electric.Telemetry do
       last_value("vm.total_run_queue_lengths.total"),
       last_value("vm.total_run_queue_lengths.cpu"),
       last_value("vm.total_run_queue_lengths.io"),
-      last_value("electric.postgres.replication.lag", unit: :byte)
+      last_value("electric.postgres.replication.wal_size", unit: :byte)
       # distribution("plug.router_dispatch.stop.duration",
       #   tags: [:route],
       #   unit: {:native, :millisecond}
