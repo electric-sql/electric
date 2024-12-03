@@ -134,6 +134,59 @@ defmodule Electric.Shapes.FilterTest do
 
       assert Filter.affected_shapes(filter, truncation) == MapSet.new(["s1", "s2", "s3", "s4"])
     end
+
+    test "where clause in the form `field = const` is optimised" do
+      filter =
+        1..1000
+        |> Enum.reduce(Filter.empty(), fn i, filter ->
+          Filter.add_shape(filter, i, Shape.new!("t1", where: "id = #{i}", inspector: @inspector))
+        end)
+
+      reductions =
+        reductions(fn ->
+          assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
+        end)
+
+      assert reductions < 500
+    end
+
+    test "where clause in the form `field = const AND another_condition` is optimised" do
+      filter =
+        1..1000
+        |> Enum.reduce(Filter.empty(), fn i, filter ->
+          Filter.add_shape(
+            filter,
+            i,
+            Shape.new!("t1", where: "id = #{i} AND id > 6", inspector: @inspector)
+          )
+        end)
+
+      reductions =
+        reductions(fn ->
+          assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
+        end)
+
+      assert reductions < 500
+    end
+
+    test "where clause in the form `a_condition AND field = const` is optimised" do
+      filter =
+        1..1000
+        |> Enum.reduce(Filter.empty(), fn i, filter ->
+          Filter.add_shape(
+            filter,
+            i,
+            Shape.new!("t1", where: "id > 6 AND id = #{i}", inspector: @inspector)
+          )
+        end)
+
+      reductions =
+        reductions(fn ->
+          assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
+        end)
+
+      assert reductions < 500
+    end
   end
 
   test "shape with no where clause is affected by all changes for the same table" do
@@ -244,5 +297,12 @@ defmodule Electric.Shapes.FilterTest do
         }
       ]
     }
+  end
+
+  defp reductions(fun) do
+    {:reductions, reductions} = :erlang.process_info(self(), :reductions)
+    fun.()
+    {:reductions, new_reductions} = :erlang.process_info(self(), :reductions)
+    new_reductions - reductions
   end
 end
