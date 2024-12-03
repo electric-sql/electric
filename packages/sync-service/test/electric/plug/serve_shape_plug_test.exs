@@ -152,6 +152,30 @@ defmodule Electric.Plug.ServeShapePlugTest do
              }
     end
 
+    test "returns 400 when offset is out of bounds", ctx do
+      Mock.ShapeCache
+      |> expect(:get_shape, fn @test_shape, _opts ->
+        {@test_shape_handle, @test_offset}
+      end)
+
+      invalid_offset = LogOffset.increment(@test_offset)
+
+      conn =
+        ctx
+        |> conn(
+          :get,
+          %{"table" => "public.users"},
+          "?handle=#{@test_shape_handle}&offset=#{invalid_offset}"
+        )
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "offset" => ["out of bounds for this shape"]
+             }
+    end
+
     test "returns 400 for live request when offset == -1", ctx do
       conn =
         ctx
