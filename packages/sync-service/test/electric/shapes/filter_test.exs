@@ -300,9 +300,9 @@ defmodule Electric.Shapes.FilterTest do
   end
 
   defp reductions(fun) do
-    {:reductions, reductions} = :erlang.process_info(self(), :reductions)
+    {:reductions, reductions_before} = :erlang.process_info(self(), :reductions)
     fun.()
-    {:reductions, new_reductions} = :erlang.process_info(self(), :reductions)
-    new_reductions - reductions
+    {:reductions, reductions_after} = :erlang.process_info(self(), :reductions)
+    reductions_after - reductions_before
   end
 end
