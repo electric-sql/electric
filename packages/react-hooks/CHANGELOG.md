@@ -1,5 +1,11 @@
 # @electric-sql/react
 
+## 0.6.1
+
+### Patch Changes
+
+- 67a9347: fix: only clear the React stream/shape cache when the previous stream/shape was aborted
+
 ## 0.6.0
 
 ### Minor Changes
