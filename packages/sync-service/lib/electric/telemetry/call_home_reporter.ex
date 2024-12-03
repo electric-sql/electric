@@ -158,6 +158,7 @@ defmodule Electric.Telemetry.CallHomeReporter do
     %{
       last_reported: state.last_reported,
       timestamp: DateTime.utc_now(),
+      report_version: 2,
       data: build_stats(state)
     }
   end
