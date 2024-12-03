@@ -134,59 +134,6 @@ defmodule Electric.Shapes.FilterTest do
 
       assert Filter.affected_shapes(filter, truncation) == MapSet.new(["s1", "s2", "s3", "s4"])
     end
-
-    test "where clause in the form `field = const` is optimised" do
-      filter =
-        1..1000
-        |> Enum.reduce(Filter.new(), fn i, filter ->
-          Filter.add_shape(filter, i, Shape.new!("t1", where: "id = #{i}", inspector: @inspector))
-        end)
-
-      reductions =
-        reductions(fn ->
-          assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
-        end)
-
-      assert reductions < 500
-    end
-
-    test "where clause in the form `field = const AND another_condition` is optimised" do
-      filter =
-        1..1000
-        |> Enum.reduce(Filter.new(), fn i, filter ->
-          Filter.add_shape(
-            filter,
-            i,
-            Shape.new!("t1", where: "id = #{i} AND id > 6", inspector: @inspector)
-          )
-        end)
-
-      reductions =
-        reductions(fn ->
-          assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
-        end)
-
-      assert reductions < 500
-    end
-
-    test "where clause in the form `a_condition AND field = const` is optimised" do
-      filter =
-        1..1000
-        |> Enum.reduce(Filter.new(), fn i, filter ->
-          Filter.add_shape(
-            filter,
-            i,
-            Shape.new!("t1", where: "id > 6 AND id = #{i}", inspector: @inspector)
-          )
-        end)
-
-      reductions =
-        reductions(fn ->
-          assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
-        end)
-
-      assert reductions < 500
-    end
   end
 
   test "shape with no where clause is affected by all changes for the same table" do
@@ -290,6 +237,96 @@ defmodule Electric.Shapes.FilterTest do
     end
   end
 
+  describe "optimisations" do
+    # These tests assert that the number of reductions needed to calculate the affected shapes
+    # when there at @shape_count shapes is less than @max_reductions.
+    #
+    # Reductions are used as a proxy for time taken for the calculation and
+    # have been chosen instead of time since the time taken is not deterministic and
+    # leads to flakey tests.
+    #
+    # Modern machines process approx 300-400 reductions per μs so @max_reductions of 400
+    # is roughly equivalent to 1μs.
+    #
+    # 1μs per change is a desirable and achievable target for replication stream processing.
+    # If optimised processing becomes slower than this we should discuss as a team to see if
+    # the performance is acceptable.
+    #
+    # @shape_count is set to 1000. This is somewhat arbitrary but is a reasonable number of shapes.
+    # The main point is we don't want to linearly scale with the number of shapes, we want
+    # O(1) or at worst O(log n) performance, so if we have that, 1000 or 10_000 shapes should be easy
+    # to keep to a microsecond per change. 10_000 shapes makes for a slow test though as the setup
+    # time (n Filter.add_shape calls) is slow.
+    @shape_count 1000
+    @max_reductions 400
+
+    test "where clause in the form `field = const` is optimised" do
+      filter =
+        1..@shape_count
+        |> Enum.reduce(Filter.new(), fn i, filter ->
+          Filter.add_shape(filter, i, Shape.new!("t1", where: "id = #{i}", inspector: @inspector))
+        end)
+
+      assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
+
+      reductions =
+        reductions(fn ->
+          Filter.affected_shapes(filter, change("t1", %{"id" => "7"}))
+        end)
+
+      assert reductions < @max_reductions
+    end
+
+    test "where clause in the form `field = const AND another_condition` is optimised" do
+      filter =
+        1..@shape_count
+        |> Enum.reduce(Filter.new(), fn i, filter ->
+          Filter.add_shape(
+            filter,
+            i,
+            Shape.new!("t1", where: "id = #{i} AND id > 6", inspector: @inspector)
+          )
+        end)
+
+      assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
+
+      reductions =
+        reductions(fn ->
+          Filter.affected_shapes(filter, change("t1", %{"id" => "7"}))
+        end)
+
+      assert reductions < @max_reductions
+    end
+
+    test "where clause in the form `a_condition AND field = const` is optimised" do
+      filter =
+        1..@shape_count
+        |> Enum.reduce(Filter.new(), fn i, filter ->
+          Filter.add_shape(
+            filter,
+            i,
+            Shape.new!("t1", where: "id > 6 AND id = #{i}", inspector: @inspector)
+          )
+        end)
+
+      assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
+
+      reductions =
+        reductions(fn ->
+          Filter.affected_shapes(filter, change("t1", %{"id" => "7"}))
+        end)
+
+      assert reductions < @max_reductions
+    end
+
+    defp reductions(fun) do
+      {:reductions, reductions_before} = :erlang.process_info(self(), :reductions)
+      fun.()
+      {:reductions, reductions_after} = :erlang.process_info(self(), :reductions)
+      reductions_after - reductions_before
+    end
+  end
+
   defp change(table, record) do
     %Transaction{
       changes: [
@@ -299,12 +336,5 @@ defmodule Electric.Shapes.FilterTest do
         }
       ]
     }
-  end
-
-  defp reductions(fun) do
-    {:reductions, reductions_before} = :erlang.process_info(self(), :reductions)
-    fun.()
-    {:reductions, reductions_after} = :erlang.process_info(self(), :reductions)
-    reductions_after - reductions_before
   end
 end
