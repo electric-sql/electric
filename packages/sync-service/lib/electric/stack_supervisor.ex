@@ -80,7 +80,38 @@ defmodule Electric.StackSupervisor do
                    ]
                  ],
                  telemetry_span_attrs: [
-                   type: {:map, :string, {:or, [:string, :integer, :float, :boolean]}},
+                   # Validates the OpenTelemetry.attributes_map() type
+                   # cf. https://github.com/open-telemetry/opentelemetry-erlang/blob/9f7affe630676d2803b04f69d0c759effb6e0245/apps/opentelemetry_api/src/opentelemetry.erl#L118
+                   type:
+                     {:or,
+                      [
+                        {:map, {:or, [:atom, :string]},
+                         {:or,
+                          [
+                            :atom,
+                            :string,
+                            :integer,
+                            :float,
+                            :boolean,
+                            {:list, {:or, [:atom, :string, :integer, :float, :boolean]}},
+                            :map
+                          ]}},
+                        {:list,
+                         {:tuple,
+                          [
+                            {:or, [:atom, :string]},
+                            {:or,
+                             [
+                               :atom,
+                               :string,
+                               :integer,
+                               :float,
+                               :boolean,
+                               {:list, {:or, [:atom, :string, :integer, :float, :boolean]}},
+                               :map
+                             ]}
+                          ]}}
+                      ]},
                    required: false
                  ]
                )
