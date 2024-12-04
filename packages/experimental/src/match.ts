@@ -1,12 +1,12 @@
-import { isChangeMessage } from './helpers'
-import { type ShapeStreamInterface } from './client'
 import {
+  isChangeMessage,
+  type ShapeStreamInterface,
   type ChangeMessage,
   type GetExtensions,
   type Operation,
   type Row,
   type Value,
-} from './types'
+} from '@electric-sql/client'
 
 export function matchStream<T extends Row<unknown>>(
   stream: ShapeStreamInterface<T>,

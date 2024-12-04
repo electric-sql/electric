@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@electric-sql/client": "workspace:*",
+    "@electric-sql/experimental": "workspace:*",
     "@electric-sql/pglite": "^0.2.14",
     "@electric-sql/pglite-react": "^0.2.14",
     "@electric-sql/pglite-sync": "^0.2.16",

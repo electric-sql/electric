@@ -1,6 +1,6 @@
 import React, { useOptimistic, useTransition } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { matchBy, matchStream } from '@electric-sql/client'
+import { matchBy, matchStream } from '@electric-sql/experimental'
 import { useShape } from '@electric-sql/react'
 import api from '../../shared/app/client'
 
