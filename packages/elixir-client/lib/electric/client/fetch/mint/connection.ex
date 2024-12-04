@@ -47,12 +47,22 @@ defmodule Electric.Client.Fetch.Mint.Connection do
 
   @impl GenServer
   def handle_info({:ssl, _socket, _data} = msg, %{conn: conn} = state) do
-    {:ok, conn, responses} = Mint.HTTP.stream(conn, msg)
-    handle_responses(responses, %{state | conn: conn})
+    case Mint.HTTP.stream(conn, msg) do
+      {:ok, conn, responses} ->
+        handle_responses(responses, %{state | conn: conn})
+
+      {:error, conn, error, responses} ->
+        Logger.warning("[#{state.stream_id}] Error: #{inspect(error)}")
+        handle_responses(responses, %{state | conn: conn})
+
+      :unknown ->
+        Logger.warning("[#{state.stream_id}] Unrecognised data packet")
+        {:noreply, state}
+    end
   end
 
   def handle_info({:ssl_closed, _socket}, state) do
-    Logger.info("[#{state.stream_id}] SSL closed")
+    Logger.debug("[#{state.stream_id}] SSL closed")
     {:noreply, state |> maybe_close() |> maybe_retry()}
   end
 
@@ -67,7 +77,7 @@ defmodule Electric.Client.Fetch.Mint.Connection do
   end
 
   def handle_info({:tcp_closed, _socket}, state) do
-    Logger.info("[#{state.stream_id}] TCP closed")
+    Logger.debug("[#{state.stream_id}] TCP closed")
     {:noreply, state |> maybe_close() |> maybe_retry()}
   end
 
