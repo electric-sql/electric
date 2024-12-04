@@ -186,6 +186,8 @@ defmodule Electric.Client.Fetch.Request do
       "Starting request for #{inspect(request_id)}"
     end)
 
+    Process.link(monitor_pid)
+
     state = %{
       request_id: request_id,
       request: request,
