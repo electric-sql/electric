@@ -40,7 +40,7 @@ Whilst the database is used for local optimistic state, writes are still made vi
 
 This implementation simplifies two key complexities:
 
-1. merge logic when recieving synced state from the server
+1. merge logic when receiving synced state from the server
 2. handling rollbacks when writes are rejected
 
 ### 1. Merge logic
