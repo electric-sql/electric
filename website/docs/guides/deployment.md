@@ -151,7 +151,9 @@ You can then connect your app to Electric [over HTTP](/docs/api/http). Typically
 ```ts
 const stream = new ShapeStream({
   url: `https://your-electric-service.example.com/v1/shape`,
-  table: 'foo'
+  params: {
+    table: `foo`
+  }
 })
 const shape = new Shape(stream)
 ```
