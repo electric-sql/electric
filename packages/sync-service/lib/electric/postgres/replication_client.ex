@@ -111,7 +111,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
     Postgrex.ReplicationConnection.start_link(
       __MODULE__,
-      config.replication_opts ++ [stack_id: config.stack_id],
+      config.replication_opts,
       start_opts
     )
   end
