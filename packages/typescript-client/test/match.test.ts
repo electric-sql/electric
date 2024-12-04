@@ -11,7 +11,9 @@ describe(`matchStream`, () => {
     // @ts-nocheck
     const stream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
-      table: issuesTableUrl,
+      params: {
+        table: issuesTableUrl,
+      },
     })
 
     const id = uuidv4()
