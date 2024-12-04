@@ -60,8 +60,8 @@ defmodule Electric.ShapeCache do
             ],
             prepare_tables_fn: [type: {:or, [:mfa, {:fun, 2}]}, required: true],
             create_snapshot_fn: [
-              type: {:fun, 5},
-              default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/5
+              type: {:fun, 6},
+              default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/6
             ],
             purge_all_shapes?: [type: :boolean, required: false]
           )

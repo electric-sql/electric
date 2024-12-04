@@ -196,8 +196,8 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  defp load_shape_info(%Conn{} = conn, _) do
-    OpenTelemetry.with_span("shape_get.plug.load_shape_info", [], fn ->
+  defp load_shape_info(%Conn{assigns: %{config: config}} = conn, _) do
+    OpenTelemetry.with_span("shape_get.plug.load_shape_info", [], config[:stack_id], fn ->
       shape_info = get_or_create_shape_handle(conn.assigns)
       handle_shape_info(conn, shape_info)
     end)
@@ -421,13 +421,20 @@ defmodule Electric.Plug.ServeShapePlug do
       )
 
   # If offset is -1, we're serving a snapshot
-  defp serve_log_or_snapshot(%Conn{assigns: %{offset: @before_all_offset}} = conn, _) do
-    OpenTelemetry.with_span("shape_get.plug.serve_snapshot", [], fn -> serve_snapshot(conn) end)
+  defp serve_log_or_snapshot(
+         %Conn{assigns: %{offset: @before_all_offset, config: config}} = conn,
+         _
+       ) do
+    OpenTelemetry.with_span("shape_get.plug.serve_snapshot", [], config[:stack_id], fn ->
+      serve_snapshot(conn)
+    end)
   end
 
   # Otherwise, serve log since that offset
-  defp serve_log_or_snapshot(conn, _) do
-    OpenTelemetry.with_span("shape_get.plug.serve_shape_log", [], fn -> serve_shape_log(conn) end)
+  defp serve_log_or_snapshot(%Conn{assigns: %{config: config}} = conn, _) do
+    OpenTelemetry.with_span("shape_get.plug.serve_shape_log", [], config[:stack_id], fn ->
+      serve_shape_log(conn)
+    end)
   end
 
   defp serve_snapshot(
@@ -513,29 +520,35 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp send_stream(stream, conn, status) do
+    stack_id = conn.assigns.config[:stack_id]
     conn = send_chunked(conn, status)
 
     {conn, bytes_sent} =
       Enum.reduce_while(stream, {conn, 0}, fn chunk, {conn, bytes_sent} ->
         chunk_size = IO.iodata_length(chunk)
 
-        OpenTelemetry.with_span("shape_get.plug.stream_chunk", [chunk_size: chunk_size], fn ->
-          case chunk(conn, chunk) do
-            {:ok, conn} ->
-              {:cont, {conn, bytes_sent + chunk_size}}
+        OpenTelemetry.with_span(
+          "shape_get.plug.stream_chunk",
+          [chunk_size: chunk_size],
+          stack_id,
+          fn ->
+            case chunk(conn, chunk) do
+              {:ok, conn} ->
+                {:cont, {conn, bytes_sent + chunk_size}}
 
-            {:error, "closed"} ->
-              error_str = "Connection closed unexpectedly while streaming response"
-              conn = assign(conn, :error_str, error_str)
-              {:halt, {conn, bytes_sent}}
+              {:error, "closed"} ->
+                error_str = "Connection closed unexpectedly while streaming response"
+                conn = assign(conn, :error_str, error_str)
+                {:halt, {conn, bytes_sent}}
 
-            {:error, reason} ->
-              error_str = "Error while streaming response: #{inspect(reason)}"
-              Logger.error(error_str)
-              conn = assign(conn, :error_str, error_str)
-              {:halt, {conn, bytes_sent}}
+              {:error, reason} ->
+                error_str = "Error while streaming response: #{inspect(reason)}"
+                Logger.error(error_str)
+                conn = assign(conn, :error_str, error_str)
+                {:halt, {conn, bytes_sent}}
+            end
           end
-        end)
+        )
       end)
 
     assign(conn, :streaming_bytes_sent, bytes_sent)
@@ -599,7 +612,8 @@ defmodule Electric.Plug.ServeShapePlug do
 
     maybe_up_to_date = if up_to_date = assigns[:up_to_date], do: up_to_date != []
 
-    Electric.Plug.Utils.common_open_telemetry_attrs(conn)
+    Electric.Telemetry.OpenTelemetry.get_stack_span_attrs(assigns.config[:stack_id])
+    |> Map.merge(Electric.Plug.Utils.common_open_telemetry_attrs(conn))
     |> Map.merge(%{
       "shape.handle" => shape_handle,
       "shape.where" => assigns[:where],

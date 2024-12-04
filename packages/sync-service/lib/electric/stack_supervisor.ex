@@ -78,6 +78,10 @@ defmodule Electric.StackSupervisor do
                    keys: [
                      registry_partitions: [type: :non_neg_integer, required: false]
                    ]
+                 ],
+                 telemetry_span_attrs: [
+                   type: {:map, :string, {:or, [:string, :integer, :float, :boolean]}},
+                   required: false
                  ]
                )
 
@@ -192,6 +196,7 @@ defmodule Electric.StackSupervisor do
       stack_events_registry: config.stack_events_registry,
       replication_opts:
         [
+          stack_id: stack_id,
           transaction_received:
             {Electric.Replication.ShapeLogCollector, :store_transaction, [shape_log_collector]},
           relation_received:
@@ -220,6 +225,16 @@ defmodule Electric.StackSupervisor do
       {Electric.Postgres.Inspector.EtsInspector, stack_id: stack_id, pool: db_pool},
       {Electric.Connection.Supervisor, new_connection_manager_opts}
     ]
+
+    # Store the telemetry span attributes in the persistent term for this stack
+    telemetry_span_attrs = Access.get(config, :telemetry_span_attrs, %{})
+
+    if telemetry_span_attrs != %{},
+      do:
+        Electric.Telemetry.OpenTelemetry.set_stack_span_attrs(
+          stack_id,
+          telemetry_span_attrs
+        )
 
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
   end

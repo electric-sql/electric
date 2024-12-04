@@ -624,7 +624,7 @@ defmodule Electric.Shapes.ConsumerTest do
           log_producer: ctx.shape_log_collector,
           run_with_conn_fn: &run_with_conn_noop/2,
           prepare_tables_fn: fn _, _ -> :ok end,
-          create_snapshot_fn: fn parent, shape_handle, _shape, _, storage ->
+          create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _ ->
             if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 10})
             Storage.make_new_snapshot!([["test"]], storage)

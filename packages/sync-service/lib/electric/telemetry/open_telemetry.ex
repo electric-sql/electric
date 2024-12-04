@@ -46,14 +46,17 @@ defmodule Electric.Telemetry.OpenTelemetry do
   the two, as long as both calls happen within the same Elixir process. See `async_fun/4` for
   interprocess progragation of span context.
   """
-  @spec with_span(span_name(), span_attrs(), (-> t)) :: t when t: term
-  def with_span(name, attributes, fun)
+  @spec with_span(span_name(), span_attrs(), String.t(), (-> t)) :: t when t: term
+  def with_span(name, attributes, stack_id, fun)
       when is_binary(name) and (is_list(attributes) or is_map(attributes)) do
+    stack_attributes = get_stack_span_attrs(stack_id)
+    all_attributes = stack_attributes |> Map.merge(Map.new(attributes))
+
     # This map is populated with default values that `:otel_tracer.with_span()` whould have set
     # anyway. But we're forced to do it here to avoid having like 50% of our code covered with
     # Dialyzer warnings (I dare you to try and only leave the `attributes` key here).
     span_opts = %{
-      attributes: attributes,
+      attributes: all_attributes,
       links: [],
       is_recording: true,
       start_time: :opentelemetry.timestamp(),
@@ -64,7 +67,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
       :electric | name |> String.split(".", trim: true) |> Enum.map(&String.to_atom/1)
     ]
 
-    :telemetry.span(erlang_telemetry_event, Map.new(attributes), fn ->
+    :telemetry.span(erlang_telemetry_event, all_attributes, fn ->
       fun_result = :otel_tracer.with_span(tracer(), name, span_opts, fn _span_ctx -> fun.() end)
       {fun_result, %{}}
     end)
@@ -88,10 +91,11 @@ defmodule Electric.Telemetry.OpenTelemetry do
   context will be used to establish the parent-child relationship between spans across the
   process boundary.
   """
-  @spec async_fun(span_ctx() | nil, span_name(), span_attrs(), (-> t)) :: (-> t) when t: term
-  def async_fun(span_ctx \\ nil, name, attributes, fun)
+  @spec async_fun(span_ctx() | nil, span_name(), span_attrs(), String.t(), (-> t)) :: (-> t)
+        when t: term
+  def async_fun(span_ctx \\ nil, name, attributes, stack_id, fun)
       when is_binary(name) and (is_list(attributes) or is_map(attributes)) do
-    wrap_fun_with_context(span_ctx, fn -> with_span(name, attributes, fun) end)
+    wrap_fun_with_context(span_ctx, fn -> with_span(name, attributes, stack_id, fun) end)
   end
 
   @doc """
@@ -105,6 +109,22 @@ defmodule Electric.Telemetry.OpenTelemetry do
   def add_span_attributes(span_ctx \\ nil, attributes) do
     span_ctx = span_ctx || get_current_context()
     :otel_span.set_attributes(span_ctx, attributes)
+  end
+
+  @doc """
+  Store the telemetry span attributes in the persistent term for this stack.
+  """
+  @spec set_stack_span_attrs(String.t(), span_attrs()) :: :ok
+  def set_stack_span_attrs(stack_id, attrs) do
+    :persistent_term.put(:"electric_otel_attributes_#{stack_id}", Map.new(attrs))
+  end
+
+  @doc """
+  Retrieve the telemetry span attributes from the persistent term for this stack.
+  """
+  @spec get_stack_span_attrs(String.t()) :: map()
+  def get_stack_span_attrs(stack_id) do
+    :persistent_term.get(:"electric_otel_attributes_#{stack_id}", %{})
   end
 
   @doc """

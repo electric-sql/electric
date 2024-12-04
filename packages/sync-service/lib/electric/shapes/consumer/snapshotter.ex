@@ -48,7 +48,8 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             storage: storage,
             run_with_conn_fn: run_with_conn_fn,
             create_snapshot_fn: create_snapshot_fn,
-            prepare_tables_fn: prepare_tables_fn_or_mfa
+            prepare_tables_fn: prepare_tables_fn_or_mfa,
+            stack_id: stack_id
           } = state
 
           affected_tables = Shape.affected_tables(shape)
@@ -56,6 +57,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           OpenTelemetry.with_span(
             "shape_snapshot.create_snapshot_task",
             shape_attrs(shape_handle, shape),
+            stack_id,
             fn ->
               try do
                 # Grab the same connection from the pool for both operations to
@@ -66,6 +68,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                     OpenTelemetry.with_span(
                       "shape_snapshot.prepare_tables",
                       shape_attrs(shape_handle, shape),
+                      stack_id,
                       fn ->
                         Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [
                           pool_conn,
@@ -74,7 +77,14 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                       end
                     )
 
-                    apply(create_snapshot_fn, [consumer, shape_handle, shape, pool_conn, storage])
+                    apply(create_snapshot_fn, [
+                      consumer,
+                      shape_handle,
+                      shape,
+                      pool_conn,
+                      storage,
+                      stack_id
+                    ])
                   end
                 ])
               rescue
@@ -115,7 +125,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   end
 
   @doc false
-  def query_in_readonly_txn(parent, shape_handle, shape, db_pool, storage) do
+  def query_in_readonly_txn(parent, shape_handle, shape, db_pool, storage, stack_id) do
     shape_attrs = shape_attrs(shape_handle, shape)
 
     Postgrex.transaction(
@@ -124,13 +134,15 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
         OpenTelemetry.with_span(
           "shape_snapshot.query_in_readonly_txn",
           shape_attrs,
+          stack_id,
           fn ->
             query_span!(
               conn,
               "shape_snapshot.start_readonly_txn",
               shape_attrs,
               "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
-              []
+              [],
+              stack_id
             )
 
             %{rows: [[xmin]]} =
@@ -139,7 +151,8 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                 "shape_snapshot.get_snapshot_xmin",
                 shape_attrs,
                 "SELECT pg_snapshot_xmin(pg_current_snapshot())",
-                []
+                [],
+                stack_id
               )
 
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, xmin})
@@ -149,12 +162,13 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             OpenTelemetry.with_span(
               "shape_snapshot.set_display_settings",
               shape_attrs,
+              stack_id,
               fn ->
                 Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
               end
             )
 
-            stream = Querying.stream_initial_data(conn, shape)
+            stream = Querying.stream_initial_data(conn, stack_id, shape)
 
             GenServer.cast(parent, {:snapshot_started, shape_handle})
 
@@ -168,10 +182,11 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     )
   end
 
-  defp query_span!(conn, span_name, span_attrs, query, params) do
+  defp query_span!(conn, span_name, span_attrs, query, params, stack_id) do
     OpenTelemetry.with_span(
       span_name,
       span_attrs,
+      stack_id,
       fn -> Postgrex.query!(conn, query, params) end
     )
   end
