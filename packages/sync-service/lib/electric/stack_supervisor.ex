@@ -116,12 +116,8 @@ defmodule Electric.StackSupervisor do
                  ]
                )
 
-  def validate(opts) do
-    NimbleOptions.validate(Map.new(opts), @opts_schema)
-  end
-
   def start_link(opts) do
-    with {:ok, config} <- validate(opts) do
+    with {:ok, config} <- NimbleOptions.validate(Map.new(opts), @opts_schema) do
       Supervisor.start_link(__MODULE__, config, Keyword.take(opts, [:name]))
     end
   end
