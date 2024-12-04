@@ -189,14 +189,8 @@ defmodule Electric.Shapes.Shape do
   @doc """
   List tables that are a part of this shape.
   """
-  @spec affected_tables(t()) :: [table_with_where_clause()]
-  def affected_tables(%__MODULE__{root_table: table, where: nil}), do: [{table, nil}]
-
-  def affected_tables(%__MODULE__{
-        root_table: table,
-        where: %Electric.Replication.Eval.Expr{query: where_clause}
-      }),
-      do: [{table, "(" <> where_clause <> ")"}]
+  @spec affected_tables(t()) :: [Electric.relation()]
+  def affected_tables(%__MODULE__{root_table: table}), do: [table]
 
   @doc """
   Convert a change to be correctly represented within the shape.
