@@ -11,9 +11,9 @@ export async function POST(request: Request) {
     const { room, op, clientId } = await getRequestParams(request)
 
     if (!clientId) {
-      saveOperation(room, op)
+      await saveOperation(room, op)
     } else {
-      saveAwarenessOperation(room, op, clientId)
+      await saveAwarenessOperation(room, op, clientId)
     }
 
     return NextResponse.json({})
