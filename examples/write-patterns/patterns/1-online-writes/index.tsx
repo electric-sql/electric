@@ -17,7 +17,9 @@ export default function OnlineWrites() {
   // into a React state variable.
   const { isLoading, data } = useShape<Todo>({
     url: `${ELECTRIC_URL}/v1/shape`,
-    table: 'todos',
+    params: {
+      table: 'todos',
+    },
     parser: {
       timestamptz: (value: string) => new Date(value),
     },

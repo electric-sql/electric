@@ -29,7 +29,9 @@ export default function OptimisticState() {
   // local writes syncing back from the server.
   const { isLoading, data, stream } = useShape<Todo>({
     url: `${ELECTRIC_URL}/v1/shape`,
-    table: 'todos',
+    params: {
+      table: 'todos',
+    },
     parser: {
       timestamptz: (value: string) => new Date(value),
     },
