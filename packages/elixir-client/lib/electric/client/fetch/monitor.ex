@@ -46,6 +46,8 @@ defmodule Electric.Client.Fetch.Monitor do
 
   @impl true
   def init(request_id) do
+    Process.flag(:trap_exit, true)
+
     state = %{
       request_id: request_id,
       subscribers: []
@@ -107,7 +109,7 @@ defmodule Electric.Client.Fetch.Monitor do
     Logger.debug(fn ->
       [
         message:
-          "#{inspect(pid)} exited with reason #{inspect(reason)}. Removing from subscribers",
+          "Listener #{inspect(pid)} exited with reason #{inspect(reason)}. Removing from subscribers",
         request_id: state.request_id
       ]
     end)
@@ -118,5 +120,17 @@ defmodule Electric.Client.Fetch.Monitor do
       end)
 
     {:noreply, state}
+  end
+
+  def handle_info({:EXIT, pid, reason}, state) do
+    Logger.debug(fn ->
+      "Request process #{inspect(pid)} exited with reason #{inspect(reason)} before issuing a reply. Using reason as an error and exiting."
+    end)
+
+    for {pid, ref} <- state.subscribers do
+      send(pid, {:response, ref, {:error, reason}})
+    end
+
+    {:stop, :normal, state}
   end
 end
