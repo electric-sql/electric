@@ -15,7 +15,9 @@ const baseApiUrl = `http://localhost:3001`
 
 const itemShape = () => ({
   url: new URL(`/v1/shape`, baseUrl).href,
-  table: `items`,
+  params: {
+    table: `items`,
+  },
 })
 
 async function createItem(newId: string) {

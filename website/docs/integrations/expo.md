@@ -35,7 +35,9 @@ const ELECTRIC_URL = 'https://my-electric-sync-service.example.com'
 export default function HomeScreen() {
   const { isLoading, data } = useShape({
     url: `${ELECTRIC_URL}/v1/shape`,
-    table: 'items'
+    params: {
+      table: 'items'
+    }
   })
 
   if (isLoading) {
