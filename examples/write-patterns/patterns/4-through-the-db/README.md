@@ -33,7 +33,7 @@ Combining data on-read makes local reads slightly slower. Using a local embedded
 
 This implementation has the same two key complexities as the [combine-on-read](../3-combine-on-read) example:
 
-1. merge logic when recieving synced state from the server
+1. merge logic when receiving synced state from the server
 2. handling rollbacks when writes are rejected
 
 ### 1. Merge logic
