@@ -1,7 +1,7 @@
 import { describe, expect, inject } from 'vitest'
 import { v4 as uuidv4 } from 'uuid'
+import { ShapeStream, matchBy, matchStream } from '@electric-sql/client'
 import { testWithIssuesTable as it } from './support/test-context'
-import { ShapeStream, matchBy, matchStream } from '../src'
 
 const BASE_URL = inject(`baseUrl`)
 
