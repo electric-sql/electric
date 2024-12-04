@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.2.5
+
+### Patch Changes
+
+- 6d9b73b: fix: make sure the client is not stuck when the request dies for some reason
+
 ## 0.2.4
 
 ### Patch Changes
