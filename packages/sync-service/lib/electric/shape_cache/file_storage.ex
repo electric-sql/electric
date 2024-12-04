@@ -3,6 +3,7 @@ defmodule Electric.ShapeCache.FileStorage do
 
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Replication.LogOffset
+  alias Electric.ShapeCache.LogChunker
   alias __MODULE__, as: FS
 
   # If the storage format changes, increase `@version` to prevent
@@ -196,6 +197,7 @@ defmodule Electric.ShapeCache.FileStorage do
         offset(key)
 
       _ ->
+        # FIXME: Should use actual on-disk offset
         LogOffset.first()
     end
   end

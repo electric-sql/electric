@@ -1,5 +1,6 @@
 defmodule Electric.Shapes.Querying do
   alias Electric.Replication.LogOffset
+  alias Electric.ShapeCache.LogChunker
   alias Electric.Utils
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
@@ -11,8 +12,14 @@ defmodule Electric.Shapes.Querying do
 
   @type json_result_stream :: Enumerable.t(json_iodata())
 
-  @spec stream_initial_data(DBConnection.t(), String.t(), Shape.t()) :: json_result_stream()
-  def stream_initial_data(conn, stack_id, %Shape{root_table: root_table} = shape) do
+  @spec stream_initial_data(DBConnection.t(), String.t(), Shape.t(), non_neg_integer()) ::
+          json_result_stream()
+  def stream_initial_data(
+        conn,
+        stack_id,
+        %Shape{root_table: root_table} = shape,
+        chunk_bytes_threshold
+      ) do
     OpenTelemetry.with_span("shape_read.stream_initial_data", [], stack_id, fn ->
       table = Utils.relation_to_sql(root_table)
 
@@ -27,6 +34,16 @@ defmodule Electric.Shapes.Querying do
       Postgrex.stream(conn, query, params)
       |> Stream.flat_map(& &1.rows)
       |> Stream.map(&hd/1)
+      |> Stream.with_index()
+      |> Stream.transform(0, fn {line, offset}, chunk_size ->
+        case LogChunker.fit_into_chunk(IO.iodata_length(line), chunk_size, chunk_bytes_threshold) do
+          {:ok, new_chunk_size} ->
+            {[line], new_chunk_size}
+
+          {:threshold_exceeded, new_chunk_size} ->
+            {[line, ~s|{"internal":"chunk_boundary","offset":"0_#{offset}"}|], new_chunk_size}
+        end
+      end)
     end)
   end
 
