@@ -9,8 +9,8 @@ const itemShape = () => {
   return {
     url: new URL(`/shape-proxy`, window.location.origin).href,
     params: {
-      table: `items`
-    }
+      table: `items`,
+    },
   }
 }
 
