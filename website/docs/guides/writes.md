@@ -57,7 +57,7 @@ no local state
 
 weaknesses:
 
-- takes a while
+- the UI doesn't update until the server responds
 - need to be online
 
 ### Optimistic state
@@ -66,6 +66,9 @@ local optimistic state without persistence
 
 1. (2) optimistic state without persistence
 - useOptimistic react hook
+- tanstack/query
+- react-router (https://reactrouter.com/start/framework/pending-ui)
+- Solid (https://docs.solidjs.com/solid-router/reference/data-apis/action)
 
 weaknesses:
 
