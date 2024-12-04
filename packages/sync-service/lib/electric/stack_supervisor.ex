@@ -29,28 +29,31 @@ defmodule Electric.StackSupervisor do
   """
   use Supervisor, restart: :transient
 
+  @connection_opts_schema [
+    type: :keyword_list,
+    required: true,
+    keys: [
+      hostname: [type: :string, required: true],
+      port: [type: :integer, required: true],
+      database: [type: :string, required: true],
+      username: [type: :string, required: true],
+      password: [type: {:fun, 0}, required: true],
+      sslmode: [type: :atom, required: false],
+      ipv6: [type: :boolean, required: false]
+    ]
+  ]
+
   @opts_schema NimbleOptions.new!(
                  name: [type: :any, required: false],
                  stack_id: [type: :string, required: true],
                  persistent_kv: [type: :any, required: true],
                  stack_events_registry: [type: :atom, required: true],
-                 connection_opts: [
-                   type: :keyword_list,
-                   required: true,
-                   keys: [
-                     hostname: [type: :string, required: true],
-                     port: [type: :integer, required: true],
-                     database: [type: :string, required: true],
-                     username: [type: :string, required: true],
-                     password: [type: {:fun, 0}, required: true],
-                     sslmode: [type: :atom, required: false],
-                     ipv6: [type: :boolean, required: false]
-                   ]
-                 ],
+                 connection_opts: @connection_opts_schema,
                  replication_opts: [
                    type: :keyword_list,
                    required: true,
                    keys: [
+                     connection_opts: @connection_opts_schema,
                      publication_name: [type: :string, required: true],
                      slot_name: [type: :string, required: true],
                      slot_temporary?: [type: :boolean, default: false],

@@ -163,6 +163,7 @@ defmodule Support.ComponentSetup do
          storage: storage,
          connection_opts: ctx.db_config,
          replication_opts: [
+           connection_opts: ctx.db_config,
            slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
            publication_name: "electric_test_pub_#{:erlang.phash2(stack_id)}",
            try_creating_publication?: true,
