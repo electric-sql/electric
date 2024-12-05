@@ -32,11 +32,13 @@ Electric does [read-path sync](/product/electric). It syncs data out-of Postgres
 
 Electric does not do write-path sync. It doesn't provide (or prescribe) a built-in solution for getting data back into Postgres from local apps and services.
 
-So how do you handle local writes with Electric? Well, the [design philosophy](/blog/2024/07/17/electric-next) behind Electric is to be composable and [integrate with your existing stack](/blog/2024/11/21/local-first-with-your-existing-api). So, just as you can sync into [any client](/docs/guides/client-development) you like, you can implement writes using any pattern you like.
+So how do you handle local writes with Electric?
+
+Well, the [design philosophy](/blog/2024/07/17/electric-next) behind Electric is to be composable and [integrate with your existing stack](/blog/2024/11/21/local-first-with-your-existing-api). So, just as you can sync into [any client](/docs/guides/client-development) you like, you can implement writes in any way you like, using a variety of different patterns.
 
 ## Patterns
 
-This guide outlines four common patterns for handling writes with Electric and discusses some of the trade-offs to consider when choosing between them.
+This guide describes four different patterns for handling writes with Electric. It shows code examples and discusses trade-offs to consider when choosing between them.
 
 1. [online writes](#online-writes)
 2. [optimistic state](#optimistic-state)
@@ -45,7 +47,7 @@ This guide outlines four common patterns for handling writes with Electric and d
 
 All of the patterns use Electric for the read-path sync (i.e.: to sync data from Postgres into the local app) and use a different approach for the write-path (i.e.: how they handle local writes and get data from the local app back into Postgres).
 
-They are introduced in order of simplicity. So the simplest and easiest to implement first and the more powerful but more complex patterns further down &dash; where you may prefer to reach for a framework rather than implement yourself.
+They are introduced in order of simplicity. So the simplest and easiest to implement first and the more powerful but more complex patterns further down &dash; where you may prefer to reach for a [framework](#tools) rather than implement yourself.
 
 > [!Warning] Write-patterns example on GitHub
 > This guide has an accompanying [write-patterns example](https://github.com/electric-sql/electric/tree/main/examples/write-patterns) on GitHub. This implements each of the patterns described below and combines them into a single React application.
@@ -174,25 +176,21 @@ The entrypoint for handling rollbacks has the local write context available, so 
   (<a href="https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/4-through-the-db">source code</a>)
 </span>
 
-The fourth pattern extends the concept of shared, persistent optimistic state all the way to a local embedded database.
+The fourth pattern extends the concept of shared, persistent optimistic state all the way to an embedded local database.
 
-This provides a pure local-first development experience, where the application code talks directly to a single database "table" and changes sync automatically in the background. However, this "power" does come at the cost of increased complexity in the form of an embedded database, complex local schema and loss of context when handling rollbacks.
+This provides a pure local-first experience, where the application code talks directly to a local database and changes sync automatically in the background. This "power" comes at the cost of increased complexity in the form of an embedded database, complex local schema and loss of context when handling rollbacks.
 
-You can see this reflected in the example implementation in [`patterns/4-through-the-db`](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/4-through-the-db). The implementation uses [PGlite](https://electric-sql.com/product/pglite) to store both synced and local optimistic state. It automatically manages optimistic state lifecycle, presents a single table interface for reads and writes and auto-syncs the local writes.
+The example in [`patterns/4-through-the-db`](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/4-through-the-db) uses [PGlite](https://electric-sql.com/product/pglite) to store both synced and local optimistic state.
 
-Specifically, we:
+Specifically, it syncs data into an immutable `todos_synced` table, persists optimistic state in a shadow `todos_local` table and combines the two on read using a `todos` view. For the write path sync it uses `INSTEAD OF` triggers to redirect writes made to the `todos` view to the `todos_local` table and keep a log of local writes in a `changes` table. It then uses `NOTIFY` to drive a sync utility, which sends the changes to the server.
 
-1. sync data into an immutable table
-2. persist optimistic state in a shadow table
-3. combine the two on read using a view
+Through this, the implementation:
 
-Plus for the write path sync, we:
+- automatically manages optimistic state lifecycle
+- presents a single table interface for reads and writes
+- auto-syncs the local writes to the server
 
-4. detect local writes
-5. write them into a change log table
-6. POST the changes to the API server
-
-The three tabs below show that main React code stays very simple, thanks to abstracting most of the complexity of the pattern into the local database schema, defined in [`local-schema.sql`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) and moving the write-path sync into a seperate utility, defined in [`sync.ts`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql):
+The three tabs below illustrate this. The application code code in [`index.tsx`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/index.tsx) stays very simple. The complexity is abstracted into the local database schema, defined in [`local-schema.sql`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) and the write-path sync utility in [`sync.ts`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql):
 
 :::tabs
 == index.tsx
@@ -205,32 +203,35 @@ The three tabs below show that main React code stays very simple, thanks to abst
 
 #### Benefits
 
-This provides full offline support, shared optimistic state and allows your components to interact purely with the local database. No coding over the network is needed. Data fetching and sending is abstracted away behind the Electric sync (for reads) and the change message log (for writes).
+This provides full offline support, shared optimistic state and allows your components to interact purely with the local database, rather than coding over the network. Data fetching and sending is abstracted away behind Electric (for reads) and the sync utility processing the change log (for writes).
 
 Good use-cases include:
 
 - building local-first software
-- interactive SaaS applications
+- mobile and desktop applications
 - collaboration and authoring software
 
 #### Drawbacks
 
-Combining data on-read makes local reads slightly slower. Using a local embedded database adds a relatively-heavy dependency to your app. The shadow table and trigger machinery complicate your client side schema definition.
+Using a local embedded database adds quite a heavy dependency to your app. The shadow table and trigger machinery complicate your client side schema definition.
+
+Syncing changes in the background complicates any potential [rollback handling](#rollbacks). In the [shared persistent optimistic state](#shared-persistent) pattern, you can detect a write being rejected by the server whilst in context, still handling user input. With through-the-database sync, this context is harder to reconstruct.
 
 #### Implementation notes
 
 The entrypoint in the code for [merge logic](#merge-logic) is the very blunt `delete_local_on_synced_trigger` defined in the [`./local-schema.sql`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql). The current implementation just wipes any local state for a row when any insert, updater or delete to that row syncs in from the server.
 
-This approach works and is simple to reason about. However, it won't preserve local changes on top of concurrent changes by other users (or tabs or devices). More sophisticated implementations could do more sophisticated merge logic here. Such as rebasing the local changes on the new server state. This typically involved maintaining more bookkeeping info and having more complex triggers.
+This approach works and is simple to reason about. However, it won't preserve local changes on top of concurrent changes by other users (or tabs or devices). More sophisticated implementations could do more sophisticated merge logic here. This typically involves maintaining more bookkeeping info and having more complex triggers.
 
-Syncing changes in the background complicates any potential [rollback handling](#rollbacks). In the [shared persistent optimistic state](#shared-persistent) pattern, you can detect a write being rejected by the server whilst still in context, handling user input. With through the database sync, this context is harder to reconstruct.
+The example also implements a very blunt rollback strategy of clearing all local state and writes in the event of any write being rejected by the server. You may want to implement a more nuanced strategy and, for example, provide information to the user about what is happening and / or minimise data loss by only clearing local-state that's causally dependent on a rejected write.
 
-In this example implementation, we implement an extremely blunt rollback strategy of clearing all local state and writes in the event of any write being rejected by the server. You may want to implement a more nuanced strategy and, for example, provide information to the user about what is happening and / or minimise data loss by only clearing local-state that's causally dependent on a rejected write.
-
-This opens the door to a lot of complexity that may best be addressed by [using an existing framework](#framework).
+This opens the door to a lot of complexity that may best be addressed by [using an existing framework](#framework) or one of the [simpler patterns](#patterns).
 
 
 ## Advanced
+
+> [!Warning] This is an advanced section.
+> You don't need to engage with these complexities to [get started with Electric](/docs/quickstart).
 
 There are two key complexities introduced by handling offline writes or local writes with optimistic state:
 
@@ -262,7 +263,7 @@ One consideration is the indirection between making a write and handling a rollb
   </div>
 </div>
 
-If you're crafting a highly concurrent, collaborative experience, you may want to engage with the complexities of merge logic and rebasing local state. However, blunt strategies like those illustrated by the patterns in this guide can be much easier to implement and reason about &mdash; and are perfectly serviceable for many applications.
+If you're crafting a highly concurrent, collaborative experience, you may want to engage with the complexities of merge logic and rebasing local state. However, blunt strategies like those illustrated by the [patterns in this guide](#patterns) can be much easier to implement and reason about &mdash; and are perfectly serviceable for many applications.
 
 
 ## Tools
