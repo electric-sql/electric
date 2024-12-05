@@ -289,6 +289,7 @@ Below we list some useful tools that work well for implementing writes with Elec
 - [SolidJS](https://docs.solidjs.com/solid-router/reference/data-apis/action)
 - [Svelte Optimistic Store](https://github.com/Der-Penz/svelte-optimistic-store)
 - [TanStack Query](/docs/integrations/tanstack)
+- [Valtio](https://valtio.dev)
 - [Vue `vue-useoptimistic`](https://github.com/shoko31/vue-useoptimistic)
 
 ### Frameworks
