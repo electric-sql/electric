@@ -9,7 +9,7 @@ defmodule Electric.ClientTest do
   alias Electric.Client.Fetch
   alias Electric.Client.Message.{ChangeMessage, ControlMessage, ResumeMessage, Headers}
 
-  @insert Headers.insert()
+  @insert Headers.insert(handle: "my-shape")
 
   defp client_stream(ctx, opts) do
     Client.stream(ctx.client, ctx.shape, opts)
@@ -677,6 +677,8 @@ defmodule Electric.ClientTest do
           fun.(conn)
       end)
 
+      headers = Headers.insert(handle: "my-shape-2")
+
       assert [
                %ChangeMessage{
                  headers: @insert,
@@ -686,7 +688,7 @@ defmodule Electric.ClientTest do
                up_to_date(1, 0),
                %ControlMessage{control: :must_refetch, offset: offset(1, 0)},
                %ChangeMessage{
-                 headers: @insert,
+                 headers: ^headers,
                  offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
