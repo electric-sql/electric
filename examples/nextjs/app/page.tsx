@@ -11,16 +11,12 @@ const itemShape = (): ShapeStreamOptions => {
   if (typeof window !== `undefined`) {
     return {
       url: new URL(`/shape-proxy`, window?.location.origin).href,
-      params: {
-        table: `items`,
-      },
+      table: `items`,
     }
   } else {
     return {
       url: new URL(`https://not-sure-how-this-works.com/shape-proxy`).href,
-      params: {
-        table: `items`,
-      },
+      table: `items`,
     }
   }
 }
