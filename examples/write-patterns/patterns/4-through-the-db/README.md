@@ -1,5 +1,5 @@
 
-# Through the DB sync example
+# Through-the-database sync pattern
 
 This is an example of an application using:
 
@@ -8,16 +8,23 @@ This is an example of an application using:
 - shared, persistent optimistic state
 - automatic change detection and background sync
 
-The implementation builds on the approach of storing optimistic state in a local [PGlite](https://electric-sql.com/product/pglite) database, introduced in the [combine on read](../../3-combine-on-read) pattern and extends it to automatically manage optimistic state lifecycle, present a single table interface for reads and writes and auto-sync the local writes.
+The implementation builds on the approach of storing optimistic state in a local [PGlite](https://electric-sql.com/product/pglite) database, introduced in the [shared persistent optimistic state](../../3-shared-persistent) pattern and extends it to automatically manage optimistic state lifecycle, present a single table interface for reads and writes and auto-sync the local writes.
 
 Specifically, we:
 
-1. sync data into an immutable table, persist optimistic state in a shadow table and combine the two on read using a view
-4. detect local writes, write them into a log of change messages and send these to the server
+1. sync data into an immutable table
+2. persist optimistic state in a shadow table
+3. combine the two on read using a view
+
+Plus for the write path sync, we:
+
+4. detect local writes
+5. write them into a change log table
+6. POST the changes to the API server
 
 ## Benefits
 
-This provides full offline support, shared optimistic state and allows your components to purely interact with the local database. Data fetching and sending is abstracted away behind the Electric sync (for reads) and the change message log (for writes).
+This provides full offline support, shared optimistic state and allows your components to interact purely with the local database. No coding over the network is needed. Data fetching and sending is abstracted away behind the Electric sync (for reads) and the change message log (for writes).
 
 Good use-cases include:
 
@@ -31,11 +38,6 @@ Combining data on-read makes local reads slightly slower. Using a local embedded
 
 ## Complexities
 
-This implementation has the same two key complexities as the [combine-on-read](../3-combine-on-read) example:
-
-1. merge logic when receiving synced state from the server
-2. handling rollbacks when writes are rejected
-
 ### 1. Merge logic
 
 The entrypoint in the code for merge logic is the very blunt `delete_local_on_synced_trigger` defined in the [`./local-schema.sql`](./local-schema.sql). The current implementation just wipes any local state for a row when any insert, updater or delete to that row syncs in from the server.
@@ -44,7 +46,7 @@ This approach works and is simple to reason about. However, it won't preserve lo
 
 ### 2. Rollbacks
 
-Syncing changes in the background complicates any potential rollback handling. In the [combine on read](../../3-combine-on-read) pattern, you can detect a write being rejected by the server whilst still in context, handling user input. With through the database sync, this context is harder to reconstruct.
+Syncing changes in the background complicates any potential rollback handling. In the [shared persistent optimistic state](../../3-shared-persistent) pattern, you can detect a write being rejected by the server whilst still in context, handling user input. With through the database sync, this context is harder to reconstruct.
 
 In this example implementation, we implement an extremely blunt rollback strategy of clearing all local state and writes in the event of any write being rejected by the server.
 

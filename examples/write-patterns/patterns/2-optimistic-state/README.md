@@ -1,5 +1,5 @@
 
-# Optimistic state example
+# Optimistic state pattern
 
 This is an example of an application using:
 
@@ -22,7 +22,9 @@ Good use-cases include:
 
 ## Drawbacks
 
-The local optimistic state is not persistent. Optimistic state is managed within the component. This can become tricky to manage when state is shared across components. More complex apps may benefit from the more comprehensive [combine on read](../../3-combine-on-read) pattern.
+The optimistic state is only available within the component that makes the write. This means that other components rendering the same state may not see it and may display stale data. The optimistic state is also not peristent. So it's lost if you unmount the component or reload the page.
+
+These limitations are addressed by the [shared persistent optimistic state](../../3-shared-persistent) pattern.
 
 ## How to run
 

@@ -1,9 +1,9 @@
 import './style.css'
 
 import {
-  CombineOnRead,
   OnlineWrites,
   OptimisticState,
+  SharedPersistent,
   ThroughTheDB,
 } from '../../patterns'
 
@@ -12,7 +12,7 @@ const App = () => {
     <div className="app">
       <OnlineWrites />
       <OptimisticState />
-      <CombineOnRead />
+      <SharedPersistent />
       <ThroughTheDB />
     </div>
   )

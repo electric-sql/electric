@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
 import {
@@ -6,13 +6,10 @@ import {
   useLiveQuery,
   usePGlite,
 } from '@electric-sql/pglite-react'
+import { type PGliteWithLive } from '@electric-sql/pglite/live'
 
-import pglite from '../../shared/app/db'
-
-import SyncChanges from './sync'
-import localSchemaMigrations from './local-schema.sql?raw'
-
-const ELECTRIC_URL = import.meta.env.ELECTRIC_URL || 'http://localhost:3000'
+import loadPGlite from './db'
+import ChangeLogSynchronizer from './sync'
 
 type Todo = {
   id: string
@@ -21,29 +18,52 @@ type Todo = {
   created_at: Date
 }
 
-// Note that the resources defined in the schema for this pattern
-// are all suffixed with `p4_`.
-await pglite.exec(localSchemaMigrations)
-
-// This starts the read path sync using Electric.
-await pglite.electric.syncShapeToTable({
-  shape: {
-    url: `${ELECTRIC_URL}/v1/shape`,
-    table: 'todos',
-  },
-  shapeKey: 'p4_todos',
-  table: 'p4_todos_synced',
-  primaryKey: ['id'],
-})
-
-// This starts the write path sync of changes captured in the triggers from
-// writes to the local DB.
-const syncChanges = new SyncChanges(pglite)
-syncChanges.start()
-
+/*
+ * Setup the local PGlite database, with automatic change detection and syncing.
+ *
+ * See `./local-schema.sql` for the local database schema, including view
+ * and trigger machinery.
+ *
+ * See `./sync.ts` for the write-path sync utility, which listens to changes
+ * using pg_notify, as per https://pglite.dev/docs/api#listen
+ */
 export default function Wrapper() {
+  const [db, setDb] = useState<PGliteWithLive>()
+
+  useEffect(() => {
+    let isMounted = true
+    let writePathSync: ChangeLogSynchronizer
+
+    async function init() {
+      const pglite = await loadPGlite()
+
+      if (!isMounted) {
+        return
+      }
+
+      writePathSync = new ChangeLogSynchronizer(pglite)
+      writePathSync.start()
+
+      setDb(pglite)
+    }
+
+    init()
+
+    return () => {
+      isMounted = false
+
+      if (writePathSync !== undefined) {
+        writePathSync.stop()
+      }
+    }
+  }, [])
+
+  if (db === undefined) {
+    return <div className="loading">Loading &hellip;</div>
+  }
+
   return (
-    <PGliteProvider db={pglite}>
+    <PGliteProvider db={db}>
       <ThroughTheDB />
     </PGliteProvider>
   )
@@ -51,9 +71,7 @@ export default function Wrapper() {
 
 function ThroughTheDB() {
   const db = usePGlite()
-  const results = useLiveQuery<Todo>(
-    'SELECT * FROM p4_todos ORDER BY created_at'
-  )
+  const results = useLiveQuery<Todo>('SELECT * FROM todos ORDER BY created_at')
 
   async function createTodo(event: React.FormEvent) {
     event.preventDefault()
@@ -63,7 +81,7 @@ function ThroughTheDB() {
     const title = formData.get('todo') as string
 
     await db.sql`
-      INSERT INTO p4_todos (
+      INSERT INTO todos (
         id,
         title,
         completed,
@@ -84,7 +102,7 @@ function ThroughTheDB() {
     const { id, completed } = todo
 
     await db.sql`
-      UPDATE p4_todos
+      UPDATE todos
         SET completed = ${!completed}
         WHERE id = ${id}
     `
@@ -94,7 +112,7 @@ function ThroughTheDB() {
     event.preventDefault()
 
     await db.sql`
-      DELETE FROM p4_todos
+      DELETE FROM todos
         WHERE id = ${todo.id}
     `
   }

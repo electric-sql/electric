@@ -4,6 +4,7 @@ type RequestOptions = {
   method: string
   headers: HeadersInit
   body?: string
+  signal?: AbortSignal
 }
 
 // Keeps trying for 3 minutes, with the delay
@@ -51,7 +52,12 @@ async function resilientFetch(
   }
 }
 
-async function request(path: string, method: string, data?: object) {
+async function request(
+  path: string,
+  method: string,
+  data?: object,
+  signal?: AbortSignal
+) {
   const url = `${API_URL}${path}`
 
   const options: RequestOptions = {
@@ -61,8 +67,12 @@ async function request(path: string, method: string, data?: object) {
     },
   }
 
-  if (data) {
+  if (data !== undefined) {
     options.body = JSON.stringify(data)
+  }
+
+  if (signal !== undefined) {
+    options.signal = signal
   }
 
   return await resilientFetch(url, options, 0)
