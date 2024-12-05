@@ -28,7 +28,7 @@ COPY rel /app/rel
 COPY lib /app/lib/
 
 COPY package.json /app/
-COPY config/*runtime.exs /app/config/
+COPY config/*.exs /app/config/
 
 ARG ELECTRIC_VERSION
 

@@ -40,8 +40,6 @@ end
 
 config :sentry,
   environment_name: config_env(),
-  enable_source_code_context: true,
-  root_source_code_paths: [File.cwd!()],
   client: Electric.Telemetry.SentryReqHTTPClient
 
 sentry_dsn = env!("SENTRY_DSN", :string, nil)
