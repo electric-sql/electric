@@ -3,14 +3,14 @@
 
 This example implements and describes four different patterns for handling writes in an application built with [ElectricSQL](https://electric-sql.com).
 
-These patterns are described in the [Writes guide](https://electric-sql.com/docs/guides/writes#patterns) from the ElectricSQL documentation. It's worth reading the guide for context. The idea is that if you walk through these patterns in turn, you can get a sense of the range of techniques and their evolution in both power and complexity.
+These patterns are described in the [Writes guide](https://electric-sql.com/docs/guides/writes) from the ElectricSQL documentation. It's worth reading the guide for context. The idea is that if you walk through these patterns in turn, you can get a sense of the range of techniques and their evolution in both power and complexity.
 
 The example is set up to run all the patterns together, in the page, at the same time, as components of a single React application. So you can also evaluate their behaviour side-by-side and and with different network connectivity.
 
 [![Screenshot of the application running](./public/screenshot.png)](https://write-patterns.electric-sql.com)
 
 You can see the example deployed and running online at:
-https://write-patterns.electric-sql.com
+https://write-patterns.examples.electric-sql.com
 
 ## Patterns
 
