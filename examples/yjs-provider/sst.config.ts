@@ -32,7 +32,21 @@ export default $config({
         $app.stage === `Production` ? `yjs-production` : `yjs-${$app.stage}`,
     })
 
-    const databaseUri = getNeonDbUri(project, db)
+    // const vpc = new sst.aws.Vpc(`yjs-vpc-${$app.stage}`, { bastion: true })
+
+    // const rds = new sst.aws.Postgres(`yjs-${$app.stage}Database`, {
+    //   vpc,
+    //   // proxy: true,
+    //   transform: {
+    //     instance: {
+    //       publiclyAccessible: true,
+    //     },
+    //   },
+    // })
+    // const databaseUri = getRdsDbUri(rds)
+
+    const databaseUri = getNeonDbUri(project, db, false)
+    const databasePooledUri = getNeonDbUri(project, db, true)
     try {
       databaseUri.apply(applyMigrations)
 
@@ -43,20 +57,10 @@ export default $config({
       const website = deployServerlessApp(
         electricInfo,
         databaseUri,
-        databaseUri
+        databasePooledUri
       )
-
-      const server = deployApp(electricInfo, databaseUri)
-      return {
-        databaseUri,
-        database_id: electricInfo.id,
-        electric_token: electricInfo.token,
-        website: website.url,
-        server: server.url,
-      }
-    } catch (e) {
-      console.error(`Failed to deploy yjs example stack`, e)
-    }
+      return { url: website.url, databaseUri, databasePooledUri }
+    } catch (e) {}
   },
 })
 
@@ -69,38 +73,38 @@ function applyMigrations(uri: string) {
   })
 }
 
-function deployApp(
-  { id, token }: $util.Output<{ id: string; token: string }>,
-  uri: $util.Output<string>
-) {
-  const vpc = new sst.aws.Vpc(`yjs-vpc-${$app.stage}`)
-  const cluster = new sst.aws.Cluster(`yjs-cluster-${$app.stage}`, { vpc })
+// function deployApp(
+//   { id, token }: $util.Output<{ id: string; token: string }>,
+//   uri: $util.Output<string>,
+//   vpc: sst.aws.Vpc
+// ) {
+//   const cluster = new sst.aws.Cluster(`yjs-cluster-${$app.stage}`, { vpc })
 
-  const service = cluster.addService(`yjs-service-${$app.stage}`, {
-    loadBalancer: {
-      ports: [{ listen: "443/https", forward: "3000/http" }],
-      domain: {
-        name: `yjs-server-${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
-        dns: sst.cloudflare.dns(),
-      },
-    },
-    environment: {
-      ELECTRIC_URL: process.env.ELECTRIC_API!,
-      DATABASE_URL: uri,
-      DATABASE_ID: id,
-      ELECTRIC_TOKEN: token,
-    },
-    image: {
-      context: "../..",
-      dockerfile: "Dockerfile",
-    },
-    dev: {
-      command: "npm run dev",
-    },
-  })
+//   const service = cluster.addService(`yjs-service-${$app.stage}`, {
+//     loadBalancer: {
+//       ports: [{ listen: "443/https", forward: "3000/http" }],
+//       domain: {
+//         name: `yjs-server-${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+//         dns: sst.cloudflare.dns(),
+//       },
+//     },
+//     environment: {
+//       ELECTRIC_URL: process.env.ELECTRIC_API!,
+//       DATABASE_URL: uri,
+//       DATABASE_ID: id,
+//       ELECTRIC_TOKEN: token,
+//     },
+//     image: {
+//       context: "../..",
+//       dockerfile: "Dockerfile",
+//     },
+//     dev: {
+//       command: "npm run dev",
+//     },
+//   })
 
-  return service
-}
+//   return service
+// }
 
 function deployServerlessApp(
   electricInfo: $util.Output<{ id: string; token: string }>,
@@ -113,7 +117,7 @@ function deployServerlessApp(
       ELECTRIC_TOKEN: electricInfo.token,
       DATABASE_ID: electricInfo.id,
       DATABASE_URL: uri,
-      //  POOLED_DATABASE_URL: TODO
+      POOLED_DATABASE_URL: pooledUri,
     },
     domain: {
       name: `yjs${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
@@ -124,7 +128,8 @@ function deployServerlessApp(
 
 function getNeonDbUri(
   project: $util.Output<neon.GetProjectResult>,
-  db: neon.Database
+  db: neon.Database,
+  pooled: boolean
 ) {
   const passwordOutput = neon.getBranchRolePasswordOutput({
     projectId: project.id,
@@ -132,7 +137,22 @@ function getNeonDbUri(
     roleName: db.ownerName,
   })
 
-  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${project.databaseHost}/${db.name}?sslmode=require`
+  const endpoint = neon.getBranchEndpointsOutput({
+    projectId: project.id,
+    branchId: project.defaultBranchId,
+  })
+
+  const databaseHost = pooled
+    ? endpoint.endpoints?.apply((endpoints) =>
+        endpoints![0].host.replace(
+          endpoints![0].id,
+          endpoints![0].id + "-pooled"
+        )
+      )
+    : project.databaseHost
+
+  const url = $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${databaseHost}/${db.name}?sslmode=require`
+  return url
 }
 
 async function addDatabaseToElectric(
