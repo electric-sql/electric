@@ -18,7 +18,8 @@ defmodule Electric.Postgres.LockConnectionTest do
                    LockConnection.start_link(
                      connection_opts: config,
                      connection_manager: self(),
-                     lock_name: @lock_name
+                     lock_name: @lock_name,
+                     stack_id: "irrelevant"
                    )
 
           assert_lock_acquired()
@@ -45,7 +46,8 @@ defmodule Electric.Postgres.LockConnectionTest do
                    LockConnection.start_link(
                      connection_opts: config,
                      connection_manager: self(),
-                     lock_name: @lock_name
+                     lock_name: @lock_name,
+                     stack_id: "irrelevant"
                    )
 
           assert_lock_acquired()
@@ -59,7 +61,8 @@ defmodule Electric.Postgres.LockConnectionTest do
                    LockConnection.start_link(
                      connection_opts: config,
                      connection_manager: self(),
-                     lock_name: @lock_name
+                     lock_name: @lock_name,
+                     stack_id: "irrelevant"
                    )
 
           # should fail to grab it

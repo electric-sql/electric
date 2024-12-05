@@ -176,6 +176,7 @@ defmodule Electric.StackSupervisor do
   @impl true
   def init(%{stack_id: stack_id} = config) do
     Process.set_label({:stack_supervisor, stack_id})
+    Logger.metadata(stack_id: stack_id)
 
     inspector =
       Access.get(

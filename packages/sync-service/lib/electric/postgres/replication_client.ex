@@ -143,8 +143,10 @@ defmodule Electric.Postgres.ReplicationClient do
   @impl true
   def init(replication_opts) do
     Process.set_label(:replication_client)
+    state = State.new(replication_opts)
+    Logger.metadata(stack_id: state.stack_id)
 
-    {:ok, State.new(replication_opts)}
+    {:ok, state}
   end
 
   # `Postgrex.ReplicationConnection` opens a new replication connection to Postgres and then
