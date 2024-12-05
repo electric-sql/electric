@@ -46,19 +46,8 @@ defmodule Electric.Client.Fetch.Mint.Connection do
   end
 
   @impl GenServer
-  def handle_info({:ssl, _socket, _data} = msg, %{conn: conn} = state) do
-    case Mint.HTTP.stream(conn, msg) do
-      {:ok, conn, responses} ->
-        handle_responses(responses, %{state | conn: conn})
-
-      {:error, conn, error, responses} ->
-        Logger.warning("[#{state.stream_id}] Error: #{inspect(error)}")
-        handle_responses(responses, %{state | conn: conn})
-
-      :unknown ->
-        Logger.warning("[#{state.stream_id}] Unrecognised data packet")
-        {:noreply, state}
-    end
+  def handle_info({:ssl, _socket, _data} = msg, state) do
+    stream_data(msg, state)
   end
 
   def handle_info({:ssl_closed, _socket}, state) do
@@ -71,9 +60,8 @@ defmodule Electric.Client.Fetch.Mint.Connection do
     {:noreply, state |> maybe_close() |> maybe_retry()}
   end
 
-  def handle_info({:tcp, _socket, _data} = msg, %{conn: conn} = state) do
-    {:ok, conn, responses} = Mint.HTTP.stream(conn, msg)
-    handle_responses(responses, %{state | conn: conn})
+  def handle_info({:tcp, _socket, _data} = msg, state) do
+    stream_data(msg, state)
   end
 
   def handle_info({:tcp_closed, _socket}, state) do
@@ -86,6 +74,21 @@ defmodule Electric.Client.Fetch.Mint.Connection do
 
     {:noreply,
      %{state | timeout: nil} |> maybe_close() |> sleep_before_reconnect() |> maybe_retry()}
+  end
+
+  defp stream_data(msg, %{conn: conn} = state) do
+    case Mint.HTTP.stream(conn, msg) do
+      {:ok, conn, responses} ->
+        handle_responses(responses, %{state | conn: conn})
+
+      {:error, conn, error, responses} ->
+        Logger.warning("[#{state.stream_id}] Error: #{inspect(error)}")
+        handle_responses(responses, %{state | conn: conn})
+
+      :unknown ->
+        Logger.warning("[#{state.stream_id}] Unrecognised data packet")
+        {:noreply, state}
+    end
   end
 
   defp request({request, opts}, state) do
