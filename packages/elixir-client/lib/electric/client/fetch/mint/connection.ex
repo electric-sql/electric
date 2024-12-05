@@ -127,6 +127,16 @@ defmodule Electric.Client.Fetch.Mint.Connection do
     state
   end
 
+  @max_tries 30
+
+  defp make_request(%{tries: @max_tries} = state, request, uri, opts) do
+    %{state | tries: 0}
+    |> maybe_close()
+    |> sleep_before_reconnect()
+    |> connect(uri, opts)
+    |> make_request(request, uri, opts)
+  end
+
   defp make_request(%{conn: conn} = state, request, uri, opts) do
     now = DateTime.utc_now()
 
@@ -147,6 +157,7 @@ defmodule Electric.Client.Fetch.Mint.Connection do
           | timeout: ref,
             conn: conn,
             ref: request_ref,
+            tries: 0,
             resp: %Fetch.Response{request_timestamp: now}
         }
 
