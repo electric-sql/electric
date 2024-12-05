@@ -71,8 +71,6 @@ export default function OnlineWrites() {
     return <div className="loading">Loading &hellip;</div>
   }
 
-  // The template below the heading is identical to the other patterns.
-
   // prettier-ignore
   return (
     <div id="online-writes" className="example">
