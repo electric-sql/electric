@@ -10,13 +10,5 @@ declare module "sst" {
       "type": "sst.aws.Nextjs"
       "url": string
     }
-    "yjs-service-vbalegas": {
-      "service": string
-      "type": "sst.aws.Service"
-      "url": string
-    }
-    "yjs-vpc-vbalegas": {
-      "type": "sst.aws.Vpc"
-    }
   }
 }
