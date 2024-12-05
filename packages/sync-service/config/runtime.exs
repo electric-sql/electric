@@ -38,6 +38,17 @@ if config_env() == :test do
   config :logger, :default_handler, level: :error
 end
 
+sentry_dsn = env!("SENTRY_DSN", :string, nil)
+
+if !is_nil(sentry_dsn) do
+  config :sentry,
+    dsn: env!("SENTRY_DSN", :string),
+    environment_name: config_env(),
+    enable_source_code_context: true,
+    root_source_code_paths: [File.cwd!()],
+    client: Electric.Telemetry.SentryReqHTTPClient
+end
+
 service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
 instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
 version = Electric.version()
