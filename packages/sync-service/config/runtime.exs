@@ -48,7 +48,7 @@ sentry_dsn = env!("SENTRY_DSN", :string, nil)
 
 if !is_nil(sentry_dsn) do
   config :sentry,
-    dsn: env!("SENTRY_DSN", :string, nil)
+    dsn: sentry_dsn
 end
 
 service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
