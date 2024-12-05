@@ -115,7 +115,7 @@ defmodule Electric.Client.Fetch.Mint.Connection do
           "[#{state.stream_id}] Failed to connect: #{uri.scheme}://#{uri.host}:#{uri.port}; #{inspect(reason)}"
         )
 
-        Logger.info("[#{state.stream_id}] tries: #{tries}; sleeping: #{sleep}")
+        Logger.info("[#{state.stream_id}] connect tries: #{tries}; sleeping: #{sleep}")
 
         Process.sleep(sleep)
 
@@ -130,25 +130,38 @@ defmodule Electric.Client.Fetch.Mint.Connection do
   defp make_request(%{conn: conn} = state, request, uri, opts) do
     now = DateTime.utc_now()
 
-    {:ok, conn, request_ref} =
-      Mint.HTTP.request(
-        conn,
-        method(request.method),
-        uri.path <> "?" <> uri.query,
-        Enum.to_list(request.headers),
-        nil
-      )
+    Mint.HTTP.request(
+      conn,
+      method(request.method),
+      uri.path <> "?" <> uri.query,
+      Enum.to_list(request.headers),
+      nil
+    )
+    |> case do
+      {:ok, conn, request_ref} ->
+        timeout = Keyword.get(opts, :timeout, @default_timeout)
+        ref = Process.send_after(self(), {:timeout, request_ref, timeout}, timeout)
 
-    timeout = Keyword.get(opts, :timeout, @default_timeout)
-    ref = Process.send_after(self(), {:timeout, request_ref, timeout}, timeout)
+        %{
+          state
+          | timeout: ref,
+            conn: conn,
+            ref: request_ref,
+            resp: %Fetch.Response{request_timestamp: now}
+        }
 
-    %{
-      state
-      | timeout: ref,
-        conn: conn,
-        ref: request_ref,
-        resp: %Fetch.Response{request_timestamp: now}
-    }
+      {:error, conn, error} ->
+        Logger.info(
+          "[#{state.stream_id}] request error #{uri.path}?#{uri.query}: #{inspect(error)}"
+        )
+
+        tries = state.tries + 1
+        sleep = retry_delay(tries)
+        Logger.info("[#{state.stream_id}] request tries: #{tries}; sleeping: #{sleep}")
+        Process.sleep(sleep)
+
+        make_request(%{state | conn: conn, tries: tries}, request, uri, opts)
+    end
   end
 
   defp method(:get), do: "GET"
@@ -226,7 +239,7 @@ defmodule Electric.Client.Fetch.Mint.Connection do
 
   defp maybe_close(%{conn: conn} = state) do
     if conn && Mint.HTTP.open?(conn) do
-      {:ok, _conn} = Mint.HTTP.close(conn)
+      Mint.HTTP.close(conn)
       %{state | conn: nil}
     else
       state
