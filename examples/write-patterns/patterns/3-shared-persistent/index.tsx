@@ -1,10 +1,16 @@
-import React, { useOptimistic, useTransition } from 'react'
+import React, { useTransition } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import { subscribe, useSnapshot } from 'valtio'
+import { proxyMap } from 'valtio/utils'
+
+import { type Operation, ShapeStream } from '@electric-sql/client'
 import { matchBy, matchStream } from '@electric-sql/experimental'
 import { useShape } from '@electric-sql/react'
+
 import api from '../../shared/app/client'
 
 const ELECTRIC_URL = import.meta.env.ELECTRIC_URL || 'http://localhost:3000'
+const KEY = 'electric-sql/examples/write-patterns/shared-persistent'
 
 type Todo = {
   id: string
@@ -17,19 +23,69 @@ type PartialTodo = Partial<Todo> & {
 }
 
 type Write = {
-  operation: 'insert' | 'update' | 'delete'
+  key: string
+  operation: Operation
   value: PartialTodo
 }
 
-export default function OptimisticState() {
+// Define a shared, persistent, reactive store for local optimistic state.
+const optimisticState = proxyMap<string, Write>(
+  JSON.parse(localStorage.getItem(KEY) || '[]')
+)
+subscribe(optimisticState, () => {
+  localStorage.setItem(KEY, JSON.stringify([...optimisticState]))
+})
+
+/*
+ * Add a local write to the optimistic state
+ */
+function addLocalWrite(operation: Operation, value: PartialTodo): Write {
+  const key = uuidv4()
+  const write: Write = {
+    key,
+    operation,
+    value,
+  }
+
+  optimisticState.set(key, write)
+
+  return write
+}
+
+/*
+ * Subscribe to the shape `stream` until the local write syncs back through it.
+ * At which point, delete the local write from the optimistic state.
+ */
+async function matchWrite(stream: ShapeStream<Todo>, write: Write) {
+  const { key, operation, value } = write
+
+  try {
+    await matchStream(stream, [operation], matchBy('id', value.id))
+  } catch (_err) {
+    return
+  }
+
+  optimisticState.delete(key)
+}
+
+/*
+ * Make an HTTP request to send the write to the API server.
+ * If the request fails, delete the local write from the optimistic state.
+ */
+async function sendRequest(path: string, method: string, write: Write) {
+  const { key, value } = write
+
+  try {
+    await api.request(path, method, value)
+  } catch (_err) {
+    optimisticState.delete(key)
+  }
+}
+
+export default function SharedPersistent() {
   const [isPending, startTransition] = useTransition()
 
-  // Use Electric's `useShape` hook to sync data from Postgres
-  // into a React state variable.
-  //
-  // Note that we also unpack the `stream` from the useShape
-  // return value, so that we can monitor it below to detect
-  // local writes syncing back from the server.
+  // Use Electric's `useShape` hook to sync data from Postgres.
   const { isLoading, data, stream } = useShape<Todo>({
     url: `${ELECTRIC_URL}/v1/shape`,
     params: {
@@ -39,15 +95,15 @@ export default function OptimisticState() {
       timestamptz: (value: string) => new Date(value),
     },
   })
-
   const sorted = data ? data.sort((a, b) => +a.created_at - +b.created_at) : []
 
-  // Use React's built in `useOptimistic` hook. This provides
-  // a mechanism to apply local optimistic state whilst writes
-  // are being sent-to and syncing-back-from the server.
-  const [todos, addOptimisticState] = useOptimistic(
-    sorted,
-    (synced: Todo[], { operation, value }: Write) => {
+  // Get the local optimistic state.
+  const writes = useSnapshot<Map<string, Write>>(optimisticState)
+
+  // Merge the synced state with the local state.
+  const todos = writes
+    .values()
+    .reduce((synced: Todo[], { operation, value }: Write) => {
       switch (operation) {
         case 'insert':
           return synced.some((todo) => todo.id === value.id)
@@ -62,20 +118,10 @@ export default function OptimisticState() {
         case 'delete':
           return synced.filter((todo) => todo.id !== value.id)
       }
-    }
-  )
+    }, sorted)
 
-  // These are the same event handler functions from the online
-  // example, extended with `startTransition` -> `addOptimisticState`
-  // to apply local optimistic state.
-  //
-  // Note that the local state is applied:
-  //
-  // 1. whilst the HTTP request is being made to the API server; and
-  // 2. until the write syncs back through the Electric shape stream
-  //
-  // This is slightly different from most optimistic state examples
-  // because we wait for the sync as well as the api request.
+  // These are the same event handler functions from the previous optimistic
+  // state pattern, adapted to add the state to the shared, persistent store.
 
   async function createTodo(event: React.FormEvent) {
     event.preventDefault()
@@ -88,19 +134,15 @@ export default function OptimisticState() {
     const data = {
       id: uuidv4(),
       title: title,
-      created_at: new Date(),
       completed: false,
+      created_at: new Date(),
     }
 
     startTransition(async () => {
-      addOptimisticState({ operation: 'insert', value: data })
+      const write = addLocalWrite('insert', data)
 
-      const fetchPromise = api.request(path, 'POST', data)
-      const syncPromise = matchStream(
-        stream,
-        ['insert'],
-        matchBy('id', data.id)
-      )
+      const fetchPromise = sendRequest(path, 'POST', write)
+      const syncPromise = matchWrite(stream, write)
 
       await Promise.all([fetchPromise, syncPromise])
     })
@@ -113,15 +155,15 @@ export default function OptimisticState() {
 
     const path = `/todos/${id}`
     const data = {
-      id,
+      id: id,
       completed: !completed,
     }
 
     startTransition(async () => {
-      addOptimisticState({ operation: 'update', value: data })
+      const write = addLocalWrite('update', data)
 
-      const fetchPromise = api.request(path, 'PUT', data)
-      const syncPromise = matchStream(stream, ['update'], matchBy('id', id))
+      const fetchPromise = sendRequest(path, 'PUT', write)
+      const syncPromise = matchWrite(stream, write)
 
       await Promise.all([fetchPromise, syncPromise])
     })
@@ -135,10 +177,10 @@ export default function OptimisticState() {
     const path = `/todos/${id}`
 
     startTransition(async () => {
-      addOptimisticState({ operation: 'delete', value: { id } })
+      const write = addLocalWrite('delete', { id })
 
-      const fetchPromise = api.request(path, 'DELETE')
-      const syncPromise = matchStream(stream, ['delete'], matchBy('id', id))
+      const fetchPromise = sendRequest(path, 'DELETE', write)
+      const syncPromise = matchWrite(stream, write)
 
       await Promise.all([fetchPromise, syncPromise])
     })
@@ -155,7 +197,7 @@ export default function OptimisticState() {
     <div id="optimistic-state" className="example">
       <h3>
         <span className="title">
-          2. Optimistic state
+          3. Shared persistent
         </span>
         <span className={isPending ? 'pending' : 'pending hidden'} />
       </h3>

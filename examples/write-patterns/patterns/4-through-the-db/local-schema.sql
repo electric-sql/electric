@@ -1,18 +1,20 @@
 -- This is the local database schema for PGlite.
 
--- Note that the resources are prefixed by a `p4` namespace (standing for pattern 4)
--- in order to avoid clashing with the resources defined in pattern 3.
+-- It uses two tables: `todos_synced` and `todos_local`. These are combined
+-- into a `todos` view that provides a merged view on both tables and supports
+-- local live queries. Writes to the `todos` view are redirected using
+-- `INSTEAD OF` triggers to the `todos_local` and `changes` tables.
 
--- The `p4_todos_synced` table for immutable, synced state from the server.
-CREATE TABLE IF NOT EXISTS p4_todos_synced (
+-- The `todos_synced` table for immutable, synced state from the server.
+CREATE TABLE IF NOT EXISTS todos_synced (
   id UUID PRIMARY KEY,
   title TEXT NOT NULL,
   completed BOOLEAN NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
--- The `p4_todos_local` table for local optimistic state.
-CREATE TABLE IF NOT EXISTS p4_todos_local (
+-- The `todos_local` table for local optimistic state.
+CREATE TABLE IF NOT EXISTS todos_local (
   id UUID PRIMARY KEY,
   title TEXT,
   completed BOOLEAN,
@@ -21,8 +23,8 @@ CREATE TABLE IF NOT EXISTS p4_todos_local (
   is_deleted BOOLEAN DEFAULT FALSE
 );
 
--- The `p4_todos` view to combine the two tables on read.
-CREATE OR REPLACE VIEW p4_todos AS
+-- The `todos` view to combine the two tables on read.
+CREATE OR REPLACE VIEW todos AS
   SELECT
     COALESCE(local.id, synced.id) AS id,
     CASE
@@ -40,50 +42,54 @@ CREATE OR REPLACE VIEW p4_todos AS
         THEN local.created_at
         ELSE synced.created_at
       END AS created_at
-  FROM p4_todos_synced AS synced
-  FULL OUTER JOIN p4_todos_local AS local
+  FROM todos_synced AS synced
+  FULL OUTER JOIN todos_local AS local
     ON synced.id = local.id
     WHERE local.id IS NULL OR local.is_deleted = FALSE;
 
--- A trigger to automatically remove local optimistic state.
-CREATE OR REPLACE FUNCTION p4_delete_local_on_sync_trigger()
+-- A trigger to automatically remove local optimistic state when the
+-- corresponding row syncs over the replication stream. This is a blunt
+-- merge strategy. More sophisticated apps can implement more
+-- sophisticated merge / rebase strategies.
+CREATE OR REPLACE FUNCTION delete_local_on_sync_trigger()
 RETURNS TRIGGER AS $$
 BEGIN
-  DELETE FROM p4_todos_local WHERE id = OLD.id;
+  DELETE FROM todos_local WHERE id = OLD.id;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER p4_delete_local_on_sync
-AFTER INSERT OR UPDATE OR DELETE ON p4_todos_synced
+CREATE OR REPLACE TRIGGER delete_local_on_sync
+AFTER INSERT OR UPDATE OR DELETE ON todos_synced
 FOR EACH ROW
-EXECUTE FUNCTION p4_delete_local_on_sync_trigger();
+EXECUTE FUNCTION delete_local_on_sync_trigger();
 
 -- The local `changes` table for capturing and persisting a log
 -- of local write operations that we want to sync to the server.
-CREATE TABLE IF NOT EXISTS p4_changes (
+CREATE TABLE IF NOT EXISTS changes (
   id BIGSERIAL PRIMARY KEY,
   operation TEXT NOT NULL,
   value JSONB NOT NULL,
   transaction_id XID8 NOT NULL
 );
 
--- We now define `INSTEAD OF` triggers to:
+-- The following `INSTEAD OF` triggers:
 -- 1. allow the app code to write directly to the view
 -- 2. to capture write operations and write change messages into the
 
 -- The insert trigger
-CREATE OR REPLACE FUNCTION p4_todos_insert_trigger()
+CREATE OR REPLACE FUNCTION todos_insert_trigger()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM p4_todos_synced WHERE id = NEW.id) THEN
+  IF EXISTS (SELECT 1 FROM todos_synced WHERE id = NEW.id) THEN
     RAISE EXCEPTION 'Cannot insert: id already exists in the synced table';
   END IF;
-  IF EXISTS (SELECT 1 FROM p4_todos_local WHERE id = NEW.id) THEN
+  IF EXISTS (SELECT 1 FROM todos_local WHERE id = NEW.id) THEN
     RAISE EXCEPTION 'Cannot insert: id already exists in the local table';
   END IF;
 
-  INSERT INTO p4_todos_local (
+  -- Insert into the local table.
+  INSERT INTO todos_local (
     id,
     title,
     completed,
@@ -98,7 +104,8 @@ BEGIN
     ARRAY['title', 'completed', 'created_at']
   );
 
-  INSERT INTO p4_changes (
+  -- Record the write operation in the change log.
+  INSERT INTO changes (
     operation,
     value,
     transaction_id
@@ -119,16 +126,16 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- The update trigger
-CREATE OR REPLACE FUNCTION p4_todos_update_trigger()
+CREATE OR REPLACE FUNCTION todos_update_trigger()
 RETURNS TRIGGER AS $$
 DECLARE
-  synced p4_todos_synced%ROWTYPE;
-  local p4_todos_local%ROWTYPE;
+  synced todos_synced%ROWTYPE;
+  local todos_local%ROWTYPE;
   changed_cols TEXT[] := '{}';
 BEGIN
   -- Fetch the corresponding rows from the synced and local tables
-  SELECT * INTO synced FROM p4_todos_synced WHERE id = NEW.id;
-  SELECT * INTO local FROM p4_todos_local WHERE id = NEW.id;
+  SELECT * INTO synced FROM todos_synced WHERE id = NEW.id;
+  SELECT * INTO local FROM todos_local WHERE id = NEW.id;
 
   -- If the row is not present in the local table, insert it
   IF NOT FOUND THEN
@@ -143,7 +150,7 @@ BEGIN
       changed_cols := array_append(changed_cols, 'created_at');
     END IF;
 
-    INSERT INTO p4_todos_local (
+    INSERT INTO todos_local (
       id,
       title,
       completed,
@@ -161,7 +168,7 @@ BEGIN
   -- Otherwise, if the row is already in the local table, update it and adjust
   -- the changed_columns
   ELSE
-    UPDATE p4_todos_local
+    UPDATE todos_local
       SET
         title =
           CASE
@@ -203,7 +210,8 @@ BEGIN
       WHERE id = NEW.id;
   END IF;
 
-  INSERT INTO p4_changes (
+  -- Record the update into the change log.
+  INSERT INTO changes (
     operation,
     value,
     transaction_id
@@ -226,16 +234,17 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- The delete trigger
-CREATE OR REPLACE FUNCTION p4_todos_delete_trigger()
+CREATE OR REPLACE FUNCTION todos_delete_trigger()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM p4_todos_local WHERE id = OLD.id) THEN
-    UPDATE p4_todos_local
+  -- Upsert a soft-deletion record in the local table.
+  IF EXISTS (SELECT 1 FROM todos_local WHERE id = OLD.id) THEN
+    UPDATE todos_local
     SET
       is_deleted = TRUE
     WHERE id = OLD.id;
   ELSE
-    INSERT INTO p4_todos_local (
+    INSERT INTO todos_local (
       id,
       is_deleted
     )
@@ -245,7 +254,8 @@ BEGIN
     );
   END IF;
 
-  INSERT INTO p4_changes (
+  -- Record in the change log.
+  INSERT INTO changes (
     operation,
     value,
     transaction_id
@@ -262,30 +272,31 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER p4_todos_insert
-INSTEAD OF INSERT ON p4_todos
+CREATE OR REPLACE TRIGGER todos_insert
+INSTEAD OF INSERT ON todos
 FOR EACH ROW
-EXECUTE FUNCTION p4_todos_insert_trigger();
+EXECUTE FUNCTION todos_insert_trigger();
 
-CREATE OR REPLACE TRIGGER p4_todos_update
-INSTEAD OF UPDATE ON p4_todos
+CREATE OR REPLACE TRIGGER todos_update
+INSTEAD OF UPDATE ON todos
 FOR EACH ROW
-EXECUTE FUNCTION p4_todos_update_trigger();
+EXECUTE FUNCTION todos_update_trigger();
 
-CREATE OR REPLACE TRIGGER p4_todos_delete
-INSTEAD OF DELETE ON p4_todos
+CREATE OR REPLACE TRIGGER todos_delete
+INSTEAD OF DELETE ON todos
 FOR EACH ROW
-EXECUTE FUNCTION p4_todos_delete_trigger();
+EXECUTE FUNCTION todos_delete_trigger();
 
-CREATE OR REPLACE FUNCTION p4_changes_notify_trigger()
+-- Notify on a `changes` topic whenever anything is added to the change log.
+CREATE OR REPLACE FUNCTION changes_notify_trigger()
 RETURNS TRIGGER AS $$
 BEGIN
-  NOTIFY p4_changes;
+  NOTIFY changes;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER p4_changes_notify
-AFTER INSERT ON p4_changes
+CREATE OR REPLACE TRIGGER changes_notify
+AFTER INSERT ON changes
 FOR EACH ROW
-EXECUTE FUNCTION p4_changes_notify_trigger();
+EXECUTE FUNCTION changes_notify_trigger();

@@ -1,5 +1,5 @@
 
-# Online writes example
+# Online writes pattern
 
 This is an example of an application using:
 
