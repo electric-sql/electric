@@ -158,7 +158,7 @@ defmodule Electric.Connection.Manager do
     Process.flag(:trap_exit, true)
 
     Process.set_label({:connection_manager, opts[:stack_id]})
-    Logger.metadata(stack_id: opts[:stack_id])
+    Electric.Telemetry.Sentry.logger_metadata(stack_id: opts[:stack_id])
 
     connection_opts =
       opts

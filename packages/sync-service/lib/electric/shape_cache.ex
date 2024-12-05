@@ -200,7 +200,7 @@ defmodule Electric.ShapeCache do
     meta_table = :ets.new(:"#{stack_id}:shape_meta_table", [:named_table, :public, :ordered_set])
 
     Process.set_label({:shape_cache, stack_id})
-    Logger.metadata(stack_id: stack_id)
+    Electric.Telemetry.Sentry.logger_metadata(stack_id: stack_id)
 
     {:ok, shape_status_state} =
       opts.shape_status.initialise(

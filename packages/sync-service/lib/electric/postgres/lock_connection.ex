@@ -44,7 +44,7 @@ defmodule Electric.Postgres.LockConnection do
   def init(opts) do
     send(self(), :acquire_lock)
 
-    Logger.metadata(
+    Electric.Telemetry.Sentry.logger_metadata(
       lock_name: Keyword.fetch!(opts, :lock_name),
       stack_id: Keyword.fetch!(opts, :stack_id)
     )

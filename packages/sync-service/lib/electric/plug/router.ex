@@ -46,7 +46,7 @@ defmodule Electric.Plug.Router do
     do: CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD"]})
 
   def add_stack_id_to_metadata(conn, _) do
-    Logger.metadata(stack_id: conn.assigns.config[:stack_id])
+    Electric.Telemetry.Sentry.logger_metadata(stack_id: conn.assigns.config[:stack_id])
     conn
   end
 end
