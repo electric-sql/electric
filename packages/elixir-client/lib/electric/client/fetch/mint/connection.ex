@@ -162,6 +162,8 @@ defmodule Electric.Client.Fetch.Mint.Connection do
         }
 
       {:error, conn, %Mint.HTTPError{reason: :closed}} ->
+        Logger.info("[#{state.stream_id}] connection closed")
+
         %{state | conn: conn, tries: 0}
         |> maybe_close()
         |> sleep_before_reconnect()
