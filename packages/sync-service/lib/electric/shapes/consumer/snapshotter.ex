@@ -46,37 +46,26 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           %{
             db_pool: pool,
             storage: storage,
-            run_with_conn_fn: run_with_conn_fn,
             create_snapshot_fn: create_snapshot_fn,
             prepare_tables_fn: prepare_tables_fn_or_mfa
           } = state
-
-          affected_tables = Shape.affected_tables(shape)
 
           OpenTelemetry.with_span(
             "shape_snapshot.create_snapshot_task",
             shape_attrs(shape_handle, shape),
             fn ->
               try do
-                # Grab the same connection from the pool for both operations to
-                # ensure we only queue for it once.
-                apply(run_with_conn_fn, [
-                  pool,
-                  fn pool_conn ->
-                    OpenTelemetry.with_span(
-                      "shape_snapshot.prepare_tables",
-                      shape_attrs(shape_handle, shape),
-                      fn ->
-                        Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [
-                          pool_conn,
-                          affected_tables
-                        ])
-                      end
-                    )
-
-                    apply(create_snapshot_fn, [consumer, shape_handle, shape, pool_conn, storage])
+                OpenTelemetry.with_span(
+                  "shape_snapshot.prepare_tables",
+                  shape_attrs(shape_handle, shape),
+                  fn ->
+                    Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [
+                      shape
+                    ])
                   end
-                ])
+                )
+
+                apply(create_snapshot_fn, [consumer, shape_handle, shape, pool, storage])
               rescue
                 error ->
                   GenServer.cast(

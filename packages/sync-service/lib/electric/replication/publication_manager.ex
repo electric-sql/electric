@@ -1,4 +1,4 @@
-defmodule Electric.Postgres.PublicationManager do
+defmodule Electric.Replication.PublicationManager do
   require Logger
 
   use GenServer
@@ -15,18 +15,9 @@ defmodule Electric.Postgres.PublicationManager do
     :scheduled_updated_ref,
     :waiters,
     :publication_name,
-    :pool,
+    :db_pool,
     :get_pg_version
   ]
-
-  @type opts() :: %{
-          required(:publication_name) => String.t(),
-          required(:pool) => term(),
-          required(:get_pg_version) => (-> String.t()),
-          optional(:name) => atom(),
-          optional(:update_debounce_timeout) => timeout(),
-          optional(:server) => any()
-        }
 
   @typep state() :: %__MODULE__{
            relation_filter_counters: %{Electric.relation() => map()},
@@ -36,7 +27,7 @@ defmodule Electric.Postgres.PublicationManager do
            scheduled_updated_ref: nil | reference(),
            waiters: list(GenServer.from()),
            publication_name: String.t(),
-           pool: term(),
+           db_pool: term(),
            get_pg_version: (-> String.t())
          }
   @typep filter_operation :: :add | :remove
@@ -58,21 +49,57 @@ defmodule Electric.Postgres.PublicationManager do
   @relation_where :relation_where
   @relation_column :relation_column
 
+  @name_schema_tuple {:tuple, [:atom, :atom, :any]}
+  @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
+  @schema NimbleOptions.new!(
+            name: [type: @genserver_name_schema, required: false],
+            stack_id: [type: :string, required: true],
+            publication_name: [type: :string, required: true],
+            db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
+            get_pg_version: [type: {:fun, 0}, required: true],
+            update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
+            server: [type: :any, required: false]
+          )
+
+  def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__)
+  end
+
+  def name(opts) do
+    stack_id = Access.fetch!(opts, :stack_id)
+    name(stack_id)
+  end
+
   @spec add_shape(Shape.t(), Keyword.t()) :: :ok
   def add_shape(shape, opts \\ []) do
-    server = Access.get(opts, :server, __MODULE__)
+    server = Access.get(opts, :server, name(opts))
     GenServer.call(server, {:add_shape, shape})
   end
 
   @spec remove_shape(Shape.t(), Keyword.t()) :: :ok
   def remove_shape(shape, opts \\ []) do
-    server = Access.get(opts, :server, __MODULE__)
+    server = Access.get(opts, :server, name(opts))
     GenServer.call(server, {:remove_shape, shape})
   end
 
-  @spec start_link(opts()) :: GenServer.on_start()
   def start_link(opts) do
-    GenServer.start_link(Access.get(opts, :name, __MODULE__), opts)
+    with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
+      stack_id = Keyword.fetch!(opts, :stack_id)
+      name = Keyword.get(opts, :name, name(stack_id))
+
+      db_pool =
+        Keyword.get(
+          opts,
+          :db_pool,
+          Electric.ProcessRegistry.name(stack_id, Electric.DbPool)
+        )
+
+      GenServer.start_link(
+        __MODULE__,
+        Map.new(opts) |> Map.put(:db_pool, db_pool) |> Map.put(:name, name),
+        name: name
+      )
+    end
   end
 
   @impl true
@@ -82,10 +109,11 @@ defmodule Electric.Postgres.PublicationManager do
       prepared_relation_filters: %{},
       committed_relation_filters: %{},
       scheduled_updated_ref: nil,
+      waiters: [],
       update_debounce_timeout:
         Access.get(opts, :update_debounce_timeout, @default_debounce_timeout),
       publication_name: Access.fetch!(opts, :publication_name),
-      pool: Access.fetch!(opts, :pool),
+      db_pool: Access.fetch!(opts, :db_pool),
       get_pg_version: Access.fetch!(opts, :get_pg_version)
     }
 
@@ -112,6 +140,8 @@ defmodule Electric.Postgres.PublicationManager do
         :update_publication,
         %__MODULE__{prepared_relation_filters: relation_filters} = state
       ) do
+    state = %{state | scheduled_updated_ref: nil}
+
     case update_publication(state) do
       :ok ->
         state = reply_to_waiters(:ok, state)
@@ -130,6 +160,9 @@ defmodule Electric.Postgres.PublicationManager do
     %{state | scheduled_updated_ref: ref}
   end
 
+  defp schedule_update_publication(_timeout, %__MODULE__{scheduled_updated_ref: _} = state),
+    do: state
+
   @spec update_publication(state()) :: :ok | {:error, term()}
   defp update_publication(
          %__MODULE__{
@@ -144,12 +177,12 @@ defmodule Electric.Postgres.PublicationManager do
          %__MODULE__{
            prepared_relation_filters: relation_filters,
            publication_name: publication_name,
-           pool: pool,
+           db_pool: db_pool,
            get_pg_version: get_pg_version
          } = _state
        ) do
     Configuration.configure_tables_for_replication!(
-      pool,
+      db_pool,
       Map.values(relation_filters),
       get_pg_version,
       publication_name
@@ -191,7 +224,7 @@ defmodule Electric.Postgres.PublicationManager do
           Map.keys(filter_counters),
           %RelationFilter{relation: relation, where_clauses: [], selected_columns: []},
           fn
-            {@relation_counter, _}, acc ->
+            @relation_counter, acc ->
               acc
 
             {@relation_column, nil}, acc ->
@@ -241,26 +274,26 @@ defmodule Electric.Postgres.PublicationManager do
 
       %{
         state
-        | prepared_relation_filters: Map.put(relation_filter_counters, table, filter_counters)
+        | relation_filter_counters: Map.put(relation_filter_counters, table, filter_counters)
       }
     else
-      %{state | prepared_relation_filters: Map.delete(relation_filter_counters, table)}
+      %{state | relation_filter_counters: Map.delete(relation_filter_counters, table)}
     end
   end
 
   @spec update_map_counter(map(), any(), integer()) :: {any(), map()}
   defp update_map_counter(map, key, inc) do
     Map.get_and_update(map, key, fn
-      nil when inc < 0 -> :pop
+      nil when inc < 0 -> {nil, nil}
       ctr when ctr + inc < 0 -> :pop
-      nil -> {nil, inc}
-      ctr -> {ctr, ctr + inc}
+      nil -> {inc, inc}
+      ctr -> {ctr + inc, ctr + inc}
     end)
   end
 
   @spec get_selected_columns_for_shape(Shape.t()) :: MapSet.t(String.t() | nil)
   defp get_selected_columns_for_shape(%Shape{where: _, selected_columns: nil}),
-    do: MapSet.new(nil)
+    do: MapSet.new([nil])
 
   defp get_selected_columns_for_shape(%Shape{where: nil, selected_columns: columns}),
     do: MapSet.new(columns)
@@ -273,9 +306,9 @@ defmodule Electric.Postgres.PublicationManager do
 
   @spec get_where_clauses_for_shape(Shape.t()) ::
           MapSet.t(Electric.Replication.Eval.Expr.t() | nil)
-  defp get_where_clauses_for_shape(%Shape{where: nil}), do: MapSet.new(nil)
+  defp get_where_clauses_for_shape(%Shape{where: nil}), do: MapSet.new([nil])
   # TODO: flatten where clauses by splitting top level ANDs
-  defp get_where_clauses_for_shape(%Shape{where: where}), do: MapSet.new(where)
+  defp get_where_clauses_for_shape(%Shape{where: where}), do: MapSet.new([where])
 
   @spec add_waiter(GenServer.from(), state()) :: state()
   defp add_waiter(from, %__MODULE__{waiters: waiters} = state),

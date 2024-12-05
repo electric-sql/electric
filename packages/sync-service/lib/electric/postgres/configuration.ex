@@ -4,7 +4,7 @@ defmodule Electric.Postgres.Configuration do
   a provided connection.
   """
   require Logger
-  alias Electric.Postgres.PublicationManager.RelationFilter
+  alias Electric.Replication.PublicationManager.RelationFilter
   alias Electric.Utils
 
   @type filters() :: %{Electric.relation() => RelationFilter.t()}
@@ -160,7 +160,11 @@ defmodule Electric.Postgres.Configuration do
     cols = if cols == nil, do: "", else: " (#{Enum.join(cols, ", ")})"
 
     where =
-      if where_clauses == nil, do: "", else: " WHERE " <> "(#{Enum.join(where_clauses, " OR ")})"
+      if where_clauses == nil,
+        do: "",
+        else:
+          " WHERE " <>
+            "(#{where_clauses |> Enum.map(& &1.query) |> Enum.join(" OR ")})"
 
     table <> cols <> where
   end
