@@ -199,6 +199,9 @@ defmodule Electric.ShapeCache do
     stack_id = opts[:stack_id]
     meta_table = :ets.new(:"#{stack_id}:shape_meta_table", [:named_table, :public, :ordered_set])
 
+    Process.set_label({:shape_cache, stack_id})
+    Logger.metadata(stack_id: stack_id)
+
     {:ok, shape_status_state} =
       opts.shape_status.initialise(
         shape_meta_table: meta_table,

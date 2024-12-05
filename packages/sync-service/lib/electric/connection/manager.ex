@@ -158,6 +158,7 @@ defmodule Electric.Connection.Manager do
     Process.flag(:trap_exit, true)
 
     Process.set_label({:connection_manager, opts[:stack_id]})
+    Logger.metadata(stack_id: opts[:stack_id])
 
     connection_opts =
       opts
@@ -245,7 +246,8 @@ defmodule Electric.Connection.Manager do
     opts = [
       connection_opts: state.connection_opts,
       connection_manager: self(),
-      lock_name: Keyword.fetch!(state.replication_opts, :slot_name)
+      lock_name: Keyword.fetch!(state.replication_opts, :slot_name),
+      stack_id: state.stack_id
     ]
 
     case start_lock_connection(opts) do

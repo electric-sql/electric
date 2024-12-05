@@ -25,9 +25,9 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     GenServer.start_link(__MODULE__, config, name: name(config))
   end
 
-  def init(%{stack_id: stack_id} = config) do
+  def init(config) do
     Process.set_label({:snapshotter, config.shape_handle})
-    Logger.metadata(stack_id: stack_id)
+    Logger.metadata(stack_id: config.stack_id, shape_handle: config.shape_handle)
 
     {:ok, config, {:continue, :start_snapshot}}
   end

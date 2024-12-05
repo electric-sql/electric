@@ -30,6 +30,7 @@ defmodule Electric.Connection.Supervisor do
 
   def init(opts) do
     Process.set_label({:connection_supervisor, opts[:stack_id]})
+    Logger.metadata(stack_id: opts[:stack_id])
     Supervisor.init([{Electric.Connection.Manager, opts}], strategy: :rest_for_one)
   end
 

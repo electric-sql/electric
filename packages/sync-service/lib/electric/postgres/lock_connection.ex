@@ -44,6 +44,11 @@ defmodule Electric.Postgres.LockConnection do
   def init(opts) do
     send(self(), :acquire_lock)
 
+    Logger.metadata(
+      lock_name: Keyword.fetch!(opts, :lock_name),
+      stack_id: Keyword.fetch!(opts, :stack_id)
+    )
+
     {:ok,
      %State{
        connection_manager: Keyword.fetch!(opts, :connection_manager),

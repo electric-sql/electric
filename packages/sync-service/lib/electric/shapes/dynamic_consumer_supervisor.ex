@@ -53,6 +53,7 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
   @impl true
   def init(stack_id: stack_id) do
     Process.set_label({:dynamic_consumer_supervisor, stack_id})
+    Logger.metadata(stack_id: stack_id)
     Logger.debug(fn -> "Starting #{__MODULE__}" end)
     DynamicSupervisor.init(strategy: :one_for_one)
   end

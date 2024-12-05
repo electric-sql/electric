@@ -293,10 +293,10 @@ Enable sending telemetry data to a StatsD reporting endpoint.
 
 ## Logging
 
-### ELECTRIC_LOGGING_LEVEL
+### ELECTRIC_LOG_LEVEL
 
 <EnvVarConfig
-    name="ELECTRIC_LOGGING_LEVEL"
+    name="ELECTRIC_LOG_LEVEL"
     optional="true"
     example="debug">
 
