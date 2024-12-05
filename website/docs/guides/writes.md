@@ -58,7 +58,7 @@ They are introduced in order of simplicity. So the simplest and easiest to imple
   1. Online writes
   <a class="header-anchor" href="#online-writes" aria-label="Permalink to &quot;Online writes&quot;">&ZeroWidthSpace;</a>
 </h3>
-<span>
+<span class="no-wrap">
   (<a href="https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/1-online-writes">source code</a>)
 </span>
 
@@ -89,7 +89,7 @@ You have the network on the write path. This can be slow and laggy with the user
   2. Optimistic state
   <a class="header-anchor" href="#online-writes" aria-label="Permalink to &quot;Optimistic state&quot;">&ZeroWidthSpace;</a>
 </h3>
-<span>
+<span class="no-wrap">
   (<a href="https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/2-optimistic-state">source code</a>)
 </span>
 
@@ -126,10 +126,10 @@ This means that other components may display inconsistent information and users 
 
 
 <h3 id="shared-persistent" tabindex="-1" style="display: inline-block">
-  3. Shared persistent optimistic state
+  3. Shared persistent <span class="hidden-xs">optimistic state</span>
   <a class="header-anchor" href="#online-writes" aria-label="Permalink to &quot;Shared persistent optimistic state&quot;">&ZeroWidthSpace;</a>
 </h3>
-<span>
+<span class="no-wrap">
   (<a href="https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/3-shared-persistent">source code</a>)
 </span>
 
@@ -172,7 +172,7 @@ The entrypoint for handling rollbacks has the local write context available, so 
   4. Through the database sync
   <a class="header-anchor" href="#online-writes" aria-label="Permalink to &quot;Through the database sync&quot;">&ZeroWidthSpace;</a>
 </h3>
-<span>
+<span class="no-wrap">
   (<a href="https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/4-through-the-db">source code</a>)
 </span>
 
