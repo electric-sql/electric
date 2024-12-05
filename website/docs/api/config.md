@@ -310,10 +310,10 @@ Available levels, in the order of increasing verbosity:
 
 </EnvVarConfig>
 
-### ELECTRIC_LOGGING_COLORS
+### ELECTRIC_LOG_COLORS
 
 <EnvVarConfig
-    name="ELECTRIC_LOGGING_COLORS"
+    name="ELECTRIC_LOG_COLORS"
     optional="true"
     example="false">
 
@@ -323,10 +323,10 @@ By default, coloring is enabled when Electric's stdout is connected to a termina
 
 </EnvVarConfig>
 
-### ELECTRIC_LOGGING_OTP_REPORTS
+### ELECTRIC_LOG_OTP_REPORTS
 
 <EnvVarConfig
-    name="ELECTRIC_LOGGING_OTP_REPORTS"
+    name="ELECTRIC_LOG_OTP_REPORTS"
     defaultValue="false"
     example="true">
 
