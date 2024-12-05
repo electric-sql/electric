@@ -1,18 +1,25 @@
-import { Pool } from "pg"
-import { pool } from "../../db"
+import { Client } from "pg"
 import { NextResponse } from "next/server"
 
+// TODO: need to use a connection pool for non-serverless deployments
+
+const connectionString =
+  process.env.POOLED_DATABASE_URL ||
+  process.env.DATABASE_URL ||
+  `postgresql://postgres:password@localhost:54321/electric`
+
 export async function POST(request: Request) {
-  let connected = false
+  const client = new Client({
+    connectionString,
+  })
   try {
     const { room, op, clientId } = await getRequestParams(request)
-    await pool.connect()
-    connected = true
+    await client.connect()
 
     if (!clientId) {
-      await saveOperation(room, op, pool)
+      await saveOperation(room, op, client)
     } else {
-      await saveAwarenessOperation(room, op, clientId, pool)
+      await saveAwarenessOperation(room, op, clientId, client)
     }
 
     return NextResponse.json({})
@@ -20,13 +27,11 @@ export async function POST(request: Request) {
     const resp = e instanceof Error ? e.message : e
     return NextResponse.json(resp, { status: 400 })
   } finally {
-    if (connected) {
-      pool.end()
-    }
+    client.end()
   }
 }
 
-async function saveOperation(room: string, op: string, connection: Pool) {
+async function saveOperation(room: string, op: string, connection: Client) {
   await connection.query(
     `INSERT INTO ydoc_operations (room, op) VALUES ($1, decode($2, 'base64'))`,
     [room, op]
@@ -37,7 +42,7 @@ async function saveAwarenessOperation(
   room: string,
   op: string,
   clientId: string,
-  connection: Pool
+  connection: Client
 ) {
   await connection.query(
     `INSERT INTO ydoc_awareness (room, clientId, op) VALUES ($1, $2, decode($3, 'base64'))

@@ -120,7 +120,7 @@ function deployServerlessApp(
       POOLED_DATABASE_URL: pooledUri,
     },
     domain: {
-      name: `yjs${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+      name: `yjs${$app.stage === `Production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
       dns: sst.cloudflare.dns(),
     },
   })
@@ -146,7 +146,7 @@ function getNeonDbUri(
     ? endpoint.endpoints?.apply((endpoints) =>
         endpoints![0].host.replace(
           endpoints![0].id,
-          endpoints![0].id + "-pooled"
+          endpoints![0].id + "-pooler"
         )
       )
     : project.databaseHost
