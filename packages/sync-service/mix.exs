@@ -92,6 +92,7 @@ defmodule Electric.MixProject do
         {:retry, "~> 0.18"},
         {:remote_ip, "~> 1.2"},
         {:req, "~> 0.5"},
+        {:sentry, "~> 10.0"},
         {:telemetry_metrics_prometheus_core, "~> 1.1"},
         {:telemetry_metrics_statsd, "~> 0.7"},
         {:telemetry_poller, "~> 1.1"},

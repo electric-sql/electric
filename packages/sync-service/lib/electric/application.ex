@@ -12,6 +12,8 @@ defmodule Electric.Application do
   def start(_type, _args) do
     :erlang.system_flag(:backtrace_depth, 50)
 
+    Electric.Telemetry.Sentry.add_logger_handler()
+
     # We have "instance id" identifier as the node ID, however that's generated every runtime,
     # so isn't stable across restarts. Our storages however scope themselves based on this stack ID
     # so we're just hardcoding it here.

@@ -28,11 +28,12 @@ COPY rel /app/rel
 COPY lib /app/lib/
 
 COPY package.json /app/
-COPY config/*runtime.exs /app/config/
+COPY config/*.exs /app/config/
 
 ARG ELECTRIC_VERSION
 
 RUN mix compile
+RUN mix sentry.package_source_code
 RUN mix release
 
 FROM ${RUNNER_IMAGE} AS runner_setup
