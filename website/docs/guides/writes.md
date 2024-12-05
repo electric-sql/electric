@@ -95,7 +95,7 @@ You have the network on the write path. This can be slow and laggy with the user
 
 The second pattern extends the online pattern above with support for local offline writes with simple optimistic state.
 
-Optimistic state is state that you display "optimistically" whilst waiting for an asynchronous operation, like sending data to a server, to complete. This allows writes to be accepted when offline and/or displayed locally immediately to the user, by merging the synced state with the optimistic state when rendering the information.
+Optimistic state is state that you display "optimistically" whilst waiting for an asynchronous operation, like sending data to a server, to complete. This allows local writes to be accepted when offline and displayed immediately to the user, by merging the synced state with the optimistic state when rendering.
 
 When the writes do succeed, they are automatically synced back to the app via Electric and the local optimistic state can be discarded.
 
@@ -145,7 +145,7 @@ This pattern can be implemented with a variety of client-side state management a
 
 This is a powerful and pragmatic pattern, occupying a compelling point in the design space. It's relatively simple to implement.
 
-Persisting optimistic state makes local writes more resilient. Storing optimistic state in a shared store allows all your components to see and react to it. This avoids one of the weaknesses with component-scoped optimistic state and makes this pattern more suitable for more complex, real world apps.
+Persisting optimistic state makes local writes more resilient. Storing optimistic state in a shared store allows all your components to see and react to it. This avoids the weaknesses with ephemoral, component-scoped optimistic state and makes this pattern more suitable for more complex, real world apps.
 
 Seperating immutable synced state from mutable local state also makes it easy to reason about and implement rollback strategies. Worst case, you can always just wipe the local state and/or re-sync the server state, without having to unpick some kind of merged mutable store.
 
@@ -157,15 +157,13 @@ Good use-cases include:
 
 #### Drawbacks
 
-Combining data on-read makes local reads slightly slower. Whilst a persistent local store is used for optimistic state, writes are still made via an API. This can often be helpful and pragmatic, allowing you to [re-use your existing API](/blog/2024/11/21/local-first-with-your-existing-api). However, you may prefer to avoid this, with a purer local-first approach based on syncing through a local embedded database.
+Combining data on-read makes local reads slightly slower. Whilst a persistent local store is used for optimistic state, writes are still made via an API. This can often be helpful and pragmatic, allowing you to [re-use your existing API](/blog/2024/11/21/local-first-with-your-existing-api). However, you may prefer to avoid this, with a purer local-first approach based on syncing [through a local embedded database](#through-the-db).
 
 #### Implementation notes
 
-This pattern can be implemented in many ways but it's worth noting that this specific example does actually implement quite an elegant approach to both [merge logic](#merge-logic) and [rollback handling](#rollbacks).
+The entrypoint for handling rollbacks has the local write context available. So it's able to rollback individual writes, rather than wiping the whole local state.
 
-Because it only clears local optimistic state once the specific local write has synced, this implementation preserves local changes on top of concurrent changes by other users (or tabs or devices).
-
-The entrypoint for handling rollbacks has the local write context available, so it's able to easily rollback individual writes, rather than wiping the whole local state. Because it has the shared store available, it could be extended ti also analyse causal dependencies of a write if desired.
+Because it has the shared store available, it would also be possible to extend this to implement more sophisticated strategies. Such as also removing other local writes that causally depended-on or were related-to the rejected write.
 
 
 <h3 id="through-the-db" tabindex="-1" style="display: inline-block">
@@ -182,7 +180,19 @@ This provides a pure local-first experience, where the application code talks di
 
 The example in [`patterns/4-through-the-db`](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/4-through-the-db) uses [PGlite](https://electric-sql.com/product/pglite) to store both synced and local optimistic state.
 
-Specifically, it syncs data into an immutable `todos_synced` table, persists optimistic state in a shadow `todos_local` table and combines the two on read using a `todos` view. For the write path sync it uses `INSTEAD OF` triggers to redirect writes made to the `todos` view to the `todos_local` table and keep a log of local writes in a `changes` table. It then uses `NOTIFY` to drive a sync utility, which sends the changes to the server.
+Specifically, it:
+
+1. syncs data into an immutable `todos_synced` table
+2. persists optimistic state in a shadow `todos_local` table; and
+3. combines the two on read using a `todos` view.
+
+For the write path sync it:
+
+4. uses `INSTEAD OF` triggers to
+   - redirect writes made to the `todos` view to the `todos_local` table
+   - keep a log of local writes in a `changes` table
+5. uses `NOTIFY` to drive a sync utility
+   - which sends the changes to the server
 
 Through this, the implementation:
 
@@ -190,7 +200,9 @@ Through this, the implementation:
 - presents a single table interface for reads and writes
 - auto-syncs the local writes to the server
 
-The three tabs below illustrate this. The application code code in [`index.tsx`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/index.tsx) stays very simple. The complexity is abstracted into the local database schema, defined in [`local-schema.sql`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) and the write-path sync utility in [`sync.ts`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql):
+The application code code in [`index.tsx`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/index.tsx) stays very simple. Most of the complexity is abstracted into the local database schema, defined in [`local-schema.sql`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql). The write-path sync utility in [`sync.ts`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) handles sending data to the server.
+
+These are shown in the three tabs below:
 
 :::tabs
 == index.tsx
@@ -242,7 +254,7 @@ There are two key complexities introduced by handling offline writes or local wr
 
 When a change syncs in over the Electric replication stream, the application has to decide how to handle any overlapping optimistic state. This can be complicated by concurrency, when changes syncing in may be made by other users (or devices, or even tabs). In these cases, it may be necessary to rebase the local state on the synced state, rather than just naively clearing the local state.
 
-[Linearlite](https://github.com/electric-sql/electric/blog/main/examples/linearlite) is an example of through-the-DB sync with sophisticated merge logic. The example implementation of the shared persistent pattern shows quite a simple, elegant approach to rebasing, where local state is always applied on-top-of synced state and concurrent changes are allowed to sync in without wiping the local state.
+[Linearlite](https://github.com/electric-sql/electric/blog/main/examples/linearlite) is an example of through-the-DB sync with sophisticated merge logic.
 
 ### Rollbacks
 
@@ -275,7 +287,9 @@ Below we list some useful tools that work well for implementing writes with Elec
 - [React `useOptimistic`](https://react.dev/reference/react/useOptimistic)
 - [React Router](https://reactrouter.com/start/framework/pending-ui)
 - [SolidJS](https://docs.solidjs.com/solid-router/reference/data-apis/action)
+- [Svelte Optimistic Store](https://github.com/Der-Penz/svelte-optimistic-store)
 - [TanStack Query](/docs/integrations/tanstack)
+- [Vue `vue-useoptimistic`](https://github.com/shoko31/vue-useoptimistic)
 
 ### Frameworks
 
@@ -283,4 +297,4 @@ Below we list some useful tools that work well for implementing writes with Elec
 - [TinyBase](https://tinybase.org)
 - [tRPC](https://github.com/KyleAMathews/trpc-crdt)
 
-See also the list of projects on the [alternatives page](/docs/reference/alternatives).
+See also the list of projects on the [alternatives page](/docs/reference/alternatives#local-first).

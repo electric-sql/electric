@@ -14,7 +14,7 @@ This is a powerful and pragmatic pattern, occupying a compelling point in the de
 
 Storing optimistic state in a shared store allows all your components to see and react to it. This avoids one of the weaknesses with component-scoped optimistic state with a [more naive optimistic state pattern](../2-optimistic-state) and makes this pattern more suitable for more complex, real world apps.
 
-Seperating immutable synced state from mutable local state makes it easy to reason about and implement rollback strategies.
+Seperating immutable synced state from mutable local state makes it easy to reason about and implement rollback strategies. The entrypoint for handling rollbacks has the local write context as well as the shared store, so it's easy to make rollbacks relatively surgical.
 
 Good use-cases include:
 
@@ -24,13 +24,9 @@ Good use-cases include:
 
 ## Drawbacks
 
-Combining data on-read makes local reads slightly slower. Whilst the database is used for local optimistic state, writes are still made via an API. This can often be helpful and pragmatic, allowing you to [re-use your existing API](https://electric-sql.com/blog/2024/11/21/local-first-with-your-existing-api). However, you may want to avoid running an API and leverage [through the DB sync](../../3-through-the-db) for a purer local-first approach.
+Combining data on-read makes local reads slightly slower.
 
-## Complexities
-
-This approach works and is simple to reason about. Because it clears local optimistic state only once the specific local write has synced, it does preserve local changes on top of concurrent changes by other users (or tabs or devices).
-
-The entrypoint for handling rollbacks has the local write context as well as the shared store, so it's easy to make rollbacks relatively surgical.
+Writes are still made via an API. This can often be helpful and pragmatic, allowing you to [re-use your existing API](https://electric-sql.com/blog/2024/11/21/local-first-with-your-existing-api). However, you may want to avoid running an API and leverage [through the DB sync](../4-through-the-db) for a purer local-first approach.
 
 ## How to run
 
