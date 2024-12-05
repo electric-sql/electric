@@ -1,60 +1,50 @@
+import { Pool } from "pg"
 import { pool } from "../../db"
 import { NextResponse } from "next/server"
-import { neon } from "@neondatabase/serverless"
-
-const sql = process.env.POOLED_DATABASE_URL
-  ? neon(process.env.POOLED_DATABASE_URL)
-  : undefined
 
 export async function POST(request: Request) {
+  let connected = false
   try {
     const { room, op, clientId } = await getRequestParams(request)
+    await pool.connect()
+    connected = true
 
     if (!clientId) {
-      await saveOperation(room, op)
+      await saveOperation(room, op, pool)
     } else {
-      await saveAwarenessOperation(room, op, clientId)
+      await saveAwarenessOperation(room, op, clientId, pool)
     }
 
     return NextResponse.json({})
   } catch (e) {
     const resp = e instanceof Error ? e.message : e
     return NextResponse.json(resp, { status: 400 })
+  } finally {
+    if (connected) {
+      pool.end()
+    }
   }
 }
 
-async function saveOperation(room: string, op: string) {
-  if (sql) {
-    await sql`
-      INSERT INTO ydoc_operations (room, op) VALUES (${room}, decode(${op}, 'base64'))
-    `
-  } else {
-    await pool!.query(
-      `INSERT INTO ydoc_operations (room, op) VALUES ($1, decode($2, 'base64'))`,
-      [room, op]
-    )
-  }
+async function saveOperation(room: string, op: string, connection: Pool) {
+  await connection.query(
+    `INSERT INTO ydoc_operations (room, op) VALUES ($1, decode($2, 'base64'))`,
+    [room, op]
+  )
 }
 
 async function saveAwarenessOperation(
   room: string,
   op: string,
-  clientId: string
+  clientId: string,
+  connection: Pool
 ) {
-  if (sql) {
-    await sql`
-      INSERT INTO ydoc_awareness (room, clientId, op) VALUES (${room}, ${clientId}, decode(${op}, 'base64'))
-      ON CONFLICT (clientId, room)
-      DO UPDATE SET op = decode(${op}, 'base64')
-    `
-  } else {
-    await pool!.query(
-      `INSERT INTO ydoc_awareness (room, clientId, op) VALUES ($1, $2, decode($3, 'base64'))
+  await connection.query(
+    `INSERT INTO ydoc_awareness (room, clientId, op) VALUES ($1, $2, decode($3, 'base64'))
        ON CONFLICT (clientId, room)
        DO UPDATE SET op = decode($3, 'base64')`,
-      [room, clientId, op]
-    )
-  }
+    [room, clientId, op]
+  )
 }
 
 async function getRequestParams(
