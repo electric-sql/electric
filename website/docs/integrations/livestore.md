@@ -14,7 +14,7 @@ image: /img/integrations/electric-livestore.jpg
 
 ## Electric and LiveStore
 
-LiveStore is under active development by [Johannes Schickling](https://x.com/schickling). ElectricSQL are sponsoring LiveStore development and building a sync integration.
+LiveStore is under active development by [Johannes Schickling](https://www.schickling.dev). ElectricSQL are sponsoring LiveStore development and building a sync integration.
 
 Some early docs are published at [livestore.dev](https://livestore.dev/getting-started/react-web). You can also see the [Expo](./expo) launch day [blog post](https://expo.dev/blog/local-first-application-development-with-livestore) and video:
 
