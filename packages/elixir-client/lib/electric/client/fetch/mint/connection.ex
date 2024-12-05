@@ -161,6 +161,13 @@ defmodule Electric.Client.Fetch.Mint.Connection do
             resp: %Fetch.Response{request_timestamp: now}
         }
 
+      {:error, conn, %Mint.HTTPError{reason: :closed}} ->
+        %{state | conn: conn, tries: 0}
+        |> maybe_close()
+        |> sleep_before_reconnect()
+        |> connect(uri, opts)
+        |> make_request(request, uri, opts)
+
       {:error, conn, error} ->
         Logger.info(
           "[#{state.stream_id}] request error #{uri.path}?#{uri.query}: #{inspect(error)}"
