@@ -34,8 +34,6 @@ defmodule Electric.Shapes.Shape do
           replica: replica()
         }
 
-  @type table_with_where_clause() :: {Electric.relation(), String.t() | nil}
-
   @type json_relation() :: [String.t(), ...]
   @type json_table_info() :: table_info() | json_relation()
   @type json_table_list() :: [json_table_info(), ...]
