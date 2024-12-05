@@ -20,7 +20,7 @@ type SendResult = 'accepted' | 'rejected' | 'retry'
 
 /*
  * Minimal, naive synchronization utility, just to illustrate the pattern of
- * `listen` to `changes` and `POST` them to the api server.
+ * `listen`ing to `changes` and `POST`ing them to the api server.
  */
 export default class ChangeLogSynchronizer {
   #db: PGliteWithLive

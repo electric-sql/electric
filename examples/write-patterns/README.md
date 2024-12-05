@@ -49,34 +49,6 @@ It extends the concept of shared, persistent optimistic state all the way to a l
 
 This provides a pure local-first development experience, where the application code talks directly to a single database "table" and changes sync automatically in the background. However, this "power" does come at the cost of increased complexity in the form of an embedded database, complex local schema and loss of context when handling rollbacks.
 
-## Complexities
-
-There are two key complexities introduced by handling optimistic state:
-
-1. merge logic when receiving synced state from the server
-2. handling rollbacks when writes are rejected
-
-### 1. Merge logic
-
-When a change syncs in over the Electric replication stream, the application has to decide how to handle any overlapping optimistic state. In this example, we implement a blunt strategy of discarding the local state whenever the corresponding row is updated in the synced state.
-
-This approach works and is simple to reason about. However, it won't preserve local changes on top of concurrent changes by other users (or tabs or devices). In this case, you may want to preserve the local state until *your* change syncs through. For example, rebasing the local changes on the updated synced state. For reference, this is implemented in the more realistic [Linearlite example](../linearlite).
-
-### 2. Rollbacks
-
-If an offline write is rejected by the server, the local application needs to find some way to revert the local state and potentially notify the user. This example just clears all local state if any write is rejected. More sophisticated and forgiving strategies are possible, such as:
-
-- marking local writes as rejected and displaying for manual conflict resolution
-- only clearing the set of writes that are causally dependent on the rejected operation
-
-One consideration is the indirection between making a write and handling a rollback. When sending write operations directly to an API, your application code can effect a rollback with the write context still available. When syncing through the database, the original write context is harder to reconstruct.
-
-### YAGNI
-
-Adam Wiggins, one of the authors of the local-first paper, developed Muse, the collaborative whiteboard app, specifically to support concurrent, collaborative editing of an infinite canvas. Having operated at scale with a large user base, one of his main findings [reported back at the first local-first meetup in Berlin in 2023](https://www.youtube.com/watch?v=WEFuEY3fHd0) was that in reality, conflicts are extremely rare and can be mitigated well by strategies like presence.
-
-If you're crafting a highly concurrent, collaborative experience, you may well want to engage with the complexities of sophisticated merge logic and rebasing local state. However, blunt strategies as illustrated in this example can be much easier to implement and reason about &mdash; and are often perfectly serviceable for most applications.
-
 ## How to run
 
 Make sure you've installed all dependencies for the monorepo and built the packages (from the monorepo root directory):
