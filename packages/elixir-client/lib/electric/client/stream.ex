@@ -168,6 +168,7 @@ defmodule Electric.Client.Stream do
     resp.body
     |> List.wrap()
     |> Enum.flat_map(&Message.parse(&1, final_offset, value_mapper_fun))
+    |> Enum.map(&Map.put(&1, :request_timestamp, resp.request_timestamp))
     |> Enum.reduce_while({start_offset, stream}, &handle_msg/2)
     # don't set the offset until we're done processing the messages. ehis keeps
     # the previous offset reached alive in the stream state

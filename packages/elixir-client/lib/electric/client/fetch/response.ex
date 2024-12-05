@@ -7,6 +7,7 @@ defmodule Electric.Client.Fetch.Response do
     :shape_handle,
     :schema,
     :next_cursor,
+    :request_timestamp,
     body: [],
     headers: %{}
   ]
@@ -18,7 +19,8 @@ defmodule Electric.Client.Fetch.Response do
           last_offset: nil | Client.Offset.t(),
           shape_handle: nil | Client.shape_handle(),
           schema: nil | Client.schema(),
-          next_cursor: nil | Client.cursor()
+          next_cursor: nil | Client.cursor(),
+          request_timestamp: DateTime.t()
         }
 
   @doc false
@@ -32,8 +34,9 @@ defmodule Electric.Client.Fetch.Response do
   end
 
   @doc false
-  @spec decode!(pos_integer(), %{optional(binary()) => binary()}, [term()]) :: t()
-  def decode!(status, headers, body) when is_integer(status) and is_map(headers) do
+  @spec decode!(pos_integer(), %{optional(binary()) => binary()}, [term()], DateTime.t()) :: t()
+  def decode!(status, headers, body, timestamp \\ DateTime.utc_now())
+      when is_integer(status) and is_map(headers) do
     %__MODULE__{
       status: status,
       headers: decode_headers(headers),
@@ -41,7 +44,8 @@ defmodule Electric.Client.Fetch.Response do
       shape_handle: decode_shape_handle(headers),
       last_offset: decode_offset(headers),
       schema: decode_schema(headers),
-      next_cursor: decode_next_cursor(headers)
+      next_cursor: decode_next_cursor(headers),
+      request_timestamp: timestamp
     }
   end
 

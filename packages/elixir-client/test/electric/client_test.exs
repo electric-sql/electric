@@ -168,6 +168,8 @@ defmodule Electric.ClientTest do
       {:ok, id3} = insert_item(ctx)
 
       # snapshot values
+      msgs = stream(ctx, 4)
+
       assert [
                %ChangeMessage{
                  headers: %{operation: :insert, relation: ["public", ^table]},
@@ -185,7 +187,10 @@ defmodule Electric.ClientTest do
                  offset: %Electric.Client.Offset{tx: 0, op: 0}
                },
                up_to_date0()
-             ] = stream(ctx, 4)
+             ] = msgs
+
+      # 1 timestamp for the snapshot, 1 for the up-to-date response
+      assert length(Enum.uniq_by(msgs, & &1.request_timestamp)) == 2
     end
 
     test "accepts a table name as a shape", ctx do

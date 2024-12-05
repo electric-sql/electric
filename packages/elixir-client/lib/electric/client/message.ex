@@ -27,9 +27,13 @@ defmodule Electric.Client.Message do
   end
 
   defmodule ControlMessage do
-    defstruct [:control, :offset]
+    defstruct [:control, :offset, :request_timestamp]
     @type control :: :must_refetch | :up_to_date
-    @type t :: %__MODULE__{control: control(), offset: Offset.t()}
+    @type t :: %__MODULE__{
+            control: control(),
+            offset: Offset.t(),
+            request_timestamp: DateTime.t()
+          }
 
     def from_message(%{"headers" => %{"control" => control}}, offset) do
       %__MODULE__{control: control_atom(control), offset: offset}
@@ -43,7 +47,7 @@ defmodule Electric.Client.Message do
   end
 
   defmodule ChangeMessage do
-    defstruct [:key, :value, :headers, :offset]
+    defstruct [:key, :value, :headers, :offset, :request_timestamp]
 
     @type key :: String.t()
     @type value :: %{String.t() => binary()}
@@ -51,7 +55,8 @@ defmodule Electric.Client.Message do
             key: key(),
             value: value(),
             headers: Headers.t(),
-            offset: Offset.t()
+            offset: Offset.t(),
+            request_timestamp: DateTime.t()
           }
 
     require Logger

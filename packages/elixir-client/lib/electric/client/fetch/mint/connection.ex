@@ -125,6 +125,8 @@ defmodule Electric.Client.Fetch.Mint.Connection do
   end
 
   defp make_request(%{conn: conn} = state, request, uri, opts) do
+    now = DateTime.utc_now()
+
     {:ok, conn, request_ref} =
       Mint.HTTP.request(
         conn,
@@ -137,7 +139,13 @@ defmodule Electric.Client.Fetch.Mint.Connection do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
     ref = Process.send_after(self(), {:timeout, request_ref, timeout}, timeout)
 
-    %{state | timeout: ref, conn: conn, ref: request_ref, resp: %Fetch.Response{}}
+    %{
+      state
+      | timeout: ref,
+        conn: conn,
+        ref: request_ref,
+        resp: %Fetch.Response{request_timestamp: now}
+    }
   end
 
   defp method(:get), do: "GET"
@@ -170,7 +178,7 @@ defmodule Electric.Client.Fetch.Mint.Connection do
   defp handle_response({:done, _ref}, {:cont, resp}) do
     case IO.iodata_to_binary(resp.body) do
       "" ->
-        {:done, Fetch.Response.decode!(%{resp | body: ""})}
+        {:done, Fetch.Response.decode!(%{resp | body: []})}
 
       json ->
         case Jason.decode(json) do
