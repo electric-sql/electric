@@ -21,8 +21,8 @@ defmodule Electric.Shapes.ConsumerSupervisor do
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}, required: true],
             prepare_tables_fn: [type: {:or, [:mfa, {:fun, 2}]}, required: true],
             create_snapshot_fn: [
-              type: {:fun, 6},
-              default: &Electric.Shapes.Consumer.Snapshotter.query_in_readonly_txn/6
+              type: {:fun, 7},
+              default: &Electric.Shapes.Consumer.Snapshotter.query_in_readonly_txn/7
             ]
           )
 

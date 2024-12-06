@@ -198,7 +198,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp load_shape_info(%Conn{assigns: %{config: config}} = conn, _) do
     OpenTelemetry.with_span("shape_get.plug.load_shape_info", [], config[:stack_id], fn ->
-      shape_info = get_or_create_shape_handle(conn.assigns)
+      shape_info = get_or_create_shape_handle(conn.assigns) |> dbg
       handle_shape_info(conn, shape_info)
     end)
   end
@@ -316,7 +316,7 @@ defmodule Electric.Plug.ServeShapePlug do
       assigns
 
     chunk_end_offset =
-      Shapes.get_chunk_end_log_offset(config, shape_handle, offset) ||
+      Shapes.get_chunk_end_log_offset(config, shape_handle, offset) |> dbg ||
         assigns.last_offset
 
     conn
@@ -337,7 +337,8 @@ defmodule Electric.Plug.ServeShapePlug do
     # The log can't be up to date if the last_offset is not the actual end.
     # Also if client is requesting the start of the log, we don't set `up-to-date`
     # here either as we want to set a long max-age on the cache-control.
-    if LogOffset.compare(chunk_end_offset, last_offset) == :lt or offset == @before_all_offset do
+    if LogOffset.compare(chunk_end_offset |> dbg, last_offset |> dbg) |> dbg == :lt or
+         offset == @before_all_offset do
       conn
       |> assign(:up_to_date, [])
       # header might have been added on first pass but no longer valid
@@ -420,15 +421,15 @@ defmodule Electric.Plug.ServeShapePlug do
         "public, max-age=#{config[:max_age]}, stale-while-revalidate=#{config[:stale_age]}"
       )
 
-  # If offset is -1, we're serving a snapshot
-  defp serve_log_or_snapshot(
-         %Conn{assigns: %{offset: @before_all_offset, config: config}} = conn,
-         _
-       ) do
-    OpenTelemetry.with_span("shape_get.plug.serve_snapshot", [], config[:stack_id], fn ->
-      serve_snapshot(conn)
-    end)
-  end
+  # # If offset is -1, we're serving a snapshot
+  # defp serve_log_or_snapshot(
+  #        %Conn{assigns: %{offset: @before_all_offset, config: config}} = conn,
+  #        _
+  #      ) do
+  #   OpenTelemetry.with_span("shape_get.plug.serve_snapshot", [], config[:stack_id], fn ->
+  #     serve_snapshot(conn)
+  #   end)
+  # end
 
   # Otherwise, serve log since that offset
   defp serve_log_or_snapshot(%Conn{assigns: %{config: config}} = conn, _) do
@@ -490,7 +491,7 @@ defmodule Electric.Plug.ServeShapePlug do
          } = conn
        ) do
     log =
-      Shapes.get_log_stream(conn.assigns.config, shape_handle,
+      Shapes.get_merged_log_stream(conn.assigns.config, shape_handle,
         since: offset,
         up_to: chunk_end_offset
       )
@@ -699,6 +700,7 @@ defmodule Electric.Plug.ServeShapePlug do
     error_str = Exception.format(error.kind, error.reason)
 
     conn
+    |> fetch_query_params()
     |> assign(:error_str, error_str)
     |> end_telemetry_span()
 

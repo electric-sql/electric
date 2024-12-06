@@ -23,6 +23,21 @@ defmodule Electric.Shapes do
     end
   end
 
+  def get_merged_log_stream(config, shape_handle, opts) do
+    {shape_cache, shape_cache_opts} = Access.get(config, :shape_cache, {ShapeCache, []})
+    storage = shape_storage(config, shape_handle)
+    offset = Access.get(opts, :since, LogOffset.before_all())
+    max_offset = Access.get(opts, :up_to, LogOffset.last())
+
+    if shape_cache.has_shape?(shape_handle, shape_cache_opts) do
+      with :started <- shape_cache.await_snapshot_start(shape_handle, shape_cache_opts) do
+        Storage.get_log_stream(offset, max_offset, storage)
+      end
+    else
+      raise "Unknown shape: #{shape_handle}"
+    end
+  end
+
   @doc """
   Get stream of the log since a given offset
   """
@@ -56,7 +71,7 @@ defmodule Electric.Shapes do
   def get_or_create_shape_handle(config, shape_def) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
 
-    shape_cache.get_or_create_shape_handle(shape_def, opts)
+    shape_cache.get_or_create_shape_handle(shape_def, opts) |> dbg
   end
 
   @doc """

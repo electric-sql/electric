@@ -44,7 +44,7 @@ defmodule Electric.Shapes.Querying do
             {[line], new_chunk_size}
 
           {:threshold_exceeded, new_chunk_size} ->
-            {[:chunk_boundary, line], new_chunk_size}
+            {[line, :chunk_boundary], new_chunk_size}
         end
       end)
     end)
