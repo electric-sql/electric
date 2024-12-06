@@ -22,49 +22,55 @@ const idSchema = z.string().uuid()
 const createSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
-  created_at: z.string()
+  created_at: z.string(),
+  write_id: z.string().optional()
 })
 const updateSchema = z.object({
-  completed: z.boolean()
+  completed: z.boolean(),
+  write_id: z.string().optional()
+})
+const deleteSchema = z.object({
+  write_id: z.string().optional()
 })
 
 // Define functions to create, update and delete todos
 // using the `db` client.
 
-const createTodo = async (id, title, created_at) => {
+const createTodo = async (id, title, created_at, write_id) => {
   const sql = `
-    INSERT INTO todos (id, title, completed, created_at)
-    VALUES ($1, $2, false, $3)
+    INSERT INTO todos (id, title, completed, created_at, write_id)
+    VALUES ($1, $2, false, $3, $4)
   `
 
   const params = [
     id,
     title,
-    created_at
+    created_at,
+    write_id || null
   ]
 
-  return await db.query(sql, params)
+  await db.query(sql, params)
 }
 
-const updateTodo = async (id, completed) => {
+const updateTodo = async (id, completed, write_id) => {
   const sql = `
-    UPDATE todos SET completed = $1
-    WHERE id::text = $2
+    UPDATE todos SET completed = $1, write_id = $2
+    WHERE id = $3
   `
 
   const params = [
     completed ? '1' : '0',
+    write_id || null,
     id
   ]
 
-  return await db.query(sql, params)
+  await db.query(sql, params)
 }
 
 const deleteTodo = async (id) => {
   const sql = `DELETE from todos where id = $1`
   const params = [id]
-
-  return await db.query(sql, params)
+  await db.query(sql, params)
 }
 
 // Expose the shared REST API to create, update and delete todos.
@@ -79,7 +85,7 @@ app.post(`/todos`, async (req, res) => {
   }
 
   try {
-    await createTodo(data.id, data.title, data.created_at)
+    await createTodo(data.id, data.title, data.created_at, data.write_id)
   }
   catch (err) {
     return res.status(500).json({ errors: err })
@@ -99,7 +105,7 @@ app.put(`/todos/:id`, async (req, res) => {
   }
 
   try {
-    await updateTodo(id, data.completed)
+    await updateTodo(id, data.completed, data.write_id)
   }
   catch (err) {
     return res.status(500).json({ errors: err })
@@ -140,8 +146,9 @@ const transactionsSchema = z.array(
           id: z.string().uuid(),
           title: z.string().optional(),
           completed: z.boolean().optional(),
-          created_at: z.string().optional()
-        })
+          created_at: z.string().optional(),
+        }),
+        write_id: z.string()
       })
     )
   })
@@ -160,14 +167,14 @@ app.post(`/changes`, async (req, res) => {
     await db.query('BEGIN')
 
     data.forEach((tx) => {
-      tx.changes.forEach(({operation, value}) => {
+      tx.changes.forEach(({operation, value, write_id}) => {
         switch (operation) {
           case 'insert':
-            createTodo(value.id, value.title, value.created_at)
+            createTodo(value.id, value.title, value.created_at, write_id)
             break
 
           case 'update':
-            updateTodo(value.id, value.completed)
+            updateTodo(value.id, value.completed, write_id)
             break
 
           case 'delete':

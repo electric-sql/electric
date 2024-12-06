@@ -22,14 +22,14 @@ type PartialTodo = Partial<Todo> & {
   id: string
 }
 
-type Write = {
-  key: string
+type LocalWrite = {
+  id: string
   operation: Operation
   value: PartialTodo
 }
 
 // Define a shared, persistent, reactive store for local optimistic state.
-const optimisticState = proxyMap<string, Write>(
+const optimisticState = proxyMap<string, LocalWrite>(
   JSON.parse(localStorage.getItem(KEY) || '[]')
 )
 subscribe(optimisticState, () => {
@@ -39,15 +39,16 @@ subscribe(optimisticState, () => {
 /*
  * Add a local write to the optimistic state
  */
-function addLocalWrite(operation: Operation, value: PartialTodo): Write {
-  const key = uuidv4()
-  const write: Write = {
-    key,
+function addLocalWrite(operation: Operation, value: PartialTodo): LocalWrite {
+  const id = uuidv4()
+
+  const write: LocalWrite = {
+    id,
     operation,
     value,
   }
 
-  optimisticState.set(key, write)
+  optimisticState.set(id, write)
 
   return write
 }
@@ -56,29 +57,50 @@ function addLocalWrite(operation: Operation, value: PartialTodo): Write {
  * Subscribe to the shape `stream` until the local write syncs back through it.
  * At which point, delete the local write from the optimistic state.
  */
-async function matchWrite(stream: ShapeStream<Todo>, write: Write) {
-  const { key, operation, value } = write
+async function matchWrite(
+  stream: ShapeStream<Todo>,
+  write: LocalWrite
+): Promise<void> {
+  const { operation, value } = write
+
+  const matchFn =
+    operation === 'delete'
+      ? matchBy('id', value.id)
+      : matchBy('write_id', write.id)
 
   try {
-    await matchStream(stream, [operation], matchBy('id', value.id))
+    await matchStream(stream, [operation], matchFn)
   } catch (_err) {
     return
   }
 
-  optimisticState.delete(key)
+  optimisticState.delete(write.id)
 }
 
 /*
  * Make an HTTP request to send the write to the API server.
  * If the request fails, delete the local write from the optimistic state.
+ * If it succeeds, return the `txid` of the write from the response data.
  */
-async function sendRequest(path: string, method: string, write: Write) {
-  const { key, value } = write
+async function sendRequest(
+  path: string,
+  method: string,
+  { id, value }: LocalWrite
+): Promise<void> {
+  const data = {
+    ...value,
+    write_id: id,
+  }
 
+  let response: Response | undefined
   try {
-    await api.request(path, method, value)
-  } catch (_err) {
-    optimisticState.delete(key)
+    response = await api.request(path, method, data)
+  } catch (err) {
+    // ignore
+  }
+
+  if (response === undefined || !response.ok) {
+    optimisticState.delete(id)
   }
 }
 
@@ -95,15 +117,16 @@ export default function SharedPersistent() {
       timestamptz: (value: string) => new Date(value),
     },
   })
+
   const sorted = data ? data.sort((a, b) => +a.created_at - +b.created_at) : []
 
   // Get the local optimistic state.
-  const writes = useSnapshot<Map<string, Write>>(optimisticState)
+  const localWrites = useSnapshot<Map<string, LocalWrite>>(optimisticState)
 
   // Merge the synced state with the local state.
-  const todos = writes
+  const todos = localWrites
     .values()
-    .reduce((synced: Todo[], { operation, value }: Write) => {
+    .reduce((synced: Todo[], { operation, value }: LocalWrite) => {
       switch (operation) {
         case 'insert':
           return synced.some((todo) => todo.id === value.id)
@@ -140,7 +163,6 @@ export default function SharedPersistent() {
 
     startTransition(async () => {
       const write = addLocalWrite('insert', data)
-
       const fetchPromise = sendRequest(path, 'POST', write)
       const syncPromise = matchWrite(stream, write)
 
@@ -155,13 +177,12 @@ export default function SharedPersistent() {
 
     const path = `/todos/${id}`
     const data = {
-      id: id,
+      id,
       completed: !completed,
     }
 
     startTransition(async () => {
       const write = addLocalWrite('update', data)
-
       const fetchPromise = sendRequest(path, 'PUT', write)
       const syncPromise = matchWrite(stream, write)
 
@@ -175,10 +196,12 @@ export default function SharedPersistent() {
     const { id } = todo
 
     const path = `/todos/${id}`
+    const data = {
+      id,
+    }
 
     startTransition(async () => {
-      const write = addLocalWrite('delete', { id })
-
+      const write = addLocalWrite('delete', data)
       const fetchPromise = sendRequest(path, 'DELETE', write)
       const syncPromise = matchWrite(stream, write)
 

@@ -161,6 +161,8 @@ Combining data on-read makes local reads slightly slower. Whilst a persistent lo
 
 #### Implementation notes
 
+The merge logic in the `matchWrite` function differs from the previous optimistic state example in that it supports rebasing local optimistic state on concurrent updates from other users.
+
 The entrypoint for handling rollbacks has the local write context available. So it's able to rollback individual writes, rather than wiping the whole local state.
 
 Because it has the shared store available, it would also be possible to extend this to implement more sophisticated strategies. Such as also removing other local writes that causally depended-on or were related-to the rejected write.
@@ -231,11 +233,9 @@ Syncing changes in the background complicates any potential [rollback handling](
 
 #### Implementation notes
 
-The entrypoint in the code for [merge logic](#merge-logic) is the very blunt `delete_local_on_synced_trigger` defined in the [`./local-schema.sql`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql). The current implementation just wipes any local state for a row when any insert, updater or delete to that row syncs in from the server.
+The [merge logic](#merge-logic) in the `delete_local_on_synced_insert_and_update_trigger` in [`./local-schema.sql`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) supports rebasing local optimistic state on concurrent updates from other users.
 
-This approach works and is simple to reason about. However, it won't preserve local changes on top of concurrent changes by other users (or tabs or devices). More sophisticated implementations could do more sophisticated merge logic here. This typically involves maintaining more bookkeeping info and having more complex triggers.
-
-The example also implements a very blunt rollback strategy of clearing all local state and writes in the event of any write being rejected by the server. You may want to implement a more nuanced strategy and, for example, provide information to the user about what is happening and / or minimise data loss by only clearing local-state that's causally dependent on a rejected write.
+The rollback strategy in the `rollback` method of the `ChangeLogSynchronizer` in [`./sync.ts`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/sync.ts) is very naive: clearing all local state and writes in the event of any write being rejected by the server. You may want to implement a more nuanced strategy. For example, to provide information to the user about what is happening and / or minimise data loss by only clearing local-state that's causally dependent on a rejected write.
 
 This opens the door to a lot of complexity that may best be addressed by [using an existing framework](#framework) or one of the [simpler patterns](#patterns).
 
@@ -252,9 +252,9 @@ There are two key complexities introduced by handling offline writes or local wr
 
 ### Merge logic
 
-When a change syncs in over the Electric replication stream, the application has to decide how to handle any overlapping optimistic state. This can be complicated by concurrency, when changes syncing in may be made by other users (or devices, or even tabs). In these cases, it may be necessary to rebase the local state on the synced state, rather than just naively clearing the local state.
+When a change syncs in over the Electric replication stream, the application has to decide how to handle any overlapping optimistic state. This can be complicated by concurrency, when changes syncing in may be made by other users (or devices, or even tabs). The third and fourth examples both demonstrate approaches to rebasing the local state on the synced state, rather than just naively clearing the local state, in order to preserve local changes.
 
-[Linearlite](https://github.com/electric-sql/electric/blog/main/examples/linearlite) is an example of through-the-DB sync with sophisticated merge logic.
+[Linearlite](https://github.com/electric-sql/electric/blog/main/examples/linearlite) is another example of through-the-DB sync with more sophisticated merge logic.
 
 ### Rollbacks
 
