@@ -8,7 +8,7 @@ excerpt: >-
   With version X, the Electric sync engine is now
   in public BETA! If you haven't checked out Electric
   recently, it's a great time to take another look.
-authors: [thruflo]
+authors: [kyle]
 image: /img/blog/electric-beta-release/header.jpg
 tags: [release]
 outline: [2, 3]
@@ -16,9 +16,32 @@ post: true
 ---
 
 <script setup>
-  import LogoStripSVG from '/static/img/blog/electric-beta-release/logo-strip.svg'
-  import LogoStripMobileSVG from '/static/img/blog/electric-beta-release/logo-strip.mobile.svg'
-  import LinearLiteScreenshotPNG from '/static/img/blog/electric-beta-release/linearlite-screenshot.png'
+  import LogoStrip from '/static/img/blog/electric-beta-release/logo-strip.svg'
+  import LogoStripSm from '/static/img/blog/electric-beta-release/logo-strip.sm.svg'
+  import LogoStripXs from '/static/img/blog/electric-beta-release/logo-strip.xs.svg'
+  import LogoStripXxs from '/static/img/blog/electric-beta-release/logo-strip.xxs.svg'
+  import LinearLiteScreenshot from '/static/img/blog/electric-beta-release/linearlite-screenshot.png'
+
+  import { onMounted } from 'vue'
+
+  onMounted(async () => {
+    if (typeof window !== 'undefined' && document.querySelector) {
+      let links = document.querySelectorAll('.cloud-cta a.VPButton.brand')
+
+      console.log('links', links)
+
+      links.forEach((link) => {
+        if (link.querySelector('span.vpi-electric-icon')) {
+          return
+        }
+
+        const icon = document.createElement('span')
+        icon.classList.add('vpi-electric-icon')
+
+        link.prepend(icon)
+      })
+    }
+  })
 </script>
 
 With [version X](#) the Electric sync engine is now in public BETA!
@@ -42,8 +65,10 @@ Six months ago, we [took on a clean re-write](/blog/2024/07/17/electric-next).
 ## Production ready
 
 <figure>
-  <img :src="LogoStripSVG" class="hidden-xs" />
-  <img :src="LogoStripMobileSVG" class="block-xs" />
+  <img :src="LogoStrip" class="hidden-sm" />
+  <img :src="LogoStripSm" class="hidden-xs block-sm" />
+  <img :src="LogoStripXs" class="hidden-xxs block-xs" />
+  <img :src="LogoStripXxs" class="block-xxs" />
 </figure>
 
 Electric and PGlite are being used in production by companies including [Google](https://firebase.google.com/docs/data-connect), [Supabase](https://database.build), [Trigger.dev](https://trigger.dev/launchweek/0/realtime), [Otto](https://ottogrid.ai) and [Doorboost](https://www.doorboost.com).
@@ -71,10 +96,12 @@ You can also see how large-scale apps built with Electric feel to use with our u
 
 <figure>
   <a href="https://linearlite.electric-sql.com" target="_blank">
-    <img :src="LinearLiteScreenshotPNG" />
+    <img :src="LinearLiteScreenshot" />
   </a>
   <figcaption>
-    Screenshot of Linearlite. Click on it to [open the demo](https://linearlite.electric-sql.com).
+    Screenshot of Linearlite. Click on it to
+    <a href="https://linearlite.electric-sql.com" target="_blank">
+      open the demo</a>
   </figcaption>
 </figure>
 
@@ -82,14 +109,15 @@ You can also see how large-scale apps built with Electric feel to use with our u
 
 Our APIs are now stable. There will be no breaking changes in minor or patch releases moving forward.
 
-Our [documentation](/docs/intro) is comprehensive, with good entry points, like the [Quickstart](/docs/quickstart), and guides for common topics like:
+We have [updated docs](/docs/intro), with a new [Quickstart](/docs/quickstart) and guides for topics like:
 
-- how to do [authentication and authorization](/docs/guides/auth)
-- how to handle [local writes and write path sync](/docs/guides/writes)
-- how to do [partial replication using shapes](/docs/guides/shapes)
+- how to do [auth](/docs/guides/auth)
+- how to handle [local writes](/docs/guides/writes)
+- how to do [partial replication with Shapes](/docs/guides/shapes)
+- how to [deploy Electric](/docs/guides/deployment)
 - how to [write your own client](/docs/guides/client-development) for any language or environment
 
-We have [client libraries](/docs/api/clients/typescript) for multiple languages, integration docs and [examples](#) showing how to use Electric with different patterns and frameworks:
+We have [client libraries](/docs/api/clients/typescript), [integration docs](/docs/integrations/react) and [examples](#) showing how to use Electric with different patterns and frameworks:
 
 > <br /><br /><br /><br /><br />... grid of the best examples ...<br /><br /><br /><br /><br /><br />
 
@@ -164,6 +192,22 @@ With this BETA release, Electric is stable and ready for prime time use. If you 
         href="/docs/intro"
         text="Documentation"
         theme="alt"
+    />
+  </div>
+</div>
+
+### Signup for cloud
+
+We're also working hard building our [Cloud product](/product/cloud), which provides managed Electric hosting so you don't need to [host Electric yourself](/docs/guides/deployment).
+
+If you're interested in using Electric Cloud, you can sign up for early access now:
+
+<div class="actions cta-actions page-footer-actions left">
+  <div class="action cloud-cta">
+    <VPButton
+        href="/product/cloud/sign-up"
+        text="Sign up "
+        theme="brand"
     />
   </div>
 </div>
