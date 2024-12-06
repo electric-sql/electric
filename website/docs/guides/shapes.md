@@ -167,14 +167,6 @@ You can upvote and discuss adding support for include trees here:
 >
 > Where necessary, you can use triggers to update these denormalised columns.
 
-### Whole rows
-
-Shapes currently sync all the columns in a row.
-
-It's not yet possible to select or ignore/mask columns. You can upvote and discuss adding support for selecting columns here:
-
-- [Shape support for selecting columns #1676](https://github.com/electric-sql/electric/discussions/1676)
-
 ### Immutable
 
 Shapes are currently immutable.
