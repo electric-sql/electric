@@ -173,7 +173,7 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :put_resp_cache_headers
   plug :generate_etag
   plug :validate_and_put_etag
-  plug :serve_log_or_snapshot
+  plug :serve_shape_log
 
   # end_telemetry_span needs to always be the last plug here.
   plug :end_telemetry_span
@@ -421,66 +421,13 @@ defmodule Electric.Plug.ServeShapePlug do
         "public, max-age=#{config[:max_age]}, stale-while-revalidate=#{config[:stale_age]}"
       )
 
-  # # If offset is -1, we're serving a snapshot
-  # defp serve_log_or_snapshot(
-  #        %Conn{assigns: %{offset: @before_all_offset, config: config}} = conn,
-  #        _
-  #      ) do
-  #   OpenTelemetry.with_span("shape_get.plug.serve_snapshot", [], config[:stack_id], fn ->
-  #     serve_snapshot(conn)
-  #   end)
-  # end
-
-  # Otherwise, serve log since that offset
-  defp serve_log_or_snapshot(%Conn{assigns: %{config: config}} = conn, _) do
+  defp serve_shape_log(%Conn{assigns: %{config: config}} = conn, _) do
     OpenTelemetry.with_span("shape_get.plug.serve_shape_log", [], config[:stack_id], fn ->
-      serve_shape_log(conn)
+      do_serve_shape_log(conn)
     end)
   end
 
-  defp serve_snapshot(
-         %Conn{
-           assigns: %{
-             chunk_end_offset: chunk_end_offset,
-             active_shape_handle: shape_handle,
-             up_to_date: maybe_up_to_date
-           }
-         } = conn
-       ) do
-    case Shapes.get_snapshot(conn.assigns.config, shape_handle) do
-      {:ok, {offset, snapshot}} ->
-        log =
-          Shapes.get_log_stream(conn.assigns.config, shape_handle,
-            since: offset,
-            up_to: chunk_end_offset
-          )
-
-        [snapshot, log, maybe_up_to_date]
-        |> Stream.concat()
-        |> to_json_stream()
-        |> Stream.chunk_every(500)
-        |> send_stream(conn, 200)
-
-      {:error, reason} ->
-        error_msg = "Could not serve a snapshot because of #{inspect(reason)}"
-
-        Logger.warning(error_msg)
-        OpenTelemetry.record_exception(error_msg)
-
-        {status_code, message} =
-          if match?(%DBConnection.ConnectionError{reason: :queue_timeout}, reason),
-            do: {429, "Could not establish connection to database - try again later"},
-            else: {500, "Failed creating or fetching the snapshot"}
-
-        send_resp(
-          conn,
-          status_code,
-          Jason.encode_to_iodata!(%{error: message})
-        )
-    end
-  end
-
-  defp serve_shape_log(
+  defp do_serve_shape_log(
          %Conn{
            assigns: %{
              offset: offset,
@@ -588,7 +535,7 @@ defmodule Electric.Plug.ServeShapePlug do
         # update last offset header
         |> put_resp_header("electric-offset", "#{latest_log_offset}")
         |> determine_up_to_date([])
-        |> serve_shape_log()
+        |> do_serve_shape_log()
 
       {^ref, :shape_rotation} ->
         # We may want to notify the client better that the shape handle had changed, but just closing the response

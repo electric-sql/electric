@@ -205,7 +205,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     ])
   end
 
-  def latest_offset!(%__MODULE__{shape_meta_table: table} = state, shape_handle) do
+  def latest_offset!(%__MODULE__{shape_meta_table: table} = _state, shape_handle) do
     latest_offset(table, shape_handle)
   end
 

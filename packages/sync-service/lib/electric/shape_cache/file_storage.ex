@@ -4,7 +4,6 @@ defmodule Electric.ShapeCache.FileStorage do
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Replication.LogOffset
   import Electric.Replication.LogOffset, only: :macros
-  alias Electric.ShapeCache.LogChunker
   alias __MODULE__, as: FS
 
   # If the storage format changes, increase `@version` to prevent
@@ -299,66 +298,6 @@ defmodule Electric.ShapeCache.FileStorage do
   defp snapshot_chunk_path(opts, chunk_number)
        when is_integer(chunk_number) and chunk_number >= 0 do
     Path.join([opts.snapshot_dir, "snapshot_chunk.#{chunk_number}.jsonl"])
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def get_snapshot(%FS{} = opts) do
-    if snapshot_started?(opts) do
-      {LogOffset.first(),
-       Stream.resource(
-         fn -> {open_snapshot_file(opts), nil} end,
-         fn {file, eof_seen} ->
-           case IO.binread(file, :line) do
-             {:error, reason} ->
-               raise IO.StreamError, reason: reason
-
-             :eof ->
-               cond do
-                 is_nil(eof_seen) ->
-                   # First time we see eof after any valid lines, we store a timestamp
-                   {[], {file, System.monotonic_time(:millisecond)}}
-
-                 # If it's been 60s without any new lines, and also we've not seen <<4>>,
-                 # then likely something is wrong
-                 System.monotonic_time(:millisecond) - eof_seen > 60_000 ->
-                   raise "Snapshot hasn't updated in 60s"
-
-                 true ->
-                   # Sleep a little and check for new lines
-                   Process.sleep(20)
-                   {[], {file, eof_seen}}
-               end
-
-             # The 4 byte marker (ASCII "end of transmission") indicates the end of the snapshot file.
-             <<4::utf8>> ->
-               {:halt, {file, nil}}
-
-             line ->
-               {[line], {file, nil}}
-           end
-         end,
-         fn {file, _} -> File.close(file) end
-       )}
-    else
-      raise "Snapshot no longer available"
-    end
-  end
-
-  defp open_snapshot_file(opts, attempts_left \\ 100)
-  defp open_snapshot_file(_, 0), do: raise(IO.StreamError, reason: :enoent)
-
-  defp open_snapshot_file(opts, attempts_left) do
-    case File.open(shape_snapshot_path(opts), [:read, :raw, read_ahead: 1024]) do
-      {:ok, file} ->
-        file
-
-      {:error, :enoent} ->
-        Process.sleep(10)
-        open_snapshot_file(opts, attempts_left - 1)
-
-      {:error, reason} ->
-        raise IO.StreamError, reason: reason
-    end
   end
 
   @impl Electric.ShapeCache.Storage
