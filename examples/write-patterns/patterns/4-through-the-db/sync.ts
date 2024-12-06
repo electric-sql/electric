@@ -3,9 +3,8 @@ import { type PGliteWithLive } from '@electric-sql/pglite/live'
 
 import api from '../../shared/app/client'
 
-type TransactionId = string
-
 type Change = {
+  id: number
   operation: Operation
   value: {
     id: string
@@ -13,7 +12,8 @@ type Change = {
     completed?: boolean
     created_at?: Date
   }
-  transaction_id: TransactionId
+  write_id: string
+  transaction_id: string
 }
 
 type SendResult = 'accepted' | 'rejected' | 'retry'
@@ -24,7 +24,7 @@ type SendResult = 'accepted' | 'rejected' | 'retry'
  */
 export default class ChangeLogSynchronizer {
   #db: PGliteWithLive
-  #position: TransactionId
+  #position: number
 
   #hasChangedWhileProcessing: boolean = false
   #shouldContinue: boolean = true
@@ -33,7 +33,7 @@ export default class ChangeLogSynchronizer {
   #abortController?: AbortController
   #unsubscribe?: () => Promise<void>
 
-  constructor(db: PGliteWithLive, position = '0') {
+  constructor(db: PGliteWithLive, position = 0) {
     this.#db = db
     this.#position = position
   }
@@ -59,13 +59,14 @@ export default class ChangeLogSynchronizer {
       return
     }
 
+    this.#status = 'processing'
+
     this.process()
   }
 
   // Process the changes by fetching them and posting them to the server.
   // If the changes are accepted then proceed, otherwise rollback or retry.
   async process(): Promise<void> {
-    this.#status === 'processing'
     this.#hasChangedWhileProcessing = false
 
     const { changes, position } = await this.query()
@@ -95,22 +96,20 @@ export default class ChangeLogSynchronizer {
       return await this.process()
     }
 
-    this.#status === 'idle'
+    this.#status = 'idle'
   }
 
   /*
    * Fetch the current batch of changes
    */
-  async query(): Promise<{ changes: Change[]; position: TransactionId }> {
+  async query(): Promise<{ changes: Change[]; position: number }> {
     const { rows } = await this.#db.sql<Change>`
       SELECT * from changes
-        WHERE transaction_id > ${this.#position}
-        ORDER BY
-          transaction_id asc,
-          id asc
+        WHERE id > ${this.#position}
+        ORDER BY id asc
     `
 
-    const position = rows.length ? rows.at(-1)!.transaction_id : this.#position
+    const position = rows.length ? rows.at(-1)!.id : this.#position
 
     return {
       changes: rows,
@@ -126,7 +125,7 @@ export default class ChangeLogSynchronizer {
 
     const groups = Object.groupBy(changes, (x) => x.transaction_id)
     const sorted = Object.entries(groups).sort((a, b) =>
-      b[0].localeCompare(a[0])
+      a[0].localeCompare(b[0])
     )
     const transactions = sorted.map(([transaction_id, changes]) => {
       return {
@@ -137,7 +136,7 @@ export default class ChangeLogSynchronizer {
 
     const signal = this.#abortController?.signal
 
-    let response: Response
+    let response: Response | undefined
     try {
       response = await api.request(path, 'POST', transactions, signal)
     } catch (_err) {
@@ -148,17 +147,17 @@ export default class ChangeLogSynchronizer {
       return 'retry'
     }
 
-    if (response instanceof Response) {
-      return response.status < 500 ? 'rejected' : 'retry'
+    if (response.ok) {
+      return 'accepted'
     }
 
-    return 'accepted'
+    return response.status < 500 ? 'rejected' : 'retry'
   }
 
   /*
    * Proceed by clearing the processed changes and moving the position forward.
    */
-  async proceed(position: TransactionId): Promise<void> {
+  async proceed(position: number): Promise<void> {
     await this.#db.sql`
       DELETE from changes
         WHERE id <= ${position}

@@ -36,23 +36,15 @@ Good use-cases include:
 
 Using a local embedded database adds a relatively-heavy dependency to your app. The shadow table and trigger machinery complicate your client side schema definition.
 
-## Complexities
-
-### 1. Merge logic
-
-The entrypoint in the code for merge logic is the very blunt `delete_local_on_synced_trigger` defined in the [`./local-schema.sql`](./local-schema.sql). The current implementation just wipes any local state for a row when any insert, updater or delete to that row syncs in from the server.
-
-This approach works and is simple to reason about. However, it won't preserve local changes on top of concurrent changes by other users (or tabs or devices). More sophisticated implementations could do more sophisticated merge logic here. Such as rebasing the local changes on the new server state. This typically involved maintaining more bookkeeping info and having more complex triggers.
-
-### 2. Rollbacks
-
 Syncing changes in the background complicates any potential rollback handling. In the [shared persistent optimistic state](../../3-shared-persistent) pattern, you can detect a write being rejected by the server whilst still in context, handling user input. With through the database sync, this context is harder to reconstruct.
 
-In this example implementation, we implement an extremely blunt rollback strategy of clearing all local state and writes in the event of any write being rejected by the server.
+## Implementation notes
 
-You may want to implement a more nuanced strategy and, for example, provide information to the user about what is happening and / or minimise data loss by only clearing local-state that's causally dependent on a rejected write. This opens the door to a lot of complexity that may best be addressed by using an existing framework.
+The merge logic in the `delete_local_on_synced_insert_and_update_trigger` in [`./local-schema.sql`](./local-schema.sql) supports rebasing local optimistic state on concurrent updates from other users.
 
-See the [Writes guide](https://electric-sql.com/docs/guides/writes) for more information and links to [existing frameworks](https://electric-sql.com/docs/guides/writes#tools).
+The rollback strategy in the `rollback` method of the `ChangeLogSynchronizer` in [`./sync.ts`](./sync.ts) is very naive: clearing all local state and writes in the event of any write being rejected by the server. You may want to implement a more nuanced strategy. For example, to provide information to the user about what is happening and / or minimise data loss by only clearing local-state that's causally dependent on a rejected write.
+
+This opens the door to a lot of complexity that may best be addressed by using an existing framework. See the [Writes guide](https://electric-sql.com/docs/guides/writes) for more information and links to [existing frameworks](https://electric-sql.com/docs/guides/writes#tools).
 
 ## How to run
 

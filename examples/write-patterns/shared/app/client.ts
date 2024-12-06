@@ -17,7 +17,7 @@ async function retryFetch(
   url: string,
   options: RequestOptions,
   retryCount: number
-) {
+): Promise<Response | undefined> {
   if (retryCount > maxRetries) {
     return
   }
@@ -35,18 +35,11 @@ async function resilientFetch(
   url: string,
   options: RequestOptions,
   retryCount: number
-) {
+): Promise<Response | undefined> {
   try {
-    const response = await fetch(url, options)
-
-    if (response.ok) {
-      return await response.json()
-    }
-
-    return response
-
-    // Could also retry here if you want to be resilient
-    // to 4xx and 5xx responses as well as network errors
+    // Could also check the status and retry before returning if you want to be
+    // resilient to 4xx and 5xx responses as well as network errors
+    return await fetch(url, options)
   } catch (err) {
     return await retryFetch(url, options, retryCount + 1)
   }
@@ -57,7 +50,7 @@ async function request(
   method: string,
   data?: object,
   signal?: AbortSignal
-) {
+): Promise<Response | undefined> {
   const url = `${API_URL}${path}`
 
   const options: RequestOptions = {

@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS todos_synced (
   id UUID PRIMARY KEY,
   title TEXT NOT NULL,
   completed BOOLEAN NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  -- Bookkeeping column.
+  write_id UUID
 );
 
 -- The `todos_local` table for local optimistic state.
@@ -19,8 +21,10 @@ CREATE TABLE IF NOT EXISTS todos_local (
   title TEXT,
   completed BOOLEAN,
   created_at TIMESTAMP WITH TIME ZONE,
+  -- Bookkeeping columns.
   changed_columns TEXT[],
-  is_deleted BOOLEAN DEFAULT FALSE
+  is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  write_id UUID NOT NULL
 );
 
 -- The `todos` view to combine the two tables on read.
@@ -47,22 +51,41 @@ CREATE OR REPLACE VIEW todos AS
     ON synced.id = local.id
     WHERE local.id IS NULL OR local.is_deleted = FALSE;
 
--- A trigger to automatically remove local optimistic state when the
--- corresponding row syncs over the replication stream. This is a blunt
--- merge strategy. More sophisticated apps can implement more
--- sophisticated merge / rebase strategies.
-CREATE OR REPLACE FUNCTION delete_local_on_sync_trigger()
+-- Triggers to automatically remove local optimistic state when the corresponding
+-- row syncs over the replication stream. Match on `write_id`, to allow local
+-- state to be rebased on concurrent changes to the same row.
+CREATE OR REPLACE FUNCTION delete_local_on_synced_insert_and_update_trigger()
 RETURNS TRIGGER AS $$
 BEGIN
-  DELETE FROM todos_local WHERE id = OLD.id;
+  DELETE FROM todos_local
+    WHERE id = NEW.id
+      AND write_id IS NOT NULL
+      AND write_id = NEW.write_id;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER delete_local_on_sync
-AFTER INSERT OR UPDATE OR DELETE ON todos_synced
+-- N.b.: deletes can be concurrent, but can't update the `write_id` and aren't
+-- revertable (once a row is deleted, it would be re-created with an insert),
+-- so its safe to just match on ID. You could implement revertable concurrent
+-- deletes using soft deletes (which are actually updates).
+CREATE OR REPLACE FUNCTION delete_local_on_synced_delete_trigger()
+RETURNS TRIGGER AS $$
+BEGIN
+  DELETE FROM todos_local WHERE id = OLD.id;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER delete_local_on_synced_insert
+AFTER INSERT ON todos_synced
 FOR EACH ROW
-EXECUTE FUNCTION delete_local_on_sync_trigger();
+EXECUTE FUNCTION delete_local_on_synced_insert_trigger();
+
+CREATE OR REPLACE TRIGGER delete_local_on_synced_insert_and_update
+AFTER UPDATE ON todos_synced
+FOR EACH ROW
+EXECUTE FUNCTION delete_local_on_synced_insert_and_update_trigger();
 
 -- The local `changes` table for capturing and persisting a log
 -- of local write operations that we want to sync to the server.
@@ -70,6 +93,7 @@ CREATE TABLE IF NOT EXISTS changes (
   id BIGSERIAL PRIMARY KEY,
   operation TEXT NOT NULL,
   value JSONB NOT NULL,
+  write_id UUID NOT NULL,
   transaction_id XID8 NOT NULL
 );
 
@@ -80,6 +104,8 @@ CREATE TABLE IF NOT EXISTS changes (
 -- The insert trigger
 CREATE OR REPLACE FUNCTION todos_insert_trigger()
 RETURNS TRIGGER AS $$
+DECLARE
+  local_write_id UUID := gen_random_uuid();
 BEGIN
   IF EXISTS (SELECT 1 FROM todos_synced WHERE id = NEW.id) THEN
     RAISE EXCEPTION 'Cannot insert: id already exists in the synced table';
@@ -94,20 +120,23 @@ BEGIN
     title,
     completed,
     created_at,
-    changed_columns
+    changed_columns,
+    write_id
   )
   VALUES (
     NEW.id,
     NEW.title,
     NEW.completed,
     NEW.created_at,
-    ARRAY['title', 'completed', 'created_at']
+    ARRAY['title', 'completed', 'created_at'],
+    local_write_id
   );
 
   -- Record the write operation in the change log.
   INSERT INTO changes (
     operation,
     value,
+    write_id,
     transaction_id
   )
   VALUES (
@@ -118,6 +147,7 @@ BEGIN
       'completed', NEW.completed,
       'created_at', NEW.created_at
     ),
+    local_write_id,
     pg_current_xact_id()
   );
 
@@ -132,6 +162,7 @@ DECLARE
   synced todos_synced%ROWTYPE;
   local todos_local%ROWTYPE;
   changed_cols TEXT[] := '{}';
+  local_write_id UUID := gen_random_uuid();
 BEGIN
   -- Fetch the corresponding rows from the synced and local tables
   SELECT * INTO synced FROM todos_synced WHERE id = NEW.id;
@@ -155,14 +186,16 @@ BEGIN
       title,
       completed,
       created_at,
-      changed_columns
+      changed_columns,
+      write_id
     )
     VALUES (
       NEW.id,
       NEW.title,
       NEW.completed,
       NEW.created_at,
-      changed_cols
+      changed_cols,
+      local_write_id
     );
 
   -- Otherwise, if the row is already in the local table, update it and adjust
@@ -206,7 +239,8 @@ BEGIN
                 THEN COALESCE(NEW.created_at, local.created_at) IS DISTINCT FROM synced.created_at
               END
           )
-        )
+        ),
+        write_id = local_write_id
       WHERE id = NEW.id;
   END IF;
 
@@ -214,6 +248,7 @@ BEGIN
   INSERT INTO changes (
     operation,
     value,
+    write_id,
     transaction_id
   )
   VALUES (
@@ -226,6 +261,7 @@ BEGIN
         'created_at', NEW.created_at
       )
     ),
+    local_write_id,
     pg_current_xact_id()
   );
 
@@ -236,21 +272,26 @@ $$ LANGUAGE plpgsql;
 -- The delete trigger
 CREATE OR REPLACE FUNCTION todos_delete_trigger()
 RETURNS TRIGGER AS $$
+DECLARE
+  local_write_id UUID := gen_random_uuid();
 BEGIN
   -- Upsert a soft-deletion record in the local table.
   IF EXISTS (SELECT 1 FROM todos_local WHERE id = OLD.id) THEN
     UPDATE todos_local
     SET
-      is_deleted = TRUE
+      is_deleted = TRUE,
+      write_id = local_write_id
     WHERE id = OLD.id;
   ELSE
     INSERT INTO todos_local (
       id,
-      is_deleted
+      is_deleted,
+      write_id
     )
     VALUES (
       OLD.id,
-      TRUE
+      TRUE,
+      local_write_id
     );
   END IF;
 
@@ -258,6 +299,7 @@ BEGIN
   INSERT INTO changes (
     operation,
     value,
+    write_id,
     transaction_id
   )
   VALUES (
@@ -265,6 +307,7 @@ BEGIN
     jsonb_build_object(
       'id', OLD.id
     ),
+    local_write_id,
     pg_current_xact_id()
   );
 

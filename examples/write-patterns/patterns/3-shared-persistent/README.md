@@ -28,6 +28,15 @@ Combining data on-read makes local reads slightly slower.
 
 Writes are still made via an API. This can often be helpful and pragmatic, allowing you to [re-use your existing API](https://electric-sql.com/blog/2024/11/21/local-first-with-your-existing-api). However, you may want to avoid running an API and leverage [through the DB sync](../4-through-the-db) for a purer local-first approach.
 
+## Implementation notes
+
+The merge logic in the `matchWrite` function supports rebasing local optimistic state on concurrent updates from other users.
+
+This differs from the previous optimistic state example, in that it matches inserts and updates on the `write_id`, rather than the `id`. This means that concurrent updates to the same row will not
+clear the optimistic state, which allows it to be rebased on changes made concurrently to the same data by other users.
+
+Note that we still match deletes by `id`, because delete operations can't update the `write_id` column. If you'd like to support revertable concurrent deletes, you can use soft deletes (which are obviously actually updates).
+
 ## How to run
 
 See the [How to run](../../README.md#how-to-run) section in the example README.
