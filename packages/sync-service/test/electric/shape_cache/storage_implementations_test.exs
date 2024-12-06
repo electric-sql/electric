@@ -2,6 +2,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   use ExUnit.Case, async: true
 
   alias Electric.Shapes.Shape
+  alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache.FileStorage
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
@@ -28,7 +29,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   @snapshot_offset LogOffset.first()
   @snapshot_offset_encoded to_string(@snapshot_offset)
-  @zero_offset LogOffset.first()
   @data_stream [
                  %{
                    offset: @snapshot_offset,
@@ -70,109 +70,13 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
-    describe "#{module_name}.get_snapshot/2" do
-      setup do
-        {:ok, %{module: unquote(module)}}
-      end
-
-      setup :start_storage
-
-      test "returns snapshot when shape does exist", %{module: storage, opts: opts} do
-        storage.mark_snapshot_as_started(opts)
-        storage.make_new_snapshot!(@data_stream, opts)
-
-        {@snapshot_offset, stream} = storage.get_snapshot(opts)
-
-        assert [
-                 %{
-                   offset: @snapshot_offset_encoded,
-                   value: %{id: "00000000-0000-0000-0000-000000000001", title: "row1"},
-                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
-                   headers: %{operation: "insert"}
-                 },
-                 %{
-                   offset: @snapshot_offset_encoded,
-                   value: %{id: "00000000-0000-0000-0000-000000000002", title: "row2"},
-                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
-                   headers: %{operation: "insert"}
-                 }
-               ] = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
-      end
-
-      test "returns snapshot offset when shape does exist", %{module: storage, opts: opts} do
-        storage.mark_snapshot_as_started(opts)
-        storage.make_new_snapshot!(@data_stream, opts)
-
-        {@snapshot_offset, _} = storage.get_snapshot(opts)
-      end
-
-      test "does not return items not in the snapshot", %{module: storage, opts: opts} do
-        log_items =
-          [
-            %Changes.NewRecord{
-              relation: {"public", "test_table"},
-              record: %{"id" => "123", "name" => "Test"},
-              log_offset: LogOffset.new(Lsn.from_integer(1000), 0)
-            }
-          ]
-          |> changes_to_log_items()
-
-        storage.mark_snapshot_as_started(opts)
-        storage.make_new_snapshot!(@data_stream, opts)
-        storage.append_to_log!(log_items, opts)
-
-        {@snapshot_offset, stream} = storage.get_snapshot(opts)
-        assert Enum.count(stream) == Enum.count(@data_stream)
-      end
-
-      test "returns complete snapshot when the snapshot is concurrently being written", %{
-        module: storage,
-        opts: opts
-      } do
-        row_count = 10
-
-        data_stream =
-          Stream.map(1..row_count, fn i ->
-            # Sleep to give the read process time to run
-            Process.sleep(1)
-
-            [
-              %{
-                offset: @snapshot_offset_encoded,
-                value: %{id: "00000000-0000-0000-0000-00000000000#{i}", title: "row#{i}"},
-                key: ~S|"public"."the-table"/"00000000-0000-0000-0000-00000000000#{i}"|,
-                headers: %{operation: "insert"}
-              }
-              |> Jason.encode_to_iodata!()
-            ]
-          end)
-
-        storage.mark_snapshot_as_started(opts)
-        {@snapshot_offset, stream} = storage.get_snapshot(opts)
-
-        read_task =
-          Task.async(fn ->
-            log = Enum.to_list(stream)
-
-            assert Enum.count(log) == row_count
-
-            for {item, i} <- Enum.with_index(log, 1) do
-              assert Jason.decode!(item, keys: :atoms).value.title == "row#{i}"
-            end
-          end)
-
-        storage.make_new_snapshot!(data_stream, opts)
-
-        Task.await(read_task)
-      end
-    end
-
     describe "#{module_name}.append_to_log!/3" do
       setup do
         {:ok, %{module: unquote(module)}}
       end
 
       setup :start_storage
+      setup :start_empty_snapshot
 
       test "adds items to the log", %{module: storage, opts: opts} do
         lsn = Lsn.from_integer(1000)
@@ -236,14 +140,15 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
-    describe "#{module_name}.get_log_stream/4" do
+    describe "#{module_name}.get_log_stream/4 for appended txns" do
       setup do
         {:ok, %{module: unquote(module)}}
       end
 
       setup :start_storage
+      setup :start_empty_snapshot
 
-      test "returns correct stream of log items", %{module: storage, opts: opts} do
+      test "returns correct stream of log items", %{storage: opts} do
         lsn1 = Lsn.from_integer(1000)
         lsn2 = Lsn.from_integer(2000)
 
@@ -273,10 +178,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(log_items1, opts)
-        :ok = storage.append_to_log!(log_items2, opts)
+        :ok = Storage.append_to_log!(log_items1, opts)
+        :ok = Storage.append_to_log!(log_items2, opts)
 
-        stream = storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
         entries = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
         assert [
@@ -379,6 +284,102 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
+    describe "#{module_name}.get_log_stream/4 for snapshots" do
+      setup do
+        {:ok, %{module: unquote(module)}}
+      end
+
+      setup :start_storage
+
+      test "returns snapshot when shape does exist", %{storage: opts} do
+        Storage.mark_snapshot_as_started(opts)
+        Storage.make_new_snapshot!(@data_stream, opts)
+
+        stream =
+          Storage.get_log_stream(LogOffset.before_all(), LogOffset.new(0, 0), opts)
+
+        assert [
+                 %{
+                   offset: @snapshot_offset_encoded,
+                   value: %{id: "00000000-0000-0000-0000-000000000001", title: "row1"},
+                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000001"|,
+                   headers: %{operation: "insert"}
+                 },
+                 %{
+                   offset: @snapshot_offset_encoded,
+                   value: %{id: "00000000-0000-0000-0000-000000000002", title: "row2"},
+                   key: ~S|"public"."the-table"/"00000000-0000-0000-0000-000000000002"|,
+                   headers: %{operation: "insert"}
+                 }
+               ] = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
+      end
+
+      test "does not return items not in the snapshot", %{storage: opts} do
+        log_items =
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "123", "name" => "Test"},
+              log_offset: LogOffset.new(Lsn.from_integer(1000), 0)
+            }
+          ]
+          |> changes_to_log_items()
+
+        Storage.mark_snapshot_as_started(opts)
+        Storage.make_new_snapshot!(@data_stream, opts)
+        Storage.append_to_log!(log_items, opts)
+
+        stream =
+          Storage.get_log_stream(
+            LogOffset.before_all(),
+            LogOffset.last_before_real_offsets(),
+            opts
+          )
+
+        assert Enum.count(stream) == Enum.count(@data_stream)
+      end
+
+      test "returns complete snapshot when the snapshot is concurrently being written", %{
+        storage: opts
+      } do
+        row_count = 10
+
+        data_stream =
+          Stream.map(1..row_count, fn i ->
+            # Sleep to give the read process time to run
+            Process.sleep(1)
+
+            [
+              %{
+                offset: @snapshot_offset_encoded,
+                value: %{id: "00000000-0000-0000-0000-00000000000#{i}", title: "row#{i}"},
+                key: ~S|"public"."the-table"/"00000000-0000-0000-0000-00000000000#{i}"|,
+                headers: %{operation: "insert"}
+              }
+              |> Jason.encode_to_iodata!()
+            ]
+          end)
+
+        Storage.mark_snapshot_as_started(opts)
+        stream = Storage.get_log_stream(LogOffset.before_all(), LogOffset.first(), opts)
+
+        read_task =
+          Task.async(fn ->
+            log = Enum.to_list(stream)
+
+            assert Enum.count(log) == row_count
+
+            for {item, i} <- Enum.with_index(log, 1) do
+              assert Jason.decode!(item, keys: :atoms).value.title == "row#{i}"
+            end
+          end)
+
+        Storage.make_new_snapshot!(data_stream, opts)
+
+        Task.await(read_task)
+      end
+    end
+
     describe "#{module_name}.cleanup!/2" do
       setup do
         {:ok, %{module: unquote(module)}}
@@ -394,19 +395,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         assert storage.snapshot_started?(opts) == false
       end
 
-      test "causes get_snapshot/2 to raise an error", %{module: storage, opts: opts} do
-        storage.mark_snapshot_as_started(opts)
-        storage.make_new_snapshot!(@data_stream, opts)
-
-        storage.cleanup!(opts)
-
-        assert_raise RuntimeError, fn ->
-          {@zero_offset, stream} = storage.get_snapshot(opts)
-          Stream.run(stream)
-        end
-      end
-
-      test "causes get_log_stream/4 to return empty stream", %{module: storage, opts: opts} do
+      test "causes get_log_stream/4 to raise", %{module: storage, opts: opts} do
         lsn = Lsn.from_integer(1000)
 
         log_items =
@@ -423,8 +412,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         storage.cleanup!(opts)
 
-        assert storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
-               |> Enum.to_list() == []
+        assert_raise RuntimeError, fn ->
+          storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts) |> Enum.to_list()
+        end
       end
     end
   end
@@ -594,7 +584,14 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     opts = module |> opts(context) |> module.shared_opts()
     shape_opts = module.for_shape(@shape_handle, opts)
     {:ok, pid} = module.start_link(shape_opts)
-    {:ok, %{opts: shape_opts, shared_opts: opts, pid: pid}}
+    {:ok, %{opts: shape_opts, shared_opts: opts, pid: pid, storage: {module, shape_opts}}}
+  end
+
+  defp start_empty_snapshot(%{storage: storage}) do
+    Storage.mark_snapshot_as_started(storage)
+    Storage.make_new_snapshot!([], storage)
+
+    :ok
   end
 
   defp opts(InMemoryStorage, %{stack_id: stack_id}) do
