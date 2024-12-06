@@ -4,6 +4,12 @@ balegas:
   image: /img/team/valter.jpg
   url: /about/team#valter
 
+kyle:
+  name: Kyle Mathews
+  title: CPO
+  image: /img/team/kyle.jpg
+  url: /about/team#kyle
+
 oleksii:
   name: Oleksii Sholik
   title: Founding Engineer

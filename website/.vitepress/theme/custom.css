@@ -249,9 +249,11 @@ a.no-visual:hover {
 .hidden {
   display: none !important;
 }
+.inline-xxs,
 .inline-xs,
 .inline-sm,
 .inline-md,
+.block-xxs,
 .block-xs,
 .block-sm,
 .block-md {
@@ -287,6 +289,17 @@ a.no-visual:hover {
     display: block !important;
   }
   .inline-xs {
+    display: inline !important;
+  }
+}
+@media (max-width: 399px) {
+  .hidden-xxs {
+    display: none !important;
+  }
+  .block-xxs {
+    display: block !important;
+  }
+  .inline-xxs {
     display: inline !important;
   }
 }

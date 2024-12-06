@@ -18,9 +18,12 @@ Welcome to the ElectricSQL developer documentation!
 
 ElectricSQL is a Postgres sync engine. Use it to sync [little subsets](/docs/guides/shapes) of your Postgres data into [local apps](/use-cases/data-sync), services and [environments](/use-cases/dev-and-test).
 
+> [!Tip] Electric BETA release
+> The Electric sync engine is now in public BETA! See the [release post here](/blog/2024/12/09/electric-beta-release).
+
 ## New to ElectricSQL?
 
-Start with the [Quickstart](/docs/quickstart) to get up-and-running. The guides on [Shapes](/docs/guides/shapes), [Auth](/docs/guides/auth) and [Writes](/docs/guides/writes) are also good entrypoints and helpful to understand how Electric works.
+Start with the [Quickstart](/docs/quickstart) to get up-and-running. The guides on [Auth](/docs/guides/auth), [Shapes](/docs/guides/shapes) and [Writes](/docs/guides/writes) are also good entrypoints and helpful to understand how Electric works.
 
 The [HTTP API](/docs/api/http) and [TypeScript Client](/docs/api/clients/typescript) docs show how to sync data. The [React](/docs/integrations/react) page illustrates how to bind these into a reactivity framework.
 
