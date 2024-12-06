@@ -58,6 +58,88 @@ features:
     link: '/product/pglite'
 ---
 
+<div class="vp-doc">
+
+## Demos
+
+<div class="demos-grid">
+  <a href="https://notes.electric-sql.com/" class="demo-card" target="_blank">
+    <img src="/img/demos/notes-demo.png" alt="Notes Demo Screenshot" />
+    <div class="demo-description">
+      <h3>Notes</h3>
+      <p>A collaborative note-taking app with real-time sync powered by Electric & Yjs</p>
+    </div>
+  </a>
+  
+  <a href="https://linearlite-pglite.netlify.app/" class="demo-card" target="_blank">
+    <img src="/img/demos/linearlite-demo.png" alt="LinearLite Demo Screenshot" />
+    <div class="demo-description">
+      <h3>LinearLite + PGlite</h3>
+      <p>An issue tracker inspired by Linear, showcasing complex data sync into PGlite</p>
+    </div>
+  </a>
+  
+  <a href="https://pixel-art.electric-sql.com/" class="demo-card" target="_blank">
+    <img src="/img/demos/pixel-art-demo.png" alt="Pixel Art Demo Screenshot" />
+    <div class="demo-description">
+      <h3>Pixel Art</h3>
+      <p>Collaborative pixel art editor with real-time multiplayer editing</p>
+    </div>
+  </a>
+</div>
+
+</div>
+
+<style>
+.demos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin: 2rem 0;
+}
+
+.demo-card {
+  display: block;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: transform 0.2s;
+  text-decoration: none !important;
+  color: inherit !important;
+  background: var(--vp-c-bg-soft);
+}
+
+.demo-card:hover {
+  transform: translateY(-4px);
+  color: inherit !important;
+  text-decoration: underline !important;
+}
+
+.demo-card:active {
+  color: inherit !important;
+  text-decoration: underline !important;
+}
+
+.demo-card img {
+  width: 100%;
+  aspect-ratio: 16/9;
+  object-fit: contain;
+  background: var(--vp-c-bg);
+}
+
+.demo-description {
+  padding: 1rem;
+}
+
+.demo-description h3 {
+  margin: 0 0 0.5rem 0;
+}
+
+.demo-description p {
+  margin: 0;
+  opacity: 0.8;
+}
+</style>
+
 <script setup>
 import { onMounted } from 'vue'
 
