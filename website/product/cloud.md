@@ -31,7 +31,7 @@ onMounted(async () => {
 
 <img src="/img/icons/ddn.svg" class="product-icon" />
 
-# Cloud <Badge type="info" text="private alpha" />
+# Cloud <Badge type="info" text="PRIVATE ALPHA" />
 
 Hosted Electric sync that's blazing fast
 and scales to millions of users
@@ -58,9 +58,9 @@ This allows you to scale out real-time data to millions of concurrent users from
 
 ## More information
 
-Electric Cloud is currently in <Badge type="tip" text="private alpha" />.
+Electric Cloud is currently in <Badge type="info" text="PRIVATE ALPHA" />.
 
-If you're interested in using it, you can sign up to the waitlist. We'll be in touch when we have capacity to onboard you.
+If you're interested in using it, you can sign up to the waitlist. We'll be in touch when we can onboard you.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta">
