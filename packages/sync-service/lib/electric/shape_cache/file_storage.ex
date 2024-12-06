@@ -230,17 +230,45 @@ defmodule Electric.ShapeCache.FileStorage do
       [storage_impl: "mixed_disk", "shape.handle": opts.shape_handle],
       stack_id,
       fn ->
-        data_stream
-        |> Stream.map(&[&1, ?\n])
-        # Use the 4 byte marker (ASCII "end of transmission") to indicate the end of the snapshot,
-        # so that concurrent readers can detect that the snapshot has been completed.
-        |> Stream.concat([<<4::utf8>>])
-        |> Stream.into(File.stream!(shape_snapshot_path(opts), [:append, :delayed_write]))
-        |> Stream.run()
+        last_chunk_num = write_stream_to_chunk_files(data_stream, opts)
 
-        CubDB.put(opts.db, @snapshot_meta_key, LogOffset.first())
+        CubDB.put(opts.db, @snapshot_meta_key, LogOffset.new(0, last_chunk_num))
       end
     )
+  end
+
+  # Write to a set of "chunk" files, with numbering starting from 0, and return the highest chunk number
+  defp write_stream_to_chunk_files(data_stream, opts) do
+    data_stream
+    |> Stream.transform(
+      {0, nil},
+      fn line, {chunk_num, file} ->
+        file = file || File.open!(snapshot_chunk_path(opts, chunk_num), [:write, :raw])
+
+        case line do
+          :chunk_boundary ->
+            # Use the 4 byte marker (ASCII "end of transmission") to indicate the end of the snapshot,
+            # so that concurrent readers can detect that the snapshot has been completed. This is a way to
+            # distinguish between "file quiet" and "file done".
+            IO.binwrite(file, <<4::utf8>>)
+            File.close(file)
+            {[], {chunk_num + 1, nil}}
+
+          line ->
+            IO.binwrite(file, [line, ?\n])
+            {[chunk_num], {chunk_num, file}}
+        end
+      end,
+      fn {_chunk_num, file} ->
+        if file, do: File.close(file)
+      end
+    )
+    |> Enum.reduce(0, fn chunk_num, _ -> chunk_num end)
+  end
+
+  defp snapshot_chunk_path(opts, chunk_number)
+       when is_integer(chunk_number) and chunk_number >= 0 do
+    Path.join([opts.snapshot_dir, "#{chunk_number}.snapshot_chunk.jsonl"])
   end
 
   @impl Electric.ShapeCache.Storage
@@ -320,7 +348,22 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def get_log_stream(offset, max_offset, %FS{} = opts) do
+  def get_log_stream(
+        %LogOffset{tx_offset: tx_offset, op_offset: op_offset} = offset,
+        max_offset,
+        %FS{} = opts
+      )
+      when tx_offset <= 0 do
+    # If snapshot wasn't even started, return an error
+    # If snapshot is complete, as indicated by presence of `@snapshot_meta_key` in CubDB, then see how the `op_offset` compares to the one stored under that key:
+    #   If `tx_offset` == -1, then open then open the file with name `snapshot_chunk_path(opts, 0)`
+    #   If `op_offset` >= the stored one, then stream from CubDB log, as we're done streaming the snapshot
+    #   If `op_offset` < the stored one, then open the file with name `snapshot_chunk_path(opts, op_offset + 1)`
+    # If previous step opened a file, then stream out it's contents line by line until `<<4::utf8>>` byte is encountered
+  end
+
+  # Any offsets with tx offset > 0 are not part of the initial snapshot.
+  def get_log_stream(%LogOffset{} = offset, max_offset, %FS{} = opts) do
     opts.db
     |> CubDB.select(
       min_key: log_key(offset),

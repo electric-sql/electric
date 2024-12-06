@@ -33,15 +33,18 @@ defmodule Electric.Shapes.Querying do
 
       Postgrex.stream(conn, query, params)
       |> Stream.flat_map(& &1.rows)
-      |> Stream.map(&hd/1)
-      |> Stream.with_index()
-      |> Stream.transform(0, fn {line, offset}, chunk_size ->
-        case LogChunker.fit_into_chunk(IO.iodata_length(line), chunk_size, chunk_bytes_threshold) do
+      |> Stream.transform(0, fn [line], chunk_size ->
+        # Reason to add 1 byte to expected length is to account for  `\n` breaks when the data is written.
+        case LogChunker.fit_into_chunk(
+               IO.iodata_length(line) + 1,
+               chunk_size,
+               chunk_bytes_threshold
+             ) do
           {:ok, new_chunk_size} ->
             {[line], new_chunk_size}
 
           {:threshold_exceeded, new_chunk_size} ->
-            {[line, ~s|{"internal":"chunk_boundary","offset":"0_#{offset}"}|], new_chunk_size}
+            {[:chunk_boundary, line], new_chunk_size}
         end
       end)
     end)
