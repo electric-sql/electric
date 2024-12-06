@@ -19,10 +19,12 @@ type ToDo = {
 
 export default function Index() {
   const { data: todos } = useShape<ToDo>({
-    url: `http://localhost:3000/v1/shape`,
+    url: `${import.meta.env.VITE_ELECTRIC_URL}/v1/shape/`,
+    table: `todos`,
     params: {
-      table: `todos`,
-    }
+      database_id: import.meta.env.VITE_ELECTRIC_DATABASE_ID,
+      token: import.meta.env.VITE_ELECTRIC_TOKEN,
+    },
   })
   todos.sort((a, b) => a.created_at - b.created_at)
   console.log({ todos })
@@ -41,15 +43,18 @@ export default function Index() {
                       checked={todo.completed}
                       onClick={async () => {
                         console.log(`completed`)
-                        await fetch(`http://localhost:3010/todos/${todo.id}`, {
-                          method: `PUT`,
-                          headers: {
-                            "Content-Type": `application/json`,
-                          },
-                          body: JSON.stringify({
-                            completed: !todo.completed,
-                          }),
-                        })
+                        await fetch(
+                          `${import.meta.env.VITE_SERVER_URL}/todos/${todo.id}`,
+                          {
+                            method: `PUT`,
+                            headers: {
+                              "Content-Type": `application/json`,
+                            },
+                            body: JSON.stringify({
+                              completed: !todo.completed,
+                            }),
+                          }
+                        )
                       }}
                     />
                     {todo.title}
@@ -61,9 +66,12 @@ export default function Index() {
                   style={{ cursor: `pointer` }}
                   onClick={async () => {
                     console.log(`deleted`)
-                    await fetch(`http://localhost:3010/todos/${todo.id}`, {
-                      method: `DELETE`,
-                    })
+                    await fetch(
+                      `${import.meta.env.VITE_SERVER_URL}/todos/${todo.id}`,
+                      {
+                        method: `DELETE`,
+                      }
+                    )
                   }}
                 >
                   x
@@ -79,13 +87,16 @@ export default function Index() {
             const formData = Object.fromEntries(
               new FormData(event.target as HTMLFormElement)
             )
-            const res = await fetch(`http://localhost:3010/todos`, {
-              method: `POST`,
-              headers: {
-                "Content-Type": `application/json`,
-              },
-              body: JSON.stringify({ id, title: formData.todo }),
-            })
+            const res = await fetch(
+              `${import.meta.env.VITE_SERVER_URL}/todos`,
+              {
+                method: `POST`,
+                headers: {
+                  "Content-Type": `application/json`,
+                },
+                body: JSON.stringify({ id, title: formData.todo }),
+              }
+            )
             console.log({ res })
           }}
         >
