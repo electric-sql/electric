@@ -32,19 +32,6 @@ export default $config({
         $app.stage === `Production` ? `yjs-production` : `yjs-${$app.stage}`,
     })
 
-    // const vpc = new sst.aws.Vpc(`yjs-vpc-${$app.stage}`, { bastion: true })
-
-    // const rds = new sst.aws.Postgres(`yjs-${$app.stage}Database`, {
-    //   vpc,
-    //   // proxy: true,
-    //   transform: {
-    //     instance: {
-    //       publiclyAccessible: true,
-    //     },
-    //   },
-    // })
-    // const databaseUri = getRdsDbUri(rds)
-
     const databaseUri = getNeonDbUri(project, db, false)
     const databasePooledUri = getNeonDbUri(project, db, true)
     try {
@@ -54,12 +41,20 @@ export default $config({
         addDatabaseToElectric(uri)
       )
 
-      const website = deployServerlessApp(
+      const serverless = deployServerlessApp(
         electricInfo,
         databaseUri,
         databasePooledUri
       )
-      return { url: website.url, databaseUri, databasePooledUri }
+
+      const website = deployAppServer(electricInfo, databasePooledUri)
+
+      return {
+        server_url: website.url,
+        serverless_url: serverless.url,
+        databaseUri,
+        databasePooledUri,
+      }
     } catch (e) {}
   },
 })
@@ -73,38 +68,37 @@ function applyMigrations(uri: string) {
   })
 }
 
-// function deployApp(
-//   { id, token }: $util.Output<{ id: string; token: string }>,
-//   uri: $util.Output<string>,
-//   vpc: sst.aws.Vpc
-// ) {
-//   const cluster = new sst.aws.Cluster(`yjs-cluster-${$app.stage}`, { vpc })
+function deployAppServer(
+  { id, token }: $util.Output<{ id: string; token: string }>,
+  uri: $util.Output<string>
+) {
+  const vpc = new sst.aws.Vpc(`yjs-vpc-${$app.stage}`, { bastion: true })
+  const cluster = new sst.aws.Cluster(`yjs-cluster-${$app.stage}`, { vpc })
+  const service = cluster.addService(`yjs-service-${$app.stage}`, {
+    loadBalancer: {
+      ports: [{ listen: "443/https", forward: "3000/http" }],
+      domain: {
+        name: `yjs-server-${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+        dns: sst.cloudflare.dns(),
+      },
+    },
+    environment: {
+      ELECTRIC_URL: process.env.ELECTRIC_API!,
+      DATABASE_URL: uri,
+      DATABASE_ID: id,
+      ELECTRIC_TOKEN: token,
+    },
+    image: {
+      context: "../..",
+      dockerfile: "Dockerfile",
+    },
+    dev: {
+      command: "npm run dev",
+    },
+  })
 
-//   const service = cluster.addService(`yjs-service-${$app.stage}`, {
-//     loadBalancer: {
-//       ports: [{ listen: "443/https", forward: "3000/http" }],
-//       domain: {
-//         name: `yjs-server-${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
-//         dns: sst.cloudflare.dns(),
-//       },
-//     },
-//     environment: {
-//       ELECTRIC_URL: process.env.ELECTRIC_API!,
-//       DATABASE_URL: uri,
-//       DATABASE_ID: id,
-//       ELECTRIC_TOKEN: token,
-//     },
-//     image: {
-//       context: "../..",
-//       dockerfile: "Dockerfile",
-//     },
-//     dev: {
-//       command: "npm run dev",
-//     },
-//   })
-
-//   return service
-// }
+  return service
+}
 
 function deployServerlessApp(
   electricInfo: $util.Output<{ id: string; token: string }>,
@@ -116,7 +110,6 @@ function deployServerlessApp(
       ELECTRIC_URL: process.env.ELECTRIC_API!,
       ELECTRIC_TOKEN: electricInfo.token,
       DATABASE_ID: electricInfo.id,
-      DATABASE_URL: uri,
       POOLED_DATABASE_URL: pooledUri,
     },
     domain: {
