@@ -66,7 +66,7 @@ You can use logical operators like `AND` and `OR` to group multiple conditions, 
 - `title='Electric' AND status='todo'`
 
 > [!WARNING] Limitations
-> Electric needs to be able to evaluate where clauses outside of Postgres, so it only supports a limited set of SQL types and expressions right now.
+> Electric needs to be able to evaluate where clauses outside of Postgres, so it supports a subset of SQL types and expressions.
 > 1. you can use columns of numerical types, `boolean`, `uuid`, `text`, `interval`, date and time types (with the exception of `timetz`)
 > 1. operators that work on those types: arithmetics, comparisons, boolean operators like `OR`, string operators like `LIKE`, etc.
 > 1. [Arrays](https://github.com/electric-sql/electric/issues/1767) and [Enums](https://github.com/electric-sql/electric/issues/1709) are not yet supported in where clauses
