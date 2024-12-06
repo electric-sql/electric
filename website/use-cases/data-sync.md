@@ -11,7 +11,6 @@ homepage_order: 10
 solves: "state transfer"
 benefits:
   - Simplifies your code
-  - No loading spinners
   - No stale data
 ---
 
