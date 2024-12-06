@@ -32,12 +32,6 @@ export default defineConfig((options) => {
       dts: {
         entry: commonOptions.entry,
         resolve: true,
-        compilerOptions: {
-          declarationDir: '../',
-          declaration: true,
-          declarationMap: true,
-          outDir: '../',
-        },
       },
       clean: false,
     },
