@@ -84,3 +84,4 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /product/ddn                    /product/cloud
 /product/sync                   /product/electric
 /docs/api/integrations/react    /docs/integrations/react
+/use-cases/state-transfer       /use-cases/data-sync

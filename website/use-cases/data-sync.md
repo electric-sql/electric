@@ -1,8 +1,8 @@
 ---
-title: "State transfer"
+title: "Data sync"
 description: >-
   Replace APIs, data fetching and network error handling with
-  data synchronisation.
+  data sync.
 image: /img/use-cases/state-transfer.png
 outline: deep
 case: true
