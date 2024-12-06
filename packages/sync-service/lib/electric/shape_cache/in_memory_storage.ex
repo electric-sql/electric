@@ -9,7 +9,6 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   @behaviour Electric.ShapeCache.Storage
 
-  @snapshot_offset LogOffset.first()
   @snapshot_start_index 0
   @snapshot_end_index :end
   @xmin_key :xmin
@@ -151,31 +150,6 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   defp snapshot_end(),
     do: snapshot_chunk_end(storage_offset(LogOffset.last_before_real_offsets()))
 
-  # defp snapshot_start, do: snapshot_key(@snapshot_start_index)
-  # defp snapshot_end, do: snapshot_key(@snapshot_end_index)
-
-  # @impl Electric.ShapeCache.Storage
-  # def get_snapshot(%MS{} = opts) do
-  #   stream =
-  #     ConcurrentStream.stream_to_end(
-  #       excluded_start_key: @snapshot_start_index,
-  #       end_marker_key: @snapshot_end_index,
-  #       poll_time_in_ms: 10,
-  #       stream_fun: fn excluded_start_key, included_end_key ->
-  #         if !snapshot_started?(opts), do: raise("Snapshot no longer available")
-
-  #         :ets.select(opts.snapshot_table, [
-  #           {{snapshot_key(:"$1"), :"$2"},
-  #            [{:andalso, {:>, :"$1", excluded_start_key}, {:"=<", :"$1", included_end_key}}],
-  #            [{{:"$1", :"$2"}}]}
-  #         ])
-  #       end
-  #     )
-  #     |> Stream.map(fn {_, item} -> item end)
-
-  #   {@snapshot_offset, stream}
-  # end
-
   defp get_offset_indexed_stream(offset, max_offset, offset_indexed_table) do
     offset = storage_offset(offset)
     max_offset = storage_offset(max_offset)
@@ -215,8 +189,6 @@ defmodule Electric.ShapeCache.InMemoryStorage do
       end_marker_key: snapshot_chunk_end(storage_offset(max_offset)),
       poll_time_in_ms: 10,
       stream_fun: fn excluded_start_key, included_end_key ->
-        dbg(excluded_start_key)
-        dbg(included_end_key)
         if !snapshot_started?(opts), do: raise("Snapshot no longer available")
 
         :ets.select(
@@ -228,7 +200,6 @@ defmodule Electric.ShapeCache.InMemoryStorage do
                 {:"=<", :"$1", {:const, included_end_key}}}
              ], [{{:"$1", :"$2"}}]}
           ]
-          |> dbg()
         )
       end
     )
