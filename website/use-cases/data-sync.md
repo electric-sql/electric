@@ -12,6 +12,7 @@ solves: "state transfer"
 benefits:
   - Simplifies your code
   - No loading spinners
+  - No stale data
 ---
 
 <script setup>
