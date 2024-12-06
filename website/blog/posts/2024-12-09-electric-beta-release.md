@@ -1,12 +1,11 @@
 ---
-title: "ElectricSQL BETA release"
+title: "Electric BETA release"
 description: >-
   The Electric sync engine is now in public BETA.
   If you haven't checked out Electric recently,
   it's a great time to take another look.
 excerpt: >-
-  With version XXX just released, we're delighted
-  to announce that the Electric sync engine is now
+  With version X, the Electric sync engine is now
   in public BETA! If you haven't checked out Electric
   recently, it's a great time to take another look.
 authors: [thruflo]
@@ -22,7 +21,7 @@ post: true
   import LinearLiteScreenshotPNG from '/static/img/blog/electric-beta-release/linearlite-screenshot.png'
 </script>
 
-With [version 0.X](#) the Electric sync engine is now in public BETA!
+With [version X](#) the Electric sync engine is now in public BETA!
 
 If you haven't checked out Electric recently, it's a great time to [take another look](/docs/intro).
 
@@ -47,7 +46,7 @@ Six months ago, we [took on a clean re-write](/blog/2024/07/17/electric-next).
   <img :src="LogoStripMobileSVG" class="block-xs" />
 </figure>
 
-Electric is being used in production by companies including [Google](https://firebase.google.com/docs/data-connect), [Supabase](https://database.build), [Trigger.dev](https://trigger.dev/launchweek/0/realtime), [Otto](https://ottogrid.ai) and [Doorboost](https://www.doorboost.com).
+Electric and PGlite are being used in production by companies including [Google](https://firebase.google.com/docs/data-connect), [Supabase](https://database.build), [Trigger.dev](https://trigger.dev/launchweek/0/realtime), [Otto](https://ottogrid.ai) and [Doorboost](https://www.doorboost.com).
 
 > We use ElectricSQL to power [Trigger.dev Realtime](https://trigger.dev/launchweek/0/realtime), a core feature of our product. When we execute our users background tasks they get instant updates in their web apps. It's simple to operate since we already use Postgres, and it scales to millions of updates per day.<br />
 > *&mdash; [Matt Aitken](https://www.linkedin.com/in/mattaitken1985), Founder &amp; CEO, [Trigger.dev](https://trigger.dev)*
@@ -75,13 +74,15 @@ You can also see how large-scale apps built with Electric feel to use with our u
     <img :src="LinearLiteScreenshotPNG" />
   </a>
   <figcaption>
-    Screenshot of the Linearlite demo. Click on it to open the app.
+    Screenshot of Linearlite. Click on it to [open the demo](https://linearlite.electric-sql.com).
   </figcaption>
 </figure>
 
 ## Easy to adopt
 
-Our APIs are now stable. There will be no breaking changes in minor or patch releases moving forward. Our [documentation](/docs/intro) has good entry points, like the [Quickstart](/docs/quickstart) and comprehensive guides for common topics like:
+Our APIs are now stable. There will be no breaking changes in minor or patch releases moving forward.
+
+Our [documentation](/docs/intro) is comprehensive, with good entry points, like the [Quickstart](/docs/quickstart), and guides for common topics like:
 
 - how to do [authentication and authorization](/docs/guides/auth)
 - how to handle [local writes and write path sync](/docs/guides/writes)
@@ -142,7 +143,7 @@ This works with *any* Postgres [data model and host](/docs/guides/deployment), a
 
 ### With your existing API
 
-Because Electric syncs over HTTP, you can use it together [with your existing API](#blog-post).
+Because Electric syncs [over HTTP](/docs/api/http), you can use it together [with your existing API](#blog-post).
 
 This allows you to handle concerns like [auth](/docs/guides/auth) and [writes](/docs/guides/writes) with your existing code and web service integrations. You don't need to codify your auth logic into database rules. You don't need to replace your API endpoints and middleware stack.
 
