@@ -78,7 +78,7 @@ export default defineConfig({
     logo: '/img/brand/logo.svg',
     nav: [
       { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
-      { text: 'Use cases', link: '/use-cases/state-transfer', activeMatch: '/use-cases/' },
+      { text: 'Use cases', link: '/use-cases/data-sync', activeMatch: '/use-cases/' },
       { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/'},
       { text: 'Blog', link: '/blog', activeMatch: '/blog/'},
       { text: 'About', link: '/about/community', activeMatch: '/about/'}
@@ -106,7 +106,7 @@ export default defineConfig({
           items: [
             {
               text: 'Replace data fetching with data sync',
-              link: '/use-cases/state-transfer'
+              link: '/use-cases/data-sync'
             },
             {
               text: 'Build resilient software that works offline',
