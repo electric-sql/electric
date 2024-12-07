@@ -12,6 +12,8 @@ import {
   MissingHeadersError,
 } from './error'
 
+import url from 'urlite/extra'
+
 // Some specific 4xx and 5xx HTTP status codes that we definitely
 // want to retry
 const HTTP_RETRY_STATUS_CODES = [429]
@@ -176,15 +178,16 @@ export function createFetchWithResponseHeadersCheck(
 
       const input = args[0]
       const urlString = input.toString()
-      const url = new URL(urlString)
-      if (url.searchParams.get(LIVE_QUERY_PARAM) === `true`) {
+      const parsedUrl = url.parse(urlString)
+
+      const liveConnection = parsedUrl.search.live === 'true'
+      const notLiveConnection = !liveConnection
+
+      if (liveConnection) {
         addMissingHeaders(requiredLiveResponseHeaders)
       }
 
-      if (
-        !url.searchParams.has(LIVE_QUERY_PARAM) ||
-        url.searchParams.get(LIVE_QUERY_PARAM) === `false`
-      ) {
+      if (notLiveConnection) {
         addMissingHeaders(requiredNonLiveResponseHeaders)
       }
 

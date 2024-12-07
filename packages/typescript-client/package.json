@@ -29,7 +29,9 @@
     "url": "https://github.com/electric-sql/electric/issues"
   },
   "homepage": "https://electric-sql.com",
-  "dependencies": {},
+  "dependencies": {
+    "urlite": "^3.1.0"
+  },
   "devDependencies": {
     "@types/pg": "^8.11.6",
     "@types/uuid": "^10.0.0",
