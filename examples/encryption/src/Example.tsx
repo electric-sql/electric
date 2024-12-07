@@ -142,7 +142,6 @@ export const Example = () => {
     form.reset()
   }
 
-
   if (items === undefined) {
     return <div>Loading...</div>
   }
