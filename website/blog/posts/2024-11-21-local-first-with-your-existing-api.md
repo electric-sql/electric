@@ -148,20 +148,196 @@ In fact, whatever you want to do to the replication stream &mdash; [encrypt](#en
 
 ## Using your existing API
 
-So far, above, we've seen that Electric handles read-path sync and leaves [writes](#writes) up to you. We've seen how it syncs over HTTP and how this allows you to implement [auth](#) and other concerns like [encryption](#) and [filtering](#) using proxies.
+So far, above, we've seen that Electric handles read-path sync and leaves [writes](#writes) up to you. We've seen how it syncs over HTTP and how this allows you to implement [auth](#auth) and other concerns like [encryption](#encryption) and [filtering](#filtering) using proxies.
 
 Now, let's now dive in to these aspects and see exactly how to implement them using your existing API. With code samples and links to example apps.
 
 ### Auth
 
+if you're [upgrading from data fetch to data sync](#), you typically authorise access to data in a controller or middleware layer
 
-authorization services
+for many sync engines, you cut out this layer and need to migrate this auth logic to database rules;
+e.g.: couch, firebase, Postgres RLS
+
+because Electric syncs over HTTP and the shape is an http resource
+don't need to do this
+you can just route the request to Electric through an HTTP proxy that you control
+
+> ... `authorizing-proxy.png` ...
+
+this can be your existing backend API
+or, if you're running Electric behind a CDN, this can be an edge function in front of the CDN
+e.g. using Cloudflare or Supabase
+
+you can see this pattern implemented in the
+=> proxy auth
+
+can also use external auth services in the proxy
+=> authzed using zanzibar for consistent distributed auth
+
+also use a token based approach
+using your api to generate the tokens
+=> gatekeeper auth
+
+this actually has three examples for authorising the tokens:
+
+> <<< api endpoint
+> <<< caddy config
+> <<< edge worker
+
+then in the client, you're using standard fetch
+=> typescript client supports headers, error handling and a custom fetch client
+=> e.g.: gatekeeper client.ts
 
 ### Writes
 
-  - in tandem with existing client-side primitives for optimistic state
+you can write to Postgres any way you like
+those dotted arrows on the outside
+that's you
+
+> /img/api/shape-log.png
+
+there's a comprehensive Writes guide and write-patterns example that walks through a range of options for this.
+You can see a number of the examples that use an API writes, including:
+
+- Linearlite
+- Phoenix LiveView
+- TanStack
+
+And there are other frameworks you can use, including
+
+- LiveStore
+- TinyBase
+
+To highlight a couple of the key patterns, let's look at the shared API server for the write-patterns example:
+
+<<< @api.js
+
+It exposes the write methods of a REST API for a table of todos. Specifically:
+
+- `POST {todo} /todos` to create a todo
+- `PUT {partial-todo} /todos/:id` to update
+- `DELETE /todos/:id` to delete
+
+If you then look at the optimistic state example, you can see this being used, in tandem with Electric sync for the read path:
+
+<<< @index.tsx
+
+Data syncs into the component using `useShape`. Writes are made using an API client to `POST` / `PUT` / `DELETE` data to the API. The app is still setup to support local, offline writes using optimistic state. There are various ways of handling local state and concurrency. The Writes guide goes into these in detail for different patterns, including:
+
+- online writes
+- optimistic state
+- shared persistent optimistic state
+- through the DB sync
+
+Just to give a sense of it here, the last pattern, through the DB sync, uses Electric with an embedded PGlite database. It defines a local database schema with an immutable `todos_synced` table for synced data and a mutable `todos_local` table for local optimistic state. It wraps these up into a `todos` view that provides a single table interface to the application code.
+
+All the application code needs to do is read and write to and from the `todos` "table". The database schema takes care of everything else, including keeping a log of local changes to send to the server, in a `changes` table. This is then processed in the example by a minimal implementation of a sync utility:
+
+<<< @sync.ts
+
+You can choose with these patterns how far you go into the complexities of concurrency, merge logic, rollbacks, etc. However you handle those, the point here is that the writes are all still being made via the API. The sync utility just shown ultimately sends data to a `POST {transactions} /changes` endpoint defined in the shared API server further above.
+
+Whether this is your existing API or a new service you implement is up to you. Either wau, it's just a web service. You can use your existing stack and you can authorise writes just as we illustrated authorizing reads above.
 
 ### Encryption
+
+electric syncs cyphertext as well as it syncs plaintext
+you can encrypt data on and off the local client
+  when it comes off the replication stream
+  and when you send it off the device when sending or syncing a local write
+
+```tsx
+import { v4 as uuidv4 } from 'uuid'
+import { useShape } from '@electric-sql/react'
+
+type Item = {
+  id: string
+  plaintext: string
+}
+type EncryptedItem = {
+  id: string
+  ciphertext: ArrayBuffer,
+  iv: Uint32Array
+}
+
+// Generate an encryption key.
+// Real apps might use different keys per app, tenant, group, user, row, etc.
+// You can use Electric to sync keys between users.
+const symmetric = {
+  name: "AES-GCM",
+  length: 256
+}
+const key = await crypto.subtle.generateKey(symmetric, true, ["encrypt", "decrypt"])
+
+async function encrypt(item: Item): Promise<EncryptedItem> {
+  const { id, plaintext } = item
+
+  const enc = new TextEncoder()
+  const encoded = enc.encode(plaintext)
+
+  const iv = crypto.getRandomValues(new Uint32Array(16))
+  const ciphertext = await crypto.subtle.encrypt({iv, name: "AES-GCM"}, key, encoded)
+
+  return {
+    id,
+    ciphertext,
+    iv
+  }
+}
+
+async function decrypt(item: EncryptedItem): Promise<Item> {
+  const { id, ciphertext, iv } = item
+
+  let decrypted = await crypto.subtle.decrypt({name: "AES-GCM", iv: iv}, key, ciphertext)
+
+  const dec = new TextDecoder()
+  const plaintext = dec.decode(decrypted)
+
+  return {
+    id,
+    plaintext
+  }
+}
+
+const MyComponent = () => {
+  const { rows } = useShape({
+    url: `https://electric.example.com/v1/shape`,
+    params: {
+      table: 'items'
+    }
+  })
+
+  const items = rows ? rows.map(row => decrypt(row)) : []
+
+  createItem() {
+    item
+  }
+
+  return (
+    <List items="items" />
+    <form onSubmit={createItem}>
+        <input type="text" name="todo"
+            placeholder="Type here &hellip;"
+            required
+        />
+        <button type="submit">
+          Add
+        </button>
+      </form>
+  )
+}
+```
+
+
+in a way, it becomes a key management challenge
+and, of course, you can use electric to sync keys
+the same way you can use electric to sync any dist config
+  for example, we're using Electric to build Electric cloud
+  specifically to sync routing data into edge workers
+
+
+
 
 
 ### Filtering
