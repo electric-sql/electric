@@ -127,7 +127,10 @@ const MyComponent = () => {
 }
 ```
 
-You can go much further with Electric, all the way to [syncing into a local database](/product/pglite). But you can do this *incrementally* as and when you need to. All you need to start migrating an existing cloud-first, web-service based app to local-first is to start swapping out your data fetching calls for read-path sync.
+You can go much further with Electric, all the way to [syncing into a local database](/product/pglite). But you can do this *incrementally* as and when you need to. For example:
+
+- [Trigger.dev](https://trigger.dev/) started with Electric by using it to sync job status data into their [Realtime product](https://trigger.dev/launchweek/0/realtime)
+- [Otto](https://ottogrid.ai) started by swapping out the way they loaded data into their AI spreadsheet
 
 #### Read-path
 
