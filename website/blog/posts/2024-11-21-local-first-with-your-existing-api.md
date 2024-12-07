@@ -81,7 +81,7 @@ To build local-first you have to have the data locally. If you're doing that wit
   </a>
 </figure>
 
-This is why you need [data sync](/use-cases/data-sync). To keep the local data fresh when it changes. Happily, this is exactly what Electric does. It [syncs data into local apps and services](/product/electric) and keeps it fresh for you.
+This is why you need [data sync](/use-cases/state-transfer). To keep the local data fresh when it changes. Happily, this is exactly what Electric does. It [syncs data into local apps and services](/product/electric) and keeps it fresh for you.
 
 Practically what does this look like? Well, instead of fetching data using web service calls, i.e.: something like this:
 
