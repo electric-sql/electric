@@ -17,7 +17,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@electric-sql/experimental": "workspace:*",
     "@electric-sql/react": "workspace:*",
     "base64-js": "^1.5.1",
     "body-parser": "^1.20.2",
