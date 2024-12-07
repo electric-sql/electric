@@ -18,9 +18,9 @@ type EncryptedItem = {
 const API_URL = import.meta.env.API_URL || 'http://localhost:3001'
 const ELECTRIC_URL = import.meta.env.ELECTRIC_URL ?? 'http://localhost:3000'
 
-// For this example, we hardcode an deterministic key that works across
-// page loads. In a real app, you would implement a key management strategy.
-// Electric is great at syncing keys between users :)
+// For this example, we hardcode a deterministic key that works across page loads.
+// In a real app, you would implement a key management strategy. Electric is great
+// at syncing keys between users :)
 const rawKey = new Uint8Array(16)
 const key = await crypto.subtle.importKey('raw', rawKey, 'AES-GCM', true, [
   'encrypt',
