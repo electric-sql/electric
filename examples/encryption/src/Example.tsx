@@ -27,8 +27,9 @@ const key = await crypto.subtle.importKey('raw', rawKey, 'AES-GCM', true, [
   'decrypt',
 ])
 
-console.log(key, 'key')
-
+/*
+ * Encrypt an `Item` into an `EncryptedItem`.
+ */
 async function encrypt(item: Item): Promise<EncryptedItem> {
   const { id, title } = item
 
@@ -55,6 +56,9 @@ async function encrypt(item: Item): Promise<EncryptedItem> {
   }
 }
 
+/*
+ * Decrypt an `EncryptedItem` to an `Item`.
+ */
 async function decrypt(item: EncryptedItem): Promise<Item> {
   const { id, ciphertext, iv: iv_str } = item
 
@@ -79,35 +83,6 @@ async function decrypt(item: EncryptedItem): Promise<Item> {
   }
 }
 
-async function createItem(event: React.FormEvent) {
-  event.preventDefault()
-
-  const form = event.target as HTMLFormElement
-  const formData = new FormData(form)
-  const title = formData.get('title') as string
-
-  const id = uuidv4()
-  const item = {
-    id,
-    title,
-  }
-
-  const data = await encrypt(item)
-
-  const url = `${API_URL}/items`
-  const options = {
-    method: 'POST',
-    body: JSON.stringify(data),
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  }
-
-  await fetch(url, options)
-
-  form.reset()
-}
-
 export const Example = () => {
   const [items, setItems] = useState<Item[]>()
 
@@ -120,8 +95,8 @@ export const Example = () => {
 
   const rows = data !== undefined ? data : []
 
-  // There are more efficient ways of updating the state than always
-  // decrypting all items on any change but just to demonstate ...
+  // There are more efficient ways of updating state than always decrypting
+  // all the items on any change but just to demonstate the decryption ...
   useEffect(() => {
     async function init() {
       const items = await Promise.all(
@@ -133,6 +108,40 @@ export const Example = () => {
 
     init()
   }, [rows])
+
+  /*
+   * Handle adding an item by creating the item data, encrypting it
+   * and sending it to the API
+   */
+  async function createItem(event: React.FormEvent) {
+    event.preventDefault()
+
+    const form = event.target as HTMLFormElement
+    const formData = new FormData(form)
+    const title = formData.get('title') as string
+
+    const id = uuidv4()
+    const item = {
+      id,
+      title,
+    }
+
+    const data = await encrypt(item)
+
+    const url = `${API_URL}/items`
+    const options = {
+      method: 'POST',
+      body: JSON.stringify(data),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+
+    await fetch(url, options)
+
+    form.reset()
+  }
+
 
   if (items === undefined) {
     return <div>Loading...</div>
