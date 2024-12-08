@@ -27,3 +27,16 @@ export const parseToDecoder = {
     return decoding.createDecoder(uint8Array)
   },
 }
+
+export const parseToDecoderLazy = {
+  bytea: (hexString: string) => () => {
+    const uint8Array = hexStringToUint8Array(hexString)
+    return decoding.createDecoder(uint8Array)
+  },
+}
+
+export const paserToTimestamptz = {
+  timestamptz: (timestamp: string) => {
+    return new Date(timestamp)
+  },
+}

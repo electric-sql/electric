@@ -13,7 +13,7 @@ import {
   Offset,
   ShapeStream,
 } from "@electric-sql/client"
-import { parseToDecoder } from "./utils"
+import { parseToDecoder, parseToDecoderLazy, paserToTimestamptz } from "./utils"
 import { IndexeddbPersistence } from "y-indexeddb"
 
 type OperationMessage = {
@@ -21,9 +21,10 @@ type OperationMessage = {
 }
 
 type AwarenessMessage = {
-  op: decoding.Decoder
+  op: () => decoding.Decoder
   clientId: string
   room: string
+  updated: Date
 }
 
 type ObservableProvider = {
@@ -35,6 +36,9 @@ type ObservableProvider = {
   // eslint-disable-next-line quotes
   "connection-close": () => void
 }
+
+// from yjs docs, need to check if is configurable
+const awarenessPingPeriod = 30000 //ms
 
 const messageSync = 0
 
@@ -284,7 +288,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
         url: this.baseUrl,
         where: `room = '${this.roomName}'`,
         table: `ydoc_awareness`,
-        parser: parseToDecoder,
+        parser: { ...parseToDecoderLazy, ...paserToTimestamptz },
         ...this.resume.awareness,
       })
 
@@ -328,9 +332,14 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
       const handleAwarenessMessage = (
         messages: Message<AwarenessMessage>[]
       ) => {
+        const minTime = new Date(Date.now() - awarenessPingPeriod)
         messages.forEach((message) => {
           if (isChangeMessage(message) && message.value.op) {
-            const decoder = message.value.op
+            if (message.value.updated < minTime) {
+              return
+            }
+
+            const decoder = message.value.op()
             awarenessProtocol.applyAwarenessUpdate(
               this.awareness!,
               decoding.readVarUint8Array(decoder),
