@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import { defineConfig } from 'vitepress'
+import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 
 import postsData from '../data/posts.data.ts'
 
@@ -51,7 +52,10 @@ export default defineConfig({
       'sql',
       'tsx',
       'typescript'
-    ]
+    ],
+    config(md) {
+      md.use(tabsMarkdownPlugin)
+    }
   },
   rewrites(id) {
     if (id.startsWith('blog/posts')) {
@@ -154,10 +158,11 @@ export default defineConfig({
           items: [
             { text: 'Auth', link: '/docs/guides/auth' },
             { text: 'Shapes', link: '/docs/guides/shapes' },
+            { text: 'Writes', link: '/docs/guides/writes' },
             { text: 'Installation', link: '/docs/guides/installation' },
             { text: 'Deployment', link: '/docs/guides/deployment' },
             { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
-            { text: 'Writing your own client', link: '/docs/guides/writing-your-own-client' },
+            { text: 'Client development', link: '/docs/guides/client-development' },
           ]
         },
         {

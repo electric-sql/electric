@@ -46,7 +46,7 @@ export type ShapeChangedCallback<T extends Row<unknown> = Row> = (data: {
  *     })
  */
 export class Shape<T extends Row<unknown> = Row> {
-  readonly #stream: ShapeStreamInterface<T>
+  readonly stream: ShapeStreamInterface<T>
 
   readonly #data: ShapeData<T> = new Map()
   readonly #subscribers = new Map<number, ShapeChangedCallback<T>>()
@@ -55,23 +55,23 @@ export class Shape<T extends Row<unknown> = Row> {
   #error: FetchError | false = false
 
   constructor(stream: ShapeStreamInterface<T>) {
-    this.#stream = stream
-    this.#stream.subscribe(
+    this.stream = stream
+    this.stream.subscribe(
       this.#process.bind(this),
       this.#handleError.bind(this)
     )
   }
 
   get isUpToDate(): boolean {
-    return this.#stream.isUpToDate
+    return this.stream.isUpToDate
   }
 
   get lastOffset(): Offset {
-    return this.#stream.lastOffset
+    return this.stream.lastOffset
   }
 
   get handle(): string | undefined {
-    return this.#stream.shapeHandle
+    return this.stream.shapeHandle
   }
 
   get rows(): Promise<T[]> {
@@ -84,7 +84,7 @@ export class Shape<T extends Row<unknown> = Row> {
 
   get value(): Promise<ShapeData<T>> {
     return new Promise((resolve, reject) => {
-      if (this.#stream.isUpToDate) {
+      if (this.stream.isUpToDate) {
         resolve(this.currentValue)
       } else {
         const unsubscribe = this.subscribe(({ value }) => {
@@ -106,22 +106,22 @@ export class Shape<T extends Row<unknown> = Row> {
 
   /** Unix time at which we last synced. Undefined when `isLoading` is true. */
   lastSyncedAt(): number | undefined {
-    return this.#stream.lastSyncedAt()
+    return this.stream.lastSyncedAt()
   }
 
   /** Time elapsed since last sync (in ms). Infinity if we did not yet sync. */
   lastSynced() {
-    return this.#stream.lastSynced()
+    return this.stream.lastSynced()
   }
 
   /** True during initial fetch. False afterwise.  */
   isLoading() {
-    return this.#stream.isLoading()
+    return this.stream.isLoading()
   }
 
   /** Indicates if we are connected to the Electric sync service. */
   isConnected(): boolean {
-    return this.#stream.isConnected()
+    return this.stream.isConnected()
   }
 
   subscribe(callback: ShapeChangedCallback<T>): () => void {

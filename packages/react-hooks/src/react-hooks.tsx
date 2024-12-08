@@ -102,6 +102,11 @@ export interface UseShapeResult<T extends Row<unknown> = Row> {
    * @type {Shape<T>}
    */
   shape: Shape<T>
+  /**
+   * The ShapeStream instance used by this Shape
+   * @type {ShapeStream<T>}
+   */
+  stream: ShapeStream<T>
   /** True during initial fetch. False afterwise. */
   isLoading: boolean
   /** Unix time at which we last synced. Undefined when `isLoading` is true. */
@@ -129,6 +134,7 @@ function parseShapeData<T extends Row<unknown>>(
     lastSyncedAt: shape.lastSyncedAt(),
     isError: shape.error !== false,
     shape,
+    stream: shape.stream as ShapeStream<T>,
     error: shape.error,
   }
 }

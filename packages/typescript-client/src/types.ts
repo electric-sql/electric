@@ -23,6 +23,8 @@ interface Header {
   [key: Exclude<string, `operation` | `control`>]: Value
 }
 
+export type Operation = `insert` | `update` | `delete`
+
 export type ControlMessage = {
   headers: Header & { control: `up-to-date` | `must-refetch` }
 }
@@ -30,7 +32,7 @@ export type ControlMessage = {
 export type ChangeMessage<T extends Row<unknown> = Row> = {
   key: string
   value: T
-  headers: Header & { operation: `insert` | `update` | `delete` }
+  headers: Header & { operation: Operation }
   offset: Offset
 }
 

@@ -11,6 +11,10 @@ import SyncShapeJPG from '/static/img/docs/guides/shapes/sync-shape.jpg?url'
 import SyncShapePNG from '/static/img/docs/guides/shapes/sync-shape.png?url'
 </script>
 
+<img src="/img/icons/shapes.svg"
+    class="product-icon"
+/>
+
 # Shapes
 
 Shapes are the core primitive for controlling sync in the ElectricSQL system.
