@@ -42,7 +42,7 @@ defmodule Electric.Client.MockTest do
       Client.Mock.response(client,
         status: 200,
         schema: %{id: %{type: "int8"}},
-        last_offset: Offset.new(0, 0),
+        last_offset: Offset.new(0, 1),
         shape_handle: "my-shape",
         body: [
           Client.Mock.change(value: %{id: "4444"}),
@@ -60,7 +60,7 @@ defmodule Electric.Client.MockTest do
              %ChangeMessage{value: %{"id" => 2222}},
              %ChangeMessage{value: %{"id" => 3333}},
              %ChangeMessage{value: %{"id" => 4444}},
-             up_to_date0()
+             up_to_date()
            ] = events
   end
 end

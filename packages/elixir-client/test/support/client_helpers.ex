@@ -4,7 +4,7 @@ defmodule Support.ClientHelpers do
 
   defmacro offset(tx, op), do: quote(do: %Offset{tx: unquote(tx), op: unquote(op)})
 
-  defmacro offset0, do: quote(do: offset(0, 0))
+  defmacro offset0, do: quote(do: offset(0, :infinity))
 
   defmacro up_to_date() do
     quote(do: %ControlMessage{control: :up_to_date, offset: %Offset{tx: _, op: _}})
@@ -19,5 +19,5 @@ defmodule Support.ClientHelpers do
     )
   end
 
-  defmacro up_to_date0(), do: quote(do: up_to_date(0, 0))
+  defmacro up_to_date0(), do: quote(do: up_to_date(0, :infinity))
 end
