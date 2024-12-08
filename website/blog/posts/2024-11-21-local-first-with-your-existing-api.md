@@ -17,6 +17,39 @@ import AuthorizingProxySmall from '/static/img/docs/guides/auth/authorizing-prox
 import AuthorizingProxyJPG from '/static/img/docs/guides/auth/authorizing-proxy.jpg?url'
 import BrowserConsolePNG from '/static/img/blog/browser-console.png?url'
 import NoStaleDataJGP from '/static/img/blog/no-stale-data.jpg?url'
+
+import { onMounted } from 'vue'
+
+import { data as initialStarCounts } from '../../data/count.data.ts'
+import { getStarCount } from '../../src/lib/star-count.ts'
+
+const formatStarCount = (count) => (
+  `<span class="muted">(</span><span> ☆ </span><span>${Math.round(count / 100) / 10}k</span><span> </span><span class="muted">)</span>`
+)
+
+const renderStarCount = async (repoName, initialStarCount) => {
+  const links = document.querySelectorAll(
+    `.actions a[href="https://github.com/electric-sql/${repoName}"]`
+  )
+  links.forEach(async (link) => {
+    link.innerHTML = '<span class="vpi-social-github"></span> GitHub&nbsp;'
+
+    const countEl = document.createElement('span')
+    countEl.classList.add('count')
+    countEl.innerHTML = formatStarCount(initialStarCount)
+
+    link.append(countEl)
+
+    const count = await getStarCount(repoName, initialStarCount)
+    countEl.innerHTML = formatStarCount(count)
+  })
+}
+
+onMounted(async () => {
+  if (typeof window !== 'undefined' && document.querySelector) {
+    renderStarCount('electric', initialStarCounts.electric)
+  }
+})
 </script>
 
 One of the exciting things about [local-first software](/use-cases/local-first-software) is the potential to eliminate APIs and microservices. Instead of coding across the network, you code against a local store, data syncs in the background and your stack is suddenly much simpler.
@@ -340,9 +373,7 @@ The [Typescript client](/docs/api/clients/typescript) supports auth headers and 
 
 ### Writes
 
-you can write to Postgres any way you like
-those dotted arrows on the outside
-that's you
+Electric does [read-path](#read-path) sync. That's the bit between Postgres and the client in the diagramme below. Electric **does not** handle writes. That's the dashed blue arrows around the outside, back from the client into Postgres:
 
 <figure>
   <a href="/img/api/shape-log.jpg">
@@ -352,76 +383,99 @@ that's you
         alt="Shape log flow diagramme"
     />
   </a>
-  <figcaption class="figure-caption text-end">
-    Shape log flow diagramme.
-  </figcaption>
 </figure>
 
-there's a comprehensive Writes guide and write-patterns example that walks through a range of options for this.
-You can see a number of the examples that use an API writes, including:
+Instead, Electric is designed for you to implement writes yourself, using whichever pattern you prefer. There's a comprehensive [Writes guide](/docs/guides/writes) and [write-patterns example](https://github.com/electric-sql/electric/tree/main/examples/write-patterns) that walks through a range of approaches for this that all use your existing API.
 
-- Linearlite
-- Phoenix LiveView
-- TanStack
+You can also see a number of the examples that use an API for writes, including the [linearlite](https://github.com/electric-sql/electric/tree/main/examples/linearlite), [phoenix-liveview](https://github.com/electric-sql/electric/tree/main/examples/phoenix-liveview) and [tanstack](https://github.com/electric-sql/electric/tree/main/examples/tanstack-example) examples.
 
-And there are other frameworks you can use, including
+#### API server
 
-- LiveStore
-- TinyBase
-
-To highlight a couple of the key patterns, let's look at the shared API server for the write-patterns example:
-
-<<< @../../examples/write-patterns/shared/backend/api.js{js}
-
-It exposes the write methods of a REST API for a table of todos. Specifically:
+To highlight a couple of the key patterns, let's look at the shared API server for the write-patterns example. It is a standard Node / Express app exposes the write methods of a REST API for a table of todos:
 
 - `POST {todo} /todos` to create a todo
 - `PUT {partial-todo} /todos/:id` to update
 - `DELETE /todos/:id` to delete
 
-If you then look at the optimistic state example, you can see this being used, in tandem with Electric sync for the read path:
+<<< @../../examples/write-patterns/shared/backend/api.js{js}
+
+#### Optimistic writes
+
+If you then look at the [optimistic state pattern](/docs/guides/writes#optimistic-state) (one of the approaches illustrated in the write-patterns example) you can see this being used, together with Electric sync, to support instant, local, offline-capable writes:
 
 <<< @../../examples/write-patterns/patterns/2-optimistic-state/index.tsx{tsx}
 
-Data syncs into the component using `useShape`. Writes are made using an API client to `POST` / `PUT` / `DELETE` data to the API. The app is still setup to support local, offline writes using optimistic state. There are various ways of handling local state and concurrency. The Writes guide goes into these in detail for different patterns, including:
+Data syncs into the component using `useShape`. Writes are made using an API client to `POST` / `PUT` / `DELETE` data to the API. The apps support local, offline writes using optimistic state. All through your API. Alongside Electric handling the read-path.
 
-- online writes
-- optimistic state
-- shared persistent optimistic state
-- through the DB sync
+You can also see the [shared persistent optimistic state](https://github.com/electric-sql/electric/tree/main/examples/write-ptterns/patterns/3-shared-persistent) pattern for a more resilient, comprehensive approach to building local-first apps with Electric on optimistic state.
 
-Just to give a sense of it here, the last pattern, through the DB sync, uses Electric with an embedded PGlite database. It defines a local database schema with an immutable `todos_synced` table for synced data and a mutable `todos_local` table for local optimistic state. It wraps these up into a `todos` view that provides a single table interface to the application code.
+#### Write-path sync
 
-All the application code needs to do is read and write to and from the `todos` "table". The database schema takes care of everything else, including keeping a log of local changes to send to the server, in a `changes` table. This is then processed in the example by a minimal implementation of a sync utility:
+Another pattern covered in the Writes guide is [through the database sync](/docs/guides/writes#through-the-db). This approach uses Electric to sync into an local, embedded database and then syncs changes made to the local database back to Postgres, via your API.
+
+The [example implementation](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/4-through-the-db) uses Electric to sync into [PGlite](/product/pglite) as the local embedded database. It defines a local database schema with an immutable `todos_synced` table for synced data and a mutable `todos_local` table for local optimistic state. It wraps these up into a `todos` view that provides a single table interface to the application code.
+
+All the application code then needs to do is read and write to the local database. The [database schema](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) takes care of everything else, including keeping a log of local changes to send to the server. This is processed by a sync utility that looks like this:
 
 <<< @../../examples/write-patterns/patterns/4-through-the-db/sync.ts{ts}
 
-You can choose with these patterns how far you go into the complexities of concurrency, merge logic, rollbacks, etc. However you handle those, the point here is that the writes are all still being made via the API. The sync utility just shown ultimately sends data to a `POST {transactions} /changes` endpoint defined in the shared API server further above.
+This sends data to a:
 
-Whether this is your existing API or a new service you implement is up to you. Either wau, it's just a web service. You can use your existing stack and you can authorise writes just as we illustrated authorizing reads above.
+- `POST {transactions} /changes` endpoint
+
+Implemented in the [shared API server](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/shared/backend/api.js) shown above. Whether you implement this as part your existing API or a new service is up to you. Either way, it's just a web service, illustrating how you can handle write-path sync with your existing API.
+
+#### Authorizing writes
+
+Just as [with reads](#auth), because you're sending writes to an HTTP endpoint, you can use a proxy to authorize them.
 
 ### Encryption
 
-electric syncs ciphertext as well as it syncs plaintext
-you can encrypt data on and off the local client
-  when it comes off the replication stream
-  and when you send it off the device when sending or syncing a local write
+Electric syncs ciphertext as well as it syncs plaintext. You can encrypt data on and off the local client:
+
+- encrypt it before you send it from the client to your API
+- decrypt it when it comes into the client from the Electric replication stream
+
+You can see an example of this in the [encryption example](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/encryption):
 
 <<< @../../examples/encryption/src/Example.tsx{tsx}
 
-in a way, it becomes a key management challenge
-and, of course, you can use electric to sync keys
-the same way you can use electric to sync any dist config
-  for example, we're using Electric to build Electric cloud
-  specifically to sync routing data into edge workers
+The actual encryption/decryption here is simple. The main challenge is key management, i.e.: choosing which data to encrypt with which keys and sharing the right keys with the right users. There are some good patterns here like using a key per resource, such as a tenant, workspace or group. You can then encrypt data within that resource using a specific key and share the key with user when they get access to the resource (e.g.: when added to the group).
+
+Electric is good at syncing keys. For example, you could define a shape like:
+
+```ts
+const stream = new ShapeStream({
+  url: `${ELECTRIC_URL}/v1/shape`,
+  params: {
+    table: 'tenants',
+    columns: [
+      'keys'
+    ],
+    where: `id IN (${user.tenant_ids})`
+  }
+})
+```
+
+Either in your client or in your proxy. You could then put a denormalised `tenant_id` column on all of your rows and lookup the correct key to use when decrypting and encrypting the row.
 
 ### Filtering
 
-
+The [HTTP API](/docs/api/http) streams a log of change operations. You can intercept this at any level -- in your API, in a middleware proxy or when handling or materialising the log from a ShapeStream instance in the client.
 
 ## Using your existing tools
 
-the browser console.
+Because Electric syncs over HTTP, it integrates with standard debugging, visibility and monitoring tools.
+
+### Monitoring
+
+You can see Electric requests in your standard HTTP logs. You can catch errors and send them with request-specific context to systems like Sentry and AppSignal.
+
+You can debug on the command line [using `curl`](/docs/quickstart#http-api).
+
+### Browser console
+
+One of the most aspects of this is being able to see and easily introspect sync requests in the browser console. This allows you to see what data is being sent through when and also allows you to observe caching and and offline behaviour.
 
 <p style="max-width: 512px">
   <a :href="BrowserConsolePNG">
@@ -429,6 +483,25 @@ the browser console.
   </a>
 </p>
 
-- compose it anyway you like
-- writes, auth and encryption are all just examples of filtering and transforming a JSON HTTP stream
-- this is exactly what web frameworks were designed to do
+You don't need to implement custom tooling to get visibility in what's happening with Electric. It's not a black box when it comes to debugging in development and in production.
+
+## Next steps
+
+With Electric, you can develop local-first apps incrementally, using your existing API. You get the benefits of local-first, without having to re-engineer your stack.
+
+<div class="actions cta-actions page-footer-actions left">
+  <div class="action">
+    <VPButton
+        href="/docs/quickstart"
+        text="Quickstart"
+        theme="electric"
+    />
+  </div>
+  <div class="action">
+    <VPButton href="https://github.com/electric-sql/electric"
+        text="Star on GitHub"
+        target="_blank"
+        theme="alt"
+    />
+  </div>
+</div>
