@@ -14,7 +14,6 @@ const sql = process.env.NEON_DATABASE_URL ? neon(connectionString) : undefined
 const pool = !process.env.NEON_DATABASE_URL
   ? new Pool({ connectionString })
   : undefined
-let connected = false
 
 export async function POST(request: Request) {
   try {
@@ -26,7 +25,6 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({})
   } catch (e) {
-    connected = false
     const resp = e instanceof Error ? e.message : e
     return NextResponse.json(resp, { status: 400 })
   }
@@ -67,11 +65,6 @@ async function getRequestParams(
 async function runQuery(q: string, params: string[]) {
   console.log(`Running query: ${q} with params: ${params}`)
   if (pool) {
-    if (pool && !connected) {
-      await pool.connect()
-      connected = true
-    }
-
     await pool.query(q, params)
   } else if (sql) {
     await sql(q, params)

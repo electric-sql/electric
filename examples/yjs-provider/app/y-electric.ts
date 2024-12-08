@@ -7,7 +7,6 @@ import { ObservableV2 } from "lib0/observable"
 import * as env from "lib0/environment"
 import * as Y from "yjs"
 import {
-  FetchError,
   isChangeMessage,
   isControlMessage,
   Message,
@@ -37,15 +36,10 @@ type ObservableProvider = {
   "connection-close": () => void
 }
 
-// Awareness TODOs:
-// Notify other users of departure
-// Reload awareness state on reconnection
-// Don't apply state changes older than ping period
-
 const messageSync = 0
 
 export class ElectricProvider extends ObservableV2<ObservableProvider> {
-  private serverUrl: string
+  private baseUrl: string
   private roomName: string
   private doc: Y.Doc
   public awareness?: awarenessProtocol.Awareness
@@ -65,7 +59,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
     changed: { added: number[]; updated: number[]; removed: number[] },
     origin: string
   ) => void
-  private disconnectHandler?: () => void
+  private disconnectShapeHandler?: () => void
   private exitHandler?: () => void
 
   private persistence?: IndexeddbPersistence
@@ -74,6 +68,8 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
     operations?: { offset: Offset; handle: string }
     awareness?: { offset: Offset; handle: string }
   } = {}
+
+  private awarenessState: Record<string, any> | null = null
 
   constructor(
     serverUrl: string,
@@ -87,7 +83,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
   ) {
     super()
 
-    this.serverUrl = serverUrl
+    this.baseUrl = serverUrl + `/v1/shape`
     this.roomName = roomName
 
     this.doc = doc
@@ -121,14 +117,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
 
     if (env.isNode && typeof process !== `undefined`) {
       this.exitHandler = () => {
-        if (this.awareness) {
-          awarenessProtocol.removeAwarenessStates(
-            this.awareness,
-            [doc.clientID],
-            `app closed`
-          )
-        }
-        process.on(`exit`, () => this.exitHandler!())
+        process.on(`exit`, () => this.destroy())
       }
     }
 
@@ -137,14 +126,6 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
     } else if (options.connect) {
       this.connect()
     }
-  }
-
-  private get operationsUrl() {
-    return this.serverUrl + `/v1/shape`
-  }
-
-  private get awarenessUrl() {
-    return this.serverUrl + `/v1/shape`
   }
 
   get synced() {
@@ -206,8 +187,27 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
 
   disconnect() {
     this.shouldConnect = false
-    if (this.disconnectHandler) {
-      this.disconnectHandler()
+
+    if (this.awareness) {
+      this.awarenessState = this.awareness.getLocalState()
+
+      awarenessProtocol.removeAwarenessStates(
+        this.awareness,
+        Array.from(this.awareness.getStates().keys()).filter(
+          (client) => client !== this.doc.clientID
+        ),
+        this
+      )
+
+      awarenessProtocol.removeAwarenessStates(
+        this.awareness,
+        [this.doc.clientID],
+        `local`
+      )
+    }
+
+    if (this.disconnectShapeHandler) {
+      this.disconnectShapeHandler()
     }
   }
 
@@ -215,6 +215,10 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
     this.shouldConnect = true
     if (!this.connected && !this.operationsStream) {
       this.setupShapeStream()
+    }
+
+    if (this.awareness && this.awarenessState !== null) {
+      this.awareness.setLocalState(this.awarenessState)
     }
   }
 
@@ -268,7 +272,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
       console.log(`Setting up shape stream ${JSON.stringify(this.resume)}`)
 
       this.operationsStream = new ShapeStream<OperationMessage>({
-        url: this.operationsUrl,
+        url: this.baseUrl,
         table: `ydoc_operations`,
         where: `room = '${this.roomName}'`,
         parser: parseToDecoder,
@@ -277,24 +281,21 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
       })
 
       this.awarenessStream = new ShapeStream({
-        url: this.awarenessUrl,
+        url: this.baseUrl,
         where: `room = '${this.roomName}'`,
         table: `ydoc_awareness`,
         parser: parseToDecoder,
         ...this.resume.awareness,
       })
 
-      const errorHandler = (e: FetchError | Error) => {
-        throw e
-      }
-
       // we probably want to extract this code
       // save state per user
       const updateShapeState = (
-        name: `operation` | `awareness`,
+        name: `operations` | `awareness`,
         offset: Offset,
         handle: string
       ) => {
+        this.resume[name] = { offset, handle }
         this.persistence?.set(`${name}_offset`, offset)
         this.persistence?.set(`${name}_handle`, handle)
       }
@@ -313,7 +314,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
             this.synced = true
 
             updateShapeState(
-              `operation`,
+              `operations`,
               this.operationsStream!.lastOffset,
               this.operationsStream!.shapeHandle
             )
@@ -321,10 +322,8 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
         })
       }
 
-      const unsubscribeSyncHandler = this.operationsStream.subscribe(
-        handleSyncMessage,
-        errorHandler
-      )
+      const unsubscribeSyncHandler =
+        this.operationsStream.subscribe(handleSyncMessage)
 
       const handleAwarenessMessage = (
         messages: Message<AwarenessMessage>[]
@@ -348,73 +347,53 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
       }
 
       const unsubscribeAwarenessHandler = this.awarenessStream.subscribe(
-        handleAwarenessMessage,
-        errorHandler
+        handleAwarenessMessage
       )
 
-      this.disconnectHandler = () => {
+      this.disconnectShapeHandler = () => {
         this.operationsStream = undefined
         this.awarenessStream = undefined
 
         if (this.connected) {
-          this.connected = false
-
-          this.synced = false
-
-          if (this.awareness) {
-            awarenessProtocol.removeAwarenessStates(
-              this.awareness,
-              Array.from(this.awareness.getStates().keys()).filter(
-                (client) => client !== this.doc.clientID
-              ),
-              this
-            )
-            this.sendAwareness([this.doc.clientID])
-          }
           this.lastSyncedStateVector = Y.encodeStateVector(this.doc)
           this.persistence?.set(
             `last_synced_state_vector`,
             this.lastSyncedStateVector
           )
+
+          this.connected = false
+          this.synced = false
           this.emit(`status`, [{ status: `disconnected` }])
         }
 
         unsubscribeSyncHandler()
         unsubscribeAwarenessHandler()
-        this.disconnectHandler = undefined
+        this.disconnectShapeHandler = undefined
         this.emit(`connection-close`, [])
       }
 
-      // send pending changes
-      const unsubscribeOps = this.operationsStream!.subscribe(() => {
-        this.connected = true
+      const pushLocalChangesUnsubscribe = this.operationsStream!.subscribe(
+        () => {
+          this.connected = true
 
-        if (this.modifiedWhileOffline) {
-          const pendingUpdates = Y.encodeStateAsUpdate(
-            this.doc,
-            this.lastSyncedStateVector
-          )
-          const encoderState = encoding.createEncoder()
-          syncProtocol.writeUpdate(encoderState, pendingUpdates)
+          if (this.modifiedWhileOffline) {
+            const pendingUpdates = Y.encodeStateAsUpdate(
+              this.doc,
+              this.lastSyncedStateVector
+            )
+            const encoderState = encoding.createEncoder()
+            syncProtocol.writeUpdate(encoderState, pendingUpdates)
 
-          this.sendOperation(pendingUpdates).then(() => {
-            this.lastSyncedStateVector = undefined
-            this.modifiedWhileOffline = false
-            this.persistence?.del(`last_synced_state_vector`)
-            this.emit(`status`, [{ status: `connected` }])
-          })
-        }
-        unsubscribeOps()
-      })
-
-      if (this.awarenessStream) {
-        const unsubscribeAwareness = this.awarenessStream.subscribe(() => {
-          if (this.awareness!.getLocalState() !== null) {
-            this.sendAwareness([this.doc.clientID])
+            this.sendOperation(pendingUpdates).then(() => {
+              this.lastSyncedStateVector = undefined
+              this.modifiedWhileOffline = false
+              this.persistence?.del(`last_synced_state_vector`)
+              this.emit(`status`, [{ status: `connected` }])
+            })
           }
-          unsubscribeAwareness()
-        })
-      }
+          pushLocalChangesUnsubscribe()
+        }
+      )
 
       this.emit(`status`, [{ status: `connecting` }])
     }

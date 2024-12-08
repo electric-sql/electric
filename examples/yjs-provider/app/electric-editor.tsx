@@ -28,46 +28,49 @@ const usercolors = [
 
 const userColor = usercolors[random.uint32() % usercolors.length]
 const ydoc = new Y.Doc()
-let network: ElectricProvider | undefined
-let awareness: Awareness | undefined
+
+const isServer = typeof window === `undefined`
+
+const awareness = !isServer ? new Awareness(ydoc) : undefined
+awareness?.setLocalStateField(`user`, {
+  name: userColor.color,
+  color: userColor.color,
+  colorLight: userColor.light,
+})
+
+const network = !isServer
+  ? new ElectricProvider(
+      new URL(`/shape-proxy`, window?.location.origin).href,
+      room,
+      ydoc,
+      {
+        connect: true,
+        awareness,
+        persistence: new IndexeddbPersistence(room, ydoc),
+      }
+    )
+  : undefined
 
 export default function ElectricEditor() {
   const editor = useRef(null)
 
-  const [connect, setConnect] = useState(`connected`)
+  const [connectivityStatus, setConnectivityStatus] = useState<
+    `connected` | `disconnected`
+  >(`connected`)
 
   const toggle = () => {
-    if (connect === `connected`) {
-      network?.disconnect()
-      setConnect(`disconnected`)
-    } else {
-      network?.connect()
-      setConnect(`connected`)
+    if (!network) {
+      return
     }
+    const toggleStatus =
+      connectivityStatus === `connected` ? `disconnected` : `connected`
+    setConnectivityStatus(toggleStatus)
+    toggleStatus === "connected" ? network.connect() : network.disconnect()
   }
 
   useEffect(() => {
     if (typeof window === `undefined`) {
       return
-    }
-
-    if (typeof window !== `undefined` && !network) {
-      awareness = new Awareness(ydoc)
-      network = new ElectricProvider(
-        new URL(`/shape-proxy`, window?.location.origin).href,
-        room,
-        ydoc,
-        {
-          connect: true,
-          awareness,
-          persistence: new IndexeddbPersistence(room, ydoc),
-        }
-      )
-      awareness?.setLocalStateField(`user`, {
-        name: userColor.color,
-        color: userColor.color,
-        colorLight: userColor.light,
-      })
     }
 
     const ytext = ydoc.getText(room)
@@ -92,7 +95,7 @@ export default function ElectricEditor() {
     <div>
       <form action={async () => toggle()}>
         <button type="submit" className="button" name="intent" value="add">
-          {connect}
+          {connectivityStatus}
         </button>
       </form>
       <p>
