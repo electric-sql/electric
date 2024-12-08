@@ -49,7 +49,8 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             run_with_conn_fn: run_with_conn_fn,
             create_snapshot_fn: create_snapshot_fn,
             prepare_tables_fn: prepare_tables_fn_or_mfa,
-            stack_id: stack_id
+            stack_id: stack_id,
+            chunk_bytes_threshold: chunk_bytes_threshold
           } = state
 
           affected_tables = Shape.affected_tables(shape)
@@ -83,7 +84,8 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                       shape,
                       pool_conn,
                       storage,
-                      stack_id
+                      stack_id,
+                      chunk_bytes_threshold
                     ])
                   end
                 ])
@@ -125,7 +127,15 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   end
 
   @doc false
-  def query_in_readonly_txn(parent, shape_handle, shape, db_pool, storage, stack_id) do
+  def query_in_readonly_txn(
+        parent,
+        shape_handle,
+        shape,
+        db_pool,
+        storage,
+        stack_id,
+        chunk_bytes_threshold
+      ) do
     shape_attrs = shape_attrs(shape_handle, shape)
 
     Postgrex.transaction(
@@ -168,7 +178,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               end
             )
 
-            stream = Querying.stream_initial_data(conn, stack_id, shape)
+            stream = Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
 
             GenServer.cast(parent, {:snapshot_started, shape_handle})
 

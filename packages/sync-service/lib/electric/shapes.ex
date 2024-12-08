@@ -8,32 +8,18 @@ defmodule Electric.Shapes do
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
 
   @doc """
-  Get snapshot for the shape handle
+  Get the snapshot followed by the log.
   """
-  def get_snapshot(config, shape_handle) do
-    {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
-    storage = shape_storage(config, shape_handle)
-
-    if shape_cache.has_shape?(shape_handle, opts) do
-      with :started <- shape_cache.await_snapshot_start(shape_handle, opts) do
-        {:ok, Storage.get_snapshot(storage)}
-      end
-    else
-      {:error, "invalid shape_handle #{inspect(shape_handle)}"}
-    end
-  end
-
-  @doc """
-  Get stream of the log since a given offset
-  """
-  def get_log_stream(config, shape_handle, opts) do
+  def get_merged_log_stream(config, shape_handle, opts) do
     {shape_cache, shape_cache_opts} = Access.get(config, :shape_cache, {ShapeCache, []})
+    storage = shape_storage(config, shape_handle)
     offset = Access.get(opts, :since, LogOffset.before_all())
     max_offset = Access.get(opts, :up_to, LogOffset.last())
-    storage = shape_storage(config, shape_handle)
 
     if shape_cache.has_shape?(shape_handle, shape_cache_opts) do
-      Storage.get_log_stream(offset, max_offset, storage)
+      with :started <- shape_cache.await_snapshot_start(shape_handle, shape_cache_opts) do
+        Storage.get_log_stream(offset, max_offset, storage)
+      end
     else
       raise "Unknown shape: #{shape_handle}"
     end

@@ -94,7 +94,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     {hash, shape_handle} = Shape.generate_id(shape)
     # fresh snapshots always start with a zero offset - only once they
     # are folded into the log do we have non-zero offsets
-    offset = LogOffset.first()
+    offset = %LogOffset{LogOffset.last() | tx_offset: 0}
 
     true =
       :ets.insert_new(
