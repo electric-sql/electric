@@ -73,7 +73,7 @@ At first glance, a toaster seems like a pretty straightforward, standalone produ
 
 Your API is a toaster. It doesn't exist in isolation. It's tied into other systems, like your monitoring systems and the way you do migrations and deployment. It's hard to just rip it out, because then you break these integrations and ergonomics &mdash; and obviate your own tooling and operational experience.
 
-For example, REST APIs are stateless. We know how to scale them. We know how to debug them. They show up in the [browser console](#). Swapping them out is all very well in theory, but what happens with your new system when it goes down in production?
+For example, REST APIs are stateless. We know how to scale them. We know how to debug them. They show up in the [browser console](#browser-console). Swapping them out is all very well in theory, but what happens with your new system when it goes down in production?
 
 ### Electric's approach
 
@@ -97,7 +97,7 @@ As well as, optionally, other concerns like:
 - [encryption](#encryption)
 - [filtering](#filtering)
 
-Because Electric syncs data [over HTTP](#http-and-json), you can use existing middleware, integrations and instrumentation. Like [authorization services](#external-services) and [the browser console](#debugging-example).
+Because Electric syncs data [over HTTP](#http-and-json), you can use existing middleware, integrations and instrumentation. Like [authorization services](#external-services) and [the browser console](#browser-console).
 
 ### Electric sync
 
@@ -206,14 +206,14 @@ on todos for select
 using ( (select auth.uid()) = user_id );
 ```
 
-With Electric, you don't need to do this. Electric syncs [over HTTP](/docs/api/http). Specifically, you make HTTP requests to a [Shape](/docs/guides/shapes) endpoint (see
+With Electric, you don't need to do this. Electric syncs [over HTTP](/docs/api/http). You make HTTP requests to a [Shape](/docs/guides/shapes) endpoint (see
 <a href="/openapi.html#/paths/~1v1~1shape/get" target="_blank">spec here</a>) at:
 
 ```http
 GET /v1/shape
 ```
 
-Because this is an HTTP resource, you can authorize access to it just as you would any other web service resource: using HTTP middleware. Specifically, route the request to Electric through an authorizing proxy that you control:
+Because this is an HTTP resource, you can authorize access to it just as you would any other web service resource: using HTTP middleware. Route the request to Electric through an authorizing proxy that you control:
 
 <a :href="AuthorizingProxyJPG">
   <img :src="AuthorizingProxy" class="hidden-sm"
@@ -232,7 +232,7 @@ This defines a proxy that takes an HTTP request, reads the user credentials from
 
 <<< @../../examples/proxy-auth/app/shape-proxy/route.ts{typescript}
 
-You can run this kind of proxy as part of your existing backend API. Here's [another example](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth/api), this time using a [Plug](https://hexdocs.pm/phoenix/plug.html) to authorize requetss to a [Phoenix](/docs/integrations/phoenix) application:
+You can run this kind of proxy as part of your existing backend API. Here's [another example](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth/api), this time using a [Plug](https://hexdocs.pm/phoenix/plug.html) to authorize requests to a [Phoenix](/docs/integrations/phoenix) application:
 
 <<< @../../examples/gatekeeper-auth/api/lib/api_web/plugs/auth/verify_token.ex{elixir}
 
@@ -385,13 +385,13 @@ Electric does [read-path](#read-path) sync. That's the bit between Postgres and 
   </a>
 </figure>
 
-Instead, Electric is designed for you to implement writes yourself, using whichever pattern you prefer. There's a comprehensive [Writes guide](/docs/guides/writes) and [write-patterns example](https://github.com/electric-sql/electric/tree/main/examples/write-patterns) that walks through a range of approaches for this that all use your existing API.
+Instead, Electric is designed for you to implement writes yourself. There's a comprehensive [Writes guide](/docs/guides/writes) and [write-patterns example](https://github.com/electric-sql/electric/tree/main/examples/write-patterns) that walks through a range of approaches for this that integrate with your existing API.
 
 You can also see a number of the examples that use an API for writes, including the [linearlite](https://github.com/electric-sql/electric/tree/main/examples/linearlite), [phoenix-liveview](https://github.com/electric-sql/electric/tree/main/examples/phoenix-liveview) and [tanstack](https://github.com/electric-sql/electric/tree/main/examples/tanstack-example) examples.
 
 #### API server
 
-To highlight a couple of the key patterns, let's look at the shared API server for the write-patterns example. It is a standard Node / Express app exposes the write methods of a REST API for a table of todos:
+To highlight a couple of the key patterns, let's look at the shared API server for the write-patterns example. It is an [Express](https://expressjs.com) app that exposes the write methods of a REST API for a table of `todos`:
 
 - `POST {todo} /todos` to create a todo
 - `PUT {partial-todo} /todos/:id` to update
@@ -405,42 +405,44 @@ If you then look at the [optimistic state pattern](/docs/guides/writes#optimisti
 
 <<< @../../examples/write-patterns/patterns/2-optimistic-state/index.tsx{tsx}
 
-Data syncs into the component using `useShape`. Writes are made using an API client to `POST` / `PUT` / `DELETE` data to the API. The apps support local, offline writes using optimistic state. All through your API. Alongside Electric handling the read-path.
-
 You can also see the [shared persistent optimistic state](https://github.com/electric-sql/electric/tree/main/examples/write-ptterns/patterns/3-shared-persistent) pattern for a more resilient, comprehensive approach to building local-first apps with Electric on optimistic state.
 
 #### Write-path sync
 
 Another pattern covered in the Writes guide is [through the database sync](/docs/guides/writes#through-the-db). This approach uses Electric to sync into an local, embedded database and then syncs changes made to the local database back to Postgres, via your API.
 
-The [example implementation](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/4-through-the-db) uses Electric to sync into [PGlite](/product/pglite) as the local embedded database. It defines a local database schema with an immutable `todos_synced` table for synced data and a mutable `todos_local` table for local optimistic state. It wraps these up into a `todos` view that provides a single table interface to the application code.
+The [example implementation](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/4-through-the-db) uses Electric to sync into [PGlite](/product/pglite) as the local embedded database. All the application code needs to do is read and write to the local database. The [database schema](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) takes care of everything else, including keeping a log of local changes to send to the server.
 
-All the application code then needs to do is read and write to the local database. The [database schema](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) takes care of everything else, including keeping a log of local changes to send to the server. This is processed by a sync utility that looks like this:
-
-<<< @../../examples/write-patterns/patterns/4-through-the-db/sync.ts{ts}
-
-This sends data to a:
+This is then processed by a sync utility that sends data to a:
 
 - `POST {transactions} /changes` endpoint
 
-Implemented in the [shared API server](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/shared/backend/api.js) shown above. Whether you implement this as part your existing API or a new service is up to you. Either way, it's just a web service, illustrating how you can handle write-path sync with your existing API.
+Implemented in the [shared API server](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/shared/backend/api.js) shown above:
+
+<<< @../../examples/write-patterns/patterns/4-through-the-db/sync.ts{ts}
 
 #### Authorizing writes
 
-Just as [with reads](#auth), because you're sending writes to an HTTP endpoint, you can use a proxy to authorize them.
+Just as [with reads](#auth), because you're sending writes to an API endpoint, you can use your API, middleware, or a proxy to authorize them. Just as you would any other API request.
+
+Agaim, to emphasise, this allows you to develop local-first apps, without having to codify write-path authorization logic into database rules. In fact, in many cases, you can just keep your existing API endpoints and you may not need to change any code at all.
 
 ### Encryption
 
-Electric syncs ciphertext as well as it syncs plaintext. You can encrypt data on and off the local client:
+Electric syncs ciphertext as well as it syncs plaintext. You can encrypt data on and off the local client, i.e.:
 
-- encrypt it before you send it from the client to your API
-- decrypt it when it comes into the client from the Electric replication stream
+- *encrypt* it before it leaves the client
+- *decrypt* it when it comes into the client from the replication stream
 
 You can see an example of this in the [encryption example](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/encryption):
 
 <<< @../../examples/encryption/src/Example.tsx{tsx}
 
-The actual encryption/decryption here is simple. The main challenge is key management, i.e.: choosing which data to encrypt with which keys and sharing the right keys with the right users. There are some good patterns here like using a key per resource, such as a tenant, workspace or group. You can then encrypt data within that resource using a specific key and share the key with user when they get access to the resource (e.g.: when added to the group).
+#### Key management
+
+One of the challenges with encryption is key management. I.e.: choosing which data to encrypt with which keys and sharing the right keys with the right users.
+
+There are some good patterns here like using a key per resource, such as a tenant, workspace or group. You can then encrypt data within that resource using a specific key and share the key with user when they get access to the resource (e.g.: when added to the group).
 
 Electric is good at syncing keys. For example, you could define a shape like:
 
@@ -487,7 +489,9 @@ You don't need to implement custom tooling to get visibility in what's happening
 
 ## Next steps
 
-With Electric, you can develop local-first apps incrementally, using your existing API. You get the benefits of local-first, without having to re-engineer your stack.
+This post has outlined how you can develop [local-first software](/use-cases/local-first-software) incrementally, using your existing API alongside [Electric](/product/electric) for read-path sync.
+
+To learn more and get started with Electric, see the [Quickstart](/docs/quickstart), [Documentation](/docs/intro) and source code on GitHub:
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
