@@ -18,7 +18,7 @@ defmodule Electric.Shapes.Querying do
         conn,
         stack_id,
         %Shape{root_table: root_table} = shape,
-        chunk_bytes_threshold
+        chunk_bytes_threshold \\ LogChunker.default_chunk_size_threshold()
       ) do
     OpenTelemetry.with_span("shape_read.stream_initial_data", [], stack_id, fn ->
       table = Utils.relation_to_sql(root_table)
