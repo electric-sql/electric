@@ -309,6 +309,7 @@ defmodule Electric.ShapeCache.FileStorage do
       shape_handle: opts.shape_handle,
       stack_id: opts.stack_id
     )
+
     File.open!(snapshot_chunk_path(opts, chunk_number), [:write, :raw])
   end
 
