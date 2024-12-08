@@ -13,6 +13,7 @@ import { keymap } from "@codemirror/view"
 import { javascript } from "@codemirror/lang-javascript"
 
 import * as random from "lib0/random"
+import { IndexeddbPersistence } from "y-indexeddb"
 
 const room = `electric-demo`
 
@@ -59,6 +60,7 @@ export default function ElectricEditor() {
         {
           connect: true,
           awareness,
+          persistence: new IndexeddbPersistence(room, ydoc),
         }
       )
       awareness?.setLocalStateField(`user`, {
