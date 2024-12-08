@@ -1,5 +1,13 @@
 # @electric-sql/client
 
+## 0.9.1
+
+### Patch Changes
+
+- fbb66e9: Use "get" instead of "has" for checking searchParams
+
+  Not all implementations of JS have the has(name, value) syntax e.g. Expo.
+
 ## 0.9.0
 
 ### Minor Changes

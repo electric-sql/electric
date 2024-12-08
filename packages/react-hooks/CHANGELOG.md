@@ -1,5 +1,12 @@
 # @electric-sql/react
 
+## 0.6.2
+
+### Patch Changes
+
+- Updated dependencies [fbb66e9]
+  - @electric-sql/client@0.9.1
+
 ## 0.6.1
 
 ### Patch Changes
