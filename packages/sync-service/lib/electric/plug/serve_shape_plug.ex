@@ -198,7 +198,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp load_shape_info(%Conn{assigns: %{config: config}} = conn, _) do
     OpenTelemetry.with_span("shape_get.plug.load_shape_info", [], config[:stack_id], fn ->
-      shape_info = get_or_create_shape_handle(conn.assigns) |> dbg
+      shape_info = get_or_create_shape_handle(conn.assigns)
       handle_shape_info(conn, shape_info)
     end)
   end
@@ -316,7 +316,7 @@ defmodule Electric.Plug.ServeShapePlug do
       assigns
 
     chunk_end_offset =
-      Shapes.get_chunk_end_log_offset(config, shape_handle, offset) |> dbg ||
+      Shapes.get_chunk_end_log_offset(config, shape_handle, offset) ||
         assigns.last_offset
 
     conn
@@ -337,7 +337,7 @@ defmodule Electric.Plug.ServeShapePlug do
     # The log can't be up to date if the last_offset is not the actual end.
     # Also if client is requesting the start of the log, we don't set `up-to-date`
     # here either as we want to set a long max-age on the cache-control.
-    if LogOffset.compare(chunk_end_offset |> dbg, last_offset |> dbg) |> dbg == :lt or
+    if LogOffset.compare(chunk_end_offset, last_offset) == :lt or
          offset == @before_all_offset do
       conn
       |> assign(:up_to_date, [])
@@ -506,7 +506,10 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp listen_for_new_changes(%Conn{assigns: assigns} = conn, _) do
     # Only start listening when we know there is a possibility that nothing is going to be returned
-    if LogOffset.compare(assigns.offset, assigns.last_offset) != :lt do
+    # There is an edge case in that the snapshot is served in chunks but `last_offset` is not updated
+    # by that process. In that case, we'll start listening for changes but not receive any updates.
+    if LogOffset.compare(assigns.offset, assigns.last_offset) != :lt or
+         assigns.last_offset == LogOffset.last_before_real_offsets() do
       shape_handle = assigns.handle
 
       ref = make_ref()
@@ -560,7 +563,9 @@ defmodule Electric.Plug.ServeShapePlug do
 
     maybe_up_to_date = if up_to_date = assigns[:up_to_date], do: up_to_date != []
 
-    Electric.Telemetry.OpenTelemetry.get_stack_span_attrs(assigns.config[:stack_id])
+    Electric.Telemetry.OpenTelemetry.get_stack_span_attrs(
+      get_in(conn.assigns, [:config, :stack_id])
+    )
     |> Map.merge(Electric.Plug.Utils.common_open_telemetry_attrs(conn))
     |> Map.merge(%{
       "shape.handle" => shape_handle,
@@ -616,7 +621,7 @@ defmodule Electric.Plug.ServeShapePlug do
           conn.query_params["handle"] || assigns[:active_shape_handle] || assigns[:handle],
         client_ip: conn.remote_ip,
         status: conn.status,
-        stack_id: assigns.config[:stack_id]
+        stack_id: get_in(conn.assigns, [:config, :stack_id])
       }
     )
 

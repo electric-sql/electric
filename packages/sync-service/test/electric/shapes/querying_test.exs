@@ -186,8 +186,11 @@ defmodule Electric.Shapes.QueryingTest do
   end
 
   defp decode_stream(stream),
-    do: stream |> Enum.to_list() |> Enum.map(fn
-      :chunk_boundary -> :chunk_boundary
-      json_item -> Jason.decode!(json_item, keys: :atoms)
-    end)
+    do:
+      stream
+      |> Enum.to_list()
+      |> Enum.map(fn
+        :chunk_boundary -> :chunk_boundary
+        json_item -> Jason.decode!(json_item, keys: :atoms)
+      end)
 end

@@ -1,5 +1,6 @@
 defmodule Electric.ShapeCache.FileStorage do
   use Retry
+  require Logger
 
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Replication.LogOffset
@@ -269,7 +270,7 @@ defmodule Electric.ShapeCache.FileStorage do
     |> Stream.transform(
       fn -> {0, nil} end,
       fn line, {chunk_num, file} ->
-        file = file || File.open!(snapshot_chunk_path(opts, chunk_num), [:write, :raw])
+        file = file || open_snapshot_chunk_to_write(opts, chunk_num)
 
         case line do
           :chunk_boundary ->
@@ -285,6 +286,14 @@ defmodule Electric.ShapeCache.FileStorage do
             {[chunk_num], {chunk_num, file}}
         end
       end,
+      fn {chunk_num, file} ->
+        if is_nil(file) and chunk_num == 0 do
+          # Special case if the source stream has ended before we started writing any chunks - we need to create the empty file for the first chunk.
+          {[chunk_num], {chunk_num, open_snapshot_chunk_to_write(opts, chunk_num)}}
+        else
+          {[], {chunk_num, file}}
+        end
+      end,
       fn {_chunk_num, file} ->
         if file do
           IO.binwrite(file, <<4::utf8>>)
@@ -293,6 +302,14 @@ defmodule Electric.ShapeCache.FileStorage do
       end
     )
     |> Enum.reduce(0, fn chunk_num, _ -> chunk_num end)
+  end
+
+  defp open_snapshot_chunk_to_write(opts, chunk_number) do
+    Logger.debug("Opening snapshot chunk #{chunk_number} for writing",
+      shape_handle: opts.shape_handle,
+      stack_id: opts.stack_id
+    )
+    File.open!(snapshot_chunk_path(opts, chunk_number), [:write, :raw])
   end
 
   defp snapshot_chunk_path(opts, chunk_number)
@@ -400,7 +417,7 @@ defmodule Electric.ShapeCache.FileStorage do
         file
 
       {:error, :enoent} ->
-        Process.sleep(10)
+        Process.sleep(20)
         open_snapshot_chunk(opts, chunk_num, attempts_left - 1)
 
       {:error, reason} ->
@@ -502,8 +519,8 @@ defmodule Electric.ShapeCache.FileStorage do
     |> then(&CubDB.delete_multi(opts.db, &1))
 
     {:ok, _} = File.rm_rf(opts.snapshot_dir)
-
     {:ok, _} = File.rm_rf(shape_definition_path(opts))
+    :ok = File.mkdir_p!(opts.snapshot_dir)
 
     :ok
   end
