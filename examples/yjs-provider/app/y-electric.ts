@@ -11,9 +11,11 @@ import {
   isChangeMessage,
   isControlMessage,
   Message,
+  Offset,
   ShapeStream,
 } from "@electric-sql/client"
 import { parseToDecoder } from "./utils"
+import { IndexeddbPersistence } from "y-indexeddb"
 
 type OperationMessage = {
   op: decoding.Decoder
@@ -34,6 +36,11 @@ type ObservableProvider = {
   // eslint-disable-next-line quotes
   "connection-close": () => void
 }
+
+// Awareness TODOs:
+// Notify other users of departure
+// Reload awareness state on reconnection
+// Don't apply state changes older than ping period
 
 const messageSync = 0
 
@@ -61,11 +68,22 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
   private disconnectHandler?: () => void
   private exitHandler?: () => void
 
+  private persistence?: IndexeddbPersistence
+  private loaded: boolean
+  private resume: {
+    operations?: { offset: Offset; handle: string }
+    awareness?: { offset: Offset; handle: string }
+  } = {}
+
   constructor(
     serverUrl: string,
     roomName: string,
     doc: Y.Doc,
-    options: { awareness?: awarenessProtocol.Awareness; connect?: boolean }
+    options: {
+      awareness?: awarenessProtocol.Awareness
+      connect?: boolean
+      persistence?: IndexeddbPersistence
+    } // TODO: make it generic, we can load it outside the provider
   ) {
     super()
 
@@ -80,6 +98,9 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
     this.shouldConnect = options.connect ?? false
 
     this.modifiedWhileOffline = false
+
+    this.persistence = options.persistence
+    this.loaded = this.persistence === undefined
 
     this.updateHandler = (update: Uint8Array, origin: unknown) => {
       if (origin !== this) {
@@ -111,7 +132,9 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
       }
     }
 
-    if (options.connect) {
+    if (!this.loaded) {
+      this.loadState()
+    } else if (options.connect) {
       this.connect()
     }
   }
@@ -133,6 +156,41 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
       this._synced = state
       this.emit(`synced`, [state])
       this.emit(`sync`, [state])
+    }
+  }
+
+  async loadState() {
+    if (this.persistence) {
+      const operationsHandle = await this.persistence.get(`operation_handle`)
+      const operationsOffset = await this.persistence.get(`operation_offset`)
+
+      const awarenessHandle = await this.persistence.get(`awareness_handle`)
+      const awarenessOffset = await this.persistence.get(`awareness_offset`)
+
+      // TODO: fix not loading changes from other users
+      const lastSyncedStateVector = await this.persistence.get(
+        `last_synced_state_vector`
+      )
+
+      this.lastSyncedStateVector = lastSyncedStateVector
+      this.modifiedWhileOffline = this.lastSyncedStateVector !== undefined
+
+      this.resume = {
+        operations: {
+          handle: operationsHandle,
+          offset: operationsOffset,
+        },
+        // TODO: we want the last pings of users, so it's more complicated
+        awareness: {
+          handle: awarenessHandle,
+          offset: awarenessOffset,
+        },
+      }
+
+      this.loaded = true
+      if (this.shouldConnect) {
+        this.connect()
+      }
     }
   }
 
@@ -207,12 +265,15 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
       this.connected = false
       this.synced = false
 
+      console.log(`Setting up shape stream ${JSON.stringify(this.resume)}`)
+
       this.operationsStream = new ShapeStream<OperationMessage>({
         url: this.operationsUrl,
         table: `ydoc_operations`,
         where: `room = '${this.roomName}'`,
         parser: parseToDecoder,
         subscribe: true,
+        ...this.resume.operations,
       })
 
       this.awarenessStream = new ShapeStream({
@@ -220,10 +281,22 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
         where: `room = '${this.roomName}'`,
         table: `ydoc_awareness`,
         parser: parseToDecoder,
+        ...this.resume.awareness,
       })
 
       const errorHandler = (e: FetchError | Error) => {
         throw e
+      }
+
+      // we probably want to extract this code
+      // save state per user
+      const updateShapeState = (
+        name: `operation` | `awareness`,
+        offset: Offset,
+        handle: string
+      ) => {
+        this.persistence?.set(`${name}_offset`, offset)
+        this.persistence?.set(`${name}_handle`, handle)
       }
 
       const handleSyncMessage = (messages: Message<OperationMessage>[]) => {
@@ -232,17 +305,18 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
             const decoder = message.value.op
             const encoder = encoding.createEncoder()
             encoding.writeVarUint(encoder, messageSync)
-            const syncMessageType = syncProtocol.readSyncMessage(
-              decoder,
-              encoder,
-              this.doc,
-              this
-            )
+            syncProtocol.readSyncMessage(decoder, encoder, this.doc, this)
           } else if (
             isControlMessage(message) &&
             message.headers.control === "up-to-date"
           ) {
             this.synced = true
+
+            updateShapeState(
+              `operation`,
+              this.operationsStream!.lastOffset,
+              this.operationsStream!.shapeHandle
+            )
           }
         })
       }
@@ -265,6 +339,12 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
             )
           }
         })
+
+        updateShapeState(
+          `awareness`,
+          this.awarenessStream!.lastOffset,
+          this.awarenessStream!.shapeHandle
+        )
       }
 
       const unsubscribeAwarenessHandler = this.awarenessStream.subscribe(
@@ -289,8 +369,13 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
               ),
               this
             )
+            this.sendAwareness([this.doc.clientID])
           }
           this.lastSyncedStateVector = Y.encodeStateVector(this.doc)
+          this.persistence?.set(
+            `last_synced_state_vector`,
+            this.lastSyncedStateVector
+          )
           this.emit(`status`, [{ status: `disconnected` }])
         }
 
@@ -315,6 +400,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
           this.sendOperation(pendingUpdates).then(() => {
             this.lastSyncedStateVector = undefined
             this.modifiedWhileOffline = false
+            this.persistence?.del(`last_synced_state_vector`)
             this.emit(`status`, [{ status: `connected` }])
           })
         }
