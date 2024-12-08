@@ -33,7 +33,7 @@ export default $config({
     })
 
     const databaseUri = getNeonDbUri(project, db, false)
-    const databasePooledUri = getNeonDbUri(project, db, true)
+    const pooledUri = getNeonDbUri(project, db, true)
     try {
       databaseUri.apply(applyMigrations)
 
@@ -41,19 +41,15 @@ export default $config({
         addDatabaseToElectric(uri)
       )
 
-      const serverless = deployServerlessApp(
-        electricInfo,
-        databaseUri,
-        databasePooledUri
-      )
+      const serverless = deployServerlessApp(electricInfo, pooledUri)
 
-      const website = deployAppServer(electricInfo, databasePooledUri)
+      const website = deployAppServer(electricInfo, databaseUri)
 
       return {
         server_url: website.url,
         serverless_url: serverless.url,
         databaseUri,
-        databasePooledUri,
+        databasePooledUri: pooledUri,
       }
     } catch (e) {}
   },
@@ -102,15 +98,14 @@ function deployAppServer(
 
 function deployServerlessApp(
   electricInfo: $util.Output<{ id: string; token: string }>,
-  uri: $util.Output<string>,
-  pooledUri: $util.Output<string>
+  uri: $util.Output<string>
 ) {
   return new sst.aws.Nextjs(`yjs`, {
     environment: {
       ELECTRIC_URL: process.env.ELECTRIC_API!,
       ELECTRIC_TOKEN: electricInfo.token,
       DATABASE_ID: electricInfo.id,
-      POOLED_DATABASE_URL: pooledUri,
+      NEON_DATABASE_URL: uri,
     },
     domain: {
       name: `yjs${$app.stage === `Production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
