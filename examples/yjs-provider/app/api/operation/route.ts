@@ -2,7 +2,7 @@ import { Pool } from "pg"
 import { NextResponse } from "next/server"
 import { neon } from "@neondatabase/serverless"
 
-// hybrid implementation for connection pool and serverless
+// hybrid implementation for connection pool and serverless with neon
 
 const connectionString =
   process.env.NEON_DATABASE_URL ||
@@ -43,7 +43,7 @@ async function saveAwarenessOperation(
 ) {
   const q = `INSERT INTO ydoc_awareness (room, clientId, op) VALUES ($1, $2, decode($3, 'base64'))
        ON CONFLICT (clientId, room)
-       DO UPDATE SET op = decode($3, 'base64')`
+       DO UPDATE SET op = decode($3, 'base64'), updated = now()`
   const params = [room, clientId, op]
   await runQuery(q, params)
 }
@@ -63,7 +63,6 @@ async function getRequestParams(
 }
 
 async function runQuery(q: string, params: string[]) {
-  console.log(`Running query: ${q} with params: ${params}`)
   if (pool) {
     await pool.query(q, params)
   } else if (sql) {
