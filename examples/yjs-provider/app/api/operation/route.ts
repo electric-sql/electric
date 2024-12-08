@@ -5,19 +5,18 @@ import { neon } from "@neondatabase/serverless"
 // hybrid implementation for connection pool and serverless
 
 const connectionString =
-  process.env.POOLED_DATABASE_URL ||
+  process.env.NEON_DATABASE_URL ||
   process.env.DATABASE_URL ||
   `postgresql://postgres:password@localhost:54321/electric`
 
-const sql = process.env.POOLED_DATABASE_URL ? neon(connectionString) : undefined
+const sql = process.env.NEON_DATABASE_URL ? neon(connectionString) : undefined
 
-const pool = process.env.DATABASE_URL
-  ? new Pool({ connectionString: process.env.DATABASE_URL })
+const pool = !process.env.NEON_DATABASE_URL
+  ? new Pool({ connectionString })
   : undefined
 let connected = false
 
 export async function POST(request: Request) {
-  console.log(`Received request: ${request}`)
   try {
     const { room, op, clientId } = await getRequestParams(request)
     if (!clientId) {
@@ -27,6 +26,7 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({})
   } catch (e) {
+    connected = false
     const resp = e instanceof Error ? e.message : e
     return NextResponse.json(resp, { status: 400 })
   }
@@ -65,7 +65,7 @@ async function getRequestParams(
 }
 
 async function runQuery(q: string, params: string[]) {
-  console.log(`Running query: ${q} with params: ${params}`, pool, sql)
+  console.log(`Running query: ${q} with params: ${params}`)
   if (pool) {
     if (pool && !connected) {
       await pool.connect()
@@ -73,8 +73,7 @@ async function runQuery(q: string, params: string[]) {
     }
 
     await pool.query(q, params)
-  }
-  if (sql) {
+  } else if (sql) {
     await sql(q, params)
   } else {
     throw new Error(`No database driver provided`)
