@@ -19,19 +19,11 @@ import BrowserConsolePNG from '/static/img/blog/browser-console.png?url'
 import NoStaleDataJGP from '/static/img/blog/no-stale-data.jpg?url'
 </script>
 
-<div class="warning custom-block github-alert">
-  <p style="margin-bottom: 10px">
-    With Electric, you can develop local-first apps incrementally,
-    using your existing API.
-  </p>
-  <p>
-    <span class="no-wrap">Jump ahead to see</span> <a href="#how-it-works">how it works</a> or read on for more context.
-  </p>
-</div>
-
 One of the exciting things about [local-first software](/use-cases/local-first-software) is the potential to eliminate APIs and microservices. Instead of coding across the network, you code against a local store, data syncs in the background and your stack is suddenly much simpler.
 
-The challenge is that, here in the real world, many of us quite like our APIs and actually want to keep them, thank you very much.
+But what if you don't want to eliminate your API? What if you want or need to keep it. How do you develop local-first software then?
+
+With [Electric](/product/electric), you can develop local-first apps incrementally, [using your existing API](#how-it-works).
 
 ## The Toaster Project
 
@@ -48,7 +40,7 @@ At first glance, a toaster seems like a pretty straightforward, standalone produ
 
 Your API is a toaster. It doesn't exist in isolation. It's tied into other systems, like your monitoring systems and the way you do migrations and deployment. It's hard to just rip it out, because then you break these integrations and ergonomics &mdash; and obviate your own tooling and operational experience.
 
-For example, REST APIs are stateless. We know how to scale them. We know how to debug them. They show up in the browser console. Swapping them out is all very well in theory, but what happens with your new system when it goes down in production?
+For example, REST APIs are stateless. We know how to scale them. We know how to debug them. They show up in the [browser console](#). Swapping them out is all very well in theory, but what happens with your new system when it goes down in production?
 
 ### Electric's approach
 
@@ -72,7 +64,7 @@ As well as, optionally, other concerns like:
 - [encryption](#encryption)
 - [filtering](#filtering)
 
-Because Electric syncs data [over HTTP](#http-and-json), you can use existing middleware, integrations and instrumentation. Like [authorization services](#external-auth-services) and [the browser console](#debugging-example).
+Because Electric syncs data [over HTTP](#http-and-json), you can use existing middleware, integrations and instrumentation. Like [authorization services](#external-services) and [the browser console](#debugging-example).
 
 ### Electric sync
 
@@ -84,9 +76,9 @@ To build local-first you have to have the data locally. If you're doing that wit
   </a>
 </figure>
 
-This is why you need [data sync](/use-cases/state-transfer). To keep the local data fresh when it changes. Happily, this is exactly what Electric does. It [syncs data into local apps and services](/product/electric) and keeps it fresh for you.
+This is why you need [data sync](/use-cases/state-transfer). To keep the local data fresh when it changes.
 
-Practically what does this look like? Well, instead of fetching data using web service calls, i.e.: something like this:
+Happily, this is exactly what Electric does. It [syncs data into local apps and services](/product/electric) and keeps it fresh for you. Practically what does this look like? Well, instead of fetching data using web service calls, i.e.: something like this:
 
 ```jsx
 import React, { useState, useEffect } from 'react'
@@ -130,16 +122,18 @@ const MyComponent = () => {
 }
 ```
 
-You can go much further with Electric, all the way to [syncing into a local database](/product/pglite). But you can do this *incrementally* as and when you need to. For example:
+For example:
 
-- [Trigger.dev](https://trigger.dev/) started with Electric by using it to sync job status data into their [Realtime product](https://trigger.dev/launchweek/0/realtime)
-- [Otto](https://ottogrid.ai) started by swapping out the way they loaded data into their AI spreadsheet
+- [Trigger.dev](https://trigger.dev/) started out with Electric by syncing status data from their background jobs platform into their [Realtime dashboard](https://trigger.dev/launchweek/0/realtime)
+- [Otto](https://ottogrid.ai) swapped out the way they loaded data into their [AI spreadsheet](https://ottogrid.ai)
+
+You can go much further with Electric, all the way to [syncing into a local database](/product/pglite). But you can do this *incrementally* as and when you need to.
 
 #### Read-path
 
 Electric [only does the read-path sync](/docs/guides/writes#local-writes-with-electric). It syncs data out-of Postgres, into local apps.
 
-Electric does not do write-path sync. It does not provide (or prescribe) a solution for getting data back into Postgres from local apps and services. In fact, it's explicitly designed for you to handle writes yourself.
+Electric does not do write-path sync. It does not provide (or prescribe) a solution for getting data back into Postgres from local apps and services. In fact, it's explicitly designed for you to [handle writes yourself](#writes).
 
 #### HTTP
 
@@ -151,20 +145,42 @@ In fact, whatever you want to do to the replication stream &mdash; [encrypt](#en
 
 ## Using your existing API
 
-So far, above, we've seen that Electric handles read-path sync and leaves [writes](#writes) up to you. We've seen how it syncs over HTTP and how this allows you to implement [auth](#auth) and other concerns like [encryption](#encryption) and [filtering](#filtering) using proxies.
+So far, we've seen that Electric handles read-path sync and leaves [writes](#writes) up to you. We've seen how it syncs over HTTP and how this allows you to implement [auth](#auth) and other concerns like [encryption](#encryption) and [filtering](#filtering) using proxies.
 
 Now, let's now dive in to these aspects and see exactly how to implement them using your existing API. With code samples and links to example apps.
 
 ### Auth
 
-if you're [upgrading from data fetch to data sync](#), you typically authorise access to data in a controller or middleware layer
+Web-service based apps typically authorize access to resources in a controller or middleware layer. When switching to use a sync engine without an API, you cut out these layers and typically need to codify your auth logic as database rules.
 
-for many sync engines, you cut out this layer and need to migrate this auth logic to database rules;
-e.g.: couch, firebase, Postgres RLS
+For example in [Firebase](https://firebase.google.com) you have [Security Rules](https://firebase.google.com/docs/rules) that look like this:
 
-because Electric syncs over HTTP and the shape is an http resource
-don't need to do this
-you can just route the request to Electric through an HTTP proxy that you control
+```js
+service <<name>> {
+  // Match the resource path.
+  match <<path>> {
+    // Allow the request if the following conditions are true.
+    allow <<methods>> : if <<condition>>
+  }
+}
+```
+
+In Postgres-based systems, like [Supabase Realtime](https://supabase.com/docs/guides/realtime) you use Postgres [Row Level Security (RLS)](https://supabase.com/docs/guides/database/postgres/row-level-security) rules, e.g.:
+
+```sql
+create policy "Individuals can view their own todos."
+on todos for select
+using ( (select auth.uid()) = user_id );
+```
+
+With Electric, you don't need to do this. Electric syncs [over HTTP](/docs/api/http). Specifically, you make HTTP requests to a [Shape](/docs/guides/shapes) endpoint (see
+<a href="/openapi.html#/paths/~1v1~1shape/get" target="_blank">spec here</a>) at:
+
+```http
+GET /v1/shape
+```
+
+Because this is an HTTP resource, you can authorize access to it just as you would any other web service resource: using HTTP middleware. Specifically, route the request to Electric through an authorizing proxy that you control:
 
 <a :href="AuthorizingProxyJPG">
   <img :src="AuthorizingProxy" class="hidden-sm"
@@ -175,37 +191,150 @@ you can just route the request to Electric through an HTTP proxy that you contro
   />
 </a>
 
-this can be your existing backend API
-or, if you're running Electric behind a CDN, this can be an edge function in front of the CDN
-e.g. using Cloudflare or Supabase
+#### API proxy
 
-you can see this pattern implemented in the
-=> proxy auth
+You can see this pattern implemented in the [proxy-auth example](https://github.com/electric-sql/electric/tree/main/examples/proxy-auth).
 
-can also use external auth services in the proxy
-=> authzed using zanzibar for consistent distributed auth
+This defines a proxy that takes an HTTP request, reads the user credentials from an `Authorization` header, uses them to authorize the request and if successful, proxies the request onto Electric:
 
-also use a token based approach
-using your api to generate the tokens
-=> gatekeeper auth
+<<< @../../examples/proxy-auth/app/shape-proxy/route.ts{typescript}
 
-this actually has three examples for authorising the tokens:
+You can run this kind of proxy as part of your existing backend API. Here's [another example](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth/api), this time using a [Plug](https://hexdocs.pm/phoenix/plug.html) to authorize requetss to a [Phoenix](/docs/integrations/phoenix) application:
 
-XXX explain the Elixir approach
+<<< @../../examples/gatekeeper-auth/api/lib/api_web/plugs/auth/verify_token.ex{elixir}
 
-<<< @../../examples/gatekeeper-auth/api/lib/api_web/router.ex{elixir}
+#### Edge proxy
 
-XXX explain the Caddy approach
+If you're running Electric [behind a CDN](/docs/api/http#caching), you're likely to want to deploy your authorizing proxy in front of the CDN. Otherwise routing requests through your API adds latency and can become a bottleneck. You can achieve this by deploying your proxy as an edge function or worker in front of the CDN, for example using [Cloudflare Workers](/docs/integrations/cloudflare#auth-example) or [Supabase Edge Functions](/docs/integrations/supabase#sync-into-edge-function).
+
+Here's a Supabase edge function using Deno that verifies that the [shape definition](/docs/guides/shapes#defining-shapes) in a JWT matches the shape definition in the request params:
+
+<<< @../../examples/gatekeeper-auth/edge/index.ts{typescript}
+
+#### External services
+
+You can also use external authorization services in your proxy.
+
+For example, [Authzed](https://authzed.com) is a low-latency, distributed authorization service based on Google Zanzibar. You can use it in an edge proxy to authorize requests in front of a CDN, whilst still ensuring strong consistency for your authorization logic.
+
+```ts
+import jwt from 'jsonwebtoken'
+import { v1 } from '@authzed/authzed-node'
+
+const AUTH_SECRET = Deno.env.get("AUTH_SECRET") || "NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY"
+const ELECTRIC_URL = Deno.env.get("ELECTRIC_URL") || "http://localhost:3000"
+
+const HAS_PERMISSION = v1.CheckPermissionResponse_Permissionship.HAS_PERMISSION
+
+function verifyAuthHeader(headers: Headers) {
+  const auth_header = headers.get("Authorization")
+
+  if (auth_header === null) {
+    return [false, null]
+  }
+
+  const token = auth_header.split("Bearer ")[1]
+
+  try {
+    const claims = jwt.verify(token, AUTH_SECRET, {algorithms: ["HS256"]})
+
+    return [true, claims]
+  }
+  catch (err) {
+    console.warn(err)
+
+    return [false, null]
+  }
+}
+
+Deno.serve(async (req) => {
+  const url = new URL(req.url)
+
+  const [isValidJWT, claims] = verifyAuthHeader(req.headers)
+  if (!isValidJWT) {
+    return new Response("Unauthorized", {status: 401})
+  }
+
+  // See https://github.com/authzed/authzed-node and
+  // https://authzed.com/docs/spicedb/getting-started/discovering-spicedb
+
+  const client = v1.NewClient(claims.token)
+
+  const resource = v1.ObjectReference.create({
+    objectType: `example/table`,
+    objectId: claims.table
+  })
+
+  const user = v1.ObjectReference.create({
+    objectType: "example/user",
+    objectId: claims.user_id
+  })
+
+  const subject = v1.SubjectReference.create({
+    object: user
+  })
+
+  const permissionRequest = v1.CheckPermissionRequest.create({
+    permission: 'read',
+    resource,
+    subject
+  })
+
+  const checkResult = await new Promise(
+    (resolve, reject) => {
+      client.checkPermission(
+        permissionRequest,
+        (err, response) => err ? reject(err) : resolve(response)
+      )
+    }
+  )
+
+  if (checkResult.permissionship !== HAS_PERMISSION) {
+    return new Response("Forbidden", {status: 403})
+  }
+
+  return fetch(`${ELECTRIC_URL}/v1/shape${url.search}`, {headers: req.headers})
+})
+```
+
+#### Gatekeeper pattern
+
+Another pattern, illustrated in our [gatekeeper-auth example](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth), is to:
+
+1. use an API endpoint to authorize shape access
+2. generate shape-scoped auth tokens
+3. validate these tokens in the proxy
+
+This allows you to keep more of your auth logic in your API and minimise what's executed on the "hot path" of the proxy. This is actually what the code example shown in the [edge proxy](#edge-proxy) section above does, using an edge worker to validate a shape-scoped auth token.
+
+You can also achieve the same thing using a standard reverse proxy like [Caddy](https://caddyserver.com/), [Nginx](https://nginx.org) or [Varnish](https://varnish-cache.org). For example, [using Caddy](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth/caddy):
 
 <<< @../../examples/gatekeeper-auth/caddy/Caddyfile{hcl}
 
-XXX explain the edge worker approach
+The workflow from the client's point of view is to first hit the gatekeeper endpoint to generate a shape-scoped auth token, e.g.:
 
-<<< @../../examples/gatekeeper-auth/edge/index.ts{ts}
+```console
+$ curl -sX POST "http://localhost:4000/gatekeeper/items" | jq
+{
+  "headers": {
+    "Authorization": "Bearer <token>"
+  },
+  "url": "http://localhost:4000/proxy/v1/shape",
+  "table": "items"
+}
+```
 
-then in the client, you're using standard fetch
-=> typescript client supports headers, error handling and a custom fetch client
-=> e.g.: gatekeeper client.ts
+Then use the token to authorize requests to Electic, via the proxy, e.g.:
+
+```console
+$ curl -sv --header "Authorization: Bearer <token>" \
+      "http://localhost:4000/proxy/v1/shape?table=items&offset=-1"
+...
+< HTTP/1.1 200 OK
+...
+```
+
+The [Typescript client](/docs/api/clients/typescript) supports auth headers and `401` / `403`error handling, so you can wrap this up using, e.g.:
 
 <<< @../../examples/gatekeeper-auth/client/index.ts{ts}
 
