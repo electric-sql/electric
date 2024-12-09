@@ -1,5 +1,16 @@
 # @electric-sql/react
 
+## 0.6.2
+
+### Patch Changes
+
+- dae3b0d: Fix node 16 cjs import
+- 9886b08: Expose `stream` in the useShape result data. This allows React components to easily access the stream to match on.
+- Updated dependencies [9886b08]
+- Updated dependencies [dae3b0d]
+- Updated dependencies [fbb66e9]
+  - @electric-sql/client@0.9.1
+
 ## 0.6.1
 
 ### Patch Changes

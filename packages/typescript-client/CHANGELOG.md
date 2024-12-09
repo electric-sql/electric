@@ -1,5 +1,15 @@
 # @electric-sql/client
 
+## 0.9.1
+
+### Patch Changes
+
+- 9886b08: Expose `shape.stream` as public readonly property.
+- dae3b0d: Fix node 16 cjs import
+- fbb66e9: Use "get" instead of "has" for checking searchParams
+
+  Not all implementations of JS have the has(name, value) syntax e.g. Expo.
+
 ## 0.9.0
 
 ### Minor Changes

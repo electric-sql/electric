@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 0.9.5
+
+### Patch Changes
+
+- 95b61e7: Configure sentry for error tracking.
+
 ## 0.9.4
 
 ### Patch Changes
