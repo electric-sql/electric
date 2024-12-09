@@ -5,7 +5,7 @@
     "target": "es2016",
     "noEmit": true,
     "jsx": "preserve",
-    "module": "preserve",
-    "moduleResolution": "bundler"
+    "module": "esnext",
+    "moduleResolution": "node"
   }
 }
