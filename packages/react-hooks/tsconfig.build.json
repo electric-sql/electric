@@ -1,5 +1,10 @@
 {
   "extends": "../../tsconfig.build.json",
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "tests", "dist"]
+  "exclude": ["node_modules", "tests", "dist"],
+  "compilerOptions": {
+    "paths": {
+      "@electric-sql/client": ["../typescript-client/src"]
+    }
+  }
 }
