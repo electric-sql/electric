@@ -1,0 +1,133 @@
+body {
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;
+
+  background: #1c1e20;
+  color: rgba(227, 227, 239, 0.92);
+  font-family: "Helvetica Neue", Helvetica, sans-serif;
+  font-size: 15px;
+  margin: 0;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, "Courier New", monospace;
+}
+
+.app {
+  margin: 10px;
+  padding: 10px;
+  width: 100%;
+
+  display:grid;
+  grid-template-columns: calc(50% - 30px) calc(50% - 30px);
+  grid-row: auto auto;
+  grid-column-gap: 20px;
+  grid-row-gap: 20px;
+}
+
+.example {
+  padding: 65px 20px 20px 20px;
+
+  background-color: #262628;
+  border-radius:10px;
+
+  min-height: calc(50vh - 115px);
+
+  background-image: url(/shared/app/icons/icon.svg);
+  background-position: 17px 23px;
+  background-repeat: no-repeat;
+  background-size: 34px;
+}
+
+.example h3 {
+  margin: 5px 0 10px;
+}
+
+.example ul {
+  list-style: none;
+  margin: 0;
+  padding: 20px 0 10px;
+  border-top: 1px solid #404049;
+  border-bottom: 1px solid #404049;
+}
+
+.example ul li {
+  width: calc(100%);
+  margin-bottom: 10px;
+}
+
+.example label {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.example label input[type=checkbox] {
+  margin-right: 7px;
+
+  accent-color: rgb(208, 188, 255);
+}
+
+.example label .title.completed {
+  text-decoration: line-through;
+}
+
+.example a.close {
+  float: right;
+  margin-right: 5px;
+  text-decoration: none;
+  color: inherit;
+  font-size: 13px;
+  margin-top: 1px;
+}
+
+.example form {
+  margin-top: 18px;
+}
+
+.example form input[type=text] {
+  padding: 9px;
+  margin-bottom: 12px;
+  background: #363638;
+  border: 0.2px solid #404049;
+  border-radius: 3px;
+  color: rgba(227, 227, 239, 0.92);
+  outline: none;
+  font-size: 14px;
+  display: block;
+  width: calc(100% - 20px);
+}
+
+.example form button[type=submit] {
+  background: #404049;
+  border: none;
+  padding: 6px 9px;
+  border-radius: 7px;
+  color: rgba(227, 227, 239, 0.92);
+  font-size: 14.5px;
+  cursor: pointer;
+}
+
+span.title {
+  display: inline;
+}
+
+span.pending {
+  display: inline;
+  opacity: 1;
+
+  width: 50px;
+  height: 50px;
+  position: absolute;
+  margin: -14px 0 0 -7px;
+
+  background-image: url(/shared/app/icons/spinner.gif);
+  background-repeat: no-repeat;
+  background-size: 50px 50px;
+
+  -webkit-transition: opacity 0.5s ease-in-out;
+  -moz-transition: opacity 0.5s ease-in-out;
+  transition: opacity 0.5s ease-in-out;
+}
+span.pending.hidden {
+  opacity: 0;
+}

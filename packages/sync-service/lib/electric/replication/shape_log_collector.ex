@@ -54,6 +54,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   def init(opts) do
     Process.set_label({:shape_log_collector, opts.stack_id})
     Logger.metadata(stack_id: opts.stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
     state = Map.merge(opts, %{producer: nil, subscriptions: {0, MapSet.new()}})
     # start in demand: :accumulate mode so that the ShapeCache is able to start
     # all active consumers before we start sending transactions

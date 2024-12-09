@@ -177,6 +177,7 @@ defmodule Electric.StackSupervisor do
   def init(%{stack_id: stack_id} = config) do
     Process.set_label({:stack_supervisor, stack_id})
     Logger.metadata(stack_id: stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     inspector =
       Access.get(

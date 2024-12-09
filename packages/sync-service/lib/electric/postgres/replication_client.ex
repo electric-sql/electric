@@ -145,6 +145,7 @@ defmodule Electric.Postgres.ReplicationClient do
     Process.set_label(:replication_client)
     state = State.new(replication_opts)
     Logger.metadata(stack_id: state.stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: state.stack_id)
 
     {:ok, state}
   end

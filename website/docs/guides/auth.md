@@ -14,6 +14,10 @@ import GatekeeperFlow from '/static/img/docs/guides/auth/gatekeeper-flow.dark.pn
 import GatekeeperFlowJPG from '/static/img/docs/guides/auth/gatekeeper-flow.jpg?url'
 </script>
 
+<img src="/img/icons/auth.svg" class="product-icon"
+    style="width: 72px"
+/>
+
 # Auth
 
 <div class="hidden-xs">
@@ -164,7 +168,7 @@ export async function GET(
 ### Gatekeeper auth
 
 > [!Warning] GitHub example
-> See the [gatekeeper-auth example](https://github.com/electric-sql/electric/tree/main/examples/proxy-auth) on GitHub for an example that implements this pattern.
+> See the [gatekeeper-auth example](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth) on GitHub for an example that implements this pattern.
 
 The Gatekeeper pattern works as follows:
 

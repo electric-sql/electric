@@ -47,6 +47,7 @@ defmodule Electric.Plug.Router do
 
   def add_stack_id_to_metadata(conn, _) do
     Logger.metadata(stack_id: conn.assigns.config[:stack_id])
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: conn.assigns.config[:stack_id])
     conn
   end
 end

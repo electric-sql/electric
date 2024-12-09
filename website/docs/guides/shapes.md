@@ -7,9 +7,12 @@ outline: deep
 ---
 
 <script setup>
-import SyncShapeJPG from '/static/img/docs/guides/shapes/sync-shape.jpg?url'
-import SyncShapePNG from '/static/img/docs/guides/shapes/sync-shape.png?url'
+import SyncShapeSVG from '/static/img/docs/guides/shapes/sync-shape.svg?url'
 </script>
+
+<img src="/img/icons/shapes.svg"
+    class="product-icon"
+/>
 
 # Shapes
 
@@ -26,11 +29,10 @@ Imagine a Postgres database in the cloud with lots of data stored in it. It's of
 A shape is a way of defining a subset of that data that you'd like to sync into a local app. Defining shapes allows you to sync just the data you want and just the data that's practical to sync onto the local device.
 
 <figure>
-  <a :href="SyncShapeJPG">
-    <img :src="SyncShapePNG"
-        alt="Illustration of syncing a shape"
-    />
-  </a>
+  <img :src="SyncShapeSVG"
+      alt="Illustration of syncing a shape"
+      style="max-width: 576px;"
+  />
 </figure>
 
 A client can choose to sync one shape, or lots of shapes. Many clients can sync the same shape. Multiple shapes can overlap.
