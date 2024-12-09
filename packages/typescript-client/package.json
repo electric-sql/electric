@@ -57,7 +57,7 @@
     "url": "git+https://github.com/electric-sql/electric.git"
   },
   "scripts": {
-    "build": "shx rm -rf dist && concurrently \"tsup\" \"tsc -p tsconfig.build.json\"",
+    "build": "shx rm -rf dist && tsup && tsc -p tsconfig.build.json",
     "format": "eslint . --fix",
     "prepack": "pnpm build",
     "stylecheck": "eslint . --quiet",
