@@ -101,12 +101,6 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def get_snapshot({parent, shape_handle, _, storage}) do
-    send(parent, {__MODULE__, :get_snapshot, shape_handle})
-    Storage.get_snapshot(storage)
-  end
-
-  @impl Electric.ShapeCache.Storage
   def get_log_stream(offset, max_offset, {parent, shape_handle, _, storage}) do
     send(parent, {__MODULE__, :get_log_stream, shape_handle, offset, max_offset})
     Storage.get_log_stream(offset, max_offset, storage)

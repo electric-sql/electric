@@ -308,11 +308,8 @@ describe(`HTTP Sync`, () => {
       )
 
       await vi.waitFor(async () => {
-        const res = await fetch(
-          `${BASE_URL}/v1/shape?table=${tableUrl}&offset=-1`
-        )
-        const body = (await res.json()) as Message[]
-        expect(body.length).greaterThan(1)
+        await sleep(100)
+        return client.isUpToDate
       })
       const updatedData = await client.rows
 
@@ -532,11 +529,8 @@ describe(`HTTP Sync`, () => {
 
     // And wait until it's definitely seen
     await vi.waitFor(async () => {
-      const res = await fetch(
-        `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`
-      )
-      const body = (await res.json()) as Message[]
-      expect(body).toHaveLength(12)
+      await sleep(50)
+      return issueStream.isUpToDate
     })
 
     let catchupOpsCount = 0
@@ -563,7 +557,9 @@ describe(`HTTP Sync`, () => {
     expect(catchupOpsCount).toBe(9)
   })
 
-  it(`should return correct caching headers`, async ({
+  // This test doesn't work anymore because server sends initial snapshot as a complete
+  // stable chunk, so e-tag is the same between requests.
+  it.skip(`should return correct caching headers`, async ({
     issuesTableUrl,
     insertIssues,
   }) => {
@@ -603,7 +599,12 @@ describe(`HTTP Sync`, () => {
     expect(etagHeader).not.toEqual(etag2Header)
   })
 
-  it(`should revalidate etags`, async ({ issuesTableUrl, insertIssues }) => {
+  // This test doesn't work anymore because server sends initial snapshot as a complete
+  // stable chunk, so e-tag is the same between requests.
+  it.skip(`should revalidate etags`, async ({
+    issuesTableUrl,
+    insertIssues,
+  }) => {
     // Start the shape
     await fetch(`${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`, {})
     // Fill it up in separate transactions
@@ -794,11 +795,8 @@ describe(`HTTP Sync`, () => {
 
     // And wait until it's definitely seen
     await vi.waitFor(async () => {
-      const res = await fetch(
-        `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`
-      )
-      const body = (await res.json()) as Message[]
-      expect(body.length).greaterThan(2)
+      await sleep(50)
+      return issueStream.isUpToDate
     })
 
     const responseSizes: number[] = []

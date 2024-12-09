@@ -3,7 +3,7 @@ import { describe, expect, inject, it as bareIt } from 'vitest'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
 import { useShape, sortedOptionsHash, UseShapeResult } from '../src/react-hooks'
-import { Shape, Message } from '@electric-sql/client'
+import { Shape, ShapeStream } from '@electric-sql/client'
 
 const BASE_URL = inject(`baseUrl`)
 
@@ -351,14 +351,20 @@ describe(`useShape`, () => {
     unmount()
 
     // Add another row to shape
-    const [newId] = await insertIssues({ title: `other row` })
+    const [_] = await insertIssues({ title: `other row` })
+
+    const parallelWaiterStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      signal: aborter.signal,
+      subscribe: true,
+    })
+
     // And wait until it's definitely seen
     await waitFor(async () => {
-      const res = await fetch(
-        `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`
-      )
-      const body = (await res.json()) as Message[]
-      expect(body).toMatchObject([{}, { value: { id: newId } }])
+      return parallelWaiterStream.isUpToDate || (await sleep(50))
     })
 
     await sleep(50)

@@ -17,7 +17,6 @@ defmodule Electric.ShapeCache.StorageTest do
     |> Mox.stub(:for_shape, fn ^shape_handle, :opts -> {shape_handle, :opts} end)
     |> Mox.expect(:make_new_snapshot!, fn _, {^shape_handle, :opts} -> :ok end)
     |> Mox.expect(:snapshot_started?, fn {^shape_handle, :opts} -> true end)
-    |> Mox.expect(:get_snapshot, fn {^shape_handle, :opts} -> {1, []} end)
     |> Mox.expect(:append_to_log!, fn _, {^shape_handle, :opts} -> :ok end)
     |> Mox.expect(:get_total_disk_usage, fn :opts -> 0 end)
     |> Mox.expect(:get_log_stream, fn _, _, {^shape_handle, :opts} -> [] end)
@@ -26,7 +25,6 @@ defmodule Electric.ShapeCache.StorageTest do
 
     Storage.make_new_snapshot!([], shape_storage)
     Storage.snapshot_started?(shape_storage)
-    Storage.get_snapshot(shape_storage)
     Storage.append_to_log!([], shape_storage)
     Storage.get_log_stream(LogOffset.first(), shape_storage)
     Storage.get_total_disk_usage(storage)

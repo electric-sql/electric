@@ -78,13 +78,16 @@ defmodule Electric.Client.Offset do
     else
       with [tx_offset_str, op_offset_str] <- :binary.split(str, "_"),
            {tx_offset, ""} <- Integer.parse(tx_offset_str),
-           {op_offset, ""} <- Integer.parse(op_offset_str) do
+           {op_offset, ""} <- parse_int_or_inf(op_offset_str) do
         {:ok, %__MODULE__{tx: tx_offset, op: op_offset}}
       else
         _ -> {:error, "has invalid format"}
       end
     end
   end
+
+  defp parse_int_or_inf("inf"), do: {:infinity, ""}
+  defp parse_int_or_inf(int), do: Integer.parse(int)
 
   @doc """
   Create a new #{__MODULE__} struct from the given LSN and operation
@@ -115,7 +118,7 @@ defmodule Electric.Client.Offset do
   end
 
   def to_string(%__MODULE__{tx: tx, op: op}) do
-    "#{Integer.to_string(tx)}_#{Integer.to_string(op)}"
+    "#{Integer.to_string(tx)}_#{if op == :infinity, do: "inf", else: Integer.to_string(op)}"
   end
 
   @spec to_tuple(t()) :: {tx_offset(), op_offset()}

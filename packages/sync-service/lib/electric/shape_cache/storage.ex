@@ -54,9 +54,6 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Check if snapshot for a given shape handle already exists"
   @callback snapshot_started?(shape_opts()) :: boolean()
 
-  @doc "Get the full snapshot for a given shape, also returning the offset this snapshot includes"
-  @callback get_snapshot(shape_opts()) :: {offset :: LogOffset.t(), log()}
-
   @doc """
   Make a new snapshot for a shape handle based on the meta information about the table and a stream of plain string rows
 
@@ -165,11 +162,6 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def snapshot_started?({mod, shape_opts}) do
     mod.snapshot_started?(shape_opts)
-  end
-
-  @impl __MODULE__
-  def get_snapshot({mod, shape_opts}) do
-    mod.get_snapshot(shape_opts)
   end
 
   @impl __MODULE__
