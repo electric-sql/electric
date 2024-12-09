@@ -103,7 +103,7 @@ function getNeonDbUri(
     ? endpoint.endpoints?.apply((endpoints) =>
         endpoints![0].host.replace(
           endpoints![0].id,
-          endpoints![0].id + "-pooler"
+          endpoints![0].id + `-pooler`
         )
       )
     : project.databaseHost
