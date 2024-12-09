@@ -14,6 +14,7 @@ import ManyShapesOneClient from '/static/img/benchmarks/many-shapes-one-client.p
 import SingleShapeSingleClient from '/static/img/benchmarks/single-shape-single-client.png?url'
 import WriteFanout from '/static/img/benchmarks/write-fanout.png?url'
 import WriteFanoutMemory from '/static/img/benchmarks/write-fanout-memory.png?url'
+import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 </script>
 
 # Benchmarks
@@ -137,7 +138,7 @@ Similar to the diverse write fanout, but with many shapes the write falls into, 
 
 Cloud benchmarks test the performance and scalability of Electric when running behind a CDN.
 
-We will post them here when available.
+<ScalabilityChart />
 
 ## PGlite
 

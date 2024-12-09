@@ -21,6 +21,7 @@ post: true
   import LogoStripXs from '/static/img/blog/electric-beta-release/logo-strip.xs.svg'
   import LogoStripXxs from '/static/img/blog/electric-beta-release/logo-strip.xxs.svg'
   import LinearLiteScreenshot from '/static/img/blog/electric-beta-release/linearlite-screenshot.png'
+  import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 
   import { onMounted } from 'vue'
 
@@ -88,7 +89,7 @@ So many real-time sync systems demo well but break under real load.
 
 Electric has been [engineered from the ground up](/docs/api/http) to handle high-throughput workloads, like [Trigger.dev](https://trigger.dev/launchweek/0/realtime), with low latency and flat resource use. You can stream real-time data to **millions of concurrent users** from a single commodity Postgres:
 
-> <br /><br /><br /><br />... proof case graph ... <br /><br /><br /><br /><br />
+<ScalabilityChart />
 
 See our [Scaling a sync engine](#) post and [benchmarks](/docs/reference/benchmarks) page for more details.
 
