@@ -48,14 +48,14 @@ export default {
 
     const latencyOptions = [
       { label: "Latency (min)", value: "latencyMin" },
+      { label: "Latency (mean)", value: "latencyMean" },
       { label: "Latency (95th percentile)", value: "latencyP95" },
       { label: "Latency (99th percentile)", value: "latencyP99" },
-      { label: "Latency (mean)", value: "latencyMean" },
     ]
     const txRateOptions = Object.keys(benchmarkData)
       .sort()
       .map((key) => ({
-        label: `Workload (${parseInt(key)} req/s)`,
+        label: `Workload (${parseInt(key) * 60} writes/min)`,
         value: key,
       }))
 
@@ -67,7 +67,7 @@ export default {
       { label: "Postgres memory", value: "postgresMemory" },
     ].filter((option) => option.value in benchmarkData[txRateOptions[0].value])
 
-    const selectedLatency = ref("latencyP95")
+    const selectedLatency = ref("latencyMean")
     const selectedTxRate = ref(
       txRateOptions[Math.floor(txRateOptions.length / 2)].value
     )

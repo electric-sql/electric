@@ -5,6 +5,14 @@ description: >-
 outline: deep
 ---
 
+<script setup>
+import { data as demosData } from '../data/demos.data.ts'
+const { demos } = demosData
+
+const linearlite = demos.find(x => x.link === '/demos/linearlite')
+const notes = demos.find(x => x.link === '/demos/notes')
+</script>
+
 <p class="intro-zap-container">
   <img src="/img/home/zap-with-halo.svg"
       alt="Electric zap with halo"
@@ -34,7 +42,12 @@ The easiest way to use Electric in production is the [Electric Cloud](/product/c
 
 ## Examples
 
-See the [Demos](/demos) page and [`examples`](https://github.com/electric-sql/electric/tree/main/examples) folder on GitHub for for demo apps and examples.
+See the [Demos](/demos) page and [`examples`](https://github.com/electric-sql/electric/tree/main/examples) folder on GitHub for demo apps and examples, e.g.:
+
+<div class="demos-grid">
+  <DemoListing :demo="linearlite"/>
+  <DemoListing :demo="notes"/>
+</div>
 
 The integration docs also illustrate common patterns, e.g. using Electric with frameworks like [TanStack](/docs/integrations/tanstack) and [Phoenix](/docs/integrations/phoenix) and platforms like [Supabase](/docs/integrations/supabase) and [Cloudflare](/docs/integrations/cloudflare).
 

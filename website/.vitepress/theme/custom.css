@@ -712,7 +712,10 @@ ul.benefits {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(216px, 1fr));
   gap: 2rem;
-  margin: 2rem 0 8rem;
+  margin: 2rem 0 2rem;
+}
+.demos-grid.homepage {
+  margin-bottom: 8rem;
 }
 
 .demo-card {
