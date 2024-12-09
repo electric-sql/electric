@@ -3,11 +3,13 @@
 
 import { execSync } from "child_process"
 
+const isProduction = (stage) => stage.toLowerCase() === `production`
+
 export default $config({
   app(input) {
     return {
       name: `nextjs-example`,
-      removal: input?.stage === `production` ? `retain` : `remove`,
+      removal: isProduction(input?.stage) ? `retain` : `remove`,
       home: `aws`,
       providers: {
         cloudflare: `5.42.0`,
@@ -25,16 +27,15 @@ export default $config({
       branchId: project.defaultBranchId,
     }
 
-    const db = new neon.Database(`nextjs`, {
+    const db = new neon.Database(`nextjs-example`, {
       ...base,
-      name:
-        $app.stage === `Production`
-          ? `nextjs-production`
-          : `nextjs-${$app.stage}`,
+      name: isProduction($app.stage)
+        ? `nextjs-production`
+        : `nextjs-${$app.stage}`,
       ownerName: `neondb_owner`,
     })
 
-    const databaseUri = getNeonDbUri(project, db)
+    const databaseUri = getNeonDbUri(project, db, false)
     try {
       databaseUri.apply(applyMigrations)
 
@@ -76,7 +77,7 @@ function deployNextJsExample(
       DATABASE_URL: uri,
     },
     domain: {
-      name: `nextjs${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+      name: `nextjs${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
       dns: sst.cloudflare.dns(),
     },
   })
@@ -84,7 +85,8 @@ function deployNextJsExample(
 
 function getNeonDbUri(
   project: $util.Output<neon.GetProjectResult>,
-  db: neon.Database
+  db: neon.Database,
+  pooled: boolean
 ) {
   const passwordOutput = neon.getBranchRolePasswordOutput({
     projectId: project.id,
@@ -92,7 +94,22 @@ function getNeonDbUri(
     roleName: db.ownerName,
   })
 
-  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${project.databaseHost}/${db.name}?sslmode=require`
+  const endpoint = neon.getBranchEndpointsOutput({
+    projectId: project.id,
+    branchId: project.defaultBranchId,
+  })
+
+  const databaseHost = pooled
+    ? endpoint.endpoints?.apply((endpoints) =>
+        endpoints![0].host.replace(
+          endpoints![0].id,
+          endpoints![0].id + `-pooler`
+        )
+      )
+    : project.databaseHost
+
+  const url = $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${databaseHost}/${db.name}?sslmode=require`
+  return url
 }
 
 async function addDatabaseToElectric(
