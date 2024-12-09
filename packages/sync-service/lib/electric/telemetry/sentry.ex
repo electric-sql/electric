@@ -1,7 +1,7 @@
 defmodule Electric.Telemetry.Sentry do
   def add_logger_handler do
     :logger.add_handler(:electric_sentry_handler, Sentry.LoggerHandler, %{
-      config: %{metadata: :all}
+      config: %{metadata: :all, capture_log_messages: true, level: :error}
     })
   end
 
