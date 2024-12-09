@@ -23,6 +23,10 @@ export async function matchStream<T extends Row>({
   timeout?: number
 }): Promise<ChangeMessage<T>> {
   return new Promise<ChangeMessage<T>>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(`matchStream timed out after ${timeout}ms`)
+    }, timeout)
+
     const unsubscribe = stream.subscribe((messages) => {
       const message = messages.filter(isChangeMessage).find(
         (message) =>
@@ -32,18 +36,12 @@ export async function matchStream<T extends Row>({
             message: message,
           })
       )
-      if (message) return finish(message)
+
+      if (message) {
+        clearTimeout(timeoutId)
+        unsubscribe()
+        return resolve(message)
+      }
     })
-
-    const timeoutId = setTimeout(() => {
-      console.error(`matchStream timed out after ${timeout}ms`)
-      reject(`matchStream timed out after ${timeout}ms`)
-    }, timeout)
-
-    function finish(message: ChangeMessage<T>) {
-      clearTimeout(timeoutId)
-      unsubscribe()
-      return resolve(message)
-    }
   })
 }

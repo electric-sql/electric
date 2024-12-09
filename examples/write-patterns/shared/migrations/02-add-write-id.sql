@@ -1,0 +1,11 @@
+-- Add an optional `write_id` field to the table.
+--
+-- This is not necessary for simpler patterns but provides an option for more
+-- advanced patterns to match on when monitoring the Electric replication
+-- stream in order to invalidate local state.
+--
+-- Matching on a per-operation update key and not, say, just the row `id`,
+-- allows you to rebase local optimistic state on top of concurrent changes to
+-- the same row made by other users. (Because you only clear the local state
+-- when *your* local write syncs through, not anyone else's).
+ALTER TABLE todos ADD COLUMN write_id UUID;

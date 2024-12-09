@@ -129,6 +129,9 @@
   display: inline-flex !important;
   align-items: center;
 }
+.vpi-social-github {
+  --icon: url('https://api.iconify.design/simple-icons/github.svg');
+}
 .action a .vpi-social-discord,
 .action a .vpi-social-github,
 .feature-cta a .vpi-social-github,
