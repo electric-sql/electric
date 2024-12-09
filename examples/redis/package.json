@@ -1,5 +1,5 @@
 {
-  "name": "@electric-examples/redis-sync",
+  "name": "@electric-examples/redis",
   "version": "0.0.1",
   "description": "An example Redis client for ElectricSQL",
   "main": "dist/index.js",
@@ -10,8 +10,8 @@
   "private": true,
   "scripts": {
     "dev": "tsx src/index.ts",
-    "backend:up": "PROJECT_NAME=redis-sync pnpm -C ../../ run example-backend:up && pnpm db:migrate",
-    "backend:down": "PROJECT_NAME=redis-sync pnpm -C ../../ run example-backend:down",
+    "backend:up": "PROJECT_NAME=redis-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=redis-example pnpm -C ../../ run example-backend:down",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
     "typecheck": "tsc -p tsconfig.json",
     "stylecheck": "eslint './*.{ts,js,tsx,jsx}' './tests/**/*.{ts,tsx}' './examples/**/*.{ts,tsx}' --no-error-on-unmatched-pattern"
