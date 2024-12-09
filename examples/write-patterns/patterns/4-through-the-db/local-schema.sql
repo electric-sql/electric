@@ -78,12 +78,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE TRIGGER delete_local_on_synced_insert
-AFTER INSERT ON todos_synced
-FOR EACH ROW
-EXECUTE FUNCTION delete_local_on_synced_insert_trigger();
-
-CREATE OR REPLACE TRIGGER delete_local_on_synced_insert_and_update
-AFTER UPDATE ON todos_synced
+AFTER INSERT OR UPDATE ON todos_synced
 FOR EACH ROW
 EXECUTE FUNCTION delete_local_on_synced_insert_and_update_trigger();
 
