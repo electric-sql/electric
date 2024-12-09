@@ -163,11 +163,13 @@ In this benchmark there are a varying number of shapes with just one client subs
 
 Latency and peak memory use rises linearly. Average memory use is flat.
 
-## Cloud <Badge type="warning" text="coming soon" />
+## Cloud
 
-Cloud benchmarks test the performance and scalability of Electric when running behind a CDN.
+Electric is designed to run behind a CDN, using the CDN's request collapsing capability to scale out to millions of concurrent users. The graph below shows the latency and compute resource of a single Electric server using this technique to handle millions of concurrent users.
 
-<ScalabilityChart />
+<figure>
+  <ScalabilityChart />
+</figure>
 
 ## PGlite
 
