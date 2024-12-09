@@ -454,7 +454,7 @@ const stream = new ShapeStream({
     columns: [
       'keys'
     ],
-    where: `id IN (${user.tenant_ids})`
+    where: `id in ('${user.tenant_ids.join(`', '`)}')`
   }
 })
 ```
