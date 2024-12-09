@@ -3,11 +3,13 @@
 
 import { execSync } from "child_process"
 
+const isProduction = (stage) => stage.toLowerCase() === `production`
+
 export default $config({
   app(input) {
     return {
       name: `nextjs-example`,
-      removal: input?.stage === `production` ? `retain` : `remove`,
+      removal: isProduction(input?.stage) ? `retain` : `remove`,
       home: `aws`,
       providers: {
         cloudflare: `5.42.0`,
@@ -27,15 +29,13 @@ export default $config({
 
     const db = new neon.Database(`nextjs-example`, {
       ...base,
-      name:
-        $app.stage === `Production`
-          ? `nextjs-production`
-          : `nextjs-${$app.stage}`,
+      name: isProduction($app.stage)
+        ? `nextjs-production`
+        : `nextjs-${$app.stage}`,
       ownerName: `neondb_owner`,
     })
 
     const databaseUri = getNeonDbUri(project, db, false)
-    const databasePooledUri = getNeonDbUri(project, db, true)
     try {
       databaseUri.apply(applyMigrations)
 
@@ -43,11 +43,7 @@ export default $config({
         addDatabaseToElectric(uri)
       )
 
-      const website = deployNextJsExample(
-        electricInfo,
-        databaseUri,
-        databasePooledUri
-      )
+      const website = deployNextJsExample(electricInfo, databaseUri)
       return {
         databaseUri,
         database_id: electricInfo.id,
@@ -71,8 +67,7 @@ function applyMigrations(uri: string) {
 
 function deployNextJsExample(
   electricInfo: $util.Output<{ id: string; token: string }>,
-  uri: $util.Output<string>,
-  pooledUri: $util.Output<string>
+  uri: $util.Output<string>
 ) {
   return new sst.aws.Nextjs(`nextjs`, {
     environment: {
@@ -80,10 +75,9 @@ function deployNextJsExample(
       ELECTRIC_TOKEN: electricInfo.token,
       DATABASE_ID: electricInfo.id,
       DATABASE_URL: uri,
-      DATABASE_POOLED_URL: pooledUri,
     },
     domain: {
-      name: `nextjs${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+      name: `nextjs${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
       dns: sst.cloudflare.dns(),
     },
   })
