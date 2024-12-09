@@ -10,9 +10,9 @@ sidebar: false
 <script setup>
 import { onMounted } from 'vue'
 
-import { data as posts } from '../data/posts.data.ts'
+import { data as posts } from './data/posts.data.ts'
 
-import BlogPostListing from '../src/components/BlogPostListing.vue'
+import BlogPostListing from './src/components/BlogPostListing.vue'
 
 onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {

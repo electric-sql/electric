@@ -6,7 +6,7 @@ image: /img/demos/demos-header.jpg
 ---
 
 <script setup>
-import { data } from '../data/demos.data.ts'
+import { data } from './data/demos.data.ts'
 
 const { demos, examples } = data
 </script>
