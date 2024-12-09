@@ -73,7 +73,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
     awareness?: { offset: Offset; handle: string }
   } = {}
 
-  private awarenessState: Record<string, any> | null = null
+  private awarenessState: Record<string, number | string> | null = null
 
   constructor(
     serverUrl: string,
@@ -146,8 +146,8 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
 
   async loadState() {
     if (this.persistence) {
-      const operationsHandle = await this.persistence.get(`operation_handle`)
-      const operationsOffset = await this.persistence.get(`operation_offset`)
+      const operationsHandle = await this.persistence.get(`operations_handle`)
+      const operationsOffset = await this.persistence.get(`operations_offset`)
 
       const awarenessHandle = await this.persistence.get(`awareness_handle`)
       const awarenessOffset = await this.persistence.get(`awareness_offset`)
@@ -223,6 +223,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
 
     if (this.awareness && this.awarenessState !== null) {
       this.awareness.setLocalState(this.awarenessState)
+      this.awarenessState = null
     }
   }
 
@@ -313,7 +314,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
             syncProtocol.readSyncMessage(decoder, encoder, this.doc, this)
           } else if (
             isControlMessage(message) &&
-            message.headers.control === "up-to-date"
+            message.headers.control === `up-to-date`
           ) {
             this.synced = true
 

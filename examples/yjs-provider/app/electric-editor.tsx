@@ -65,7 +65,7 @@ export default function ElectricEditor() {
     const toggleStatus =
       connectivityStatus === `connected` ? `disconnected` : `connected`
     setConnectivityStatus(toggleStatus)
-    toggleStatus === "connected" ? network.connect() : network.disconnect()
+    toggleStatus === `connected` ? network.connect() : network.disconnect()
   }
 
   useEffect(() => {
