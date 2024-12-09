@@ -2,10 +2,22 @@ import fs from 'node:fs'
 import { defineConfig } from 'vitepress'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 
+import demosData from '../data/demos.data.ts'
 import postsData from '../data/posts.data.ts'
 
-const postPaths = fs.readdirSync('blog/posts').filter(x => x.endsWith('.md')).map(x => `blog/posts/${x}`)
+const demoPaths = fs.readdirSync('demos').filter(x => x.endsWith('.md')).map(x => `demos/${x}`)
+const { demos, examples } = await demosData.load(demoPaths)
 
+const demoSidebarItems = await demos.map(demo => ({
+  text: demo.title,
+  link: demo.link
+}))
+const exampleSidebarItems = await examples.map(example => ({
+  text: example.title,
+  link: example.link
+}))
+
+const postPaths = fs.readdirSync('blog/posts').filter(x => x.endsWith('.md')).map(x => `blog/posts/${x}`)
 const posts = await postsData.load(postPaths)
 
 const blogSidebarItems = await posts.map(post => ({
@@ -80,6 +92,7 @@ export default defineConfig({
       { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
       { text: 'Use cases', link: '/use-cases/state-transfer', activeMatch: '/use-cases/' },
       { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/'},
+      { text: 'Demos', link: '/demos', activeMatch: '/demos/'},
       { text: 'Blog', link: '/blog', activeMatch: '/blog/'},
       { text: 'About', link: '/about/community', activeMatch: '/about/'}
     ],
@@ -195,6 +208,7 @@ export default defineConfig({
                 { text: 'React', link: '/docs/integrations/react' },
                 { text: 'Redis', link: '/docs/integrations/redis' },
                 { text: 'TanStack', link: '/docs/integrations/tanstack' },
+                { text: 'Yjs', link: '/docs/integrations/yjs' },
               ],
             },
             {
@@ -225,6 +239,18 @@ export default defineConfig({
             { text: 'Telemetry', link: '/docs/reference/telemetry' },
           ]
         },
+      ],
+      '/demos': [
+        {
+          text: 'Demos',
+          collapsed: false,
+          items: demoSidebarItems
+        },
+        {
+          text: 'Examples',
+          collapsed: false,
+          items: exampleSidebarItems,
+        }
       ],
       '/blog': [
         {
