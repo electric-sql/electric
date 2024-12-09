@@ -2,8 +2,8 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const originUrl = new URL(
     process.env.ELECTRIC_URL
-      ? `${process.env.ELECTRIC_URL}/v1/shape`
-      : `http://localhost:3000/v1/shape`
+      ? `${process.env.ELECTRIC_URL}/v1/shape/`
+      : `http://localhost:3000/v1/shape/`
   )
 
   url.searchParams.forEach((value, key) => {
