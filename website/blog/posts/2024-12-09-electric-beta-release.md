@@ -1,13 +1,13 @@
 ---
 title: "Electric BETA release"
 description: >-
-  The Electric sync engine is now in public BETA.
+  The Electric sync engine is now in BETA.
   If you haven't checked out Electric recently,
   it's a great time to take another look.
 excerpt: >-
-  With version X, the Electric sync engine is now
-  in public BETA! If you haven't checked out Electric
-  recently, it's a great time to take another look.
+  With version X, the Electric sync engine is now in BETA!
+  If you haven't checked out Electric recently, it's a
+  great time to take another look.
 authors: [kyle]
 image: /img/blog/electric-beta-release/header.jpg
 tags: [release]
@@ -28,8 +28,6 @@ post: true
     if (typeof window !== 'undefined' && document.querySelector) {
       let links = document.querySelectorAll('.cloud-cta a.VPButton.brand')
 
-      console.log('links', links)
-
       links.forEach((link) => {
         if (link.querySelector('span.vpi-electric-icon')) {
           return
@@ -44,15 +42,15 @@ post: true
   })
 </script>
 
-With [version X](#) the Electric sync engine is now in public BETA!
+With [version X](#) the Electric sync engine is now in BETA!
 
 If you haven't checked out Electric recently, it's a great time to [take another look](/docs/intro).
 
 ## What is Electric?
 
-[Electric](/product/electric) is a Postgres sync engine. We sync [little subsets](/docs/guides/shapes) of your Postgres data into local apps and services.
+[Electric](/product/electric) is a Postgres sync engine. We do real-time [partial replication](/docs/guides/shapes) of Postgres data into local apps and services.
 
-Use Electric to swap out data fetching for [data sync](/use-cases/data-sync). Build apps on instant, real-time, local data. Without having to roll your own sync engine or change your stack.
+Use Electric to swap out data *fetching* for [data *sync*](/use-cases/data-sync). Build apps on instant, real-time, local data. Without having to roll your own sync engine or change your stack.
 
 We also develop [PGlite](/product/pglite), a lightweight WASM Postgres you can run in the browser.
 
@@ -90,24 +88,24 @@ Electric has been [engineered from the ground up](/docs/api/http) to handle high
 
 > <br /><br /><br /><br />... proof case graph ... <br /><br /><br /><br /><br />
 
-See our [Scaling a sync engine](#) post and [benchmarks](/docs/reference/benchmarks) page for more details.
+See our [benchmarks](/docs/reference/benchmarks) page for more details.
 
-You can also see how large-scale apps built with Electric feel to use with our updated [ Linearlite](https://linearlite.electric-sql.com) demo. This is a [Linear](https://linear.app) clone that loads 100,000 issues and 200,000 comments through Electric into PGlite. It loads fast, it feels instant and it's fully interactive:
+You can also see how large-scale apps built with Electric feel to use with our updated [ Linearlite](/demos/linearlite) demo. This is a [Linear](https://linear.app) clone that loads 100,000k issues and their comments through Electric into PGlite. It loads fast, it feels instant and it's fully interactive:
 
 <figure>
-  <a href="https://linearlite.electric-sql.com" target="_blank">
+  <a href="https://linearlite.examples.electric-sql.com" target="_blank">
     <img :src="LinearLiteScreenshot" />
   </a>
   <figcaption>
     Screenshot of Linearlite. Click on it to
-    <a href="https://linearlite.electric-sql.com" target="_blank">
+    <a href="https://linearlite.examples.electric-sql.com" target="_blank">
       open the demo</a>
   </figcaption>
 </figure>
 
 ## Easy to adopt
 
-Our APIs are now stable. There will be no breaking changes in minor or patch releases moving forward.
+We've iterated a great deal on our APIs to make them as simple and powerful as possible. There should be no breaking changes in minor or patch releases moving forward.
 
 We have [updated docs](/docs/intro), with a new [Quickstart](/docs/quickstart) and guides for topics like:
 
