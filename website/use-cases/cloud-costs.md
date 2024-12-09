@@ -1,5 +1,5 @@
 ---
-title: "Cloud costs"
+title: "Cloud cost reduction"
 description: >-
   Take the query workload off your database and the
   compute workload off your cloud.

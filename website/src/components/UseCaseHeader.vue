@@ -6,9 +6,9 @@ const { frontmatter } = useData()
 
 <style scoped>
   .use-case-illustration {
-    width: 50vw;
-    max-width: 320px;
-    min-width: 180px;
+    width: calc(100px + 50vw);
+    max-width: 420px;
+    min-width: 240px;
     margin-top: -20px !important;
     margin-left: -24px !important;
   }
