@@ -126,7 +126,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
     }
 
     if (!this.loaded) {
-      this.loadState()
+      this.loadSyncState()
     } else if (options.connect) {
       this.connect()
     }
@@ -144,38 +144,39 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
     }
   }
 
-  async loadState() {
-    if (this.persistence) {
-      const operationsHandle = await this.persistence.get(`operations_handle`)
-      const operationsOffset = await this.persistence.get(`operations_offset`)
+  async loadSyncState() {
+    if (!this.persistence) {
+      throw Error(`Can't load sync state without persistence backend`)
+    }
+    const operationsHandle = await this.persistence.get(`operations_handle`)
+    const operationsOffset = await this.persistence.get(`operations_offset`)
 
-      const awarenessHandle = await this.persistence.get(`awareness_handle`)
-      const awarenessOffset = await this.persistence.get(`awareness_offset`)
+    const awarenessHandle = await this.persistence.get(`awareness_handle`)
+    const awarenessOffset = await this.persistence.get(`awareness_offset`)
 
-      // TODO: fix not loading changes from other users
-      const lastSyncedStateVector = await this.persistence.get(
-        `last_synced_state_vector`
-      )
+    const lastSyncedStateVector = await this.persistence.get(
+      `last_synced_state_vector`
+    )
 
-      this.lastSyncedStateVector = lastSyncedStateVector
-      this.modifiedWhileOffline = this.lastSyncedStateVector !== undefined
+    this.lastSyncedStateVector = lastSyncedStateVector
+    this.modifiedWhileOffline = this.lastSyncedStateVector !== undefined
 
-      this.resume = {
-        operations: {
-          handle: operationsHandle,
-          offset: operationsOffset,
-        },
-        // TODO: we want the last pings of users, so it's more complicated
-        awareness: {
-          handle: awarenessHandle,
-          offset: awarenessOffset,
-        },
-      }
+    this.resume = {
+      operations: {
+        handle: operationsHandle,
+        offset: operationsOffset,
+      },
 
-      this.loaded = true
-      if (this.shouldConnect) {
-        this.connect()
-      }
+      // TODO: we might miss some awareness updates since last pings
+      awareness: {
+        handle: awarenessHandle,
+        offset: awarenessOffset,
+      },
+    }
+
+    this.loaded = true
+    if (this.shouldConnect) {
+      this.connect()
     }
   }
 
@@ -192,7 +193,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
   disconnect() {
     this.shouldConnect = false
 
-    if (this.awareness) {
+    if (this.awareness && this.connected) {
       this.awarenessState = this.awareness.getLocalState()
 
       awarenessProtocol.removeAwarenessStates(
@@ -203,6 +204,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
         this
       )
 
+      // try to notify other clients that we are disconnected
       awarenessProtocol.removeAwarenessStates(
         this.awareness,
         [this.doc.clientID],
@@ -228,12 +230,6 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
   }
 
   private sendOperation(update: Uint8Array) {
-    if (update.length <= 2) {
-      throw Error(
-        `Shouldn't be trying to send operations without pending operations`
-      )
-    }
-
     if (!this.connected) {
       this.modifiedWhileOffline = true
       return Promise.resolve()
@@ -293,8 +289,6 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
         ...this.resume.awareness,
       })
 
-      // we probably want to extract this code
-      // save state per user
       const updateShapeState = (
         name: `operations` | `awareness`,
         offset: Offset,
