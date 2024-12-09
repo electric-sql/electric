@@ -19,14 +19,14 @@ type ToDo = {
 
 export default function Index() {
   const { data: todos } = useShape<ToDo>({
-    url: `${import.meta.env.VITE_ELECTRIC_URL}/v1/shape/`,
+    url: new URL(`${import.meta.env.VITE_ELECTRIC_URL}/v1/shape/`),
     table: `todos`,
     params: {
       database_id: import.meta.env.VITE_ELECTRIC_DATABASE_ID,
       token: import.meta.env.VITE_ELECTRIC_TOKEN,
     },
   })
-  todos.sort((a, b) => a.created_at - b.created_at)
+  todos.sort((a: ToDo, b: ToDo) => a.created_at - b.created_at)
   console.log({ todos })
   return (
     <Container size="1">
@@ -34,7 +34,7 @@ export default function Index() {
         <Heading>Electric TODOS</Heading>
 
         <Flex gap="3" direction="column">
-          {todos.map((todo) => {
+          {todos.map((todo: ToDo) => {
             return (
               <Flex key={todo.id} gap="2" align="center">
                 <Text as="label">
@@ -44,7 +44,11 @@ export default function Index() {
                       onClick={async () => {
                         console.log(`completed`)
                         await fetch(
-                          `${import.meta.env.VITE_SERVER_URL}/todos/${todo.id}`,
+                          new URL(
+                            `${import.meta.env.VITE_SERVER_URL}/todos/${
+                              todo.id
+                            }`
+                          ),
                           {
                             method: `PUT`,
                             headers: {
@@ -67,7 +71,9 @@ export default function Index() {
                   onClick={async () => {
                     console.log(`deleted`)
                     await fetch(
-                      `${import.meta.env.VITE_SERVER_URL}/todos/${todo.id}`,
+                      new URL(
+                        `${import.meta.env.VITE_SERVER_URL}/todos/${todo.id}`
+                      ),
                       {
                         method: `DELETE`,
                       }
@@ -88,7 +94,7 @@ export default function Index() {
               new FormData(event.target as HTMLFormElement)
             )
             const res = await fetch(
-              `${import.meta.env.VITE_SERVER_URL}/todos`,
+              new URL(`${import.meta.env.VITE_SERVER_URL}/todos`),
               {
                 method: `POST`,
                 headers: {

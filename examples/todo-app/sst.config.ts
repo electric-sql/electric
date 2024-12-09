@@ -3,11 +3,14 @@
 
 import { execSync } from "child_process"
 
+const isProduction = (stage: string) =>
+  stage.toLocaleLowerCase() === `production`
+
 export default $config({
   app(input) {
     return {
-      name: `todo-app-example`,
-      removal: input?.stage === `production` ? `retain` : `remove`,
+      name: `todo-app`,
+      removal: isProduction(input?.stage) ? `retain` : `remove`,
       home: `aws`,
       providers: {
         cloudflare: `5.42.0`,
@@ -19,24 +22,23 @@ export default $config({
     }
   },
   async run() {
-    const project = neon.getProjectOutput({ id: process.env.NEON_PROJECT_ID! })
-    const base = {
-      projectId: project.id,
-      branchId: project.defaultBranchId,
-    }
-
-    const db = new neon.Database(`todo-app-example`, {
-      ...base,
-      name:
-        $app.stage === `Production`
-          ? `todo-app-production`
-          : `todo-app-${$app.stage}`,
-      ownerName: `neondb_owner`,
-    })
-
-    const databaseUri = getNeonDbUri(project, db, false)
-    // const databasePooledUri = getNeonDbUri(project, db, true)
     try {
+      const project = neon.getProjectOutput({
+        id: process.env.NEON_PROJECT_ID!,
+      })
+      const base = {
+        projectId: project.id,
+        branchId: project.defaultBranchId,
+      }
+
+      const db = new neon.Database(`todo-app-db`, {
+        ...base,
+        name: isProduction($app.stage) ? `todo-app` : `todo-app-${$app.stage}`,
+        ownerName: `neondb_owner`,
+      })
+
+      const databaseUri = getNeonDbUri(project, db, false)
+
       databaseUri.apply(applyMigrations)
 
       const electricInfo = databaseUri.apply((uri) =>
@@ -52,7 +54,7 @@ export default $config({
         loadBalancer: {
           ports: [{ listen: "443/https", forward: "3010/http" }],
           domain: {
-            name: `todo-app-server-${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+            name: `todo-app-backend${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
             dns: sst.cloudflare.dns(),
           },
         },
@@ -72,7 +74,7 @@ export default $config({
         throw new Error(`ELECTRIC_API environment variable is required`)
       }
 
-      const website = new sst.aws.StaticSite("todo-website", {
+      const website = new sst.aws.StaticSite("todo-app-website", {
         build: {
           command: "npm run build",
           output: "dist",
@@ -86,7 +88,7 @@ export default $config({
           VITE_ELECTRIC_DATABASE_ID: electricInfo.id,
         },
         domain: {
-          name: `todo-app-site-${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+          name: `todo-app${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
           dns: sst.cloudflare.dns(),
         },
         dev: {
@@ -102,7 +104,7 @@ export default $config({
         website: website.url,
       }
     } catch (e) {
-      console.error(`Failed to deploy todo app example stack`, e)
+      console.error(`Failed to deploy todo app ${$app.stage} stack`, e)
     }
   },
 })

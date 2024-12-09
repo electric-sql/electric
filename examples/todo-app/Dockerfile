@@ -19,7 +19,7 @@ RUN pnpm run -r build
 
 
 # Need to make production image more clean
-FROM node:lts-alpine AS prod
+FROM base AS prod
 WORKDIR /app
 
 ENV NODE_ENV=production

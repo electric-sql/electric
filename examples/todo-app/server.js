@@ -6,7 +6,6 @@ import { z } from "zod"
 
 const { Pool } = pg
 const pool = new Pool({connectionString: process.env.DATABASE_URL})
-await pool.connect()
 
 const port = 3010
 
