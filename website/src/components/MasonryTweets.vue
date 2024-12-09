@@ -88,8 +88,8 @@ onMounted(async () => {
   }
   .masonry-item {
     width: 100%;
-    max-width: 462px;
-    margin: 0;
+    max-width: 520px;
+    margin: 0 auto;
     display: block;
   }
   .masonry-item .twitter-tweet iframe {

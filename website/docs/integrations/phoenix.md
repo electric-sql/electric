@@ -6,10 +6,6 @@ description: >-
 image: /img/integrations/electric-phoenix.jpg
 ---
 
-<script setup>
-  import HelpWanted from '/src/components/HelpWanted.vue'
-</script>
-
 <img src="/img/integrations/phoenix.svg" class="product-icon" />
 
 # Phoenix
