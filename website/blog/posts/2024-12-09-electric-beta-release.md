@@ -85,7 +85,7 @@ Electric and PGlite are being used in production by companies including [Google]
 > *&mdash; [Sully Omar](https://x.com/SullyOmarr), Co-founder &amp; CEO, [Otto](https://ottogrid.ai)*
 
 > At [Doorboost](https://www.doorboost.com) we aggregate millions of rows from a dozen platforms, all of which gets distilled down to a simple dashboard. With Electric we have been able to deliver this dashboard in milliseconds and update live. Moving forward, we will be building all our products using Electric.<br />
-> *&mdash; [Vache Asatryan](https://am.linkedin.com/in/vacheasatryan), Co-founder &amp; CTO, [Doorboost](https://doorboost.com)*
+> *&mdash; [Vache Asatryan](https://am.linkedin.com/in/vacheasatryan), CTO, [Doorboost](https://doorboost.com)*
 
 ### Scalable
 
