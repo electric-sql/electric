@@ -1,6 +1,7 @@
 <script>
 import { ref, onMounted, watch, markRaw } from "vue"
 import { Chart } from "chart.js/auto"
+import benchmarkData from "../../static/data/benchmarks/cdn_perf_benchmark_2024-12-09.json"
 
 function getComputedStyleValue(name) {
   if (typeof window !== "undefined") {
@@ -17,47 +18,20 @@ function formatMetricValue(metricName, value) {
       return `${value}%`
     case "syncServiceMemory":
     case "postgresMemory":
-      return `${value} MB`
+      return humanizeBytes(value)
     case "syncServiceStorage":
-      return `${value} GB`
+      return humanizeBytes(value)
   }
 }
 
-// TODO: Use actual data
-const staticData = {
-  60: {
-    clients: [0, 100000, 200000, 300000, 400000, 500000],
-    latency99: [50, 60, 70, 80, 90, 100],
-    latency95: [40, 50, 60, 70, 80, 90],
-    latencyMean: [30, 40, 50, 60, 70, 80],
-    syncServiceCPU: [10, 20, 30, 40, 50, 60],
-    syncServiceMemory: [200, 300, 400, 500, 600, 700],
-    syncServiceStorage: [100, 150, 200, 250, 300, 350],
-    postgresCPU: [5, 10, 15, 20, 25, 30],
-    postgresMemory: [50, 100, 150, 200, 250, 300],
-  },
-  1000: {
-    clients: [0, 100000, 200000, 300000, 400000, 500000],
-    latency99: [60, 70, 80, 90, 100, 110],
-    latency95: [50, 60, 70, 80, 90, 100],
-    latencyMean: [40, 50, 60, 70, 80, 90],
-    syncServiceCPU: [15, 25, 35, 45, 55, 65],
-    syncServiceMemory: [250, 350, 450, 550, 650, 750],
-    syncServiceStorage: [120, 170, 220, 270, 320, 370],
-    postgresCPU: [7, 12, 17, 22, 27, 32],
-    postgresMemory: [60, 110, 160, 210, 260, 310],
-  },
-  5000: {
-    clients: [0, 100000, 200000, 300000, 400000, 500000],
-    latency99: [70, 80, 90, 100, 110, 120],
-    latency95: [60, 70, 80, 90, 100, 110],
-    latencyMean: [50, 60, 70, 80, 90, 100],
-    syncServiceCPU: [20, 30, 40, 50, 60, 70],
-    syncServiceMemory: [300, 400, 500, 600, 700, 800],
-    syncServiceStorage: [140, 190, 240, 290, 340, 390],
-    postgresCPU: [10, 15, 20, 25, 30, 35],
-    postgresMemory: [70, 120, 170, 220, 270, 320],
-  },
+function humanizeBytes(bytes, decimals = 0) {
+  if (bytes < 0) throw new Error("Byte value cannot be negative.")
+  const units = ["B", "KB", "MB", "GB"]
+  const factor = 1024
+  if (bytes === 0) return `0 B`
+  const index = Math.floor(Math.log(bytes) / Math.log(factor))
+  const size = bytes / Math.pow(factor, index)
+  return `${size.toFixed(decimals)} ${units[index]}`
 }
 
 export default {
@@ -73,25 +47,33 @@ export default {
     const chartInstance = ref(null)
 
     const latencyOptions = [
-      { label: "Latency (99th percentile)", value: "latency99" },
-      { label: "Latency (95th percentile)", value: "latency95" },
+      { label: "Latency (min)", value: "latencyMin" },
+      { label: "Latency (95th percentile)", value: "latencyP95" },
+      { label: "Latency (99th percentile)", value: "latencyP99" },
       { label: "Latency (mean)", value: "latencyMean" },
     ]
-    const txRateOptions = Object.keys(staticData).map((key) => ({
-      label: `${key} txs per sec`,
-      value: key,
-    }))
-    const metricOptions = [
-      { label: "Sync Service CPU", value: "syncServiceCPU" },
-      { label: "Sync Service Memory", value: "syncServiceMemory" },
-      { label: "Sync Service Storage", value: "syncServiceStorage" },
-      { label: "Postgres CPU", value: "postgresCPU" },
-      { label: "Postgres Memory", value: "postgresMemory" },
-    ]
+    const txRateOptions = Object.keys(benchmarkData)
+      .sort()
+      .map((key) => ({
+        label: `Workload (${parseInt(key)} req/s)`,
+        value: key,
+      }))
 
-    const selectedLatency = ref("latency95")
-    const selectedTxRate = ref(1000)
-    const selectedMetric = ref("syncServiceMemory")
+    const metricOptions = [
+      { label: "Sync service CPU", value: "syncServiceCPU" },
+      { label: "Sync service memory", value: "syncServiceMemory" },
+      { label: "Sync service storage", value: "syncServiceStorage" },
+      { label: "Postgres CPU", value: "postgresCPU" },
+      { label: "Postgres memory", value: "postgresMemory" },
+    ].filter((option) => option.value in benchmarkData[txRateOptions[0].value])
+
+    const selectedLatency = ref("latencyP95")
+    const selectedTxRate = ref(
+      txRateOptions[Math.floor(txRateOptions.length / 2)].value
+    )
+    const selectedMetric = ref(
+      metricOptions[Math.floor(metricOptions.length / 2)].value
+    )
 
     const brandColor1 = getComputedStyleValue("--electric-color")
     const brandColor2 = getComputedStyleValue("--vp-c-brand-1")
@@ -101,7 +83,7 @@ export default {
         createChart()
         return
       }
-      const data = staticData[selectedTxRate.value]
+      const data = benchmarkData[selectedTxRate.value]
       const labels = data.clients
       const latencyData = data[selectedLatency.value]
       const metricData = data[selectedMetric.value]
@@ -117,7 +99,7 @@ export default {
         chartInstance.value.destroy()
       }
 
-      const data = staticData[selectedTxRate.value]
+      const data = benchmarkData[selectedTxRate.value]
       const labels = data.clients
       const latencyData = data[selectedLatency.value]
       const metricData = data[selectedMetric.value]
