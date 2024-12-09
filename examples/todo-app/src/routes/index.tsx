@@ -85,7 +85,6 @@ export default function Index() {
             )
           })}
         </Flex>
-        // @ts-ignore
         <form
           onSubmit={async (event: React.FormEvent) => {
             event.preventDefault()
