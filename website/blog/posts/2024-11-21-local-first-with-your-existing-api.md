@@ -14,4 +14,4 @@ outline: [2, 4]
 post: true
 ---
 
-...
+This post will be published shortly. Bear with us.
