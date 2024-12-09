@@ -298,4 +298,4 @@ Below we list some useful tools that work well for implementing writes with Elec
 - [TinyBase](https://tinybase.org)
 - [tRPC](https://github.com/KyleAMathews/trpc-crdt)
 
-See also the list of projects on the [alternatives page](/docs/reference/alternatives#local-first).
+See also the list of local-first projects on the [alternatives page](/docs/reference/alternatives#local-first).
