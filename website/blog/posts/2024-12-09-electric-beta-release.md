@@ -87,7 +87,9 @@ So many real-time sync systems demo well but break under real load.
 
 Electric has been [engineered from the ground up](/docs/api/http) to handle high-throughput workloads, like [Trigger.dev](https://trigger.dev/launchweek/0/realtime), with low latency and flat resource use. You can stream real-time data to **millions of concurrent users** from a single commodity Postgres:
 
-<ScalabilityChart />
+<figure>
+  <ScalabilityChart />
+</figure>
 
 See our [benchmarks](/docs/reference/benchmarks) page for more details.
 

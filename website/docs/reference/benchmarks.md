@@ -134,11 +134,13 @@ Latency rises linearly. Memory usage is relatively flat.
 
 Similar to the diverse write fanout, but with many shapes the write falls into, only one is  actively listened to.
 
-## Cloud <Badge type="warning" text="coming soon" />
+## Cloud
 
-Cloud benchmarks test the performance and scalability of Electric when running behind a CDN.
+Electric is designed to run behind a CDN, using the CDN's request collapsing capability to scale out to millions of concurrent users. The graph below shows the latency and compute resource of a single Electric server using this technique to handle millions of concurrent users.
 
-<ScalabilityChart />
+<figure>
+  <ScalabilityChart />
+</figure>
 
 ## PGlite
 
