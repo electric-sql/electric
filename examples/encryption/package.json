@@ -1,0 +1,43 @@
+{
+  "name": "@electric-examples/encryption",
+  "private": true,
+  "version": "0.0.1",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "backend:up": "PROJECT_NAME=basic-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=basic-example pnpm -C ../../ run example-backend:down",
+    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
+    "dev": "concurrently \"vite\" \"node backend/api.js\"",
+    "build": "vite build",
+    "format": "eslint . --ext ts,tsx --fix",
+    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electric-sql/react": "workspace:*",
+    "base64-js": "^1.5.1",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "pg": "^8.12.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "uuid": "^10.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@databases/pg-migrations": "^5.0.3",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "dotenv": "^16.4.5",
+    "eslint": "^8.57.0",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4"
+  }
+}
