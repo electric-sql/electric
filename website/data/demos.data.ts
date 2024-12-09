@@ -21,9 +21,9 @@ export default {
     })
 
     return {
-      demos: demos.filter(x => x.demo),
-      homepage_demos: demos.filter(x => x.homepage),
-      examples: demos.filter(x => x.example)
+      demos: demos.filter(x => x.demo === true),
+      homepage_demos: demos.filter(x => x.homepage === true),
+      examples: demos.filter(x => x.demo !== true).sort((a, b) => a.link.localeCompare(b.link))
     }
   },
 }

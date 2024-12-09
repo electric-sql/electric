@@ -292,7 +292,7 @@ See the:
 
 - [Quickstart](/docs/quickstart)
 - [HTTP API](/docs/api/http)
-- [Examples](https://github.com/electric-sql/electric/tree/main/examples)
+- [Examples](/demos)
 
 If you have any questions or need support, ask on the `#help-and-support` channel in the [Electric Discord](https://discord.electric-sql.com).
 

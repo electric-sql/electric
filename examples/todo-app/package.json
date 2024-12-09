@@ -60,8 +60,8 @@
     "url": "git+https://github.com/KyleAMathews/vite-react-router-electric-sql-starter.git"
   },
   "scripts": {
-    "backend:up": "PROJECT_NAME=todo-app pnpm -C ../../ run example-backend:up && pnpm db:migrate",
-    "backend:down": "PROJECT_NAME=todo-app pnpm -C ../../ run example-backend:down",
+    "backend:up": "PROJECT_NAME=todo-app-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=todo-app-example pnpm -C ../../ run example-backend:down",
     "build": "vite build",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
     "dev": "concurrently \"vite\" \"node server.js\"",

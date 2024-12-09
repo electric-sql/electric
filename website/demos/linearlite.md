@@ -15,9 +15,11 @@ order: 10
 
 [Linear](https://linear.app) project management app clone, built using [Electric](/product/electric) and [PGlite](/product/pglite).
 
-<DemoEmbed :demo="$frontmatter" />
+<DemoCTAs :demo="$frontmatter" />
 
 ## Linearlite using Electric and PGlite
+
+<DemoEmbed :demo="$frontmatter" />
 
 This demonstrates a fully-interactive, offline capable, real-world app with a large data set. It shows both fast initial data loading and instant local reactivity, despite a very large data set loaded into the local database.
 

@@ -455,4 +455,4 @@ The following error types may be encountered:
 - `MissingShapeHandleError`: Missing required shape handle
 - `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
 
-See the [Examples](https://github.com/electric-sql/electric/tree/main/examples) and [integrations](/docs/integrations/react) for more usage examples.
+See the [Demos](/demos) and [integrations](/docs/integrations/react) for more usage examples.

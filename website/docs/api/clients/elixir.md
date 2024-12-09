@@ -30,7 +30,7 @@ stream
 |> Stream.run()
 ```
 
-You can materialise the shape stream into a variety of data structures. For example by matching on insert, update and delete operations and applying them to a Map or an Ecto struct. (See the [redis-sync](https://github.com/electric-sql/electric/blob/main/examples/redis-sync/src/index.ts) example and Typescript [Shape class](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/shape.ts) for reference).
+You can materialise the shape stream into a variety of data structures. For example by matching on insert, update and delete operations and applying them to a Map or an Ecto struct. (See the [Redis example](/demos/redis) example and Typescript [Shape class](/docs/api/clients/typescript#shape) for reference).
 
 ### Ecto queries
 

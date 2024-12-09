@@ -14,10 +14,8 @@ order: 30
 
 This is a collaborative pixel art editor with real-time multiplayer editing.
 
-<DemoEmbed :demo="$frontmatter" />
+<DemoCTAs :demo="$frontmatter" />
 
 ## Pixel art using Electric
 
-XXX description of what's interesting about this.
-
-<DemoCTAs :demo="$frontmatter" />
+<DemoEmbed :demo="$frontmatter" />
