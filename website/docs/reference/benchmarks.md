@@ -15,6 +15,7 @@ import SingleShapeSingleClient from '/static/img/benchmarks/single-shape-single-
 import WriteFanout from '/static/img/benchmarks/write-fanout.png?url'
 import WriteFanoutMemory from '/static/img/benchmarks/write-fanout-memory.png?url'
 import UnrelatedShapesOneClientLatency from '/static/img/benchmarks/unrelated-shapes-one-client-latency.png?url'
+import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 </script>
 
 # Benchmarks
@@ -73,7 +74,7 @@ The next four measure live update time, i.e. write performance:
   </a>
 </figure>
 
-This measures the memory use and the time to sync all the data into all the clients for an increasing number of concurrent clients performing 
+This measures the memory use and the time to sync all the data into all the clients for an increasing number of concurrent clients performing
 an initial sync of a 500 row single shape. The results show stable memory use with time to sync all data rising roughly linearly up to 2,000 concurrent clients.
 
 #### 2. A single client syncing a large shape
@@ -111,7 +112,7 @@ The two graphs differ based on the type of WHERE clause used for the shapes:
 - **Bottom Graph:** The WHERE clause is in the form `field LIKE constant`, an example of a non-optimised query type.
   In this case, the latency increases linearly with the number of shapes because Electric must evaluate each shape individually to determine if it is affected by the write.
   Despite this, the response times remain low, a tenth of a second for 10,000 shapes.
-  
+
 #### 4. One shape with many clients
 
 <figure>
@@ -166,7 +167,7 @@ Latency and peak memory use rises linearly. Average memory use is flat.
 
 Cloud benchmarks test the performance and scalability of Electric when running behind a CDN.
 
-We will post them here when available.
+<ScalabilityChart />
 
 ## PGlite
 
