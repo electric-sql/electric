@@ -25,6 +25,12 @@ post: true
 
   import { onMounted } from 'vue'
 
+  import { data as demosData } from '../../data/demos.data.ts'
+  const { demos } = demosData
+
+  const notesDemo = demos.find(x => x.link === '/demos/notes')
+  const pixelArtDemo = demos.find(x => x.link === '/demos/pixel-art')
+
   onMounted(async () => {
     if (typeof window !== 'undefined' && document.querySelector) {
       let links = document.querySelectorAll('.cloud-cta a.VPButton.brand')
@@ -110,7 +116,7 @@ You can also see how large-scale apps built with Electric feel to use with our u
 
 We've iterated a great deal on our APIs to make them as simple and powerful as possible. There should be no breaking changes in minor or patch releases moving forward.
 
-We have [updated docs](/docs/intro), with a new [Quickstart](/docs/quickstart) and guides for topics like:
+We've updated our [Documentation](/docs/intro), with a new [Quickstart](/docs/quickstart) and guides for topics like:
 
 - how to do [auth](/docs/guides/auth)
 - how to handle [local writes](/docs/guides/writes)
@@ -118,9 +124,12 @@ We have [updated docs](/docs/intro), with a new [Quickstart](/docs/quickstart) a
 - how to [deploy Electric](/docs/guides/deployment)
 - how to [write your own client](/docs/guides/client-development) for any language or environment
 
-We have [client libraries](/docs/api/clients/typescript), [integration docs](/docs/integrations/react) and [examples](#) showing how to use Electric with different patterns and frameworks:
+We have [client libraries](/docs/api/clients/typescript), [integration docs](/docs/integrations/react), [demo apps](/demos) and [technical examples](/demos#technical-examples) showing how to use Electric with different patterns and frameworks:
 
-> <br /><br /><br /><br /><br />... grid of the best examples ...<br /><br /><br /><br /><br /><br />
+<div class="demos-grid">
+  <DemoListing :demo="notesDemo" />
+  <DemoListing :demo="pixelArtDemo" />
+</div>
 
 ### Incrementally
 
@@ -172,7 +181,7 @@ This works with *any* Postgres [data model and host](/docs/guides/deployment), a
 
 ### With your existing API
 
-Because Electric syncs [over HTTP](/docs/api/http), you can use it together [with your existing API](#blog-post).
+Because Electric syncs [over HTTP](/docs/api/http), you can use it together [with your existing API](/blog/2024/11/21/local-first-with-your-existing-api).
 
 This allows you to handle concerns like [auth](/docs/guides/auth) and [writes](/docs/guides/writes) with your existing code and web service integrations. You don't need to codify your auth logic into database rules. You don't need to replace your API endpoints and middleware stack.
 

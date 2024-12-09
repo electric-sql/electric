@@ -173,7 +173,7 @@ See the kind of applications you can build with Electric
     feel like to use</span></span>.
 
 </div>
-<div class="demos-grid">
+<div class="demos-grid homepage">
   <DemoListing v-for="(demo, index) in homepage_demos"
       :demo="demo"
       :key="index"
