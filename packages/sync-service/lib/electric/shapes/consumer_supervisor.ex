@@ -62,7 +62,9 @@ defmodule Electric.Shapes.ConsumerSupervisor do
       config
 
     Process.set_label({:consumer_supervisor, shape_handle})
-    Logger.metadata(stack_id: config.stack_id, shape_handle: shape_handle)
+    metadata = [stack_id: config.stack_id, shape_handle: shape_handle]
+    Logger.metadata(metadata)
+    Electric.Telemetry.Sentry.set_tags_context(metadata)
 
     shape_storage = Electric.ShapeCache.Storage.for_shape(shape_handle, storage)
 

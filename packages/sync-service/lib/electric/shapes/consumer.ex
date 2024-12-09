@@ -60,7 +60,9 @@ defmodule Electric.Shapes.Consumer do
     %{log_producer: producer, storage: storage, shape_status: {shape_status, shape_status_state}} =
       config
 
-    Logger.metadata(shape_handle: config.shape_handle, stack_id: config.stack_id)
+    metadata = [shape_handle: config.shape_handle, stack_id: config.stack_id]
+    Logger.metadata(metadata)
+    Electric.Telemetry.Sentry.set_tags_context(metadata)
 
     Process.flag(:trap_exit, true)
 

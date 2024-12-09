@@ -86,6 +86,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
     Process.set_label({:ets_inspector, opts.stack_id})
     Logger.metadata(stack_id: opts.stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
     # Name needs to be an atom but we don't want to dynamically create atoms.
     # Instead, we will use the reference to the table that is returned by `:ets.new`
