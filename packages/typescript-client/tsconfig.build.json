@@ -1,8 +1,5 @@
 {
   "extends": "../../tsconfig.build.json",
-  "compilerOptions": {
-    "skipLibCheck": true
-  },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "tests", "dist"]
 }
