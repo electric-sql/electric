@@ -1,0 +1,50 @@
+{
+  "name": "@electric-examples/yjs-provider",
+  "private": true,
+  "version": "0.0.1",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "backend:up": "PROJECT_NAME=yjs-provider pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=yjs-provider pnpm -C ../../ run example-backend:down",
+    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
+    "dev": "next dev --turbo -p 5173",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --ext js,ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "stylecheck": "eslint . --quiet",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@codemirror/lang-javascript": "^6.2.2",
+    "@codemirror/state": "^6.4.1",
+    "@codemirror/view": "^6.32.0",
+    "@electric-sql/client": "workspace:*",
+    "@electric-sql/react": "workspace:*",
+    "@neondatabase/serverless": "^0.10.4",
+    "codemirror": "^6.0.1",
+    "lib0": "^0.2.96",
+    "next": "^14.2.9",
+    "pg": "^8.13.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sst": "^3.3.35",
+    "y-codemirror.next": "0.3.5",
+    "y-indexeddb": "^9.0.12",
+    "y-protocols": "1.0.6",
+    "yjs": "^13.6.18"
+  },
+  "devDependencies": {
+    "@databases/pg-migrations": "^5.0.3",
+    "@next/eslint-plugin-next": "^14.2.5",
+    "@types/pg": "^8.11.6",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "dotenv": "^16.4.5",
+    "eslint": "^8.57.0",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4"
+  }
+}
