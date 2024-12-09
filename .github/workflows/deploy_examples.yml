@@ -48,13 +48,13 @@ jobs:
           restore-keys: |
             sst-cache-main-${{ runner.os }}
 
-      - name: Deploy Linearlite
-        working-directory: examples/linearlite
+      - name: Deploy Linearlite Read Only
+        working-directory: examples/linearlite-read-only
         run: |
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
           if [ -f ".sst/outputs.json" ]; then
-            linearlite=$(jq -r '.website' .sst/outputs.json)
-            echo "linearlite=$linearlite" >> $GITHUB_ENV
+            linearlite_read_only=$(jq -r '.website' .sst/outputs.json)
+            echo "linearlite_read_only=$linearlite_read_only" >> $GITHUB_ENV
           else
             echo "sst outputs file not found. Exiting."
             exit 1
@@ -79,12 +79,12 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const linearlite = process.env.linearlite;
+            const linearlite_read_only = process.env.linearlite_read_only;
             const nextjs = process.env.nextjs;
 
             const prNumber = context.issue.number;
             const commentBody = `## Examples
-            - linearlite: ${linearlite}
+            - linearlite-read-only: ${linearlite_read_only}
             - nextjs: ${nextjs}
             `;
 
