@@ -316,11 +316,13 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
           ) {
             this.synced = true
 
-            updateShapeState(
-              `operations`,
-              this.operationsStream!.lastOffset,
-              this.operationsStream!.shapeHandle
-            )
+            if (this.operationsStream?.lastOffset && this.operationsStream?.shapeHandle) {
+              updateShapeState(
+                `operations`,
+                this.operationsStream.lastOffset,
+                this.operationsStream.shapeHandle
+              )
+            }
           }
         })
       }
@@ -347,11 +349,13 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
           }
         })
 
-        updateShapeState(
-          `awareness`,
-          this.awarenessStream!.lastOffset,
-          this.awarenessStream!.shapeHandle
-        )
+        if (this.awarenessStream?.lastOffset && this.awarenessStream?.shapeHandle) {
+          updateShapeState(
+            `awareness`,
+            this.awarenessStream.lastOffset,
+            this.awarenessStream.shapeHandle
+          )
+        }
       }
 
       const unsubscribeAwarenessHandler = this.awarenessStream.subscribe(
