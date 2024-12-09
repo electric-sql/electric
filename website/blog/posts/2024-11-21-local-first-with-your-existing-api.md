@@ -77,7 +77,7 @@ For example, REST APIs are stateless. We know how to scale them. We know how to 
 
 ### Electric's approach
 
-At Electric, our mission is to make [sync](/use-cases/state-transfer) and [local-first](/use-cases/local-first-software) adoptable for mainstream software. So, one of the main challenges we've focused on is how to use Electric with your existing software stack.
+At Electric, our mission is to make [sync](/use-cases/data-sync) and [local-first](/use-cases/local-first-software) adoptable for mainstream software. So, one of the main challenges we've focused on is how to use Electric with your existing software stack.
 
 This is why we work with [any data model](/docs/guides/deployment#data-model-compatibility) in [any standard Postgres](/docs/guides/deployment#_1-running-postgres). It's why we allow you to sync data into anything from a [JavaScript object](/docs/api/clients/typescript#shape) to a [local database](/product/pglite). And it's why we focus on providing [composable primitives](/blog/2024/07/17/electric-next) rather than a one-size-fits-all solution.
 
@@ -109,7 +109,7 @@ To build local-first you have to have the data locally. If you're doing that wit
   </a>
 </figure>
 
-This is why you need [data sync](/use-cases/state-transfer). To keep the local data fresh when it changes.
+This is why you need [data sync](/use-cases/data-sync). To keep the local data fresh when it changes.
 
 Happily, this is exactly what Electric does. It [syncs data into local apps and services](/product/electric) and keeps it fresh for you. Practically what does this look like? Well, instead of fetching data using web service calls, i.e.: something like this:
 
