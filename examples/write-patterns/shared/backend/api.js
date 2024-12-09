@@ -7,9 +7,7 @@ import { z } from 'zod'
 
 // Connect to Postgres.
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:54321/electric'
-const DATABASE_USE_SSL = process.env.DATABASE_USE_SSL === 'true' || false
-const pool = new pg.Pool({connectionString: DATABASE_URL, ssl: DATABASE_USE_SSL})
-const db = await pool.connect()
+const pool = new pg.Pool({connectionString: DATABASE_URL})
 
 // Expose an HTTP server.
 const PORT = parseInt(process.env.PORT || '3001')
@@ -46,7 +44,7 @@ const createTodo = async (id, title, created_at, write_id) => {
     write_id || null
   ]
 
-  await db.query(sql, params)
+  await pool.query(sql, params)
 }
 
 const updateTodo = async (id, completed, write_id) => {
@@ -61,13 +59,13 @@ const updateTodo = async (id, completed, write_id) => {
     id
   ]
 
-  await db.query(sql, params)
+  await pool.query(sql, params)
 }
 
 const deleteTodo = async (id) => {
   const sql = `DELETE from todos where id = $1`
   const params = [id]
-  await db.query(sql, params)
+  await pool.query(sql, params)
 }
 
 // Expose the shared REST API to create, update and delete todos.
@@ -160,8 +158,9 @@ app.post(`/changes`, async (req, res) => {
     return res.status(400).json({ errors: err.errors })
   }
 
+  const client = await pool.connect()
   try {
-    await db.query('BEGIN')
+    await client.query('BEGIN')
 
     data.forEach((tx) => {
       tx.changes.forEach(({operation, value, write_id}) => {
@@ -181,12 +180,14 @@ app.post(`/changes`, async (req, res) => {
       })
     })
 
-    await db.query('COMMIT')
+    await client.query('COMMIT')
   }
   catch (err) {
-    await db.query('ROLLBACK')
+    await client.query('ROLLBACK')
 
     return res.status(500).json({ errors: err })
+  }finally {
+    await client.release()
   }
 
   return res.status(200).json({ status: 'OK' })
@@ -194,5 +195,5 @@ app.post(`/changes`, async (req, res) => {
 
 // Start the server
 app.listen(PORT, () => {
-  console.log(`Server listening at http://localhost:${PORT}`)
+  console.log(`Server listening at port ${PORT}`)
 })
