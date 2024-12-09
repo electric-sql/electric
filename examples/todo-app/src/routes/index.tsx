@@ -19,9 +19,9 @@ type ToDo = {
 
 export default function Index() {
   const { data: todos } = useShape<ToDo>({
-    url: new URL(`${import.meta.env.VITE_ELECTRIC_URL}/v1/shape/`),
-    table: `todos`,
+    url: new URL(`${import.meta.env.VITE_ELECTRIC_URL}/v1/shape/`).href,
     params: {
+      table: `todos`,
       database_id: import.meta.env.VITE_ELECTRIC_DATABASE_ID,
       token: import.meta.env.VITE_ELECTRIC_TOKEN,
     },
@@ -32,7 +32,6 @@ export default function Index() {
     <Container size="1">
       <Flex gap="5" mt="5" direction="column">
         <Heading>Electric TODOS</Heading>
-
         <Flex gap="3" direction="column">
           {todos.map((todo: ToDo) => {
             return (
@@ -48,7 +47,7 @@ export default function Index() {
                             `${import.meta.env.VITE_SERVER_URL}/todos/${
                               todo.id
                             }`
-                          ),
+                          ).href,
                           {
                             method: `PUT`,
                             headers: {
@@ -73,7 +72,7 @@ export default function Index() {
                     await fetch(
                       new URL(
                         `${import.meta.env.VITE_SERVER_URL}/todos/${todo.id}`
-                      ),
+                      ).href,
                       {
                         method: `DELETE`,
                       }
@@ -86,15 +85,16 @@ export default function Index() {
             )
           })}
         </Flex>
+        // @ts-ignore
         <form
-          onSubmit={async (event) => {
+          onSubmit={async (event: React.FormEvent) => {
             event.preventDefault()
             const id = uuidv4()
             const formData = Object.fromEntries(
               new FormData(event.target as HTMLFormElement)
             )
             const res = await fetch(
-              new URL(`${import.meta.env.VITE_SERVER_URL}/todos`),
+              new URL(`${import.meta.env.VITE_SERVER_URL}/todos`).href,
               {
                 method: `POST`,
                 headers: {
