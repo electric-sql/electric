@@ -27,8 +27,6 @@
 
 Your Postgres data, in sync, wherever you need it.
 
-It's like GraphQL, but for Postgres.
-
 **Table of Contents:**
 
 - [Quick links](#quick-links)
