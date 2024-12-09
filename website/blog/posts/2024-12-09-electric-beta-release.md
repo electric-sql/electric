@@ -5,7 +5,7 @@ description: >-
   If you haven't checked out Electric recently,
   it's a great time to take another look.
 excerpt: >-
-  With version 1.0.0-beta, the Electric sync engine is now in BETA!
+  With version 1.0.0-beta.0, the Electric sync engine is now in BETA!
   If you haven't checked out Electric recently, it's a
   great time to take another look.
 authors: [kyle]
@@ -49,7 +49,7 @@ post: true
   })
 </script>
 
-With version [`1.0.0-beta`](https://github.com/electric-sql/electric/blob/main/packages/sync-service/CHANGELOG.md) the Electric sync engine is now in BETA!
+With version [`1.0.0-beta.0`](https://github.com/electric-sql/electric/blob/main/packages/sync-service/CHANGELOG.md) the Electric sync engine is now in BETA!
 
 If you haven't checked out Electric recently, it's a great time to [take another look](/docs/intro).
 
@@ -206,11 +206,11 @@ With this BETA release, Electric is stable and ready for prime time use. If you 
   </div>
 </div>
 
-### Signup for cloud
+### Signup for early access to Electric Cloud
 
-We're also working hard building our [Cloud product](/product/cloud), which provides managed Electric hosting so you don't need to [host Electric yourself](/docs/guides/deployment).
+We're also building [Electric Cloud](/product/cloud), which provides managed Electric hosting (for those that don't want [host Electric themselves](/docs/guides/deployment)).
 
-If you're interested in using Electric Cloud, you can sign up for early access now:
+If you're interested in using Electric Cloud, you can sign up for early access here:
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta">
