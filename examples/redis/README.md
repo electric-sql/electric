@@ -24,7 +24,7 @@ pnpm run -r build
 Navigate back to this directory:
 
 ```shell
-cd examples/redis-sync
+cd examples/redis
 ```
 
 Start the example backend services using [Docker Compose](https://docs.docker.com/compose/):
