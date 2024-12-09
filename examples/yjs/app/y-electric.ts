@@ -274,8 +274,10 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
 
       this.operationsStream = new ShapeStream<OperationMessage>({
         url: this.baseUrl,
-        table: `ydoc_operations`,
-        where: `room = '${this.roomName}'`,
+        params: {
+          table: `ydoc_operations`,
+          where: `room = '${this.roomName}'`,
+        },
         parser: parseToDecoder,
         subscribe: true,
         ...this.resume.operations,
@@ -283,8 +285,10 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
 
       this.awarenessStream = new ShapeStream({
         url: this.baseUrl,
-        where: `room = '${this.roomName}'`,
-        table: `ydoc_awareness`,
+        params: {
+          where: `room = '${this.roomName}'`,
+          table: `ydoc_awareness`,
+        },
         parser: { ...parseToDecoderLazy, ...paserToTimestamptz },
         ...this.resume.awareness,
       })
