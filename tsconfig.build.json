@@ -1,11 +1,3 @@
 {
-  "compilerOptions": {
-    "incremental": false,
-    "baseUrl": "./",
-    "target": "es2016",
-    "noEmit": true,
-    "jsx": "preserve",
-    "module": "preserve",
-    "moduleResolution": "bundler"
-  }
+  "extends": "./tsconfig.base.json",
 }
