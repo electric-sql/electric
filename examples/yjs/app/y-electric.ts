@@ -316,7 +316,10 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
           ) {
             this.synced = true
 
-            if (this.operationsStream?.lastOffset && this.operationsStream?.shapeHandle) {
+            if (
+              this.operationsStream?.lastOffset &&
+              this.operationsStream?.shapeHandle
+            ) {
               updateShapeState(
                 `operations`,
                 this.operationsStream.lastOffset,
@@ -349,7 +352,10 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
           }
         })
 
-        if (this.awarenessStream?.lastOffset && this.awarenessStream?.shapeHandle) {
+        if (
+          this.awarenessStream?.lastOffset &&
+          this.awarenessStream?.shapeHandle
+        ) {
           updateShapeState(
             `awareness`,
             this.awarenessStream.lastOffset,
