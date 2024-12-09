@@ -99,9 +99,15 @@ export default function ElectricEditor() {
         </button>
       </form>
       <p>
-        This is a demo of <a href="https://github.com/yjs/yjs">Yjs</a> shared
-        editor syncing with {` `}
-        <a href="https://github.com/electric-sql/electric">Electric</a>.
+        This is a demo of <a href="https://github.com/yjs/yjs">Yjs</a> using
+        {` `}
+        {` `}
+        <a href="https://github.com/electric-sql/electric">Electric</a> for
+        syncing.
+      </p>
+      <p>
+        The content of this editor is shared with every client that visits this
+        domain.
       </p>
       <div ref={editor}></div>
     </div>

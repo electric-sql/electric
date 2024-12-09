@@ -3,11 +3,14 @@
 
 import { execSync } from "child_process"
 
+const isProduction = () => $app.stage.toLocaleLowerCase() === `production`
+
 export default $config({
   app(input) {
     return {
       name: `yjs`,
-      removal: input?.stage === `production` ? `retain` : `remove`,
+      removal:
+        input?.stage.toLocaleLowerCase() === `production` ? `retain` : `remove`,
       home: `aws`,
       providers: {
         cloudflare: `5.42.0`,
@@ -19,39 +22,41 @@ export default $config({
     }
   },
   async run() {
-    const project = neon.getProjectOutput({ id: process.env.NEON_PROJECT_ID! })
-    const base = {
-      projectId: project.id,
-      branchId: project.defaultBranchId,
-    }
-
-    const db = new neon.Database(`yjs`, {
-      ...base,
-      ownerName: `neondb_owner`,
-      name:
-        $app.stage === `Production` ? `yjs-production` : `yjs-${$app.stage}`,
-    })
-
-    const databaseUri = getNeonDbUri(project, db, false)
-    const pooledUri = getNeonDbUri(project, db, true)
     try {
+      const project = neon.getProjectOutput({
+        id: process.env.NEON_PROJECT_ID!,
+      })
+      const base = {
+        projectId: project.id,
+        branchId: project.defaultBranchId,
+      }
+
+      const db = new neon.Database(`yjs-db`, {
+        ...base,
+        ownerName: `neondb_owner`,
+        name: isProduction() ? `yjs` : `yjs-${$app.stage}`,
+      })
+
+      const databaseUri = getNeonDbUri(project, db, false)
+      const pooledUri = getNeonDbUri(project, db, true)
       databaseUri.apply(applyMigrations)
 
       const electricInfo = databaseUri.apply((uri) =>
         addDatabaseToElectric(uri)
       )
 
-      const serverless = deployServerlessApp(electricInfo, pooledUri)
-
+      // const serverless = deployServerlessApp(electricInfo, pooledUri)
       const website = deployAppServer(electricInfo, databaseUri)
 
       return {
+        // serverless_url: serverless.url,
         server_url: website.url,
-        serverless_url: serverless.url,
         databaseUri,
         databasePooledUri: pooledUri,
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error(e)
+    }
   },
 })
 
@@ -74,7 +79,7 @@ function deployAppServer(
     loadBalancer: {
       ports: [{ listen: "443/https", forward: "3000/http" }],
       domain: {
-        name: `yjs-server-${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+        name: `yjs-server${isProduction() ? `` : `-${$app.stage}`}.examples.electric-sql.com`,
         dns: sst.cloudflare.dns(),
       },
     },
@@ -108,7 +113,7 @@ function deployServerlessApp(
       NEON_DATABASE_URL: uri,
     },
     domain: {
-      name: `yjs${$app.stage === `Production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+      name: `yjs${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
       dns: sst.cloudflare.dns(),
     },
   })

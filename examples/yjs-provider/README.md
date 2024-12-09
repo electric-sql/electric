@@ -1,22 +1,28 @@
-# Yjs Electric provider example
+# Yjs Electric provider
 
-## Setup
+This example showcases a multiplayer [Codemirror](https://codemirror.net/) editor with [YJS](https://github.com/yjs/yjs) and [ElectricSQL](https://electric-sql.com/). All data is synchronized through [Postgres](https://www.postgresql.org/), eliminating the need for additional real-time infrastructure. 
 
-1. Make sure you've installed all dependencies for the monorepo and built packages
+Y-Electric is a [YJS connection provider](https://docs.yjs.dev/ecosystem/connection-provider) that comes with offline support, integrates with [database providers](https://docs.yjs.dev/ecosystem/database-provider) and also handles [Presence/Awareness](https://docs.yjs.dev/api/about-awareness) data. It works with the entire YJS ecosystem and with you existing apps too!
 
-From the root directory:
+> We're releasing The Y-Electric backend as a package soon!
 
-- `pnpm i`
-- `pnpm run -r build`
+## How to run
 
-2. Start the docker containers
+Make sure you've installed all dependencies for the monorepo and built the packages (from the monorepo root directory):
 
-`pnpm run backend:up`
+```shell
+pnpm install
+pnpm run -r build
+```
 
-3. Start the dev server
+Start the docker containers (in this directory):
 
-`pnpm run dev`
+```shell
+pnpm backend:up
+```
 
-4. When done, tear down the backend containers so you can run other examples
+Start the dev server:
 
-`pnpm run backend:down`
+```shell
+pnpm dev
+```
