@@ -6,7 +6,7 @@ import { execSync } from 'child_process'
 export default $config({
   app(input) {
     return {
-      name: `linearlite`,
+      name: `linearlite-read-only`,
       removal: input?.stage === `production` ? `retain` : `remove`,
       home: `aws`,
       providers: {
@@ -25,12 +25,12 @@ export default $config({
       branchId: project.defaultBranchId,
     }
 
-    const db = new neon.Database(`linearlite`, {
+    const db = new neon.Database(`linearlite-read-only`, {
       ...base,
       name:
         $app.stage === `Production`
-          ? `linearlite-production`
-          : `linearlite-${$app.stage}`,
+          ? `linearlite-read-only-production`
+          : `linearlite-read-only-${$app.stage}`,
       ownerName: `neondb_owner`,
     })
 
@@ -51,7 +51,7 @@ export default $config({
         website: website.url,
       }
     } catch (e) {
-      console.error(`Failed to deploy linearlite stack`, e)
+      console.error(`Failed to deploy linearlite-read-only stack`, e)
     }
   },
 })
@@ -77,18 +77,18 @@ function loadData(uri: string) {
 function deployLinearLite(
   electricInfo: $util.Output<{ id: string; token: string }>
 ) {
-  return new sst.aws.StaticSite(`linearlite`, {
+  return new sst.aws.StaticSite(`linearlite-read-only`, {
     environment: {
       VITE_ELECTRIC_URL: process.env.ELECTRIC_API!,
       VITE_ELECTRIC_TOKEN: electricInfo.token,
       VITE_DATABASE_ID: electricInfo.id,
     },
     build: {
-      command: `pnpm run --filter @electric-sql/client  --filter @electric-sql/react --filter @electric-examples/linearlite build`,
+      command: `pnpm run --filter @electric-sql/client  --filter @electric-sql/react --filter @electric-examples/linearlite-read-only build`,
       output: `dist`,
     },
     domain: {
-      name: `linearlite${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+      name: `linearlite-read-only${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
       dns: sst.cloudflare.dns(),
     },
   })
