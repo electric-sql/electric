@@ -4,15 +4,8 @@ import cors from "cors"
 import pg from "pg"
 import { z } from "zod"
 
-const { Client } = pg
-const client = new Client({
-  host: `localhost`,
-  port: 54321,
-  password: `password`,
-  user: `postgres`,
-  database: `electric`,
-})
-client.connect()
+const { Pool } = pg
+const pool = new Pool({connectionString: process.env.DATABASE_URL})
 
 const port = 3010
 
@@ -42,7 +35,7 @@ app.post(`/todos`, async (req, res) => {
     return res.status(400).json({ errors: e.errors })
   }
   try {
-    await client.query(
+    await pool.query(
       `insert into todos (id, title, completed, created_at) VALUES($1, $2, false, $3)`,
       [parsedData.id, parsedData.title, new Date()]
     )
@@ -62,7 +55,7 @@ app.put(`/todos/:id`, async (req, res) => {
       id: todoId,
     })
     console.log({ query, values })
-    await client.query(query, values)
+    await pool.query(query, values)
   } catch (e) {
     console.log(`insert error`, e)
     return res.status(500).json({ errors: e })
@@ -74,7 +67,7 @@ app.delete(`/todos/:id`, async (req, res) => {
   const todoId = idSchema.parse(req.params.id)
   console.log(`delete`, todoId)
   try {
-    await client.query(`DELETE from todos where id = $1`, [todoId])
+    await pool.query(`DELETE from todos where id = $1`, [todoId])
   } catch (e) {
     console.log(`insert error`, e)
     return res.status(500).json({ errors: e })
@@ -84,7 +77,7 @@ app.delete(`/todos/:id`, async (req, res) => {
 
 // --- Start the Server ---
 app.listen(port, () => {
-  console.log(`Server listening at http://localhost:${port}`)
+  console.log(`Server listening on port ${port}`)
 })
 
 /*

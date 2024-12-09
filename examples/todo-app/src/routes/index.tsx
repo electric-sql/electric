@@ -19,20 +19,21 @@ type ToDo = {
 
 export default function Index() {
   const { data: todos } = useShape<ToDo>({
-    url: `http://localhost:3000/v1/shape`,
+    url: new URL(`${import.meta.env.VITE_ELECTRIC_URL}/v1/shape/`).href,
     params: {
       table: `todos`,
-    }
+      database_id: import.meta.env.VITE_ELECTRIC_DATABASE_ID,
+      token: import.meta.env.VITE_ELECTRIC_TOKEN,
+    },
   })
-  todos.sort((a, b) => a.created_at - b.created_at)
+  todos.sort((a: ToDo, b: ToDo) => a.created_at - b.created_at)
   console.log({ todos })
   return (
     <Container size="1">
       <Flex gap="5" mt="5" direction="column">
         <Heading>Electric TODOS</Heading>
-
         <Flex gap="3" direction="column">
-          {todos.map((todo) => {
+          {todos.map((todo: ToDo) => {
             return (
               <Flex key={todo.id} gap="2" align="center">
                 <Text as="label">
@@ -41,15 +42,22 @@ export default function Index() {
                       checked={todo.completed}
                       onClick={async () => {
                         console.log(`completed`)
-                        await fetch(`http://localhost:3010/todos/${todo.id}`, {
-                          method: `PUT`,
-                          headers: {
-                            "Content-Type": `application/json`,
-                          },
-                          body: JSON.stringify({
-                            completed: !todo.completed,
-                          }),
-                        })
+                        await fetch(
+                          new URL(
+                            `${import.meta.env.VITE_SERVER_URL}/todos/${
+                              todo.id
+                            }`
+                          ).href,
+                          {
+                            method: `PUT`,
+                            headers: {
+                              "Content-Type": `application/json`,
+                            },
+                            body: JSON.stringify({
+                              completed: !todo.completed,
+                            }),
+                          }
+                        )
                       }}
                     />
                     {todo.title}
@@ -61,9 +69,14 @@ export default function Index() {
                   style={{ cursor: `pointer` }}
                   onClick={async () => {
                     console.log(`deleted`)
-                    await fetch(`http://localhost:3010/todos/${todo.id}`, {
-                      method: `DELETE`,
-                    })
+                    await fetch(
+                      new URL(
+                        `${import.meta.env.VITE_SERVER_URL}/todos/${todo.id}`
+                      ).href,
+                      {
+                        method: `DELETE`,
+                      }
+                    )
                   }}
                 >
                   x
@@ -73,19 +86,22 @@ export default function Index() {
           })}
         </Flex>
         <form
-          onSubmit={async (event) => {
+          onSubmit={async (event: React.FormEvent) => {
             event.preventDefault()
             const id = uuidv4()
             const formData = Object.fromEntries(
               new FormData(event.target as HTMLFormElement)
             )
-            const res = await fetch(`http://localhost:3010/todos`, {
-              method: `POST`,
-              headers: {
-                "Content-Type": `application/json`,
-              },
-              body: JSON.stringify({ id, title: formData.todo }),
-            })
+            const res = await fetch(
+              new URL(`${import.meta.env.VITE_SERVER_URL}/todos`).href,
+              {
+                method: `POST`,
+                headers: {
+                  "Content-Type": `application/json`,
+                },
+                body: JSON.stringify({ id, title: formData.todo }),
+              }
+            )
             console.log({ res })
           }}
         >
