@@ -27,7 +27,9 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
   def init(config) do
     Process.set_label({:snapshotter, config.shape_handle})
-    Logger.metadata(stack_id: config.stack_id, shape_handle: config.shape_handle)
+    metadata = [stack_id: config.stack_id, shape_handle: config.shape_handle]
+    Logger.metadata(metadata)
+    Electric.Telemetry.Sentry.set_tags_context(metadata)
 
     {:ok, config, {:continue, :start_snapshot}}
   end

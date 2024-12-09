@@ -18,6 +18,7 @@ defmodule Electric.Replication.Supervisor do
   def init(opts) do
     Process.set_label({:replication_supervisor, opts[:stack_id]})
     Logger.metadata(stack_id: opts[:stack_id])
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
     Logger.info("Starting shape replication pipeline")
 
     # TODO: weird to have these without defaults but `consumer_supervisor` with a default

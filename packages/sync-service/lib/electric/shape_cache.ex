@@ -201,6 +201,7 @@ defmodule Electric.ShapeCache do
 
     Process.set_label({:shape_cache, stack_id})
     Logger.metadata(stack_id: stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     {:ok, shape_status_state} =
       opts.shape_status.initialise(

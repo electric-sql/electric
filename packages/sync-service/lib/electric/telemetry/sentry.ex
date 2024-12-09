@@ -4,4 +4,9 @@ defmodule Electric.Telemetry.Sentry do
       config: %{metadata: :all}
     })
   end
+
+  @spec set_tags_context(keyword()) :: :ok
+  def set_tags_context(tags) do
+    Sentry.Context.set_tags_context(Map.new(tags))
+  end
 end
