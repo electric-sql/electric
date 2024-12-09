@@ -1,6 +1,5 @@
 import base64 from 'base64-js'
 import React, { useEffect, useState } from 'react'
-import { v4 as uuidv4 } from 'uuid'
 import { useShape } from '@electric-sql/react'
 import './Example.css'
 
@@ -120,7 +119,7 @@ export const Example = () => {
     const formData = new FormData(form)
     const title = formData.get('title') as string
 
-    const id = uuidv4()
+    const id = crypto.randomUUID()
     const item = {
       id,
       title,
