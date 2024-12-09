@@ -6,10 +6,6 @@ description: >-
 image: /img/integrations/electric-phoenix.jpg
 ---
 
-<script setup>
-  import HelpWanted from '/src/components/HelpWanted.vue'
-</script>
-
 <img src="/img/integrations/phoenix.svg" class="product-icon" />
 
 # Phoenix
@@ -84,28 +80,13 @@ For more details and full documentation see [hexdocs.pm/electric_phoenix](https:
 
 ### Phoenix LiveView
 
-See the
-[phoenix-liveview example](https://github.com/electric-sql/electric/tree/main/examples/phoenix-liveview)
-on GitHub.
+See the [Phoenix LiveView example](/demos/phoenix-liveview). This is an example Phoenix LiveView application that uses [`Electric.Phoenix.LiveView.electric_stream/4`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.LiveView.html#electric_stream/4) to sync data from Postgres into a LiveView using [Phoenix Streams](https://fly.io/phoenix-files/phoenix-dev-blog-streams/).
 
-This is an example Phoenix LiveView application that uses
-[`Electric.Phoenix.LiveView.electric_stream/4`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.LiveView.html#electric_stream/4)
-to sync data from Postgres into a LiveView using
-[Phoenix Streams](https://fly.io/phoenix-files/phoenix-dev-blog-streams/).
-This keeps the LiveView automatically in-sync with Postgres, without having
-to re-run queries or trigger any change handling yourself.
-
-See the
-[documentation](https://electric-sql.com/docs/integrations/phoenix#liveview-sync)
-for more details.
+This keeps the LiveView automatically in-sync with Postgres, without having to re-run queries or trigger any change handling yourself.
 
 ### Gatekeeper Auth
 
-The
-[gatekeeper-auth](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth)
-example also contains a Phoenix application that uses
-[`Electric.Phoenix.Plug`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.Plug.html)
-to authorize shape access and issue shape-scoped access tokens.
+The [Gatekeeper auth](/demos/gatekeeper-auth) example also contains a Phoenix application that uses [`Electric.Phoenix.Plug`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.Plug.html) to authorize shape access and issue shape-scoped access tokens.
 
 <HelpWanted issue="1878">
   an equivalent integration for other server-side frameworks, such as Rails, Laravel, Django, etc.

@@ -6,10 +6,6 @@ description: >-
 image: /img/integrations/electric-mobx.jpg
 ---
 
-<script setup>
-  import HelpWanted from '/src/components/HelpWanted.vue'
-</script>
-
 <img src="/img/integrations/mobx.svg" class="product-icon" />
 
 # MobX

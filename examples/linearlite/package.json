@@ -5,8 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "backend:down": "PROJECT_NAME=linearlite pnpm -C ../../ run example-backend:down",
-    "backend:up": "PROJECT_NAME=linearlite pnpm -C ../../ run example-backend:up && pnpm db:migrate && pnpm db:load-data",
+    "backend:down": "PROJECT_NAME=linearlite-example pnpm -C ../../ run example-backend:down",
+    "backend:up": "PROJECT_NAME=linearlite-example pnpm -C ../../ run example-backend:up && pnpm db:migrate && pnpm db:load-data",
     "build": "vite build",
     "db:load-data": "dotenv -e ../../.env.dev -- node ./db/load_data.js",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",

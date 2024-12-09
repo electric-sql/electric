@@ -77,7 +77,7 @@ For example, REST APIs are stateless. We know how to scale them. We know how to 
 
 ### Electric's approach
 
-At Electric, our mission is to make [sync](/use-cases/state-transfer) and [local-first](/use-cases/local-first-software) adoptable for mainstream software. So, one of the main challenges we've focused on is how to use Electric with your existing software stack.
+At Electric, our mission is to make [sync](/use-cases/data-sync) and [local-first](/use-cases/local-first-software) adoptable for mainstream software. So, one of the main challenges we've focused on is how to use Electric with your existing software stack.
 
 This is why we work with [any data model](/docs/guides/deployment#data-model-compatibility) in [any standard Postgres](/docs/guides/deployment#_1-running-postgres). It's why we allow you to sync data into anything from a [JavaScript object](/docs/api/clients/typescript#shape) to a [local database](/product/pglite). And it's why we focus on providing [composable primitives](/blog/2024/07/17/electric-next) rather than a one-size-fits-all solution.
 
@@ -109,7 +109,7 @@ To build local-first you have to have the data locally. If you're doing that wit
   </a>
 </figure>
 
-This is why you need [data sync](/use-cases/state-transfer). To keep the local data fresh when it changes.
+This is why you need [data sync](/use-cases/data-sync). To keep the local data fresh when it changes.
 
 Happily, this is exactly what Electric does. It [syncs data into local apps and services](/product/electric) and keeps it fresh for you. Practically what does this look like? Well, instead of fetching data using web service calls, i.e.: something like this:
 
@@ -226,13 +226,13 @@ Because this is an HTTP resource, you can authorize access to it just as you wou
 
 #### API proxy
 
-You can see this pattern implemented in the [proxy-auth example](https://github.com/electric-sql/electric/tree/main/examples/proxy-auth).
+You can see this pattern implemented in the [Proxy auth example](/demos/proxy-auth).
 
 This defines a proxy that takes an HTTP request, reads the user credentials from an `Authorization` header, uses them to authorize the request and if successful, proxies the request onto Electric:
 
 <<< @../../examples/proxy-auth/app/shape-proxy/route.ts{typescript}
 
-You can run this kind of proxy as part of your existing backend API. Here's [another example](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth/api), this time using a [Plug](https://hexdocs.pm/phoenix/plug.html) to authorize requests to a [Phoenix](/docs/integrations/phoenix) application:
+You can run this kind of proxy as part of your existing backend API. Here's [another example](/demos/gatekeeper-auth), this time using a [Plug](https://hexdocs.pm/phoenix/plug.html) to authorize requests to a [Phoenix](/docs/integrations/phoenix) application:
 
 <<< @../../examples/gatekeeper-auth/api/lib/api_web/plugs/auth/verify_token.ex{elixir}
 
@@ -332,7 +332,7 @@ Deno.serve(async (req) => {
 
 #### Gatekeeper pattern
 
-Another pattern, illustrated in our [gatekeeper-auth example](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth), is to:
+Another pattern, illustrated in our [gatekeeper-auth example](/demos/gatekeeper-auth), is to:
 
 1. use an API endpoint to authorize shape access
 2. generate shape-scoped auth tokens
@@ -385,9 +385,9 @@ Electric does [read-path](#read-path) sync. That's the bit between Postgres and 
   </a>
 </figure>
 
-Instead, Electric is designed for you to implement writes yourself. There's a comprehensive [Writes guide](/docs/guides/writes) and [write-patterns example](https://github.com/electric-sql/electric/tree/main/examples/write-patterns) that walks through a range of approaches for this that integrate with your existing API.
+Instead, Electric is designed for you to implement writes yourself. There's a comprehensive [Writes guide](/docs/guides/writes) and [Write patterns example](/demos/write-patterns) that walks through a range of approaches for this that integrate with your existing API.
 
-You can also see a number of the examples that use an API for writes, including the [linearlite](https://github.com/electric-sql/electric/tree/main/examples/linearlite), [phoenix-liveview](https://github.com/electric-sql/electric/tree/main/examples/phoenix-liveview) and [tanstack](https://github.com/electric-sql/electric/tree/main/examples/tanstack-example) examples.
+You can also see a number of the examples that use an API for writes, including the [Linearlite](/demos/linearlite), [Phoenix LiveView](/demos/phoenix-liveview) and [Tanstack](/demos/tanstack) examples.
 
 #### API server
 
@@ -434,7 +434,7 @@ Electric syncs ciphertext as well as it syncs plaintext. You can encrypt data on
 - *encrypt* it before it leaves the client
 - *decrypt* it when it comes into the client from the replication stream
 
-You can see an example of this in the [encryption example](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/encryption):
+You can see an example of this in the [encryption example](/demos/encryption):
 
 <<< @../../examples/encryption/src/Example.tsx{tsx}
 

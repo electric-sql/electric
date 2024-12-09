@@ -66,6 +66,9 @@ import VPFeatures from 'vitepress/dist/client/theme-default/components/VPFeature
 import { data as initialStarCounts } from './data/count.data.ts'
 import { data as useCases } from './data/use-cases.data.ts'
 
+import { data as demosData } from './data/demos.data.ts'
+const { homepage_demos } = demosData
+
 import MasonryTweets from './src/components/MasonryTweets.vue'
 import UseCases from './src/components/UseCases.vue'
 
@@ -125,7 +128,7 @@ const renderStarCount = async (repoName, initialStarCount) => {
 onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {
     const githubLinks = document.querySelectorAll(
-      '.actions a[href="https://github.com/electric-sql/electric"]'
+      '.actions a[href^="https://github.com"]'
     )
 
     let icon = document.querySelector('.actions .vpi-social-github')
@@ -158,6 +161,24 @@ onMounted(async () => {
   }
 })
 </script>
+
+<div class="features-content">
+
+## Demo apps
+
+See the kind of applications you can build with Electric
+<span class="no-wrap-sm">
+  and what they
+  <span class="no-wrap">
+    feel like to use</span></span>.
+
+</div>
+<div class="demos-grid homepage">
+  <DemoListing v-for="(demo, index) in homepage_demos"
+      :demo="demo"
+      :key="index"
+  />
+</div>
 
 <MasonryTweets :tweets="tweets" />
 

@@ -9,11 +9,13 @@ outline: deep
 
 # Sign-up
 
-[Electric Cloud](../cloud) is currently in <Badge type="tip" text="private alpha" />.
+[Electric Cloud](../cloud) is currently in <Badge type="info" text="private alpha" />.
+
+If you're interested in early-access to the Electric Cloud, you can sign up to the waitlist.
 
 ## Sign-up for early access
 
-If you're interested in early-access to the Electric Cloud, you can sign up to the waitlist. Submit the form below and we'll be in touch when we have capacity to onboard you.
+Submit the form below and we'll be in touch when we can onboard you.
 
 <figure>
   <iframe class="airtable-embed"
@@ -26,7 +28,7 @@ If you're interested in early-access to the Electric Cloud, you can sign up to t
 
 ## Next steps
 
-In the meantime, you may like to [#say-hello on Discord](https://discord.electric-sql.com) and check out our guides on installing locally and self-hosting in the meantime.
+In the meantime, you may like to [#say-hello on Discord](https://discord.electric-sql.com) and check out our guides on installation and self-hosted deployment.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action hidden-xs">
@@ -55,9 +57,15 @@ In the meantime, you may like to [#say-hello on Discord](https://discord.electri
         theme="alt"
     />
   </div>
-  <div class="action">
+  <div class="action hidden-xs">
     <VPButton href="/docs/guides/deployment"
-        text="Self host"
+        text="Deployment"
+        theme="alt"
+    />
+  </div>
+  <div class="action block-xs">
+    <VPButton href="/docs/guides/deployment"
+        text="Deploy"
         theme="alt"
     />
   </div>

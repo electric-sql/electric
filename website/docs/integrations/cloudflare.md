@@ -6,10 +6,6 @@ description: >-
 image: /img/integrations/electric-cloudflare.jpg
 ---
 
-<script setup>
-  import HelpWanted from '/src/components/HelpWanted.vue'
-</script>
-
 <img src="/img/integrations/cloudflare.svg" class="product-icon" />
 
 # Cloudflare

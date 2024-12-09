@@ -1,7 +1,7 @@
 
 # Electric - Gatekeeper auth example
 
-This example demonstrates a number of ways of implementing the [gatekeeper auth](https://electric-sql.com/docs/guides/auth#gatekeeper-auth) pattern for [securing access](https://electric-sql.com/docs/guides/auth) to the [Electric sync service](https://electric-sql.com/product/sync).
+This example demonstrates a number of ways of implementing the [gatekeeper auth](https://electric-sql.com/docs/guides/auth#gatekeeper-auth) pattern for [securing access](https://electric-sql.com/docs/guides/auth) to the [Electric sync service](https://electric-sql.com/product/electric).
 
 It includes:
 

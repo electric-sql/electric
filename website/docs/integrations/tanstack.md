@@ -7,8 +7,6 @@ image: /img/integrations/electric-tanstack.jpg
 ---
 
 <script setup>
-import HelpWanted from '/src/components/HelpWanted.vue'
-
 import DataFlowPNG from '/static/img/docs/integrations/tanstack/data-flow.png?url'
 import DataFlowSmPNG from '/static/img/docs/integrations/tanstack/data-flow.sm.png?url'
 import DataFlowJPG from '/static/img/docs/integrations/tanstack/data-flow.jpg?url'
@@ -53,12 +51,12 @@ The example below shows a simple todo application that uses Electric for read-pa
 
 Electric is used to sync a shape. TanStack is used to apply mutations and maintain optimistic state. When a mutation is confirmed, it cleares the optimistic state. When the component renders, it merges the optimistic state into the shape data.
 
-<<< @../../examples/tanstack-example/src/Example.tsx
+<<< @../../examples/tanstack/src/Example.tsx
 
-See the [`tanstack-example`](https://github.com/electric-sql/electric/tree/main/examples/tanstack-example) for the full source code.
+See the [Tanstack example](/demos/tanstack) for the full source code.
 
 <HelpWanted issue="1882">
   a library based on the
-  <code>tanstack-example</code>
+  <code>tanstack</code> example
   that integrates Electric and TanStack into a higher level interface.
 </HelpWanted>

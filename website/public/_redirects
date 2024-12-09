@@ -16,7 +16,7 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /docs/integrations/deployment   /docs/guides/deployment
 /docs/integrations/deployment/* /docs/guides/deployment
 /docs/overview                  /docs/intro
-/docs/overview/examples         https://github.com/electric-sql/electric/tree/main/examples
+/docs/overview/examples         /demos
 /docs/overview/faqs             /docs/intro
 /docs/overview/technical-intro  /docs/intro
 /docs/overview/welcome          /docs/intro
@@ -40,7 +40,7 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 
 /docs                                        /docs/intro
 /intro                                       /docs/intro
-/examples                                    https://github.com/electric-sql/electric/tree/main/examples
+/examples                                    /demos
 /docs/guides/troubleshooting/missing-headers /docs/guides/troubleshooting#missing-headers-mdash-why-is-the-client-complaining-about-missing-headers
 
 # More links from legacy site
@@ -56,8 +56,8 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /docs/api/*                     /docs/api/http
 /docs/deployment                /docs/guides/deployment
 /docs/deployment/*              /docs/guides/deployment
-/docs/examples                  https://github.com/electric-sql/electric/tree/main/examples
-/docs/examples/*                https://github.com/electric-sql/electric/tree/main/examples
+/docs/examples                  /demos
+/docs/examples/*                /demos
 /docs/integrations              /docs/integrations/react
 /docs/integrations/*            /docs/integrations/react
 /docs/intro/*                   /docs/intro
@@ -85,3 +85,4 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /product/sync                         /product/electric
 /docs/api/integrations/react          /docs/integrations/react
 /docs/guides/writing-your-own-client  /docs/guides/client-development
+/use-cases/state-transfer             /use-cases/data-sync

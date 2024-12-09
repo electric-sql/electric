@@ -109,7 +109,7 @@ So, hopefully now our motivation is clear. We needed to find a way to simplify E
 
 Electric Next is a [sync engine](/product/electric), not a local-first software platform.
 
-It can be used for a wide range of [use cases](/use-cases/state-transfer), syncing data into apps, workers, services, agents and environments. These include but are not limited to local-first software development.
+It can be used for a wide range of [use cases](/use-cases/data-sync), syncing data into apps, workers, services, agents and environments. These include but are not limited to local-first software development.
 
 ### Sync engine
 
@@ -292,7 +292,7 @@ See the:
 
 - [Quickstart](/docs/quickstart)
 - [HTTP API](/docs/api/http)
-- [Examples](https://github.com/electric-sql/electric/tree/main/examples)
+- [Examples](/demos)
 
 If you have any questions or need support, ask on the `#help-and-support` channel in the [Electric Discord](https://discord.electric-sql.com).
 

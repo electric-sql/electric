@@ -1,6 +1,6 @@
 # Electric - Proxy auth example
 
-This example implements the [proxy auth](https://electric-sql.com/docs/guides/auth#gatekeeper-auth) pattern for [securing access](https://electric-sql.com/docs/guides/auth) to the [Electric sync service](https://electric-sql.com/product/sync).
+This example implements the [proxy auth](https://electric-sql.com/docs/guides/auth#gatekeeper-auth) pattern for [securing access](https://electric-sql.com/docs/guides/auth) to the [Electric sync service](https://electric-sql.com/product/electric).
 
 It demonstrates how an API can proxy and authorise shape requests, by either:
 
