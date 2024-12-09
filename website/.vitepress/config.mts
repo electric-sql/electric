@@ -92,8 +92,8 @@ export default defineConfig({
       { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
       { text: 'Use cases', link: '/use-cases/data-sync', activeMatch: '/use-cases/' },
       { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/'},
-      { text: 'Demos', link: '/demos', activeMatch: '/demos/'},
-      { text: 'Blog', link: '/blog', activeMatch: '/blog/'},
+      { text: 'Demos', link: '/demos', activeMatch: '/demos'},
+      { text: 'Blog', link: '/blog', activeMatch: '/blog'},
       { text: 'About', link: '/about/community', activeMatch: '/about/'}
     ],
     search: {
