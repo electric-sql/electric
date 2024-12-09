@@ -1,13 +1,13 @@
 {
-  "name": "@electric-examples/tanstack-example",
+  "name": "@electric-examples/tanstack",
   "private": true,
   "version": "0.0.1",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "backend:up": "PROJECT_NAME=tanstack-basic-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
-    "backend:down": "PROJECT_NAME=tanstack-basic-example pnpm -C ../../ run example-backend:down",
+    "backend:up": "PROJECT_NAME=tanstack-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=tanstack-example pnpm -C ../../ run example-backend:down",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
     "dev": "concurrently \"vite\" \"node src/server/app.js\"",
     "build": "vite build",

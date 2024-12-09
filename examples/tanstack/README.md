@@ -24,7 +24,7 @@ pnpm run -r build
 Navigate back to this directory:
 
 ```shell
-cd examples/tanstack-example
+cd examples/tanstack
 ```
 
 Start the example backend services using [Docker Compose](https://docs.docker.com/compose/):
