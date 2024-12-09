@@ -7,8 +7,6 @@ image: /img/integrations/electric-tanstack.jpg
 ---
 
 <script setup>
-import HelpWanted from '/src/components/HelpWanted.vue'
-
 import DataFlowPNG from '/static/img/docs/integrations/tanstack/data-flow.png?url'
 import DataFlowSmPNG from '/static/img/docs/integrations/tanstack/data-flow.sm.png?url'
 import DataFlowJPG from '/static/img/docs/integrations/tanstack/data-flow.jpg?url'

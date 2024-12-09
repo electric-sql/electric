@@ -111,11 +111,11 @@
   }
 }
 .feature-cta a {
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 16px;
-  border-radius: 30px;
-  border: 1px solid none;
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 8px 16px !important;
+  border-radius: 30px !important;
+  border: 1px solid none !important;
   color: var(--vp-button-alt-text);
   background-color: var(--vp-button-alt-bg);
 }
@@ -134,6 +134,7 @@
 }
 .action a .vpi-social-discord,
 .action a .vpi-social-github,
+.demo-actions a .vpi-social-github,
 .feature-cta a .vpi-social-github,
 .feature-cta a .vpi-electric-icon,
 .cloud-cta a .vpi-electric-icon {
@@ -687,4 +688,92 @@ ul.benefits {
   .side-by-side-videos {
     grid-template-columns: 1fr;
   }
+}
+
+.demos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(216px, 1fr));
+  gap: 2rem;
+  margin: 2rem 0 8rem;
+}
+
+.demo-card {
+  display: block;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: transform 0.2s;
+  text-decoration: none !important;
+  color: inherit !important;
+  background: var(--vp-c-bg-soft);
+}
+
+.demo-card:active {
+  color: inherit !important;
+  text-decoration: underline !important;
+}
+
+.demo-card img {
+  width: 100%;
+  aspect-ratio: 16/9;
+  object-fit: contain;
+  background: var(--vp-c-bg);
+  opacity: 0.9;
+}
+
+@media (max-width: 511px) {
+  .demo-card img {
+    width: 100%;
+    aspect-ratio: 16/6;
+    object-fit: cover;
+    background: var(--vp-c-bg);
+  }
+}
+
+.demo-description {
+  position: relative;
+  padding: 18px 24px;
+  background: var(--vp-c-bg-soft);
+  z-index: 100;
+  margin-top: -2rem;
+}
+
+.demo-description h3 {
+  margin: 0 0 0.5rem 0;
+}
+
+.demo-description p {
+  margin: 0;
+  opacity: 0.8;
+  font-size: 14px;
+  font-weight: 550 !important;
+  max-width: 320px;
+}
+
+ul.demo-actions {
+  margin: 6px 0 4px;
+  padding: 0;
+  list-style: none;
+
+  display: flex;
+  align-items: flex-start;
+}
+
+ul.demo-actions li {
+  display: inline-block;
+  margin: 14px 10px 7px -2px !important;
+}
+
+ul.demo-actions li .VPButton {
+  border-radius: 16px !important;
+  padding: 0 16px !important;
+  line-height: 32px !important;
+  font-size: 12px !important;
+}
+
+.demo-embed img {
+  border-radius: 16px;
+  opacity: 0.9;
+}
+.demo-embed figcaption {
+  margin: 14px 0 14px auto;
 }

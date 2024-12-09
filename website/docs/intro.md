@@ -33,7 +33,7 @@ The easiest way to use Electric in production is the [Electric Cloud](/product/c
 
 ## Examples
 
-There are lots of [examples](https://github.com/electric-sql/electric/tree/main/examples) in the main repo on GitHub.
+See the [Demos](/demos) page and [`examples`](https://github.com/electric-sql/electric/tree/main/examples) folder on GitHub for for demo apps and examples.
 
 The integration docs also illustrate common patterns, e.g. using Electric with frameworks like [TanStack](/docs/integrations/tanstack) and [Phoenix](/docs/integrations/phoenix) and platforms like [Supabase](/docs/integrations/supabase) and [Cloudflare](/docs/integrations/cloudflare).
 
