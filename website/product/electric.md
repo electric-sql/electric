@@ -105,7 +105,7 @@ This enables a massive number of clients to query and get real-time updates to s
 
 ## More information
 
-See the [Docs](/docs/intro), [Quickstart](/docs/quickstart) and [Examples](https://github.com/electric-sql/electric/tree/main/examples). You can [self-host](/docs/guides/deployment) or use the [Electric&nbsp;Cloud](/product/cloud).
+See the [Docs](/docs/intro), [Quickstart](/docs/quickstart) and [Demos](/demos). You can [self-host](/docs/guides/deployment) or use the [Electric&nbsp;Cloud](/product/cloud).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">

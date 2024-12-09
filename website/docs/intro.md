@@ -42,7 +42,7 @@ The easiest way to use Electric in production is the [Electric Cloud](/product/c
 
 ## Examples
 
-See the [Demos](/demos) page and [`examples`](https://github.com/electric-sql/electric/tree/main/examples) folder on GitHub for demo apps and examples, e.g.:
+See the [Demos](/demos) section and [`examples`](https://github.com/electric-sql/electric/tree/main/examples) folder on GitHub for demo apps and examples, e.g.:
 
 <div class="demos-grid">
   <DemoListing :demo="linearlite"/>

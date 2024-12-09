@@ -14,9 +14,11 @@ order: 20
 
 This is a collaborative note-taking app with real-time sync powered by Electric and [Yjs](/docs/integrations/yjs).
 
-<DemoEmbed :demo="$frontmatter" />
+<DemoCTAs :demo="$frontmatter" />
 
 ## Electric <> Yjs demo
+
+<DemoEmbed :demo="$frontmatter" />
 
 Notes demonstrates our [Yjs integration](/docs/integrations/yjs). By combining Yjs's powerful collaborative editing capabilities with Postgres and Electric, you get the best of both worlds:
 
