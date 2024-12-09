@@ -27,7 +27,9 @@
 
 Your Postgres data, in sync, wherever you need it.
 
-Table of Contents:
+It's like GraphQL, but for Postgres.
+
+**Table of Contents:**
 
 - [Quick links](#quick-links)
 - [What is Electric?](#what-is-electric)
