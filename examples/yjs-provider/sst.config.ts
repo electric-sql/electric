@@ -79,7 +79,7 @@ function deployAppServer(
     loadBalancer: {
       ports: [{ listen: "443/https", forward: "3000/http" }],
       domain: {
-        name: `yjs-server${isProduction() ? `` : `-${$app.stage}`}.examples.electric-sql.com`,
+        name: `yjs${isProduction() ? `` : `-${$app.stage}`}.examples.electric-sql.com`,
         dns: sst.cloudflare.dns(),
       },
     },
