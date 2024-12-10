@@ -6,7 +6,7 @@
     "dotenv-cli": "^7.4.2"
   },
   "engines": {
-    "node": "^20.0.0"
+    "node": "^20.18.1"
   },
   "packageManager": "pnpm@9.15.0",
   "private": true,

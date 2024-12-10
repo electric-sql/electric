@@ -1,3 +1,3 @@
 [build.environment]
   # Environment variables are set here
-  NODE_VERSION = "22.12.0"
+  NODE_VERSION = "20.18.1"
