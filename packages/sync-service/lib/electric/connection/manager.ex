@@ -667,7 +667,7 @@ defmodule Electric.Connection.Manager do
     log_collector_pid
   end
 
-  defp drop_slot(%{pool_pid: nil} = state) do
+  defp drop_slot(%{pool_pid: nil} = _state) do
     Logger.warning("Skipping slot drop, pool connection not available")
   end
 
