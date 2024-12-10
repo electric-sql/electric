@@ -167,7 +167,8 @@ defmodule Electric.Client.Stream do
 
     resp.body
     |> List.wrap()
-    |> Enum.flat_map(&Message.parse(&1, final_offset, value_mapper_fun))
+    |> Enum.flat_map(&Message.parse(&1, shape_handle, final_offset, value_mapper_fun))
+    |> Enum.map(&Map.put(&1, :request_timestamp, resp.request_timestamp))
     |> Enum.reduce_while({start_offset, stream}, &handle_msg/2)
     # don't set the offset until we're done processing the messages. ehis keeps
     # the previous offset reached alive in the stream state
@@ -181,10 +182,11 @@ defmodule Electric.Client.Stream do
        when status in [409] do
     %{value_mapper_fun: value_mapper_fun} = stream
     offset = last_offset(resp, stream.offset)
+    handle = shape_handle(resp)
 
     stream
-    |> reset(shape_handle(resp))
-    |> buffer(Enum.flat_map(resp.body, &Message.parse(&1, offset, value_mapper_fun)))
+    |> reset(handle)
+    |> buffer(Enum.flat_map(resp.body, &Message.parse(&1, handle, offset, value_mapper_fun)))
     |> dispatch()
   end
 
@@ -332,7 +334,11 @@ defmodule Electric.Client.Stream do
   defp resume(%{opts: %{resume: %Message.ResumeMessage{} = resume}} = stream) do
     %{shape_handle: shape_handle, offset: offset, schema: schema} = resume
 
-    generate_value_mapper(schema, %{stream | shape_handle: shape_handle, offset: offset})
+    if schema do
+      generate_value_mapper(schema, %{stream | shape_handle: shape_handle, offset: offset})
+    else
+      %{stream | shape_handle: shape_handle, offset: offset}
+    end
   end
 
   defp resume(stream) do
