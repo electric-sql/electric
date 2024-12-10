@@ -31,15 +31,16 @@ defmodule Electric.Client.Fetch.HTTP do
   end
 
   defp request(request) do
-    request |> Req.request() |> wrap_resp()
+    now = DateTime.utc_now()
+    request |> Req.request() |> wrap_resp(now)
   end
 
-  defp wrap_resp({:ok, %Req.Response{} = resp}) do
+  defp wrap_resp({:ok, %Req.Response{} = resp}, timestamp) do
     %{status: status, headers: headers, body: body} = resp
-    {:ok, Fetch.Response.decode!(status, headers, body)}
+    {:ok, Fetch.Response.decode!(status, headers, body, timestamp)}
   end
 
-  defp wrap_resp({:error, _} = error) do
+  defp wrap_resp({:error, _} = error, _timestamp) do
     error
   end
 

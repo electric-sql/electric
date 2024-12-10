@@ -10,6 +10,7 @@ defmodule Electric.Client.Fetch.Request do
   require Logger
 
   defstruct [
+    :stream_id,
     :endpoint,
     :database_id,
     :shape_handle,
@@ -28,6 +29,7 @@ defmodule Electric.Client.Fetch.Request do
   @type headers :: %{String.t() => [String.t()] | String.t()}
 
   fields = [
+    stream_id: quote(do: term()),
     method: quote(do: :get | :head | :delete),
     endpoint: quote(do: URI.t()),
     offset: quote(do: Electric.Client.Offset.t()),
@@ -62,21 +64,21 @@ defmodule Electric.Client.Fetch.Request do
     {:via, Registry, {Electric.Client.Registry, {__MODULE__, request_id}}}
   end
 
-  defp request_id(%Client{fetch: {fetch_impl, _}}, %__MODULE__{shape_handle: nil} = request) do
-    %{endpoint: endpoint, shape: shape_definition} = request
-    {fetch_impl, URI.to_string(endpoint), shape_definition}
-  end
-
-  defp request_id(%Client{fetch: {fetch_impl, _}}, %__MODULE__{} = request) do
-    %{endpoint: endpoint, offset: offset, live: live, shape_handle: shape_handle} = request
-    {fetch_impl, URI.to_string(endpoint), shape_handle, Offset.to_tuple(offset), live}
-  end
-
   @doc """
   Returns the URL for the Request.
   """
   @spec url(t()) :: binary()
   def url(%__MODULE__{} = request, opts \\ []) do
+    request
+    |> uri(opts)
+    |> URI.to_string()
+  end
+
+  @doc """
+  Returns the %URI{} for the Request.
+  """
+  @spec uri(t()) :: URI.t()
+  def uri(%__MODULE__{} = request, opts \\ []) do
     %{endpoint: endpoint} = request
 
     if Keyword.get(opts, :query, true) do
@@ -89,9 +91,9 @@ defmodule Electric.Client.Fetch.Request do
         |> List.keysort(0)
         |> URI.encode_query(:rfc3986)
 
-      URI.to_string(%{endpoint | query: query})
+      %{endpoint | query: query}
     else
-      URI.to_string(endpoint)
+      endpoint
     end
   end
 
@@ -118,50 +120,6 @@ defmodule Electric.Client.Fetch.Request do
     |> Util.map_put_if("cursor", cursor, !is_nil(cursor))
     |> Util.map_put_if("database_id", database_id, !is_nil(database_id))
   end
-
-  @doc false
-  def request(%Client{} = client, %__MODULE__{} = request) do
-    request_id = request_id(client, request)
-
-    # register this pid before making the request to avoid race conditions for
-    # very fast responses
-    {:ok, monitor_pid} = start_monitor(request_id)
-
-    try do
-      ref = Fetch.Monitor.register(monitor_pid, self())
-
-      {:ok, _request_pid} = start_request(request_id, request, client, monitor_pid)
-
-      Fetch.Monitor.wait(ref)
-    catch
-      :exit, {reason, _} ->
-        Logger.debug(fn ->
-          "Request process ended with reason #{inspect(reason)} before we could register. Re-attempting."
-        end)
-
-        request(client, request)
-    end
-  end
-
-  defp start_request(request_id, request, client, monitor_pid) do
-    DynamicSupervisor.start_child(
-      Electric.Client.RequestSupervisor,
-      {__MODULE__, {request_id, request, client, monitor_pid}}
-    )
-    |> return_existing()
-  end
-
-  defp start_monitor(request_id) do
-    DynamicSupervisor.start_child(
-      Electric.Client.RequestSupervisor,
-      {Electric.Client.Fetch.Monitor, request_id}
-    )
-    |> return_existing()
-  end
-
-  defp return_existing({:ok, pid}), do: {:ok, pid}
-  defp return_existing({:error, {:already_started, pid}}), do: {:ok, pid}
-  defp return_existing(error), do: error
 
   @doc false
   def child_spec({request_id, _request, _client, _monitor_pid} = args) do
