@@ -15,6 +15,7 @@ import SingleShapeSingleClient from '/static/img/benchmarks/single-shape-single-
 import WriteFanout from '/static/img/benchmarks/write-fanout.png?url'
 import WriteFanoutMemory from '/static/img/benchmarks/write-fanout-memory.png?url'
 import UnrelatedShapesOneClientLatency from '/static/img/benchmarks/unrelated-shapes-one-client-latency.png?url'
+import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 </script>
 
 # Benchmarks
@@ -73,7 +74,7 @@ The next four measure live update time, i.e. write performance:
   </a>
 </figure>
 
-This measures the memory use and the time to sync all the data into all the clients for an increasing number of concurrent clients performing 
+This measures the memory use and the time to sync all the data into all the clients for an increasing number of concurrent clients performing
 an initial sync of a 500 row single shape. The results show stable memory use with time to sync all data rising roughly linearly up to 2,000 concurrent clients.
 
 #### 2. A single client syncing a large shape
@@ -111,7 +112,7 @@ The two graphs differ based on the type of WHERE clause used for the shapes:
 - **Bottom Graph:** The WHERE clause is in the form `field LIKE constant`, an example of a non-optimised query type.
   In this case, the latency increases linearly with the number of shapes because Electric must evaluate each shape individually to determine if it is affected by the write.
   Despite this, the response times remain low, a tenth of a second for 10,000 shapes.
-  
+
 #### 4. One shape with many clients
 
 <figure>
@@ -162,11 +163,17 @@ In this benchmark there are a varying number of shapes with just one client subs
 
 Latency and peak memory use rises linearly. Average memory use is flat.
 
-## Cloud <Badge type="warning" text="coming soon" />
+## Cloud
 
-Cloud benchmarks test the performance and scalability of Electric when running behind a CDN.
+Electric is designed to run behind a CDN, using the CDN's [request collapsing](/docs/api/http#request-collapsing) capability to scale out data delivery to lots of concurrent users.
 
-We will post them here when available.
+The graph below shows the latency and compute resource of a single Electric server using this technique to handle between 100k and 1 million concurrent users, with a write workload of 960 transactions per minute:
+
+<figure>
+  <ScalabilityChart />
+</figure>
+
+These statistics were generated using our [client load benchmarking](https://github.com/electric-sql/client-load-benchmarking) suite that allows for measuring (a) client latencies and (b) sync service resource use for any combination of concurrent connected clients and database workload.
 
 ## PGlite
 

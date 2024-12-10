@@ -117,7 +117,7 @@ If you just want a stream of logical database operations, you can simply stream 
 
 ### Into a data structure
 
-If you want to maintain a materialised Shape in your client, you can apply the operations in the shape log to a data structure. This is what both the Typescript client [`Shape`](/docs/api/clients/typescript#shapestream) class and [Redis example](https://github.com/electric-sql/electric/blob/main/examples/redis-sync/src/index.ts) do.
+If you want to maintain a materialised Shape in your client, you can apply the operations in the shape log to a data structure. This is what both the Typescript client [`Shape`](/docs/api/clients/typescript#shape) class and [Redis example](/demos/redis) do.
 
 Shape log messages are either control messages or logical `insert`, `update` or `delete` operations. You can materialise a Shape by applying these to your chosen data structure. For example, for a Javascript `Map`:
 

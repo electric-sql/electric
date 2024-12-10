@@ -16,7 +16,7 @@ https://write-patterns.examples.electric-sql.com
 
 The main code is in the [`./patterns`](./patterns) folder, which has a subfolder for each pattern. There's also some shared code, including an API server and some app boilerplate in [`./shared`](./shared).
 
-All of the patterns use [Electric](https://electric-sql.com/product/sync) for the read-path (i.e.: syncing data from Postgres into the local app) and implement a different approach to the write-path (i.e.: how they handle local writes and get data from the local app back into Postgres).
+All of the patterns use [Electric](https://electric-sql.com/product/electric) for the read-path (i.e.: syncing data from Postgres into the local app) and implement a different approach to the write-path (i.e.: how they handle local writes and get data from the local app back into Postgres).
 
 ### [1. Online writes](./patterns/1-online-writes)
 

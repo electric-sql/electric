@@ -6,10 +6,6 @@ description: >-
 image: /img/integrations/electric-redis.jpg
 ---
 
-<script setup>
-  import HelpWanted from '/src/components/HelpWanted.vue'
-</script>
-
 <img src="/img/integrations/redis.svg" class="product-icon" />
 
 # Redis
@@ -24,9 +20,9 @@ Many applications use [Redis](https://redis.io/docs/latest/develop/use/client-si
 
 The shape stream comes through as a [log](/docs/api/http#shape-log) of insert, update and delete messages. Apply these to the Redis hash and the cache automatically stays up-to-date:
 
-<<< @../../examples/redis-sync/src/index.ts
+<<< @../../examples/redis/src/index.ts
 
-See the [`redis-sync` example](https://github.com/electric-sql/electric/tree/main/examples/redis-sync) for more details.
+See the [Redis example](/demos/redis) for more details.
 
 <HelpWanted issue="1881">
   a library that wraps up the
