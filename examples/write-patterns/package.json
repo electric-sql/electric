@@ -1,23 +1,9 @@
 {
   "name": "@electric-examples/write-patterns",
-  "private": true,
   "version": "0.0.1",
   "author": "ElectricSQL",
-  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"
-  },
-  "type": "module",
-  "scripts": {
-    "backend:up": "PROJECT_NAME=write-patterns pnpm -C ../../ run example-backend:up && pnpm db:migrate",
-    "backend:down": "PROJECT_NAME=write-patterns pnpm -C ../../ run example-backend:down",
-    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./shared/migrations",
-    "dev": "concurrently \"vite\" \"node shared/backend/api.js\"",
-    "build": "vite build",
-    "format": "eslint . --ext ts,tsx --fix",
-    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@electric-sql/client": "workspace:*",
@@ -51,10 +37,24 @@
     "vite": "^5.3.4",
     "vite-plugin-pwa": "^0.21.0"
   },
+  "license": "Apache-2.0",
   "overrides": {
     "@types/react": "npm:types-react@rc",
     "@types/react-dom": "npm:types-react-dom@rc",
     "react": "19.0.0-rc.1",
     "react-dom": "19.0.0-rc.1"
-  }
+  },
+  "private": true,
+  "scripts": {
+    "backend:down": "PROJECT_NAME=write-patterns pnpm -C ../../ run example-backend:down",
+    "backend:up": "PROJECT_NAME=write-patterns pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "build": "vite build",
+    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./shared/migrations",
+    "dev": "concurrently \"vite\" \"node shared/backend/api.js\"",
+    "format": "eslint . --fix",
+    "preview": "vite preview",
+    "stylecheck": "eslint . --quiet",
+    "typecheck": "tsc --noEmit"
+  },
+  "type": "module"
 }
