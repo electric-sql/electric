@@ -67,6 +67,9 @@ defmodule Electric.Client.Offset do
       iex> from_string("1378734_3")
       {:ok, %#{__MODULE__}{tx: 1378734, op: 3}}
 
+      iex> from_string("0_inf")
+      {:ok, %#{__MODULE__}{tx: 0, op: :infinity}}
+
       iex> from_string("not a real offset")
       {:error, "has invalid format"}
 
