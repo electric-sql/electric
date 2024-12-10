@@ -2,4 +2,4 @@
 "@core/elixir-client": patch
 ---
 
-Add un-pooled connection behaviour for the Elixir client
+Add pool behaviour for the Elixir client to allow for per-client persistent connections. Add request timestamp and shape handle to replication stream messages.
