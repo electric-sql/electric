@@ -9,6 +9,7 @@ RUN npm install -g pnpm
 COPY pnpm-*.yaml ./
 COPY package.json ./
 COPY tsconfig.build.json ./
+COPY tsconfig.base.json ./
 COPY packages/typescript-client packages/typescript-client/
 COPY packages/react-hooks packages/react-hooks/
 COPY packages/experimental packages/experimental/
