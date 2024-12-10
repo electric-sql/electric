@@ -48,8 +48,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: $(node -p "require('./package.json').packageManager.replace(/.*@/, '')")
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -80,8 +78,6 @@ jobs:
           version-type: strict
           version-file: ".tool-versions"
       - uses: pnpm/action-setup@v4
-        with:
-          version: $(node -p "require('./package.json').packageManager.replace(/.*@/, '')")
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -153,8 +149,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: $(node -p "require('./package.json').packageManager.replace(/.*@/, '')")
       - uses: actions/setup-node@v4
         with:
           node-version: 20
