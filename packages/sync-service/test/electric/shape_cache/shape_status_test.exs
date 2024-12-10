@@ -145,7 +145,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   test "latest_offset", ctx do
     {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
     assert :error = ShapeStatus.latest_offset(state, "sdfsodf")
-    assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, LogOffset.first()}
+
+    assert ShapeStatus.latest_offset(state, shape_handle) ==
+             {:ok, LogOffset.last_before_real_offsets()}
+
     offset = LogOffset.new(100, 3)
     assert ShapeStatus.set_latest_offset(state, shape_handle, offset)
     refute ShapeStatus.set_latest_offset(state, "not my shape", offset)
@@ -156,7 +159,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     table_name = table_name()
     {:ok, _state, [shape_handle]} = new_state(ctx, table: table_name, shapes: [shape!()])
     assert :error = ShapeStatus.latest_offset(table_name, "sdfsodf")
-    assert ShapeStatus.latest_offset(table_name, shape_handle) == {:ok, LogOffset.first()}
+
+    assert ShapeStatus.latest_offset(table_name, shape_handle) ==
+             {:ok, LogOffset.last_before_real_offsets()}
+
     offset = LogOffset.new(100, 3)
     refute ShapeStatus.set_latest_offset(table_name, "not my shape", offset)
     assert ShapeStatus.set_latest_offset(table_name, shape_handle, offset)

@@ -601,13 +601,14 @@ defmodule Electric.Shapes.ConsumerTest do
   end
 
   describe "transaction handling with real storage" do
+    @describetag :tmp_dir
     setup do
       %{inspector: Support.StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])}
     end
 
     setup [
       {Support.ComponentSetup, :with_registry},
-      {Support.ComponentSetup, :with_in_memory_storage},
+      {Support.ComponentSetup, :with_cub_db_storage},
       {Support.ComponentSetup, :with_log_chunking},
       {Support.ComponentSetup, :with_shape_log_collector}
     ]
@@ -624,10 +625,10 @@ defmodule Electric.Shapes.ConsumerTest do
           log_producer: ctx.shape_log_collector,
           run_with_conn_fn: &run_with_conn_noop/2,
           prepare_tables_fn: fn _, _ -> :ok end,
-          create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _ ->
+          create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 10})
-            Storage.make_new_snapshot!([["test"]], storage)
+            Storage.make_new_snapshot!([], storage)
             GenServer.cast(parent, {:snapshot_started, shape_handle})
           end
         )
@@ -681,8 +682,8 @@ defmodule Electric.Shapes.ConsumerTest do
       shape_storage = Storage.for_shape(shape_handle, storage)
 
       assert [op1, op2] =
-               Storage.get_log_stream(LogOffset.before_all(), shape_storage)
-               |> Enum.map(&:json.decode/1)
+               Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)
+               |> Enum.map(&Jason.decode!/1)
 
       # If we encounter & store the same transaction, log stream should be stable
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
@@ -690,8 +691,8 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {Shapes.Consumer, ^ref, 11}
 
       assert [^op1, ^op2] =
-               Storage.get_log_stream(LogOffset.before_all(), shape_storage)
-               |> Enum.map(&:json.decode/1)
+               Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)
+               |> Enum.map(&Jason.decode!/1)
     end
 
     @tag snapshot_delay: 100
@@ -754,8 +755,8 @@ defmodule Electric.Shapes.ConsumerTest do
       shape_storage = Storage.for_shape(shape_handle, storage)
 
       assert [_op1, _op2] =
-               Storage.get_log_stream(LogOffset.before_all(), shape_storage)
-               |> Enum.map(&:json.decode/1)
+               Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)
+               |> Enum.map(&Jason.decode!/1)
     end
   end
 end

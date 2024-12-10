@@ -1,7 +1,7 @@
 import { parse } from 'cache-control-parser'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
-import { describe, expect, inject, vi } from 'vitest'
+import { assert, describe, expect, inject, vi } from 'vitest'
 import { FetchError, Shape, ShapeStream } from '../src'
 import { Message, Offset } from '../src/types'
 import { isChangeMessage, isUpToDateMessage } from '../src/helpers'
@@ -307,13 +307,9 @@ describe(`HTTP Sync`, () => {
         ]
       )
 
-      await vi.waitFor(async () => {
-        const res = await fetch(
-          `${BASE_URL}/v1/shape?table=${tableUrl}&offset=-1`
-        )
-        const body = (await res.json()) as Message[]
-        expect(body.length).greaterThan(1)
-      })
+      await vi.waitFor(() =>
+        assert(client.isUpToDate && !client.lastOffset.startsWith(`0_`))
+      )
       const updatedData = await client.rows
 
       expect(updatedData).toMatchObject([
@@ -531,13 +527,7 @@ describe(`HTTP Sync`, () => {
     )
 
     // And wait until it's definitely seen
-    await vi.waitFor(async () => {
-      const res = await fetch(
-        `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`
-      )
-      const body = (await res.json()) as Message[]
-      expect(body).toHaveLength(12)
-    })
+    await sleep(100)
 
     let catchupOpsCount = 0
     const newAborter = new AbortController()
@@ -600,12 +590,24 @@ describe(`HTTP Sync`, () => {
     )
     const etag2Header = res2.headers.get(`etag`)
     expect(etag2Header, `Response should have etag header`).not.toEqual(null)
-    expect(etagHeader).not.toEqual(etag2Header)
+    expect(etagHeader).toEqual(etag2Header)
+
+    // Second chunk is not yet full, so no e-tag yet
+    const res3 = await fetch(
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=${res2.headers.get(`electric-offset`)}&handle=${res2.headers.get(`electric-handle`)}`
+    )
+    const etag3Header = res3.headers.get(`etag`)
+    expect(etag3Header, `Response should have etag header`).not.toEqual(null)
+    expect(etagHeader).not.toEqual(etag3Header)
   })
 
   it(`should revalidate etags`, async ({ issuesTableUrl, insertIssues }) => {
     // Start the shape
-    await fetch(`${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`, {})
+    const baseRes = await fetch(
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
+      {}
+    )
+    const handle = baseRes.headers.get(`electric-handle`)
     // Fill it up in separate transactions
     for (const i of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
       await insertIssues({ title: `foo${i}` })
@@ -614,11 +616,11 @@ describe(`HTTP Sync`, () => {
     await sleep(100)
 
     const res = await fetch(
-      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=0_0&handle=${handle}`,
       {}
     )
     const messages = (await res.json()) as Message[]
-    expect(messages.length).toEqual(9) // 9 inserts
+    expect(messages.length).toEqual(10) // 9 inserts + up-to-date
     const midMessage = messages.slice(-6)[0]
     expect(midMessage).to.have.own.property(`offset`)
     const midOffset = (midMessage as { offset: string }).offset
@@ -627,7 +629,7 @@ describe(`HTTP Sync`, () => {
     expect(etag, `Response should have etag header`).not.toBe(null)
 
     const etagValidation = await fetch(
-      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=0_0&handle=${handle}`,
       {
         headers: { 'If-None-Match': etag! },
       }
@@ -794,11 +796,8 @@ describe(`HTTP Sync`, () => {
 
     // And wait until it's definitely seen
     await vi.waitFor(async () => {
-      const res = await fetch(
-        `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`
-      )
-      const body = (await res.json()) as Message[]
-      expect(body.length).greaterThan(2)
+      await sleep(50)
+      return issueStream.isUpToDate
     })
 
     const responseSizes: number[] = []

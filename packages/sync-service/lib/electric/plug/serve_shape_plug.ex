@@ -173,7 +173,7 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :put_resp_cache_headers
   plug :generate_etag
   plug :validate_and_put_etag
-  plug :serve_log_or_snapshot
+  plug :serve_shape_log
 
   # end_telemetry_span needs to always be the last plug here.
   plug :end_telemetry_span
@@ -337,7 +337,8 @@ defmodule Electric.Plug.ServeShapePlug do
     # The log can't be up to date if the last_offset is not the actual end.
     # Also if client is requesting the start of the log, we don't set `up-to-date`
     # here either as we want to set a long max-age on the cache-control.
-    if LogOffset.compare(chunk_end_offset, last_offset) == :lt or offset == @before_all_offset do
+    if LogOffset.compare(chunk_end_offset, last_offset) == :lt or
+         offset == @before_all_offset do
       conn
       |> assign(:up_to_date, [])
       # header might have been added on first pass but no longer valid
@@ -420,66 +421,13 @@ defmodule Electric.Plug.ServeShapePlug do
         "public, max-age=#{config[:max_age]}, stale-while-revalidate=#{config[:stale_age]}"
       )
 
-  # If offset is -1, we're serving a snapshot
-  defp serve_log_or_snapshot(
-         %Conn{assigns: %{offset: @before_all_offset, config: config}} = conn,
-         _
-       ) do
-    OpenTelemetry.with_span("shape_get.plug.serve_snapshot", [], config[:stack_id], fn ->
-      serve_snapshot(conn)
-    end)
-  end
-
-  # Otherwise, serve log since that offset
-  defp serve_log_or_snapshot(%Conn{assigns: %{config: config}} = conn, _) do
+  defp serve_shape_log(%Conn{assigns: %{config: config}} = conn, _) do
     OpenTelemetry.with_span("shape_get.plug.serve_shape_log", [], config[:stack_id], fn ->
-      serve_shape_log(conn)
+      do_serve_shape_log(conn)
     end)
   end
 
-  defp serve_snapshot(
-         %Conn{
-           assigns: %{
-             chunk_end_offset: chunk_end_offset,
-             active_shape_handle: shape_handle,
-             up_to_date: maybe_up_to_date
-           }
-         } = conn
-       ) do
-    case Shapes.get_snapshot(conn.assigns.config, shape_handle) do
-      {:ok, {offset, snapshot}} ->
-        log =
-          Shapes.get_log_stream(conn.assigns.config, shape_handle,
-            since: offset,
-            up_to: chunk_end_offset
-          )
-
-        [snapshot, log, maybe_up_to_date]
-        |> Stream.concat()
-        |> to_json_stream()
-        |> Stream.chunk_every(500)
-        |> send_stream(conn, 200)
-
-      {:error, reason} ->
-        error_msg = "Could not serve a snapshot because of #{inspect(reason)}"
-
-        Logger.warning(error_msg)
-        OpenTelemetry.record_exception(error_msg)
-
-        {status_code, message} =
-          if match?(%DBConnection.ConnectionError{reason: :queue_timeout}, reason),
-            do: {429, "Could not establish connection to database - try again later"},
-            else: {500, "Failed creating or fetching the snapshot"}
-
-        send_resp(
-          conn,
-          status_code,
-          Jason.encode_to_iodata!(%{error: message})
-        )
-    end
-  end
-
-  defp serve_shape_log(
+  defp do_serve_shape_log(
          %Conn{
            assigns: %{
              offset: offset,
@@ -490,7 +438,7 @@ defmodule Electric.Plug.ServeShapePlug do
          } = conn
        ) do
     log =
-      Shapes.get_log_stream(conn.assigns.config, shape_handle,
+      Shapes.get_merged_log_stream(conn.assigns.config, shape_handle,
         since: offset,
         up_to: chunk_end_offset
       )
@@ -558,7 +506,10 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp listen_for_new_changes(%Conn{assigns: assigns} = conn, _) do
     # Only start listening when we know there is a possibility that nothing is going to be returned
-    if LogOffset.compare(assigns.offset, assigns.last_offset) != :lt do
+    # There is an edge case in that the snapshot is served in chunks but `last_offset` is not updated
+    # by that process. In that case, we'll start listening for changes but not receive any updates.
+    if LogOffset.compare(assigns.offset, assigns.last_offset) != :lt or
+         assigns.last_offset == LogOffset.last_before_real_offsets() do
       shape_handle = assigns.handle
 
       ref = make_ref()
@@ -587,7 +538,7 @@ defmodule Electric.Plug.ServeShapePlug do
         # update last offset header
         |> put_resp_header("electric-offset", "#{latest_log_offset}")
         |> determine_up_to_date([])
-        |> serve_shape_log()
+        |> do_serve_shape_log()
 
       {^ref, :shape_rotation} ->
         # We may want to notify the client better that the shape handle had changed, but just closing the response
@@ -612,7 +563,9 @@ defmodule Electric.Plug.ServeShapePlug do
 
     maybe_up_to_date = if up_to_date = assigns[:up_to_date], do: up_to_date != []
 
-    Electric.Telemetry.OpenTelemetry.get_stack_span_attrs(assigns.config[:stack_id])
+    Electric.Telemetry.OpenTelemetry.get_stack_span_attrs(
+      get_in(conn.assigns, [:config, :stack_id])
+    )
     |> Map.merge(Electric.Plug.Utils.common_open_telemetry_attrs(conn))
     |> Map.merge(%{
       "shape.handle" => shape_handle,
@@ -668,7 +621,7 @@ defmodule Electric.Plug.ServeShapePlug do
           conn.query_params["handle"] || assigns[:active_shape_handle] || assigns[:handle],
         client_ip: conn.remote_ip,
         status: conn.status,
-        stack_id: assigns.config[:stack_id]
+        stack_id: get_in(conn.assigns, [:config, :stack_id])
       }
     )
 
@@ -699,6 +652,7 @@ defmodule Electric.Plug.ServeShapePlug do
     error_str = Exception.format(error.kind, error.reason)
 
     conn
+    |> fetch_query_params()
     |> assign(:error_str, error_str)
     |> end_telemetry_span()
 
