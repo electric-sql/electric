@@ -1,7 +1,7 @@
 ---
-"@electric-sql/client": patch
-"@core/sync-service": patch
-"@electric-sql/react": patch
+"@electric-sql/client": none
+"@core/sync-service": none
+"@electric-sql/react": none
 ---
 
 First beta release
