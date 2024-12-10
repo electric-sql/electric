@@ -39,8 +39,15 @@ app.post('/apply-changes', async (c) => {
     console.error(error)
     return c.json({ error: 'Invalid changes' }, 400)
   }
-  const changeResponse = await applyChanges(parsedChanges)
-  return c.json(changeResponse)
+  try {
+    await applyChanges(parsedChanges)
+  } catch (error) {
+    // In a real app you would want to check which changes have failed and save that
+    // and return that information to the client.
+    console.error(error)
+    return c.json({ error: 'Failed to apply changes' }, 500)
+  }
+  return c.json({ success: true })
 })
 
 // Start the server
@@ -52,22 +59,16 @@ serve({
   port,
 })
 
-async function applyChanges(changes: ChangeSet): Promise<{ success: boolean }> {
+async function applyChanges(changes: ChangeSet) {
   const { issues, comments } = changes
-
-  try {
-    await sql.begin(async (sql) => {
-      for (const issue of issues) {
-        await applyTableChange('issue', issue, sql)
-      }
-      for (const comment of comments) {
-        await applyTableChange('comment', comment, sql)
-      }
-    })
-    return { success: true }
-  } catch (error) {
-    throw error
-  }
+  await sql.begin(async (sql) => {
+    for (const issue of issues) {
+      await applyTableChange('issue', issue, sql)
+    }
+    for (const comment of comments) {
+      await applyTableChange('comment', comment, sql)
+    }
+  })
 }
 
 async function applyTableChange(

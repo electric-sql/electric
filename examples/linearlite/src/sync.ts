@@ -214,6 +214,8 @@ async function doSyncToServer(pg: PGliteWithExtensions) {
     body: JSON.stringify(changeSet),
   })
   if (!response.ok) {
+    // In a real app you would want to check which changes have failed and save that
+    // information to the database, maybe in a `sync_errors` column on the row effected.
     throw new Error('Failed to apply changes')
   }
   await pg.transaction(async (tx) => {
