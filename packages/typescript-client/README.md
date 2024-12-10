@@ -143,7 +143,7 @@ Runtime errors:
 
 See the [typescript client docs on the website](https://electric-sql.com/docs/api/clients/typescript#error-handling) for more details on error handling.
 
-And in general, see the [docs website](https://electric-sql.com) and [examples folder](https://electric-sql.com/examples/basic) for more information.
+And in general, see the [docs website](https://electric-sql.com) and [examples](https://electric-sql.com/demos) for more information.
 
 ## Develop
 

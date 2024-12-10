@@ -51,9 +51,9 @@ const Component = () => {
     />
   </div>
   <div class="action hidden-sm">
-    <VPButton href="https://github.com/electric-sql/electric/tree/main/examples"
+    <VPButton href="/demos"
         target="_blank"
-        text="Examples"
+        text="Demos"
         theme="alt"
     />
   </div>

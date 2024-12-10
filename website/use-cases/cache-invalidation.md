@@ -95,7 +95,7 @@ You don't need to manage cache invalidation seperately or set expiry dates of TT
 
 ## Real world example
 
-See the [`redis-sync` example](https://github.com/electric-sql/electric/tree/main/examples/redis-sync) and the [Redis integration page](/docs/integrations/redis) for a real world example, syncing data into a Redis cache with automatic invalidation.
+See the [Redis example](/demos/redis) and [integration page](/docs/integrations/redis) for a real world example, syncing data into a Redis cache with automatic invalidation.
 
 ## Next steps
 
@@ -116,9 +116,9 @@ Get started with Electric to simplify your stack and avoid stale data.
     />
   </div>
   <div class="action hidden-sm">
-    <VPButton href="https://github.com/electric-sql/electric/tree/main/examples"
+    <VPButton href="/demos"
         target="_blank"
-        text="Examples"
+        text="Demos"
         theme="alt"
     />
   </div>

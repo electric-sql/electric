@@ -15,44 +15,7 @@ importers:
         specifier: ^7.4.2
         version: 7.4.2
 
-  examples/bash-client: {}
-
-  examples/basic-example:
-    dependencies:
-      '@electric-sql/react':
-        specifier: workspace:*
-        version: link:../../packages/react-hooks
-      react:
-        specifier: ^18.3.1
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.3.1
-        version: 18.3.1(react@18.3.1)
-    devDependencies:
-      '@databases/pg-migrations':
-        specifier: ^5.0.3
-        version: 5.0.3(typescript@5.6.3)
-      '@types/react':
-        specifier: ^18.3.3
-        version: 18.3.12
-      '@types/react-dom':
-        specifier: ^18.3.0
-        version: 18.3.1
-      '@vitejs/plugin-react':
-        specifier: ^4.3.1
-        version: 4.3.3(vite@5.4.10(@types/node@20.17.6)(terser@5.36.0))
-      dotenv:
-        specifier: ^16.4.5
-        version: 16.4.5
-      eslint:
-        specifier: ^8.57.0
-        version: 8.57.1
-      typescript:
-        specifier: ^5.5.3
-        version: 5.6.3
-      vite:
-        specifier: ^5.3.4
-        version: 5.4.10(@types/node@20.17.6)(terser@5.36.0)
+  examples/bash: {}
 
   examples/encryption:
     dependencies:
@@ -565,7 +528,7 @@ importers:
         specifier: ^4.4.5
         version: 4.5.5(@types/node@20.17.6)(terser@5.36.0)
 
-  examples/nextjs-example:
+  examples/nextjs:
     dependencies:
       '@electric-sql/client':
         specifier: workspace:*
@@ -684,7 +647,44 @@ importers:
         specifier: ^5.3.4
         version: 5.4.10(@types/node@20.17.6)(terser@5.36.0)
 
-  examples/redis-sync:
+  examples/react:
+    dependencies:
+      '@electric-sql/react':
+        specifier: workspace:*
+        version: link:../../packages/react-hooks
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@databases/pg-migrations':
+        specifier: ^5.0.3
+        version: 5.0.3(typescript@5.6.3)
+      '@types/react':
+        specifier: ^18.3.3
+        version: 18.3.12
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.1
+      '@vitejs/plugin-react':
+        specifier: ^4.3.1
+        version: 4.3.3(vite@5.4.10(@types/node@20.17.6)(terser@5.36.0))
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.4.5
+      eslint:
+        specifier: ^8.57.0
+        version: 8.57.1
+      typescript:
+        specifier: ^5.5.3
+        version: 5.6.3
+      vite:
+        specifier: ^5.3.4
+        version: 5.4.10(@types/node@20.17.6)(terser@5.36.0)
+
+  examples/redis:
     dependencies:
       '@electric-sql/client':
         specifier: workspace:*
@@ -740,7 +740,7 @@ importers:
         specifier: ^5.5.2
         version: 5.6.3
 
-  examples/remix-basic:
+  examples/remix:
     dependencies:
       '@electric-sql/client':
         specifier: workspace:*
@@ -807,7 +807,7 @@ importers:
         specifier: ^5.3.4
         version: 5.4.10(@types/node@20.17.6)(terser@5.36.0)
 
-  examples/tanstack-example:
+  examples/tanstack:
     dependencies:
       '@electric-sql/client':
         specifier: workspace:*
@@ -1337,6 +1337,9 @@ importers:
       '@redocly/cli':
         specifier: ^1.18.0
         version: 1.25.11(enzyme@3.11.0)
+      chart.js:
+        specifier: ^4.4.7
+        version: 4.4.7
       nodemon:
         specifier: ^3.1.4
         version: 3.1.7
@@ -3059,6 +3062,9 @@ packages:
 
   '@jspm/core@2.1.0':
     resolution: {integrity: sha512-3sRl+pkyFY/kLmHl0cgHiFp2xEqErA8N3ECjMs7serSUBmoJ70lBa0PG5t0IM6WJgdZNyyI0R8YFfi5wM8+mzg==}
+
+  '@kurkle/color@0.3.4':
+    resolution: {integrity: sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w==}
 
   '@lezer/common@1.2.3':
     resolution: {integrity: sha512-w7ojc8ejBqr2REPsWxJjrMFsA/ysDCFICn8zEOR9mrqzOu2amhITYuLD8ag6XZf0CFXDrhKqw7+tW8cX66NaDA==}
@@ -5276,6 +5282,10 @@ packages:
 
   chardet@0.7.0:
     resolution: {integrity: sha512-mT8iDcrh03qDGRRmoA2hmBJnxpllMR+0/0qlzjqZES6NdiWDcZkCNAk4rPFZ9Q85r27unkiNNg8ZOiwZXBHwcA==}
+
+  chart.js@4.4.7:
+    resolution: {integrity: sha512-pwkcKfdzTMAU/+jNosKhNL2bHtJc/sSmYgVbuGTEDhzkrhmyihmP7vUc/5ZK9WopidMDHNe3Wm7jOd/WhuHWuw==}
+    engines: {pnpm: '>=8'}
 
   check-error@2.1.1:
     resolution: {integrity: sha512-OAlb+T7V4Op9OwdkjmguYRqncdlx5JiofwOAUkmTF+jNdHwzTaTs4sRAGpzLF3oOz5xAyDGrPgeIDFQmDOTiJw==}
@@ -11821,6 +11831,8 @@ snapshots:
 
   '@jspm/core@2.1.0': {}
 
+  '@kurkle/color@0.3.4': {}
+
   '@lezer/common@1.2.3': {}
 
   '@lezer/highlight@1.2.1':
@@ -14469,6 +14481,10 @@ snapshots:
   character-reference-invalid@2.0.1: {}
 
   chardet@0.7.0: {}
+
+  chart.js@4.4.7:
+    dependencies:
+      '@kurkle/color': 0.3.4
 
   check-error@2.1.1: {}
 
@@ -17262,7 +17278,7 @@ snapshots:
       oas-kit-common: 1.0.8
       reftools: 1.1.9
       yaml: 1.10.2
-      yargs: 17.0.1
+      yargs: 17.7.2
 
   oas-schema-walker@1.1.5: {}
 
@@ -18853,7 +18869,7 @@ snapshots:
       oas-validator: 5.0.8
       reftools: 1.1.9
       yaml: 1.10.2
-      yargs: 17.0.1
+      yargs: 17.7.2
     transitivePeerDependencies:
       - encoding
 

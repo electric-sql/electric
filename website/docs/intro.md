@@ -5,6 +5,14 @@ description: >-
 outline: deep
 ---
 
+<script setup>
+import { data as demosData } from '../data/demos.data.ts'
+const { demos } = demosData
+
+const linearlite = demos.find(x => x.link === '/demos/linearlite')
+const notes = demos.find(x => x.link === '/demos/notes')
+</script>
+
 <p class="intro-zap-container">
   <img src="/img/home/zap-with-halo.svg"
       alt="Electric zap with halo"
@@ -16,13 +24,14 @@ outline: deep
 
 Welcome to the ElectricSQL developer documentation!
 
-ElectricSQL is a Postgres sync engine. Use it to sync [little subsets](/docs/guides/shapes) of your Postgres data into [local apps](/use-cases/state-transfer), services and [environments](/use-cases/dev-and-test).
+ElectricSQL is a Postgres sync engine. Use it to sync [little subsets](/docs/guides/shapes) of your Postgres data into [local apps](/use-cases/data-sync), services and [environments](/use-cases/dev-and-test).
 
-You don't need to be an expert in database replication or distributed systems to use Electric. You do need to be familiar with basic web development.
+> [!Tip] Electric BETA release
+> The Electric sync engine is now in BETA! See the [release post here](/blog/2024/12/10/electric-beta-release).
 
 ## New to ElectricSQL?
 
-Start with the [Quickstart](/docs/quickstart) to get up-and-running. The guides on [Shapes](/docs/guides/shapes) and [Auth](/docs/guides/auth) are also good entrypoints and helpful to understand how Electric works.
+Start with the [Quickstart](/docs/quickstart) to get up-and-running. The guides on [Auth](/docs/guides/auth), [Shapes](/docs/guides/shapes) and [Writes](/docs/guides/writes) are also good entrypoints and helpful to understand how Electric works.
 
 The [HTTP API](/docs/api/http) and [TypeScript Client](/docs/api/clients/typescript) docs show how to sync data. The [React](/docs/integrations/react) page illustrates how to bind these into a reactivity framework.
 
@@ -33,7 +42,12 @@ The easiest way to use Electric in production is the [Electric Cloud](/product/c
 
 ## Examples
 
-There are lots of [examples](https://github.com/electric-sql/electric/tree/main/examples) in the main repo on GitHub.
+See the [Demos](/demos) section and [`examples`](https://github.com/electric-sql/electric/tree/main/examples) folder on GitHub for demo apps and examples, e.g.:
+
+<div class="demos-grid">
+  <DemoListing :demo="linearlite"/>
+  <DemoListing :demo="notes"/>
+</div>
 
 The integration docs also illustrate common patterns, e.g. using Electric with frameworks like [TanStack](/docs/integrations/tanstack) and [Phoenix](/docs/integrations/phoenix) and platforms like [Supabase](/docs/integrations/supabase) and [Cloudflare](/docs/integrations/cloudflare).
 

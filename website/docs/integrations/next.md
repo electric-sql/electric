@@ -6,10 +6,6 @@ description: >-
 image: /img/integrations/electric-next.jpg
 ---
 
-<script setup>
-  import HelpWanted from '/src/components/HelpWanted.vue'
-</script>
-
 <img src="/img/integrations/next.svg" class="product-icon" />
 
 # Next.js
@@ -24,13 +20,13 @@ Next.js is based on React. Electric [works with React](./react). You can integra
 
 #### Next.js example
 
-See the [nextjs-example](https://github.com/electric-sql/electric/tree/main/examples/nextjs-example) on GitHub. This demonstrates using Electric for read-path sync and a Next.js API for handling writes:
+See the [Nextjs example](/demos/nextjs) on GitHub. This demonstrates using Electric for read-path sync and a Next.js API for handling writes:
 
-<<< @../../examples/nextjs-example/app/page.tsx
+<<< @../../examples/nextjs/app/page.tsx
 
 It also demonstrates using a [shape-proxy endpoint](https://github.com/electric-sql/electric/blob/main/examples/nextjs-example/app/shape-proxy/route.ts) for proxying access to the Electric sync service. This allows you to implement [auth](/docs/guides/auth) and routing in-front-of Electric (and other concerns like transforming or decrypting the stream) using your Next.js backend:
 
-<<< @../../examples/nextjs-example/app/shape-proxy/route.ts
+<<< @../../examples/nextjs/app/shape-proxy/route.ts
 
 #### ElectroDrizzle
 

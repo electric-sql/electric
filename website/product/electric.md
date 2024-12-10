@@ -77,7 +77,7 @@ The Electric sync engine syncs [little subsets](/docs/guides/shapes) of data out
 
 You can sync data into:
 
-- web and mobile apps, [replacing data fetching with data sync](/use-cases/state-transfer)
+- web and mobile apps, [replacing data fetching with data sync](/use-cases/data-sync)
 - edge workers and services, for example maintaining a low-latency [edge data cache](/use-cases/cache-invalidation)
 - local AI systems, for example [running RAG using pgvector](/use-cases/local-ai)
 - dev and test environments, for example syncing data into [an embedded PGlite](/product/pglite) database
@@ -105,7 +105,7 @@ This enables a massive number of clients to query and get real-time updates to s
 
 ## More information
 
-See the [Docs](/docs/intro), [Quickstart](/docs/quickstart) and [Examples](https://github.com/electric-sql/electric/tree/main/examples). You can [self-host](/docs/guides/deployment) or use the [Electric&nbsp;Cloud](/product/cloud).
+See the [Docs](/docs/intro), [Quickstart](/docs/quickstart) and [Demos](/demos). You can [self-host](/docs/guides/deployment) or use the [Electric&nbsp;Cloud](/product/cloud).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
