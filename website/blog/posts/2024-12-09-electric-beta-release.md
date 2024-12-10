@@ -93,13 +93,13 @@ So many real-time sync systems demo well but break under real load.
 
 Electric has been [engineered from the ground up](/docs/api/http) to handle high-throughput workloads, like [Trigger.dev](https://trigger.dev/launchweek/0/realtime), with low latency and flat resource use. You can stream real-time data to **millions of concurrent users** from a single commodity Postgres.
 
-The chart below is from our cloud [benchmarks](/docs/reference/benchmarks), testing Electric's memory usage and latency with a single Electric service scaling real-time sync from 100k to 1million concurrent clients under a sustained load of 960 writes/minute. Both memory usage and latency are essentially <em>flat</em>:
+The chart below is from our cloud [benchmarks](/docs/reference/benchmarks), testing Electric's memory usage and latency with a single Electric service scaling real-time sync from 100k to 1 million concurrent clients under a sustained load of 960 writes/minute. Both memory usage and latency are essentially <em>flat</em>:
 
 <figure>
   <ScalabilityChart />
 </figure>
 
-You can also see how large-scale apps built with Electric feel to use with our updated [ Linearlite](/demos/linearlite) demo. This is a [Linear](https://linear.app) clone that loads 100,000k issues and their comments through Electric into PGlite. Once loaded, it's fully interactive and feels instant to use:
+You can also see how large-scale apps built with Electric feel to use with our updated [ Linearlite](/demos/linearlite) demo. This is a [Linear](https://linear.app) clone that loads 100,000k issues and their comments through Electric into PGlite (~150mb of data). Once loaded, it's fully interactive and feels instant to use:
 
 <figure>
   <p>
@@ -116,7 +116,7 @@ You can also see how large-scale apps built with Electric feel to use with our u
 
 ## Easy to adopt
 
-We've iterated a great deal on our APIs to make them as simple and powerful as possible. There should be no breaking changes in minor or patch releases moving forward.
+We've iterated a lot on our APIs to make them as simple and powerful as possible. There should be no breaking changes in minor or patch releases moving forward.
 
 We've updated our [Documentation](/docs/intro), with a new [Quickstart](/docs/quickstart) and guides for topics like:
 
@@ -127,6 +127,8 @@ We've updated our [Documentation](/docs/intro), with a new [Quickstart](/docs/qu
 - how to [write your own client](/docs/guides/client-development) for any language or environment
 
 We have [client libraries](/docs/api/clients/typescript), [integration docs](/docs/integrations/react), [demo apps](/demos) and [technical examples](/demos#technical-examples) showing how to use Electric with different patterns and frameworks:
+
+#### Interactive demos
 
 <div class="demos-grid">
   <DemoListing :demo="notesDemo" />
@@ -210,7 +212,7 @@ With this BETA release, Electric is stable and ready for prime time use. If you 
 
 ### Signup for early access to Electric Cloud
 
-We're also building [Electric Cloud](/product/cloud), which provides managed Electric hosting (for those that don't want [host Electric themselves](/docs/guides/deployment)).
+We're also building [Electric Cloud](/product/cloud), which provides managed Electric hosting (for those that don't want to [host Electric themselves](/docs/guides/deployment)).
 
 If you're interested in using Electric Cloud, you can sign up for early access here:
 
