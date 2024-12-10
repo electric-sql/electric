@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- 1255205: First beta release
+
 ## 0.9.1
 
 ### Patch Changes

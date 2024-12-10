@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- 1255205: First beta release
+- 309ac75: Do not await full setup for configuring replication slot drop.
+- 6ca47df: feat: introduce chunked snapshot generation
+
 ## 0.9.5
 
 ### Patch Changes
