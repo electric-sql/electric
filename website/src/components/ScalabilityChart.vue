@@ -149,6 +149,9 @@ export default {
             },
           },
           responsive: true,
+          maintainAspectRatio: true,
+          aspectRatio: 16 / 9,
+          resizeDelay: 40,
           interaction: {
             mode: 'index',
             intersect: false,
@@ -240,6 +243,8 @@ export default {
 <style scoped>
 .ScalabilityGraph {
   width: 100%;
-  height: 400px;
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
 }
 </style>

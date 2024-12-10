@@ -49,7 +49,7 @@ post: true
   })
 </script>
 
-With version [`1.0.0-beta.0`](https://github.com/electric-sql/electric/blob/main/packages/sync-service/CHANGELOG.md) the Electric sync engine is now in BETA!
+With version [`1.0.0-beta.0`](https://github.com/electric-sql/electric/releases) the Electric sync engine is now in BETA!
 
 If you haven't checked out Electric recently, it's a great time to [take another look](/docs/intro).
 
@@ -81,7 +81,7 @@ Electric and PGlite are being used in production by companies including [Google]
 > We use ElectricSQL to power [Trigger.dev Realtime](https://trigger.dev/launchweek/0/realtime), a core feature of our product. When we execute our users background tasks they get instant updates in their web apps. It's simple to operate since we already use Postgres, and it scales to millions of updates per day.<br />
 > *&mdash; [Matt Aitken](https://www.linkedin.com/in/mattaitken1985), Founder &amp; CEO, [Trigger.dev](https://trigger.dev)*
 
-> <br /><br />... quote coming ...<br /><br /><br />
+> At [Otto](https://ottogrid.ai), we built a spreadsheet product where every cell operates as its own AI agent. ElectricSQL enables us to reliably stream agent updates to our spreadsheet in real-time and efficiently manage large spreadsheets at scale. It has dramatically simplified our architecture while delivering the performance we need for cell-level reactive updates.<br />
 > *&mdash; [Sully Omar](https://x.com/SullyOmarr), Co-founder &amp; CEO, [Otto](https://ottogrid.ai)*
 
 > At [Doorboost](https://www.doorboost.com) we aggregate millions of rows from a dozen platforms, all of which gets distilled down to a simple dashboard. With Electric we have been able to deliver this dashboard in milliseconds and update live. Moving forward, we will be building all our products using Electric.<br />
@@ -91,17 +91,15 @@ Electric and PGlite are being used in production by companies including [Google]
 
 So many real-time sync systems demo well but break under real load.
 
-Electric has been [engineered from the ground up](/docs/api/http) to handle high-throughput workloads, like [Trigger.dev](https://trigger.dev/launchweek/0/realtime), with low latency and flat resource use. You can stream real-time data to **millions of concurrent users** from a single commodity Postgres:
+Electric has been [engineered from the ground up](/docs/api/http) to handle high-throughput workloads, like [Trigger.dev](https://trigger.dev/launchweek/0/realtime), with low latency and flat resource use. You can stream real-time data to **millions of concurrent users** from a single commodity Postgres.
 
-We ran a benchmark testing Electric's memory usage and latency for updates to clients. With a sustained load of 16 transactions per second, memory usage and latency are <em>flat</em> as we scale from 100k to 1 million clients!
+The chart below is from our cloud [benchmarks](/docs/reference/benchmarks), testing Electric's memory usage and latency with a single Electric service scaling real-time sync from 100k to 1million concurrent clients under a sustained load of 960 writes/minute. Both memory usage and latency are essentially <em>flat</em>:
 
 <figure>
   <ScalabilityChart />
 </figure>
 
-See our [benchmarks](/docs/reference/benchmarks) page for more details.
-
-You can also see how large-scale apps built with Electric feel to use with our updated [ Linearlite](/demos/linearlite) demo. This is a [Linear](https://linear.app) clone that loads 100,000k issues and their comments through Electric into PGlite. It loads fast, it feels instant and it's fully interactive:
+You can also see how large-scale apps built with Electric feel to use with our updated [ Linearlite](/demos/linearlite) demo. This is a [Linear](https://linear.app) clone that loads 100,000k issues and their comments through Electric into PGlite. Once loaded, it's fully interactive and feels instant to use:
 
 <figure>
   <a href="https://linearlite.examples.electric-sql.com" target="_blank">
