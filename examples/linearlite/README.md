@@ -1,20 +1,25 @@
-# Linearlite + PGlite + ElectricSQL
 
-This is a demo app that shows how to build a local-first app using PGlite and the ElectricSQL sync engine.
+# Linearlite
 
-It's an example of a team collaboration app, such as Linear built using ElectricSQL - a sync engine that synchronises small subsets of your Postgres data into local apps and services, so that you can have the data you need, in-sync, wherever you need it.
+This is a comprehensive example of a local-first [Linear](https://linear.app) clone built with [Electric](https://electric-sql.com) and [PGlite](https://pglite.dev).
 
-This example syncs the data into a local PGlite database and uses a "write through the database" pattern, where local mutations are saved to the local PGlite database and then synced to the server. See the [Write Path](#write-path) section for more details.
+Linear is a collaborative project management app for teams, built on a [sync engine architecture](https://linear.app/blog/scaling-the-linear-sync-engine). Linearlite is an example app that shows how you can build a Linear-quality application using Electric and PGlite. It's built on top of the excellent clone of the Linear UI built by [Tuan Nguyen](https://github.com/tuan3w).
+
+It uses syncs data using Electric into a local PGlite database and uses a [write through the database](https://electric-sql.com/docs/guides/writes#through-the-db) pattern, where local mutations are saved to the local database and then synced to the server. See the [Write Path](#write-path) section below for more details.
+
+## Data set
+
+Linearlite is configured to load a large dataset of 100,000 issues, with comments, totally ~150MB into the local database. It demonstrates both fast initial sync and instant local reactivity, using fast, windowed live queries in PGlite. As such, it is intended to show how you can build large-scale, real-world apps on Electric and PGlite.
+
+## Features
 
 The following features are implemented:
 
-- Full bi-directional sync of data to and from the server using a "write through the database" pattern
-- An indicator on each issue to show if it's been synced to the server
-- Filtering and sorting of issues and comments
-- A kanban board for issues with drag and drop reordering; the ordering is handled with fractional indexing so that it can be completed in a conflict free manner
-- Full text search of issues and comments using Postgres's `tsvector` and `tsquery` features
-
-It's built on top of the excellent clone of the Linear UI built by [Tuan Nguyen](https://github.com/tuan3w).
+- full bi-directional sync of data to and from the server
+- an indicator on each issue to show if it's been synced to the server
+- filtering and sorting of issues and comments
+- a kanban board for issues with drag and drop reordering (with conflict free ordering handled using fractional indexes)
+- full text search of issues and comments using Postgres's `tsvector` and `tsquery` features
 
 ## Setup
 
