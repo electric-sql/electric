@@ -1,6 +1,5 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 import { execSync } from "child_process"
-
 export default $config({
   app(input) {
     return {
@@ -11,6 +10,7 @@ export default $config({
       providers: {
         cloudflare: `5.42.0`,
         aws: { version: `6.57.0`, region: `eu-west-1` },
+        postgresql: "3.14.0",
       },
     }
   },
@@ -20,29 +20,20 @@ export default $config({
         `Env variables ELECTRIC_API and ELECTRIC_ADMIN_API must be set`
       )
 
-    const vpc = new sst.aws.Vpc("BasicExampleVPC", {
-      transform: {
-        securityGroup: {
-          ingress: [
-            {
-              toPort: 5432,
-              fromPort: 5432,
-              protocol: `tcp`,
-              cidrBlocks: ["0.0.0.0/0"],
-            },
-          ],
-        },
-      },
+    const provider = new postgresql.Provider("neon", {
+      host: process.env.EXAMPLES_DATABASE_HOST,
+      database: `neondb`,
+      username: `neondb_owner`,
+      password: process.env.EXAMPLES_DATABASE_PASSWORD,
     })
-    const pg = new sst.aws.Postgres("BasicExampleDB", { vpc })
 
-    const pgUri = $interpolate`postgresql://${pg.username}:${pg.password}@${pg.host}:${pg.port}/${pg.database}?sslmode=require`
+    const pg = new postgresql.Database("basic_example", {}, { provider })
 
+    const pgUri = $interpolate`postgresql://${provider.username}:${provider.password}@${provider.host}/${pg.name}?sslmode=require`
     const electricInfo = pgUri.apply((uri) => {
-      // applyMigrations(uri)
+      applyMigrations(uri)
       return addDatabaseToElectric(uri, `eu-west-1`)
     })
-
     const staticSite = new sst.aws.StaticSite("BasicExampleWeb", {
       environment: {
         VITE_ELECTRIC_URL: process.env.ELECTRIC_API!,
@@ -54,7 +45,6 @@ export default $config({
         output: "dist",
       },
     })
-
     return {
       pgUri,
       databaseId: electricInfo.id,
@@ -63,7 +53,6 @@ export default $config({
     }
   },
 })
-
 function applyMigrations(uri: string) {
   execSync(`pnpm exec pg-migrations apply --directory ./db/migrations`, {
     env: {
@@ -72,13 +61,14 @@ function applyMigrations(uri: string) {
     },
   })
 }
-
 async function addDatabaseToElectric(
   uri: string,
   region: string
-): Promise<{ id: string; token: string }> {
+): Promise<{
+  id: string
+  token: string
+}> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
-
   const result = await fetch(`${adminApi}/v1/databases`, {
     method: `PUT`,
     headers: { "Content-Type": `application/json` },
@@ -87,12 +77,15 @@ async function addDatabaseToElectric(
       region,
     }),
   })
-
   if (!result.ok) {
     throw new Error(
-      `Could not add database to Electric (${result.status}): ${await result.text()}`
+      `Could not add database to Electric (${
+        result.status
+      }): ${await result.text()}`
     )
   }
-
-  return (await result.json()) as { token: string; id: string }
+  return (await result.json()) as {
+    token: string
+    id: string
+  }
 }
