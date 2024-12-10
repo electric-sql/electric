@@ -5,7 +5,7 @@ description: >-
   If you haven't checked out Electric recently,
   it's a great time to take another look.
 excerpt: >-
-  With version 1.0.0-beta.0, the Electric sync engine is now in BETA!
+  With version 1.0.0-beta.1, the Electric sync engine is now in BETA!
   If you haven't checked out Electric recently, it's a
   great time to take another look.
 authors: [kyle]
@@ -49,7 +49,7 @@ post: true
   })
 </script>
 
-With version [`1.0.0-beta.0`](https://github.com/electric-sql/electric/releases) the Electric sync engine is now in BETA!
+With version [`1.0.0-beta.1`](https://github.com/electric-sql/electric/releases) the Electric sync engine is now in BETA!
 
 If you haven't checked out Electric recently, it's a great time to [take another look](/docs/intro).
 
