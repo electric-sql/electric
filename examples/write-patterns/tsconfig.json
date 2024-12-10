@@ -20,5 +20,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["shared/app", "patterns"]
+  "include": ["src", "patterns", "shared", "types"]
 }

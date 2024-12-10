@@ -124,25 +124,24 @@ export default function SharedPersistent() {
   // Get the local optimistic state.
   const localWrites = useSnapshot<Map<string, LocalWrite>>(optimisticState)
 
-  // Merge the synced state with the local state.
-  const todos = localWrites
-    .values()
-    .reduce((synced: Todo[], { operation, value }: LocalWrite) => {
+  const computeOptimisticState = (synced: Todo[], writes: LocalWrite[]): Todo[] => {
+    return writes.reduce((synced: Todo[], { operation, value }: LocalWrite): Todo[] => {
       switch (operation) {
         case 'insert':
-          return synced.some((todo) => todo.id === value.id)
-            ? synced
-            : [...synced, value as Todo]
-
+          return [...synced, value as Todo]
         case 'update':
           return synced.map((todo) =>
             todo.id === value.id ? { ...todo, ...value } : todo
           )
-
         case 'delete':
           return synced.filter((todo) => todo.id !== value.id)
+        default:
+          return synced
       }
-    }, sorted)
+    }, synced)
+  }
+
+  const todos = computeOptimisticState(sorted, [...localWrites.values()])
 
   // These are the same event handler functions from the previous optimistic
   // state pattern, adapted to add the state to the shared, persistent store.
