@@ -156,7 +156,8 @@ function getNeonDbUri(
 }
 
 async function addDatabaseToElectric(
-  uri: string
+  database_url: string,
+  region: `us-east-1` | `eu-west-1` = `us-east-1`
 ): Promise<{ id: string; token: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
 
@@ -164,8 +165,8 @@ async function addDatabaseToElectric(
     method: `PUT`,
     headers: { 'Content-Type': `application/json` },
     body: JSON.stringify({
-      database_url: uri,
-      region: `us-east-1`,
+      database_url,
+      region,
     }),
   })
 
