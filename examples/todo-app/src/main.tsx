@@ -5,8 +5,8 @@ import ErrorPage from "./error-page"
 
 import { Theme } from "@radix-ui/themes"
 import "@fontsource/alegreya-sans/latin.css"
-import "./style.css"
 import "@radix-ui/themes/styles.css"
+import "./style.css"
 
 import Index from "./routes/index"
 
@@ -31,7 +31,7 @@ const router = createBrowserRouter([
 async function render() {
   ReactDOM.createRoot(document.getElementById(`root`)!).render(
     <React.StrictMode>
-      <Theme appearance="dark" accentColor="iris" panelBackground="solid">
+      <Theme appearance="dark" accentColor="violet" panelBackground="solid">
         <RouterProvider router={router} />
       </Theme>
     </React.StrictMode>
