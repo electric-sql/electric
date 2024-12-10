@@ -732,7 +732,7 @@ importers:
         version: 0.3.4
       tsup:
         specifier: ^8.0.1
-        version: 8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
+        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
       tsx:
         specifier: ^4.19.1
         version: 4.19.2
@@ -1001,8 +1001,8 @@ importers:
         specifier: 19.0.0-rc.1
         version: 19.0.0-rc.1(react@19.0.0-rc.1)
       sst:
-        specifier: 3.3.7
-        version: 3.3.7(hono@4.6.13)
+        specifier: 3.3.64
+        version: 3.3.64(hono@4.6.13)
       uuid:
         specifier: ^10.0.0
         version: 10.0.0
@@ -1185,7 +1185,7 @@ importers:
         version: 0.3.4
       tsup:
         specifier: ^8.0.1
-        version: 8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
+        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
       typescript:
         specifier: ^5.5.2
         version: 5.6.3
@@ -1261,7 +1261,7 @@ importers:
         version: 0.3.4
       tsup:
         specifier: ^8.0.1
-        version: 8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
+        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
       typescript:
         specifier: ^5.5.2
         version: 5.6.3
@@ -1321,7 +1321,7 @@ importers:
         version: 0.3.4
       tsup:
         specifier: ^8.0.1
-        version: 8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
+        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
       typescript:
         specifier: ^5.5.2
         version: 5.6.3
@@ -8828,6 +8828,11 @@ packages:
     cpu: [arm64]
     os: [darwin]
 
+  sst-darwin-arm64@3.3.64:
+    resolution: {integrity: sha512-sGlGX66vjWuN/501zjjEdqIalteyuawuoUvbIQsYFZ3yYg+THSPsXR5e3ADo2LgrOelaMhOOAZ8jabGGEsptnw==}
+    cpu: [arm64]
+    os: [darwin]
+
   sst-darwin-arm64@3.3.7:
     resolution: {integrity: sha512-2CQh78YIdvrRpO8enZ/Jx51JsUSFtk564u9w4ldcu5SsMMDY1ocdw5p/XIwBy1eKeRtrXLizd35sYbtSfSy6sw==}
     cpu: [arm64]
@@ -8835,6 +8840,11 @@ packages:
 
   sst-darwin-x64@3.3.59:
     resolution: {integrity: sha512-SOOvHPxdxXwcMEwfdDXFiaMqZTdy1UcTL74omKGAn3i0pdoDN+FK2KPa865gNd1dzyYg0P6QXcUu9hI92g9Cyg==}
+    cpu: [x64]
+    os: [darwin]
+
+  sst-darwin-x64@3.3.64:
+    resolution: {integrity: sha512-qH8vDyPMbRASBt5T5+dIyheJ7DoGjHaeGBWzloDVN9Ukz+H3W37rSR4cWEkZlYAwxx32DoiFl6hNIhH39TFpAw==}
     cpu: [x64]
     os: [darwin]
 
@@ -8848,6 +8858,11 @@ packages:
     cpu: [arm64]
     os: [linux]
 
+  sst-linux-arm64@3.3.64:
+    resolution: {integrity: sha512-MUd0hHMap0SXAdU+UniAAlAzEzuJNIPbnQ80SHFGKatJNgFlQmmp7jq4qR1GXjaB3/NttLKIroQ8RBXuydtUzA==}
+    cpu: [arm64]
+    os: [linux]
+
   sst-linux-arm64@3.3.7:
     resolution: {integrity: sha512-dYolpXAjq0S8QjL8sTKzcRpPNgZDeMcJ9PHnt/8GpdqxNxEpGlNF9gMl2cB7mleJyJYBNMPvi4YEeCGtcazmeQ==}
     cpu: [arm64]
@@ -8855,6 +8870,11 @@ packages:
 
   sst-linux-x64@3.3.59:
     resolution: {integrity: sha512-7XZaYHl7Uun9q6koMEIICvw/+BX18hqiVmBjaC2p6J6x5tw+z7kfpK3x+yD26HLHoFNhpIBLb+6Nqj7XDyCa/Q==}
+    cpu: [x64]
+    os: [linux]
+
+  sst-linux-x64@3.3.64:
+    resolution: {integrity: sha512-8V42iyy9hc2bcW570DCzFIZrL1wOlSx0PF2M+Zlq7jhVGbhBTTZ13HHIo//W7ETtsAhItBeknZil6LidLz4ZDg==}
     cpu: [x64]
     os: [linux]
 
@@ -8868,6 +8888,11 @@ packages:
     cpu: [x86]
     os: [linux]
 
+  sst-linux-x86@3.3.64:
+    resolution: {integrity: sha512-TuJ5Zf9Lt5nTUOFKR+/EqPbpmzvtngHzQ5qvVq0k0wgPFC/ZgZItJtgZlspz8LL7wFl5dt2Y7VTVUHpov4PKNQ==}
+    cpu: [x86]
+    os: [linux]
+
   sst-linux-x86@3.3.7:
     resolution: {integrity: sha512-4rXj54+UJd+HLmrhCHQ0k9AOkugHZhhh6sCUnkUNChJr5ei62pRscUQ7ge8/jywvfzHZGZw3eXXJWCCsjilXFA==}
     cpu: [x86]
@@ -8875,6 +8900,18 @@ packages:
 
   sst@3.3.59:
     resolution: {integrity: sha512-WzKYWMf41n/TMEVp54tEITvmZQ0iZHf2whevpqqS85dAGP6w74NbEkwPNAB5oU2RlA2sj8GgMF76NdctsYQ0JA==}
+    hasBin: true
+    peerDependencies:
+      hono: 4.x
+      valibot: 0.30.x
+    peerDependenciesMeta:
+      hono:
+        optional: true
+      valibot:
+        optional: true
+
+  sst@3.3.64:
+    resolution: {integrity: sha512-Mvgbz/ylG2UOzDir9t0Qk8M0wbzQMzwm0/lk5+lywqpK8emAea43+yOIgPvaJEeGiv9i9T97XRnYLbddUGZAFA==}
     hasBin: true
     peerDependencies:
       hono: 4.x
@@ -18573,10 +18610,16 @@ snapshots:
   sst-darwin-arm64@3.3.59:
     optional: true
 
+  sst-darwin-arm64@3.3.64:
+    optional: true
+
   sst-darwin-arm64@3.3.7:
     optional: true
 
   sst-darwin-x64@3.3.59:
+    optional: true
+
+  sst-darwin-x64@3.3.64:
     optional: true
 
   sst-darwin-x64@3.3.7:
@@ -18585,16 +18628,25 @@ snapshots:
   sst-linux-arm64@3.3.59:
     optional: true
 
+  sst-linux-arm64@3.3.64:
+    optional: true
+
   sst-linux-arm64@3.3.7:
     optional: true
 
   sst-linux-x64@3.3.59:
     optional: true
 
+  sst-linux-x64@3.3.64:
+    optional: true
+
   sst-linux-x64@3.3.7:
     optional: true
 
   sst-linux-x86@3.3.59:
+    optional: true
+
+  sst-linux-x86@3.3.64:
     optional: true
 
   sst-linux-x86@3.3.7:
@@ -18612,6 +18664,19 @@ snapshots:
       sst-linux-arm64: 3.3.59
       sst-linux-x64: 3.3.59
       sst-linux-x86: 3.3.59
+
+  sst@3.3.64(hono@4.6.13):
+    dependencies:
+      aws4fetch: 1.0.20
+      jose: 5.2.3
+      openid-client: 5.6.4
+    optionalDependencies:
+      hono: 4.6.13
+      sst-darwin-arm64: 3.3.64
+      sst-darwin-x64: 3.3.64
+      sst-linux-arm64: 3.3.64
+      sst-linux-x64: 3.3.64
+      sst-linux-x86: 3.3.64
 
   sst@3.3.7(hono@4.6.13):
     dependencies:
@@ -19019,7 +19084,7 @@ snapshots:
 
   tslib@2.8.1: {}
 
-  tsup@8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0):
+  tsup@8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0):
     dependencies:
       bundle-require: 5.0.0(esbuild@0.24.0)
       cac: 6.7.14
