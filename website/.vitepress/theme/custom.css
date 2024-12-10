@@ -688,3 +688,8 @@ ul.benefits {
     grid-template-columns: 1fr;
   }
 }
+
+.vp-doc h1 > .VPBadge {
+  margin-top: 8px;
+  font-size: 14px;
+}
