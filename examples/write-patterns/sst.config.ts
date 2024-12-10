@@ -3,20 +3,20 @@
 
 import { execSync } from 'child_process'
 
-const isProduction = (stage) => stage.toLocaleLowerCase() === `production`
+const isProduction = (stage) => stage.toLocaleLowerCase() === 'production'
 
 export default $config({
   app(input) {
     return {
-      name: `write-patterns`,
-      removal: input?.stage === `production` ? `retain` : `remove`,
-      home: `aws`,
+      name: 'write-patterns',
+      removal: input?.stage === 'production' ? 'retain' : 'remove',
+      home: 'aws',
       providers: {
-        cloudflare: `5.42.0`,
+        cloudflare: '5.42.0',
         aws: {
-          version: `6.57.0`,
+          version: '6.57.0',
         },
-        neon: `0.6.3`,
+        neon: '0.6.3',
       },
     }
   },
@@ -27,12 +27,12 @@ export default $config({
       branchId: project.defaultBranchId,
     }
 
-    const db = new neon.Database(`write-patterns`, {
+    const db = new neon.Database('write-patterns', {
       ...base,
       name: isProduction($app.stage)
-        ? `write-patterns-production`
+        ? 'write-patterns-production'
         : `write-patterns-${$app.stage}`,
-      ownerName: `neondb_owner`,
+      ownerName: 'neondb_owner',
     })
 
     const databaseUri = getNeonDbUri(project, db, false)
@@ -58,7 +58,7 @@ export default $config({
             ports: [{ listen: '443/https', forward: '3001/http' }],
             domain: {
               name: `write-patterns-backend${
-                $app.stage === `production` ? `` : `-stage-${$app.stage}`
+                $app.stage === 'production' ? '' : `-stage-${$app.stage}`
               }.examples.electric-sql.com`,
               dns: sst.cloudflare.dns(),
             },
@@ -77,7 +77,7 @@ export default $config({
       )
 
       if (!process.env.ELECTRIC_API) {
-        throw new Error(`ELECTRIC_API environment variable is required`)
+        throw new Error('ELECTRIC_API environment variable is required')
       }
 
       const website = new sst.aws.StaticSite('write-patterns-website', {
@@ -95,7 +95,7 @@ export default $config({
         },
         domain: {
           name: `write-patterns${
-            isProduction($app.stage) ? `` : `-stage-${$app.stage}`
+            isProduction($app.stage) ? '' : `-stage-${$app.stage}`
           }.examples.electric-sql.com`,
           dns: sst.cloudflare.dns(),
         },
@@ -112,13 +112,13 @@ export default $config({
         website: website.url,
       }
     } catch (e) {
-      console.error(`Failed to deploy todo app example stack`, e)
+      console.error('Failed to deploy todo app example stack', e)
     }
   },
 })
 
 function applyMigrations(uri: string) {
-  execSync(`pnpm exec pg-migrations apply --directory ./shared/migrations`, {
+  execSync('pnpm exec pg-migrations apply --directory ./shared/migrations', {
     env: {
       ...process.env,
       DATABASE_URL: uri,
@@ -157,13 +157,13 @@ function getNeonDbUri(
 
 async function addDatabaseToElectric(
   database_url: string,
-  region: `us-east-1` | `eu-west-1` = `us-east-1`
+  region: 'us-east-1' | 'eu-west-1' = 'us-east-1'
 ): Promise<{ id: string; token: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
 
   const result = await fetch(`${adminApi}/v1/databases`, {
-    method: `PUT`,
-    headers: { 'Content-Type': `application/json` },
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       database_url,
       region,
