@@ -308,7 +308,7 @@ describe(`HTTP Sync`, () => {
       )
 
       await vi.waitFor(() =>
-        assert(client.isUpToDate && !client.lastOffset.startsWith('0_'))
+        assert(client.isUpToDate && !client.lastOffset.startsWith(`0_`))
       )
       const updatedData = await client.rows
 
