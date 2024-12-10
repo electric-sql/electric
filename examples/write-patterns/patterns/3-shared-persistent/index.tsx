@@ -95,7 +95,7 @@ async function sendRequest(
   let response: Response | undefined
   try {
     response = await api.request(path, method, data)
-  } catch (err) {
+  } catch (_err) {
     // ignore
   }
 

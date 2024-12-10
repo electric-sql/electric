@@ -40,7 +40,7 @@ async function resilientFetch(
     // Could also check the status and retry before returning if you want to be
     // resilient to 4xx and 5xx responses as well as network errors
     return await fetch(url, options)
-  } catch (err) {
+  } catch (_err) {
     return await retryFetch(url, options, retryCount + 1)
   }
 }
