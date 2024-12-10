@@ -31,7 +31,7 @@ const router = createBrowserRouter([
 async function render() {
   ReactDOM.createRoot(document.getElementById(`root`)!).render(
     <React.StrictMode>
-      <Theme appearance="dark" accentColor="green" panelBackground="solid">
+      <Theme appearance="dark" accentColor="iris" panelBackground="solid">
         <RouterProvider router={router} />
       </Theme>
     </React.StrictMode>
