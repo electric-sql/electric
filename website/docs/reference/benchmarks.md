@@ -165,13 +165,15 @@ Latency and peak memory use rises linearly. Average memory use is flat.
 
 ## Cloud
 
-Electric is designed to run behind a CDN, using the CDN's request collapsing capability to scale out to millions of concurrent users. The graph below shows the latency and compute resource of a single Electric server using this technique to handle millions of concurrent users.
+Electric is designed to run behind a CDN, using the CDN's [request collapsing](/docs/api/http#request-collapsing) capability to scale out data delivery to lots of concurrent users.
+
+The graph below shows the latency and compute resource of a single Electric server using this technique to handle between 100k and 1 million concurrent users, with a write workload of 960 transactions per minute:
 
 <figure>
   <ScalabilityChart />
 </figure>
 
-These statistics were generated using our [client load benchmarking](https://github.com/electric-sql/client-load-benchmarking) suite that allows for measuring client latencies for any combination of concurrent connected clients and database workload.
+These statistics were generated using our [client load benchmarking](https://github.com/electric-sql/client-load-benchmarking) suite that allows for measuring (a) client latencies and (b) sync service resource use for any combination of concurrent connected clients and database workload.
 
 ## PGlite
 
