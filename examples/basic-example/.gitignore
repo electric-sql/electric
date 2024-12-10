@@ -1,2 +1,5 @@
 dist
 .env.local
+
+# sst
+.sst
