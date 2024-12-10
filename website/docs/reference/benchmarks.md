@@ -51,15 +51,15 @@ We are working to set up benchmarks to run on every release (patch, minor and ma
 
 The first two benchmarks measure initial sync time, i.e. read performance:
 
-1. [many concurrent clients syncing a small shape](#1-many-concurrent-clients-syncing-a-small-shape)
-2. [a single client syncing a large shape](#2-a-single-client-syncing-a-large-shape)
+1. [many concurrent clients syncing a small shape](#_1-many-concurrent-clients-syncing-a-small-shape)
+2. [a single client syncing a large shape](#_2-a-single-client-syncing-a-large-shape)
 
 The next four measure live update time, i.e. write performance:
 
-3. [many disjoint shapes](#3-many-disjoint-shapes)
-4. [one shape with many clients](#4-one-shape-with-many-clients)
-5. [many overlapping shapes, each with a single client](#5-many-overlapping-shapes-each-with-a-single-client)
-6. [many overlapping shapes, one client](#6-many-overlapping-shapes-one-client)
+3. [many disjoint shapes](#_3-many-disjoint-shapes)
+4. [one shape with many clients](#_4-one-shape-with-many-clients)
+5. [many overlapping shapes, each with a single client](#_5-many-overlapping-shapes-each-with-a-single-client)
+6. [many overlapping shapes, one client](#_6-many-overlapping-shapes-one-client)
 
 ### Initial sync
 
