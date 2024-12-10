@@ -124,21 +124,27 @@ export default function SharedPersistent() {
   // Get the local optimistic state.
   const localWrites = useSnapshot<Map<string, LocalWrite>>(optimisticState)
 
-  const computeOptimisticState = (synced: Todo[], writes: LocalWrite[]): Todo[] => {
-    return writes.reduce((synced: Todo[], { operation, value }: LocalWrite): Todo[] => {
-      switch (operation) {
-        case 'insert':
-          return [...synced, value as Todo]
-        case 'update':
-          return synced.map((todo) =>
-            todo.id === value.id ? { ...todo, ...value } : todo
-          )
-        case 'delete':
-          return synced.filter((todo) => todo.id !== value.id)
-        default:
-          return synced
-      }
-    }, synced)
+  const computeOptimisticState = (
+    synced: Todo[],
+    writes: LocalWrite[]
+  ): Todo[] => {
+    return writes.reduce(
+      (synced: Todo[], { operation, value }: LocalWrite): Todo[] => {
+        switch (operation) {
+          case 'insert':
+            return [...synced, value as Todo]
+          case 'update':
+            return synced.map((todo) =>
+              todo.id === value.id ? { ...todo, ...value } : todo
+            )
+          case 'delete':
+            return synced.filter((todo) => todo.id !== value.id)
+          default:
+            return synced
+        }
+      },
+      synced
+    )
   }
 
   const todos = computeOptimisticState(sorted, [...localWrites.values()])
