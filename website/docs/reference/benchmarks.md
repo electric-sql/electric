@@ -171,6 +171,8 @@ Electric is designed to run behind a CDN, using the CDN's request collapsing cap
   <ScalabilityChart />
 </figure>
 
+These statistics were generated using our [client load benchmarking](https://github.com/electric-sql/client-load-benchmarking) suite that allows for measuring client latencies for any combination of concurrent connected clients and database workload.
+
 ## PGlite
 
 PGlite benchmarks are documented at [pglite.dev/benchmarks](https://pglite.dev/benchmarks).
