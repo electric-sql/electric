@@ -8,8 +8,8 @@ import { matchBy, matchStream } from '@electric-sql/experimental'
 import { useShape } from '@electric-sql/react'
 
 import api from '../../shared/app/client'
+import { ELECTRIC_URL, envParams } from '../../shared/app/config'
 
-const ELECTRIC_URL = import.meta.env.ELECTRIC_URL || 'http://localhost:3000'
 const KEY = 'electric-sql/examples/write-patterns/shared-persistent'
 
 type Todo = {
@@ -112,6 +112,7 @@ export default function SharedPersistent() {
     url: `${ELECTRIC_URL}/v1/shape`,
     params: {
       table: 'todos',
+      ...envParams,
     },
     parser: {
       timestamptz: (value: string) => new Date(value),
@@ -123,25 +124,30 @@ export default function SharedPersistent() {
   // Get the local optimistic state.
   const localWrites = useSnapshot<Map<string, LocalWrite>>(optimisticState)
 
-  // Merge the synced state with the local state.
-  const todos = localWrites
-    .values()
-    .reduce((synced: Todo[], { operation, value }: LocalWrite) => {
-      switch (operation) {
-        case 'insert':
-          return synced.some((todo) => todo.id === value.id)
-            ? synced
-            : [...synced, value as Todo]
+  const computeOptimisticState = (
+    synced: Todo[],
+    writes: LocalWrite[]
+  ): Todo[] => {
+    return writes.reduce(
+      (synced: Todo[], { operation, value }: LocalWrite): Todo[] => {
+        switch (operation) {
+          case 'insert':
+            return [...synced, value as Todo]
+          case 'update':
+            return synced.map((todo) =>
+              todo.id === value.id ? { ...todo, ...value } : todo
+            )
+          case 'delete':
+            return synced.filter((todo) => todo.id !== value.id)
+          default:
+            return synced
+        }
+      },
+      synced
+    )
+  }
 
-        case 'update':
-          return synced.map((todo) =>
-            todo.id === value.id ? { ...todo, ...value } : todo
-          )
-
-        case 'delete':
-          return synced.filter((todo) => todo.id !== value.id)
-      }
-    }, sorted)
+  const todos = computeOptimisticState(sorted, [...localWrites.values()])
 
   // These are the same event handler functions from the previous optimistic
   // state pattern, adapted to add the state to the shared, persistent store.

@@ -4,16 +4,19 @@ import { electricSync } from '@electric-sql/pglite-sync'
 
 import localSchemaMigrations from './local-schema.sql?raw'
 
+import { ELECTRIC_URL, envParams } from '../../shared/app/config'
+
 const DATA_DIR = 'idb://electric-write-patterns-example'
-const ELECTRIC_URL = import.meta.env.ELECTRIC_URL || 'http://localhost:3000'
 
 const registry = new Map<string, Promise<PGliteWithLive>>()
 
 export default async function loadPGlite(): Promise<PGliteWithLive> {
-  const loadingPromise = registry.get('loadingPromise')
+  let loadingPromise = registry.get('loadingPromise')
 
   if (loadingPromise === undefined) {
-    registry.set('loadingPromise', _loadPGlite())
+    loadingPromise = _loadPGlite()
+
+    registry.set('loadingPromise', loadingPromise)
   }
 
   return loadingPromise as Promise<PGliteWithLive>
@@ -32,7 +35,10 @@ async function _loadPGlite(): Promise<PGliteWithLive> {
   await pglite.electric.syncShapeToTable({
     shape: {
       url: `${ELECTRIC_URL}/v1/shape`,
-      table: 'todos',
+      params: {
+        table: 'todos',
+        ...envParams,
+      },
     },
     shapeKey: 'todos',
     table: 'todos_synced',

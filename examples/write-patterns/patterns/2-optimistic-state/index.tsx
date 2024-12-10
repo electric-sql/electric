@@ -2,9 +2,9 @@ import React, { useOptimistic, useTransition } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { matchBy, matchStream } from '@electric-sql/experimental'
 import { useShape } from '@electric-sql/react'
-import api from '../../shared/app/client'
 
-const ELECTRIC_URL = import.meta.env.ELECTRIC_URL || 'http://localhost:3000'
+import api from '../../shared/app/client'
+import { ELECTRIC_URL, envParams } from '../../shared/app/config'
 
 type Todo = {
   id: string
@@ -34,6 +34,7 @@ export default function OptimisticState() {
     url: `${ELECTRIC_URL}/v1/shape`,
     params: {
       table: 'todos',
+      ...envParams,
     },
     parser: {
       timestamptz: (value: string) => new Date(value),
