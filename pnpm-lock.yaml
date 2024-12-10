@@ -745,8 +745,8 @@ importers:
         specifier: ^0.2.14
         version: 0.2.14(@electric-sql/pglite@0.2.14)(react@19.0.0-rc.1)
       '@electric-sql/pglite-sync':
-        specifier: ^0.2.16
-        version: 0.2.16(@electric-sql/pglite@0.2.14)
+        specifier: ^0.2.17
+        version: 0.2.17(@electric-sql/pglite@0.2.14)
       '@electric-sql/react':
         specifier: workspace:*
         version: link:../../packages/react-hooks
@@ -768,6 +768,9 @@ importers:
       react-dom:
         specifier: 19.0.0-rc.1
         version: 19.0.0-rc.1(react@19.0.0-rc.1)
+      sst:
+        specifier: 3.3.7
+        version: 3.3.7
       uuid:
         specifier: ^10.0.0
         version: 10.0.0
@@ -1915,8 +1918,8 @@ packages:
       search-insights:
         optional: true
 
-  '@electric-sql/client@0.8.0':
-    resolution: {integrity: sha512-M4VnuL2q2i1yhsjc9DEQtf4GEkXoaMjlfm0Lq7KqLDjj2nqPhbUTo8IeWhf3OJSZ7j+GyFd/YlLg4rlBDrE/6Q==}
+  '@electric-sql/client@0.9.1':
+    resolution: {integrity: sha512-Lpo+GjnXW7i0uyITlkSTDGPH/fVYYln1/HQkgZAf89F3i/QeAVKT7UlWa7la1G0dGNSQaZuOypFvqENnHHJUKg==}
 
   '@electric-sql/pglite-react@0.2.14':
     resolution: {integrity: sha512-QseE5Y2a7+9G1gj0Xffg3nKpKQ0KIN/6euofmRMMwTUWxK8eok6sVus2XtUY+Hy8TkzhoLa8boEOJ+xTU8/bZQ==}
@@ -1924,10 +1927,10 @@ packages:
       '@electric-sql/pglite': ^0.2.14
       react: ^18.0.0
 
-  '@electric-sql/pglite-sync@0.2.16':
-    resolution: {integrity: sha512-jv/86TRBAPHA273Dt0af/mf/kARHkzsmjTMVhmSs8FAn6UKR1fcqIIAeC3EyI0ihP2H3E2M3ivpMMvO8DULGxQ==}
+  '@electric-sql/pglite-sync@0.2.17':
+    resolution: {integrity: sha512-lawbWkSKdCO+ETKQjseEefSgltwB5jXBzwSx0YMI2zmO+rf7gl5DP1hqEz5drqrzACS2mNRldah7p+0QcFEjLg==}
     peerDependencies:
-      '@electric-sql/pglite': ^0.2.14
+      '@electric-sql/pglite': ^0.2.15
 
   '@electric-sql/pglite@0.2.14':
     resolution: {integrity: sha512-ZMYZL/yFu5sCewYecdX4OjyOPcrI2OmQ6598e/tyke4Rpgeekd4+pINf9jjzJNJk1Kq5dtuB6buqZsBQf0sx8A==}
@@ -10537,7 +10540,7 @@ snapshots:
     transitivePeerDependencies:
       - '@algolia/client-search'
 
-  '@electric-sql/client@0.8.0':
+  '@electric-sql/client@0.9.1':
     optionalDependencies:
       '@rollup/rollup-darwin-arm64': 4.24.4
 
@@ -10546,9 +10549,9 @@ snapshots:
       '@electric-sql/pglite': 0.2.14
       react: 19.0.0-rc.1
 
-  '@electric-sql/pglite-sync@0.2.16(@electric-sql/pglite@0.2.14)':
+  '@electric-sql/pglite-sync@0.2.17(@electric-sql/pglite@0.2.14)':
     dependencies:
-      '@electric-sql/client': 0.8.0
+      '@electric-sql/client': 0.9.1
       '@electric-sql/pglite': 0.2.14
 
   '@electric-sql/pglite@0.2.14': {}

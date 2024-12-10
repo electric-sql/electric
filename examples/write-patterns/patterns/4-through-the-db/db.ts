@@ -8,6 +8,15 @@ const DATA_DIR = 'idb://electric-write-patterns-example'
 const ELECTRIC_URL =
   import.meta.env.VITE_ELECTRIC_URL || 'http://localhost:3000'
 
+const envParams: { database_id: string; token: string } | {} =
+  import.meta.env.VITE_ELECTRIC_TOKEN &&
+  import.meta.env.VITE_ELECTRIC_DATABASE_ID
+    ? {
+        database_id: import.meta.env.VITE_ELECTRIC_DATABASE_ID,
+        token: import.meta.env.VITE_ELECTRIC_TOKEN,
+      }
+    : {}
+
 const registry = new Map<string, Promise<PGliteWithLive>>()
 
 export default async function loadPGlite(): Promise<PGliteWithLive> {
@@ -33,10 +42,9 @@ async function _loadPGlite(): Promise<PGliteWithLive> {
   await pglite.electric.syncShapeToTable({
     shape: {
       url: `${ELECTRIC_URL}/v1/shape`,
-      table: 'todos',
       params: {
-        token: import.meta.env.VITE_ELECTRIC_TOKEN,
-        database_id: import.meta.env.VITE_ELECTRIC_DATABASE_ID,
+        table: 'todos',
+        ...envParams,
       },
     },
     shapeKey: 'todos',
