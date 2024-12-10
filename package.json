@@ -1,20 +1,21 @@
 {
   "description": "Electric SQL monorepo",
-  "private": true,
   "version": "0.0.0",
   "dependencies": {
     "@changesets/cli": "^2.27.10",
     "dotenv-cli": "^7.4.2"
   },
+  "packageManager": "^pnpm@9.15.0",
+  "private": true,
   "scripts": {
+    "ci:publish": "pnpm '/^ci:publish:.+/'",
+    "ci:publish:hex-electric": "pnpm run --dir packages/sync-service publish:hex",
+    "ci:publish:hex-electric-client": "pnpm run --dir packages/elixir-client publish:hex",
+    "ci:publish:npm": "pnpm changeset publish",
+    "ci:version": "pnpm exec changeset version",
     "example-backend:down": "dotenv  -e .env.dev -- docker compose -f .support/docker-compose.yml down --volumes",
     "example-backend:just_up": "dotenv -e .env.dev -- docker compose -f ./.support/docker-compose.yml up -d",
     "example-backend:up": "pnpm example-backend:down && pnpm example-backend:just_up",
-    "stylecheck-all": "pnpm --if-present --recursive run stylecheck",
-    "ci:version": "pnpm exec changeset version",
-    "ci:publish": "pnpm '/^ci:publish:.+/'",
-    "ci:publish:npm": "pnpm changeset publish",
-    "ci:publish:hex-electric": "pnpm run --dir packages/sync-service publish:hex",
-    "ci:publish:hex-electric-client": "pnpm run --dir packages/elixir-client publish:hex"
+    "stylecheck-all": "pnpm --if-present --recursive run stylecheck"
   }
 }
