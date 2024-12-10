@@ -102,9 +102,11 @@ The chart below is from our cloud [benchmarks](/docs/reference/benchmarks), test
 You can also see how large-scale apps built with Electric feel to use with our updated [ Linearlite](/demos/linearlite) demo. This is a [Linear](https://linear.app) clone that loads 100,000k issues and their comments through Electric into PGlite. Once loaded, it's fully interactive and feels instant to use:
 
 <figure>
-  <a href="https://linearlite.examples.electric-sql.com" target="_blank">
-    <img :src="LinearLiteScreenshot" />
-  </a>
+  <p>
+    <a href="https://linearlite.examples.electric-sql.com" target="_blank">
+      <img :src="LinearLiteScreenshot" />
+    </a>
+  </p>
   <figcaption>
     Screenshot of Linearlite.
     <a href="https://linearlite.examples.electric-sql.com" target="_blank">
