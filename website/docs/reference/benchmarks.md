@@ -50,14 +50,14 @@ We are working to set up benchmarks to run on every release (patch, minor and ma
 
 The first two benchmarks measure initial sync time (i.e.: read performance):
 
-1. many concurrent clients syncing a small shape
-2. a single client syncing a large shape
+1. [many concurrent clients syncing a small shape](#1-many-concurrent-clients-syncing-a-small-shape)
+2. [a single client syncing a large shape](#2-a-single-client-syncing-a-large-shape)
 
 The next three measure fanout of live streaming data (i.e.: write performance:
 
-3. into to one shape with many concurrent clients
-4. into many shapes, each with a single client
-5. into many shapes, all streamed to one client
+3. [into to one shape with many concurrent clients](#3-one-shape-with-many-clients)
+4. [into many shapes, each with a single client](#4-many-shapes-each-with-a-single-client)
+5. [into many shapes, all streamed to one client](#5-many-shapes-streamed-to-one-client)
 
 ### Initial sync
 
@@ -71,7 +71,7 @@ The next three measure fanout of live streaming data (i.e.: write performance:
   </a>
 </figure>
 
-This measures the memory use and time-to-sync-all-the-data-into-all-clients for an increasing number of concurrent clients performing an initial sync of a (500 row) single shape. The results show stable memory use with time to sync all data rising roughly linearly up-to 2,000 concurrent clients.
+This measures the memory use and the time to sync all the data into all the clients for an increasing number of concurrent clients performing an initial sync of a 500 row single shape. The results show stable memory use with time to sync all data rising roughly linearly up to 2,000 concurrent clients.
 
 #### 2. A single client syncing a large shape
 
@@ -97,7 +97,9 @@ This measures a single client syncing a single large shape of up-to 1M rows. The
   </a>
 </figure>
 
-Measures write latency (i.e.: time for the client to see the write) and memory use for a transaction of increasing size written to one shape log, streamed to an increasing number of clients.
+Measures write latency (i.e.: time for the client to see the write) for a transaction of increasing size written to one shape log, streamed to an increasing number of clients.
+
+Below is the memory use for the same benchmark.
 
 <figure>
   <a :href="WriteFanoutMemory">
@@ -119,7 +121,7 @@ Measures write latency (i.e.: time for the client to see the write) and memory u
 
 Shows "diverse write fanout", where we do a single write into many shapes that each have a single client listening to them (and the write is seen by all shapes).
 
-Latency rises linearly. Memory usage is relatively flat.
+Latency and memory use rises linearly.
 
 #### 5. Many shapes, streamed to one client
 
@@ -131,7 +133,9 @@ Latency rises linearly. Memory usage is relatively flat.
   </a>
 </figure>
 
-Similar to the diverse write fanout, but with many shapes the write falls into, only one is  actively listened to.
+Similar to the diverse write fanout, but with many shapes the write falls into, only one is actively listened to.
+
+Latency and peak memory use rises linearly. Average memory use is flat.
 
 ## Cloud <Badge type="warning" text="coming soon" />
 
