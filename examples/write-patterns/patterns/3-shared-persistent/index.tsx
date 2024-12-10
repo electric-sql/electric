@@ -8,19 +8,9 @@ import { matchBy, matchStream } from '@electric-sql/experimental'
 import { useShape } from '@electric-sql/react'
 
 import api from '../../shared/app/client'
+import { ELECTRIC_URL, envParams } from '../../shared/app/config'
 
-const ELECTRIC_URL =
-  import.meta.env.VITE_ELECTRIC_URL || 'http://localhost:3000'
 const KEY = 'electric-sql/examples/write-patterns/shared-persistent'
-
-const envParams: { database_id: string; token: string } | {} =
-  import.meta.env.VITE_ELECTRIC_TOKEN &&
-  import.meta.env.VITE_ELECTRIC_DATABASE_ID
-    ? {
-        database_id: import.meta.env.VITE_ELECTRIC_DATABASE_ID,
-        token: import.meta.env.VITE_ELECTRIC_TOKEN,
-      }
-    : {}
 
 type Todo = {
   id: string

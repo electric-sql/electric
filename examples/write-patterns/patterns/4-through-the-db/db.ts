@@ -4,18 +4,9 @@ import { electricSync } from '@electric-sql/pglite-sync'
 
 import localSchemaMigrations from './local-schema.sql?raw'
 
-const DATA_DIR = 'idb://electric-write-patterns-example'
-const ELECTRIC_URL =
-  import.meta.env.VITE_ELECTRIC_URL || 'http://localhost:3000'
+import { ELECTRIC_URL, envParams } from '../../shared/app/config'
 
-const envParams: { database_id: string; token: string } | {} =
-  import.meta.env.VITE_ELECTRIC_TOKEN &&
-  import.meta.env.VITE_ELECTRIC_DATABASE_ID
-    ? {
-        database_id: import.meta.env.VITE_ELECTRIC_DATABASE_ID,
-        token: import.meta.env.VITE_ELECTRIC_TOKEN,
-      }
-    : {}
+const DATA_DIR = 'idb://electric-write-patterns-example'
 
 const registry = new Map<string, Promise<PGliteWithLive>>()
 
