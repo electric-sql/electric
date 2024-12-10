@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.API_URL || 'http://localhost:3001'
+const API_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001'
 
 type RequestOptions = {
   method: string

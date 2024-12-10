@@ -3,7 +3,17 @@ import { v4 as uuidv4 } from 'uuid'
 import { useShape } from '@electric-sql/react'
 import api from '../../shared/app/client'
 
-const ELECTRIC_URL = import.meta.env.ELECTRIC_URL || 'http://localhost:3000'
+const ELECTRIC_URL =
+  import.meta.env.VITE_ELECTRIC_URL || 'http://localhost:3000'
+
+const envParams: { database_id: string; token: string } | {} =
+  import.meta.env.VITE_ELECTRIC_TOKEN &&
+  import.meta.env.VITE_ELECTRIC_DATABASE_ID
+    ? {
+        database_id: import.meta.env.VITE_ELECTRIC_DATABASE_ID,
+        token: import.meta.env.VITE_ELECTRIC_TOKEN,
+      }
+    : {}
 
 type Todo = {
   id: string
@@ -19,6 +29,7 @@ export default function OnlineWrites() {
     url: `${ELECTRIC_URL}/v1/shape`,
     params: {
       table: 'todos',
+      ...envParams,
     },
     parser: {
       timestamptz: (value: string) => new Date(value),
