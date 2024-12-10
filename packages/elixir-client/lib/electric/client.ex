@@ -153,7 +153,8 @@ defmodule Electric.Client do
     :endpoint,
     :database_id,
     :fetch,
-    :authenticator
+    :authenticator,
+    :pool
   ]
 
   @api_endpoint_path "/v1/shape"
@@ -177,6 +178,11 @@ defmodule Electric.Client do
                    authenticator: [
                      type: :mod_arg,
                      default: {Client.Authenticator.Unauthenticated, []},
+                     doc: false
+                   ],
+                   pool: [
+                     type: :mod_arg,
+                     default: {Electric.Client.Fetch.Pool, []},
                      doc: false
                    ]
                  )
@@ -396,7 +402,7 @@ defmodule Electric.Client do
   """
   def delete_shape(%Client{} = client, %ShapeDefinition{} = shape) do
     request = request(client, method: :delete, shape: shape)
-    Electric.Client.Fetch.Request.request(client, request)
+    Electric.Client.Fetch.request(client, request, [])
   end
 
   defp validate_queryable!(queryable) when is_atom(queryable) do

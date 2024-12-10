@@ -9,6 +9,7 @@ defmodule Electric.Client.Stream do
   require Electric.Client.Offset
 
   defstruct [
+    :id,
     :client,
     :shape,
     :schema,
@@ -114,7 +115,13 @@ defmodule Electric.Client.Stream do
 
     opts = NimbleOptions.validate!(Map.new(opts), @opts_schema)
 
-    struct(__MODULE__, Keyword.put(core, :opts, opts))
+    id = generate_id()
+
+    struct(__MODULE__, Keyword.put(core, :opts, opts) |> Keyword.put(:id, id))
+  end
+
+  defp generate_id do
+    System.unique_integer([:positive, :monotonic])
   end
 
   def next(%S{buffer: buffer} = stream) do
@@ -235,6 +242,7 @@ defmodule Electric.Client.Stream do
 
   defp build_request(stream) do
     %{
+      id: id,
       client: client,
       shape: shape,
       up_to_date?: up_to_date?,
@@ -245,6 +253,7 @@ defmodule Electric.Client.Stream do
     } = stream
 
     Client.request(client,
+      stream_id: id,
       offset: offset,
       shape_handle: shape_handle,
       replica: replica,
@@ -261,7 +270,7 @@ defmodule Electric.Client.Stream do
   end
 
   defp make_request(request, stream) do
-    Fetch.Request.request(stream.client, request)
+    Fetch.request(stream.client, request)
   end
 
   defp reset(stream, shape_handle) do
