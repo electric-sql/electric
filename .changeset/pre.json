@@ -1,0 +1,12 @@
+{
+  "mode": "pre",
+  "tag": "beta",
+  "initialVersions": {
+    "@core/elixir-client": "0.2.5",
+    "@electric-sql/experimental": "0.1.1",
+    "@electric-sql/react": "1.0.0-beta.0",
+    "@core/sync-service": "1.0.0-beta.0",
+    "@electric-sql/client": "1.0.0-beta.0"
+  },
+  "changesets": []
+}
