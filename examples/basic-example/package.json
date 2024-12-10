@@ -6,23 +6,25 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "backend:up": "PROJECT_NAME=basic-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
     "backend:down": "PROJECT_NAME=basic-example pnpm -C ../../ run example-backend:down",
+    "backend:up": "PROJECT_NAME=basic-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "build": "vite build",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
     "dev": "vite",
-    "build": "vite build",
     "format": "eslint . --ext ts,tsx --fix",
-    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
+    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@electric-sql/react": "workspace:*",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "sst": "3.3.64"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
+    "@types/aws-lambda": "8.10.146",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
