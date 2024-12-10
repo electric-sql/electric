@@ -106,9 +106,9 @@ You can also see how large-scale apps built with Electric feel to use with our u
     <img :src="LinearLiteScreenshot" />
   </a>
   <figcaption>
-    Screenshot of Linearlite. Click on it to
+    Screenshot of Linearlite.
     <a href="https://linearlite.examples.electric-sql.com" target="_blank">
-      open the demo</a>
+      Open the demo</a>
   </figcaption>
 </figure>
 
