@@ -6,7 +6,26 @@
     "@electric-sql/experimental": "0.1.1",
     "@electric-sql/react": "1.0.0-beta.0",
     "@core/sync-service": "1.0.0-beta.0",
-    "@electric-sql/client": "1.0.0-beta.0"
+    "@electric-sql/client": "1.0.0-beta.0",
+    "@electric-examples/bash-client": "0.0.1",
+    "@electric-examples/basic-example": "0.0.1",
+    "@electric-examples/encryption": "0.0.1",
+    "@electric-examples/gatekeeper-auth": "0.0.1",
+    "@electric-examples/linearlite": "0.0.1",
+    "@electric-examples/linearlite-read-only": "0.0.1",
+    "@electric-examples/nextjs-example": "0.0.1",
+    "@electric-examples/proxy-auth": "0.0.1",
+    "@electric-examples/redis-sync": "0.0.1",
+    "@electric-examples/remix-basic": "0.0.1",
+    "@electric-examples/tanstack-example": "0.0.1",
+    "@electric-examples/todo-app": "1.0.1",
+    "@electric-examples/write-patterns": "0.0.1",
+    "@electric-examples/yjs-provider": "0.0.1",
+    "@electric-sql/docs": "0.0.1"
   },
-  "changesets": []
+  "changesets": [
+    "beige-hotels-sin",
+    "healthy-comics-heal",
+    "polite-frogs-yell"
+  ]
 }

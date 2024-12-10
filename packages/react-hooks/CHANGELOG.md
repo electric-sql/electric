@@ -1,5 +1,13 @@
 # @electric-sql/react
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- 1255205: First beta release
+- Updated dependencies [1255205]
+  - @electric-sql/client@1.0.0-beta.1
+
 ## 0.6.2
 
 ### Patch Changes
