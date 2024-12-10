@@ -12,6 +12,7 @@
     "dev": "next dev --turbo -p 5173",
     "build": "next build",
     "start": "next start",
+    "format": "eslint . --fix",
     "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
