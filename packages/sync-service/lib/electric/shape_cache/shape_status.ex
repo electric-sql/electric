@@ -92,9 +92,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec add_shape(t(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
   def add_shape(state, shape) do
     {hash, shape_handle} = Shape.generate_id(shape)
-    # fresh snapshots always start with a zero offset - only once they
-    # are folded into the log do we have non-zero offsets
-    offset = LogOffset.first()
+    # For fresh snapshots we're setting "latest" offset to be a highest possible virtual offset,
+    # which is needed because while the snapshot is being made we DON'T update this ETS table.
+    # We could, but that would required making the Storage know about this module and I don't like that.
+    offset = LogOffset.last_before_real_offsets()
 
     true =
       :ets.insert_new(

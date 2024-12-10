@@ -47,7 +47,8 @@ defmodule Electric.Replication.LogOffset do
       ** (FunctionClauseError) no function clause matching in Electric.Replication.LogOffset.new/2
   """
   def new(tx_offset, op_offset)
-      when is_integer(tx_offset) and tx_offset >= 0 and is_integer(op_offset) and op_offset >= 0 do
+      when is_integer(tx_offset) and tx_offset >= 0 and is_integer(op_offset) and op_offset >= 0
+      when is_integer(tx_offset) and tx_offset >= 0 and op_offset == :infinity do
     %LogOffset{tx_offset: tx_offset, op_offset: op_offset}
   end
 
@@ -99,6 +100,10 @@ defmodule Electric.Replication.LogOffset do
                   (offset1.tx_offset == offset2.tx_offset and
                      offset1.op_offset < offset2.op_offset)
 
+  defguard is_min_offset(offset) when offset.tx_offset == -1
+
+  defguard is_virtual_offset(offset) when offset.tx_offset == 0
+
   @doc """
   An offset that is smaller than all offsets in the log.
 
@@ -129,6 +134,12 @@ defmodule Electric.Replication.LogOffset do
   """
   @spec last() :: t
   def last(), do: %LogOffset{tx_offset: 0xFFFFFFFFFFFFFFFF, op_offset: :infinity}
+
+  @doc """
+  The last possible offset for the "virtual" part of the log - i.e. snapshots.
+  """
+  @spec last_before_real_offsets() :: t()
+  def last_before_real_offsets(), do: %LogOffset{tx_offset: 0, op_offset: :infinity}
 
   @doc """
   Increments the offset of the change inside the transaction.
@@ -184,6 +195,10 @@ defmodule Electric.Replication.LogOffset do
     [Integer.to_string(-1)]
   end
 
+  def to_iolist(%LogOffset{tx_offset: tx_offset, op_offset: :infinity}) do
+    [Integer.to_string(tx_offset), ?_, "inf"]
+  end
+
   def to_iolist(%LogOffset{tx_offset: tx_offset, op_offset: op_offset}) do
     [Integer.to_string(tx_offset), ?_, Integer.to_string(op_offset)]
   end
@@ -205,6 +220,9 @@ defmodule Electric.Replication.LogOffset do
       iex> from_string("0_02")
       {:ok, %LogOffset{tx_offset: 0, op_offset: 2}}
 
+      iex> from_string("0_inf")
+      {:ok, %LogOffset{tx_offset: 0, op_offset: :infinity}}
+
       iex> from_string("1_2_3")
       {:error, "has invalid format"}
 
@@ -224,7 +242,7 @@ defmodule Electric.Replication.LogOffset do
     else
       with [tx_offset_str, op_offset_str] <- String.split(str, "_"),
            {tx_offset, ""} <- Integer.parse(tx_offset_str),
-           {op_offset, ""} <- Integer.parse(op_offset_str),
+           {op_offset, ""} <- parse_int_or_inf(op_offset_str),
            offset <- new(tx_offset, op_offset) do
         {:ok, offset}
       else
@@ -233,9 +251,20 @@ defmodule Electric.Replication.LogOffset do
     end
   end
 
+  defp parse_int_or_inf("inf"), do: {:infinity, ""}
+  defp parse_int_or_inf(int), do: Integer.parse(int)
+
   defimpl Inspect do
     def inspect(%LogOffset{tx_offset: -1, op_offset: 0}, _opts) do
       "LogOffset.before_all()"
+    end
+
+    def inspect(%LogOffset{tx_offset: 0xFFFFFFFFFFFFFFFF, op_offset: :infinity}, _opts) do
+      "LogOffset.last()"
+    end
+
+    def inspect(%LogOffset{tx_offset: 0, op_offset: :infinity}, _opts) do
+      "LogOffset.last_before_real_offsets()"
     end
 
     def inspect(%LogOffset{tx_offset: tx, op_offset: op}, _opts) do

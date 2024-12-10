@@ -134,7 +134,6 @@ defmodule Electric.Connection.Manager do
   end
 
   def drop_replication_slot_on_stop(server) do
-    await_active(server)
     GenServer.call(server, :drop_replication_slot_on_stop)
   end
 
@@ -410,7 +409,7 @@ defmodule Electric.Connection.Manager do
       drop_slot(state)
     end
 
-    {:noreply, %{state | shape_log_collector_pid: nil}}
+    {:noreply, %{state | shape_log_collector_pid: nil, replication_client_pid: nil}}
   end
 
   # Periodically log the status of the lock connection until it is acquired for
@@ -666,6 +665,10 @@ defmodule Electric.Connection.Manager do
       |> List.keyfind(Electric.Replication.ShapeLogCollector, 0)
 
     log_collector_pid
+  end
+
+  defp drop_slot(%{pool_pid: nil} = _state) do
+    Logger.warning("Skipping slot drop, pool connection not available")
   end
 
   defp drop_slot(%{pool_pid: pool} = state) do

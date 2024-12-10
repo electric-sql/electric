@@ -1,8 +1,10 @@
 defmodule Electric.ShapeCache.FileStorage do
   use Retry
+  require Logger
 
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Replication.LogOffset
+  import Electric.Replication.LogOffset, only: :macros
   alias __MODULE__, as: FS
 
   # If the storage format changes, increase `@version` to prevent
@@ -100,7 +102,19 @@ defmodule Electric.ShapeCache.FileStorage do
       cleanup_internals!(opts)
     end
 
+    if File.exists?(old_snapshot_path(opts)) do
+      # This shape has had the snapshot written before we started using the new format.
+      # We need to move the old snapshot into the new format and store correct metadata
+      # so that we know it's complete.
+      File.rename(old_snapshot_path(opts), snapshot_chunk_path(opts, 0))
+      CubDB.put(opts.db, @snapshot_meta_key, LogOffset.new(0, 0))
+    end
+
     CubDB.put(opts.db, @version_key, @version)
+  end
+
+  defp old_snapshot_path(opts) do
+    Path.join([opts.snapshot_dir, "snapshot.jsonl"])
   end
 
   @impl Electric.ShapeCache.Storage
@@ -162,13 +176,20 @@ defmodule Electric.ShapeCache.FileStorage do
         |> Enum.map(&for_shape(&1, opts))
         |> Enum.map(fn fs ->
           maybe_get_size(shape_definition_path(fs)) +
-            maybe_get_size(shape_snapshot_path(fs)) +
+            get_all_chunk_sizes(fs) +
             maybe_get_size(CubDB.current_db_file(fs.db))
         end)
         |> Enum.sum()
 
       _ ->
         0
+    end
+  end
+
+  defp get_all_chunk_sizes(%FS{} = opts) do
+    case File.ls(opts.snapshot_dir) do
+      {:ok, chunk_files} -> chunk_files |> Enum.map(&maybe_get_size/1) |> Enum.sum()
+      _ -> 0
     end
   end
 
@@ -185,6 +206,17 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   defp latest_offset(opts) do
+    with nil <- get_latest_txn_log_offset(opts),
+         nil <- get_last_snapshot_offset(opts) do
+      # We're returning this very fake offset here due to our system's limitation: for ongoing log, we read "latest offset"
+      # from an ETS table in the shape cache, that's updated by the consumer as it consumes the log. I don't want to introduce
+      # any responsibility to chat to the consumer into the storage, so this gives the logic in the plug a good reference point
+      # to compare snapshot offsets to. They are always going to be smaller than this, so we will be able to go through the chunks.
+      LogOffset.last_before_real_offsets()
+    end
+  end
+
+  defp get_latest_txn_log_offset(opts) do
     case CubDB.select(opts.db,
            min_key: log_start(),
            max_key: log_end(),
@@ -192,11 +224,8 @@ defmodule Electric.ShapeCache.FileStorage do
            reverse: true
          )
          |> Enum.take(1) do
-      [{key, _}] ->
-        offset(key)
-
-      _ ->
-        LogOffset.first()
+      [{key, _}] -> offset(key)
+      _ -> nil
     end
   end
 
@@ -228,77 +257,65 @@ defmodule Electric.ShapeCache.FileStorage do
       [storage_impl: "mixed_disk", "shape.handle": opts.shape_handle],
       stack_id,
       fn ->
-        data_stream
-        |> Stream.map(&[&1, ?\n])
-        # Use the 4 byte marker (ASCII "end of transmission") to indicate the end of the snapshot,
-        # so that concurrent readers can detect that the snapshot has been completed.
-        |> Stream.concat([<<4::utf8>>])
-        |> Stream.into(File.stream!(shape_snapshot_path(opts), [:append, :delayed_write]))
-        |> Stream.run()
+        last_chunk_num = write_stream_to_chunk_files(data_stream, opts)
 
-        CubDB.put(opts.db, @snapshot_meta_key, LogOffset.first())
+        CubDB.put(opts.db, @snapshot_meta_key, LogOffset.new(0, last_chunk_num))
       end
     )
   end
 
-  @impl Electric.ShapeCache.Storage
-  def get_snapshot(%FS{} = opts) do
-    if snapshot_started?(opts) do
-      {LogOffset.first(),
-       Stream.resource(
-         fn -> {open_snapshot_file(opts), nil} end,
-         fn {file, eof_seen} ->
-           case IO.binread(file, :line) do
-             {:error, reason} ->
-               raise IO.StreamError, reason: reason
+  # Write to a set of "chunk" files, with numbering starting from 0, and return the highest chunk number
+  defp write_stream_to_chunk_files(data_stream, opts) do
+    data_stream
+    |> Stream.transform(
+      fn -> {0, nil} end,
+      fn line, {chunk_num, file} ->
+        file = file || open_snapshot_chunk_to_write(opts, chunk_num)
 
-             :eof ->
-               cond do
-                 is_nil(eof_seen) ->
-                   # First time we see eof after any valid lines, we store a timestamp
-                   {[], {file, System.monotonic_time(:millisecond)}}
+        case line do
+          :chunk_boundary ->
+            # Use the 4 byte marker (ASCII "end of transmission") to indicate the end of the snapshot,
+            # so that concurrent readers can detect that the snapshot has been completed. This is a way to
+            # distinguish between "file quiet" and "file done".
+            IO.binwrite(file, <<4::utf8>>)
+            File.close(file)
+            {[], {chunk_num + 1, nil}}
 
-                 # If it's been 60s without any new lines, and also we've not seen <<4>>,
-                 # then likely something is wrong
-                 System.monotonic_time(:millisecond) - eof_seen > 60_000 ->
-                   raise "Snapshot hasn't updated in 60s"
-
-                 true ->
-                   # Sleep a little and check for new lines
-                   Process.sleep(20)
-                   {[], {file, eof_seen}}
-               end
-
-             # The 4 byte marker (ASCII "end of transmission") indicates the end of the snapshot file.
-             <<4::utf8>> ->
-               {:halt, {file, nil}}
-
-             line ->
-               {[line], {file, nil}}
-           end
-         end,
-         fn {file, _} -> File.close(file) end
-       )}
-    else
-      raise "Snapshot no longer available"
-    end
+          line ->
+            IO.binwrite(file, [line, ?\n])
+            {[chunk_num], {chunk_num, file}}
+        end
+      end,
+      fn {chunk_num, file} ->
+        if is_nil(file) and chunk_num == 0 do
+          # Special case if the source stream has ended before we started writing any chunks - we need to create the empty file for the first chunk.
+          {[chunk_num], {chunk_num, open_snapshot_chunk_to_write(opts, chunk_num)}}
+        else
+          {[], {chunk_num, file}}
+        end
+      end,
+      fn {_chunk_num, file} ->
+        if file do
+          IO.binwrite(file, <<4::utf8>>)
+          File.close(file)
+        end
+      end
+    )
+    |> Enum.reduce(0, fn chunk_num, _ -> chunk_num end)
   end
 
-  defp open_snapshot_file(opts, attempts_left \\ 100)
-  defp open_snapshot_file(_, 0), do: raise(IO.StreamError, reason: :enoent)
+  defp open_snapshot_chunk_to_write(opts, chunk_number) do
+    Logger.debug("Opening snapshot chunk #{chunk_number} for writing",
+      shape_handle: opts.shape_handle,
+      stack_id: opts.stack_id
+    )
 
-  defp open_snapshot_file(opts, attempts_left) do
-    case File.open(shape_snapshot_path(opts), [:read, :raw, read_ahead: 1024]) do
-      {:ok, file} ->
-        file
+    File.open!(snapshot_chunk_path(opts, chunk_number), [:write, :raw])
+  end
 
-      {:error, :enoent} ->
-        Process.sleep(10)
-        open_snapshot_file(opts, attempts_left - 1)
-
-      {:error, reason} ->
-        raise IO.StreamError, reason: reason
-    end
+  defp snapshot_chunk_path(opts, chunk_number)
+       when is_integer(chunk_number) and chunk_number >= 0 do
+    Path.join([opts.snapshot_dir, "snapshot_chunk.#{chunk_number}.jsonl"])
   end
 
   @impl Electric.ShapeCache.Storage
@@ -318,7 +335,98 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def get_log_stream(offset, max_offset, %FS{} = opts) do
+  def get_log_stream(
+        %LogOffset{tx_offset: tx_offset, op_offset: op_offset} = offset,
+        max_offset,
+        %FS{} = opts
+      )
+      when tx_offset <= 0 do
+    unless snapshot_started?(opts), do: raise("Snapshot not started")
+
+    case {CubDB.get(opts.db, @snapshot_meta_key), offset} do
+      # Snapshot is complete
+      {%LogOffset{}, offset} when is_min_offset(offset) ->
+        # Stream first chunk of snapshot
+        stream_snapshot_chunk!(opts, 0)
+
+      {%LogOffset{} = latest, offset} when is_log_offset_lt(offset, latest) ->
+        # Stream next chunk of snapshot
+        stream_snapshot_chunk!(opts, op_offset + 1)
+
+      {%LogOffset{}, offset} ->
+        stream_log_chunk(offset, max_offset, opts)
+
+      # Snapshot is incomplete
+      {nil, offset} when is_min_offset(offset) ->
+        stream_snapshot_chunk!(opts, 0)
+
+      {nil, _offset} ->
+        # Try streaming the next chunk if the file already exists, otherwise wait for the file or end of snapshot to be announced
+        # where either event should happen shortly, we just either hit a file switch or just before CubDB was updatred
+        wait_for_chunk_file_or_snapshot_end(opts, op_offset + 1)
+    end
+  end
+
+  # Any offsets with tx offset > 0 are not part of the initial snapshot, no need for additional checks.
+  def get_log_stream(%LogOffset{} = offset, max_offset, %FS{} = opts),
+    do: stream_log_chunk(offset, max_offset, opts)
+
+  # This function raises if the chunk file doesn't exist.
+  defp stream_snapshot_chunk!(%FS{} = opts, chunk_number) do
+    Stream.resource(
+      fn -> {open_snapshot_chunk(opts, chunk_number), nil} end,
+      fn {file, eof_seen} ->
+        case IO.binread(file, :line) do
+          {:error, reason} ->
+            raise IO.StreamError, reason: reason
+
+          :eof ->
+            cond do
+              is_nil(eof_seen) ->
+                # First time we see eof after any valid lines, we store a timestamp
+                {[], {file, System.monotonic_time(:millisecond)}}
+
+              # If it's been 60s without any new lines, and also we've not seen <<4>>,
+              # then likely something is wrong
+              System.monotonic_time(:millisecond) - eof_seen > 60_000 ->
+                raise "Snapshot hasn't updated in 60s"
+
+              true ->
+                # Sleep a little and check for new lines
+                Process.sleep(20)
+                {[], {file, eof_seen}}
+            end
+
+          # The 4 byte marker (ASCII "end of transmission") indicates the end of the snapshot file.
+          <<4::utf8>> ->
+            {:halt, {file, nil}}
+
+          line ->
+            {[line], {file, nil}}
+        end
+      end,
+      fn {file, _} -> File.close(file) end
+    )
+  end
+
+  defp open_snapshot_chunk(opts, chunk_num, attempts_left \\ 100)
+  defp open_snapshot_chunk(_, _, 0), do: raise(IO.StreamError, reason: :enoent)
+
+  defp open_snapshot_chunk(opts, chunk_num, attempts_left) do
+    case File.open(snapshot_chunk_path(opts, chunk_num), [:read, :raw, read_ahead: 1024]) do
+      {:ok, file} ->
+        file
+
+      {:error, :enoent} ->
+        Process.sleep(20)
+        open_snapshot_chunk(opts, chunk_num, attempts_left - 1)
+
+      {:error, reason} ->
+        raise IO.StreamError, reason: reason
+    end
+  end
+
+  defp stream_log_chunk(%LogOffset{} = offset, max_offset, %FS{} = opts) do
     opts.db
     |> CubDB.select(
       min_key: log_key(offset),
@@ -328,8 +436,65 @@ defmodule Electric.ShapeCache.FileStorage do
     |> Stream.map(fn {_, item} -> item end)
   end
 
+  defp wait_for_chunk_file_or_snapshot_end(
+         opts,
+         chunk_number,
+         max_wait_time \\ 60_000,
+         total_wait_time \\ 0
+       )
+
+  defp wait_for_chunk_file_or_snapshot_end(_, _, max, total) when total >= max,
+    do: raise("Snapshot hasn't updated in #{max}ms")
+
+  defp wait_for_chunk_file_or_snapshot_end(
+         %FS{} = opts,
+         chunk_number,
+         max_wait_time,
+         total_wait_time
+       ) do
+    path = snapshot_chunk_path(opts, chunk_number)
+
+    cond do
+      File.exists?(path, [:raw]) ->
+        stream_snapshot_chunk!(opts, chunk_number)
+
+      CubDB.has_key?(opts.db, @snapshot_meta_key) ->
+        []
+
+      true ->
+        Process.sleep(50)
+
+        wait_for_chunk_file_or_snapshot_end(
+          opts,
+          chunk_number,
+          max_wait_time,
+          total_wait_time + 50
+        )
+    end
+  end
+
   @impl Electric.ShapeCache.Storage
-  def get_chunk_end_log_offset(offset, %FS{} = opts) do
+  # If min offset was requested, then next chunk boundary is first snapshot chunk
+  def get_chunk_end_log_offset(offset, _) when is_min_offset(offset),
+    do: snapshot_offset(0)
+
+  # If the current offset is one of the "real" chunks, then next chunk is the boundary
+  def get_chunk_end_log_offset(offset, %FS{} = opts) when is_virtual_offset(offset) do
+    case get_last_snapshot_offset(%FS{} = opts) do
+      # We don't have the "last one", so optimistically give the next chunk pointer.
+      # If it turns out we're actually done, then this pointer will give beginning of txn log when requested with.
+      nil -> LogOffset.increment(offset)
+      # This is easy - we want to read next chunk and we know we can
+      last when is_log_offset_lt(offset, last) -> LogOffset.increment(offset)
+      # Requested chunk is at the end or beyond the end of the snapshot, serve from txn log. If no chunk is yet present, get end of log
+      _ -> get_chunk_end_for_log(offset, opts)
+    end
+  end
+
+  # Current offset is in txn log, serve from there.
+  def get_chunk_end_log_offset(offset, %FS{} = opts), do: get_chunk_end_for_log(offset, opts)
+
+  defp get_chunk_end_for_log(offset, %FS{} = opts) do
     CubDB.select(opts.db,
       min_key: chunk_checkpoint_key(offset),
       max_key: chunk_checkpoint_end(),
@@ -338,6 +503,10 @@ defmodule Electric.ShapeCache.FileStorage do
     |> Stream.map(fn {key, _} -> offset(key) end)
     |> Enum.take(1)
     |> Enum.at(0)
+  end
+
+  defp get_last_snapshot_offset(%FS{} = opts) do
+    CubDB.get(opts.db, @snapshot_meta_key)
   end
 
   defp cleanup_internals!(%FS{} = opts) do
@@ -350,9 +519,9 @@ defmodule Electric.ShapeCache.FileStorage do
     |> Enum.concat(keys_from_range(chunk_checkpoint_start(), chunk_checkpoint_end(), opts))
     |> then(&CubDB.delete_multi(opts.db, &1))
 
-    {:ok, _} = File.rm_rf(shape_snapshot_path(opts))
-
+    {:ok, _} = File.rm_rf(opts.snapshot_dir)
     {:ok, _} = File.rm_rf(shape_definition_path(opts))
+    :ok = File.mkdir_p!(opts.snapshot_dir)
 
     :ok
   end
@@ -378,13 +547,11 @@ defmodule Electric.ShapeCache.FileStorage do
     |> Stream.map(&elem(&1, 0))
   end
 
-  defp shape_snapshot_path(opts) do
-    Path.join([opts.snapshot_dir, "snapshot.jsonl"])
-  end
-
   defp stored_version(opts) do
     CubDB.get(opts.db, @version_key)
   end
+
+  defp snapshot_offset(chunk_number), do: LogOffset.new(0, chunk_number)
 
   # Key helpers
   defp log_key(offset), do: {:log, LogOffset.to_tuple(offset)}

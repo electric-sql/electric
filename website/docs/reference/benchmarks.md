@@ -14,6 +14,7 @@ import ManyShapesOneClient from '/static/img/benchmarks/many-shapes-one-client.p
 import SingleShapeSingleClient from '/static/img/benchmarks/single-shape-single-client.png?url'
 import WriteFanout from '/static/img/benchmarks/write-fanout.png?url'
 import WriteFanoutMemory from '/static/img/benchmarks/write-fanout-memory.png?url'
+import UnrelatedShapesOneClientLatency from '/static/img/benchmarks/unrelated-shapes-one-client-latency.png?url'
 </script>
 
 # Benchmarks
@@ -48,16 +49,17 @@ We are working to set up benchmarks to run on every release (patch, minor and ma
 
 ## Electric
 
-The first two benchmarks measure initial sync time (i.e.: read performance):
+The first two benchmarks measure initial sync time, i.e. read performance:
 
-1. many concurrent clients syncing a small shape
-2. a single client syncing a large shape
+1. [many concurrent clients syncing a small shape](#1-many-concurrent-clients-syncing-a-small-shape)
+2. [a single client syncing a large shape](#2-a-single-client-syncing-a-large-shape)
 
-The next three measure fanout of live streaming data (i.e.: write performance:
+The next four measure live update time, i.e. write performance:
 
-3. into to one shape with many concurrent clients
-4. into many shapes, each with a single client
-5. into many shapes, all streamed to one client
+3. [many disjoint shapes](#3-many-disjoint-shapes)
+4. [one shape with many clients](#4-one-shape-with-many-clients)
+5. [many overlapping shapes, each with a single client](#5-many-overlapping-shapes-each-with-a-single-client)
+6. [many overlapping shapes, one client](#6-many-overlapping-shapes-one-client)
 
 ### Initial sync
 
@@ -71,7 +73,8 @@ The next three measure fanout of live streaming data (i.e.: write performance:
   </a>
 </figure>
 
-This measures the memory use and time-to-sync-all-the-data-into-all-clients for an increasing number of concurrent clients performing an initial sync of a (500 row) single shape. The results show stable memory use with time to sync all data rising roughly linearly up-to 2,000 concurrent clients.
+This measures the memory use and the time to sync all the data into all the clients for an increasing number of concurrent clients performing 
+an initial sync of a 500 row single shape. The results show stable memory use with time to sync all data rising roughly linearly up to 2,000 concurrent clients.
 
 #### 2. A single client syncing a large shape
 
@@ -85,9 +88,31 @@ This measures the memory use and time-to-sync-all-the-data-into-all-clients for 
 
 This measures a single client syncing a single large shape of up-to 1M rows. The sync time is linear, the memory is stable.
 
-### Write fanout
+### Live updates
 
-#### 3. One shape with many clients
+#### 3. Many disjoint shapes
+
+<figure>
+  <a :href="UnrelatedShapesOneClientLatency">
+    <img :src="UnrelatedShapesOneClientLatency"
+        alt="Benchmark measuring how long a write that affects a single shape takes to reach a client"
+    />
+  </a>
+</figure>
+
+This benchmark evaluates the time it takes for a write operation to reach a client subscribed to the relevant shape. On the x-axis, the number of active shapes is shown.
+Each shape in this benchmark is independent, ensuring that a write operation affects only one shape at a time.
+
+The two graphs differ based on the type of WHERE clause used for the shapes:
+- **Top Graph:** The WHERE clause is in the form `field = constant`, where each shape is assigned a unique constant. These types of WHERE clause, along with similar patterns,
+  are optimised for high performance regardless of the number of shapes — analogous to having an index on the field. As shown in the graph, the latency remains consistently
+  flat at 6ms as the number of shapes increases. This 6ms latency includes 3ms for PostgreSQL to process the write operation and 3ms for Electric to propagate it.
+  We are actively working to optimise additional WHERE clause types in the future.
+- **Bottom Graph:** The WHERE clause is in the form `field LIKE constant`, an example of a non-optimised query type.
+  In this case, the latency increases linearly with the number of shapes because Electric must evaluate each shape individually to determine if it is affected by the write.
+  Despite this, the response times remain low, a tenth of a second for 10,000 shapes.
+  
+#### 4. One shape with many clients
 
 <figure>
   <a :href="WriteFanout">
@@ -97,7 +122,9 @@ This measures a single client syncing a single large shape of up-to 1M rows. The
   </a>
 </figure>
 
-Measures write latency (i.e.: time for the client to see the write) and memory use for a transaction of increasing size written to one shape log, streamed to an increasing number of clients.
+Measures write latency (i.e.: time for the client to see the write) for a transaction of increasing size written to one shape log, streamed to an increasing number of clients.
+
+Below is the memory use for the same benchmark.
 
 <figure>
   <a :href="WriteFanoutMemory">
@@ -107,7 +134,7 @@ Measures write latency (i.e.: time for the client to see the write) and memory u
   </a>
 </figure>
 
-#### 4. Many shapes, each with a single client
+#### 5. Many overlapping shapes, each with a single client
 
 <figure>
   <a :href="DiverseShapeFanout">
@@ -117,11 +144,11 @@ Measures write latency (i.e.: time for the client to see the write) and memory u
   </a>
 </figure>
 
-Shows "diverse write fanout", where we do a single write into many shapes that each have a single client listening to them (and the write is seen by all shapes).
+In this benchmark there are a varying number of shapes with each shape having a single client subscribed to it. It shows the average length of time it takes for a single write that affects all the shapes to reach each client.
 
-Latency rises linearly. Memory usage is relatively flat.
+Latency and memory use rises linearly.
 
-#### 5. Many shapes, streamed to one client
+#### 6. Many overlapping shapes, one client
 
 <figure>
   <a :href="ManyShapesOneClient">
@@ -131,7 +158,9 @@ Latency rises linearly. Memory usage is relatively flat.
   </a>
 </figure>
 
-Similar to the diverse write fanout, but with many shapes the write falls into, only one is  actively listened to.
+In this benchmark there are a varying number of shapes with just one client subscribed to one of the shapes. It shows the length of time it takes for a single write that affects all the shapes to reach the client.
+
+Latency and peak memory use rises linearly. Average memory use is flat.
 
 ## Cloud <Badge type="warning" text="coming soon" />
 

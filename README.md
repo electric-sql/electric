@@ -23,9 +23,20 @@
   <a href="https://x.com/ElectricSQL" target="_blank"><img src="https://img.shields.io/twitter/follow/ElectricSQL.svg?style=social&label=Follow @ElectricSQL"></a>
 </p>
 
-# Electric
+# Electric <!-- omit in toc -->
 
 Your Postgres data, in sync, wherever you need it.
+
+**Table of Contents:**
+
+- [Quick links](#quick-links)
+- [What is Electric?](#what-is-electric)
+- [Getting Started](#getting-started)
+- [HTTP API Docs](#http-api-docs)
+- [Developing Electric](#developing-electric)
+  - [Mac setup](#mac-setup)
+- [Contributing](#contributing)
+- [Support](#support)
 
 ## Quick links
 
@@ -38,7 +49,7 @@ Your Postgres data, in sync, wherever you need it.
 
 Electric provides an [HTTP API](https://electric-sql.com/docs/api/http) for syncing [Shapes](https://electric-sql.com/docs/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](https://electric-sql.com/docs/api/clients/typescript) and [integrations](https://electric-sql.com/docs/api/integrations/react).
 
-### This looks a bit different than the last time I visited?
+### This looks a bit different than the last time I visited? <!-- omit in toc -->
 
 We started a clean rebuild of the sync engine in July 2024. One that's informed by the lessons learned building the [previous system](https://github.com/electric-sql/electric-old). See
 [James' blog post for background on the change](https://electric-sql.com/blog/2024/07/17/electric-next).
@@ -65,15 +76,15 @@ curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
 Or use one of the clients or integrations, such as the [`useShape`](https://electric-sql.com/docs/api/integrations/react) React hook:
 
 ```jsx
-import { useShape } from '@electric-sql/react'
+import { useShape } from "@electric-sql/react"
 
 function Component() {
   const { data } = useShape({
     url: `http://localhost:3000/v1/shape`,
     params: {
       table: `foo`,
-      where: `title LIKE 'foo%'`
-    }
+      where: `title LIKE 'foo%'`,
+    },
   })
 
   return JSON.stringify(data)

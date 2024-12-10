@@ -155,6 +155,42 @@ defmodule Electric.Shapes.QueryingTest do
            ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
   end
 
+  test "splits the result into chunks according to the chunk size threshold", %{db_conn: conn} do
+    Postgrex.query!(
+      conn,
+      """
+      CREATE TABLE items (
+        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+        value TEXT
+      )
+      """,
+      []
+    )
+
+    Postgrex.query!(
+      conn,
+      ~s|INSERT INTO items (value) VALUES ('1'), (NULL), ('"test\\x0001\n"')|,
+      []
+    )
+
+    shape = Shape.new!("items", inspector: {DirectInspector, conn})
+
+    assert [
+             %{key: ~S["public"."items"/"1"], value: %{value: "1"}},
+             :chunk_boundary,
+             %{key: ~S["public"."items"/"2"], value: %{value: nil}},
+             :chunk_boundary,
+             %{key: ~S["public"."items"/"3"], value: %{value: ~s["test\\x0001\n"]}},
+             :chunk_boundary
+           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape, 10))
+  end
+
   defp decode_stream(stream),
-    do: stream |> Enum.to_list() |> Enum.map(&Jason.decode!(&1, keys: :atoms))
+    do:
+      stream
+      |> Enum.to_list()
+      |> Enum.map(fn
+        :chunk_boundary -> :chunk_boundary
+        json_item -> Jason.decode!(json_item, keys: :atoms)
+      end)
 end

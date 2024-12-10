@@ -2,13 +2,13 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   use Agent
   alias Electric.ConcurrentStream
   alias Electric.Replication.LogOffset
+  import Electric.Replication.LogOffset, only: :macros
   alias Electric.Telemetry.OpenTelemetry
 
   alias __MODULE__, as: MS
 
   @behaviour Electric.ShapeCache.Storage
 
-  @snapshot_offset LogOffset.first()
   @snapshot_start_index 0
   @snapshot_end_index :end
   @xmin_key :xmin
@@ -99,7 +99,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   defp current_offset(_opts) do
-    LogOffset.first()
+    LogOffset.last_before_real_offsets()
   end
 
   @impl Electric.ShapeCache.Storage
@@ -138,34 +138,17 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     end
   end
 
-  defp snapshot_key(index) do
-    {:data, index}
+  defp snapshot_key(chunk_key, index) do
+    {chunk_key, index}
   end
 
-  defp snapshot_start, do: snapshot_key(@snapshot_start_index)
-  defp snapshot_end, do: snapshot_key(@snapshot_end_index)
+  defp snapshot_chunk_start(chunk_key), do: snapshot_key(chunk_key, @snapshot_start_index)
+  defp snapshot_chunk_end(chunk_key), do: snapshot_key(chunk_key, @snapshot_end_index)
 
-  @impl Electric.ShapeCache.Storage
-  def get_snapshot(%MS{} = opts) do
-    stream =
-      ConcurrentStream.stream_to_end(
-        excluded_start_key: @snapshot_start_index,
-        end_marker_key: @snapshot_end_index,
-        poll_time_in_ms: 10,
-        stream_fun: fn excluded_start_key, included_end_key ->
-          if !snapshot_started?(opts), do: raise("Snapshot no longer available")
+  defp snapshot_start(), do: snapshot_chunk_start(storage_offset(LogOffset.before_all()))
 
-          :ets.select(opts.snapshot_table, [
-            {{snapshot_key(:"$1"), :"$2"},
-             [{:andalso, {:>, :"$1", excluded_start_key}, {:"=<", :"$1", included_end_key}}],
-             [{{:"$1", :"$2"}}]}
-          ])
-        end
-      )
-      |> Stream.map(fn {_, item} -> item end)
-
-    {@snapshot_offset, stream}
-  end
+  defp snapshot_end(),
+    do: snapshot_chunk_end(storage_offset(LogOffset.last_before_real_offsets()))
 
   defp get_offset_indexed_stream(offset, max_offset, offset_indexed_table) do
     offset = storage_offset(offset)
@@ -185,12 +168,49 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     end)
   end
 
+  @snapshot_boundary_offset LogOffset.last_before_real_offsets()
   @impl Electric.ShapeCache.Storage
+  def get_log_stream(offset, max_offset, %MS{} = opts)
+      when is_log_offset_lt(offset, @snapshot_boundary_offset) do
+    case :ets.lookup_element(opts.snapshot_table, snapshot_end(), 2, nil) do
+      nil -> stream_from_snapshot(offset, max_offset, opts)
+      max when is_log_offset_lt(offset, max) -> stream_from_snapshot(offset, max_offset, opts)
+      _ -> get_offset_indexed_stream(offset, max_offset, opts.log_table)
+    end
+  end
+
   def get_log_stream(offset, max_offset, %MS{} = opts) do
     get_offset_indexed_stream(offset, max_offset, opts.log_table)
   end
 
+  defp stream_from_snapshot(offset, max_offset, %MS{} = opts) do
+    ConcurrentStream.stream_to_end(
+      excluded_start_key: snapshot_chunk_end(storage_offset(offset)),
+      end_marker_key: snapshot_chunk_end(storage_offset(max_offset)),
+      poll_time_in_ms: 10,
+      stream_fun: fn excluded_start_key, included_end_key ->
+        if !snapshot_started?(opts), do: raise("Snapshot no longer available")
+
+        :ets.select(
+          opts.snapshot_table,
+          [
+            {{:"$1", :"$2"},
+             [
+               {:andalso, {:>, :"$1", {:const, excluded_start_key}},
+                {:"=<", :"$1", {:const, included_end_key}}}
+             ], [{{:"$1", :"$2"}}]}
+          ]
+        )
+      end
+    )
+    |> Stream.map(fn {_, item} -> item end)
+    |> Stream.reject(&is_nil/1)
+  end
+
   @impl Electric.ShapeCache.Storage
+  def get_chunk_end_log_offset(offset, _) when is_min_offset(offset),
+    do: LogOffset.first()
+
   def get_chunk_end_log_offset(offset, %MS{} = opts) do
     case :ets.next_lookup(opts.chunk_checkpoint_table, storage_offset(offset)) do
       :"$end_of_table" ->
@@ -209,15 +229,44 @@ defmodule Electric.ShapeCache.InMemoryStorage do
       stack_id,
       fn ->
         table = opts.snapshot_table
+        chunk_checkpoint_table = opts.chunk_checkpoint_table
 
         data_stream
         |> Stream.with_index(1)
-        |> Stream.map(fn {log_item, index} -> {snapshot_key(index), log_item} end)
-        |> Stream.chunk_every(500)
-        |> Stream.each(fn chunk -> :ets.insert(table, chunk) end)
-        |> Stream.run()
+        |> Stream.transform(
+          fn -> 0 end,
+          fn
+            {:chunk_boundary, _}, chunk_num ->
+              chunk_offset = storage_offset(LogOffset.new(0, chunk_num))
 
-        :ets.insert(table, {snapshot_end(), 0})
+              {[
+                 {chunk_offset, :snapshot_checkpoint},
+                 {snapshot_chunk_end(chunk_offset), nil}
+               ], chunk_num + 1}
+
+            {line, index}, chunk_num ->
+              chunk_offset = storage_offset(LogOffset.new(0, chunk_num))
+              {[{snapshot_key(chunk_offset, index), line}], chunk_num}
+          end,
+          fn chunk_num ->
+            chunk_offset = storage_offset(LogOffset.new(0, chunk_num))
+
+            {[{chunk_offset, :snapshot_checkpoint}, {snapshot_chunk_end(chunk_offset), nil}],
+             chunk_num}
+          end,
+          fn _ -> nil end
+        )
+        |> Stream.chunk_every(500)
+        |> Stream.flat_map(fn chunk ->
+          {checkpoints, data} = Enum.split_with(chunk, &match?({_, :snapshot_checkpoint}, &1))
+
+          :ets.insert(chunk_checkpoint_table, checkpoints)
+          :ets.insert(table, data)
+          Enum.map(checkpoints, &elem(&1, 0))
+        end)
+        |> Enum.max()
+        |> then(fn max_chunk -> :ets.insert(table, {snapshot_end(), LogOffset.new(max_chunk)}) end)
+
         :ok
       end
     )

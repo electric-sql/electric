@@ -115,7 +115,9 @@ defmodule Electric.MixProject do
   defp aliases() do
     [
       start_dev: "cmd --cd dev docker compose up -d",
-      stop_dev: "cmd --cd dev docker compose down -v"
+      stop_dev: "cmd --cd dev docker compose down -v",
+      clean_persistent: "cmd rm -rf persistent",
+      reset: "do clean_persistent, stop_dev, start_dev"
     ]
   end
 

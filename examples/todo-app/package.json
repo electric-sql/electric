@@ -18,11 +18,11 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.23.1",
+    "sst": "3.3.7",
     "uuid": "^10.0.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@capsizecss/metrics": "^3.2.0",
     "@databases/pg-migrations": "^5.0.3",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -40,8 +40,7 @@
     "pg": "^8.12.0",
     "shelljs": "^0.8.5",
     "typescript": "^5.4.5",
-    "vite": "^5.3.1",
-    "vite-plugin-capsize-radix": "^0.0.9"
+    "vite": "^5.3.1"
   },
   "homepage": "https://github.com/KyleAMathews/vite-react-router-electric-sql-starter#readme",
   "keywords": [
@@ -64,7 +63,7 @@
     "backend:down": "PROJECT_NAME=todo-app pnpm -C ../../ run example-backend:down",
     "build": "vite build",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
-    "dev": "concurrently \"vite\" \"node server.js\"",
+    "dev": "dotenv -e .env -- concurrently \"vite\" \"node server.js\"",
     "typecheck": "tsc --noEmit"
   }
 }

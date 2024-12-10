@@ -1,4 +1,4 @@
-# Linearlite
+# Linearlite Read Only
 
 This is an example Linear clone developed using ElectricSQL.
 
@@ -22,7 +22,7 @@ pnpm run -r build
 Navigate back to this directory:
 
 ```shell
-cd examples/linearlite
+cd examples/linearlite-read-only
 ```
 
 Start the example backend services using [Docker Compose](https://docs.docker.com/compose/):

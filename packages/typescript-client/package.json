@@ -1,34 +1,11 @@
 {
   "name": "@electric-sql/client",
-  "version": "0.9.0",
   "description": "Postgres everywhere - your data, in sync, wherever you need it.",
-  "type": "module",
-  "main": "dist/cjs/index.cjs",
-  "module": "dist/index.legacy-esm.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    "./package.json": "./package.json",
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "default": "./dist/cjs/index.cjs"
-    }
-  },
-  "files": [
-    "dist",
-    "src"
-  ],
-  "sideEffects": false,
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/electric-sql/electric.git"
-  },
+  "version": "0.9.1",
   "author": "ElectricSQL team and contributors.",
-  "license": "Apache-2",
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"
   },
-  "homepage": "https://electric-sql.com",
   "dependencies": {},
   "devDependencies": {
     "@types/pg": "^8.11.6",
@@ -49,22 +26,50 @@
     "uuid": "^10.0.0",
     "vitest": "^2.0.2"
   },
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.cts",
+        "default": "./dist/cjs/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "homepage": "https://electric-sql.com",
+  "license": "Apache-2",
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/index.legacy-esm.js",
+  "types": "./dist/index.d.ts",
   "optionalDependencies": {
     "@rollup/rollup-darwin-arm64": "^4.18.1"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric.git"
+  },
+  "scripts": {
+    "build": "shx rm -rf dist && tsup && tsc -p tsconfig.build.json",
+    "format": "eslint . --fix",
+    "prepack": "pnpm build",
+    "stylecheck": "eslint . --quiet",
+    "test": "pnpm exec vitest",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "sideEffects": false,
   "typesVersions": {
     "*": {
       "*": [
         "./dist/index.d.ts"
       ]
     }
-  },
-  "scripts": {
-    "test": "pnpm exec vitest",
-    "typecheck": "tsc -p tsconfig.json",
-    "build": "shx rm -rf dist && concurrently \"tsup\" \"tsc -p tsconfig.build.json\"",
-    "prepack": "pnpm build",
-    "stylecheck": "eslint . --quiet",
-    "format": "eslint . --fix"
   }
 }
