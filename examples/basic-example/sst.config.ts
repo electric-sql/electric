@@ -1,5 +1,8 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 import { execSync } from "child_process"
+
+const isProduction = (stage) => stage.toLowerCase() === `production`
+
 export default $config({
   app(input) {
     return {
@@ -19,6 +22,12 @@ export default $config({
       throw new Error(
         `Env variables ELECTRIC_API and ELECTRIC_ADMIN_API must be set`
       )
+    
+    if (!process.env.EXAMPLES_DATABASE_HOST || !process.env.EXAMPLES_DATABASE_PASSWORD) {
+      throw new Error(
+        `Env variables EXAMPLES_DATABASE_HOST and EXAMPLES_DATABASE_PASSWORD must be set`
+      )
+    }
 
     const provider = new postgresql.Provider("neon", {
       host: process.env.EXAMPLES_DATABASE_HOST,
@@ -43,6 +52,10 @@ export default $config({
       build: {
         command: "npm run build",
         output: "dist",
+      },
+      domain: {
+        name: `basic${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
+        dns: sst.cloudflare.dns(),
       },
     })
     return {
