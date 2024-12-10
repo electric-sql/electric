@@ -77,8 +77,8 @@ export default function Index() {
           ) : (
             todos.map((todo) => {
               return (
-                <Card onClick={() => onTodoClicked(todo)}>
-                  <Flex key={todo.id} gap="2" align="center" justify="between">
+                <Card key={todo.id} onClick={() => onTodoClicked(todo)}>
+                  <Flex gap="2" align="center" justify="between">
                     <Text as="label">
                       <Flex gap="2" align="center">
                         <Checkbox checked={todo.completed} />

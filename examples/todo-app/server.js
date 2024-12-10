@@ -2,10 +2,11 @@ import express from "express"
 import bodyParser from "body-parser"
 import cors from "cors"
 import pg from "pg"
+import process from "process"
 import { z } from "zod"
 
 const { Pool } = pg
-const pool = new Pool({connectionString: process.env.DATABASE_URL})
+const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
 const port = 3010
 
