@@ -100,15 +100,17 @@ This measures a single client syncing a single large shape of up-to 1M rows. The
   </a>
 </figure>
 
-This benchmark measures how long it takes for a write to reach a client subscibed to the affected shape. The x axis is the number of active shapes, each shape in this benchmark being disjoint
-from the others so a write will only ever affect one shape.
+This benchmark evaluates the time it takes for a write operation to reach a client subscribed to the relevant shape. On the x-axis, the number of active shapes is shown.
+Each shape in this benchmark is independent, ensuring that a write operation affects only one shape at a time.
 
-The two graphs vary by what type of where clause is used for the shapes:
-- In the top graph a where clause of the form `field = constant` is used, where each shape has a different constant. Where clauses in this form and others have been optimised to be
-  fast regardless of the number of shapes. You can see the latency is flat at 6ms. This 6ms includes the time Postgres takes to execute the write, Postgres taking about 3ms and
-  Electric taking the remaining 3ms.
-- In the botton graph a where clause of the form `field LIKE constant` is used which is an example of a where clause that is not optimised. You can see the latency rises linearly
-  with the number of shapes. This is because Electric has to check each shape to see if the write affects it. Even so, response times are fast.
+The two graphs differ based on the type of WHERE clause used for the shapes:
+- **Top Graph:** The WHERE clause is in the form `field = constant`, where each shape is assigned a unique constant. These types of WHERE clause, along with similar patterns,
+  are optimised for high performance regardless of the number of shapes — analogous to having an index on the field. As shown in the graph, the latency remains consistently
+  flat at 6ms as the number of shapes increases. This 6ms latency includes 3ms for PostgreSQL to process the write operation and 3ms for Electric to propagate it.
+  We are actively working to optimise additional WHERE clause types in the future.
+- **Bottom Graph:** The WHERE clause is in the form `field LIKE constant`, an example of a non-optimised query type.
+  In this case, the latency increases linearly with the number of shapes because Electric must evaluate each shape individually to determine if it is affected by the write.
+  Despite this, the response times remain low, a tenth of a second for 10,000 shapes.
   
 #### 4. One shape with many clients
 
