@@ -102,7 +102,7 @@ defmodule Electric.Replication.LogOffset do
 
   defguard is_min_offset(offset) when offset.tx_offset == -1
 
-  defguard is_snapshot_offset(offset) when offset.tx_offset == 0
+  defguard is_virtual_offset(offset) when offset.tx_offset == 0
 
   @doc """
   An offset that is smaller than all offsets in the log.

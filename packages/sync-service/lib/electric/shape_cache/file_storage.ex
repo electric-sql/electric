@@ -479,7 +479,7 @@ defmodule Electric.ShapeCache.FileStorage do
     do: snapshot_offset(0)
 
   # If the current offset is one of the "real" chunks, then next chunk is the boundary
-  def get_chunk_end_log_offset(offset, %FS{} = opts) when is_snapshot_offset(offset) do
+  def get_chunk_end_log_offset(offset, %FS{} = opts) when is_virtual_offset(offset) do
     case get_last_snapshot_offset(%FS{} = opts) do
       # We don't have the "last one", so optimistically give the next chunk pointer.
       # If it turns out we're actually done, then this pointer will give beginning of txn log when requested with.
