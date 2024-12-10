@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react"
 import {
   Container,
   Flex,
@@ -5,8 +6,11 @@ import {
   Heading,
   Text,
   TextField,
-  Link,
+  Card,
+  Button,
+  Box,
 } from "@radix-ui/themes"
+import logo from "../assets/logo.svg"
 import { useShape } from "@electric-sql/react"
 import { v4 as uuidv4 } from "uuid"
 
@@ -26,72 +30,88 @@ export default function Index() {
       token: import.meta.env.VITE_ELECTRIC_TOKEN,
     },
   })
-  todos.sort((a: ToDo, b: ToDo) => a.created_at - b.created_at)
-  console.log({ todos })
+  todos.sort((a, b) => a.created_at - b.created_at)
+
+  const [inputEnabled, setInputEnabled] = useState(false)
+
+  const onTodoClicked = useCallback(async (todo: ToDo) => {
+    console.log(`completed`)
+    await fetch(
+      new URL(`${import.meta.env.VITE_SERVER_URL}/todos/${todo.id}`).href,
+      {
+        method: `PUT`,
+        headers: {
+          "Content-Type": `application/json`,
+        },
+        body: JSON.stringify({
+          completed: !todo.completed,
+        }),
+      }
+    )
+  }, [])
+
+  const onTodoDeleted = useCallback(async (todo: ToDo) => {
+    console.log(`deleted`)
+    await fetch(
+      new URL(`${import.meta.env.VITE_SERVER_URL}/todos/${todo.id}`).href,
+      {
+        method: `DELETE`,
+      }
+    )
+  }, [])
+
   return (
     <Container size="1">
       <Flex gap="5" mt="5" direction="column">
-        <Heading>Electric TODOS</Heading>
+        <Flex align="center" justify="center">
+          <img src={logo} width="32px" alt="logo" />
+          <Heading ml="1">Electric To-Dos</Heading>
+          <Box width="32px" />
+        </Flex>
+
         <Flex gap="3" direction="column">
-          {todos.map((todo: ToDo) => {
-            return (
-              <Flex key={todo.id} gap="2" align="center">
-                <Text as="label">
-                  <Flex gap="2" align="center">
-                    <Checkbox
-                      checked={todo.completed}
-                      onClick={async () => {
-                        console.log(`completed`)
-                        await fetch(
-                          new URL(
-                            `${import.meta.env.VITE_SERVER_URL}/todos/${
-                              todo.id
-                            }`
-                          ).href,
-                          {
-                            method: `PUT`,
-                            headers: {
-                              "Content-Type": `application/json`,
-                            },
-                            body: JSON.stringify({
-                              completed: !todo.completed,
-                            }),
-                          }
-                        )
+          {todos.length === 0 ? (
+            <Flex justify="center">
+              <Text>No to-dos to show - add one!</Text>
+            </Flex>
+          ) : (
+            todos.map((todo) => {
+              return (
+                <Card key={todo.id} onClick={() => onTodoClicked(todo)}>
+                  <Flex gap="2" align="center" justify="between">
+                    <Text as="label">
+                      <Flex gap="2" align="center">
+                        <Checkbox checked={todo.completed} />
+                        {todo.title}
+                      </Flex>
+                    </Text>
+                    <Button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onTodoDeleted(todo)
                       }}
-                    />
-                    {todo.title}
+                      variant="ghost"
+                      ml="auto"
+                      style={{ cursor: `pointer` }}
+                    >
+                      X
+                    </Button>
                   </Flex>
-                </Text>
-                <Link
-                  underline="always"
-                  ml="auto"
-                  style={{ cursor: `pointer` }}
-                  onClick={async () => {
-                    console.log(`deleted`)
-                    await fetch(
-                      new URL(
-                        `${import.meta.env.VITE_SERVER_URL}/todos/${todo.id}`
-                      ).href,
-                      {
-                        method: `DELETE`,
-                      }
-                    )
-                  }}
-                >
-                  x
-                </Link>
-              </Flex>
-            )
-          })}
+                </Card>
+              )
+            })
+          )}
         </Flex>
         <form
-          onSubmit={async (event: React.FormEvent) => {
+          style={{ width: `100%` }}
+          onSubmit={async (event) => {
             event.preventDefault()
+            if (!inputEnabled) return
             const id = uuidv4()
-            const formData = Object.fromEntries(
-              new FormData(event.target as HTMLFormElement)
-            )
+            const formElem = event.target as HTMLFormElement
+            const formData = Object.fromEntries(new FormData(formElem))
+            formElem.reset()
+
             const res = await fetch(
               new URL(`${import.meta.env.VITE_SERVER_URL}/todos`).href,
               {
@@ -105,7 +125,19 @@ export default function Index() {
             console.log({ res })
           }}
         >
-          <TextField.Root type="text" name="todo" placeholder="New Todo" />
+          <Flex direction="row">
+            <TextField.Root
+              onChange={(e) => setInputEnabled(e.currentTarget.value !== ``)}
+              type="text"
+              name="todo"
+              placeholder="New Todo"
+              mr="1"
+              style={{ width: `100%` }}
+            />
+            <Button type="submit" disabled={!inputEnabled}>
+              Add
+            </Button>
+          </Flex>
         </form>
       </Flex>
     </Container>
