@@ -11,10 +11,12 @@ const DATA_DIR = 'idb://electric-write-patterns-example'
 const registry = new Map<string, Promise<PGliteWithLive>>()
 
 export default async function loadPGlite(): Promise<PGliteWithLive> {
-  const loadingPromise = registry.get('loadingPromise')
+  let loadingPromise = registry.get('loadingPromise')
 
   if (loadingPromise === undefined) {
-    registry.set('loadingPromise', _loadPGlite())
+    loadingPromise = _loadPGlite()
+
+    registry.set('loadingPromise', loadingPromise)
   }
 
   return loadingPromise as Promise<PGliteWithLive>
