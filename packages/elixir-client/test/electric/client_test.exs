@@ -9,7 +9,7 @@ defmodule Electric.ClientTest do
   alias Electric.Client.Fetch
   alias Electric.Client.Message.{ChangeMessage, ControlMessage, ResumeMessage, Headers}
 
-  @insert Headers.insert()
+  @insert Headers.insert(handle: "my-shape")
 
   defp client_stream(ctx, opts) do
     Client.stream(ctx.client, ctx.shape, opts)
@@ -148,6 +148,18 @@ defmodule Electric.ClientTest do
       assert [%ControlMessage{control: :up_to_date, offset: offset0()}] = stream(ctx, 1)
     end
 
+    test "generates a unique id for the stream", ctx do
+      n = 100
+
+      ids =
+        for _ <- 1..n do
+          %{id: id} = client_stream(ctx, [])
+          id
+        end
+
+      assert length(Enum.uniq(ids)) == n
+    end
+
     test "streams a non empty shape", ctx do
       %{tablename: table} = ctx
 
@@ -156,6 +168,8 @@ defmodule Electric.ClientTest do
       {:ok, id3} = insert_item(ctx)
 
       # snapshot values
+      msgs = stream(ctx, 4)
+
       assert [
                %ChangeMessage{
                  headers: %{operation: :insert, relation: ["public", ^table]},
@@ -173,7 +187,10 @@ defmodule Electric.ClientTest do
                  offset: %Electric.Client.Offset{tx: 0, op: 0}
                },
                up_to_date0()
-             ] = stream(ctx, 4)
+             ] = msgs
+
+      # 1 timestamp for the snapshot, 1 for the up-to-date response
+      assert length(Enum.uniq_by(msgs, & &1.request_timestamp)) == 2
     end
 
     test "accepts a table name as a shape", ctx do
@@ -660,6 +677,8 @@ defmodule Electric.ClientTest do
           fun.(conn)
       end)
 
+      headers = Headers.insert(handle: "my-shape-2")
+
       assert [
                %ChangeMessage{
                  headers: @insert,
@@ -669,7 +688,7 @@ defmodule Electric.ClientTest do
                up_to_date(1, 0),
                %ControlMessage{control: :must_refetch, offset: offset(1, 0)},
                %ChangeMessage{
-                 headers: @insert,
+                 headers: ^headers,
                  offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
