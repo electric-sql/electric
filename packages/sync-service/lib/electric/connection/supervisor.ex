@@ -38,13 +38,23 @@ defmodule Electric.Connection.Supervisor do
   def start_shapes_supervisor(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
-    publication_manager_opts = Keyword.fetch!(opts, :publication_manager_opts)
+    db_pool_opts = Keyword.fetch!(opts, :pool_opts)
+    replication_opts = Keyword.fetch!(opts, :replication_opts)
     inspector = Keyword.fetch!(shape_cache_opts, :inspector)
 
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
+    get_pg_version_fn = fn ->
+      server = Electric.Connection.Manager.name(stack_id)
+      Electric.Connection.Manager.get_pg_version(server)
+    end
+
     publication_manager_spec =
-      {Electric.Replication.PublicationManager, publication_manager_opts}
+      {Electric.Replication.PublicationManager,
+       stack_id: stack_id,
+       publication_name: Keyword.fetch!(replication_opts, :publication_name),
+       db_pool: Keyword.fetch!(db_pool_opts, :name),
+       get_pg_version: get_pg_version_fn}
 
     shape_log_collector_spec =
       {Electric.Replication.ShapeLogCollector, stack_id: stack_id, inspector: inspector}

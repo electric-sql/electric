@@ -206,18 +206,6 @@ defmodule Electric.StackSupervisor do
     db_pool =
       Electric.ProcessRegistry.name(stack_id, Electric.DbPool)
 
-    get_pg_version_fn = fn ->
-      server = Electric.Connection.Manager.name(stack_id)
-      Electric.Connection.Manager.get_pg_version(server)
-    end
-
-    publication_manager_opts = [
-      stack_id: stack_id,
-      publication_name: config.replication_opts[:publication_name],
-      db_pool: db_pool,
-      get_pg_version: get_pg_version_fn
-    ]
-
     prepare_tables_mfa =
       {
         Electric.Replication.PublicationManager,
@@ -261,7 +249,6 @@ defmodule Electric.StackSupervisor do
         persistent_kv: config.persistent_kv
       ],
       shape_cache_opts: shape_cache_opts,
-      publication_manager_opts: publication_manager_opts,
       tweaks: config.tweaks
     ]
 

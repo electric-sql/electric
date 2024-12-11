@@ -907,7 +907,7 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
-  def prepare_tables_noop(_, _), do: :ok
+  def prepare_tables_noop(_), do: :ok
 
   def run_with_conn_noop(conn, cb), do: cb.(conn)
 

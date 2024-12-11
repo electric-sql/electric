@@ -153,11 +153,14 @@ defmodule Electric.Postgres.Configuration do
   @spec make_table_clause(RelationFilter.t()) :: String.t()
   defp make_table_clause(%RelationFilter{
          relation: relation,
-         where_clauses: where_clauses,
-         selected_columns: cols
+         where_clauses: where_clauses
+         #  selected_columns: cols
        }) do
     table = Utils.relation_to_sql(relation)
-    cols = if cols == nil, do: "", else: " (#{Enum.join(cols, ", ")})"
+
+    # NOTE: cannot filter on columns with REPLICA IDENTITY FULL
+    # cols = if cols == nil, do: "", else: " (#{Enum.join(cols, ", ")})"
+    cols = ""
 
     where =
       if where_clauses == nil,
