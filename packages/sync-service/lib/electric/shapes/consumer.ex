@@ -370,9 +370,14 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp cleanup(state) do
-    %{shape_status: {shape_status, shape_status_state}} = state
+    %{
+      shape_status: {shape_status, shape_status_state},
+      publication_manager: {publication_manager, publication_manager_opts}
+    } = state
+
     shape_status.remove_shape(shape_status_state, state.shape_handle)
     ShapeCache.Storage.cleanup!(state.storage)
+    publication_manager.remove_shape(state.shape, publication_manager_opts)
   end
 
   defp reply_to_snapshot_waiters(_reply, %{awaiting_snapshot_start: []} = state) do

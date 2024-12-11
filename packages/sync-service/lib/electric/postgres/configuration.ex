@@ -139,6 +139,21 @@ defmodule Electric.Postgres.Configuration do
 
   # Makes an SQL query that alters the given publication whith the given tables and filters.
   @spec make_alter_publication_query(String.t(), filters()) :: String.t()
+  defp make_alter_publication_query(publication_name, []),
+    do: "DO $$
+  DECLARE
+      tables TEXT;
+  BEGIN
+      SELECT string_agg(format('%I.%I', schemaname, tablename), ', ')
+      INTO tables
+      FROM pg_publication_tables
+      WHERE pubname = '#{publication_name}' ;
+
+      IF tables IS NOT NULL THEN
+          EXECUTE format('ALTER PUBLICATION #{Utils.quote_name(publication_name)} DROP TABLE %s', tables);
+      END IF;
+  END $$;"
+
   defp make_alter_publication_query(publication_name, filters) do
     base_sql = "ALTER PUBLICATION #{Utils.quote_name(publication_name)} SET TABLE "
 

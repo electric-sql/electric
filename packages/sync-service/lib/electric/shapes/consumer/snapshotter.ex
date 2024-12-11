@@ -5,7 +5,6 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   alias Electric.Shapes
   alias Electric.Shapes.Querying
   alias Electric.Telemetry.OpenTelemetry
-  alias Electric.Utils
 
   require Logger
 
@@ -48,7 +47,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             db_pool: pool,
             storage: storage,
             create_snapshot_fn: create_snapshot_fn,
-            prepare_tables_fn: prepare_tables_fn_or_mfa,
+            publication_manager: {publication_manager, publication_manager_opts},
             stack_id: stack_id,
             chunk_bytes_threshold: chunk_bytes_threshold
           } = state
@@ -64,9 +63,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                   shape_attrs(shape_handle, shape),
                   stack_id,
                   fn ->
-                    Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [
-                      shape
-                    ])
+                    publication_manager.add_shape(shape, publication_manager_opts)
                   end
                 )
 

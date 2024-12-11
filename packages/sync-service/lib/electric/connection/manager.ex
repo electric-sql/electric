@@ -319,6 +319,8 @@ defmodule Electric.Connection.Manager do
           Electric.Connection.Supervisor.start_shapes_supervisor(
             stack_id: state.stack_id,
             shape_cache_opts: shape_cache_opts,
+            pool_opts: state.pool_opts,
+            replication_opts: state.replication_opts,
             stack_events_registry: state.stack_events_registry,
             tweaks: state.tweaks
           )

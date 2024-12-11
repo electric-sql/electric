@@ -206,20 +206,13 @@ defmodule Electric.StackSupervisor do
     db_pool =
       Electric.ProcessRegistry.name(stack_id, Electric.DbPool)
 
-    prepare_tables_mfa =
-      {
-        Electric.Replication.PublicationManager,
-        :add_shape,
-        [[stack_id: stack_id]]
-      }
-
     shape_changes_registry_name = :"#{Registry.ShapeChanges}:#{stack_id}"
 
     shape_cache_opts = [
       stack_id: stack_id,
       storage: storage,
       inspector: inspector,
-      prepare_tables_fn: prepare_tables_mfa,
+      publication_manager: {Electric.Replication.PublicationManager, stack_id: stack_id},
       chunk_bytes_threshold: config.chunk_bytes_threshold,
       log_producer: shape_log_collector,
       consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
