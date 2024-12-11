@@ -6,5 +6,9 @@ import "sst"
 export {}
 declare module "sst" {
   export interface Resource {
+    "proxy-auth": {
+      "type": "sst.aws.Nextjs"
+      "url": string
+    }
   }
 }
