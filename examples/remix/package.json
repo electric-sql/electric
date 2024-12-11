@@ -6,13 +6,14 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "backend:up": "PROJECT_NAME=remix-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
     "backend:down": "PROJECT_NAME=remix-example pnpm -C ../../ run example-backend:down",
+    "backend:up": "PROJECT_NAME=remix-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "build": "remix vite:build",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
-    "dev": "vite",
-    "build": "vite build",
-    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "dev": "remix vite:dev",
     "preview": "vite preview",
+    "start": "remix-serve ./build/server/index.js",
+    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -26,13 +27,15 @@
     "pg": "^8.12.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sst": "3.3.64",
     "uuid": "^10.0.0"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
+    "@types/aws-lambda": "8.10.146",
+    "@types/pg": "^8.11.6",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "@types/pg": "^8.11.6",
     "@types/uuid": "*",
     "@vitejs/plugin-react": "^4.3.1",
     "dotenv": "^16.4.5",
