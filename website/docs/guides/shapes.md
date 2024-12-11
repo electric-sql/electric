@@ -43,9 +43,10 @@ Shapes are defined by:
 
 - a `table`, such as `projects`
 - a `where` clause, used to filter the rows in that table, such as `status='active'`
+- a `columns` clause, used to only sync a subset of the columns in that table, such as `columns=id,title,status`
 
 > [!IMPORTANT] Limitations
-> Shapes are currently single table, whole row only. You can sync all the rows in a table, or a subset of the rows in that table. You can't yet [select columns](#whole-rows) or sync an [include tree](#single-table) without filtering or joining in the client.
+> Shapes are currently single table, whole row only. You can sync all the rows in a table, or a subset of the rows in that table. You can't yet sync an [include tree](#single-table) without filtering or joining in the client.
 
 ### `table`
 
@@ -83,6 +84,17 @@ You can use logical operators like `AND` and `OR` to group multiple conditions, 
 > 1. where clauses can't use non-deterministic SQL functions like `count()` or `now()`
 >
 > If you need to use a data type or where clause feature that isn't yet supported, please feel free to [raise a Feature Request](https://github.com/electric-sql/electric/discussions/categories/feature-requests) on GitHub.
+
+### `columns`
+
+Optional list of columns to include in the rows from the table, e.g.:
+
+- `columns=id,title,status` - Only include the id, title, and status columns.
+- `columns=id,"Status-Check"` - Only include id and Status-Check columns, quoting the identifiers where necessary.
+
+They should always include the primary key columns, and should be formed as a comma separated list of column names exactly as they are in the database schema. When not specified all columns are synced.
+
+If the identifier was defined as case sensitive and/or with special characters, then you must quote it in the `columns` parameter as well.
 
 ## Subscribing to shapes
 
