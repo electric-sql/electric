@@ -1,5 +1,14 @@
 # @electric-sql/react
 
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- ade15b9: Expose `stream` in the useShape result data. This allows React components to easily access the stream to match on.
+- Updated dependencies [ade15b9]
+- Updated dependencies [ade15b9]
+  - @electric-sql/client@1.0.0-beta.2
+
 ## 1.0.0-beta.1
 
 ### Patch Changes
