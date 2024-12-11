@@ -148,6 +148,14 @@ defmodule Electric.StackSupervisor do
         {Electric.ShapeCache, stack_id: stack_id, server: Electric.ShapeCache.name(stack_id)}
       )
 
+    publication_manager =
+      Access.get(
+        opts,
+        :publication_manager,
+        {Electric.Replication.PublicationManager,
+         stack_id: stack_id, server: Electric.Replication.PublicationManager.name(stack_id)}
+      )
+
     inspector =
       Access.get(
         opts,
@@ -159,6 +167,7 @@ defmodule Electric.StackSupervisor do
 
     [
       shape_cache: shape_cache,
+      publication_manager: publication_manager,
       registry: shape_changes_registry_name,
       stack_events_registry: opts[:stack_events_registry],
       storage: storage_mod_arg(opts),
@@ -202,11 +211,18 @@ defmodule Electric.StackSupervisor do
       Electric.Connection.Manager.get_pg_version(server)
     end
 
+    publication_manager_opts = [
+      stack_id: stack_id,
+      publication_name: config.replication_opts[:publication_name],
+      db_pool: db_pool,
+      get_pg_version: get_pg_version_fn
+    ]
+
     prepare_tables_mfa =
       {
-        Electric.Postgres.Configuration,
-        :configure_tables_for_replication!,
-        [get_pg_version_fn, config.replication_opts[:publication_name]]
+        Electric.Replication.PublicationManager,
+        :add_shape,
+        [[stack_id: stack_id]]
       }
 
     shape_changes_registry_name = :"#{Registry.ShapeChanges}:#{stack_id}"
@@ -245,6 +261,7 @@ defmodule Electric.StackSupervisor do
         persistent_kv: config.persistent_kv
       ],
       shape_cache_opts: shape_cache_opts,
+      publication_manager_opts: publication_manager_opts,
       tweaks: config.tweaks
     ]
 

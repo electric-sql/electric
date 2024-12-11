@@ -39,6 +39,8 @@ defmodule Electric.Connection.Manager do
       :timeline_opts,
       # Options passed to the Replication.Supervisor's start_link() function
       :shape_cache_opts,
+      # Options passed to the Replication.Supervisor's start_link() function
+      :publication_manager_opts,
       # PID of the replication client
       :replication_client_pid,
       # PID of the Postgres connection lock
@@ -175,6 +177,7 @@ defmodule Electric.Connection.Manager do
     pool_opts = Keyword.fetch!(opts, :pool_opts)
     timeline_opts = Keyword.fetch!(opts, :timeline_opts)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
+    publication_manager_opts = Keyword.fetch!(opts, :publication_manager_opts)
 
     state =
       %State{
@@ -183,6 +186,7 @@ defmodule Electric.Connection.Manager do
         pool_opts: pool_opts,
         timeline_opts: timeline_opts,
         shape_cache_opts: shape_cache_opts,
+        publication_manager_opts: publication_manager_opts,
         pg_lock_acquired: false,
         backoff: {:backoff.init(1000, 10_000), nil},
         stack_id: Keyword.fetch!(opts, :stack_id),
@@ -319,6 +323,7 @@ defmodule Electric.Connection.Manager do
           Electric.Connection.Supervisor.start_shapes_supervisor(
             stack_id: state.stack_id,
             shape_cache_opts: shape_cache_opts,
+            publication_manager_opts: state.publication_manager_opts,
             stack_events_registry: state.stack_events_registry,
             tweaks: state.tweaks
           )
