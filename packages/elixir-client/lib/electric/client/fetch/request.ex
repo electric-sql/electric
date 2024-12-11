@@ -126,7 +126,7 @@ defmodule Electric.Client.Fetch.Request do
     %{
       id: {__MODULE__, request_id},
       start: {__MODULE__, :start_link, [args]},
-      restart: :transient,
+      restart: :temporary,
       type: :worker
     }
   end
@@ -143,8 +143,6 @@ defmodule Electric.Client.Fetch.Request do
     Logger.debug(fn ->
       "Starting request for #{inspect(request_id)}"
     end)
-
-    Process.link(monitor_pid)
 
     state = %{
       request_id: request_id,
