@@ -2,7 +2,8 @@ import type { LoaderFunctionArgs } from "@remix-run/node"
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url)
-  const originUrl = new URL(`http://localhost:3000/v1/shape`)
+  const baseUrl = process.env.ELECTRIC_URL ?? `http://localhost:3000`
+  const originUrl = new URL(`/v1/shape`, baseUrl)
   url.searchParams.forEach((value, key) => {
     originUrl.searchParams.set(key, value)
   })
