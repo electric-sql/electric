@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./.sst/platform/config.d.ts" />
 import { execSync } from "child_process"
 
@@ -6,14 +7,14 @@ const isProduction = (stage: string) => stage.toLowerCase() === `production`
 export default $config({
   app(input) {
     return {
-      name: "proxy-auth",
-      removal: input?.stage === "production" ? "retain" : "remove",
-      protect: ["production"].includes(input?.stage),
-      home: "aws",
+      name: `proxy-auth`,
+      removal: input?.stage === `production` ? `retain` : `remove`,
+      protect: [`production`].includes(input?.stage),
+      home: `aws`,
       providers: {
         cloudflare: `5.42.0`,
         aws: { version: `6.57.0`, region: `eu-west-1` },
-        postgresql: "3.14.0",
+        postgresql: `3.14.0`,
       },
     }
   },
@@ -22,21 +23,26 @@ export default $config({
       throw new Error(
         `Env variables ELECTRIC_API and ELECTRIC_ADMIN_API must be set`
       )
-    
-    if (!process.env.EXAMPLES_DATABASE_HOST || !process.env.EXAMPLES_DATABASE_PASSWORD) {
+
+    if (
+      !process.env.EXAMPLES_DATABASE_HOST ||
+      !process.env.EXAMPLES_DATABASE_PASSWORD
+    ) {
       throw new Error(
         `Env variables EXAMPLES_DATABASE_HOST and EXAMPLES_DATABASE_PASSWORD must be set`
       )
     }
 
-    const provider = new postgresql.Provider("neon", {
+    const provider = new postgresql.Provider(`neon`, {
       host: process.env.EXAMPLES_DATABASE_HOST,
       database: `neondb`,
       username: `neondb_owner`,
       password: process.env.EXAMPLES_DATABASE_PASSWORD,
     })
 
-    const dbName = isProduction($app.stage) ? `proxy-auth-production` : `proxy-auth-${$app.stage}`
+    const dbName = isProduction($app.stage)
+      ? `proxy-auth-production`
+      : `proxy-auth-${$app.stage}`
     const pg = new postgresql.Database(dbName, {}, { provider })
 
     const pgUri = $interpolate`postgresql://${provider.username}:${provider.password}@${provider.host}/${pg.name}?sslmode=require`
@@ -44,7 +50,7 @@ export default $config({
       return addDatabaseToElectric(uri, `eu-west-1`)
     })
 
-    const staticSite = new sst.aws.Nextjs("proxy-auth", {
+    const staticSite = new sst.aws.Nextjs(`proxy-auth`, {
       environment: {
         ELECTRIC_URL: process.env.ELECTRIC_API!,
         ELECTRIC_TOKEN: electricInfo.token,
