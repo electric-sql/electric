@@ -20,12 +20,10 @@ defmodule Electric.Client.Fetch.Pool do
 
     # register this pid before making the request to avoid race conditions for
     # very fast responses
-    {:ok, monitor_pid} = start_monitor(request_id)
+    {:ok, monitor_pid} = start_monitor(request_id, request, client)
 
     try do
       ref = Fetch.Monitor.register(monitor_pid, self())
-
-      {:ok, _request_pid} = start_request(request_id, request, client, monitor_pid)
 
       Fetch.Monitor.wait(ref)
     catch
@@ -38,18 +36,10 @@ defmodule Electric.Client.Fetch.Pool do
     end
   end
 
-  defp start_request(request_id, request, client, monitor_pid) do
+  defp start_monitor(request_id, request, client) do
     DynamicSupervisor.start_child(
       Electric.Client.RequestSupervisor,
-      {Fetch.Request, {request_id, request, client, monitor_pid}}
-    )
-    |> return_existing()
-  end
-
-  defp start_monitor(request_id) do
-    DynamicSupervisor.start_child(
-      Electric.Client.RequestSupervisor,
-      {Electric.Client.Fetch.Monitor, request_id}
+      {Electric.Client.Fetch.Monitor, {request_id, request, client}}
     )
     |> return_existing()
   end
