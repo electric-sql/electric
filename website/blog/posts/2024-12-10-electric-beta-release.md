@@ -176,7 +176,7 @@ const MyComponent = () => {
   })
 
   return (
-    <List items={ data } />
+    <List items={ items } />
   )
 }
 ```
