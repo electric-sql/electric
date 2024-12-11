@@ -63,6 +63,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                 OpenTelemetry.with_span(
                   "shape_snapshot.prepare_tables",
                   shape_attrs(shape_handle, shape),
+                  stack_id,
                   fn ->
                     Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [
                       shape
