@@ -196,12 +196,16 @@ defmodule Electric.Telemetry do
     [
       last_value("system.cpu.core_count"),
       last_value("system.cpu.utilization.total"),
+      last_value("electric.postgres.replication.wal_size", unit: :byte),
       last_value("electric.storage.used", unit: {:byte, :kilobyte}),
       last_value("electric.shapes.total_shapes.count"),
       last_value("vm.memory.total", unit: :byte),
       last_value("vm.memory.processes_used", unit: :byte),
       last_value("vm.memory.binary", unit: :byte),
       last_value("vm.memory.ets", unit: :byte),
+      last_value("vm.system_counts.process_count"),
+      last_value("vm.system_counts.atom_count"),
+      last_value("vm.system_counts.port_count"),
       last_value("vm.total_run_queue_lengths.total"),
       last_value("vm.total_run_queue_lengths.cpu"),
       last_value("vm.total_run_queue_lengths.io"),
@@ -239,7 +243,9 @@ defmodule Electric.Telemetry do
     stack_id = Keyword.fetch!(opts, :stack_id)
 
     [
-      # A module, function and arguments to be invoked periodically.
+      :memory,
+      :total_run_queue_lengths,
+      :system_counts,
       {__MODULE__, :uptime_event, []},
       {__MODULE__, :count_shapes, [stack_id]},
       {__MODULE__, :cpu_utilization, []},
