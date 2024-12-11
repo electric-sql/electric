@@ -55,7 +55,7 @@ defmodule Electric.Client.Fetch.Monitor do
         response
 
       {:DOWN, ^caller_monitor_ref, :process, _pid, reason} ->
-        raise RuntimeError,
+        raise Electric.Client.Error,
           message: "#{Fetch.Monitor} process died with reason #{inspect(reason)}"
     end
   end
