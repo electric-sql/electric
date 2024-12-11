@@ -157,7 +157,7 @@ const MyComponent = () => {
   }, [])
 
   return (
-    <List items="items" />
+    <List items={ items } />
   )
 }
 ```
@@ -168,7 +168,7 @@ Swap it out for code like this (replacing the `fetch` in the `useEffect` with [`
 import { useShape } from '@electric-sql/react'
 
 const MyComponent = () => {
-  const { data } = useShape({
+  const { data: items } = useShape({
     url: 'https://electric.example.com/v1/shapes',
     params: {
       table: 'items'
@@ -176,7 +176,7 @@ const MyComponent = () => {
   })
 
   return (
-    <List items="data" />
+    <List items={ data } />
   )
 }
 ```
