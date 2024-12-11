@@ -4,7 +4,6 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes
   alias Electric.Shapes.Querying
-  alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Utils
 
