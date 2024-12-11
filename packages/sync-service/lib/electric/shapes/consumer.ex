@@ -226,7 +226,7 @@ defmodule Electric.Shapes.Consumer do
   defp handle_txns(txns, state) do
     case Enum.reduce_while(txns, state, &handle_txn/2) do
       {:truncate, state} ->
-        {:stop, {:shutdown, :truncate}, state}
+        {:stop, :normal, state}
 
       state ->
         {:noreply, [], state}
@@ -283,9 +283,7 @@ defmodule Electric.Shapes.Consumer do
           "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
         )
 
-        :ok = shape_cache.handle_truncate(shape_handle, shape_cache_opts)
-
-        :ok = ShapeCache.Storage.cleanup!(storage)
+        cleanup(state)
 
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
 

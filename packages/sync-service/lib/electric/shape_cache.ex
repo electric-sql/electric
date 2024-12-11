@@ -158,7 +158,7 @@ defmodule Electric.ShapeCache do
   @spec handle_truncate(shape_handle(), keyword()) :: :ok
   def handle_truncate(shape_handle, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
-    GenStage.call(server, {:truncate, shape_handle})
+    GenStage.cast(server, {:truncate, shape_handle})
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -276,16 +276,6 @@ defmodule Electric.ShapeCache do
      state}
   end
 
-  def handle_call({:truncate, shape_handle}, _from, state) do
-    with :ok <- clean_up_shape(state, shape_handle) do
-      Logger.info(
-        "Truncating and rotating shape handle, previous shape handle #{shape_handle} cleaned up"
-      )
-    end
-
-    {:reply, :ok, state}
-  end
-
   def handle_call({:clean, shape_handle}, _from, state) do
     # ignore errors when cleaning up non-existant shape id
     with :ok <- clean_up_shape(state, shape_handle) do
@@ -299,6 +289,17 @@ defmodule Electric.ShapeCache do
     Logger.info("Cleaning up all shapes")
     clean_up_all_shapes(state)
     {:reply, :ok, state}
+  end
+
+  @impl GenServer
+  def handle_cast({:truncate, shape_handle}, state) do
+    with :ok <- clean_up_shape(state, shape_handle) do
+      Logger.info(
+        "Truncating and rotating shape handle, previous shape handle #{shape_handle} cleaned up"
+      )
+    end
+
+    {:noreply, state}
   end
 
   defp clean_up_shape(state, shape_handle) do
