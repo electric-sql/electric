@@ -21,11 +21,20 @@
     "@electric-examples/todo-app": "1.0.1",
     "@electric-examples/write-patterns": "0.0.1",
     "@electric-examples/yjs-provider": "0.0.1",
-    "@electric-sql/docs": "0.0.1"
+    "@electric-sql/docs": "0.0.1",
+    "@electric-examples/bash": "0.0.1",
+    "@electric-examples/nextjs": "0.0.1",
+    "@electric-examples/react": "0.0.1",
+    "@electric-examples/redis": "0.0.1",
+    "@electric-examples/remix": "0.0.1",
+    "@electric-examples/tanstack": "0.0.1"
   },
   "changesets": [
     "beige-hotels-sin",
+    "beige-snails-brush",
     "healthy-comics-heal",
-    "polite-frogs-yell"
+    "modern-poets-film",
+    "polite-frogs-yell",
+    "tender-seas-stare"
   ]
 }
