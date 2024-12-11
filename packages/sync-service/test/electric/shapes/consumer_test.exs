@@ -73,8 +73,6 @@ defmodule Electric.Shapes.ConsumerTest do
     Lsn.from_integer(offset)
   end
 
-  defp prepare_tables_fn(_pool, _affected_tables), do: :ok
-
   defp run_with_conn_noop(conn, cb), do: cb.(conn)
 
   describe "event handling" do
@@ -146,11 +144,11 @@ defmodule Electric.Shapes.ConsumerTest do
                registry: registry_name,
                shape_cache: {Mock.ShapeCache, []},
                shape_status: {Mock.ShapeStatus, []},
+               publication_manager: {Mock.PublicationManager, []},
                storage: storage,
                chunk_bytes_threshold:
                  Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
-               run_with_conn_fn: &run_with_conn_noop/2,
-               prepare_tables_fn: &prepare_tables_fn/2},
+               run_with_conn_fn: &run_with_conn_noop/2},
               id: {Shapes.ConsumerSupervisor, shape_handle}
             )
 
@@ -610,7 +608,8 @@ defmodule Electric.Shapes.ConsumerTest do
       {Support.ComponentSetup, :with_registry},
       {Support.ComponentSetup, :with_cub_db_storage},
       {Support.ComponentSetup, :with_log_chunking},
-      {Support.ComponentSetup, :with_shape_log_collector}
+      {Support.ComponentSetup, :with_shape_log_collector},
+      {Support.ComponentSetup, :with_noop_publication_manager}
     ]
 
     setup(ctx) do
@@ -624,7 +623,6 @@ defmodule Electric.Shapes.ConsumerTest do
           }),
           log_producer: ctx.shape_log_collector,
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: fn _, _ -> :ok end,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 10})

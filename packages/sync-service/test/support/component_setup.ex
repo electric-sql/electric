@@ -9,6 +9,13 @@ defmodule Support.ComponentSetup do
   alias Electric.ShapeCache.InMemoryStorage
   alias Electric.Postgres.Inspector.EtsInspector
 
+  defmodule NoopPublicationManager do
+    @behaviour Electric.Replication.PublicationManager
+    def name(_), do: :pub_man
+    def add_shape(_shape, _opts), do: :ok
+    def remove_shape(_shape, _opts), do: :ok
+  end
+
   def with_stack_id_from_test(ctx) do
     stack_id = full_test_name(ctx)
     registry = start_link_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
@@ -55,10 +62,31 @@ defmodule Support.ComponentSetup do
     %{chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold()}
   end
 
+  def with_publication_manager(ctx) do
+    server = :"publication_manager_#{full_test_name(ctx)}"
+    get_pg_version = fn -> Application.fetch_env!(:electric, :pg_version_for_tests) end
+
+    Electric.Replication.PublicationManager.start_link(
+      name: server,
+      stack_id: ctx.stack_id,
+      publication_name: ctx.publication_name,
+      db_pool: ctx.pool,
+      get_pg_version: get_pg_version
+    )
+
+    %{
+      publication_manager:
+        {Electric.Replication.PublicationManager, stack_id: ctx.stack_id, server: server}
+    }
+  end
+
+  def with_noop_publication_manager(_ctx) do
+    %{publication_manager: {NoopPublicationManager, []}}
+  end
+
   def with_shape_cache(ctx, additional_opts \\ []) do
     server = :"shape_cache_#{full_test_name(ctx)}"
     consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
-    get_pg_version = fn -> Application.fetch_env!(:electric, :pg_version_for_tests) end
 
     start_opts =
       [
@@ -66,6 +94,7 @@ defmodule Support.ComponentSetup do
         stack_id: ctx.stack_id,
         inspector: ctx.inspector,
         storage: ctx.storage,
+        publication_manager: ctx.publication_manager,
         chunk_bytes_threshold: ctx.chunk_bytes_threshold,
         db_pool: ctx.pool,
         registry: ctx.registry,
@@ -73,13 +102,6 @@ defmodule Support.ComponentSetup do
         consumer_supervisor: consumer_supervisor
       ]
       |> Keyword.merge(additional_opts)
-      |> Keyword.put_new_lazy(:prepare_tables_fn, fn ->
-        {
-          Electric.Postgres.Configuration,
-          :configure_tables_for_replication!,
-          [get_pg_version, ctx.publication_name]
-        }
-      end)
 
     {:ok, _pid} =
       Electric.Shapes.DynamicConsumerSupervisor.start_link(

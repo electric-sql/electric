@@ -47,7 +47,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
         inspector: {Mock.Inspector, []},
         shape_status: Mock.ShapeStatus,
-        prepare_tables_fn: fn _, _ -> {:ok, [:ok]} end,
+        publication_manager: {Mock.PublicationManager, []},
         log_producer: ShapeLogCollector.name(ctx.stack_id),
         stack_id: ctx.stack_id,
         consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(ctx.stack_id),

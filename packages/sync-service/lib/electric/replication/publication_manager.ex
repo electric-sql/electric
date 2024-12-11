@@ -1,11 +1,14 @@
 defmodule Electric.Replication.PublicationManager do
   require Logger
-
   use GenServer
 
   alias Electric.Postgres.Configuration
   alias Electric.Replication.Eval.Expr
   alias Electric.Shapes.Shape
+
+  @callback name(binary() | Keyword.t()) :: atom()
+  @callback add_shape(Shape.t(), Keyword.t()) :: :ok
+  @callback remove_shape(Shape.t(), Keyword.t()) :: :ok
 
   defstruct [
     :relation_filter_counters,
@@ -13,6 +16,7 @@ defmodule Electric.Replication.PublicationManager do
     :committed_relation_filters,
     :update_debounce_timeout,
     :scheduled_updated_ref,
+    :retries,
     :waiters,
     :publication_name,
     :db_pool,
@@ -42,7 +46,8 @@ defmodule Electric.Replication.PublicationManager do
           }
   end
 
-  @retry_timeout 1_000
+  @retry_timeout 300
+  @max_retries 3
   @default_debounce_timeout 50
 
   @relation_counter :relation_counter
@@ -73,13 +78,21 @@ defmodule Electric.Replication.PublicationManager do
   @spec add_shape(Shape.t(), Keyword.t()) :: :ok
   def add_shape(shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
-    GenServer.call(server, {:add_shape, shape})
+
+    case GenServer.call(server, {:add_shape, shape}) do
+      :ok -> :ok
+      {:error, err} -> raise err
+    end
   end
 
   @spec remove_shape(Shape.t(), Keyword.t()) :: :ok
   def remove_shape(shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
-    GenServer.call(server, {:remove_shape, shape})
+
+    case GenServer.call(server, {:remove_shape, shape}) do
+      :ok -> :ok
+      {:error, err} -> raise err
+    end
   end
 
   def start_link(opts) do
@@ -109,6 +122,7 @@ defmodule Electric.Replication.PublicationManager do
       prepared_relation_filters: %{},
       committed_relation_filters: %{},
       scheduled_updated_ref: nil,
+      retries: 0,
       waiters: [],
       update_debounce_timeout:
         Access.get(opts, :update_debounce_timeout, @default_debounce_timeout),
@@ -138,18 +152,23 @@ defmodule Electric.Replication.PublicationManager do
   @impl true
   def handle_info(
         :update_publication,
-        %__MODULE__{prepared_relation_filters: relation_filters} = state
+        %__MODULE__{prepared_relation_filters: relation_filters, retries: retries} = state
       ) do
-    state = %{state | scheduled_updated_ref: nil}
+    state = %{state | scheduled_updated_ref: nil, retries: 0}
 
     case update_publication(state) do
       :ok ->
         state = reply_to_waiters(:ok, state)
         {:noreply, %{state | committed_relation_filters: relation_filters}}
 
+      {:error, err} when retries < @max_retries ->
+        Logger.warning("Failed to configure publication, retrying: #{inspect(err)}")
+        state = schedule_update_publication(@retry_timeout, %{state | retries: retries + 1})
+        {:noreply, state}
+
       {:error, err} ->
-        Logger.error("Failed to configure publication for replication: #{inspect(err)}")
-        state = schedule_update_publication(@retry_timeout, state)
+        Logger.error("Failed to configure publication: #{inspect(err)}")
+        state = reply_to_waiters({:error, err}, state)
         {:noreply, state}
     end
   end

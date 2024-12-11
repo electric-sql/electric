@@ -2,6 +2,8 @@ defmodule Electric.Postgres.ConfigurationTest do
   use ExUnit.Case, async: true
   import ExUnit.CaptureLog
 
+  alias Electric.Replication.PublicationManager.RelationFilter
+  alias Electric.Replication.Eval
   alias Electric.Postgres.Configuration
 
   @pg_15 150_000
@@ -55,7 +57,14 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       Configuration.configure_tables_for_replication!(
         conn,
-        [{{"public", "items"}, "(value ILIKE 'yes%')"}],
+        [
+          %RelationFilter{
+            relation: {"public", "items"},
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
+            selected_columns: nil
+          }
+        ],
+        # [{{"public", "items"}, "(value ILIKE 'yes%')"}],
         get_pg_version,
         publication
       )
@@ -81,7 +90,14 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert capture_log(fn ->
                Configuration.configure_tables_for_replication!(
                  conn,
-                 [{{"public", "items"}, "(value ILIKE 'yes%')"}],
+                 [
+                   %RelationFilter{
+                     relation: {"public", "items"},
+                     where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
+                     selected_columns: nil
+                   }
+                 ],
+                 #  [{{"public", "items"}, "(value ILIKE 'yes%')"}],
                  get_pg_version,
                  publication
                )
@@ -92,7 +108,14 @@ defmodule Electric.Postgres.ConfigurationTest do
       refute capture_log(fn ->
                Configuration.configure_tables_for_replication!(
                  conn,
-                 [{{"public", "items"}, "(value ILIKE 'no%')"}],
+                 [
+                   %RelationFilter{
+                     relation: {"public", "items"},
+                     where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}],
+                     selected_columns: nil
+                   }
+                 ],
+                 #  [{{"public", "items"}, "(value ILIKE 'no%')"}],
                  get_pg_version,
                  publication
                )
@@ -111,8 +134,16 @@ defmodule Electric.Postgres.ConfigurationTest do
       Configuration.configure_tables_for_replication!(
         conn,
         [
-          {{"public", "items"}, "(value ILIKE 'yes%')"},
-          {{"public", "other_table"}, "(value ILIKE 'no%')"}
+          %RelationFilter{
+            relation: {"public", "items"},
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
+            selected_columns: nil
+          },
+          %RelationFilter{
+            relation: {"public", "other_table"},
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}],
+            selected_columns: nil
+          }
         ],
         get_pg_version,
         publication
@@ -133,7 +164,7 @@ defmodule Electric.Postgres.ConfigurationTest do
                )
     end
 
-    test "keeps all tables when updating one of them", %{
+    test "can update existing where clauses by updating all tables", %{
       pool: conn,
       publication_name: publication,
       get_pg_version: get_pg_version
@@ -145,8 +176,16 @@ defmodule Electric.Postgres.ConfigurationTest do
       Configuration.configure_tables_for_replication!(
         conn,
         [
-          {{"public", "items"}, "(value ILIKE 'yes%')"},
-          {{"public", "other_table"}, "(value ILIKE 'no%')"}
+          %RelationFilter{
+            relation: {"public", "items"},
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
+            selected_columns: nil
+          },
+          %RelationFilter{
+            relation: {"public", "other_table"},
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}],
+            selected_columns: nil
+          }
         ],
         get_pg_version,
         publication
@@ -169,7 +208,16 @@ defmodule Electric.Postgres.ConfigurationTest do
       Configuration.configure_tables_for_replication!(
         conn,
         [
-          {{"public", "other_table"}, "(value ILIKE 'yes%')"}
+          %RelationFilter{
+            relation: {"public", "items"},
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
+            selected_columns: nil
+          },
+          %RelationFilter{
+            relation: {"public", "other_table"},
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
+            selected_columns: nil
+          }
         ],
         get_pg_version,
         publication
@@ -179,8 +227,7 @@ defmodule Electric.Postgres.ConfigurationTest do
                expected_filters(
                  [
                    {"public", "items", "(value ~~* 'yes%'::text)"},
-                   {"public", "other_table",
-                    "((value ~~* 'no%'::text) OR (value ~~* 'yes%'::text))"}
+                   {"public", "other_table", "(value ~~* 'yes%'::text)"}
                  ],
                  pg_version
                )
@@ -190,7 +237,13 @@ defmodule Electric.Postgres.ConfigurationTest do
          %{pool: conn, publication_name: publication, get_pg_version: get_pg_version} do
       Configuration.configure_tables_for_replication!(
         conn,
-        [{{"public", "items"}, "(value ILIKE 'yes%')"}],
+        [
+          %RelationFilter{
+            relation: {"public", "items"},
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
+            selected_columns: nil
+          }
+        ],
         get_pg_version,
         publication
       )
@@ -210,7 +263,18 @@ defmodule Electric.Postgres.ConfigurationTest do
       # Configure `items` table again but with a different where clause
       Configuration.configure_tables_for_replication!(
         conn,
-        [{{"public", "items"}, "(value ILIKE 'no%')"}, {{"public", "other_table"}, nil}],
+        [
+          %RelationFilter{
+            relation: {"public", "items"},
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}],
+            selected_columns: nil
+          },
+          %RelationFilter{
+            relation: {"public", "other_table"},
+            where_clauses: nil,
+            selected_columns: nil
+          }
+        ],
         get_pg_version,
         publication
       )
@@ -221,7 +285,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert list_tables_in_publication(conn, publication) ==
                expected_filters(
                  [
-                   {"public", "items", "((value ~~* 'yes%'::text) OR (value ~~* 'no%'::text))"},
+                   {"public", "items", "(value ~~* 'no%'::text)"},
                    {"public", "other_table", nil}
                  ],
                  pg_version
@@ -231,7 +295,18 @@ defmodule Electric.Postgres.ConfigurationTest do
       # the resulting publication should no longer have a filter for that table
       Configuration.configure_tables_for_replication!(
         conn,
-        [{{"public", "items"}, nil}, {{"public", "other_table"}, "(value ILIKE 'no%')"}],
+        [
+          %RelationFilter{
+            relation: {"public", "items"},
+            where_clauses: nil,
+            selected_columns: nil
+          },
+          %RelationFilter{
+            relation: {"public", "other_table"},
+            where_clauses: nil,
+            selected_columns: nil
+          }
+        ],
         get_pg_version,
         publication
       )
@@ -250,7 +325,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert_raise Postgrex.Error, ~r/undefined_object/, fn ->
         Configuration.configure_tables_for_replication!(
           conn,
-          [{{"public", "items"}, nil}],
+          [%RelationFilter{relation: {"public", "items"}}],
           get_pg_version,
           "nonexistent"
         )
@@ -266,20 +341,49 @@ defmodule Electric.Postgres.ConfigurationTest do
       Configuration.configure_tables_for_replication!(
         conn,
         [
-          {{"public", "items"}, "(value ILIKE 'yes%')"},
-          {{"public", "other_table"}, "(value ILIKE '1%')"},
-          {{"public", "other_other_table"}, "(value ILIKE '1%')"}
+          %RelationFilter{
+            relation: {"public", "items"},
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
+          },
+          %RelationFilter{
+            relation: {"public", "other_table"},
+            where_clauses: [%Eval.Expr{query: "(value ILIKE '1%')"}]
+          },
+          %RelationFilter{
+            relation: {"public", "other_other_table"},
+            where_clauses: [%Eval.Expr{query: "(value ILIKE '1%')"}]
+          }
         ],
+        # [
+        #   {{"public", "items"}, "(value ILIKE 'yes%')"},
+        #   {{"public", "other_table"}, "(value ILIKE '1%')"},
+        #   {{"public", "other_other_table"}, "(value ILIKE '1%')"}
+        # ],
         get_pg_version,
         publication
       )
+
+      new_filters = [
+        %RelationFilter{
+          relation: {"public", "items"},
+          where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
+        },
+        %RelationFilter{
+          relation: {"public", "other_table"},
+          where_clauses: [%Eval.Expr{query: "(value ILIKE '2%')"}]
+        },
+        %RelationFilter{
+          relation: {"public", "other_other_table"},
+          where_clauses: [%Eval.Expr{query: "(value ILIKE '2%')"}]
+        }
+      ]
 
       task1 =
         Task.async(fn ->
           Postgrex.transaction(conn, fn conn ->
             Configuration.configure_tables_for_replication!(
               conn,
-              [{{"public", "other_other_table"}, "(value ILIKE '2%')"}],
+              new_filters,
               get_pg_version,
               publication
             )
@@ -293,7 +397,7 @@ defmodule Electric.Postgres.ConfigurationTest do
           Postgrex.transaction(conn, fn conn ->
             Configuration.configure_tables_for_replication!(
               conn,
-              [{{"public", "other_table"}, "(value ILIKE '2%')"}],
+              new_filters,
               get_pg_version,
               publication
             )
@@ -310,9 +414,8 @@ defmodule Electric.Postgres.ConfigurationTest do
                expected_filters(
                  [
                    {"public", "items", "(value ~~* 'yes%'::text)"},
-                   {"public", "other_other_table",
-                    "((value ~~* '1%'::text) OR (value ~~* '2%'::text))"},
-                   {"public", "other_table", "((value ~~* '1%'::text) OR (value ~~* '2%'::text))"}
+                   {"public", "other_other_table", "(value ~~* '2%'::text)"},
+                   {"public", "other_table", "(value ~~* '2%'::text)"}
                  ],
                  get_pg_version.()
                )

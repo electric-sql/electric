@@ -49,8 +49,6 @@ defmodule Electric.ShapeCacheTest do
 
   @zero_offset LogOffset.last_before_real_offsets()
 
-  @prepare_tables_noop {__MODULE__, :prepare_tables_noop, []}
-
   @stub_inspector StubInspector.new([
                     %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0},
                     %{name: "value", type: "text", type_id: {25, 1}}
@@ -69,14 +67,14 @@ defmodule Electric.ShapeCacheTest do
       :with_log_chunking,
       :with_no_pool,
       :with_registry,
-      :with_shape_log_collector
+      :with_shape_log_collector,
+      :with_noop_publication_manager
     ]
 
     setup ctx do
       with_shape_cache(
         Map.put(ctx, :inspector, @stub_inspector),
-        create_snapshot_fn: fn _, _, _, _, _, _, _ -> nil end,
-        prepare_tables_fn: @prepare_tables_noop
+        create_snapshot_fn: fn _, _, _, _, _, _, _ -> nil end
       )
     end
 
@@ -98,14 +96,14 @@ defmodule Electric.ShapeCacheTest do
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
-      :with_shape_log_collector
+      :with_shape_log_collector,
+      :with_noop_publication_manager
     ]
 
     test "creates initial snapshot if one doesn't exist", %{storage: storage} = ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 10})
             Storage.make_new_snapshot!([["test"]], storage)
@@ -124,12 +122,16 @@ defmodule Electric.ShapeCacheTest do
     test "triggers table prep and snapshot creation only once", ctx do
       test_pid = self()
 
+      defmodule TempPubManager do
+        def add_shape(_, opts) do
+          send(opts[:test_pid], {:called, :prepare_tables_fn})
+        end
+      end
+
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: fn nil, [{{"public", "items"}, nil}] ->
-            send(test_pid, {:called, :prepare_tables_fn})
-          end,
+          publication_manager: {TempPubManager, [test_pid: test_pid]},
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             send(test_pid, {:called, :create_snapshot_fn})
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 10})
@@ -157,7 +159,6 @@ defmodule Electric.ShapeCacheTest do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             send(test_pid, {:called, :create_snapshot_fn})
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 10})
@@ -211,6 +212,7 @@ defmodule Electric.ShapeCacheTest do
       :with_basic_tables,
       :with_inspector,
       :with_shape_log_collector,
+      :with_publication_manager,
       :with_shape_cache
     ]
 
@@ -395,14 +397,14 @@ defmodule Electric.ShapeCacheTest do
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
-      :with_shape_log_collector
+      :with_shape_log_collector,
+      :with_noop_publication_manager
     ]
 
     test "returns empty list initially", ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
-          run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop
+          run_with_conn_fn: &run_with_conn_noop/2
         )
 
       meta_table = Access.fetch!(opts, :shape_meta_table)
@@ -414,7 +416,6 @@ defmodule Electric.ShapeCacheTest do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 10})
             Storage.make_new_snapshot!([["test"]], storage)
@@ -435,7 +436,6 @@ defmodule Electric.ShapeCacheTest do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             ref = make_ref()
             send(test_pid, {:waiting_point, ref, self()})
@@ -467,14 +467,14 @@ defmodule Electric.ShapeCacheTest do
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
-      :with_shape_log_collector
+      :with_shape_log_collector,
+      :with_noop_publication_manager
     ]
 
     test "returns true for known shape handle", ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _, _, _, _, _ ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 100})
             GenServer.cast(parent, {:snapshot_started, shape_handle})
@@ -490,7 +490,6 @@ defmodule Electric.ShapeCacheTest do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _, _, _, _, _ ->
             Process.sleep(100)
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 100})
@@ -509,14 +508,14 @@ defmodule Electric.ShapeCacheTest do
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
-      :with_shape_log_collector
+      :with_shape_log_collector,
+      :with_noop_publication_manager
     ]
 
     test "returns :started for snapshots that have started", ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _, _, _, _, _ ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 100})
             GenServer.cast(parent, {:snapshot_started, shape_handle})
@@ -536,7 +535,6 @@ defmodule Electric.ShapeCacheTest do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 10})
             Storage.make_new_snapshot!([["test"]], storage)
@@ -555,7 +553,6 @@ defmodule Electric.ShapeCacheTest do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             ref = make_ref()
             send(test_pid, {:waiting_point, ref, self()})
@@ -611,7 +608,6 @@ defmodule Electric.ShapeCacheTest do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 10})
             GenServer.cast(parent, {:snapshot_started, shape_handle})
@@ -649,7 +645,6 @@ defmodule Electric.ShapeCacheTest do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, _storage, _, _ ->
             ref = make_ref()
             send(test_pid, {:waiting_point, ref, self()})
@@ -685,14 +680,14 @@ defmodule Electric.ShapeCacheTest do
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
-      :with_shape_log_collector
+      :with_shape_log_collector,
+      :with_noop_publication_manager
     ]
 
     test "cleans up shape data and rotates the shape handle", ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 10})
             Storage.make_new_snapshot!([["test"]], storage)
@@ -749,7 +744,6 @@ defmodule Electric.ShapeCacheTest do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 10})
             Storage.make_new_snapshot!([["test"]], storage)
@@ -780,6 +774,7 @@ defmodule Electric.ShapeCacheTest do
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
+      :with_noop_publication_manager,
       :with_no_pool
     ]
 
@@ -787,7 +782,6 @@ defmodule Electric.ShapeCacheTest do
       do:
         with_shape_cache(Map.put(ctx, :inspector, @stub_inspector),
           run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, @snapshot_xmin})
             Storage.make_new_snapshot!([["test"]], storage)
@@ -861,7 +855,6 @@ defmodule Electric.ShapeCacheTest do
       with_cub_db_storage(context)
 
       with_shape_cache(Map.put(context, :inspector, @stub_inspector),
-        prepare_tables_fn: @prepare_tables_noop,
         create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
           GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, @snapshot_xmin})
           Storage.make_new_snapshot!([["test"]], storage)
@@ -906,8 +899,6 @@ defmodule Electric.ShapeCacheTest do
       end
     end
   end
-
-  def prepare_tables_noop(_), do: :ok
 
   def run_with_conn_noop(conn, cb), do: cb.(conn)
 
