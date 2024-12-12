@@ -38,6 +38,25 @@ defmodule Electric.Postgres.Configuration do
     )
   end
 
+  @doc """
+  Get Postgres server version
+  """
+  @spec get_pg_version(Postgrex.conn()) :: integer
+  def get_pg_version(conn) do
+    case Postgrex.query(
+           conn,
+           "SELECT current_setting('server_version_num') server_version_num",
+           []
+         ) do
+      {:ok, result} when result.num_rows == 1 ->
+        [[version_str]] = result.rows
+        {:ok, String.to_integer(version_str)}
+
+      {:error, err} ->
+        {:error, err}
+    end
+  end
+
   defp configure_tables_for_replication_internal!(
          pool,
          relation_filters,

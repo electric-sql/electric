@@ -22,7 +22,7 @@ defmodule Electric.Replication.PublicationManager do
     :waiters,
     :publication_name,
     :db_pool,
-    :get_pg_version
+    :pg_version
   ]
 
   @typep state() :: %__MODULE__{
@@ -34,7 +34,7 @@ defmodule Electric.Replication.PublicationManager do
            waiters: list(GenServer.from()),
            publication_name: String.t(),
            db_pool: term(),
-           get_pg_version: (-> String.t())
+           pg_version: non_neg_integer()
          }
   @typep filter_operation :: :add | :remove
 
@@ -146,10 +146,16 @@ defmodule Electric.Replication.PublicationManager do
         Access.get(opts, :update_debounce_timeout, @default_debounce_timeout),
       publication_name: Access.fetch!(opts, :publication_name),
       db_pool: Access.fetch!(opts, :db_pool),
-      get_pg_version: Access.fetch!(opts, :get_pg_version)
+      pg_version: Access.get(opts, :pg_version, nil)
     }
 
-    {:ok, state}
+    {:ok, state, {:continue, :get_pg_version}}
+  end
+
+  @impl true
+  def handle_continue(:get_pg_version, state) do
+    state = get_pg_version(state)
+    {:noreply, state}
   end
 
   @impl true
@@ -226,19 +232,33 @@ defmodule Electric.Replication.PublicationManager do
            prepared_relation_filters: relation_filters,
            publication_name: publication_name,
            db_pool: db_pool,
-           get_pg_version: get_pg_version
+           pg_version: pg_version
          } = _state
        ) do
     Configuration.configure_tables_for_replication!(
       db_pool,
       Map.values(relation_filters),
-      get_pg_version,
+      fn -> pg_version end,
       publication_name
     )
 
     :ok
   rescue
     err -> {:error, err}
+  end
+
+  defp get_pg_version(%{pg_version: pg_version} = state) when not is_nil(pg_version), do: state
+
+  defp get_pg_version(%{pg_version: nil, db_pool: db_pool} = state) do
+    case Configuration.get_pg_version(db_pool) do
+      {:ok, pg_version} ->
+        %{state | pg_version: pg_version}
+
+      {:error, err} ->
+        Logger.error("Failed to get PG version, retrying after timeout: #{inspect(err)}")
+        Process.sleep(@retry_timeout)
+        get_pg_version(state)
+    end
   end
 
   @spec update_relation_filters_for_shape(Shape.t(), filter_operation(), state()) :: state()

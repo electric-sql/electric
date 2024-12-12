@@ -34,7 +34,7 @@ defmodule Electric.Replication.Supervisor do
         {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
       )
 
-    children = [publication_manager, consumer_supervisor, log_collector, shape_cache]
+    children = [consumer_supervisor, publication_manager, log_collector, shape_cache]
     Supervisor.init(children, strategy: :one_for_all)
   end
 end
