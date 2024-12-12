@@ -44,17 +44,11 @@ defmodule Electric.Connection.Supervisor do
 
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
-    get_pg_version_fn = fn ->
-      server = Electric.Connection.Manager.name(stack_id)
-      Electric.Connection.Manager.get_pg_version(server)
-    end
-
     publication_manager_spec =
       {Electric.Replication.PublicationManager,
        stack_id: stack_id,
        publication_name: Keyword.fetch!(replication_opts, :publication_name),
-       db_pool: Keyword.fetch!(db_pool_opts, :name),
-       get_pg_version: get_pg_version_fn}
+       db_pool: Keyword.fetch!(db_pool_opts, :name)}
 
     shape_log_collector_spec =
       {Electric.Replication.ShapeLogCollector, stack_id: stack_id, inspector: inspector}

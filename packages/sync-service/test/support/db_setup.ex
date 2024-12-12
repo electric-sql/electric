@@ -52,7 +52,7 @@ defmodule Support.DbSetup do
     %{rows: [[pg_version]]} =
       Postgrex.query!(ctx.db_conn, "SELECT current_setting('server_version_num')::integer", [])
 
-    {:ok, %{get_pg_version: fn -> pg_version end}}
+    {:ok, %{pg_version: pg_version}}
   end
 
   def with_shared_db(_ctx) do

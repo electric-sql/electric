@@ -29,11 +29,11 @@ defmodule Electric.Postgres.Configuration do
           float()
         ) ::
           {:ok, [:ok]}
-  def configure_tables_for_replication!(pool, relation_filters, get_pg_version, publication_name) do
+  def configure_tables_for_replication!(pool, relation_filters, pg_version, publication_name) do
     configure_tables_for_replication_internal!(
       pool,
       relation_filters,
-      get_pg_version.(),
+      pg_version,
       publication_name
     )
   end

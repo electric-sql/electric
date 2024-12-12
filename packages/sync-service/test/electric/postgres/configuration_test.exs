@@ -51,7 +51,7 @@ defmodule Electric.Postgres.ConfigurationTest do
 
   describe "configure_tables_for_replication!/3" do
     test "sets REPLICA IDENTITY on the table and adds it to the publication",
-         %{pool: conn, publication_name: publication, get_pg_version: get_pg_version} do
+         %{pool: conn, publication_name: publication, pg_version: pg_version} do
       assert get_table_identity(conn, {"public", "items"}) == "d"
       assert list_tables_in_publication(conn, publication) == []
 
@@ -60,18 +60,14 @@ defmodule Electric.Postgres.ConfigurationTest do
         [
           %RelationFilter{
             relation: {"public", "items"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
-            selected_columns: nil
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
           }
         ],
-        # [{{"public", "items"}, "(value ILIKE 'yes%')"}],
-        get_pg_version,
+        pg_version,
         publication
       )
 
       assert get_table_identity(conn, {"public", "items"}) == "f"
-
-      pg_version = get_pg_version.()
 
       assert list_tables_in_publication(conn, publication) ==
                expected_filters(
@@ -83,7 +79,7 @@ defmodule Electric.Postgres.ConfigurationTest do
     end
 
     test "doesn't execute `ALTER TABLE` if table identity is already full",
-         %{pool: conn, publication_name: publication, get_pg_version: get_pg_version} do
+         %{pool: conn, publication_name: publication, pg_version: pg_version} do
       assert get_table_identity(conn, {"public", "items"}) == "d"
       assert list_tables_in_publication(conn, publication) == []
 
@@ -93,12 +89,10 @@ defmodule Electric.Postgres.ConfigurationTest do
                  [
                    %RelationFilter{
                      relation: {"public", "items"},
-                     where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
-                     selected_columns: nil
+                     where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
                    }
                  ],
-                 #  [{{"public", "items"}, "(value ILIKE 'yes%')"}],
-                 get_pg_version,
+                 pg_version,
                  publication
                )
              end) =~ "Altering identity"
@@ -111,12 +105,10 @@ defmodule Electric.Postgres.ConfigurationTest do
                  [
                    %RelationFilter{
                      relation: {"public", "items"},
-                     where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}],
-                     selected_columns: nil
+                     where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}]
                    }
                  ],
-                 #  [{{"public", "items"}, "(value ILIKE 'no%')"}],
-                 get_pg_version,
+                 pg_version,
                  publication
                )
              end) =~ "Altering identity"
@@ -125,7 +117,7 @@ defmodule Electric.Postgres.ConfigurationTest do
     test "works with multiple tables", %{
       pool: conn,
       publication_name: publication,
-      get_pg_version: get_pg_version
+      pg_version: pg_version
     } do
       assert get_table_identity(conn, {"public", "items"}) == "d"
       assert get_table_identity(conn, {"public", "other_table"}) == "d"
@@ -136,23 +128,19 @@ defmodule Electric.Postgres.ConfigurationTest do
         [
           %RelationFilter{
             relation: {"public", "items"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
-            selected_columns: nil
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
           },
           %RelationFilter{
             relation: {"public", "other_table"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}],
-            selected_columns: nil
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}]
           }
         ],
-        get_pg_version,
+        pg_version,
         publication
       )
 
       assert get_table_identity(conn, {"public", "items"}) == "f"
       assert get_table_identity(conn, {"public", "other_table"}) == "f"
-
-      pg_version = get_pg_version.()
 
       assert list_tables_in_publication(conn, publication) ==
                expected_filters(
@@ -167,7 +155,7 @@ defmodule Electric.Postgres.ConfigurationTest do
     test "can update existing where clauses by updating all tables", %{
       pool: conn,
       publication_name: publication,
-      get_pg_version: get_pg_version
+      pg_version: pg_version
     } do
       assert get_table_identity(conn, {"public", "items"}) == "d"
       assert get_table_identity(conn, {"public", "other_table"}) == "d"
@@ -178,23 +166,19 @@ defmodule Electric.Postgres.ConfigurationTest do
         [
           %RelationFilter{
             relation: {"public", "items"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
-            selected_columns: nil
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
           },
           %RelationFilter{
             relation: {"public", "other_table"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}],
-            selected_columns: nil
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}]
           }
         ],
-        get_pg_version,
+        pg_version,
         publication
       )
 
       assert get_table_identity(conn, {"public", "items"}) == "f"
       assert get_table_identity(conn, {"public", "other_table"}) == "f"
-
-      pg_version = get_pg_version.()
 
       assert list_tables_in_publication(conn, publication) ==
                expected_filters(
@@ -210,16 +194,14 @@ defmodule Electric.Postgres.ConfigurationTest do
         [
           %RelationFilter{
             relation: {"public", "items"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
-            selected_columns: nil
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
           },
           %RelationFilter{
             relation: {"public", "other_table"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
-            selected_columns: nil
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
           }
         ],
-        get_pg_version,
+        pg_version,
         publication
       )
 
@@ -234,23 +216,20 @@ defmodule Electric.Postgres.ConfigurationTest do
     end
 
     test "doesn't fail when one of the tables is already configured",
-         %{pool: conn, publication_name: publication, get_pg_version: get_pg_version} do
+         %{pool: conn, publication_name: publication, pg_version: pg_version} do
       Configuration.configure_tables_for_replication!(
         conn,
         [
           %RelationFilter{
             relation: {"public", "items"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
-            selected_columns: nil
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
           }
         ],
-        get_pg_version,
+        pg_version,
         publication
       )
 
       assert get_table_identity(conn, {"public", "other_table"}) == "d"
-
-      pg_version = get_pg_version.()
 
       assert list_tables_in_publication(conn, publication) ==
                expected_filters(
@@ -266,16 +245,11 @@ defmodule Electric.Postgres.ConfigurationTest do
         [
           %RelationFilter{
             relation: {"public", "items"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}],
-            selected_columns: nil
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}]
           },
-          %RelationFilter{
-            relation: {"public", "other_table"},
-            where_clauses: nil,
-            selected_columns: nil
-          }
+          %RelationFilter{relation: {"public", "other_table"}}
         ],
-        get_pg_version,
+        pg_version,
         publication
       )
 
@@ -296,18 +270,10 @@ defmodule Electric.Postgres.ConfigurationTest do
       Configuration.configure_tables_for_replication!(
         conn,
         [
-          %RelationFilter{
-            relation: {"public", "items"},
-            where_clauses: nil,
-            selected_columns: nil
-          },
-          %RelationFilter{
-            relation: {"public", "other_table"},
-            where_clauses: nil,
-            selected_columns: nil
-          }
+          %RelationFilter{relation: {"public", "items"}},
+          %RelationFilter{relation: {"public", "other_table"}}
         ],
-        get_pg_version,
+        pg_version,
         publication
       )
 
@@ -321,12 +287,12 @@ defmodule Electric.Postgres.ConfigurationTest do
                )
     end
 
-    test "fails when a publication doesn't exist", %{pool: conn, get_pg_version: get_pg_version} do
+    test "fails when a publication doesn't exist", %{pool: conn, pg_version: pg_version} do
       assert_raise Postgrex.Error, ~r/undefined_object/, fn ->
         Configuration.configure_tables_for_replication!(
           conn,
           [%RelationFilter{relation: {"public", "items"}}],
-          get_pg_version,
+          pg_version,
           "nonexistent"
         )
       end
@@ -335,7 +301,7 @@ defmodule Electric.Postgres.ConfigurationTest do
     test "concurrent alters to the publication don't deadlock and run correctly", %{
       pool: conn,
       publication_name: publication,
-      get_pg_version: get_pg_version
+      pg_version: pg_version
     } do
       # Create the publication first
       Configuration.configure_tables_for_replication!(
@@ -354,12 +320,7 @@ defmodule Electric.Postgres.ConfigurationTest do
             where_clauses: [%Eval.Expr{query: "(value ILIKE '1%')"}]
           }
         ],
-        # [
-        #   {{"public", "items"}, "(value ILIKE 'yes%')"},
-        #   {{"public", "other_table"}, "(value ILIKE '1%')"},
-        #   {{"public", "other_other_table"}, "(value ILIKE '1%')"}
-        # ],
-        get_pg_version,
+        pg_version,
         publication
       )
 
@@ -384,7 +345,7 @@ defmodule Electric.Postgres.ConfigurationTest do
             Configuration.configure_tables_for_replication!(
               conn,
               new_filters,
-              get_pg_version,
+              pg_version,
               publication
             )
 
@@ -398,7 +359,7 @@ defmodule Electric.Postgres.ConfigurationTest do
             Configuration.configure_tables_for_replication!(
               conn,
               new_filters,
-              get_pg_version,
+              pg_version,
               publication
             )
 
@@ -417,7 +378,7 @@ defmodule Electric.Postgres.ConfigurationTest do
                    {"public", "other_other_table", "(value ~~* '2%'::text)"},
                    {"public", "other_table", "(value ~~* '2%'::text)"}
                  ],
-                 get_pg_version.()
+                 pg_version
                )
     end
   end

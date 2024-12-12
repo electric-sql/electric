@@ -63,7 +63,7 @@ defmodule Electric.Replication.PublicationManager do
             stack_id: [type: :string, required: true],
             publication_name: [type: :string, required: true],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
-            get_pg_version: [type: {:fun, 0}, required: true],
+            pg_version: [type: :integer, required: false],
             update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
             server: [type: :any, required: false]
           )
