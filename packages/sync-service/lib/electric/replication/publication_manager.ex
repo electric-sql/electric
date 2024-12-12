@@ -22,7 +22,8 @@ defmodule Electric.Replication.PublicationManager do
     :waiters,
     :publication_name,
     :db_pool,
-    :pg_version
+    :pg_version,
+    :configure_tables_for_replication_fn
   ]
 
   @typep state() :: %__MODULE__{
@@ -34,7 +35,8 @@ defmodule Electric.Replication.PublicationManager do
            waiters: list(GenServer.from()),
            publication_name: String.t(),
            db_pool: term(),
-           pg_version: non_neg_integer()
+           pg_version: non_neg_integer(),
+           configure_tables_for_replication_fn: fun()
          }
   @typep filter_operation :: :add | :remove
 
@@ -63,8 +65,13 @@ defmodule Electric.Replication.PublicationManager do
             stack_id: [type: :string, required: true],
             publication_name: [type: :string, required: true],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
-            pg_version: [type: :integer, required: false],
+            pg_version: [type: {:or, [:integer, :atom]}, required: false, default: nil],
             update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
+            configure_tables_for_replication_fn: [
+              type: {:fun, 4},
+              required: false,
+              default: &Configuration.configure_tables_for_replication!/4
+            ],
             server: [type: :any, required: false]
           )
 
@@ -146,7 +153,9 @@ defmodule Electric.Replication.PublicationManager do
         Access.get(opts, :update_debounce_timeout, @default_debounce_timeout),
       publication_name: Access.fetch!(opts, :publication_name),
       db_pool: Access.fetch!(opts, :db_pool),
-      pg_version: Access.get(opts, :pg_version, nil)
+      pg_version: Access.fetch!(opts, :pg_version),
+      configure_tables_for_replication_fn:
+        Access.fetch!(opts, :configure_tables_for_replication_fn)
     }
 
     {:ok, state, {:continue, :get_pg_version}}
@@ -232,10 +241,11 @@ defmodule Electric.Replication.PublicationManager do
            prepared_relation_filters: relation_filters,
            publication_name: publication_name,
            db_pool: db_pool,
-           pg_version: pg_version
+           pg_version: pg_version,
+           configure_tables_for_replication_fn: configure_tables_for_replication_fn
          } = _state
        ) do
-    Configuration.configure_tables_for_replication!(
+    configure_tables_for_replication_fn.(
       db_pool,
       Map.values(relation_filters),
       pg_version,
