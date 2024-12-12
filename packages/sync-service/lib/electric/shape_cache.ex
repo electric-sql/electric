@@ -303,11 +303,16 @@ defmodule Electric.ShapeCache do
   end
 
   defp recover_shapes(state) do
+    %{publication_manager: {publication_manager, publication_manager_opts}} = state
+
     state.shape_status_state
     |> state.shape_status.list_shapes()
     |> Enum.each(fn {shape_handle, shape} ->
       try do
         {:ok, _pid, _snapshot_xmin, _latest_offset} = start_shape(shape_handle, shape, state)
+
+        # recover publication filter state
+        :ok = publication_manager.recover_shape(shape, publication_manager_opts)
       rescue
         e ->
           Logger.error("Failed to recover shape #{shape_handle}: #{inspect(e)}")
@@ -317,6 +322,9 @@ defmodule Electric.ShapeCache do
           |> Electric.ShapeCache.Storage.unsafe_cleanup!()
       end
     end)
+
+    # ensure publication filters are in line with existing shapes
+    publication_manager.refresh_publication(publication_manager_opts)
   end
 
   defp start_shape(shape_handle, shape, state) do

@@ -7,8 +7,10 @@ defmodule Electric.Replication.PublicationManager do
   alias Electric.Shapes.Shape
 
   @callback name(binary() | Keyword.t()) :: atom()
+  @callback recover_shape(Shape.t(), Keyword.t()) :: :ok
   @callback add_shape(Shape.t(), Keyword.t()) :: :ok
   @callback remove_shape(Shape.t(), Keyword.t()) :: :ok
+  @callback refresh_publication(Keyword.t()) :: :ok
 
   defstruct [
     :relation_filter_counters,
@@ -85,11 +87,27 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
+  @spec recover_shape(Shape.t(), Keyword.t()) :: :ok
+  def recover_shape(shape, opts \\ []) do
+    server = Access.get(opts, :server, name(opts))
+    GenServer.call(server, {:recover_shape, shape})
+  end
+
   @spec remove_shape(Shape.t(), Keyword.t()) :: :ok
   def remove_shape(shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
 
     case GenServer.call(server, {:remove_shape, shape}) do
+      :ok -> :ok
+      {:error, err} -> raise err
+    end
+  end
+
+  @spec refresh_publication(Keyword.t()) :: :ok
+  def refresh_publication(opts \\ []) do
+    server = Access.get(opts, :server, name(opts))
+
+    case GenServer.call(server, :refresh_publication) do
       :ok -> :ok
       {:error, err} -> raise err
     end
@@ -142,8 +160,19 @@ defmodule Electric.Replication.PublicationManager do
     {:noreply, state}
   end
 
+  def handle_call({:recover_shape, shape}, _from, state) do
+    state = update_relation_filters_for_shape(shape, :add, state)
+    {:reply, :ok, state}
+  end
+
   def handle_call({:remove_shape, shape}, from, state) do
     state = update_relation_filters_for_shape(shape, :remove, state)
+    state = add_waiter(from, state)
+    state = schedule_update_publication(state.update_debounce_timeout, state)
+    {:noreply, state}
+  end
+
+  def handle_call(:refresh_publication, from, state) do
     state = add_waiter(from, state)
     state = schedule_update_publication(state.update_debounce_timeout, state)
     {:noreply, state}

@@ -13,7 +13,9 @@ defmodule Support.ComponentSetup do
     @behaviour Electric.Replication.PublicationManager
     def name(_), do: :pub_man
     def add_shape(_shape, _opts), do: :ok
+    def recover_shape(_shape, _opts), do: :ok
     def remove_shape(_shape, _opts), do: :ok
+    def refresh_publication(_opts), do: :ok
   end
 
   def with_stack_id_from_test(ctx) do
