@@ -133,7 +133,8 @@ jobs:
                   "postgres_image": ["postgres:16-alpine"],
                   "row_count": [500],
                   "shape_count": [100,300,500,700,900,1100,1300,1500,1700,1900,2100,2300,2500,2700,2900,3100],
-                  "tx_row_count": [50]
+                  "tx_row_count": [50],
+                  "where_clause": ["name = '#{name}'"]
                 },
                 "machine_request": {
                   "vcpu": 4,
