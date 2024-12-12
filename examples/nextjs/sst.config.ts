@@ -17,7 +17,7 @@ export default $config({
           version: `6.57.0`,
           region: `eu-west-1`,
         },
-        postgresql: "3.14.0",
+        postgresql: `3.14.0`,
       },
     }
   },
@@ -27,21 +27,26 @@ export default $config({
         `Env variables ELECTRIC_API and ELECTRIC_ADMIN_API must be set`
       )
 
-    if (!process.env.EXAMPLES_DATABASE_HOST || !process.env.EXAMPLES_DATABASE_PASSWORD) {
+    if (
+      !process.env.EXAMPLES_DATABASE_HOST ||
+      !process.env.EXAMPLES_DATABASE_PASSWORD
+    ) {
       throw new Error(
         `Env variables EXAMPLES_DATABASE_HOST and EXAMPLES_DATABASE_PASSWORD must be set`
       )
     }
 
     try {
-      const provider = new postgresql.Provider("neon", {
+      const provider = new postgresql.Provider(`neon`, {
         host: process.env.EXAMPLES_DATABASE_HOST,
         database: `neondb`,
         username: `neondb_owner`,
         password: process.env.EXAMPLES_DATABASE_PASSWORD,
       })
 
-      const dbName = isProduction($app.stage) ? `nextjs-production` : `nextjs-${$app.stage}`
+      const dbName = isProduction($app.stage)
+        ? `nextjs-production`
+        : `nextjs-${$app.stage}`
       const pg = new postgresql.Database(dbName, {}, { provider })
 
       const pgUri = $interpolate`postgresql://${provider.username}:${provider.password}@${provider.host}/${pg.name}?sslmode=require`
