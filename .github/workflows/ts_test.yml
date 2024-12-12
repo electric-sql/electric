@@ -50,7 +50,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version-file: "package.json"
+          node-version-file: ".tool-versions"
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
@@ -80,7 +80,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version-file: "package.json"
+          node-version-file: ".tool-versions"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
@@ -151,7 +151,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version-file: "package.json"
+          node-version-file: ".tool-versions"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
