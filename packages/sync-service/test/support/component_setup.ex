@@ -71,8 +71,7 @@ defmodule Support.ComponentSetup do
       name: server,
       stack_id: ctx.stack_id,
       publication_name: ctx.publication_name,
-      db_pool: ctx.pool,
-      pg_version: Application.fetch_env!(:electric, :pg_version_for_tests)
+      db_pool: ctx.pool
     )
 
     %{

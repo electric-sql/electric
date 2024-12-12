@@ -41,7 +41,7 @@ defmodule Electric.Postgres.Configuration do
   @doc """
   Get Postgres server version
   """
-  @spec get_pg_version(Postgrex.conn()) :: integer
+  @spec get_pg_version(Postgrex.conn()) :: non_neg_integer()
   def get_pg_version(conn) do
     case Postgrex.query(
            conn,
