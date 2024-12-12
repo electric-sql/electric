@@ -313,8 +313,8 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      Mock.ShapeCache
-      |> expect(:handle_truncate, fn @shape_handle1, _ -> :ok end)
+      Mock.ShapeStatus
+      |> expect(:remove_shape, fn _, @shape_handle1 -> :ok end)
       |> allow(
         self(),
         Shapes.Consumer.name(ctx.stack_id, @shape_handle1)
@@ -366,8 +366,8 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      Mock.ShapeCache
-      |> expect(:handle_truncate, fn @shape_handle1, _ -> :ok end)
+      Mock.ShapeStatus
+      |> expect(:remove_shape, fn _, @shape_handle1 -> :ok end)
       |> allow(
         self(),
         Shapes.Consumer.name(ctx.stack_id, @shape_handle1)

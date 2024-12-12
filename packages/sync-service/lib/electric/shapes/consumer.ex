@@ -283,9 +283,7 @@ defmodule Electric.Shapes.Consumer do
           "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
         )
 
-        :ok = shape_cache.handle_truncate(shape_handle, shape_cache_opts)
-
-        :ok = ShapeCache.Storage.cleanup!(storage)
+        cleanup(state)
 
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
 
