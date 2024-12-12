@@ -46,8 +46,6 @@ service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
 instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
 version = Electric.version()
 
-config :telemetry_poller, :default, period: 500
-
 config :opentelemetry,
   resource_detectors: [:otel_resource_env_var, :otel_resource_app_env],
   resource: %{service: %{name: service_name, version: version}, instance: %{id: instance_id}}
@@ -207,13 +205,14 @@ config :electric,
   # Used in telemetry
   instance_id: instance_id,
   telemetry_statsd_host: statsd_host,
+  telemetry_poll_period: env!("ELECTRIC_TELEMETRY_POLL", :integer, 5_000),
+  call_home_telemetry: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
+  telemetry_url: env!("ELECTRIC_TELEMETRY_URL", :string, "https://checkpoint.electric-sql.com"),
+  prometheus_port: prometheus_port,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, 20),
   replication_stream_id: replication_stream_id,
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, false),
   service_port: env!("ELECTRIC_PORT", :integer, 3000),
-  prometheus_port: prometheus_port,
   storage: storage,
   persistent_kv: persistent_kv,
-  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false),
-  call_home_telemetry: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
-  telemetry_url: "https://checkpoint.electric-sql.com"
+  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false)

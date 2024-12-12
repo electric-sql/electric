@@ -28,10 +28,27 @@ defmodule Electric.Telemetry.CallHomeReporter do
   end
 
   def report_home(results) do
-    url = Application.fetch_env!(:electric, :telemetry_url)
+    if url = telemetry_url() do
+      Req.post!(url, json: results, retry: :transient)
+    end
 
-    Req.post!(url, json: results, retry: :transient)
     :ok
+  end
+
+  defp telemetry_url do
+    url = Application.get_env(:electric, :telemetry_url, "")
+
+    case URI.new(url) do
+      {:ok, %URI{scheme: scheme} = uri} when scheme in ["http", "https"] ->
+        uri
+
+      {:ok, _} ->
+        nil
+
+      {:error, _} ->
+        Logger.warning("Invalid telemetry_url: #{inspect(url)}")
+        nil
+    end
   end
 
   def print_stats(name \\ __MODULE__) do

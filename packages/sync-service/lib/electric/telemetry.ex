@@ -1,5 +1,6 @@
 defmodule Electric.Telemetry do
   use Supervisor
+
   import Telemetry.Metrics
 
   def start_link(init_arg) do
@@ -7,8 +8,11 @@ defmodule Electric.Telemetry do
   end
 
   def init(opts) do
+    poll_period = Application.fetch_env!(:electric, :telemetry_poll_period)
+
     children = [
-      {:telemetry_poller, measurements: periodic_measurements(opts), period: 2_000}
+      {:telemetry_poller,
+       measurements: periodic_measurements(opts), period: poll_period, init_delay: 5_000}
     ]
 
     children
@@ -68,6 +72,19 @@ defmodule Electric.Telemetry do
         run_queue_total: summary("vm.total_run_queue_lengths.total"),
         run_queue_cpu: summary("vm.total_run_queue_lengths.cpu"),
         run_queue_io: summary("vm.total_run_queue_lengths.io")
+      ],
+      system: [
+        load_avg1: last_value("system.load_percent.avg1"),
+        load_avg5: last_value("system.load_percent.avg5"),
+        load_avg15: last_value("system.load_percent.avg15"),
+        memory_free: last_value("system.memory.free_memory"),
+        memory_used: last_value("system.memory.used_memory"),
+        memory_free_percent: last_value("system.memory_percent.free_memory"),
+        memory_used_percent: last_value("system.memory_percent.used_memory"),
+        swap_free: last_value("system.swap.free"),
+        swap_used: last_value("system.swap.used"),
+        swap_free_percent: last_value("system.swap_percent.free"),
+        swap_used_percent: last_value("system.swap_percent.used")
       ],
       usage: [
         inbound_bytes:
@@ -147,7 +164,14 @@ defmodule Electric.Telemetry do
       summary("electric.storage.make_new_snapshot.stop.duration", unit: {:native, :millisecond}),
       summary("electric.querying.stream_initial_data.stop.duration",
         unit: {:native, :millisecond}
-      )
+      ),
+      last_value("system.load_percent.avg1"),
+      last_value("system.load_percent.avg5"),
+      last_value("system.load_percent.avg15"),
+      last_value("system.memory.free_memory"),
+      last_value("system.memory.used_memory"),
+      last_value("system.swap.free"),
+      last_value("system.swap.used")
     ]
     |> Enum.map(&%{&1 | tags: [:instance_id | &1.tags]})
   end
@@ -185,6 +209,8 @@ defmodule Electric.Telemetry do
       {__MODULE__, :uptime_event, []},
       {__MODULE__, :count_shapes, [stack_id]},
       {__MODULE__, :get_total_disk_usage, [opts]},
+      {__MODULE__, :get_system_load_average, [opts]},
+      {__MODULE__, :get_system_memory_usage, [opts]},
       {Electric.Connection.Manager, :report_retained_wal_size,
        [Electric.Connection.Manager.name(stack_id)]}
     ]
@@ -216,5 +242,93 @@ defmodule Electric.Telemetry do
   catch
     :exit, {:noproc, _} ->
       :ok
+  end
+
+  def get_system_load_average(opts) do
+    cores = :erlang.system_info(:logical_processors)
+
+    # > The load values are proportional to how long time a runnable Unix
+    # > process has to spend in the run queue before it is scheduled.
+    # > Accordingly, higher values mean more system load. The returned value
+    # > divided by 256 produces the figure displayed by rup and top.
+    #
+    # I'm going one step further and dividing by the number of CPUs so in a 4
+    # core system, a load of 4.0 (in top) will show as 100%.
+    # Since load can go above num cores, we can to 200%, 300% but
+    # I think this makes sense.
+    #
+    # Certainly the formula in the erlang docs:
+    #
+    # > the following simple mathematical transformation can produce the load
+    # > value as a percentage:
+    # >
+    # >   PercentLoad = 100 * (1 - D/(D + Load))
+    # >
+    # > D determines which load value should be associated with which
+    # > percentage. Choosing D = 50 means that 128 is 60% load, 256 is 80%, 512
+    # > is 90%, and so on.
+    #
+    # Makes little sense. Setting `D` as they say and plugging in a avg1 value
+    # of 128 does not give 60% so I'm not sure how to square what they say with
+    # the numbers...
+    #
+    # e.g. my machine currently has a cpu util (:cpu_sup.util()) of 4% and an
+    # avg1() of 550 ish across 24 cores (so doing very little) but that formula
+    # would give a `PercentLoad` of ~92%.
+    #
+    # My version would give value of 550 / 256 / 24 = 9%
+    [:avg1, :avg5, :avg15]
+    |> Map.new(fn probe ->
+      {probe, 100 * (apply(:cpu_sup, probe, []) / 256 / cores)}
+    end)
+    |> then(
+      &:telemetry.execute([:system, :load_percent], &1, %{
+        stack_id: opts[:stack_id]
+      })
+    )
+  end
+
+  def get_system_memory_usage(opts) do
+    {total, stats} =
+      :memsup.get_system_memory_data()
+      |> Keyword.delete(:total_memory)
+      |> Keyword.pop(:system_total_memory)
+
+    mem_stats =
+      Keyword.take(stats, [:free_memory, :available_memory, :buffered_memory, :cached_memory])
+
+    {total_swap, stats} = Keyword.pop(stats, :total_swap)
+
+    used_memory = total - Keyword.fetch!(mem_stats, :free_memory)
+    resident_memory = total - Keyword.fetch!(mem_stats, :available_memory)
+
+    memory_stats =
+      mem_stats
+      |> Map.new()
+      |> Map.put(:used_memory, used_memory)
+      |> Map.put(:resident_memory, resident_memory)
+
+    memory_percent_stats =
+      mem_stats
+      |> Map.new(fn {k, v} -> {k, 100 * v / total} end)
+      |> Map.put(:used_memory, 100 * used_memory / total)
+      |> Map.put(:resident_memory, 100 * resident_memory / total)
+
+    :telemetry.execute([:system, :memory], memory_stats, %{
+      stack_id: opts[:stack_id]
+    })
+
+    :telemetry.execute([:system, :memory_percent], memory_percent_stats, %{
+      stack_id: opts[:stack_id]
+    })
+
+    free_swap = Keyword.get(stats, :free_swap, 0)
+    used_swap = total_swap - free_swap
+
+    swap_stats = %{total: total_swap, free: free_swap, used: used_swap}
+    swap_percent_stats = %{free: 100 * free_swap / total_swap, used: 100 * used_swap / total_swap}
+
+    :telemetry.execute([:system, :swap], swap_stats, %{stack_id: opts[:stack_id]})
+    :telemetry.execute([:system, :swap_percent], swap_percent_stats, %{stack_id: opts[:stack_id]})
   end
 end
