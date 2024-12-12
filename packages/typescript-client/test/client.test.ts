@@ -451,7 +451,7 @@ describe(`Shape`, () => {
     expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
   })
 
-  it.only(`should support async error handler`, async ({ issuesTableUrl }) => {
+  it(`should support async error handler`, async ({ issuesTableUrl }) => {
     let authChanged: () => void
     const authChangePromise = new Promise<void>((res) => {
       authChanged = res
