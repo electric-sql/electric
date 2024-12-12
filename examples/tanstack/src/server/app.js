@@ -2,11 +2,9 @@ import http from "http"
 import pg from "pg"
 
 const db = new pg.Pool({
-  host: `localhost`,
-  port: 54321,
-  password: `password`,
-  user: `postgres`,
-  database: `electric`,
+  connectionString:
+    process.env.DATABASE_URL ??
+    `postgresql://postgres:password@localhost:54321/electric`,
 })
 
 // Async function to handle reading the body of the request
@@ -34,7 +32,6 @@ const server = http.createServer(async (req, res) => {
     // Handle CORS preflight requests
     if (req.method === `OPTIONS`) {
       res.writeHead(204, CORS_HEADERS)
-      res.writeHead
       res.end()
       return
     }
@@ -59,7 +56,7 @@ const server = http.createServer(async (req, res) => {
 
     res.writeHead(404, { ...JSON_HEADERS, ...CORS_HEADERS })
     res.end(JSON.stringify({ error: `Not Found` }))
-  } catch (error) {
+  } catch (_error) {
     res.writeHead(500, { ...JSON_HEADERS, ...CORS_HEADERS })
     res.end(JSON.stringify({ error: `Something went wrong` }))
   }

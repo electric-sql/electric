@@ -12,6 +12,7 @@ type Item = { id: string }
 
 const baseUrl = import.meta.env.ELECTRIC_URL ?? `http://localhost:3000`
 const baseApiUrl = `http://localhost:3001`
+const itemsUrl = new URL(`/items`, baseApiUrl)
 
 const itemShape = () => ({
   url: new URL(`/v1/shape`, baseUrl).href,
@@ -31,7 +32,7 @@ async function createItem(newId: string) {
   })
 
   // Insert item
-  const fetchPromise = fetch(`${baseApiUrl}/items`, {
+  const fetchPromise = fetch(itemsUrl, {
     method: `POST`,
     body: JSON.stringify({ id: newId }),
   })
@@ -54,7 +55,7 @@ async function clearItems(numItems: number) {
       : Promise.resolve()
 
   // Delete all items
-  const fetchPromise = fetch(`${baseApiUrl}/items`, { method: `DELETE` })
+  const fetchPromise = fetch(itemsUrl, { method: `DELETE` })
 
   return await Promise.all([findUpdatePromise, fetchPromise])
 }
