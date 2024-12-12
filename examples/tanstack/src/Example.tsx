@@ -13,8 +13,8 @@ type Item = { id: string }
 const baseElectricUrl =
   import.meta.env.VITE_ELECTRIC_URL ?? `http://localhost:3000`
 
-const { protocol, hostname } = window.location
-const baseApiUrl = `${protocol}//${hostname}:3001`
+const baseApiUrl =
+  import.meta.env.VITE_APP_BACKEND_URL ?? `http//localhost:3001`
 const itemsUrl = new URL(`/items`, baseApiUrl)
 
 const token = import.meta.env.VITE_ELECTRIC_TOKEN
@@ -44,8 +44,8 @@ async function createItem(newId: string) {
     method: `POST`,
     body: JSON.stringify({ id: newId }),
     headers: {
-      "Content-Type": "application/json"
-    }
+      "Content-Type": `application/json`,
+    },
   })
 
   return await Promise.all([findUpdatePromise, fetchPromise])
