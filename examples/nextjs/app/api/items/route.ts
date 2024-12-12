@@ -2,7 +2,9 @@ import { NextResponse } from "next/server"
 import { Pool } from "pg"
 
 const client = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString:
+    process.env.DATABASE_URL ??
+    `postgresql://postgres:password@localhost:54321/electric`,
 })
 
 export async function POST(request: Request) {
