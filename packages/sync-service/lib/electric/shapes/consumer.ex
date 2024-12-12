@@ -226,7 +226,7 @@ defmodule Electric.Shapes.Consumer do
   defp handle_txns(txns, state) do
     case Enum.reduce_while(txns, state, &handle_txn/2) do
       {:truncate, state} ->
-        {:stop, :normal, state}
+        {:stop, {:shutdown, :truncate}, state}
 
       state ->
         {:noreply, [], state}
