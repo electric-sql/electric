@@ -1,0 +1,27 @@
+{
+  "mode": "pre",
+  "tag": "beta",
+  "initialVersions": {
+    "@electric-examples/bash": "0.0.1",
+    "@electric-examples/encryption": "0.0.1",
+    "@electric-examples/gatekeeper-auth": "0.0.1",
+    "@electric-examples/linearlite": "0.0.1",
+    "@electric-examples/linearlite-read-only": "0.0.1",
+    "@electric-examples/nextjs": "0.0.1",
+    "@electric-examples/proxy-auth": "0.0.1",
+    "@electric-examples/react": "0.0.1",
+    "@electric-examples/redis": "0.0.1",
+    "@electric-examples/remix": "0.0.1",
+    "@electric-examples/tanstack": "0.0.1",
+    "@electric-examples/todo-app": "1.0.1",
+    "@electric-examples/write-patterns": "0.0.1",
+    "@electric-examples/yjs-provider": "0.0.1",
+    "@core/elixir-client": "0.2.5",
+    "@electric-sql/experimental": "0.1.2-beta.0",
+    "@electric-sql/react": "1.0.0-beta.1",
+    "@core/sync-service": "1.0.0-beta.1",
+    "@electric-sql/client": "1.0.0-beta.1",
+    "@electric-sql/docs": "0.0.1"
+  },
+  "changesets": []
+}
