@@ -313,14 +313,13 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeStatus
       |> expect(:remove_shape, 1, fn _, @shape_handle1 -> :ok end)
-      |> allow(self(),Consumer.name(ctx.stack_id, @shape_handle1)
-      )
-
-      shape1 = ctx.shapes[@shape_handle1]
-      Mock.PublicationManager
-      |> expect(:remove_shape, 1, fn  ^shape1, _ -> :ok end)
       |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
 
+      shape1 = ctx.shapes[@shape_handle1]
+
+      Mock.PublicationManager
+      |> expect(:remove_shape, 1, fn ^shape1, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -368,7 +367,6 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-
       Mock.ShapeStatus
       |> expect(:remove_shape, fn _, @shape_handle1 -> :ok end)
       |> allow(
@@ -377,8 +375,9 @@ defmodule Electric.Shapes.ConsumerTest do
       )
 
       shape = ctx.shapes[@shape_handle1]
+
       Mock.PublicationManager
-      |> expect(:remove_shape, 1, fn  ^shape, _ -> :ok end)
+      |> expect(:remove_shape, 1, fn ^shape, _ -> :ok end)
       |> allow(
         self(),
         Shapes.Consumer.name(ctx.stack_id, @shape_handle1)
@@ -525,10 +524,11 @@ defmodule Electric.Shapes.ConsumerTest do
 
       shape1 = ctx.shapes[@shape_handle1]
       shape2 = ctx.shapes[@shape_handle2]
+
       Mock.PublicationManager
-      |> expect(:remove_shape, 1, fn  ^shape1, _ -> :ok end)
+      |> expect(:remove_shape, 1, fn ^shape1, _ -> :ok end)
       |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
-      |> expect(:remove_shape, 0, fn  ^shape2, _ -> :ok end)
+      |> expect(:remove_shape, 0, fn ^shape2, _ -> :ok end)
       |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle2))
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
@@ -574,10 +574,11 @@ defmodule Electric.Shapes.ConsumerTest do
 
       shape1 = ctx.shapes[@shape_handle1]
       shape2 = ctx.shapes[@shape_handle2]
+
       Mock.PublicationManager
-      |> expect(:remove_shape, 1, fn  ^shape1, _ -> :ok end)
+      |> expect(:remove_shape, 1, fn ^shape1, _ -> :ok end)
       |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
-      |> expect(:remove_shape, 0, fn  ^shape2, _ -> :ok end)
+      |> expect(:remove_shape, 0, fn ^shape2, _ -> :ok end)
       |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle2))
 
       :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
@@ -604,10 +605,11 @@ defmodule Electric.Shapes.ConsumerTest do
 
       shape1 = ctx.shapes[@shape_handle1]
       shape2 = ctx.shapes[@shape_handle2]
+
       Mock.PublicationManager
-      |> expect(:remove_shape, 1, fn  ^shape1, _ -> :ok end)
+      |> expect(:remove_shape, 1, fn ^shape1, _ -> :ok end)
       |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
-      |> expect(:remove_shape, 0, fn  ^shape2, _ -> :ok end)
+      |> expect(:remove_shape, 0, fn ^shape2, _ -> :ok end)
       |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle2))
 
       GenServer.cast(Consumer.name(ctx.stack_id, @shape_handle1), :unexpected_cast)
@@ -628,10 +630,10 @@ defmodule Electric.Shapes.ConsumerTest do
       |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
 
       shape1 = ctx.shapes[@shape_handle1]
-      Mock.PublicationManager
-      |> expect(:remove_shape, 0, fn  ^shape1, _ -> :ok end)
-      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
 
+      Mock.PublicationManager
+      |> expect(:remove_shape, 0, fn ^shape1, _ -> :ok end)
+      |> allow(self(), Consumer.name(ctx.stack_id, @shape_handle1))
 
       GenServer.stop(Consumer.name(ctx.stack_id, @shape_handle1))
 
