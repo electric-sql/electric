@@ -1,3 +1,5 @@
 [build.environment]
   # Environment variables are set here
+
+  # Node version here should match the one in .tool-versions - that's the authoritative source
   NODE_VERSION = "20.18.1"
