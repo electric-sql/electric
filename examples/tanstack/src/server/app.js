@@ -3,7 +3,7 @@ import pg from "pg"
 
 const db = new pg.Pool({
   connectionString:
-    process.env.DATABASE_URL ??
+    process.env.VITE_DATABASE_URL ??
     `postgresql://postgres:password@localhost:54321/electric`,
 })
 

@@ -10,18 +10,22 @@ import "./Example.css"
 
 type Item = { id: string }
 
-const baseUrl = import.meta.env.ELECTRIC_URL ?? `http://localhost:3000`
-const baseApiUrl = `http://localhost:3001`
+const baseElectricUrl =
+  import.meta.env.VITE_ELECTRIC_URL ?? `http://localhost:3000`
+
+const { protocol, hostname } = window.location
+const baseApiUrl = `${protocol}//${hostname}:3001`
 const itemsUrl = new URL(`/items`, baseApiUrl)
-const token = import.meta.env.ELECTRIC_TOKEN
-const databaseId = import.meta.env.ELECTRIC_DATABASE_ID
+
+const token = import.meta.env.VITE_ELECTRIC_TOKEN
+const databaseId = import.meta.env.VITE_ELECTRIC_DATABASE_ID
 
 const itemShape = () => ({
-  url: new URL(`/v1/shape`, baseUrl).href,
+  url: new URL(`/v1/shape`, baseElectricUrl).href,
   params: {
     table: `items`,
     ...(token ? { token } : {}),
-    ...(databaseId ? { databaseId } : {}),
+    ...(databaseId ? { database_id: databaseId } : {}),
   },
 })
 
@@ -39,6 +43,9 @@ async function createItem(newId: string) {
   const fetchPromise = fetch(itemsUrl, {
     method: `POST`,
     body: JSON.stringify({ id: newId }),
+    headers: {
+      "Content-Type": "application/json"
+    }
   })
 
   return await Promise.all([findUpdatePromise, fetchPromise])
