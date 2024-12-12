@@ -18,8 +18,11 @@ defmodule Electric.Client.Fetch.Pool do
   def request(%Client{} = client, %Fetch.Request{} = request, opts) do
     request_id = request_id(client, request)
 
-    # register this pid before making the request to avoid race conditions for
-    # very fast responses
+    # The monitor process is unique to the request and launches the actual
+    # request as a linked process.
+    #
+    # This coalesces requests, so no matter how many simultaneous
+    # clients we have, we only ever make one request to the backend.
     {:ok, monitor_pid} = start_monitor(request_id, request, client)
 
     try do
@@ -48,13 +51,12 @@ defmodule Electric.Client.Fetch.Pool do
   defp return_existing({:error, {:already_started, pid}}), do: {:ok, pid}
   defp return_existing(error), do: error
 
-  defp request_id(%Client{fetch: {fetch_impl, _}}, %Fetch.Request{shape_handle: nil} = request) do
-    %{endpoint: endpoint, shape: shape_definition} = request
-    {fetch_impl, URI.to_string(endpoint), shape_definition}
-  end
-
   defp request_id(%Client{fetch: {fetch_impl, _}}, %Fetch.Request{} = request) do
-    %{endpoint: endpoint, offset: offset, live: live, shape_handle: shape_handle} = request
-    {fetch_impl, URI.to_string(endpoint), shape_handle, Client.Offset.to_tuple(offset), live}
+    {
+      fetch_impl,
+      URI.to_string(request.endpoint),
+      request.headers,
+      Fetch.Request.params(request)
+    }
   end
 end
