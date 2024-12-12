@@ -8,11 +8,12 @@
   "scripts": {
     "backend:up": "PROJECT_NAME=tanstack-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
     "backend:down": "PROJECT_NAME=tanstack-example pnpm -C ../../ run example-backend:down",
+    "build": "vite build",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
     "dev": "concurrently \"vite\" \"node src/server/app.js\"",
-    "build": "vite build",
-    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "format": "eslint . --fix",
     "preview": "vite preview",
+    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
