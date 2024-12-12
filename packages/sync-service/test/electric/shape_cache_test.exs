@@ -375,7 +375,14 @@ defmodule Electric.ShapeCacheTest do
     end
 
     test "correctly propagates the error", %{shape_cache_opts: opts} do
-      shape = %Shape{root_table: {"public", "nonexistent"}, root_table_id: 2}
+      shape = %Shape{
+        @shape
+        | root_table: {"public", "nonexistent"},
+          root_table_id: 2,
+          table_info: %{
+            {"public", "nonexistent"} => Map.fetch!(@shape.table_info, @shape.root_table)
+          }
+      }
 
       {shape_handle, log} =
         with_log(fn ->
