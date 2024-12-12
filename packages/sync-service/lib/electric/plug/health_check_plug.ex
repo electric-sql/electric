@@ -16,8 +16,8 @@ defmodule Electric.Plug.HealthCheckPlug do
 
     {status_code, status_text} =
       case get_service_status.() do
-        :waiting -> {503, "waiting"}
-        :starting -> {503, "starting"}
+        :waiting -> {202, "waiting"}
+        :starting -> {202, "starting"}
         :active -> {200, "active"}
         :stopping -> {503, "stopping"}
       end
