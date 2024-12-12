@@ -226,6 +226,10 @@ defmodule Electric.ShapeCache do
       recover_shapes(state)
     end
 
+    # ensure publication filters are in line with existing shapes
+    {publication_manager, publication_manager_opts} = opts.publication_manager
+    publication_manager.refresh_publication(publication_manager_opts)
+
     # do this after finishing this function so that we're subscribed to the
     # producer before it starts forwarding its demand
     send(self(), :consumers_ready)
@@ -322,9 +326,6 @@ defmodule Electric.ShapeCache do
           |> Electric.ShapeCache.Storage.unsafe_cleanup!()
       end
     end)
-
-    # ensure publication filters are in line with existing shapes
-    publication_manager.refresh_publication(publication_manager_opts)
   end
 
   defp start_shape(shape_handle, shape, state) do
