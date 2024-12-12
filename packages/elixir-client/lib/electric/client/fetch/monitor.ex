@@ -79,6 +79,7 @@ defmodule Electric.Client.Fetch.Monitor do
   @impl true
   def handle_continue({:start_request, request_id, request, client}, state) do
     {:ok, _pid} = Fetch.Request.start_link({request_id, request, client, self()})
+
     {:noreply, state}
   end
 
@@ -127,7 +128,7 @@ defmodule Electric.Client.Fetch.Monitor do
       send(pid, {:response, ref, response})
     end
 
-    {:stop, :normal, :ok, state}
+    {:stop, {:shutdown, :normal}, :ok, state}
   end
 
   @impl true
@@ -157,6 +158,6 @@ defmodule Electric.Client.Fetch.Monitor do
       send(pid, {:response, ref, {:error, reason}})
     end
 
-    {:stop, :normal, state}
+    {:stop, {:shutdown, :normal}, state}
   end
 end

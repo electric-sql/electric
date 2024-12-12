@@ -117,7 +117,7 @@ defmodule Electric.Client.Fetch.Request do
     |> Util.map_put_if("replica", to_string(replica), replica != :default)
     |> Util.map_put_if("handle", shape_handle, is_binary(shape_handle))
     |> Util.map_put_if("live", "true", live?)
-    |> Util.map_put_if("cursor", cursor, !is_nil(cursor))
+    |> Util.map_put_if("cursor", to_string(cursor), !is_nil(cursor))
     |> Util.map_put_if("database_id", database_id, !is_nil(database_id))
   end
 
@@ -133,9 +133,7 @@ defmodule Electric.Client.Fetch.Request do
 
   @doc false
   def start_link({request_id, request, client, monitor_pid}) do
-    GenServer.start_link(__MODULE__, {request_id, request, client, monitor_pid},
-      name: name(request_id)
-    )
+    GenServer.start_link(__MODULE__, {request_id, request, client, monitor_pid})
   end
 
   @impl true
@@ -161,16 +159,21 @@ defmodule Electric.Client.Fetch.Request do
 
     authenticated_request = Client.authenticate_request(client, request)
 
-    case fetcher.fetch(authenticated_request, fetcher_opts) do
-      {:ok, %Fetch.Response{status: status} = response} when status in 200..299 ->
-        reply(response, state)
+    try do
+      case fetcher.fetch(authenticated_request, fetcher_opts) do
+        {:ok, %Fetch.Response{status: status} = response} when status in 200..299 ->
+          reply(response, state)
 
-      {:ok, %Fetch.Response{} = response} ->
-        # Turn HTTP errors into errors
-        reply({:error, response}, state)
+        {:ok, %Fetch.Response{} = response} ->
+          # Turn HTTP errors into errors
+          reply({:error, response}, state)
 
+        error ->
+          reply(error, state)
+      end
+    rescue
       error ->
-        reply(error, state)
+        reply({:error, error}, state)
     end
 
     {:stop, :normal, state}
