@@ -679,61 +679,6 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
-  describe "handle_truncate/2" do
-    setup [
-      :with_stack_id_from_test,
-      :with_in_memory_storage,
-      :with_log_chunking,
-      :with_registry,
-      :with_shape_log_collector
-    ]
-
-    test "cleans up shape data and rotates the shape handle", ctx do
-      %{shape_cache_opts: opts} =
-        with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
-          run_with_conn_fn: &run_with_conn_noop/2,
-          prepare_tables_fn: @prepare_tables_noop,
-          create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
-            GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 10})
-            Storage.make_new_snapshot!([["test"]], storage)
-            GenServer.cast(parent, {:snapshot_started, shape_handle})
-          end
-        )
-
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      Process.sleep(50)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
-
-      storage = Storage.for_shape(shape_handle, ctx.storage)
-
-      Storage.append_to_log!(
-        changes_to_log_items([
-          %Electric.Replication.Changes.NewRecord{
-            relation: {"public", "items"},
-            record: %{"id" => "1", "value" => "Alice"},
-            log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
-          }
-        ]),
-        storage
-      )
-
-      assert Storage.snapshot_started?(storage)
-      assert Enum.count(Storage.get_log_stream(@zero_offset, storage)) == 1
-
-      ref =
-        Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
-        |> Process.monitor()
-
-      log = capture_log(fn -> ShapeCache.handle_truncate(shape_handle, opts) end)
-      assert log =~ "Truncating and rotating shape handle"
-
-      assert_receive {:DOWN, ^ref, :process, _pid, _}
-      # Wait a bit for the async cleanup to complete
-
-      refute Storage.snapshot_started?(storage)
-    end
-  end
-
   describe "clean_shape/2" do
     setup [
       :with_stack_id_from_test,

@@ -18,7 +18,6 @@ defmodule Electric.ShapeCacheBehaviour do
               {shape_handle(), current_snapshot_offset :: LogOffset.t()}
   @callback list_shapes(keyword() | map()) :: [{shape_handle(), Shape.t()}]
   @callback await_snapshot_start(shape_handle(), opts :: keyword()) :: :started | {:error, term()}
-  @callback handle_truncate(shape_handle(), keyword()) :: :ok
   @callback clean_shape(shape_handle(), keyword()) :: :ok
   @callback clean_all_shapes(keyword()) :: :ok
   @callback has_shape?(shape_handle(), keyword()) :: boolean()
@@ -155,13 +154,6 @@ defmodule Electric.ShapeCache do
   end
 
   @impl Electric.ShapeCacheBehaviour
-  @spec handle_truncate(shape_handle(), keyword()) :: :ok
-  def handle_truncate(shape_handle, opts \\ []) do
-    server = Access.get(opts, :server, name(opts))
-    GenStage.cast(server, {:truncate, shape_handle})
-  end
-
-  @impl Electric.ShapeCacheBehaviour
   @spec await_snapshot_start(shape_handle(), keyword()) :: :started | {:error, term()}
   def await_snapshot_start(shape_handle, opts \\ []) when is_binary(shape_handle) do
     table = get_shape_meta_table(opts)
@@ -289,17 +281,6 @@ defmodule Electric.ShapeCache do
     Logger.info("Cleaning up all shapes")
     clean_up_all_shapes(state)
     {:reply, :ok, state}
-  end
-
-  @impl GenServer
-  def handle_cast({:truncate, shape_handle}, state) do
-    with :ok <- clean_up_shape(state, shape_handle) do
-      Logger.info(
-        "Truncating and rotating shape handle, previous shape handle #{shape_handle} cleaned up"
-      )
-    end
-
-    {:noreply, state}
   end
 
   defp clean_up_shape(state, shape_handle) do
