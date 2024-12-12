@@ -13,11 +13,15 @@ type Item = { id: string }
 const baseUrl = import.meta.env.ELECTRIC_URL ?? `http://localhost:3000`
 const baseApiUrl = `http://localhost:3001`
 const itemsUrl = new URL(`/items`, baseApiUrl)
+const token = import.meta.env.ELECTRIC_TOKEN
+const databaseId = import.meta.env.ELECTRIC_DATABASE_ID
 
 const itemShape = () => ({
   url: new URL(`/v1/shape`, baseUrl).href,
   params: {
     table: `items`,
+    ...(token ? { token } : {}),
+    ...(databaseId ? { databaseId } : {}),
   },
 })
 
