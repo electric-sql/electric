@@ -58,6 +58,7 @@ export default $config({
         ELECTRIC_URL: process.env.ELECTRIC_API!,
         ELECTRIC_TOKEN: electricInfo.token,
         DATABASE_ID: electricInfo.id,
+        DATABASE_URL: pgUri,
       },
       domain: {
         name: `remix${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
