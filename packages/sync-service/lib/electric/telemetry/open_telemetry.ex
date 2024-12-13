@@ -154,7 +154,9 @@ defmodule Electric.Telemetry.OpenTelemetry do
        Exception.format_stacktrace(stacktrace)}
     ]
 
-    :otel_span.add_event(get_current_context(), "exception", semantic_attributes ++ attributes)
+    ctx = get_current_context()
+    :otel_span.add_event(ctx, "exception", semantic_attributes ++ attributes)
+    :otel_span.set_status(ctx, :error, message)
   end
 
   defp tracer, do: :opentelemetry.get_tracer()
