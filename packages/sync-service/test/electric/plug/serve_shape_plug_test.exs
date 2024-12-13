@@ -40,6 +40,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
   @start_offset_50 LogOffset.new(Lsn.from_integer(50), 0)
   @test_pg_id "12345"
 
+  # Higher timeout is needed for some tests that tend to run slower on CI.
+  @receive_timeout 1000
+
   def load_column_info({"public", "users"}, _),
     do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
 
@@ -453,9 +456,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
           |> call_serve_shape_plug(ctx)
         end)
 
-      # Raised timeout here because sometimes, rarely, the task takes a little while to reach this point
-      assert_receive :got_log_stream, 300
-      Process.sleep(50)
+      assert_receive :got_log_stream, @receive_timeout
 
       # Simulate new changes arriving
       Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
@@ -512,9 +513,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
           |> call_serve_shape_plug(ctx)
         end)
 
-      # Raised timeout here because sometimes, rarely, the task takes a little while to reach this point
-      assert_receive :got_log_stream, 300
-      Process.sleep(50)
+      assert_receive :got_log_stream, @receive_timeout
 
       # Simulate shape rotation
       Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
