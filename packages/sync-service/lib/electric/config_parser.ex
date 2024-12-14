@@ -228,10 +228,10 @@ defmodule Electric.ConfigParser do
     with {num, suffix} <- Float.parse(str),
          true <- num > 0,
          suffix = String.trim(suffix),
-         true <- suffix == "" or suffix in ~w[ms msec s sec m min] do
+         true <- suffix == "" or suffix in @time_units do
       {:ok, trunc(num * time_multiplier(suffix))}
     else
-      _ -> {:error, "has invalid value: #{inspect(str)}"}
+      _ -> {:error, "has invalid value: #{inspect(str)}. Must be one of #{inspect(@time_units)}"}
     end
   end
 
