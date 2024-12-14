@@ -201,6 +201,32 @@ defmodule Electric.ConfigParser do
 
   def parse_log_level!(str) when str in @log_levels, do: String.to_existing_atom(str)
 
-  def parse_log_level!(_str),
-    do: raise(Dotenvy.Error, message: "Must be one of #{inspect(@public_log_levels)}")
+  def parse_log_level!(_str) do
+    raise Dotenvy.Error, message: "Must be one of #{inspect(@public_log_levels)}"
+  end
+
+  @spec parse_human_readable_time(binary | nil) :: {:ok, pos_integer} | {:error, binary}
+
+  def parse_human_readable_time(str) do
+    with {num, suffix} <- Float.parse(str),
+         true <- num > 0,
+         suffix = String.trim(suffix),
+         true <- suffix == "" or suffix in ~w[ms msec s sec m min] do
+      {:ok, trunc(num * time_multiplier(suffix))}
+    else
+      _ -> {:error, "has invalid value: #{inspect(str)}"}
+    end
+  end
+
+  defp time_multiplier(""), do: 1
+  defp time_multiplier(millisecond) when millisecond in ["ms", "msec"], do: 1
+  defp time_multiplier(second) when second in ["s", "sec"], do: 1000
+  defp time_multiplier(minute) when minute in ["m", "min"], do: 1000 * 60
+
+  def parse_human_readable_time!(str) do
+    case parse_human_readable_time(str) do
+      {:ok, result} -> result
+      {:error, message} -> raise Dotenvy.Error, message: message
+    end
+  end
 end

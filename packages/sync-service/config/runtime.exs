@@ -196,6 +196,13 @@ prometheus_port = env!("ELECTRIC_PROMETHEUS_PORT", :integer, nil)
 # instead of having hanging files. We use a provided value as stack id, but nothing else.
 provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, "single_stack")
 
+system_metrics_poll_interval =
+  env!(
+    "ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL",
+    &Electric.ConfigParser.parse_human_readable_time!/1,
+    :timer.seconds(5)
+  )
+
 config :electric,
   provided_database_id: provided_database_id,
   allow_shape_deletion: enable_integration_testing,
@@ -205,7 +212,6 @@ config :electric,
   # Used in telemetry
   instance_id: instance_id,
   telemetry_statsd_host: statsd_host,
-  telemetry_poll_period: env!("ELECTRIC_TELEMETRY_POLL", :integer, 5_000),
   call_home_telemetry: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
   telemetry_url: env!("ELECTRIC_TELEMETRY_URL", :string, "https://checkpoint.electric-sql.com"),
   prometheus_port: prometheus_port,
@@ -213,6 +219,7 @@ config :electric,
   replication_stream_id: replication_stream_id,
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, false),
   service_port: env!("ELECTRIC_PORT", :integer, 3000),
+  system_metrics_poll_interval: system_metrics_poll_interval,
   storage: storage,
   persistent_kv: persistent_kv,
   listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false)

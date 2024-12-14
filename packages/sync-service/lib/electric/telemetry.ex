@@ -8,11 +8,13 @@ defmodule Electric.Telemetry do
   end
 
   def init(opts) do
-    poll_period = Application.fetch_env!(:electric, :telemetry_poll_period)
+    system_metrics_poll_interval = Application.get_env(:electric, :system_metrics_poll_interval)
 
     children = [
       {:telemetry_poller,
-       measurements: periodic_measurements(opts), period: poll_period, init_delay: 5_000}
+       measurements: periodic_measurements(opts),
+       period: system_metrics_poll_interval,
+       init_delay: :timer.seconds(5)}
     ]
 
     children
