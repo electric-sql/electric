@@ -10,32 +10,32 @@ defmodule Electric.Telemetry do
   def init(opts) do
     system_metrics_poll_interval = Application.get_env(:electric, :system_metrics_poll_interval)
 
-    children = [
+    statsd_host = Application.fetch_env!(:electric, :telemetry_statsd_host)
+    prometheus? = not is_nil(Application.fetch_env!(:electric, :prometheus_port))
+    call_home_telemetry? = Application.fetch_env!(:electric, :call_home_telemetry?)
+
+    [
       {:telemetry_poller,
        measurements: periodic_measurements(opts),
        period: system_metrics_poll_interval,
-       init_delay: :timer.seconds(5)}
+       init_delay: :timer.seconds(5)},
+      statsd_reporter_child_spec(statsd_host),
+      prometheus_reporter_child_spec(prometheus?),
+      call_home_reporter_child_spec(call_home_telemetry?)
     ]
-
-    children
-    |> add_statsd_reporter(Application.fetch_env!(:electric, :telemetry_statsd_host))
-    |> add_prometheus_reporter(Application.fetch_env!(:electric, :prometheus_port))
-    |> add_call_home_reporter(Application.fetch_env!(:electric, :call_home_telemetry))
+    |> Enum.reject(&is_nil/1)
     |> Supervisor.init(strategy: :one_for_one)
   end
 
-  defp add_call_home_reporter(children, false), do: children
+  defp call_home_reporter_child_spec(false), do: nil
 
-  defp add_call_home_reporter(children, true) do
-    children ++
-      [
-        {Electric.Telemetry.CallHomeReporter,
-         static_info: static_info(),
-         metrics: call_home_metrics(),
-         first_report_in: {2, :minute},
-         reporting_period: {30, :minute},
-         reporter_fn: &Electric.Telemetry.CallHomeReporter.report_home/1}
-      ]
+  defp call_home_reporter_child_spec(true) do
+    {Electric.Telemetry.CallHomeReporter,
+     static_info: static_info(),
+     metrics: call_home_metrics(),
+     first_report_in: {2, :minute},
+     reporting_period: {30, :minute},
+     reporter_fn: &Electric.Telemetry.CallHomeReporter.report_home/1}
   end
 
   def static_info() do
@@ -124,23 +124,20 @@ defmodule Electric.Telemetry do
     ]
   end
 
-  defp add_statsd_reporter(children, nil), do: children
+  defp statsd_reporter_child_spec(nil), do: nil
 
-  defp add_statsd_reporter(children, host) do
-    children ++
-      [
-        {TelemetryMetricsStatsd,
-         host: host,
-         formatter: :datadog,
-         global_tags: [instance_id: Electric.instance_id()],
-         metrics: statsd_metrics()}
-      ]
+  defp statsd_reporter_child_spec(host) do
+    {TelemetryMetricsStatsd,
+     host: host,
+     formatter: :datadog,
+     global_tags: [instance_id: Electric.instance_id()],
+     metrics: statsd_metrics()}
   end
 
-  defp add_prometheus_reporter(children, nil), do: children
+  defp prometheus_reporter_child_spec(false), do: nil
 
-  defp add_prometheus_reporter(children, _) do
-    children ++ [{TelemetryMetricsPrometheus.Core, metrics: prometheus_metrics()}]
+  defp prometheus_reporter_child_spec(true) do
+    {TelemetryMetricsPrometheus.Core, metrics: prometheus_metrics()}
   end
 
   defp statsd_metrics() do

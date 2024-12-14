@@ -1,14 +1,15 @@
 import Config
 import Dotenvy
 
+alias Electric.ConfigParser
+
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 
 if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
 
-config :logger,
-  level: env!("ELECTRIC_LOG_LEVEL", &Electric.ConfigParser.parse_log_level!/1, :info)
+config :logger, level: env!("ELECTRIC_LOG_LEVEL", &ConfigParser.parse_log_level!/1, :info)
 
 config :logger, :default_formatter,
   # Doubled line breaks serve as long message boundaries
@@ -105,12 +106,10 @@ config :opentelemetry,
        local_parent_not_sampled: :always_off
      }}
 
-database_url = env!("DATABASE_URL", :string!)
+database_url_config = env!("DATABASE_URL", &ConfigParser.parse_postgresql_uri!/1)
 
 database_ipv6_config =
   env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
-
-{:ok, database_url_config} = Electric.ConfigParser.parse_postgresql_uri(database_url)
 
 connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
 
@@ -199,7 +198,7 @@ provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, "single_stack")
 system_metrics_poll_interval =
   env!(
     "ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL",
-    &Electric.ConfigParser.parse_human_readable_time!/1,
+    &ConfigParser.parse_human_readable_time!/1,
     :timer.seconds(5)
   )
 
@@ -212,7 +211,7 @@ config :electric,
   # Used in telemetry
   instance_id: instance_id,
   telemetry_statsd_host: statsd_host,
-  call_home_telemetry: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
+  call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
   telemetry_url: env!("ELECTRIC_TELEMETRY_URL", :string, "https://checkpoint.electric-sql.com"),
   prometheus_port: prometheus_port,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, 20),
