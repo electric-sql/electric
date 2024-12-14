@@ -191,9 +191,13 @@ replication_stream_id =
 storage = {storage_mod, storage_opts}
 
 prometheus_port = env!("ELECTRIC_PROMETHEUS_PORT", :integer, nil)
-# The provided database id is relevant if you had used v0.8 and want to keep the storage
-# instead of having hanging files. We use a provided value as stack id, but nothing else.
-provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, "single_stack")
+
+call_home_telemetry_url =
+  env!(
+    "ELECTRIC_TELEMETRY_URL",
+    &ConfigParser.parse_telemetry_url!/1,
+    "https://checkpoint.electric-sql.com"
+  )
 
 system_metrics_poll_interval =
   env!(
@@ -202,12 +206,9 @@ system_metrics_poll_interval =
     :timer.seconds(5)
   )
 
-call_home_telemetry_url =
-  env!(
-    "ELECTRIC_TELEMETRY_URL",
-    &ConfigParser.parse_telemetry_url!/1,
-    "https://checkpoint.electric-sql.com"
-  )
+# The provided database id is relevant if you had used v0.8 and want to keep the storage
+# instead of having hanging files. We use a provided value as stack id, but nothing else.
+provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, "single_stack")
 
 config :electric,
   provided_database_id: provided_database_id,
@@ -217,15 +218,15 @@ config :electric,
   chunk_bytes_threshold: chunk_bytes_threshold,
   # Used in telemetry
   instance_id: instance_id,
-  telemetry_statsd_host: statsd_host,
   call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
   telemetry_url: call_home_telemetry_url,
+  system_metrics_poll_interval: system_metrics_poll_interval,
+  telemetry_statsd_host: statsd_host,
   prometheus_port: prometheus_port,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, 20),
   replication_stream_id: replication_stream_id,
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, false),
   service_port: env!("ELECTRIC_PORT", :integer, 3000),
-  system_metrics_poll_interval: system_metrics_poll_interval,
   storage: storage,
   persistent_kv: persistent_kv,
   listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false)
