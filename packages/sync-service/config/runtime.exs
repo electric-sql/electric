@@ -202,6 +202,13 @@ system_metrics_poll_interval =
     :timer.seconds(5)
   )
 
+call_home_telemetry_url =
+  env!(
+    "ELECTRIC_TELEMETRY_URL",
+    &ConfigParser.parse_telemetry_url!/1,
+    "https://checkpoint.electric-sql.com"
+  )
+
 config :electric,
   provided_database_id: provided_database_id,
   allow_shape_deletion: enable_integration_testing,
@@ -212,7 +219,7 @@ config :electric,
   instance_id: instance_id,
   telemetry_statsd_host: statsd_host,
   call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
-  telemetry_url: env!("ELECTRIC_TELEMETRY_URL", :string, "https://checkpoint.electric-sql.com"),
+  telemetry_url: call_home_telemetry_url,
   prometheus_port: prometheus_port,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, 20),
   replication_stream_id: replication_stream_id,

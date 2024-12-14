@@ -28,28 +28,11 @@ defmodule Electric.Telemetry.CallHomeReporter do
   end
 
   def report_home(results) do
-    if url = telemetry_url() do
-      Req.post!(url, json: results, retry: :transient)
-    end
-
+    Req.post!(telemetry_url(), json: results, retry: :transient)
     :ok
   end
 
-  defp telemetry_url do
-    url = Application.get_env(:electric, :telemetry_url, "")
-
-    case URI.new(url) do
-      {:ok, %URI{scheme: scheme} = uri} when scheme in ["http", "https"] ->
-        uri
-
-      {:ok, _} ->
-        nil
-
-      {:error, _} ->
-        Logger.warning("Invalid telemetry_url: #{inspect(url)}")
-        nil
-    end
-  end
+  defp telemetry_url, do: Application.fetch_env!(:electric, :telemetry_url)
 
   def print_stats(name \\ __MODULE__) do
     GenServer.call(name, :print_stats)
@@ -66,7 +49,9 @@ defmodule Electric.Telemetry.CallHomeReporter do
     Process.set_label({:call_home_reporter, name})
 
     Logger.notice(
-      "Starting telemetry reporter. Electric will send anonymous usage data to #{Application.fetch_env!(:electric, :telemetry_url)}. You can configure this with `ELECTRIC_USAGE_REPORTING` environment variable, see https://electric-sql.com/docs/reference/telemetry for more information."
+      "Starting telemetry reporter. Electric will send anonymous usage data to #{telemetry_url()}. " <>
+        "You can configure this with `ELECTRIC_USAGE_REPORTING` environment variable, " <>
+        "see https://electric-sql.com/docs/reference/telemetry for more information."
     )
 
     metrics = save_target_path_to_options(metrics)

@@ -205,6 +205,23 @@ defmodule Electric.ConfigParser do
     raise Dotenvy.Error, message: "Must be one of #{inspect(@public_log_levels)}"
   end
 
+  @spec parse_telemetry_url(binary) :: {:ok, binary} | {:error, binary}
+  def parse_telemetry_url(str) do
+    case URI.new(str) do
+      {:ok, %URI{scheme: scheme}} when scheme in ["http", "https"] -> {:ok, str}
+      _ -> {:error, "has invalid URL format: \"#{str}\""}
+    end
+  end
+
+  def parse_telemetry_url!(str) do
+    case parse_telemetry_url(str) do
+      {:ok, url} -> url
+      {:error, message} -> raise Dotenvy.Error, message: message
+    end
+  end
+
+  @time_units ~w[ms msec s sec m min]
+
   @spec parse_human_readable_time(binary | nil) :: {:ok, pos_integer} | {:error, binary}
 
   def parse_human_readable_time(str) do
