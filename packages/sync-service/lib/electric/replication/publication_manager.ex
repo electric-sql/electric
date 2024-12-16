@@ -378,7 +378,7 @@ defmodule Electric.Replication.PublicationManager do
 
   defp get_selected_columns_for_shape(%Shape{where: where, selected_columns: columns}) do
     # If columns are selected, include columns used in the where clause
-    where_cols = where |> Expr.current_table_refs() |> MapSet.new()
+    where_cols = where |> Expr.unqualified_refs() |> MapSet.new()
     MapSet.union(MapSet.new(columns), where_cols)
   end
 

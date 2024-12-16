@@ -23,15 +23,15 @@ defmodule Electric.Replication.Eval.Expr do
   ## Examples
 
       iex> used_refs = %{["id"] => :int8, ["created_at"] => :timestamp}
-      iex> current_table_refs(%Expr{query: "id = 1", used_refs: used_refs})
+      iex> unqualified_refs(%Expr{query: "id = 1", used_refs: used_refs})
       ["created_at", "id"]
 
       iex> used_refs = %{["id"] => :int8, ["potato", "created_at"] => :timestamp}
-      iex> current_table_refs(%Expr{query: "id = 1", used_refs: used_refs, returns: :int8})
+      iex> unqualified_refs(%Expr{query: "id = 1", used_refs: used_refs, returns: :int8})
       ["id"]
   """
-  @spec current_table_refs(t()) :: [String.t()]
-  def current_table_refs(%__MODULE__{used_refs: used_refs}) do
+  @spec unqualified_refs(t()) :: [String.t()]
+  def unqualified_refs(%__MODULE__{used_refs: used_refs}) do
     used_refs
     # Keep only used refs that are pointing to current table
     |> Enum.filter(&match?({[_], _}, &1))
