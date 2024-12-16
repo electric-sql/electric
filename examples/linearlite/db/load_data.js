@@ -7,7 +7,9 @@ if (!process.env.DATABASE_URL) {
 
 const DATABASE_URL = process.env.DATABASE_URL
 const ISSUES_TO_LOAD = process.env.ISSUES_TO_LOAD || 512
-const TX_BATCH_SIZE = process.env.TX_BATCH_SIZE ? Number(process.env.TX_BATCH_SIZE) : 10000
+const TX_BATCH_SIZE = process.env.TX_BATCH_SIZE
+  ? Number(process.env.TX_BATCH_SIZE)
+  : 10000
 const BATCH_SIZE = 1000
 const issues = generateIssues(ISSUES_TO_LOAD)
 
