@@ -3,16 +3,19 @@ defmodule Electric.Telemetry do
 
   import Telemetry.Metrics
 
+  @build_env Mix.env()
+
   def start_link(init_arg) do
     Supervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
 
   def init(opts) do
-    system_metrics_poll_interval = Application.get_env(:electric, :system_metrics_poll_interval)
+    system_metrics_poll_interval =
+      Electric.get_env(:system_metrics_poll_interval, :timer.seconds(5))
 
-    statsd_host = Application.fetch_env!(:electric, :telemetry_statsd_host)
-    prometheus? = not is_nil(Application.fetch_env!(:electric, :prometheus_port))
-    call_home_telemetry? = Application.fetch_env!(:electric, :call_home_telemetry?)
+    statsd_host = Electric.get_env(:telemetry_statsd_host, nil)
+    prometheus? = not is_nil(Electric.get_env(:prometheus_port, nil))
+    call_home_telemetry? = Electric.get_env(:call_home_telemetry?, @build_env == :prod)
 
     [
       {:telemetry_poller,

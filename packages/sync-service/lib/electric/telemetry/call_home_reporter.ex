@@ -12,6 +12,8 @@ defmodule Electric.Telemetry.CallHomeReporter do
   @type metric :: Telemetry.Metrics.t()
   @type report_format :: keyword(metric() | report_format())
 
+  @telemetry_url URI.new!("https://checkpoint.electric-sql.com")
+
   def start_link(opts) do
     name = Keyword.get(opts, :name, __MODULE__)
     metrics = Keyword.fetch!(opts, :metrics)
@@ -32,7 +34,7 @@ defmodule Electric.Telemetry.CallHomeReporter do
     :ok
   end
 
-  defp telemetry_url, do: Application.fetch_env!(:electric, :telemetry_url)
+  defp telemetry_url, do: Electric.get_env(:telemetry_url, @telemetry_url)
 
   def print_stats(name \\ __MODULE__) do
     GenServer.call(name, :print_stats)
