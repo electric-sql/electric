@@ -43,7 +43,7 @@ defmodule Electric.Client.Mock do
     end
 
     def init(parent) do
-      {:ok, %{parent: parent, from: nil, request: nil, response: nil}}
+      {:ok, %{parent: parent, requests: [], responses: []}}
     end
 
     def request(pid, request) do
@@ -58,22 +58,24 @@ defmodule Electric.Client.Mock do
       GenServer.call(pid, {:response, response})
     end
 
-    def handle_call({:request, request}, from, %{response: nil} = state) do
-      {:noreply, %{state | from: from, request: request}}
+    def handle_call({:request, request}, from, %{responses: []} = state) do
+      {:noreply, %{state | requests: state.requests ++ [{from, request}]}}
     end
 
-    def handle_call({:request, request}, _from, %{from: from, response: %{} = response} = state) do
+    def handle_call({:request, request}, _from, %{responses: [{from, response} | rest]} = state) do
       GenServer.reply(from, {:ok, request})
-      {:reply, {:ok, response}, %{state | from: nil, response: nil}}
+
+      {:reply, {:ok, response}, %{state | responses: rest}}
     end
 
-    def handle_call({:response, response}, from, %{from: nil} = state) do
-      {:noreply, %{state | from: from, response: response}}
+    def handle_call({:response, response}, from, %{requests: []} = state) do
+      {:noreply, %{state | responses: state.responses ++ [{from, response}]}}
     end
 
-    def handle_call({:response, response}, _from, %{from: from} = state) when not is_nil(from) do
+    def handle_call({:response, response}, _from, %{requests: [{from, request} | rest]} = state) do
       GenServer.reply(from, {:ok, response})
-      {:reply, {:ok, state.request}, %{state | from: nil, request: nil}}
+
+      {:reply, {:ok, request}, %{state | requests: rest}}
     end
   end
 
