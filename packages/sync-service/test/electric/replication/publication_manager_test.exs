@@ -32,7 +32,10 @@ defmodule Electric.Replication.PublicationManagerTest do
 
   setup ctx do
     test_pid = self()
-    configure_tables_fn = fn _, filters, _, _ -> send(test_pid, {:filters, filters}) end
+
+    configure_tables_fn = fn _, filters, _, _ ->
+      send(test_pid, {:filters, Map.values(filters)})
+    end
 
     %{publication_manager: {_, publication_manager_opts}} =
       with_publication_manager(%{

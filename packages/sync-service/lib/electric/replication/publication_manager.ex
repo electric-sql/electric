@@ -247,7 +247,7 @@ defmodule Electric.Replication.PublicationManager do
        ) do
     configure_tables_for_replication_fn.(
       db_pool,
-      Map.values(relation_filters),
+      relation_filters,
       pg_version,
       publication_name
     )

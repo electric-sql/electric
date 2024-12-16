@@ -24,8 +24,8 @@ defmodule Electric.Postgres.Configuration do
   """
   @spec configure_tables_for_replication!(
           Postgrex.conn(),
-          [RelationFilter.t()],
-          (-> String.t()),
+          filters(),
+          String.t(),
           float()
         ) ::
           {:ok, [:ok]}
@@ -75,7 +75,8 @@ defmodule Electric.Postgres.Configuration do
         |> MapSet.new()
 
       new_published_tables =
-        Enum.map(relation_filters, & &1.relation)
+        relation_filters
+        |> Map.keys()
         |> Enum.map(&Utils.relation_to_sql/1)
         |> MapSet.new()
 
@@ -122,7 +123,11 @@ defmodule Electric.Postgres.Configuration do
       relation_filters = filter_for_existing_relations(conn, relation_filters)
 
       # Update the entire publication with the new filters
-      Postgrex.query!(conn, make_alter_publication_query(publication_name, relation_filters), [])
+      Postgrex.query!(
+        conn,
+        make_alter_publication_query(publication_name, relation_filters),
+        []
+      )
 
       # `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
       # but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
@@ -134,7 +139,7 @@ defmodule Electric.Postgres.Configuration do
   end
 
   defp set_replica_identity!(conn, relation_filters) do
-    for %RelationFilter{relation: relation} <- relation_filters,
+    for %RelationFilter{relation: relation} <- Map.values(relation_filters),
         table = Utils.relation_to_sql(relation) do
       %Postgrex.Result{rows: [[correct_identity?]]} =
         Postgrex.query!(
@@ -163,30 +168,35 @@ defmodule Electric.Postgres.Configuration do
 
   # Makes an SQL query that alters the given publication whith the given tables and filters.
   @spec make_alter_publication_query(String.t(), filters()) :: String.t()
-  defp make_alter_publication_query(publication_name, []),
-    do: "DO $$
-  DECLARE
-      tables TEXT;
-  BEGIN
-      SELECT string_agg(format('%I.%I', schemaname, tablename), ', ')
-      INTO tables
-      FROM pg_publication_tables
-      WHERE pubname = '#{publication_name}' ;
-
-      IF tables IS NOT NULL THEN
-          EXECUTE format('ALTER PUBLICATION #{Utils.quote_name(publication_name)} DROP TABLE %s', tables);
-      END IF;
-  END $$;"
-
   defp make_alter_publication_query(publication_name, filters) do
-    base_sql = "ALTER PUBLICATION #{Utils.quote_name(publication_name)} SET TABLE "
+    case Map.values(filters) do
+      [] ->
+        "
+        DO $$
+        DECLARE
+            tables TEXT;
+        BEGIN
+            SELECT string_agg(format('%I.%I', schemaname, tablename), ', ')
+            INTO tables
+            FROM pg_publication_tables
+            WHERE pubname = '#{publication_name}' ;
 
-    tables =
-      filters
-      |> Enum.map(&make_table_clause/1)
-      |> Enum.join(", ")
+            IF tables IS NOT NULL THEN
+                EXECUTE format('ALTER PUBLICATION #{Utils.quote_name(publication_name)} DROP TABLE %s', tables);
+            END IF;
+        END $$;
+        "
 
-    base_sql <> tables
+      filters ->
+        base_sql = "ALTER PUBLICATION #{Utils.quote_name(publication_name)} SET TABLE "
+
+        tables =
+          filters
+          |> Enum.map(&make_table_clause/1)
+          |> Enum.join(", ")
+
+        base_sql <> tables
+    end
   end
 
   @spec filter_for_existing_relations(Postgrex.conn(), filters()) :: filters()
@@ -204,10 +214,7 @@ defmodule Electric.Postgres.Configuration do
     WHERE pn.nspname = ir.schemaname AND pc.relkind = 'r';
     "
 
-    relation_filter_map =
-      filters |> Enum.map(&{&1.relation, &1}) |> Map.new()
-
-    relations = Map.keys(relation_filter_map)
+    relations = Map.keys(filters)
 
     Postgrex.query!(conn, query, [
       Enum.map(relations, &elem(&1, 0)),
@@ -215,10 +222,10 @@ defmodule Electric.Postgres.Configuration do
     ])
     |> Map.fetch!(:rows)
     |> Enum.map(&List.to_tuple/1)
-    |> Enum.reduce([], fn rel, filters ->
-      case Map.get(relation_filter_map, rel) do
-        nil -> filters
-        filter -> [filter | filters]
+    |> Enum.reduce(%{}, fn rel, new_filters ->
+      case Map.get(filters, rel) do
+        nil -> new_filters
+        filter -> Map.put(new_filters, rel, filter)
       end
     end)
   end

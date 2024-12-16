@@ -57,12 +57,12 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       Configuration.configure_tables_for_replication!(
         conn,
-        [
-          %RelationFilter{
+        %{
+          {"public", "items"} => %RelationFilter{
             relation: {"public", "items"},
             where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
           }
-        ],
+        },
         pg_version,
         publication
       )
@@ -86,12 +86,12 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert capture_log(fn ->
                Configuration.configure_tables_for_replication!(
                  conn,
-                 [
-                   %RelationFilter{
+                 %{
+                   {"public", "items"} => %RelationFilter{
                      relation: {"public", "items"},
                      where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
                    }
-                 ],
+                 },
                  pg_version,
                  publication
                )
@@ -102,12 +102,12 @@ defmodule Electric.Postgres.ConfigurationTest do
       refute capture_log(fn ->
                Configuration.configure_tables_for_replication!(
                  conn,
-                 [
-                   %RelationFilter{
+                 %{
+                   {"public", "items"} => %RelationFilter{
                      relation: {"public", "items"},
                      where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}]
                    }
-                 ],
+                 },
                  pg_version,
                  publication
                )
@@ -125,16 +125,16 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       Configuration.configure_tables_for_replication!(
         conn,
-        [
-          %RelationFilter{
+        %{
+          {"public", "items"} => %RelationFilter{
             relation: {"public", "items"},
             where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
           },
-          %RelationFilter{
+          {"public", "other_table"} => %RelationFilter{
             relation: {"public", "other_table"},
             where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}]
           }
-        ],
+        },
         pg_version,
         publication
       )
@@ -163,16 +163,16 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       Configuration.configure_tables_for_replication!(
         conn,
-        [
-          %RelationFilter{
+        %{
+          {"public", "items"} => %RelationFilter{
             relation: {"public", "items"},
             where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
           },
-          %RelationFilter{
+          {"public", "other_table"} => %RelationFilter{
             relation: {"public", "other_table"},
             where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}]
           }
-        ],
+        },
         pg_version,
         publication
       )
@@ -191,16 +191,16 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       Configuration.configure_tables_for_replication!(
         conn,
-        [
-          %RelationFilter{
+        %{
+          {"public", "items"} => %RelationFilter{
             relation: {"public", "items"},
             where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
           },
-          %RelationFilter{
+          {"public", "other_table"} => %RelationFilter{
             relation: {"public", "other_table"},
             where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
           }
-        ],
+        },
         pg_version,
         publication
       )
@@ -219,12 +219,12 @@ defmodule Electric.Postgres.ConfigurationTest do
          %{pool: conn, publication_name: publication, pg_version: pg_version} do
       Configuration.configure_tables_for_replication!(
         conn,
-        [
-          %RelationFilter{
+        %{
+          {"public", "items"} => %RelationFilter{
             relation: {"public", "items"},
             where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
           }
-        ],
+        },
         pg_version,
         publication
       )
@@ -242,13 +242,13 @@ defmodule Electric.Postgres.ConfigurationTest do
       # Configure `items` table again but with a different where clause
       Configuration.configure_tables_for_replication!(
         conn,
-        [
-          %RelationFilter{
+        %{
+          {"public", "items"} => %RelationFilter{
             relation: {"public", "items"},
             where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}]
           },
-          %RelationFilter{relation: {"public", "other_table"}}
-        ],
+          {"public", "other_table"} => %RelationFilter{relation: {"public", "other_table"}}
+        },
         pg_version,
         publication
       )
@@ -269,10 +269,10 @@ defmodule Electric.Postgres.ConfigurationTest do
       # the resulting publication should no longer have a filter for that table
       Configuration.configure_tables_for_replication!(
         conn,
-        [
-          %RelationFilter{relation: {"public", "items"}},
-          %RelationFilter{relation: {"public", "other_table"}}
-        ],
+        %{
+          {"public", "items"} => %RelationFilter{relation: {"public", "items"}},
+          {"public", "other_table"} => %RelationFilter{relation: {"public", "other_table"}}
+        },
         pg_version,
         publication
       )
@@ -291,7 +291,9 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert_raise Postgrex.Error, ~r/undefined_object/, fn ->
         Configuration.configure_tables_for_replication!(
           conn,
-          [%RelationFilter{relation: {"public", "items"}}],
+          %{
+            {"public", "items"} => %RelationFilter{relation: {"public", "items"}}
+          },
           pg_version,
           "nonexistent"
         )
@@ -306,38 +308,38 @@ defmodule Electric.Postgres.ConfigurationTest do
       # Create the publication first
       Configuration.configure_tables_for_replication!(
         conn,
-        [
-          %RelationFilter{
+        %{
+          {"public", "items"} => %RelationFilter{
             relation: {"public", "items"},
             where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
           },
-          %RelationFilter{
+          {"public", "other_table"} => %RelationFilter{
             relation: {"public", "other_table"},
             where_clauses: [%Eval.Expr{query: "(value ILIKE '1%')"}]
           },
-          %RelationFilter{
+          {"public", "other_other_table"} => %RelationFilter{
             relation: {"public", "other_other_table"},
             where_clauses: [%Eval.Expr{query: "(value ILIKE '1%')"}]
           }
-        ],
+        },
         pg_version,
         publication
       )
 
-      new_filters = [
-        %RelationFilter{
+      new_filters = %{
+        {"public", "items"} => %RelationFilter{
           relation: {"public", "items"},
           where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
         },
-        %RelationFilter{
+        {"public", "other_table"} => %RelationFilter{
           relation: {"public", "other_table"},
           where_clauses: [%Eval.Expr{query: "(value ILIKE '2%')"}]
         },
-        %RelationFilter{
+        {"public", "other_other_table"} => %RelationFilter{
           relation: {"public", "other_other_table"},
           where_clauses: [%Eval.Expr{query: "(value ILIKE '2%')"}]
         }
-      ]
+      }
 
       task1 =
         Task.async(fn ->
