@@ -70,7 +70,8 @@ defmodule Electric.Client.Fetch.Monitor do
 
     state = %{
       request_id: request_id,
-      subscribers: []
+      subscribers: [],
+      response: nil
     }
 
     {:ok, state, {:continue, {:start_request, request_id, request, client}}}
@@ -83,21 +84,16 @@ defmodule Electric.Client.Fetch.Monitor do
     {:noreply, state}
   end
 
-  @impl true
-  def handle_call({:register, listener_pid}, _from, state) do
-    ref = Process.monitor(listener_pid)
-
-    Logger.debug(
-      fn -> "Registering listener pid #{inspect(listener_pid)}" end,
-      request_id: state.request_id
-    )
-
-    state = Map.update!(state, :subscribers, &[{listener_pid, ref} | &1])
-
-    {:reply, ref, state}
+  def handle_continue(:handle_response, %{subscribers: _, response: nil} = state) do
+    {:noreply, state}
   end
 
-  def handle_call({:reply, response}, _from, state) do
+  def handle_continue(:handle_response, %{subscribers: [], response: _} = state) do
+    Logger.debug("Got response with no subscribers - deferring until subscribers are present")
+    {:noreply, state}
+  end
+
+  def handle_continue(:handle_response, %{subscribers: subscribers, response: response} = state) do
     case response do
       %{status: status} ->
         Logger.debug(
@@ -124,11 +120,29 @@ defmodule Electric.Client.Fetch.Monitor do
         )
     end
 
-    for {pid, ref} <- state.subscribers do
+    for {pid, ref} <- subscribers do
       send(pid, {:response, ref, response})
     end
 
-    {:stop, {:shutdown, :normal}, :ok, state}
+    {:stop, {:shutdown, :normal}, state}
+  end
+
+  @impl true
+  def handle_call({:register, listener_pid}, _from, state) do
+    ref = Process.monitor(listener_pid)
+
+    Logger.debug(
+      fn -> "Registering listener pid #{inspect(listener_pid)}" end,
+      request_id: state.request_id
+    )
+
+    state = Map.update!(state, :subscribers, &[{listener_pid, ref} | &1])
+
+    {:reply, ref, state, {:continue, :handle_response}}
+  end
+
+  def handle_call({:reply, response}, _from, state) do
+    {:reply, :ok, %{state | response: response}, {:continue, :handle_response}}
   end
 
   @impl true
@@ -149,7 +163,7 @@ defmodule Electric.Client.Fetch.Monitor do
     {:noreply, state}
   end
 
-  def handle_info({:EXIT, pid, reason}, state) do
+  def handle_info({:EXIT, pid, reason}, %{response: nil} = state) do
     Logger.debug(fn ->
       "Request process #{inspect(pid)} exited with reason #{inspect(reason)} before issuing a reply. Using reason as an error and exiting."
     end)
@@ -159,5 +173,9 @@ defmodule Electric.Client.Fetch.Monitor do
     end
 
     {:stop, {:shutdown, :normal}, state}
+  end
+
+  def handle_info({:EXIT, _pid, _reason}, state) do
+    {:noreply, state}
   end
 end

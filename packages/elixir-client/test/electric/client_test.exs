@@ -1,6 +1,8 @@
 defmodule Electric.ClientTest do
   use ExUnit.Case, async: true
 
+  @moduletag :capture_log
+
   import Support.DbSetup
   import Support.ClientHelpers
 
