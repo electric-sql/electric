@@ -538,6 +538,12 @@ defmodule Electric.Connection.Manager do
 
     Logger.warning("Database connection in #{mode} mode failed: #{message}")
 
+    Electric.StackSupervisor.dispatch_stack_event(
+      state.stack_events_registry,
+      state.stack_id,
+      {:database_connection_failed, message}
+    )
+
     step =
       cond do
         is_nil(state.lock_connection_pid) -> :start_lock_connection
