@@ -171,7 +171,7 @@ defmodule Electric.Postgres.Configuration do
   defp make_alter_publication_query(publication_name, filters) do
     case Map.values(filters) do
       [] ->
-        "
+        """
         DO $$
         DECLARE
             tables TEXT;
@@ -185,7 +185,7 @@ defmodule Electric.Postgres.Configuration do
                 EXECUTE format('ALTER PUBLICATION #{Utils.quote_name(publication_name)} DROP TABLE %s', tables);
             END IF;
         END $$;
-        "
+        """
 
       filters ->
         base_sql = "ALTER PUBLICATION #{Utils.quote_name(publication_name)} SET TABLE "
@@ -201,7 +201,7 @@ defmodule Electric.Postgres.Configuration do
 
   @spec filter_for_existing_relations(Postgrex.conn(), filters()) :: filters()
   defp filter_for_existing_relations(conn, filters) do
-    query = "
+    query = """
     WITH input_relations AS (
         SELECT
           UNNEST($1::text[]) AS schemaname,
@@ -212,7 +212,7 @@ defmodule Electric.Postgres.Configuration do
     JOIN pg_class pc ON pc.relname = ir.tablename
     JOIN pg_namespace pn ON pn.oid = pc.relnamespace
     WHERE pn.nspname = ir.schemaname AND pc.relkind = 'r';
-    "
+    """
 
     relations = Map.keys(filters)
 
