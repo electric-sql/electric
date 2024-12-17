@@ -120,12 +120,18 @@ defmodule Electric.Postgres.Configuration do
        ) do
     Postgrex.transaction(pool, fn conn ->
       # Ensure that all tables are present in the publication
-      relation_filters = filter_for_existing_relations(conn, relation_filters)
+      relation_filters = filter_for_existing_relations(conn, relation_filters) |> dbg
 
       # Update the entire publication with the new filters
       Postgrex.query!(
         conn,
-        make_alter_publication_query(publication_name, relation_filters),
+        make_alter_publication_query(publication_name, relation_filters) |> dbg,
+        []
+      )
+
+      Postgrex.query!(
+        conn,
+        "ALTER PUBLICATION #{Utils.quote_name(publication_name)} SET ( publish_via_partition_root = true )",
         []
       )
 
@@ -211,7 +217,7 @@ defmodule Electric.Postgres.Configuration do
     FROM input_relations ir
     JOIN pg_class pc ON pc.relname = ir.tablename
     JOIN pg_namespace pn ON pn.oid = pc.relnamespace
-    WHERE pn.nspname = ir.schemaname AND pc.relkind = 'r';
+    WHERE pn.nspname = ir.schemaname AND pc.relkind IN ('r', 'p');
     """
 
     relations = Map.keys(filters)

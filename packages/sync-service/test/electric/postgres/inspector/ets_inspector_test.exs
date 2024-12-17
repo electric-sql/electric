@@ -18,7 +18,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     end
 
     test "returns relation from table name", %{opts: opts, table: table} do
-      assert {:ok, %{relation: ^table, relation_id: _}} =
+      assert {:ok, %{relation: ^table, relation_id: _, kind: :ordinary_table}} =
                EtsInspector.load_relation("PuBliC.ItEmS", opts)
     end
 
@@ -56,6 +56,20 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       from_cache2 = EtsInspector.load_relation(~s|PuBliC."ITEMS"|, opts)
       assert original2 == from_cache2
       assert {:ok, %{relation: {"public", "ITEMS"}, relation_id: _}} = original2
+    end
+
+    @tag with_sql: [
+           ~s|CREATE TABLE "partitioned_items" (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (b)|
+         ]
+    test "can introspect partitioned tables", %{
+      opts: opts
+    } do
+      assert {:ok,
+              %{
+                relation: {"public", "partitioned_items"},
+                relation_id: _,
+                kind: :partitioned_table
+              }} = EtsInspector.load_relation("public.partitioned_items", opts)
     end
   end
 
@@ -124,7 +138,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   end
 
   describe "load_column_info/2" do
-    setup [:with_inspector, :with_basic_tables]
+    setup [:with_inspector, :with_basic_tables, :with_sql_execute]
 
     setup %{inspector: {EtsInspector, opts}} do
       {:ok, %{opts: opts, table: {"public", "items"}}}
@@ -148,6 +162,14 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       original = EtsInspector.load_column_info(table, opts)
       from_cache = Task.await(task)
       assert from_cache == original
+    end
+
+    @tag with_sql: [
+           ~s|CREATE TABLE "partitioned_items" (a INT, b INT, c TEXT, PRIMARY KEY (a, b)) PARTITION BY RANGE (b)|
+         ]
+    test "can introspect partitioned tables", %{opts: opts} do
+      assert {:ok, [%{name: "a"}, %{name: "b"}, %{name: "c"}]} =
+               EtsInspector.load_column_info({"public", "partitioned_items"}, opts)
     end
   end
 end

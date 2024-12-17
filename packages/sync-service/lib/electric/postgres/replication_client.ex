@@ -254,6 +254,7 @@ defmodule Electric.Postgres.ReplicationClient do
         {:noreply, %{state | txn_collector: txn_collector}}
 
       {%Transaction{} = txn, %Collector{} = txn_collector} ->
+        dbg(txn)
         state = %{state | txn_collector: txn_collector}
 
         {m, f, args} = state.transaction_received

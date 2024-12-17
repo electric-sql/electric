@@ -8,11 +8,11 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
     # The extra cast from $1 to text is needed because of Postgrex' OID type encoding
     # see: https://github.com/elixir-ecto/postgrex#oid-type-encoding
     query = """
-    SELECT nspname, relname, pg_class.oid
+    SELECT nspname, relname, pg_class.oid, relkind
     FROM pg_class
     JOIN pg_namespace ON relnamespace = pg_namespace.oid
     WHERE
-      relkind = 'r' AND
+      relkind IN ('r', 'p') AND
       pg_class.oid = $1::text::regclass
     """
 
@@ -20,13 +20,16 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
       {:ok, result} ->
         # We expect exactly one row because the query didn't fail
         # so the relation exists since we could cast it to a regclass
-        [[schema, table, oid]] = result.rows
-        {:ok, %{relation_id: oid, relation: {schema, table}}}
+        [[schema, table, oid, kind]] = result.rows
+        {:ok, %{relation_id: oid, relation: {schema, table}, kind: resolve_kind(kind)}}
 
       {:error, err} ->
         {:error, Exception.message(err)}
     end
   end
+
+  defp resolve_kind("r"), do: :ordinary_table
+  defp resolve_kind("p"), do: :partitioned_table
 
   @doc """
   Load table information (refs) from the database
@@ -49,7 +52,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
     JOIN pg_type ON atttypid = pg_type.oid
     LEFT JOIN pg_index ON indrelid = pg_class.oid AND indisprimary
     LEFT JOIN pg_type AS elem_pg_type ON pg_type.typelem = elem_pg_type.oid
-    WHERE relname = $1 AND nspname = $2 AND relkind = 'r'
+    WHERE relname = $1 AND nspname = $2 AND relkind IN ('r', 'p')
     ORDER BY pg_class.oid, attnum
     """
 
