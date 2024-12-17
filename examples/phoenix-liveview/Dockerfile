@@ -15,68 +15,53 @@ RUN apt-get update -y && \
 
 RUN mix local.hex --force && mix local.rebar --force
 
+ENV MIX_ENV=prod
+
 WORKDIR /app
 
 COPY mix.* /app/
 COPY config/config.exs /app/config/
 COPY config/prod.exs /app/config/
-#RUN mix deps.get
-#RUN mix deps.compile
+RUN mix deps.get --only $MIX_ENV --check-locked
+RUN mix deps.compile
+RUN mix assets.setup
 
-# These are ordered by change frequency, with the least frequently changing dir first.
-#COPY rel /app/rel
-COPY lib /app/lib/
-
-# COPY package.json /app/
 COPY config/*runtime.exs /app/config/
+
+COPY lib /app/lib/
+RUN mix compile
 
 COPY assets /app/assets/
 COPY priv /app/priv/
+RUN mix assets.deploy
 
-#RUN mix compile
+COPY rel /app/rel/
 
-#RUN mix setup
+RUN mix release
 
-#FROM ${RUNNER_IMAGE} AS runner_setup
-#
-#RUN apt-get update -y && \
-#    apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates curl && \
-#    apt-get clean && \
-#    rm -f /var/lib/apt/lists/*_*
-#
-## Set the locale
-#RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
-#
-#ENV LANG=en_US.UTF-8
-#ENV LANGUAGE=en_US:en
-#ENV LC_ALL=en_US.UTF-8
+FROM ${RUNNER_IMAGE} AS runner_setup
+
+RUN apt-get update -y && \
+    apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates curl && \
+    apt-get clean && \
+    rm -f /var/lib/apt/lists/*_*
+
+# Set the locale
+RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
+
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
 
 WORKDIR "/app"
 RUN chown nobody /app
 
-#FROM runner_setup AS runner
+FROM runner_setup AS runner
 
-ARG ELECTRIC_URL
-ARG DATABASE_URL
-ARG SECRET_KEY_BASE
+ARG RELEASE_NAME=electric_phoenix_example
 
-#COPY --from=builder /app/_build/prod/rel/${RELEASE_NAME} ./
-#RUN mv /app/bin/${RELEASE_NAME} /app/bin/entrypoint
+COPY --from=builder /app/_build/prod/rel/${RELEASE_NAME} ./
+RUN mv /app/bin/${RELEASE_NAME} /app/bin/entrypoint
 
-RUN mix deps.get --only prod
+CMD ["/app/bin/server"]
 
-ENV MIX_ENV=prod
-RUN mix compile
-
-#RUN mix phx.digest
-
-ENV ELECTRIC_URL="$ELECTRIC_URL"
-ENV DATABASE_URL="$DATABASE_URL"
-ENV SECRET_KEY_BASE="$SECRET_KEY_BASE"
-
-#RUN ELECTRIC_URL="$ELECTRIC_URL" DATABASE_URL="$DATABASE_URL" SECRET_KEY_BASE="$(mix phx.gen.secret)" mix setup
-RUN mix setup
-
-#ENTRYPOINT ["/app/bin/entrypoint"]
-CMD ["mix", "phx.server"]
-EXPOSE 4000
