@@ -8,11 +8,12 @@ defmodule Electric.Telemetry do
   end
 
   def init(opts) do
-    system_metrics_poll_interval = Application.get_env(:electric, :system_metrics_poll_interval)
+    system_metrics_poll_interval =
+      Electric.Config.get_env(:system_metrics_poll_interval)
 
-    statsd_host = Application.fetch_env!(:electric, :telemetry_statsd_host)
-    prometheus? = not is_nil(Application.fetch_env!(:electric, :prometheus_port))
-    call_home_telemetry? = Application.fetch_env!(:electric, :call_home_telemetry?)
+    statsd_host = Electric.Config.get_env(:telemetry_statsd_host)
+    prometheus? = not is_nil(Electric.Config.get_env(:prometheus_port))
+    call_home_telemetry? = Electric.Config.get_env(:call_home_telemetry?)
 
     [
       {:telemetry_poller,

@@ -32,7 +32,7 @@ defmodule Electric.Telemetry.CallHomeReporter do
     :ok
   end
 
-  defp telemetry_url, do: Application.fetch_env!(:electric, :telemetry_url)
+  defp telemetry_url, do: Electric.Config.get_env(:telemetry_url)
 
   def print_stats(name \\ __MODULE__) do
     GenServer.call(name, :print_stats)

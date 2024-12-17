@@ -15,7 +15,7 @@ Electric Sync is powered by an Elixir-based application that connects to your Po
 
 For a quick setup and examples, refer to the [Quickstart guide](https://electric-sql.com/docs/quickstart).
 
-## Running
+## Running as a Standalone HTTP Endpoint
 
 Run Postgres:
 
@@ -36,3 +36,48 @@ Run the Elixir app:
 mix deps.get
 iex -S mix
 ```
+
+## Embedding into another Elixir Application
+
+Include `:electric` into your dependencies:
+
+    # mix.exs
+    defp deps do
+      [
+      {:electric, ">= 1.0.0-beta-1"}
+      ]
+    end
+
+Add the Postgres db connection configuration to your application's config.
+Electric accepts the same configuration format as
+[Ecto](https://hexdocs.pm/ecto/Ecto.html) (and
+[Postgrex](https://hexdocs.pm/postgrex/Postgrex.html#start_link/1)) so you can
+reuse that configuration if you want:
+
+    # config/*.exs
+    database_config = [
+      database: "ecto_simple",
+      username: "postgres",
+      password: "postgres",
+      hostname: "localhost"
+    ]
+    config :my_app, Repo, database_config
+
+    config :electric,
+      connection_opts: Electric.Utils.obfuscate_password(database_config)
+
+Or if you're getting your db connection from an environment variable, then you
+can use
+[`Electric.Config.parse_postgresql_uri!/1`](https://hexdocs.pm/electric/Electric.Config.html#parse_postgresql_uri!/1):
+
+    # config/*.exs
+    {:ok, database_config} = Electric.Config.parse_postgresql_uri(System.fetch_env!("DATABASE_URL"))
+
+    config :electric,
+      connection_opts: Electric.Utils.obfuscate_password(database_config)
+
+The Electric app will startup along with the rest of your Elixir app.
+
+Beyond the required database connection configuration there are a lot of other
+optional configuration parameters. See the [`Electric` docs for more
+information](https://hexdocs.pm/electric/Electric.html).

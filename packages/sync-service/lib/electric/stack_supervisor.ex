@@ -38,15 +38,7 @@ defmodule Electric.StackSupervisor do
                  connection_opts: [
                    type: :keyword_list,
                    required: true,
-                   keys: [
-                     hostname: [type: :string, required: true],
-                     port: [type: :integer, required: true],
-                     database: [type: :string, required: true],
-                     username: [type: :string, required: true],
-                     password: [type: {:fun, 0}, required: true],
-                     sslmode: [type: :atom, required: false],
-                     ipv6: [type: :boolean, required: false]
-                   ]
+                   keys: Electric.connection_opts_schema()
                  ],
                  replication_opts: [
                    type: :keyword_list,
