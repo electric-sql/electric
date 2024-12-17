@@ -15,7 +15,7 @@ defmodule Electric do
     sslmode: [
       type: {:in, [:disable, :allow, :prefer, :require]},
       required: false,
-      default: :disable,
+      default: :prefer,
       doc:
         "Connection SSL configuration. See https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-SSLMODE-STATEMENTS",
       type_spec: quote(do: :disable | :allow | :prefer | :require)
@@ -153,11 +153,19 @@ defmodule Electric do
   end
 
   @spec get_env(atom(), term()) :: term()
+  def get_env(key, nil) do
+    Application.get_env(:electric, key, nil)
+  end
+
   def get_env(key, default) do
-    # use the `||` as well as the get_env default because it allows us to
-    # remove the defaults from the runtime.exs file env var retrieval and only
-    # hard-code the default values once where they're used.
-    Application.get_env(:electric, key, default) || default
+    # handle the case where the config value was set in runtime.exs but
+    # to `nil` because of a missing env var. So the `Application.get_env/3`
+    # returns `nil` rather than `default`. Needs to handle the case
+    # where the config has been set to `false`...
+    case Application.get_env(:electric, key, default) do
+      nil -> default
+      value -> value
+    end
   end
 
   def fetch_env!(key) do
