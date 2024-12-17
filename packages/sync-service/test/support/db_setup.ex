@@ -16,7 +16,7 @@ defmodule Support.DbSetup do
     full_db_name = to_string(ctx.test)
 
     db_name_hash =
-      full_db_name |> :erlang.phash2(99_999_999) |> to_string() |> String.pad_leading(6, "0")
+      full_db_name |> :erlang.phash2(99_999_999) |> to_string() |> String.pad_leading(8, "0")
 
     # Truncate the database name to 63 characters, use hash to guarantee uniqueness
     db_name = "#{db_name_hash} ~ #{String.slice(full_db_name, 0..50)}"
