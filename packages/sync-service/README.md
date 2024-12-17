@@ -68,10 +68,10 @@ reuse that configuration if you want:
 
 Or if you're getting your db connection from an environment variable, then you
 can use
-[`Electric.ConfigParser.parse_postgresql_uri!/1`](https://hexdocs.pm/electric/Electric.ConfigParser.html#parse_postgresql_uri!/1):
+[`Electric.Config.parse_postgresql_uri!/1`](https://hexdocs.pm/electric/Electric.Config.html#parse_postgresql_uri!/1):
 
     # config/*.exs
-    {:ok, database_config} = Electric.ConfigParser.parse_postgresql_uri(System.fetch_env!("DATABASE_URL"))
+    {:ok, database_config} = Electric.Config.parse_postgresql_uri(System.fetch_env!("DATABASE_URL"))
 
     config :electric,
       connection_opts: Electric.Utils.obfuscate_password(database_config)

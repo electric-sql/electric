@@ -1,5 +1,6 @@
 defmodule Electric.Application do
   use Application
+
   require Config
 
   @doc """
@@ -12,22 +13,22 @@ defmodule Electric.Application do
   def start(_type, _args) do
     :erlang.system_flag(:backtrace_depth, 50)
 
-    Electric.ensure_instance_id()
+    Electric.Config.ensure_instance_id()
     Electric.Telemetry.Sentry.add_logger_handler()
 
     # We have "instance id" identifier as the node ID, however that's generated every runtime,
     # so isn't stable across restarts. Our storages however scope themselves based on this stack ID
     # so we're just hardcoding it here.
-    stack_id = Electric.get_env(:provided_database_id, "single_stack")
+    stack_id = Electric.Config.get_env(:provided_database_id)
 
-    storage = Electric.get_env(:storage, Electric.default_storage())
+    storage = Electric.Config.get_env(:storage)
 
     router_opts =
       [
         long_poll_timeout: 20_000,
-        max_age: Electric.get_env(:cache_max_age, 60),
-        stale_age: Electric.get_env(:cache_stale_age, 60 * 5),
-        allow_shape_deletion: Electric.get_env(:allow_shape_deletion, false)
+        max_age: Electric.Config.get_env(:cache_max_age),
+        stale_age: Electric.Config.get_env(:cache_stale_age),
+        allow_shape_deletion: Electric.Config.get_env(:allow_shape_deletion?)
       ] ++
         Electric.StackSupervisor.build_shared_opts(
           stack_id: stack_id,
@@ -36,10 +37,10 @@ defmodule Electric.Application do
         )
 
     {kv_module, kv_fun, kv_params} =
-      Electric.get_env(:persistent_kv, Electric.default_persistent_kv())
+      Electric.Config.get_env(:persistent_kv)
 
     persistent_kv = apply(kv_module, kv_fun, [kv_params])
-    replication_stream_id = Electric.get_env(:replication_stream_id, "default")
+    replication_stream_id = Electric.Config.get_env(:replication_stream_id)
     publication_name = "electric_publication_#{replication_stream_id}"
     slot_name = "electric_slot_#{replication_stream_id}"
 
@@ -61,28 +62,24 @@ defmodule Electric.Application do
             Electric.StackSupervisor,
             stack_id: stack_id,
             stack_events_registry: Registry.StackEvents,
-            connection_opts: Electric.fetch_env!(:connection_opts),
+            connection_opts: Electric.Config.fetch_env!(:connection_opts),
             persistent_kv: persistent_kv,
             replication_opts: [
               publication_name: publication_name,
               slot_name: slot_name,
-              slot_temporary?: Electric.get_env(:replication_slot_temporary?, false)
+              slot_temporary?: Electric.Config.get_env(:replication_slot_temporary?)
             ],
-            pool_opts: [pool_size: Electric.get_env(:db_pool_size, 20)],
+            pool_opts: [pool_size: Electric.Config.get_env(:db_pool_size)],
             storage: storage,
-            chunk_bytes_threshold:
-              Electric.get_env(
-                :chunk_bytes_threshold,
-                Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
-              )
+            chunk_bytes_threshold: Electric.Config.get_env(:chunk_bytes_threshold)
           },
           {Electric.Telemetry, stack_id: stack_id, storage: storage},
           {Bandit,
            plug: {Electric.Plug.Router, router_opts},
-           port: Electric.get_env(:service_port, 3000),
+           port: Electric.Config.get_env(:service_port),
            thousand_island_options: http_listener_options()}
         ],
-        prometheus_endpoint(Electric.get_env(:prometheus_port, nil))
+        prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
       ])
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Electric.Supervisor)
@@ -102,7 +99,7 @@ defmodule Electric.Application do
   end
 
   defp http_listener_options do
-    if Electric.get_env(:listen_on_ipv6?, false) do
+    if Electric.Config.get_env(:listen_on_ipv6?) do
       [transport_options: [:inet6]]
     else
       []

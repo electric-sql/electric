@@ -1,4 +1,114 @@
-defmodule Electric.ConfigParser do
+defmodule Electric.Config.Defaults do
+  @moduledoc false
+
+  # we want the default storage and kv implementations to honour the
+  # `:storage_dir` configuration setting so we need to use runtime-evaluated
+  # functions to get them. Since you can't embed anoymous functions these
+  # functions are used instead.
+
+  @doc false
+  def storage do
+    {Electric.ShapeCache.FileStorage, storage_dir: storage_dir("shapes")}
+  end
+
+  @doc false
+  def persistent_kv do
+    {Electric.PersistentKV.Filesystem, :new!, root: storage_dir("state")}
+  end
+
+  defp storage_dir(sub_dir) do
+    Path.join(storage_dir(), sub_dir)
+  end
+
+  defp storage_dir do
+    Electric.Config.get_env(:storage_dir)
+  end
+end
+
+defmodule Electric.Config do
+  require Logger
+
+  @build_env Mix.env()
+
+  @defaults [
+    # Database
+    provided_database_id: "single_stack",
+    db_pool_size: 20,
+    replication_stream_id: "default",
+    replication_slot_temporary?: false,
+    # HTTP API
+    cache_max_age: 60,
+    cache_stale_age: 60 * 5,
+    chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
+    allow_shape_deletion?: false,
+    service_port: 3000,
+    listen_on_ipv6?: false,
+    # Storage
+    storage_dir: "./persistent",
+    storage: &Electric.Config.Defaults.storage/0,
+    persistent_kv: &Electric.Config.Defaults.persistent_kv/0,
+    # Telemetry
+    instance_id: nil,
+    prometheus_port: nil,
+    call_home_telemetry?: @build_env == :prod,
+    telemetry_statsd_host: nil,
+    telemetry_url: URI.new!("https://checkpoint.electric-sql.com"),
+    system_metrics_poll_interval: :timer.seconds(5)
+  ]
+
+  def default(key) do
+    case Keyword.fetch!(@defaults, key) do
+      fun when is_function(fun, 0) -> fun.()
+      value -> value
+    end
+  end
+
+  @doc false
+  @spec ensure_instance_id() :: :ok
+  # the instance id needs to be consistent across calls, so we do need to have
+  # a value in the config, even if it's not configured by the user.
+  def ensure_instance_id do
+    case get_env(:instance_id, nil) do
+      nil ->
+        instance_id = generate_instance_id()
+
+        Logger.info("Setting electric instance_id: #{instance_id}")
+        Application.put_env(:electric, :instance_id, instance_id)
+
+      id when is_binary(id) ->
+        :ok
+    end
+  end
+
+  defp generate_instance_id do
+    Electric.Utils.uuid4()
+  end
+
+  @spec get_env(Application.key()) :: Application.value()
+  def get_env(key) do
+    get_env(key, default(key))
+  end
+
+  defp get_env(key, nil) do
+    Application.get_env(:electric, key, nil)
+  end
+
+  defp get_env(key, default) do
+    # handle the case where the config value was set in runtime.exs but to
+    # `nil` because of a missing env var. This allows us to just use `nil`
+    # as the default config values in runtime.exs so avoiding hard-coding
+    # defaults all over the place.
+    case Application.get_env(:electric, key, default) do
+      nil -> default
+      value -> value
+    end
+  end
+
+  @spec fetch_env!(Application.key()) :: Application.value()
+  def fetch_env!(key) do
+    Application.fetch_env!(:electric, key)
+  end
+
   @doc ~S"""
   Parse a PostgreSQL URI into a keyword list.
 

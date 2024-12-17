@@ -31,6 +31,8 @@ defmodule Electric do
 
   @type pg_connection_opts :: [unquote(NimbleOptions.option_typespec(opts_schema))]
 
+  default = fn key -> inspect(Electric.Config.default(key)) end
+
   @moduledoc """
 
   ## Configuration options
@@ -39,24 +41,28 @@ defmodule Electric do
 
       config :electric,
         connection_opts: nil
-        provided_database_id: nil,
-        allow_shape_deletion: false,
-        cache_max_age: 60,
-        cache_stale_age: 300,
-        chunk_bytes_threshold: 10 * 1024 * 1024,
-        instance_id: nil,
-        telemetry_statsd_host: nil,
-        db_pool_size: 20
-        replication_stream_id: "default",
-        replication_slot_temporary?: false
-        service_port: 3000,
-        prometheus_port: nil,
-        storage_dir: "./persistent",
-        storage: {Electric.ShapeCache.FileStorage, storage_dir: "./persistent/shapes"},
-        persistent_kv: {Electric.PersistentKV.Filesystem, :new!, root: "./persistent/state"},
-        listen_on_ipv6?: false,
-        call_home_telemetry: true,
-        telemetry_url: "https://checkpoint.electric-sql.com"
+        # Database
+        provided_database_id: #{default.(:provided_database_id)},
+        db_pool_size: #{default.(:db_pool_size)},
+        replication_stream_id: #{default.(:replication_stream_id)},
+        replication_slot_temporary?: #{default.(:replication_slot_temporary?)},
+        # HTTP API
+        service_port: #{default.(:service_port)},
+        allow_shape_deletion?: #{default.(:allow_shape_deletion?)},
+        cache_max_age: #{default.(:cache_max_age)},
+        cache_stale_age: #{default.(:cache_stale_age)},
+        chunk_bytes_threshold: #{default.(:chunk_bytes_threshold)},
+        listen_on_ipv6?: #{default.(:listen_on_ipv6?)},
+        # Storage
+        storage_dir: #{default.(:storage_dir)},
+        storage: #{default.(:storage)},
+        persistent_kv: #{default.(:persistent_kv)},
+        # Telemetry
+        instance_id: #{default.(:instance_id)},
+        telemetry_statsd_host: #{default.(:telemetry_statsd_host)},
+        prometheus_port: #{default.(:prometheus_port)},
+        call_home_telemetry?: #{default.(:call_home_telemetry?)},
+        telemetry_url: #{default.(:telemetry_url)},
 
   Only the `connection_opts` are required.
 
@@ -64,46 +70,43 @@ defmodule Electric do
 
   - `connection_opts` - **Required**
      #{NimbleOptions.docs(opts_schema, nest_level: 1)}.
-  - `db_pool_size` - How many connections Electric opens as a pool for handling shape queries (default: `20`)
-  - `replication_stream_id` - Suffix for the logical replication publication and slot name (default: `"default"`)
+  - `db_pool_size` - How many connections Electric opens as a pool for handling shape queries (default: `#{default.(:db_pool_size)}`)
+  - `replication_stream_id` - Suffix for the logical replication publication and slot name (default: `#{default.(:replication_stream_id)}`)
 
   ### HTTP API
 
-  - `service_port` - Port that the [HTTP API](https://electric-sql.com/docs/api/http) is exposed on (default: `3000`)
-  - `allow_shape_deletion` - Whether to allow deletion of Shapes via the HTTP API (default: `false`)
-  - `cache_max_age` - Default `max-age` for the cache headers of the HTTP API in seconds (default: `60`s)
-  - `cache_stale_age` - Default `stale-age` for the cache headers of the HTTP API in seconds (default: `300`s)
-  - `chunk_bytes_threshold` - Limit the maximum size in bytes of a shape log response,
-    to ensure they are cached by upstream caches. (default: `10 * 1024 *
-    1024` (10MiB)).
-  - `listen_on_ipv6?` - Whether the HTTP API should listen on IPv6 as well as IPv4 (default: `false`)
+  - `service_port` (`t:integer/0`) - Port that the [HTTP API](https://electric-sql.com/docs/api/http) is exposed on (default: `#{default.(:service_port)}`)
+  - `allow_shape_deletion?` (`t:boolean/0`) - Whether to allow deletion of Shapes via the HTTP API (default: `#{default.(:allow_shape_deletion?)}`)
+  - `cache_max_age` (`t:integer/0`) - Default `max-age` for the cache headers of the HTTP API in seconds (default: `#{default.(:cache_max_age)}`s)
+  - `cache_stale_age` (`t:integer/0`) - Default `stale-age` for the cache headers of the HTTP API in seconds (default: `#{default.(:cache_stale_age)}`s)
+  - `chunk_bytes_threshold` (`t:integer/0`) - Limit the maximum size in bytes of a shape log response,
+    to ensure they are cached by upstream caches. (default: `#{default.(:chunk_bytes_threshold)}` (10MiB)).
+  - `listen_on_ipv6?` (`t:boolean/0`) - Whether the HTTP API should listen on IPv6 as well as IPv4 (default: `#{default.(:listen_on_ipv6?)}`)
 
   ### Storage
 
-  - `storage_dir` - Path to root folder for storing data on the filesystem (default: `"./persistent"`)
-  - `storage` - Where to store shape logs. Must be a 2-tuple of `{module(),
+  - `storage_dir` (`t:String.t/0`) - Path to root folder for storing data on the filesystem (default: `#{default.(:storage_dir)}`)
+  - `storage` (`t:Electric.ShapeCache.Storage.storage/0`) - Where to store shape logs. Must be a 2-tuple of `{module(),
     term()}` where `module` points to an implementation of the
-    `Electric.ShapeCache.Storage` behaviour. (default:
-    `{Electric.ShapeCache.FileStorage, storage_dir: "./persistent/shapes"}`)
-  - `persistent_kv` - A mfa that when called constructs an implementation of
-    the `Electric.PersistentKV` behaviour, used to store system state (defau7lt:
-    `{Electric.PersistentKV.Filesystem, :new!, root: "./persistent/state"}`)
+    `Electric.ShapeCache.Storage` behaviour. (default: `#{default.(:storage)}`)
+  - `persistent_kv` (`t:Electric.PersistentKV.t/0`) - A mfa that when called constructs an implementation of
+    the `Electric.PersistentKV` behaviour, used to store system state (default: `#{default.(:persistent_kv)}`)
 
   ### Telemetry
 
-  - `instance_id` - A unique identifier for the Electric instance (default: a
-    randomly generated UUID). Set this to enable tracking of instance usage
-    metrics across restarts.
-  - `telemetry_statsd_host` - If set, send telemetry data to the given StatsD reporting endpoint (default: `nil`)
-  - `prometheus_port` -If set, expose a prometheus reporter for telemetry data on the specified port (default: `nil`)
-  - `call_home_telemetry` - Allow [anonymous usage
+  - `instance_id` (`t:binary/0`) - A unique identifier for the Electric instance. Set this to
+    enable tracking of instance usage metrics across restarts, otherwise will be
+    randomly generated at boot (default: a randomly generated UUID).
+  - `telemetry_statsd_host` (`t:String.t/0`) - If set, send telemetry data to the given StatsD reporting endpoint (default: `#{default.(:telemetry_statsd_host)}`)
+  - `prometheus_port` (`t:integer/0`) - If set, expose a prometheus reporter for telemetry data on the specified port (default: `#{default.(:prometheus_port)}`)
+  - `call_home_telemetry?` (`t:boolean/0`) - Allow [anonymous usage
     data](https://electric-sql.com/docs/reference/telemetry#anonymous-usage-data)
-    about the instance being sent to a central checkpoint service (default: `true`)
-  - `telemetry_url` - Where to send the usage data (default: `"https://checkpoint.electric-sql.com"`)
+    about the instance being sent to a central checkpoint service (default: `true` for production)
+  - `telemetry_url` (`t:URI.t/0`) - Where to send the usage data (default: `#{default.(:telemetry_url)}`)
 
   ### Deprecated
 
-  - `provided_database_id` - The provided database id is relevant if you had
+  - `provided_database_id` (`t:binary/0`) - The provided database id is relevant if you had
     used v0.8 and want to keep the storage instead of having hanging files. We
     use a provided value as stack id, but nothing else.
   """
@@ -115,33 +118,12 @@ defmodule Electric do
     @connection_opts
   end
 
-  @doc false
-  @spec ensure_instance_id() :: :ok
-  # the instance id needs to be consistent across calls, so we do need to have
-  # a value in the config, even if it's not configured by the user.
-  def ensure_instance_id do
-    case get_env(:instance_id, nil) do
-      nil ->
-        instance_id = generate_instance_id()
-
-        Logger.info("Setting electric instance_id: #{instance_id}")
-        Application.put_env(:electric, :instance_id, instance_id)
-
-      id when is_binary(id) ->
-        :ok
-    end
-  end
-
-  defp generate_instance_id do
-    Electric.Utils.uuid4()
-  end
-
   @doc """
   `instance_id` is used to track a particular server's telemetry metrics.
   """
   @spec instance_id() :: binary | no_return
   def instance_id do
-    fetch_env!(:instance_id)
+    Electric.Config.fetch_env!(:instance_id)
   end
 
   @type relation :: {schema :: String.t(), table :: String.t()}
@@ -150,41 +132,5 @@ defmodule Electric do
   @current_vsn Mix.Project.config()[:version]
   def version do
     @current_vsn
-  end
-
-  @spec get_env(atom(), term()) :: term()
-  def get_env(key, nil) do
-    Application.get_env(:electric, key, nil)
-  end
-
-  def get_env(key, default) do
-    # handle the case where the config value was set in runtime.exs but
-    # to `nil` because of a missing env var. So the `Application.get_env/3`
-    # returns `nil` rather than `default`. Needs to handle the case
-    # where the config has been set to `false`...
-    case Application.get_env(:electric, key, default) do
-      nil -> default
-      value -> value
-    end
-  end
-
-  def fetch_env!(key) do
-    Application.fetch_env!(:electric, key)
-  end
-
-  def default_storage do
-    {Electric.ShapeCache.FileStorage, storage_dir: storage_dir("shapes")}
-  end
-
-  def default_persistent_kv do
-    {Electric.PersistentKV.Filesystem, :new!, root: storage_dir("state")}
-  end
-
-  defp storage_dir(sub_dir) do
-    Path.join(storage_dir(), sub_dir)
-  end
-
-  defp storage_dir do
-    get_env(:storage_dir, "./persistent")
   end
 end

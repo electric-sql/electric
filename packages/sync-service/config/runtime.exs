@@ -1,15 +1,13 @@
 import Config
 import Dotenvy
 
-alias Electric.ConfigParser
-
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 
 if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
 
-config :logger, level: env!("ELECTRIC_LOG_LEVEL", &ConfigParser.parse_log_level!/1, :info)
+config :logger, level: env!("ELECTRIC_LOG_LEVEL", &Electric.Config.parse_log_level!/1, :info)
 
 config :logger, :default_formatter,
   # Doubled line breaks serve as long message boundaries
@@ -106,7 +104,7 @@ config :opentelemetry,
        local_parent_not_sampled: :always_off
      }}
 
-database_url_config = env!("DATABASE_URL", &ConfigParser.parse_postgresql_uri!/1)
+database_url_config = env!("DATABASE_URL", &Electric.Config.parse_postgresql_uri!/1)
 
 database_ipv6_config =
   env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
@@ -115,7 +113,7 @@ connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
 
 config :electric, connection_opts: Electric.Utils.obfuscate_password(connection_opts)
 
-enable_integration_testing = env!("ELECTRIC_ENABLE_INTEGRATION_TESTING", :boolean, nil)
+enable_integration_testing? = env!("ELECTRIC_ENABLE_INTEGRATION_TESTING", :boolean, nil)
 cache_max_age = env!("ELECTRIC_CACHE_MAX_AGE", :integer, nil)
 cache_stale_age = env!("ELECTRIC_CACHE_STALE_AGE", :integer, nil)
 statsd_host = env!("ELECTRIC_STATSD_HOST", :string?, nil)
@@ -188,14 +186,14 @@ prometheus_port = env!("ELECTRIC_PROMETHEUS_PORT", :integer, nil)
 call_home_telemetry_url =
   env!(
     "ELECTRIC_TELEMETRY_URL",
-    &ConfigParser.parse_telemetry_url!/1,
+    &Electric.Config.parse_telemetry_url!/1,
     nil
   )
 
 system_metrics_poll_interval =
   env!(
     "ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL",
-    &ConfigParser.parse_human_readable_time!/1,
+    &Electric.Config.parse_human_readable_time!/1,
     nil
   )
 
@@ -205,7 +203,7 @@ provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, nil)
 
 config :electric,
   provided_database_id: provided_database_id,
-  allow_shape_deletion: enable_integration_testing,
+  allow_shape_deletion?: enable_integration_testing?,
   cache_max_age: cache_max_age,
   cache_stale_age: cache_stale_age,
   chunk_bytes_threshold: chunk_bytes_threshold,
