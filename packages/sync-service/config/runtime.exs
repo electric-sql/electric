@@ -1,14 +1,15 @@
 import Config
 import Dotenvy
 
+alias Electric.ConfigParser
+
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 
 if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
 
-config :logger,
-  level: env!("ELECTRIC_LOG_LEVEL", &Electric.ConfigParser.parse_log_level!/1, :info)
+config :logger, level: env!("ELECTRIC_LOG_LEVEL", &ConfigParser.parse_log_level!/1, :info)
 
 config :logger, :default_formatter,
   # Doubled line breaks serve as long message boundaries
@@ -45,8 +46,6 @@ end
 service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
 instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
 version = Electric.version()
-
-config :telemetry_poller, :default, period: 500
 
 config :opentelemetry,
   resource_detectors: [:otel_resource_env_var, :otel_resource_app_env],
@@ -107,12 +106,10 @@ config :opentelemetry,
        local_parent_not_sampled: :always_off
      }}
 
-database_url = env!("DATABASE_URL", :string!)
+database_url_config = env!("DATABASE_URL", &ConfigParser.parse_postgresql_uri!/1)
 
 database_ipv6_config =
   env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
-
-{:ok, database_url_config} = Electric.ConfigParser.parse_postgresql_uri(database_url)
 
 connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
 
@@ -194,6 +191,21 @@ replication_stream_id =
 storage = {storage_mod, storage_opts}
 
 prometheus_port = env!("ELECTRIC_PROMETHEUS_PORT", :integer, nil)
+
+call_home_telemetry_url =
+  env!(
+    "ELECTRIC_TELEMETRY_URL",
+    &ConfigParser.parse_telemetry_url!/1,
+    "https://checkpoint.electric-sql.com"
+  )
+
+system_metrics_poll_interval =
+  env!(
+    "ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL",
+    &ConfigParser.parse_human_readable_time!/1,
+    :timer.seconds(5)
+  )
+
 # The provided database id is relevant if you had used v0.8 and want to keep the storage
 # instead of having hanging files. We use a provided value as stack id, but nothing else.
 provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, "single_stack")
@@ -206,14 +218,15 @@ config :electric,
   chunk_bytes_threshold: chunk_bytes_threshold,
   # Used in telemetry
   instance_id: instance_id,
+  call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
+  telemetry_url: call_home_telemetry_url,
+  system_metrics_poll_interval: system_metrics_poll_interval,
   telemetry_statsd_host: statsd_host,
+  prometheus_port: prometheus_port,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, 20),
   replication_stream_id: replication_stream_id,
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, false),
   service_port: env!("ELECTRIC_PORT", :integer, 3000),
-  prometheus_port: prometheus_port,
   storage: storage,
   persistent_kv: persistent_kv,
-  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false),
-  call_home_telemetry: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
-  telemetry_url: "https://checkpoint.electric-sql.com"
+  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false)
