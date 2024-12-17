@@ -12,7 +12,6 @@ defmodule Electric.Client.Fetch.Request do
   defstruct [
     :stream_id,
     :endpoint,
-    :database_id,
     :shape_handle,
     :live,
     :shape,
@@ -105,7 +104,6 @@ defmodule Electric.Client.Fetch.Request do
       replica: replica,
       live: live?,
       shape_handle: shape_handle,
-      database_id: database_id,
       offset: %Offset{} = offset,
       next_cursor: cursor,
       params: params
@@ -118,7 +116,6 @@ defmodule Electric.Client.Fetch.Request do
     |> Util.map_put_if("handle", shape_handle, is_binary(shape_handle))
     |> Util.map_put_if("live", "true", live?)
     |> Util.map_put_if("cursor", to_string(cursor), !is_nil(cursor))
-    |> Util.map_put_if("database_id", database_id, !is_nil(database_id))
   end
 
   @doc false

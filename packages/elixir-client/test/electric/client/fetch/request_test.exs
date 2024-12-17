@@ -89,6 +89,38 @@ defmodule Electric.Client.Fetch.RequestTest do
       assert %{"my_param" => "here"} = params
     end
 
+    test "includes client params in the url" do
+      client_params = %{my_goal: "unknowable", my_reasons: "inscrutable"}
+      request_params = %{"my_param" => "here"}
+
+      expected_query_params =
+        client_params
+        |> Map.merge(request_params)
+        |> Map.new(fn {k, v} ->
+          {to_string(k), v}
+        end)
+
+      %Client{params: ^client_params} = client = client!(params: client_params)
+
+      request =
+        Client.request(client,
+          offset: Client.Offset.new(1234, 1),
+          shape_handle: "my-shape",
+          live: true,
+          next_cursor: 123_948,
+          shape: Client.shape!("my_table"),
+          params: request_params
+        )
+
+      url = Request.url(request)
+      {:ok, uri} = URI.new(url)
+      params = URI.decode_query(uri.query)
+
+      for {k, v} <- expected_query_params do
+        assert params[k] == v
+      end
+    end
+
     test "includes column list in parameters" do
       columns = ["id", "value", "description"]
 
@@ -109,27 +141,6 @@ defmodule Electric.Client.Fetch.RequestTest do
 
       column_list = Enum.join(columns, ",")
       assert %{"columns" => ^column_list} = params
-    end
-
-    test "includes client database_id in params" do
-      database_id = "168d01dc-9e19-4887-99d9-7f5eba1ca434"
-
-      request =
-        Client.request(client!(database_id: database_id),
-          offset: Client.Offset.new(1234, 1),
-          shape_handle: "my-shape",
-          live: true,
-          next_cursor: 123_948,
-          shape: Client.shape!("my_table")
-        )
-
-      url = Request.url(request)
-
-      {:ok, uri} = URI.new(url)
-
-      params = URI.decode_query(uri.query)
-
-      assert %{"database_id" => ^database_id} = params
     end
   end
 end

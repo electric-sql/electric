@@ -107,14 +107,54 @@ defmodule Electric.ClientTest do
       assert {:error, _} = Client.new([])
     end
 
-    test "database_id is correctly assigned" do
-      {:ok, %Client{database_id: "1234"}} =
-        Client.new(base_url: "http://localhost:3000", database_id: "1234")
-    end
+    test "params are appended to all requests" do
+      params = %{my_goal: "unknowable", my_reasons: "inscrutable"}
 
-    test "database_id is optional" do
-      {:ok, %Client{database_id: nil}} =
-        Client.new(base_url: "http://localhost:3000", database_id: nil)
+      expected_query_params =
+        Map.new(params, fn {k, v} ->
+          {to_string(k), v}
+        end)
+
+      bypass = Bypass.open()
+
+      {:ok, %Client{params: ^params} = client} =
+        Client.new(base_url: "http://localhost:#{bypass.port}", params: params)
+
+      stream = Client.stream(client, "things", oneshot: true)
+
+      parent = self()
+
+      Bypass.expect(
+        bypass,
+        fn %{
+             query_params: query_params
+           } = conn ->
+          for {k, v} <- expected_query_params do
+            assert query_params[k] == v
+          end
+
+          send(parent, {:request, query_params})
+
+          bypass_resp(conn, "[]",
+            shape_handle: "my-shape",
+            last_offset: "1234_0",
+            schema: Jason.encode!(%{"id" => %{type: "text"}, "value" => %{type: "text"}})
+          )
+        end
+      )
+
+      Task.start_link(fn ->
+        stream |> Stream.take(1) |> Enum.to_list()
+      end)
+
+      receive do
+        {:request, _query} ->
+          :ok
+      after
+        500 ->
+          # the asserts in the bypass handler just trigger a retry loop
+          flunk("did not receive the expected query parameters")
+      end
     end
   end
 
