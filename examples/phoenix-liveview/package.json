@@ -1,0 +1,14 @@
+{
+  "name": "phoenix-liveview",
+  "version": "0.0.0",
+  "dependencies": {
+    "camelcase": "^8.0.0"
+  },
+  "devDependencies": {
+    "typescript": "5.7.2",
+    "sst": "3.3.7"
+  },
+  "scripts": {
+    "deploy": "sst deploy --stage production"
+  }
+}
