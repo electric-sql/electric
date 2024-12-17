@@ -452,9 +452,14 @@ describe(`Shape`, () => {
   })
 
   it(`should support async error handler`, async ({ issuesTableUrl }) => {
+    let authChanged: () => void
+    const authChangePromise = new Promise<void>((res) => {
+      authChanged = res
+    })
     const mockErrorHandler = vi.fn().mockImplementation(async (error) => {
       if (error instanceof FetchError && error.status === 401) {
         await sleep(200)
+        authChanged()
         return {
           headers: {
             Authorization: `valid credentials`,
@@ -489,6 +494,7 @@ describe(`Shape`, () => {
     expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
     expect(shapeStream.isConnected()).toBe(false)
 
+    await authChangePromise
     await sleep(200) // give some time for the error handler to modify the authorization header
     expect(shapeStream.isConnected()).toBe(true)
   })

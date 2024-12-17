@@ -38,9 +38,17 @@ defmodule Electric.Connection.Supervisor do
   def start_shapes_supervisor(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
+    db_pool_opts = Keyword.fetch!(opts, :pool_opts)
+    replication_opts = Keyword.fetch!(opts, :replication_opts)
     inspector = Keyword.fetch!(shape_cache_opts, :inspector)
 
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
+
+    publication_manager_spec =
+      {Electric.Replication.PublicationManager,
+       stack_id: stack_id,
+       publication_name: Keyword.fetch!(replication_opts, :publication_name),
+       db_pool: Keyword.fetch!(db_pool_opts, :name)}
 
     shape_log_collector_spec =
       {Electric.Replication.ShapeLogCollector, stack_id: stack_id, inspector: inspector}
@@ -51,6 +59,7 @@ defmodule Electric.Connection.Supervisor do
           Electric.Replication.Supervisor,
           stack_id: stack_id,
           shape_cache: shape_cache_spec,
+          publication_manager: publication_manager_spec,
           log_collector: shape_log_collector_spec
         },
         restart: :temporary

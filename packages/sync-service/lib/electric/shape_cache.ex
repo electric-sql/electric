@@ -48,6 +48,7 @@ defmodule Electric.ShapeCache do
             log_producer: [type: @genserver_name_schema, required: true],
             consumer_supervisor: [type: @genserver_name_schema, required: true],
             storage: [type: :mod_arg, required: true],
+            publication_manager: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],
             inspector: [type: :mod_arg, required: true],
             shape_status: [type: :atom, default: Electric.ShapeCache.ShapeStatus],
@@ -57,7 +58,6 @@ defmodule Electric.ShapeCache do
               type: {:fun, 2},
               default: &Shapes.Consumer.Snapshotter.run_with_conn/2
             ],
-            prepare_tables_fn: [type: {:or, [:mfa, {:fun, 2}]}, required: true],
             create_snapshot_fn: [
               type: {:fun, 7},
               default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/7
@@ -205,6 +205,7 @@ defmodule Electric.ShapeCache do
       name: opts.name,
       stack_id: opts.stack_id,
       storage: opts.storage,
+      publication_manager: opts.publication_manager,
       chunk_bytes_threshold: opts.chunk_bytes_threshold,
       inspector: opts.inspector,
       shape_meta_table: meta_table,
@@ -213,7 +214,6 @@ defmodule Electric.ShapeCache do
       shape_status_state: shape_status_state,
       run_with_conn_fn: opts.run_with_conn_fn,
       create_snapshot_fn: opts.create_snapshot_fn,
-      prepare_tables_fn: opts.prepare_tables_fn,
       log_producer: opts.log_producer,
       registry: opts.registry,
       consumer_supervisor: opts.consumer_supervisor,
@@ -225,6 +225,10 @@ defmodule Electric.ShapeCache do
     else
       recover_shapes(state)
     end
+
+    # ensure publication filters are in line with existing shapes
+    {publication_manager, publication_manager_opts} = opts.publication_manager
+    publication_manager.refresh_publication(publication_manager_opts)
 
     # do this after finishing this function so that we're subscribed to the
     # producer before it starts forwarding its demand
@@ -303,11 +307,16 @@ defmodule Electric.ShapeCache do
   end
 
   defp recover_shapes(state) do
+    %{publication_manager: {publication_manager, publication_manager_opts}} = state
+
     state.shape_status_state
     |> state.shape_status.list_shapes()
     |> Enum.each(fn {shape_handle, shape} ->
       try do
         {:ok, _pid, _snapshot_xmin, _latest_offset} = start_shape(shape_handle, shape, state)
+
+        # recover publication filter state
+        :ok = publication_manager.recover_shape(shape, publication_manager_opts)
       rescue
         e ->
           Logger.error("Failed to recover shape #{shape_handle}: #{inspect(e)}")
@@ -329,6 +338,7 @@ defmodule Electric.ShapeCache do
              shape: shape,
              shape_status: {state.shape_status, state.shape_status_state},
              storage: state.storage,
+             publication_manager: state.publication_manager,
              chunk_bytes_threshold: state.chunk_bytes_threshold,
              log_producer: state.log_producer,
              shape_cache:
@@ -341,7 +351,6 @@ defmodule Electric.ShapeCache do
              registry: state.registry,
              db_pool: state.db_pool,
              run_with_conn_fn: state.run_with_conn_fn,
-             prepare_tables_fn: state.prepare_tables_fn,
              create_snapshot_fn: state.create_snapshot_fn
            ) do
       consumer = Shapes.Consumer.name(state.stack_id, shape_handle)

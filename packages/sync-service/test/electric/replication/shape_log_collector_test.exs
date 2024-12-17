@@ -10,14 +10,20 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
   alias Support.Mock
   alias Support.StubInspector
-  import Support.ComponentSetup, only: [with_in_memory_storage: 1, with_stack_id_from_test: 1]
+
+  import Support.ComponentSetup,
+    only: [
+      with_in_memory_storage: 1,
+      with_stack_id_from_test: 1,
+      with_noop_publication_manager: 1
+    ]
 
   import Mox
 
   @moduletag :capture_log
 
   setup :verify_on_exit!
-  setup [:with_stack_id_from_test, :with_in_memory_storage]
+  setup [:with_stack_id_from_test, :with_in_memory_storage, :with_noop_publication_manager]
 
   setup(ctx) do
     # Start a test Registry
@@ -47,7 +53,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
         inspector: {Mock.Inspector, []},
         shape_status: Mock.ShapeStatus,
-        prepare_tables_fn: fn _, _ -> {:ok, [:ok]} end,
+        publication_manager: ctx.publication_manager,
         log_producer: ShapeLogCollector.name(ctx.stack_id),
         stack_id: ctx.stack_id,
         consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(ctx.stack_id),
