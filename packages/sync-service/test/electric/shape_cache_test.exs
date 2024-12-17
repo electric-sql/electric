@@ -216,7 +216,8 @@ defmodule Electric.ShapeCacheTest do
       :with_inspector,
       :with_shape_log_collector,
       :with_publication_manager,
-      :with_shape_cache
+      :with_shape_cache,
+      :with_sql_execute
     ]
 
     setup %{pool: pool} do
@@ -398,6 +399,50 @@ defmodule Electric.ShapeCacheTest do
 
       log =~
         ~S|** (Postgrex.Error) ERROR 42P01 (undefined_table) relation "public.nonexistent" does not exist|
+    end
+
+    @tag with_sql: [
+           ~s|CREATE TABLE "partitioned_items" (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (b)|,
+           ~s|CREATE TABLE "partitioned_items_100" PARTITION OF "partitioned_items" FOR VALUES FROM (0) TO (99)|,
+           ~s|CREATE TABLE "partitioned_items_200" PARTITION OF "partitioned_items" FOR VALUES FROM (100) TO (199)|
+         ]
+    test "can create shape from partitioned table", ctx do
+      Postgrex.query!(
+        ctx.pool,
+        "INSERT INTO partitioned_items (a, b) VALUES ($1, $2), ($3, $4), ($5, $6)",
+        [1, 50, 2, 150, 3, 10]
+      )
+
+      shape = %Shape{
+        root_table: {"public", "partitioned_items"},
+        root_table_id: 1,
+        table_info: %{
+          {"public", "partitioned_items"} => %{
+            columns: [
+              %{name: "a", type: "int4", type_id: {23, -1}, pk_position: 0},
+              %{name: "b", type: "int4", type_id: {23, -1}, pk_position: 1}
+            ],
+            pk: ["a", "b"]
+          }
+        }
+      }
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, ctx.shape_cache_opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.shape_cache_opts)
+      storage = Storage.for_shape(shape_handle, ctx.storage)
+
+      stream =
+        Storage.get_log_stream(
+          LogOffset.before_all(),
+          LogOffset.last_before_real_offsets(),
+          storage
+        )
+
+      assert [
+               %{"value" => %{"a" => "1"}},
+               %{"value" => %{"a" => "2"}},
+               %{"value" => %{"a" => "3"}}
+             ] = stream_to_list(stream, "a")
     end
   end
 
@@ -929,9 +974,9 @@ defmodule Electric.ShapeCacheTest do
 
   def run_with_conn_noop(conn, cb), do: cb.(conn)
 
-  defp stream_to_list(stream) do
+  defp stream_to_list(stream, sort_col \\ "value") do
     stream
     |> Enum.map(&Jason.decode!/1)
-    |> Enum.sort_by(fn %{"value" => %{"value" => val}} -> val end)
+    |> Enum.sort_by(fn %{"value" => value} -> value[sort_col] end)
   end
 end

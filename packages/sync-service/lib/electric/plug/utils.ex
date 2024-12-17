@@ -127,8 +127,7 @@ defmodule Electric.Plug.Utils do
     stack_ready_timeout = Access.get(conn.assigns.config, :stack_ready_timeout, 5_000)
     stack_events_registry = conn.assigns.config[:stack_events_registry]
 
-    ref = make_ref()
-    Electric.StackSupervisor.subscribe_to_stack_events(stack_events_registry, stack_id, ref)
+    ref = Electric.StackSupervisor.subscribe_to_stack_events(stack_events_registry, stack_id)
 
     if Electric.ProcessRegistry.alive?(stack_id, Electric.Replication.Supervisor) do
       conn

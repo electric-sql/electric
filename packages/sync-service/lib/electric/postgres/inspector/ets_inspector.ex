@@ -1,6 +1,8 @@
 defmodule Electric.Postgres.Inspector.EtsInspector do
-  alias Electric.Postgres.Inspector.DirectInspector
   use GenServer
+
+  alias Electric.Postgres.Inspector.DirectInspector
+
   @behaviour Electric.Postgres.Inspector
 
   ## Public API
@@ -117,7 +119,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
           {:error, err} ->
             {:reply, {:error, err}, state}
 
-          {:ok, relation} ->
+          {:ok, %{relation: relation} = info} ->
             # We keep the mapping in both directions:
             # - Forward: user-provided table name -> PG relation (many-to-one)
             #     e.g. `~s|users|` -> `{"public", "users"}`
@@ -127,9 +129,11 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
             #
             # The forward direction allows for efficient lookup (based on user-provided table name)
             # the backward direction allows for efficient cleanup (based on PG relation)
-            :ets.insert(state.pg_info_table, {{table, :table_to_relation}, relation})
-            :ets.insert(state.pg_relation_table, {{relation, :relation_to_table}, table})
-            {:reply, {:ok, relation}, state}
+            :ets.insert(state.pg_info_table, {{table, :table_to_relation}, info})
+            :ets.insert(state.pg_info_table, {{relation, :table_to_relation}, info})
+            :ets.insert(state.pg_relation_table, {{info, :relation_to_table}, table})
+            :ets.insert(state.pg_relation_table, {{info, :relation_to_table}, relation})
+            {:reply, {:ok, info}, state}
         end
 
       relation ->
@@ -159,10 +163,24 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   end
 
   @pg_rel_position 2
-  defp relation_from_ets(table, opts_or_state) do
+  defp relation_from_ets(table, opts_or_state) when is_binary(table) do
     ets_table = get_column_info_table(opts_or_state)
 
     :ets.lookup_element(ets_table, {table, :table_to_relation}, @pg_rel_position, :not_found)
+  end
+
+  defp relation_from_ets({_schema, _name} = relation, opts_or_state) do
+    ets_table = get_column_info_table(opts_or_state)
+
+    with info when is_map(info) <-
+           :ets.lookup_element(
+             ets_table,
+             {relation, :table_to_relation},
+             @pg_rel_position,
+             :not_found
+           ) do
+      info
+    end
   end
 
   @pg_table_idx 1

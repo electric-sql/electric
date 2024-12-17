@@ -182,8 +182,7 @@ defmodule Support.ComponentSetup do
 
     stack_events_registry = Registry.StackEvents
 
-    ref = make_ref()
-    Electric.StackSupervisor.subscribe_to_stack_events(stack_events_registry, stack_id, ref)
+    ref = Electric.StackSupervisor.subscribe_to_stack_events(stack_events_registry, stack_id)
 
     stack_supervisor =
       start_supervised!(
@@ -214,10 +213,13 @@ defmodule Support.ComponentSetup do
 
     %{
       stack_id: stack_id,
+      registry: Electric.StackSupervisor.registry_name(stack_id),
       stack_events_registry: stack_events_registry,
+      shape_cache: {ShapeCache, [stack_id: stack_id]},
       persistent_kv: kv,
       stack_supervisor: stack_supervisor,
-      storage: storage
+      storage: storage,
+      inspector: {EtsInspector, stack_id: stack_id, server: EtsInspector.name(stack_id: stack_id)}
     }
   end
 

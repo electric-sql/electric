@@ -207,6 +207,31 @@ defmodule Electric.Shapes.ShapeTest do
 
       assert Shape.convert_change(shape, non_matching_update) == []
     end
+
+    test "re-writes changes to partition on shape" do
+      shape = %Shape{
+        root_table: {"public", "partition_root"},
+        root_table_id: @relation_id,
+        partitions: %{
+          {"public", "partition_01"} => {"public", "partition_root"},
+          {"public", "partition_02"} => {"public", "partition_root"}
+        }
+      }
+
+      partition_update = %UpdatedRecord{
+        relation: {"public", "partition_02"},
+        old_record: %{"id" => 1, "value" => "same", "other_value" => "old"},
+        record: %{"id" => 1, "value" => "same", "other_value" => "new"}
+      }
+
+      assert Shape.convert_change(shape, partition_update) == [
+               %UpdatedRecord{
+                 relation: {"public", "partition_root"},
+                 old_record: %{"id" => 1, "value" => "same", "other_value" => "old"},
+                 record: %{"id" => 1, "value" => "same", "other_value" => "new"}
+               }
+             ]
+    end
   end
 
   describe "new/2" do

@@ -211,7 +211,7 @@ defmodule Electric.Postgres.Configuration do
     FROM input_relations ir
     JOIN pg_class pc ON pc.relname = ir.tablename
     JOIN pg_namespace pn ON pn.oid = pc.relnamespace
-    WHERE pn.nspname = ir.schemaname AND pc.relkind = 'r';
+    WHERE pn.nspname = ir.schemaname AND pc.relkind IN ('r', 'p');
     """
 
     relations = Map.keys(filters)

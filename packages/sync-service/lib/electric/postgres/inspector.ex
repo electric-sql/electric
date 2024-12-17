@@ -1,7 +1,9 @@
 defmodule Electric.Postgres.Inspector do
   alias Electric.Replication.Eval.Parser
+
   @type relation :: Electric.relation()
   @type relation_id :: Electric.relation_id()
+  @type relation_kind :: :ordinary_table | :partitioned_table
 
   @type column_info :: %{
           name: String.t(),
@@ -17,15 +19,19 @@ defmodule Electric.Postgres.Inspector do
 
   @type relation_info :: %{
           relation_id: relation_id(),
-          relation: relation()
+          relation: relation(),
+          kind: relation_kind(),
+          parent: nil | relation(),
+          children: nil | [relation(), ...]
         }
 
-  @callback load_relation(String.t(), opts :: term()) ::
+  @callback load_relation(String.t() | relation(), opts :: term()) ::
               {:ok, relation_info()} | {:error, String.t()}
 
   @callback load_column_info(relation(), opts :: term()) ::
               {:ok, [column_info()]} | :table_not_found
 
+  # @callback introspect_relation()
   @callback clean(relation(), opts :: term()) :: true
 
   @type inspector :: {module(), opts :: term()}
@@ -40,9 +46,14 @@ defmodule Electric.Postgres.Inspector do
        `"Users"` would return `{"public", "Users"}`,
        `some_schema.users` would return `{"some_schema", "users"}`.
   """
-  @spec load_relation(String.t(), inspector()) :: {:ok, relation_info()} | {:error, String.t()}
-  def load_relation(table, {module, opts}),
-    do: module.load_relation(table, opts)
+  def load_relation(%{schema: schema, table: table}, inspector),
+    do: load_relation({schema, table}, inspector)
+
+  @spec load_relation(String.t() | relation(), inspector()) ::
+          {:ok, relation_info()} | {:error, String.t()}
+  def load_relation(table, {module, opts}) do
+    module.load_relation(table, opts)
+  end
 
   @doc """
   Load column information about a given table using a provided inspector.
@@ -55,6 +66,7 @@ defmodule Electric.Postgres.Inspector do
   @doc """
   Clean up all information about a given relation using a provided inspector.
   """
+
   @spec clean(relation(), inspector()) :: true
   def clean(relation, {module, opts}), do: module.clean(relation, opts)
 

@@ -22,6 +22,7 @@ defmodule Electric.Shapes.Dispatcher do
   """
 
   require Logger
+
   alias Electric.Shapes.Filter
 
   defmodule State do
@@ -32,13 +33,13 @@ defmodule Electric.Shapes.Dispatcher do
 
   @impl GenStage.Dispatcher
 
-  def init(_opts) do
+  def init(opts) do
     {:ok,
      %State{
        waiting: 0,
        pending: nil,
        subscribers: [],
-       filter: Filter.new(),
+       filter: Filter.new(opts),
        pids: MapSet.new()
      }}
   end
@@ -141,9 +142,14 @@ defmodule Electric.Shapes.Dispatcher do
   end
 
   def dispatch([event], _length, %State{waiting: 0, subscribers: subscribers} = state) do
+    {filter, affected_shapes} =
+      Filter.affected_shapes(
+        state.filter,
+        event
+      )
+
     {waiting, pending} =
-      state.filter
-      |> Filter.affected_shapes(event)
+      affected_shapes
       |> Enum.reduce({0, MapSet.new()}, fn {pid, ref} = subscriber, {waiting, pending} ->
         Process.send(pid, {:"$gen_consumer", {self(), ref}, [event]}, [:noconnect])
         {waiting + 1, MapSet.put(pending, subscriber)}
@@ -160,7 +166,7 @@ defmodule Electric.Shapes.Dispatcher do
           {waiting, pending}
       end
 
-    {:ok, [], %State{state | waiting: waiting, pending: pending}}
+    {:ok, [], %State{state | filter: filter, waiting: waiting, pending: pending}}
   end
 
   @impl GenStage.Dispatcher
