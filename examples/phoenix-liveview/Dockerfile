@@ -1,0 +1,82 @@
+ARG ELIXIR_VERSION=1.17.2
+ARG OTP_VERSION=27.0.1
+ARG DEBIAN_VERSION=bookworm-20240722-slim
+
+ARG BUILDER_IMAGE="hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}"
+ARG RUNNER_IMAGE="debian:${DEBIAN_VERSION}"
+
+FROM ${BUILDER_IMAGE} AS builder
+LABEL maintainer="info@electric-sql.com"
+
+RUN apt-get update -y && \
+    apt-get install -y build-essential git curl && \
+    apt-get clean && \
+    rm -f /var/lib/apt/lists/*_*
+
+RUN mix local.hex --force && mix local.rebar --force
+
+WORKDIR /app
+
+COPY mix.* /app/
+COPY config/config.exs /app/config/
+COPY config/prod.exs /app/config/
+#RUN mix deps.get
+#RUN mix deps.compile
+
+# These are ordered by change frequency, with the least frequently changing dir first.
+#COPY rel /app/rel
+COPY lib /app/lib/
+
+# COPY package.json /app/
+COPY config/*runtime.exs /app/config/
+
+COPY assets /app/assets/
+COPY priv /app/priv/
+
+#RUN mix compile
+
+#RUN mix setup
+
+#FROM ${RUNNER_IMAGE} AS runner_setup
+#
+#RUN apt-get update -y && \
+#    apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates curl && \
+#    apt-get clean && \
+#    rm -f /var/lib/apt/lists/*_*
+#
+## Set the locale
+#RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
+#
+#ENV LANG=en_US.UTF-8
+#ENV LANGUAGE=en_US:en
+#ENV LC_ALL=en_US.UTF-8
+
+WORKDIR "/app"
+RUN chown nobody /app
+
+#FROM runner_setup AS runner
+
+ARG ELECTRIC_URL
+ARG DATABASE_URL
+ARG SECRET_KEY_BASE
+
+#COPY --from=builder /app/_build/prod/rel/${RELEASE_NAME} ./
+#RUN mv /app/bin/${RELEASE_NAME} /app/bin/entrypoint
+
+RUN mix deps.get --only prod
+
+ENV MIX_ENV=prod
+RUN mix compile
+
+#RUN mix phx.digest
+
+ENV ELECTRIC_URL="$ELECTRIC_URL"
+ENV DATABASE_URL="$DATABASE_URL"
+ENV SECRET_KEY_BASE="$SECRET_KEY_BASE"
+
+#RUN ELECTRIC_URL="$ELECTRIC_URL" DATABASE_URL="$DATABASE_URL" SECRET_KEY_BASE="$(mix phx.gen.secret)" mix setup
+RUN mix setup
+
+#ENTRYPOINT ["/app/bin/entrypoint"]
+CMD ["mix", "phx.server"]
+EXPOSE 4000
