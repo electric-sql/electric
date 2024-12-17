@@ -20,6 +20,7 @@ defmodule Support.DbSetup do
       |> :erlang.phash2(64 ** 5)
       |> :binary.encode_unsigned()
       |> Base.encode64()
+      |> String.replace_trailing("==","")
 
     # Truncate the database name to 63 characters, use hash to guarantee uniqueness
     db_name = "#{db_name_hash} ~ #{String.slice(full_db_name, 0..50)}"
