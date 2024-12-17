@@ -13,7 +13,14 @@ defmodule Support.DbSetup do
     {:ok, utility_pool} = start_db_pool(base_config)
     Process.unlink(utility_pool)
 
-    db_name = to_string(ctx.test)
+    full_db_name = to_string(ctx.test)
+
+    db_name_hash =
+      full_db_name |> :erlang.phash2(9999) |> to_string() |> String.pad_leading(4, "0")
+
+    # Truncate the database name to 63 characters, use hash to guarantee uniqueness
+    db_name = "#{db_name_hash} ~ #{String.slice(full_db_name, 0..54)}"
+
     escaped_db_name = :binary.replace(db_name, ~s'"', ~s'""', [:global])
 
     Postgrex.query!(utility_pool, "DROP DATABASE IF EXISTS \"#{escaped_db_name}\"", [])
