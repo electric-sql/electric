@@ -65,34 +65,34 @@ defmodule Electric.ConfigParser do
       ]}
 
       iex> parse_postgresql_uri("postgres://super_user@localhost:7801/postgres?sslmode=yesplease")
-      {:error, "has invalid \"sslmode\" value: \"yesplease\""}
+      {:error, "invalid \"sslmode\" value: \"yesplease\""}
 
       iex> parse_postgresql_uri("postgrex://localhost")
-      {:error, "has invalid URL scheme: \"postgrex\""}
+      {:error, "invalid URL scheme: \"postgrex\""}
 
       iex> parse_postgresql_uri("postgresql://localhost")
-      {:error, "has invalid or missing username"}
+      {:error, "invalid or missing username"}
 
       iex> parse_postgresql_uri("postgresql://:@localhost")
-      {:error, "has invalid or missing username"}
+      {:error, "invalid or missing username"}
 
       iex> parse_postgresql_uri("postgresql://:password@localhost")
-      {:error, "has invalid or missing username"}
+      {:error, "invalid or missing username"}
 
       iex> parse_postgresql_uri("postgresql://user:password")
-      {:error, "has invalid or missing username"}
+      {:error, "invalid or missing username"}
 
       iex> parse_postgresql_uri("postgresql://user:password@")
       {:error, "missing host"}
 
       iex> parse_postgresql_uri("postgresql://user@localhost:5433/mydb?opts=-c%20synchronous_commit%3Doff&foo=bar")
-      {:error, "has unsupported query options: \"foo\", \"opts\""}
+      {:error, "unsupported query options: \"foo\", \"opts\""}
 
       iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=database")
-      {:error, "has unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
+      {:error, "unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
 
       iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=off")
-      {:error, "has unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
+      {:error, "unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
   """
   @spec parse_postgresql_uri(binary) :: {:ok, keyword} | {:error, binary}
   def parse_postgresql_uri(uri_str) do
@@ -122,12 +122,12 @@ defmodule Electric.ConfigParser do
   def parse_postgresql_uri!(uri_str) do
     case parse_postgresql_uri(uri_str) do
       {:ok, results} -> results
-      {:error, reason} -> raise reason
+      {:error, message} -> raise Dotenvy.Error, message: message
     end
   end
 
   defp validate_url_scheme(scheme) when scheme in ["postgres", "postgresql"], do: :ok
-  defp validate_url_scheme(scheme), do: {:error, "has invalid URL scheme: #{inspect(scheme)}"}
+  defp validate_url_scheme(scheme), do: {:error, "invalid URL scheme: #{inspect(scheme)}"}
 
   defp validate_url_host(str) do
     if is_binary(str) and String.trim(str) != "" do
@@ -143,7 +143,7 @@ defmodule Electric.ConfigParser do
          false <- String.trim(username) == "" do
       {:ok, {username, password}}
     else
-      _ -> {:error, "has invalid or missing username"}
+      _ -> {:error, "invalid or missing username"}
     end
   end
 
@@ -167,18 +167,18 @@ defmodule Electric.ConfigParser do
 
       %{"sslmode" => sslmode} when sslmode in ~w[verify-ca verify-full] ->
         {:error,
-         "has unsupported \"sslmode\" value #{inspect(sslmode)}. Consider using the DATABASE_REQUIRE_SSL configuration option"}
+         "unsupported \"sslmode\" value #{inspect(sslmode)}. Consider using the DATABASE_REQUIRE_SSL configuration option"}
 
       %{"sslmode" => sslmode} ->
-        {:error, "has invalid \"sslmode\" value: #{inspect(sslmode)}"}
+        {:error, "invalid \"sslmode\" value: #{inspect(sslmode)}"}
 
       %{"replication" => _} ->
         {:error,
-         "has unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
+         "unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
 
       map ->
         {:error,
-         "has unsupported query options: " <>
+         "unsupported query options: " <>
            (map |> Map.keys() |> Enum.sort() |> Enum.map_join(", ", &inspect/1))}
     end
   end
@@ -196,7 +196,7 @@ defmodule Electric.ConfigParser do
   end
 
   def parse_log_level(str) do
-    {:error, "has invalid value: #{inspect(str)}. Must be one of #{inspect(@public_log_levels)}"}
+    {:error, "invalid log level: #{inspect(str)}. Must be one of #{inspect(@public_log_levels)}"}
   end
 
   def parse_log_level!(str) when str in @log_levels, do: String.to_existing_atom(str)
@@ -209,7 +209,7 @@ defmodule Electric.ConfigParser do
   def parse_telemetry_url(str) do
     case URI.new(str) do
       {:ok, %URI{scheme: scheme}} when scheme in ["http", "https"] -> {:ok, str}
-      _ -> {:error, "has invalid URL format: \"#{str}\""}
+      _ -> {:error, "invalid URL format: \"#{str}\""}
     end
   end
 
@@ -231,7 +231,7 @@ defmodule Electric.ConfigParser do
          true <- suffix == "" or suffix in @time_units do
       {:ok, trunc(num * time_multiplier(suffix))}
     else
-      _ -> {:error, "has invalid value: #{inspect(str)}. Must be one of #{inspect(@time_units)}"}
+      _ -> {:error, "invalid time unit: #{inspect(str)}. Must be one of #{inspect(@time_units)}"}
     end
   end
 
