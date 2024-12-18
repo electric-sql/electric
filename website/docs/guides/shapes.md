@@ -91,7 +91,7 @@ In Electric, we filter the changes we receive from Postgres so that each shape o
 If there are lots of shapes, this could mean we have to evaluate lots of where clauses for each write, one for each shape, however we have optimised this process
 so that we can evaluate millions of where clauses at once, providing the where clauses follow various patterns, which we call optimised where clauses.
 
-In the future we plan to optimse a large subset of Postgres where clauses, however in our current implimentation there is only a few patterns we optimise:
+In the future we plan to optimse a large subset of Postgres where clauses, however in our current beta implimentation there is only a few patterns we optimise:
 
 - `field = constant` - we can evaluate millions of these where clauses at once by indexing the shapes based on the constant
   value for each shape. This index is internal to Electric, and nothing to do with Postgres indexes. It's a hashmap if you're interested.
