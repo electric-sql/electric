@@ -187,7 +187,7 @@ is using an optimised where clause, specifically `field = constant`.
 > When you create a shape, you can specify a where clause that filters the rows that the shape is interested in.
 > In Electric, we filter the changes we receive from Postgres so that each shape only receives changes that affect the rows it is interested in.
 > If there are lots of shapes, this could mean we have to evaluate lots of where clauses for each write, however we have optimised this process
-> so that we can evalute millions of where clauses at once, providing the where clauses follow various patterns, which we call optimised where clauses.
+> so that we can evaluate millions of where clauses at once, providing the where clauses follow various patterns, which we call optimised where clauses.
 > `field = constant` is one of the patterns we optimise, we can evaluate millions of these where clauses at once by indexing the shapes based on the constant
 > value for each shape. This index is internal to Electric, and nothing to do with Postgres indexes. It's a hashmap if you're interested.
 > `field = const AND another_condition` is another pattern we optimise. We aim to optimise a large subset of Postgres where clauses in the future.
