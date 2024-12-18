@@ -95,7 +95,7 @@ In the future we plan to optimse a large subset of Postgres where clauses, howev
 
 - `field = constant` - we can evaluate millions of these where clauses at once by indexing the shapes based on the constant
   value for each shape. This index is internal to Electric, and nothing to do with Postgres indexes. It's a hashmap if you're interested.
-- `field = constant AND another_condition` - the `field = constant` part of the where clause is optimised as above, and any shapes that that match that are then
+- `field = constant AND another_condition` - the `field = constant` part of the where clause is optimised as above, and any shapes that match are
   iterated through to check the other condition. Providing the first condition is enough to filter out most of the shapes, the write processing will be fast.
   If however `field = const` matches for a large number of shapes, then the write processing will be slower since each of the shapes will need to be iterated through.
 - `a_non_optimised_condition AND field = constant` - much like `field = constant AND another_condition` however now the optimised condition is at the end of the where clause.
