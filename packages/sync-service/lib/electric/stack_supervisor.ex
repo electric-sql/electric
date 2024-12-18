@@ -28,8 +28,11 @@ defmodule Electric.StackSupervisor do
       2. `Electric.Replication.ShapeLogCollector` collects transactions from the replication connection, fanning them out to `Electric.Shapes.Consumer` (4.1.1.2)
       3. `Electric.ShapeCache` coordinates shape creation and handle allocation, shape metadata
   """
-  alias Electric.ShapeCache.LogChunker
+
+  # Setting `restart: :transient` is required for passing the `:auto_shutdown` to `Supervisor.init()` below.
   use Supervisor, restart: :transient
+
+  alias Electric.ShapeCache.LogChunker
 
   @opts_schema NimbleOptions.new!(
                  name: [type: :any, required: false],
@@ -119,6 +122,11 @@ defmodule Electric.StackSupervisor do
   def subscribe_to_stack_events(registry, stack_id, ref \\ make_ref()) do
     {:ok, _pid} = Registry.register(registry, {:stack_status, stack_id}, ref)
     ref
+  end
+
+  # noop if there's no registry running
+  def dispatch_stack_event(nil, _stack_id, _event) do
+    :ok
   end
 
   def dispatch_stack_event(registry, stack_id, event) do
