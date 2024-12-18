@@ -117,7 +117,9 @@ type InternalParamsRecord = {
 /**
  * Helper function to resolve a function or value to its final value
  */
-export async function resolveValue<T>(value: T | (() => T | Promise<T>)): Promise<T> {
+export async function resolveValue<T>(
+  value: T | (() => T | Promise<T>)
+): Promise<T> {
   if (typeof value === `function`) {
     return (value as () => T | Promise<T>)()
   }
