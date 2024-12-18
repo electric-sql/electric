@@ -3,10 +3,17 @@ defmodule Electric.MixProject do
 
   @github_repo "https://github.com/electric-sql/electric"
 
+  # Project version is obtained by evaluating version.exs in development. Before publishing to
+  # hex.pm, the line below is replaced with a static version string via the
+  # `mix:write-static-version` script in package.json.
+  {version, _bindings} = Code.eval_file("version.exs")
+  @version version || "0.0.0"
+  @docs_source_ref_version version || "main"
+
   def project do
     [
       app: :electric,
-      version: version(),
+      version: @version,
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -121,28 +128,6 @@ defmodule Electric.MixProject do
     ]
   end
 
-  defp version(default \\ "0.0.0") do
-    with :error <- version_from_env(),
-         :error <- version_from_package_json() do
-      default
-    end
-  end
-
-  defp version_from_env do
-    with {:ok, version} <- System.fetch_env("ELECTRIC_VERSION"),
-         trimmed = String.trim(version),
-         {:ok, _} <- Version.parse(trimmed) do
-      trimmed
-    end
-  end
-
-  defp version_from_package_json do
-    case File.read("./package.json") do
-      {:ok, binary} -> binary |> :json.decode() |> Map.fetch!("version")
-      {:error, _} -> :error
-    end
-  end
-
   defp description do
     "Postgres sync engine. Sync little subsets of your Postgres data into local apps and services. "
   end
@@ -158,8 +143,7 @@ defmodule Electric.MixProject do
   end
 
   defp docs do
-    version = version("main")
-    tag = URI.encode("@core/sync-service@#{version}", &(&1 != ?@))
+    tag = URI.encode("@core/sync-service@#{@docs_source_ref_version}", &(&1 != ?@))
 
     [
       main: "readme",

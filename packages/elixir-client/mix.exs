@@ -3,10 +3,17 @@ defmodule Electric.Client.MixProject do
 
   @github_repo "https://github.com/electric-sql/electric"
 
+  # Project version is obtained by evaluating version.exs in development. Before publishing to
+  # hex.pm, the line below is replaced with a static version string via the
+  # `mix:write-static-version` script in package.json.
+  {version, _bindings} = Code.eval_file("version.exs")
+  @version version || "0.0.0"
+  @docs_source_ref_version version || "main"
+
   def project do
     [
       app: :electric_client,
-      version: version(),
+      version: @version,
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -59,8 +66,7 @@ defmodule Electric.Client.MixProject do
   defp deps_for(_), do: []
 
   defp docs do
-    version = version("main")
-    tag = URI.encode("@core/elixir-client@#{version}", &(&1 != ?@))
+    tag = URI.encode("@core/elixir-client@#{@docs_source_ref_version}", &(&1 != ?@))
 
     [
       main: "Electric.Client",
@@ -83,27 +89,5 @@ defmodule Electric.Client.MixProject do
 
   defp description do
     "Elixir client for ElectricSQL"
-  end
-
-  defp version(default \\ "0.0.0") do
-    with :error <- version_from_env(),
-         :error <- version_from_package_json() do
-      default
-    end
-  end
-
-  defp version_from_env do
-    with {:ok, version} <- System.fetch_env("ELECTRIC_CLIENT_VERSION"),
-         trimmed = String.trim(version),
-         {:ok, _} <- Version.parse(trimmed) do
-      trimmed
-    end
-  end
-
-  defp version_from_package_json do
-    case File.read("./package.json") do
-      {:ok, binary} -> binary |> :json.decode() |> Map.fetch!("version")
-      {:error, _} -> :error
-    end
   end
 end
