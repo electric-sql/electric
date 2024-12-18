@@ -15,6 +15,8 @@ import SingleShapeSingleClient from '/static/img/benchmarks/single-shape-single-
 import WriteFanout from '/static/img/benchmarks/write-fanout.png?url'
 import WriteFanoutMemory from '/static/img/benchmarks/write-fanout-memory.png?url'
 import UnrelatedShapesOneClientLatency from '/static/img/benchmarks/unrelated-shapes-one-client-latency.png?url'
+import ReplicationThroughputOptimised from '/static/img/benchmarks/replication-throughput-optimised.png?url'
+import ReplicationThroughputNonOptimised from '/static/img/benchmarks/replication-throughput-non-optimised.png?url'
 import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 </script>
 
@@ -50,17 +52,22 @@ We are working to set up benchmarks to run on every release (patch, minor and ma
 
 ## Electric
 
-The first two benchmarks measure initial sync time, i.e. read performance:
+The first two benchmarks measure a client's initial sync time:
 
 1. [many concurrent clients syncing a small shape](#_1-many-concurrent-clients-syncing-a-small-shape)
 2. [a single client syncing a large shape](#_2-a-single-client-syncing-a-large-shape)
 
-The next four measure live update time, i.e. write performance:
+The next four measure how long it takes for clients to recieve an update after a write:
 
 3. [many disjoint shapes](#_3-many-disjoint-shapes)
 4. [one shape with many clients](#_4-one-shape-with-many-clients)
 5. [many overlapping shapes, each with a single client](#_5-many-overlapping-shapes-each-with-a-single-client)
 6. [many overlapping shapes, one client](#_6-many-overlapping-shapes-one-client)
+
+The last two benchmarks measure how long it takes Electric to process a write:
+
+7. [write throughput with optimised where clauses](#_7-write-throughput-with-optimised-where-clauses)
+8. [write throughput with non-optimised where clauses](#_8-write-throughput-with-non-optimised-where-clauses)
 
 ### Initial sync
 
@@ -162,6 +169,59 @@ Latency and memory use rises linearly.
 In this benchmark there are a varying number of shapes with just one client subscribed to one of the shapes. It shows the length of time it takes for a single write that affects all the shapes to reach the client.
 
 Latency and peak memory use rises linearly. Average memory use is flat.
+
+#### 7. Write throughput with optimised where clauses
+
+<figure>
+  <a :href="ReplicationThroughputOptimised">
+    <img :src="ReplicationThroughputOptimised"
+        alt="Benchmark measuring how many writes per second Electric can process"
+    />
+  </a>
+</figure>
+
+This benchmark measures how long each write takes to process with a varying number of shapes. Each shape in this benchmark
+is using an optimised where clause, specifically `field = constant`.
+
+> [!Tip] Optimised where clauses
+> When you create a shape, you can specify a where clause that filters the rows that the shape is interested in.
+> In Electric, we filter the changes we receive from Postgres so that each shape only receives changes that affect the rows it is interested in.
+> If there are lots of shapes, this could mean we have to evaluate lots of where clauses for each write, however we have optimised this process
+> so that we can evalute millions of where clauses at once, providing the where clauses follow various patterns, which we call optimised where clauses.
+> `field = constant` is one of the patterns we optimise, we can evaluate millions of these where clauses at once by indexing the shapes based on the constant
+> value for each shape. This index is internal to Electric, and nothing to do with Postgres indexes. It's a hashmap if you're interested.
+> `field = const AND another_condition` is another pattern we optimise. We aim to optimise a large subset of Postgres where clauses in the future.
+> Optimised where clauses mean that we can process writes in a quarter of a millisecond, regardless of how many shapes there are.
+
+The top graph shows throughput for Postgres 14, the bottom graph for Postgres 15.
+
+The green line shows how fast we process writes that affect shapes. You can see in both graphs that throughput is flat at 0.17-0.27 milliseconds per change
+(4000 - 6000 row changes per second) regardless of how many shapes there are.
+
+The purple line shows how fast we ignore writes that don't affect any shapes. For Postgres 14 (top graph) this is flat at 0.02 milliseconds per change (50,000 row changes per second).For Postgres 15 (bottom graph) the throughput scales linearly with the number of shapes. This is because Postgres 15 has the ability to filter the replication stream based on a
+where clause, so we use this to filter out writes that don't affect any shapes. However as you can see in the graph, in this situation this is not a good optimisation!
+We're working on improving this, but at the moment it's kept as it's beneficial when using non-optimised where clauses (see benchmark 8).
+
+#### 8. Write throughput with non-optimised where clauses
+
+<figure>
+  <a :href="ReplicationThroughputNonOptimised">
+    <img :src="ReplicationThroughputNonOptimised"
+        alt="Benchmark measuring how many writes per second Electric can process"
+    />
+  </a>
+</figure>
+
+This benchmark also measures how long each write takes to process with a varying number of shapes, but in this benchmark each shape
+is using an non-optimised where clause, specifically `field ILIKE constant`. You can see in both graphs that throughput scales linearly with the number of shapes.
+This is because, for non-optimised where clauses, Electric has to evaluate each shape individually to determine if it is affected by the write.
+
+The top graph shows throughput for Postgres 14. You can see throughput is the roughly the same regardless of whether the write affects shapes (green) or not (purple),
+140k row changes per second per shape.
+
+The bottom graph shows throughput for Postgres 15. Postgres 15 has the ability to filter the replication stream based on a where clause,
+so we use this to filter out writes that don't affect any shapes. So for writes that affect shapes, we get the same  140k row changes per second per shape as Postgres 14,
+but for writes that don't affect shapes, we get 1400k row changes per second per shape.
 
 ## Cloud
 
