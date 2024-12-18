@@ -85,6 +85,27 @@ You can use logical operators like `AND` and `OR` to group multiple conditions, 
 >
 > If you need to use a data type or where clause feature that isn't yet supported, please feel free to [raise a Feature Request](https://github.com/electric-sql/electric/discussions/categories/feature-requests) on GitHub.
 
+#### Optimised where clauses
+
+In Electric, we filter the changes we receive from Postgres so that each shape only receives changes that affect the rows it is interested in.
+If there are lots of shapes, this could mean we have to evaluate lots of where clauses for each write, one for each shape, however we have optimised this process
+so that we can evaluate millions of where clauses at once, providing the where clauses follow various patterns, which we call optimised where clauses.
+
+In the future we plan to optimse a large subset of Postgres where clauses, however in our current implimentation there is only a few patterns we optimise:
+
+- `field = constant` - we can evaluate millions of these where clauses at once by indexing the shapes based on the constant
+  value for each shape. This index is internal to Electric, and nothing to do with Postgres indexes. It's a hashmap if you're interested.
+- `field = constant AND another_condition` - the `field = constant` part of the where clause is optimised as above, and any shapes that that match that and then
+  iterated through to check the other condition. Providing the first condition is enough to filter out most of the shapes, the write processing will be fast.
+  If however `field = const` matches for a large number of shapes, then the write processing will be slower since each of the shapes will need to be iterated through.
+- `a_non_optimised_condition AND field = constant` - much like `field = constant AND another_condition` however now the optimised condition is at the end of the where clause.
+  Providing the last condition is enough to filter out most of the shapes, the write processing will be fast. If however the last condition matches for a large number of shapes,
+  then the write processing will be slower since each of the shapes will need to be iterated through.
+
+For optimised where clauses, we can process 4000 - 6000 row changes per second, regardless of how many shapes there are.
+For non-optimised where clauses, we can process 140k row changes per second **per shape**.
+For more details see the [benchmarks](/docs/reference/benchmarks#_7-write-throughput-with-optimised-where-clauses).
+
 ### `columns`
 
 Optional list of columns to include in the rows from the table, e.g.:
