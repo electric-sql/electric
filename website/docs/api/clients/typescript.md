@@ -233,6 +233,31 @@ const stream = new ShapeStream({
 })
 ```
 
+#### Dynamic Options
+
+Both `params` and `headers` support function options that are resolved when needed. These functions can be synchronous or asynchronous:
+
+```typescript
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  params: {
+    table: 'items',
+    userId: () => getCurrentUserId(),
+    filter: async () => await getUserPreferences()
+  },
+  headers: {
+    'Authorization': async () => `Bearer ${await getAccessToken()}`,
+    'X-Tenant-Id': () => getCurrentTenant()
+  }
+})
+```
+
+Function options are resolved in parallel, making this pattern efficient for multiple async operations like fetching auth tokens and user context. Common use cases include:
+- Authentication tokens that need to be refreshed
+- User-specific parameters that may change
+- Dynamic filtering based on current state
+- Multi-tenant applications where context determines the request
+
 #### Messages
 
 A `ShapeStream` consumes and emits a stream of messages. These messages can either be a `ChangeMessage` representing a change to the shape data:

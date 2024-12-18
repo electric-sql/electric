@@ -202,16 +202,22 @@ export interface ShapeStreamOptions<T = never> {
 
   /**
    * HTTP headers to attach to requests made by the client.
-   * Can be used for adding authentication headers.
+   * Values can be strings or functions (sync or async) that return strings.
+   * Function values are resolved in parallel when needed, making this useful
+   * for authentication tokens or other dynamic headers.
    */
   headers?: ExternalHeadersRecord
 
   /**
    * Additional request parameters to attach to the URL.
+   * Values can be strings, string arrays, or functions (sync or async) that return these types.
+   * Function values are resolved in parallel when needed, making this useful
+   * for user-specific parameters or dynamic filters.
+   * 
    * These will be merged with Electric's standard parameters.
    * Note: You cannot use Electric's reserved parameter names
    * (offset, handle, live, cursor).
-   *
+   * 
    * PostgreSQL-specific options like table, where, columns, and replica
    * should be specified here.
    */
