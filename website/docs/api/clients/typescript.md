@@ -325,10 +325,9 @@ const stream = new ShapeStream({
 
 This is less efficient and will use more bandwidth for the same shape (especially for tables with large static column values). Note also that shapes with different `replica` settings are distinct, even for the same table and where clause combination.
 
-#### Custom error handler
+#### Authentication with Dynamic Tokens
 
-You can provide a custom error handler to recover from 4xx HTTP errors. 
-Using a custom error handler we can for instance refresh the authorization token when a request is rejected with a `401 Unauthorized` status code because the token expired:
+When working with authentication tokens that need to be refreshed, the recommended approach is to use a function-based header:
 
 ```ts
 const stream = new ShapeStream({
@@ -336,25 +335,22 @@ const stream = new ShapeStream({
   params: {
     table: 'items'
   },
-  // Add authentication header
   headers: {
-    'Authorization': 'Bearer token'
+    'Authorization': async () => `Bearer ${await getToken()}`
   },
-  // Add custom URL parameters
   onError: async (error) => {
     if (error instanceof FetchError && error.status === 401) {
-      const token = await getToken()
-      return {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
+      // Force token refresh or handle specific auth errors
+      await refreshToken()
+      // The next request will automatically get a fresh token via the function-based header
     }
     // Rethrow errors we can't handle
     throw error
   }
 })
 ```
+
+This approach automatically handles token refresh as the function is called each time a request is made. You can also combine this with an error handler for more complex scenarios.
 
 ### Shape
 
