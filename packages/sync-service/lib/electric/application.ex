@@ -71,7 +71,8 @@ defmodule Electric.Application do
             ],
             pool_opts: [pool_size: Electric.Config.get_env(:db_pool_size)],
             storage: storage,
-            chunk_bytes_threshold: Electric.Config.get_env(:chunk_bytes_threshold)
+            chunk_bytes_threshold: Electric.Config.get_env(:chunk_bytes_threshold),
+            name: Electric.StackSupervisor
           },
           {Electric.Telemetry, stack_id: stack_id, storage: storage},
           {Bandit,
