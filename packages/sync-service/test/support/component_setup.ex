@@ -214,6 +214,7 @@ defmodule Support.ComponentSetup do
 
     %{
       stack_id: stack_id,
+      registry: Electric.StackSupervisor.registry_name(stack_id),
       stack_events_registry: stack_events_registry,
       persistent_kv: kv,
       stack_supervisor: stack_supervisor,

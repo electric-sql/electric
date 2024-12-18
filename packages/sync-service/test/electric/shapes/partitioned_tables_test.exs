@@ -55,22 +55,26 @@ defmodule Electric.Shapes.PartitionedTablesTest do
       [1, 50, 2, 150, 3, 10]
     )
 
-    Process.sleep(1000)
+    Process.sleep(4000)
 
-    Postgrex.query!(
-      ctx.db_conn,
-      ~s|CREATE TABLE "partitioned_items_300" PARTITION OF "partitioned_items" FOR VALUES FROM (200) TO (299)|,
-      []
-    )
+    # Postgrex.query!(
+    #   ctx.db_conn,
+    #   ~s|CREATE TABLE "partitioned_items_300" PARTITION OF "partitioned_items" FOR VALUES FROM (200) TO (299)|,
+    #   []
+    # )
 
-    Process.sleep(1000)
+    # Process.sleep(1000)
 
-    Postgrex.query!(
-      ctx.db_conn,
-      "INSERT INTO partitioned_items (a, b) VALUES ($1, $2), ($3, $4), ($5, $6)",
-      [4, 50, 5, 250, 6, 10]
-    )
+    # Postgrex.query!(
+    #   ctx.db_conn,
+    #   "INSERT INTO partitioned_items (a, b) VALUES ($1, $2), ($3, $4), ($5, $6)",
+    #   [4, 50, 5, 250, 6, 10]
+    # )
 
-    Process.sleep(1000)
+    ref = make_ref()
+    # registry = Electric.ProcessRegistry.registry_name(ctx.stack_id)
+    Registry.register(ctx.registry, shape_handle, ref)
+    assert_receive {^ref, :new_changes, latest_log_offset}, 1000
+    dbg(latest_log_offset)
   end
 end
