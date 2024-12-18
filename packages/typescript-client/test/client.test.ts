@@ -5,6 +5,7 @@ import { testWithIssuesTable as it } from './support/test-context'
 import { ShapeStream, Shape, FetchError } from '../src'
 import { Message, Row, ChangeMessage } from '../src/types'
 import { MissingHeadersError } from '../src/error'
+import { resolveValue } from '../src'
 
 const BASE_URL = inject(`baseUrl`)
 
@@ -188,7 +189,6 @@ describe(`Shape`, () => {
       fetchClient: fetchWrapper,
     })
     const shape = new Shape(shapeStream)
-
     let dataUpdateCount = 0
     await new Promise<void>((resolve, reject) => {
       setTimeout(() => reject(`Timed out waiting for data changes`), 1000)
@@ -663,5 +663,52 @@ describe(`Shape`, () => {
       // changed by the updates: 'full' param
       await clearIssuesShape(shapeStream.shapeHandle)
     }
+  })
+
+  it(`should support function-based params and headers`, async ({
+    issuesTableUrl,
+  }) => {
+    const mockParamFn = vi.fn().mockReturnValue(`test-value`)
+    const mockAsyncParamFn = vi.fn().mockResolvedValue(`test-value`)
+    const mockHeaderFn = vi.fn().mockReturnValue(`test-value`)
+    const mockAsyncHeaderFn = vi.fn().mockResolvedValue(`test-value`)
+
+    // Test with synchronous functions
+    const shapeStream1 = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+        customParam: mockParamFn,
+      },
+      headers: {
+        'X-Custom-Header': mockHeaderFn,
+      },
+    })
+    const shape1 = new Shape(shapeStream1)
+    await shape1.value
+
+    expect(mockParamFn).toHaveBeenCalled()
+    expect(mockHeaderFn).toHaveBeenCalled()
+
+    // Test with async functions
+    const shapeStream2 = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+        customParam: mockAsyncParamFn,
+      },
+      headers: {
+        'X-Custom-Header': mockAsyncHeaderFn,
+      },
+    })
+    const shape2 = new Shape(shapeStream2)
+    await shape2.value
+
+    expect(mockAsyncParamFn).toHaveBeenCalled()
+    expect(mockAsyncHeaderFn).toHaveBeenCalled()
+
+    // Verify the resolved values
+    expect(await resolveValue(mockParamFn())).toBe(`test-value`)
+    expect(await resolveValue(mockAsyncParamFn())).toBe(`test-value`)
   })
 })

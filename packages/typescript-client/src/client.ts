@@ -88,10 +88,22 @@ type ReservedParamKeys =
 
 /**
  * External params type - what users provide.
- * Includes documented PostgreSQL params and allows string or string[] values for any additional params.
+ * Includes documented PostgreSQL params and allows string, string[], or function values for any additional params.
  */
-type ExternalParamsRecord = Partial<PostgresParams> & {
-  [K in string as K extends ReservedParamKeys ? never : K]: string | string[]
+export type ExternalParamsRecord = PostgresParams & {
+  [key: string]:
+    | string
+    | string[]
+    | (() => string | string[] | Promise<string | string[]>)
+    | undefined
+}
+
+/**
+ * External headers type - what users provide.
+ * Allows string or function values for any header.
+ */
+export type ExternalHeadersRecord = {
+  [key: string]: string | (() => string | Promise<string>)
 }
 
 /**
@@ -103,19 +115,57 @@ type InternalParamsRecord = {
 }
 
 /**
+ * Helper function to resolve a function or value to its final value
+ */
+export async function resolveValue<T>(value: T | (() => T | Promise<T>)): Promise<T> {
+  if (typeof value === `function`) {
+    return (value as () => T | Promise<T>)()
+  }
+  return value
+}
+
+/**
  * Helper function to convert external params to internal format
  */
-function toInternalParams(params: ExternalParamsRecord): InternalParamsRecord {
-  const result: InternalParamsRecord = {}
-  for (const [key, value] of Object.entries(params)) {
-    result[key] = Array.isArray(value) ? value.join(`,`) : value
-  }
-  return result
+async function toInternalParams(
+  params: ExternalParamsRecord
+): Promise<InternalParamsRecord> {
+  const entries = Object.entries(params)
+  const resolvedEntries = await Promise.all(
+    entries.map(async ([key, value]) => {
+      if (value === undefined) return [key, undefined]
+      const resolvedValue = await resolveValue(value)
+      return [
+        key,
+        Array.isArray(resolvedValue) ? resolvedValue.join(`,`) : resolvedValue,
+      ]
+    })
+  )
+
+  return Object.fromEntries(
+    resolvedEntries.filter(([_, value]) => value !== undefined)
+  )
+}
+
+/**
+ * Helper function to resolve headers
+ */
+async function resolveHeaders(
+  headers?: ExternalHeadersRecord
+): Promise<Record<string, string>> {
+  if (!headers) return {}
+
+  const entries = Object.entries(headers)
+  const resolvedEntries = await Promise.all(
+    entries.map(async ([key, value]) => [key, await resolveValue(value)])
+  )
+
+  return Object.fromEntries(resolvedEntries)
 }
 
 type RetryOpts = {
   params?: ExternalParamsRecord
-  headers?: Record<string, string>
+  headers?: ExternalHeadersRecord
 }
 
 type ShapeStreamErrorHandler = (
@@ -152,7 +202,7 @@ export interface ShapeStreamOptions<T = never> {
    * HTTP headers to attach to requests made by the client.
    * Can be used for adding authentication headers.
    */
-  headers?: Record<string, string>
+  headers?: ExternalHeadersRecord
 
   /**
    * Additional request parameters to attach to the URL.
@@ -320,6 +370,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         const fetchUrl = new URL(url)
 
+        // Resolve headers first
+        const requestHeaders = await resolveHeaders(this.options.headers)
+
         // Add any custom parameters first
         if (this.options.params) {
           // Check for reserved parameter names
@@ -332,8 +385,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
             )
           }
 
+          // Resolve params
+          const params = await toInternalParams(this.options.params)
+
           // Add PostgreSQL-specific parameters from params
-          const params = toInternalParams(this.options.params)
           if (params.table)
             fetchUrl.searchParams.set(TABLE_QUERY_PARAM, params.table)
           if (params.where)
@@ -381,7 +436,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         try {
           response = await this.#fetchClient(fetchUrl.toString(), {
             signal,
-            headers: this.options.headers,
+            headers: requestHeaders,
           })
           this.#connected = true
         } catch (e) {
