@@ -191,6 +191,7 @@ is using an optimised where clause, specifically `field = constant`.
 > `field = constant` is one of the patterns we optimise, we can evaluate millions of these where clauses at once by indexing the shapes based on the constant
 > value for each shape. This index is internal to Electric, and nothing to do with Postgres indexes. It's a hashmap if you're interested.
 > `field = const AND another_condition` is another pattern we optimise. We aim to optimise a large subset of Postgres where clauses in the future.
+> Optimised where clauses mean that we can process writes in a quarter of a millisecond, regardless of how many shapes there are.
 
 The top graph shows throughput for Postgres 14, the bottom graph for Postgres 15.
 
