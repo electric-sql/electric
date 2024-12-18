@@ -32,7 +32,17 @@ defmodule Electric.Shapes.PartitionedTablesTest do
       }
     }
 
-    dbg(ctx)
+    Electric.Postgres.Inspector.DirectInspector.load_relation(
+      "public.partitioned_items",
+      ctx.db_conn
+    )
+    |> dbg
+
+    Electric.Postgres.Inspector.DirectInspector.load_relation(
+      "public.partitioned_items_100",
+      ctx.db_conn
+    )
+    |> dbg
 
     {shape_handle, _} =
       ShapeCache.get_or_create_shape_handle(shape, stack_id: ctx.stack_id) |> dbg
@@ -45,6 +55,22 @@ defmodule Electric.Shapes.PartitionedTablesTest do
       [1, 50, 2, 150, 3, 10]
     )
 
-    Process.sleep(3000)
+    Process.sleep(1000)
+
+    Postgrex.query!(
+      ctx.db_conn,
+      ~s|CREATE TABLE "partitioned_items_300" PARTITION OF "partitioned_items" FOR VALUES FROM (200) TO (299)|,
+      []
+    )
+
+    Process.sleep(1000)
+
+    Postgrex.query!(
+      ctx.db_conn,
+      "INSERT INTO partitioned_items (a, b) VALUES ($1, $2), ($3, $4), ($5, $6)",
+      [4, 50, 5, 250, 6, 10]
+    )
+
+    Process.sleep(1000)
   end
 end

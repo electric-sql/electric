@@ -22,6 +22,14 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
                EtsInspector.load_relation("PuBliC.ItEmS", opts)
     end
 
+    test "can reload the info using the relation", %{opts: opts, table: table} do
+      assert {:ok, %{relation: ^table, relation_id: _, kind: :ordinary_table}} =
+               EtsInspector.load_relation("public.items", opts)
+
+      assert {:ok, %{relation: ^table, relation_id: _, kind: :ordinary_table}} =
+               EtsInspector.load_relation(table, opts)
+    end
+
     test "returns same value from ETS cache as the original call", %{opts: opts, table: table} do
       original = EtsInspector.load_relation("PuBliC.ItEmS", opts)
       from_cache = EtsInspector.load_relation("PuBliC.ItEmS", opts)
@@ -59,17 +67,50 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     end
 
     @tag with_sql: [
-           ~s|CREATE TABLE "partitioned_items" (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (b)|
+           ~s|CREATE TABLE "just_normal_john" (a INT PRIMARY KEY)|
          ]
-    test "can introspect partitioned tables", %{
+    test "returns blank children and parent for non-partitioned tables", %{
       opts: opts
     } do
+      assert {:ok, %{relation: {"public", "just_normal_john"}, parent: nil, children: nil}} =
+               EtsInspector.load_relation("public.just_normal_john", opts)
+    end
+
+    @tag with_sql: [
+           ~s|CREATE SCHEMA other|,
+           ~s|CREATE TABLE "partitioned_items" (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (b)|,
+           ~s|CREATE TABLE "partitioned_items_100" PARTITION OF "partitioned_items" FOR VALUES FROM (0) TO (99)|,
+           ~s|CREATE TABLE "partitioned_items_200" PARTITION OF "partitioned_items" FOR VALUES FROM (100) TO (199)|,
+           ~s|CREATE TABLE other."partitioned_items_300" PARTITION OF "partitioned_items" FOR VALUES FROM (200) TO (299)|
+         ]
+    test "returns the partitioned table heirarchy", %{
+      opts: opts
+    } do
+      partitions = [
+        {"public", "partitioned_items_100"},
+        {"public", "partitioned_items_200"},
+        {"other", "partitioned_items_300"}
+      ]
+
       assert {:ok,
               %{
+                parent: nil,
                 relation: {"public", "partitioned_items"},
                 relation_id: _,
-                kind: :partitioned_table
+                kind: :partitioned_table,
+                children: ^partitions
               }} = EtsInspector.load_relation("public.partitioned_items", opts)
+
+      for {schema, name} = relation <- partitions do
+        assert {:ok,
+                %{
+                  parent: {"public", "partitioned_items"},
+                  relation: ^relation,
+                  relation_id: _,
+                  kind: :ordinary_table,
+                  children: nil
+                }} = EtsInspector.load_relation("#{schema}.#{name}", opts)
+      end
     end
   end
 
@@ -99,7 +140,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       # Another table
       table3 = ~s|"ITEMS"|
 
-      assert {:ok, relation} = EtsInspector.load_relation(table1, opts)
+      assert {:ok, %{relation: rel} = relation} = EtsInspector.load_relation(table1, opts)
       assert {:ok, ^relation} = EtsInspector.load_relation(table2, opts)
       assert {:ok, relation2} = EtsInspector.load_relation(table3, opts)
       assert relation != relation2
@@ -107,11 +148,13 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       # Check that the relations are in the ETS cache
       assert :ets.lookup(pg_relation_table, {relation, :relation_to_table}) == [
                {{relation, :relation_to_table}, "public.items"},
+               {{relation, :relation_to_table}, {"public", "items"}},
                {{relation, :relation_to_table}, "PUBLIC.ITEMS"}
              ]
 
       assert :ets.lookup(pg_relation_table, {relation2, :relation_to_table}) == [
-               {{relation2, :relation_to_table}, ~s|"ITEMS"|}
+               {{relation2, :relation_to_table}, ~s|"ITEMS"|},
+               {{relation2, :relation_to_table}, {"public", "ITEMS"}}
              ]
 
       assert :ets.lookup_element(pg_info_table, {table1, :table_to_relation}, 2, :not_found) ==
@@ -130,6 +173,8 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       assert :ets.member(pg_relation_table, {relation, :relation_to_table}) == false
       assert :ets.member(pg_info_table, {table1, :table_to_relation}) == false
       assert :ets.member(pg_info_table, {table2, :table_to_relation}) == false
+      # we also remove the info cached under the {schema, name} relation
+      assert :ets.member(pg_info_table, {rel, :table_to_relation}) == false
 
       # relation2 should still be in the cache
       assert :ets.member(pg_relation_table, {relation2, :relation_to_table}) == true

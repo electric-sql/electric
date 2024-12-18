@@ -129,12 +129,6 @@ defmodule Electric.Postgres.Configuration do
         []
       )
 
-      Postgrex.query!(
-        conn,
-        "ALTER PUBLICATION #{Utils.quote_name(publication_name)} SET ( publish_via_partition_root = true )",
-        []
-      )
-
       # `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
       # but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
       # deadlock if the order is reversed.

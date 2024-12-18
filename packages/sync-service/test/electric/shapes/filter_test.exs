@@ -18,10 +18,14 @@ defmodule Electric.Shapes.FilterTest do
                %{name: "an_array", array_type: "int8"}
              ])
 
+  defp filter(inspector \\ @inspector) do
+    Filter.new(inspector: inspector)
+  end
+
   describe "affected_shapes/2" do
     test "returns shapes affected by insert" do
       filter =
-        Filter.new()
+        filter()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
@@ -42,7 +46,7 @@ defmodule Electric.Shapes.FilterTest do
 
     test "returns shapes affected by delete" do
       filter =
-        Filter.new()
+        filter()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
@@ -63,7 +67,7 @@ defmodule Electric.Shapes.FilterTest do
 
     test "returns shapes affected by update" do
       filter =
-        Filter.new()
+        filter()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
@@ -86,7 +90,7 @@ defmodule Electric.Shapes.FilterTest do
 
     test "returns shapes affected by relation change" do
       filter =
-        Filter.new()
+        filter()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id > 7", inspector: @inspector))
@@ -108,7 +112,7 @@ defmodule Electric.Shapes.FilterTest do
       s3 = Shape.new!("t3", inspector: @inspector)
 
       filter =
-        Filter.new()
+        filter()
         |> Filter.add_shape("s1", s1)
         |> Filter.add_shape("s2", s2)
         |> Filter.add_shape("s3", s3)
@@ -120,7 +124,7 @@ defmodule Electric.Shapes.FilterTest do
 
     test "returns shapes affected by truncation" do
       filter =
-        Filter.new()
+        filter()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id > 7", inspector: @inspector))
@@ -138,7 +142,7 @@ defmodule Electric.Shapes.FilterTest do
 
   test "shape with no where clause is affected by all changes for the same table" do
     shape = Shape.new!("t1", inspector: @inspector)
-    filter = Filter.new() |> Filter.add_shape("s", shape)
+    filter = filter() |> Filter.add_shape("s", shape)
 
     assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
     assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new(["s"])
@@ -147,7 +151,7 @@ defmodule Electric.Shapes.FilterTest do
 
   test "shape with a where clause is affected by changes that match that where clause" do
     shape = Shape.new!("t1", where: "id = 7", inspector: @inspector)
-    filter = Filter.new() |> Filter.add_shape("s", shape)
+    filter = filter() |> Filter.add_shape("s", shape)
 
     assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
     assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new([])
@@ -156,7 +160,7 @@ defmodule Electric.Shapes.FilterTest do
 
   test "invalid record value logs an error and says all shapes for the table are affected" do
     filter =
-      Filter.new()
+      filter()
       |> Filter.add_shape("shape1", Shape.new!("table", inspector: @inspector))
       |> Filter.add_shape("shape2", Shape.new!("table", where: "id = 7", inspector: @inspector))
       |> Filter.add_shape("shape3", Shape.new!("table", where: "id = 8", inspector: @inspector))
@@ -173,7 +177,7 @@ defmodule Electric.Shapes.FilterTest do
   end
 
   test "Filter.remove_shape/2" do
-    empty = Filter.new()
+    empty = filter()
 
     filter1 =
       empty
@@ -231,7 +235,7 @@ defmodule Electric.Shapes.FilterTest do
 
       transaction = change("the_table", record)
 
-      assert Filter.new()
+      assert filter()
              |> Filter.add_shape("the-shape", shape)
              |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"]) == affected
     end
@@ -263,7 +267,7 @@ defmodule Electric.Shapes.FilterTest do
     test "where clause in the form `field = const` is optimised" do
       filter =
         1..@shape_count
-        |> Enum.reduce(Filter.new(), fn i, filter ->
+        |> Enum.reduce(filter(), fn i, filter ->
           Filter.add_shape(filter, i, Shape.new!("t1", where: "id = #{i}", inspector: @inspector))
         end)
 
@@ -280,7 +284,7 @@ defmodule Electric.Shapes.FilterTest do
     test "where clause in the form `field = const AND another_condition` is optimised" do
       filter =
         1..@shape_count
-        |> Enum.reduce(Filter.new(), fn i, filter ->
+        |> Enum.reduce(filter(), fn i, filter ->
           Filter.add_shape(
             filter,
             i,
@@ -301,7 +305,7 @@ defmodule Electric.Shapes.FilterTest do
     test "where clause in the form `a_condition AND field = const` is optimised" do
       filter =
         1..@shape_count
-        |> Enum.reduce(Filter.new(), fn i, filter ->
+        |> Enum.reduce(filter(), fn i, filter ->
           Filter.add_shape(
             filter,
             i,
@@ -324,6 +328,106 @@ defmodule Electric.Shapes.FilterTest do
       fun.()
       {:reductions, reductions_after} = :erlang.process_info(self(), :reductions)
       reductions_after - reductions_before
+    end
+  end
+
+  @partition_inspector StubInspector.new(%{
+                         {"public", "partitioned"} => %{
+                           relation: %{
+                             children: [{"public", "partition_01"}, {"public", "partition_02"}]
+                           },
+                           columns: [
+                             %{name: "id", type: "int8", pk_position: 0},
+                             %{name: "an_array", array_type: "int8"}
+                           ]
+                         },
+                         {"public", "partition_01"} => %{
+                           relation: %{
+                             children: nil,
+                             parent: {"public", "partitioned"}
+                           },
+                           columns: [
+                             %{name: "id", type: "int8", pk_position: 0},
+                             %{name: "an_array", array_type: "int8"}
+                           ]
+                         },
+                         {"public", "partition_02"} => %{
+                           relation: %{
+                             children: nil,
+                             parent: {"public", "partitioned"}
+                           },
+                           columns: [
+                             %{name: "id", type: "int8", pk_position: 0},
+                             %{name: "an_array", array_type: "int8"}
+                           ]
+                         }
+                       })
+
+  describe "partitioned tables" do
+    @tag :wip
+    test "changes to table partition are sent to root" do
+      filter =
+        Filter.new(inspector: @partition_inspector)
+        |> Filter.add_shape("s1", Shape.new!("partitioned", inspector: @partition_inspector))
+        |> Filter.add_shape(
+          "s2",
+          Shape.new!("partitioned", where: "id = 2", inspector: @partition_inspector)
+        )
+        |> Filter.add_shape(
+          "s3",
+          Shape.new!("partitioned", where: "id = 3", inspector: @partition_inspector)
+        )
+
+      insert =
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"public", "partition_01"},
+              record: %{"id" => "2"}
+            }
+          ]
+        }
+
+      assert Filter.affected_shapes(filter, insert) == MapSet.new(["s1", "s2"])
+    end
+
+    @tag :wip
+    test "changes to table partition are always sent to partition shape" do
+      filter =
+        Filter.new(inspector: @partition_inspector)
+        |> Filter.add_shape("s1", Shape.new!("partitioned", inspector: @partition_inspector))
+        |> Filter.add_shape(
+          "s2",
+          Shape.new!("partitioned", where: "id = 2", inspector: @partition_inspector)
+        )
+        |> Filter.add_shape(
+          "s3",
+          Shape.new!("partition_01", inspector: @partition_inspector)
+        )
+
+      insert =
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"public", "partition_01"},
+              record: %{"id" => "2"}
+            }
+          ]
+        }
+
+      assert Filter.affected_shapes(filter, insert) == MapSet.new(["s1", "s2", "s3"])
+
+      insert =
+        %Transaction{
+          changes: [
+            %NewRecord{
+              relation: {"public", "partition_02"},
+              record: %{"id" => "2"}
+            }
+          ]
+        }
+
+      assert Filter.affected_shapes(filter, insert) == MapSet.new(["s1", "s2"])
     end
   end
 

@@ -22,6 +22,7 @@ defmodule Electric.Shapes.Dispatcher do
   """
 
   require Logger
+
   alias Electric.Shapes.Filter
 
   defmodule State do
@@ -32,13 +33,13 @@ defmodule Electric.Shapes.Dispatcher do
 
   @impl GenStage.Dispatcher
 
-  def init(_opts) do
+  def init(opts) do
     {:ok,
      %State{
        waiting: 0,
        pending: nil,
        subscribers: [],
-       filter: Filter.new(),
+       filter: Filter.new(opts),
        pids: MapSet.new()
      }}
   end
