@@ -1,5 +1,6 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
+import { execSync } from "child_process"
 import camelcase from "camelcase"
 
 const isProduction = (stage) => stage.toLowerCase() === `production`
@@ -53,13 +54,6 @@ export default $config({
     const domainName = `liveview${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`
 
     // Run the server on ECS
-    const awsProvider = new aws.Provider(
-      camelcase(`phoenix-liveview-provider-${regionName}`),
-      {
-        region: regionName,
-      }
-    )
-
     const vpcName = camelcase(`electric-region-vpc-2-${regionName}`)
     const vpc = new sst.aws.Vpc(
       vpcName,
@@ -91,6 +85,7 @@ export default $config({
         },
         cpu: `0.25 vCPU`,
         memory: `0.5 GB`,
+        architecture: `arm64`, // TODO: remove this once it works
         transform: {
           target: {
             deregistrationDelay: 0,
@@ -101,26 +96,22 @@ export default $config({
         },
         environment: {
           DATABASE_URL: $interpolate`${pgBaseUri}?ssl=true`,
-          ELECTRIC_URL: "https://api-dev-production.electric-sql.com",
-          ELECTRIC_DATABASE_ID: electricInfo.id,
-          ELECTRIC_TOKEN: electricInfo.token,
-          SECRET_KEY_BASE:
-            "L3QqWzf6ZxGgQW4MoVQUOEMXy0KN6zS1/NXValYI/wkjB2hjujpBSVUKB22s8R7E",
+          ELECTRIC_URL: `https://api-dev-production.electric-sql.com`,
+          SECRET_KEY_BASE: `L3QqWzf6ZxGgQW4MoVQUOEMXy0KN6zS1/NXValYI/wkjB2hjujpBSVUKB22s8R7E`,
+          PHX_HOST: domainName,
+          ELECTRIC_CLIENT_PARAMS: JSON.stringify({
+            database_id: electricInfo.id,
+            token: electricInfo.token,
+          }),
         },
-        /*
-        volumes: [
-          {
-            efs: permanentStorage,
-            path: storagePath,
-          },
-        ],
-        */
         image: {
           context: `.`,
           dockerfile: `Dockerfile`,
         },
       }
     )
+    
+    pgUriForElectric.apply(applyMigrations)
 
     return {
       liveview: liveviewService.url,
@@ -129,6 +120,15 @@ export default $config({
     }
   },
 })
+
+function applyMigrations(uri: string) {
+  execSync(`pnpm exec pg-migrations apply --directory ./db/migrations`, {
+    env: {
+      ...process.env,
+      DATABASE_URL: uri,
+    },
+  })
+}
 
 async function addDatabaseToElectric(
   uri: string,

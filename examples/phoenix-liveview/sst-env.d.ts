@@ -9,5 +9,10 @@ declare module "sst" {
     "electricRegionVpc2EuWest1": {
       "type": "sst.aws.Vpc"
     }
+    "phoenixLiveviewServiceEuWest1": {
+      "service": string
+      "type": "sst.aws.Service"
+      "url": string
+    }
   }
 }

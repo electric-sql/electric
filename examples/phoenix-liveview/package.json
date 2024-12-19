@@ -5,6 +5,7 @@
     "camelcase": "^8.0.0"
   },
   "devDependencies": {
+    "@databases/pg-migrations": "^5.0.3",
     "typescript": "5.7.2",
     "sst": "3.3.7"
   },
