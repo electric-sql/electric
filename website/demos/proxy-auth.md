@@ -18,6 +18,8 @@ order: 40
 
 ## Proxy auth with Electric
 
+<DemoEmbed :demo="$frontmatter" />
+
 This example demonstrates authorizing access to the Electric HTTP API using a proxy. It implements the [proxy-auth](/docs/guides/auth#proxy-auth) pattern described in the [Auth](/docs/guides/auth) guide.
 
 The main proxy code is in [`./app/shape-proxy/route.ts`](https://github.com/electric-sql/electric/blob/main/examples/proxy-auth/app/shape-proxy/route.ts):
