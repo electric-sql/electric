@@ -26,15 +26,8 @@ steps:
       - cd ./packages/sync-service
       - git fetch --tags
       - export ELECTRIC_VERSION=$(jq '.version' -r package.json)
-      - DOCKERHUB_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/${DOCKERHUB_REPO}/${IMAGE_NAME}/tags/?page_size=100" | jq -r '.results[] | select(.name | test("^[0-9]+\\.[0-9]+\\.[0-9]+.*$")) | .name' | sort -V | tail -n1 || echo "0.0.0")
-      - |
-        if [ "$(printf '%s\n' "$DOCKERHUB_VERSION" "$ELECTRIC_VERSION" | sort -V | tail -n1)" = "$ELECTRIC_VERSION" ]; then
-          docker buildx build --platform linux/arm64/v8,linux/amd64 --push
-            --build-arg ELECTRIC_VERSION=$${ELECTRIC_VERSION}
-            -t $${ELECTRIC_IMAGE_NAME}:$${ELECTRIC_VERSION}
-            -t $${ELECTRIC_IMAGE_NAME}:latest
-            .
-        else
-          echo "Current version $ELECTRIC_VERSION is not newer than DockerHub version $DOCKERHUB_VERSION. Skipping build."
-          exit 0
-        fi
+      - docker buildx build --platform linux/arm64/v8,linux/amd64 --push
+        --build-arg ELECTRIC_VERSION=$${ELECTRIC_VERSION}
+        -t $${ELECTRIC_IMAGE_NAME}:$${ELECTRIC_VERSION}
+        -t $${ELECTRIC_IMAGE_NAME}:latest
+        .
