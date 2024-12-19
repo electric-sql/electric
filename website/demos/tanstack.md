@@ -5,9 +5,7 @@ description: >-
 deployed_url: https://tanstack.examples.electric-sql.com/
 source_url: https://github.com/electric-sql/electric/tree/main/examples/tanstack
 image: /img/demos/items-screenshot.png
-demo: true
-homepage: true
-order: 80
+example: true
 ---
 
 # {{ $frontmatter.title }}
@@ -17,8 +15,6 @@ order: 80
 <DemoCTAs :demo="$frontmatter" />
 
 ## Electric with Tanstack Query
-
-<DemoEmbed :demo="$frontmatter" />
 
 This is an example TanStack application developed using Electric for read-path sync, together with Tanstack Query for local writes with [optimistic state](/docs/guides/writes#optimistic-state).
 

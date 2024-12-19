@@ -5,9 +5,7 @@ description: >-
 deployed_url: https://nextjs.examples.electric-sql.com/
 source_url: https://github.com/electric-sql/electric/tree/main/examples/nextjs
 image: /img/demos/items-screenshot.png
-demo: true
-homepage: true
-order: 60
+example: true
 ---
 
 # {{ $frontmatter.title }}
@@ -17,8 +15,6 @@ order: 60
 <DemoCTAs :demo="$frontmatter" />
 
 ## Next.js example app
-
-<DemoEmbed :demo="$frontmatter" />
 
 This is an example using Electric with [Next.js](/docs/integrations/next).
 

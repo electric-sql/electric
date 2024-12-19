@@ -5,9 +5,7 @@ description: >-
 deployed_url: https://basic.examples.electric-sql.com
 source_url: https://github.com/electric-sql/electric/tree/main/examples/react
 image: /img/demos/items-screenshot.png
-demo: true
-homepage: true
-order: 50
+example: true
 ---
 
 # {{ $frontmatter.title }}
@@ -17,8 +15,6 @@ order: 50
 <DemoCTAs :demo="$frontmatter" />
 
 ## Basic example using React
-
-<DemoEmbed :demo="$frontmatter" />
 
 This is our simplest example of a web app using Electric with [React](https://react.dev) and [Vite](https://vite.dev).
 

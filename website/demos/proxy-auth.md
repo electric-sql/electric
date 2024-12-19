@@ -5,9 +5,7 @@ description: >-
 deployed_url: https://proxy-auth.examples.electric-sql.com/
 source_url: https://github.com/electric-sql/electric/tree/main/examples/proxy-auth
 image: /img/demos/proxy-auth-screenshot.png
-demo: true
-homepage: true
-order: 40
+example: true
 ---
 
 # {{ $frontmatter.title }}
@@ -17,8 +15,6 @@ order: 40
 <DemoCTAs :demo="$frontmatter" />
 
 ## Proxy auth with Electric
-
-<DemoEmbed :demo="$frontmatter" />
 
 This example demonstrates authorizing access to the Electric HTTP API using a proxy. It implements the [proxy-auth](/docs/guides/auth#proxy-auth) pattern described in the [Auth](/docs/guides/auth) guide.
 

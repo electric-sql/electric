@@ -5,9 +5,7 @@ description: >-
 deployed_url: https://remix.examples.electric-sql.com/
 source_url: https://github.com/electric-sql/electric/tree/main/examples/nextjs
 image: /img/demos/items-screenshot.png
-demo: true
-homepage: true
-order: 70
+example: true
 ---
 
 # {{ $frontmatter.title }}
@@ -17,8 +15,6 @@ order: 70
 <DemoCTAs :demo="$frontmatter" />
 
 ## Remix example app
-
-<DemoEmbed :demo="$frontmatter" />
 
 This is an example using Electric with [Remix](https://remix.run/).
 
