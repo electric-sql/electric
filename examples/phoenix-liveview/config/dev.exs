@@ -85,4 +85,7 @@ config :phoenix_live_view,
 
 config :electric_phoenix, Electric.Client,
   base_url: System.get_env("ELECTRIC_URL", "http://localhost:3000/"),
-  params: System.get_env("ELECTRIC_CLIENT_PARAMS", "{}") |> :json.decode()
+  params:
+    System.get_env("ELECTRIC_CLIENT_PARAMS", "{}")
+    |> :json.decode()
+    |> IO.inspect(label: :electric_client_params)
