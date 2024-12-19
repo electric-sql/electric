@@ -151,10 +151,10 @@ defmodule Electric.Client do
 
   defstruct [
     :endpoint,
-    :database_id,
     :fetch,
     :authenticator,
-    :pool
+    :pool,
+    :params
   ]
 
   @api_endpoint_path "/v1/shape"
@@ -169,10 +169,11 @@ defmodule Electric.Client do
                      doc:
                        "The full URL of the shape API endpoint. E.g. for local development this would be `http://localhost:3000/v1/shape`. Use this if you need a non-standard API path."
                    ],
-                   database_id: [
-                     type: {:or, [nil, :string]},
+                   params: [
+                     type: {:map, {:or, [:atom, :string]}, :any},
+                     default: %{},
                      doc:
-                       "Which database to use, optional unless Electric is used with multiple databases."
+                       "Additional query parameters to include in every request to the Electric backend."
                    ],
                    fetch: [type: :mod_arg, default: {Client.Fetch.HTTP, []}, doc: false],
                    authenticator: [
@@ -376,7 +377,12 @@ defmodule Electric.Client do
   @doc false
   @spec request(t(), Fetch.Request.attrs()) :: Fetch.Request.t()
   def request(%Client{} = client, opts) do
-    struct(%Fetch.Request{endpoint: client.endpoint, database_id: client.database_id}, opts)
+    params = Map.merge(client.params, Keyword.get(opts, :params, %{}))
+
+    struct(
+      %Fetch.Request{endpoint: client.endpoint},
+      Keyword.put(opts, :params, params)
+    )
   end
 
   @doc """
