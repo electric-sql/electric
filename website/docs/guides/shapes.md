@@ -173,7 +173,7 @@ There are two kinds of where clauses:
 
 With non-optimized where clauses, throughput is inversely proportional to the number of shapes. If you have 10 shapes, Electric can process 1,400 changes per second. If you have 100 shapes, throughput drops to 140 changes per second.
 
-With optimized where clauses, Electric can evaluate millions of clausese at once and maintain a consistent throughput of ~5,000 row changes per second **no matter how many shapes you have**. If you have 10 shapes, Electric can process 5,000 changes per second. If you have 1,000 shapes, throughput remains at 5,000 changes per second.
+With optimized where clauses, Electric can evaluate millions of clauses at once and maintain a consistent throughput of ~5,000 row changes per second **no matter how many shapes you have**. If you have 10 shapes, Electric can process 5,000 changes per second. If you have 1,000 shapes, throughput remains at 5,000 changes per second.
 
 For more details see the [benchmarks](/docs/reference/benchmarks#_7-write-throughput-with-optimized-where-clauses).
 
