@@ -2,7 +2,7 @@
 title: Phoenix LiveView
 description: >-
   Example of a Phoenix LiveView app using Electric.
-# deployed_url: https://phoenix-liveview.examples.electric-sql.com
+deployed_url: https://phoenix-liveview.examples.electric-sql.com
 source_url: https://github.com/electric-sql/electric/tree/main/examples/phoenix-liveview
 example: true
 ---
