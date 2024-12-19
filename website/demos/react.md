@@ -18,6 +18,8 @@ order: 50
 
 ## Basic example using React
 
+<DemoEmbed :demo="$frontmatter" />
+
 This is our simplest example of a web app using Electric with [React](https://react.dev) and [Vite](https://vite.dev).
 
 The Electric-specific code is in [`./src/Example.tsx`](https://github.com/electric-sql/electric/blog/main/examples/react/src/Example.tsx):

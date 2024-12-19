@@ -18,6 +18,8 @@ order: 60
 
 ## Next.js example app
 
+<DemoEmbed :demo="$frontmatter" />
+
 This is an example using Electric with [Next.js](/docs/integrations/next).
 
 The entrypoint for the Electric-specific code is in [`./app/page.tsx`](https://github.com/electric-sql/electric/blog/main/examples/nextjs/app/page.tsx):

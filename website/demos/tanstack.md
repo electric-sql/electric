@@ -18,6 +18,8 @@ order: 80
 
 ## Electric with Tanstack Query
 
+<DemoEmbed :demo="$frontmatter" />
+
 This is an example TanStack application developed using Electric for read-path sync, together with Tanstack Query for local writes with [optimistic state](/docs/guides/writes#optimistic-state).
 
 See the [Electric <> Tanstack integration docs](https://electric-sql.com/docs/integrations/tanstack) for more context and a [video of the example running here](https://x.com/msfstef/status/1828763769498952173).
