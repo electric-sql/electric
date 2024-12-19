@@ -376,27 +376,21 @@ export class ShapeStream<T extends Row<unknown> = Row>
       ) {
         const { url, signal } = this.options
 
+        // Resolve headers and params in parallel
+        const [requestHeaders, params] = await Promise.all([
+          resolveHeaders(this.options.headers),
+          this.options.params ? toInternalParams(this.options.params) : undefined,
+        ])
+
+        // Validate params after resolution
+        if (params) {
+          validateParams(params)
+        }
+
         const fetchUrl = new URL(url)
 
-        // Resolve headers first
-        const requestHeaders = await resolveHeaders(this.options.headers)
-
-        // Add any custom parameters first
-        if (this.options.params) {
-          // Check for reserved parameter names
-          const reservedParams = Object.keys(this.options.params).filter(
-            (key) => RESERVED_PARAMS.has(key)
-          )
-          if (reservedParams.length > 0) {
-            throw new Error(
-              `Cannot use reserved Electric parameter names in custom params: ${reservedParams.join(`, `)}`
-            )
-          }
-
-          // Resolve params
-          const params = await toInternalParams(this.options.params)
-
-          // Add PostgreSQL-specific parameters from params
+        // Add PostgreSQL-specific parameters
+        if (params) {
           if (params.table)
             fetchUrl.searchParams.set(TABLE_QUERY_PARAM, params.table)
           if (params.where)
@@ -609,6 +603,21 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 }
 
+/**
+ * Validates that no reserved parameter names are used in the provided params object
+ * @throws {ReservedParamError} if any reserved parameter names are found
+ */
+function validateParams(params: Record<string, unknown> | undefined): void {
+  if (!params) return
+
+  const reservedParams = Object.keys(params).filter((key) =>
+    RESERVED_PARAMS.has(key as ReservedParamKeys)
+  )
+  if (reservedParams.length > 0) {
+    throw new ReservedParamError(reservedParams)
+  }
+}
+
 function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (!options.url) {
     throw new MissingShapeUrlError()
@@ -625,14 +634,7 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
     throw new MissingShapeHandleError()
   }
 
-  // Check for reserved parameter names
-  if (options.params) {
-    const reservedParams = Object.keys(options.params).filter((key) =>
-      RESERVED_PARAMS.has(key)
-    )
-    if (reservedParams.length > 0) {
-      throw new ReservedParamError(reservedParams)
-    }
-  }
+  validateParams(options.params)
+  
   return
 }
