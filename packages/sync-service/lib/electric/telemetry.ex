@@ -4,13 +4,17 @@ defmodule Electric.Telemetry do
   import Telemetry.Metrics
 
   def start_link(init_arg) do
-    Supervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
+    if Electric.Config.telemetry_export_enabled?() do
+      Supervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
+    else
+      # Avoid starting the telemetry supervisor and its telemetry_poller child if we're not
+      # intending to export periodic measurements metrics anywhere.
+      :ignore
+    end
   end
 
   def init(opts) do
-    system_metrics_poll_interval =
-      Electric.Config.get_env(:system_metrics_poll_interval)
-
+    system_metrics_poll_interval = Electric.Config.get_env(:system_metrics_poll_interval)
     statsd_host = Electric.Config.get_env(:telemetry_statsd_host)
     prometheus? = not is_nil(Electric.Config.get_env(:prometheus_port))
     call_home_telemetry? = Electric.Config.get_env(:call_home_telemetry?)
