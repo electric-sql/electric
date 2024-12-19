@@ -629,6 +629,9 @@ importers:
         specifier: ^8.0.0
         version: 8.0.0
     devDependencies:
+      '@databases/pg-migrations':
+        specifier: ^5.0.3
+        version: 5.0.3(typescript@5.7.2)
       sst:
         specifier: 3.3.7
         version: 3.3.7(hono@4.6.13)
@@ -11225,6 +11228,13 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
+  '@databases/pg-config@3.2.0(typescript@5.7.2)':
+    dependencies:
+      cosmiconfig: 8.3.6(typescript@5.7.2)
+      funtypes: 4.2.0
+    transitivePeerDependencies:
+      - typescript
+
   '@databases/pg-connection-string@1.0.0': {}
 
   '@databases/pg-data-type-id@3.0.0': {}
@@ -11247,11 +11257,46 @@ snapshots:
       - pg-native
       - typescript
 
+  '@databases/pg-migrations@5.0.3(typescript@5.7.2)':
+    dependencies:
+      '@databases/migrations-base': 3.0.1
+      '@databases/pg': 5.5.0(typescript@5.7.2)
+      '@databases/pg-config': 3.2.0(typescript@5.7.2)
+      assert-never: 1.3.0
+      chalk: 4.1.2
+      interrogator: 2.0.1
+      is-interactive: 1.0.0
+      parameter-reducers: 2.1.0
+      semver: 7.6.3
+      sucrase: 3.35.0
+    transitivePeerDependencies:
+      - pg-native
+      - typescript
+
   '@databases/pg@5.5.0(typescript@5.6.3)':
     dependencies:
       '@babel/code-frame': 7.26.2
       '@databases/escape-identifier': 1.0.3
       '@databases/pg-config': 3.2.0(typescript@5.6.3)
+      '@databases/pg-connection-string': 1.0.0
+      '@databases/pg-data-type-id': 3.0.0
+      '@databases/pg-errors': 1.0.0
+      '@databases/push-to-async-iterable': 3.0.0
+      '@databases/shared': 3.1.0
+      '@databases/split-sql-query': 1.0.4(@databases/sql@3.3.0)
+      '@databases/sql': 3.3.0
+      assert-never: 1.3.0
+      pg: 8.13.1
+      pg-cursor: 2.12.1(pg@8.13.1)
+    transitivePeerDependencies:
+      - pg-native
+      - typescript
+
+  '@databases/pg@5.5.0(typescript@5.7.2)':
+    dependencies:
+      '@babel/code-frame': 7.26.2
+      '@databases/escape-identifier': 1.0.3
+      '@databases/pg-config': 3.2.0(typescript@5.7.2)
       '@databases/pg-connection-string': 1.0.0
       '@databases/pg-data-type-id': 3.0.0
       '@databases/pg-errors': 1.0.0
@@ -14839,6 +14884,15 @@ snapshots:
       path-type: 4.0.0
     optionalDependencies:
       typescript: 5.6.3
+
+  cosmiconfig@8.3.6(typescript@5.7.2):
+    dependencies:
+      import-fresh: 3.3.0
+      js-yaml: 4.1.0
+      parse-json: 5.2.0
+      path-type: 4.0.0
+    optionalDependencies:
+      typescript: 5.7.2
 
   crelt@1.0.6: {}
 
