@@ -226,6 +226,28 @@ See the [./client](https://github.com/electric-sql/electric/tree/main/examples/g
 
 <<< @../../examples/gatekeeper-auth/client/index.ts{typescript}
 
+### Dynamic Auth Options
+
+The TypeScript client supports function-based options for headers and params, making it easy to handle dynamic auth tokens:
+
+```typescript
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  headers: {
+    // Token will be refreshed on each request
+    'Authorization': async () => `Bearer ${await getAccessToken()}`
+  }
+})
+```
+
+This pattern is particularly useful when:
+- Your auth tokens need periodic refreshing
+- You're using session-based authentication
+- You need to fetch tokens from a secure storage
+- You want to handle token rotation automatically
+
+The function is called when needed and its value is resolved in parallel with other dynamic options, making it efficient for real-world auth scenarios.
+
 ## Notes
 
 ### External services
