@@ -282,7 +282,8 @@ describe(`Shape`, () => {
       signal: aborter.signal,
     })
 
-    await sleep(100) // give some time for the initial fetch to complete
+    // give some time for the initial fetch to complete
+    await waitForFetch(shapeStream)
     expect(shapeStream.isConnected()).true
 
     const shape = new Shape(shapeStream)
@@ -328,6 +329,8 @@ describe(`Shape`, () => {
       },
     })
 
+    const unsubscribe = shapeStream.subscribe(() => unsubscribe())
+
     await sleep(100) // give some time for the initial fetch to complete
     expect(shapeStream.isConnected()).true
 
@@ -347,7 +350,7 @@ describe(`Shape`, () => {
     issuesTableUrl,
   }) => {
     const mockErrorHandler = vi.fn()
-    new ShapeStream({
+    const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
         table: issuesTableUrl,
@@ -360,7 +363,7 @@ describe(`Shape`, () => {
       onError: mockErrorHandler,
     })
 
-    await sleep(10) // give some time for the initial fetch to complete
+    await waitForFetch(shapeStream)
     expect(mockErrorHandler.mock.calls.length).toBe(1)
     expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
   })
@@ -383,7 +386,7 @@ describe(`Shape`, () => {
       }
     })
 
-    new ShapeStream({
+    const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
         table: issuesTableUrl,
@@ -402,7 +405,7 @@ describe(`Shape`, () => {
       onError: mockErrorHandler,
     })
 
-    await sleep(50) // give some time for the fetches to complete
+    await waitForFetch(shapeStream)
     expect(mockErrorHandler.mock.calls.length).toBe(1)
     expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
   })
@@ -425,7 +428,7 @@ describe(`Shape`, () => {
       }
     })
 
-    new ShapeStream({
+    const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
         table: issuesTableUrl,
@@ -446,7 +449,7 @@ describe(`Shape`, () => {
       onError: mockErrorHandler,
     })
 
-    await sleep(50) // give some time for the fetches to complete
+    await waitForFetch(shapeStream)
     expect(mockErrorHandler.mock.calls.length).toBe(1)
     expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
   })
@@ -489,7 +492,7 @@ describe(`Shape`, () => {
       onError: mockErrorHandler,
     })
 
-    await sleep(50) // give some time for the first fetch to complete
+    await waitForFetch(shapeStream)
     expect(mockErrorHandler.mock.calls.length).toBe(1)
     expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
     expect(shapeStream.isConnected()).toBe(false)
@@ -521,7 +524,9 @@ describe(`Shape`, () => {
       },
     })
 
-    await sleep(10) // give some time for the initial fetch to complete
+    const unsub = shapeStream.subscribe(() => unsub())
+    await sleep(10) // give sometime for fetch to fail
+
     expect(shapeStream.isConnected()).false
 
     const expectedErrorMessage = new MissingHeadersError(url, [
@@ -549,6 +554,7 @@ describe(`Shape`, () => {
       },
     })
 
+    const unsubLive = shapeStreamLive.subscribe(() => unsubLive())
     await sleep(10) // give some time for the initial fetch to complete
     expect(shapeStreamLive.isConnected()).false
 
@@ -573,7 +579,8 @@ describe(`Shape`, () => {
       subscribe: false,
     })
 
-    await sleep(100) // give some time for the fetch to complete
+    await waitForFetch(shapeStream)
+    await sleep(50)
 
     // We should no longer be connected because
     // the initial fetch finished and we've not subscribed to changes
@@ -594,7 +601,7 @@ describe(`Shape`, () => {
 
     expect(shapeStream.isLoading()).true
 
-    await sleep(200) // give some time for the initial fetch to complete
+    await waitForFetch(shapeStream)
 
     expect(shapeStream.isLoading()).false
   })
@@ -665,3 +672,13 @@ describe(`Shape`, () => {
     }
   })
 })
+
+function waitForFetch(stream: ShapeStream): Promise<void> {
+  let unsub = () => {}
+  return new Promise<void>((resolve) => {
+    unsub = stream.subscribe(
+      () => resolve(),
+      () => resolve()
+    )
+  }).finally(() => unsub())
+}

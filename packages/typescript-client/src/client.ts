@@ -257,6 +257,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     ]
   >()
 
+  #started = false
   #lastOffset: Offset
   #liveCacheBuster: string // Seconds since our Electric Epoch 😎
   #lastSyncedAt?: number // unix time
@@ -290,8 +291,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#fetchClient = createFetchWithResponseHeadersCheck(
       createFetchWithChunkBuffer(fetchWithBackoffClient)
     )
-
-    this.#start()
   }
 
   get shapeHandle() {
@@ -311,6 +310,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #start() {
+    if (this.#started) throw new Error(`Cannot start stream twice`)
+    this.#started = true
+
     try {
       while (
         (!this.options.signal?.aborted && !this.#isUpToDate) ||
@@ -462,6 +464,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           }
 
           // Restart
+          this.#started = false
           this.#start()
         }
         return
@@ -481,6 +484,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const subscriptionId = Math.random()
 
     this.#subscribers.set(subscriptionId, [callback, onError])
+    if (!this.#started) this.#start()
 
     return () => {
       this.#subscribers.delete(subscriptionId)
