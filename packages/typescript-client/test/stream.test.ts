@@ -83,4 +83,41 @@ describe(`ShapeStream`, () => {
       `columns=id&handle=potato&offset=-1&table=foo&where=a%3D1`
     )
   })
+
+  it(`should start requesting only after first subscription`, async () => {
+    const eventTarget = new EventTarget()
+    const fetchWrapper = (): Promise<Response> => {
+      eventTarget.dispatchEvent(new Event(`fetch`))
+      return Promise.resolve(Response.error())
+    }
+
+    const aborter = new AbortController()
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: {
+        table: `foo`,
+        where: `a=1`,
+        columns: [`id`],
+      },
+      handle: `potato`,
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+    })
+
+    // should not fire any fetch requests
+    await new Promise<void>((resolve, reject) => {
+      eventTarget.addEventListener(`fetch`, reject, { once: true })
+      setTimeout(() => resolve(), 100)
+    })
+
+    // should fire fetch immediately after subbing
+    const startedStreaming = new Promise<void>((resolve, reject) => {
+      eventTarget.addEventListener(`fetch`, () => resolve(), {
+        once: true,
+      })
+      setTimeout(() => reject(`timed out`), 100)
+    })
+    const unsub = stream.subscribe(() => unsub())
+    await startedStreaming
+  })
 })
