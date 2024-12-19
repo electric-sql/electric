@@ -4,6 +4,7 @@ description: >-
   Example of an Electric app using Remix.
 deployed_url: https://remix.examples.electric-sql.com/
 source_url: https://github.com/electric-sql/electric/tree/main/examples/nextjs
+image: /img/demos/items-screenshot.png
 demo: true
 homepage: true
 order: 70
