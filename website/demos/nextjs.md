@@ -2,8 +2,11 @@
 title: Next.js
 description: >-
   Example of an Electric app using Next.js.
+deployed_url: https://nextjs.examples.electric-sql.com/
 source_url: https://github.com/electric-sql/electric/tree/main/examples/nextjs
-example: true
+demo: true
+homepage: true
+order: 60
 ---
 
 # {{ $frontmatter.title }}

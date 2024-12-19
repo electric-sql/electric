@@ -2,8 +2,11 @@
 title: React
 description: >-
   Basic example of an Electric app using React.
+deployed_url: https://basic.examples.electric-sql.com
 source_url: https://github.com/electric-sql/electric/tree/main/examples/react
-example: true
+demo: true
+homepage: true
+order: 50
 ---
 
 # {{ $frontmatter.title }}

@@ -2,8 +2,11 @@
 title: Proxy auth
 description: >-
   Example showing how to authorize access to Electric using a proxy.
+deployed_url: https://proxy-auth.examples.electric-sql.com/
 source_url: https://github.com/electric-sql/electric/tree/main/examples/proxy-auth
-example: true
+demo: true
+homepage: true
+order: 40
 ---
 
 # {{ $frontmatter.title }}

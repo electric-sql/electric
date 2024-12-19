@@ -2,8 +2,11 @@
 title: Remix
 description: >-
   Example of an Electric app using Remix.
+deployed_url: https://remix.examples.electric-sql.com/
 source_url: https://github.com/electric-sql/electric/tree/main/examples/nextjs
-example: true
+demo: true
+homepage: true
+order: 70
 ---
 
 # {{ $frontmatter.title }}
