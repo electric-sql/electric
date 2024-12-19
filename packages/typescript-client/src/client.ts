@@ -38,7 +38,7 @@ import {
   REPLICA_PARAM,
 } from './constants'
 
-const RESERVED_PARAMS = new Set([
+const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
   SHAPE_HANDLE_QUERY_PARAM,
   LIVE_QUERY_PARAM,
@@ -50,7 +50,7 @@ type Replica = `full` | `default`
 /**
  * PostgreSQL-specific shape parameters that can be provided externally
  */
-type PostgresParams = {
+export interface PostgresParams {
   /** The root table for the shape. Not required if you set the table in your proxy. */
   table?: string
 
@@ -76,27 +76,21 @@ type PostgresParams = {
   replica?: Replica
 }
 
+type ParamValue = string | string[] | (() => string | string[] | Promise<string | string[]>)
+
+/**
+ * External params type - what users provide.
+ * Excludes reserved parameters to prevent dynamic variations that could cause stream shape changes.
+ */
+export type ExternalParamsRecord = {
+  [K in string as K extends ReservedParamKeys ? never : K]: ParamValue | undefined
+} & Partial<PostgresParams>
+
 type ReservedParamKeys =
-  | typeof COLUMNS_QUERY_PARAM
   | typeof LIVE_CACHE_BUSTER_QUERY_PARAM
   | typeof SHAPE_HANDLE_QUERY_PARAM
   | typeof LIVE_QUERY_PARAM
   | typeof OFFSET_QUERY_PARAM
-  | typeof TABLE_QUERY_PARAM
-  | typeof WHERE_QUERY_PARAM
-  | typeof REPLICA_PARAM
-
-/**
- * External params type - what users provide.
- * Includes documented PostgreSQL params and allows string, string[], or function values for any additional params.
- */
-export type ExternalParamsRecord = PostgresParams & {
-  [key: string]:
-    | string
-    | string[]
-    | (() => string | string[] | Promise<string | string[]>)
-    | undefined
-}
 
 /**
  * External headers type - what users provide.
