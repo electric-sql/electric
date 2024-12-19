@@ -18,7 +18,9 @@ defmodule Electric.Connection.Supervisor do
   has successfully initialized a database connection pool.
   """
 
-  use Supervisor
+  use Supervisor, restart: :transient, significant: true
+
+  require Logger
 
   def name(opts) do
     Electric.ProcessRegistry.name(opts[:stack_id], __MODULE__)
@@ -26,6 +28,15 @@ defmodule Electric.Connection.Supervisor do
 
   def start_link(opts) do
     Supervisor.start_link(__MODULE__, opts, name: name(opts))
+  end
+
+  def shutdown(stack_id, reason) do
+    Logger.error(
+      "Stopping connection supervisor with stack_id=#{inspect(stack_id)} " <>
+        "due to an unrecoverable error: #{inspect(reason)}"
+    )
+
+    Supervisor.stop(name(stack_id: stack_id), {:shutdown, reason}, 1_000)
   end
 
   def init(opts) do

@@ -119,6 +119,11 @@ defmodule Electric.StackSupervisor do
     Registry.register(registry, {:stack_status, stack_id}, value)
   end
 
+  # noop if there's no registry running
+  def dispatch_stack_event(nil, _stack_id, _event) do
+    :ok
+  end
+
   def dispatch_stack_event(registry, stack_id, event) do
     Registry.dispatch(registry, {:stack_status, stack_id}, fn entries ->
       for {pid, ref} <- entries do

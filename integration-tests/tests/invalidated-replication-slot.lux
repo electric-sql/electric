@@ -6,11 +6,12 @@
 
 [my invalidated_slot_error=
   """
-  [error] :gen_statem {:"Elixir.Electric.ProcessRegistry:single_stack", {Electric.Postgres.ReplicationClient, nil}} terminating
   ** (Postgrex.Error) ERROR 55000 (object_not_in_prerequisite_state) cannot read from logical replication slot "electric_slot_integration"
 
   This slot has been invalidated because it exceeded the maximum reserved size.
   """]
+
+[my stack_id="single_stack"]
 
 ###
 
@@ -25,9 +26,6 @@
 [shell electric]
   ??[info] Starting replication from postgres
 
-  # Reset the failure pattern because we'll be matching on an error.
-  -
-
 ## Seed the database with enough data to exceed max_wal_size and force a checkpoint that
 ## will invalidate the replication slot.
 [invoke seed_pg]
@@ -36,21 +34,28 @@
 [shell pg]
   ?invalidating slot "electric_slot_integration" because its restart_lsn [\d\w]+/[\d\w]+ exceeds max_slot_wal_keep_size
 
+[macro verify_connection_and_stack_supervisors_shutdown stack_id invalidated_slot_error]
+  ??$invalidated_slot_error
+  ??[error] Stopping connection supervisor with stack_id=$stack_id due to an unrecoverable error
+
+  !IO.puts("Stack supervisor pid: #{inspect Process.whereis(Electric.StackSupervisor)}")
+  ??Stack supervisor pid: nil
+[endmacro]
+
 ## Observe the fatal connection error.
 [shell electric]
-  ??$invalidated_slot_error
-
-  # Confirm Electric process exit.
-  ??$PS1
-
-## Start the sync service once again to verify that it crashes due to the invalidated slot error.
-[invoke setup_electric]
-
-[shell electric]
-  ??[info] Starting replication from postgres
+  # Reset the failure pattern because we'll be matching on an error.
   -
-  ??$invalidated_slot_error
-  ??$PS1
+
+  [invoke verify_connection_and_stack_supervisors_shutdown $stack_id $invalidated_slot_error]
+
+  # Restart the OTP application to verify that the supervisors shut down again due to the invalidated slot.
+  !:ok = Application.stop(:electric)
+  !:ok = Application.start(:electric)
+
+  ??[info] Starting replication from postgres
+
+  [invoke verify_connection_and_stack_supervisors_shutdown $stack_id $invalidated_slot_error]
 
 [cleanup]
   [invoke teardown]
