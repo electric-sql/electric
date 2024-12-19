@@ -38,3 +38,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+      - name: Add latest tag to published packages
+        if: steps.changesets.outputs.published == 'true'
+        run: node scripts/tag-latest.mjs
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

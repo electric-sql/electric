@@ -14,11 +14,14 @@
     "ci:publish": "pnpm '/^ci:publish:.+/'",
     "ci:publish:hex-electric": "pnpm run --dir packages/sync-service publish:hex",
     "ci:publish:hex-electric-client": "pnpm run --dir packages/elixir-client publish:hex",
-    "ci:publish:npm": "pnpm changeset publish --tag latest",
+    "ci:publish:npm": "pnpm changeset publish",
     "ci:version": "pnpm exec changeset version",
     "example-backend:down": "dotenv  -e .env.dev -- docker compose -f .support/docker-compose.yml down --volumes",
     "example-backend:just_up": "dotenv -e .env.dev -- docker compose -f ./.support/docker-compose.yml up -d",
     "example-backend:up": "pnpm example-backend:down && pnpm example-backend:just_up",
     "stylecheck-all": "pnpm --if-present --recursive run stylecheck"
+  },
+  "devDependencies": {
+    "glob": "^10.3.10"
   }
 }
