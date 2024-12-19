@@ -1,5 +1,7 @@
 name: Benchmark a PR
 
+# A pointless comment to trigger a workflow run
+
 on:
   issue_comment:
     types: [created]
