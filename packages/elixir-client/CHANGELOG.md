@@ -1,5 +1,14 @@
 # @core/elixir-client
 
+## 0.2.6-beta.0
+
+### Patch Changes
+
+- 1b8dce0: Fix race condition where response comes before listener has monitored itself.
+- 71b8ab2: Add pool behaviour for the Elixir client to allow for per-client persistent connections. Add request timestamp and shape handle to replication stream messages.
+- fc1796a: Fix stalled elixir client streams by ensuring that requests are always made, even if calling process dies
+- 01c63ae: Fix race condition in elixir client when multiple simultaneous clients are streaming the same shape
+
 ## 0.2.5
 
 ### Patch Changes
