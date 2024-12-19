@@ -57,7 +57,7 @@ export default $config({
       return addDatabaseToElectric(uri, `eu-west-1`)
     })
 
-    const domainName = `liveview${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`
+    const domainName = `phoenix-liveview${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`
 
     // Run the server on ECS
     const vpcName = camelcase(`electric-region-vpc-2-${regionName}`)
