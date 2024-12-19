@@ -20,13 +20,26 @@ steps:
         .
   - wait
   - label: "🚀 Build & publish the release image to Docker Hub"
-    if: build.tag =~ /@core\/sync-service@/
+    if: build.branch == "main"
     command:
       - export ELECTRIC_IMAGE_NAME="${DOCKERHUB_REPO}/${IMAGE_NAME}"
       - cd ./packages/sync-service
+      - git fetch --tags
       - export ELECTRIC_VERSION=$(jq '.version' -r package.json)
-      - docker buildx build --platform linux/arm64/v8,linux/amd64 --push
-        --build-arg ELECTRIC_VERSION=$${ELECTRIC_VERSION}
-        -t $${ELECTRIC_IMAGE_NAME}:$${ELECTRIC_VERSION}
-        -t $${ELECTRIC_IMAGE_NAME}:latest
-        .
+      # Get the latest version from DockerHub
+      - |
+        DOCKERHUB_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/${DOCKERHUB_REPO}/${IMAGE_NAME}/tags/?page_size=100" | \
+          jq -r '.results[] | select(.name | test("^[0-9]+\\.[0-9]+\\.[0-9]+.*$")) | .name' | \
+          sort -V | tail -n1 || echo "0.0.0")
+      # Compare versions and only build if local is newer
+      - |
+        if [ "$(printf '%s\n' "$DOCKERHUB_VERSION" "$ELECTRIC_VERSION" | sort -V | tail -n1)" = "$ELECTRIC_VERSION" ]; then
+          echo "Building new version $ELECTRIC_VERSION (current version on DockerHub is $DOCKERHUB_VERSION)"
+          docker buildx build --platform linux/arm64/v8,linux/amd64 --push \
+            --build-arg ELECTRIC_VERSION=$${ELECTRIC_VERSION} \
+            -t $${ELECTRIC_IMAGE_NAME}:$${ELECTRIC_VERSION} \
+            -t $${ELECTRIC_IMAGE_NAME}:latest \
+            .
+        else
+          echo "Current version $ELECTRIC_VERSION is not newer than DockerHub version $DOCKERHUB_VERSION. Skipping build."
+        fi
