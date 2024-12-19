@@ -1,6 +1,6 @@
 name: Benchmark a PR
 
-# A pointless comment to trigger a workflow run
+# A pointless comment to trigger another workflow run
 
 on:
   issue_comment:
