@@ -23,7 +23,7 @@ describe(`ShapeStream`, () => {
     }
 
     const aborter = new AbortController()
-    new ShapeStream({
+    const stream = new ShapeStream({
       url: shapeUrl,
       params: {
         table: `foo`,
@@ -35,6 +35,7 @@ describe(`ShapeStream`, () => {
         'X-Custom-Header': `my-value`,
       },
     })
+    const unsub = stream.subscribe(() => unsub())
 
     await new Promise((resolve) =>
       eventTarget.addEventListener(`fetch`, resolve, { once: true })
@@ -60,7 +61,7 @@ describe(`ShapeStream`, () => {
     }
 
     const aborter = new AbortController()
-    new ShapeStream({
+    const stream = new ShapeStream({
       url: shapeUrl,
       params: {
         table: `foo`,
@@ -71,6 +72,8 @@ describe(`ShapeStream`, () => {
       signal: aborter.signal,
       fetchClient: fetchWrapper,
     })
+
+    const unsub = stream.subscribe(() => unsub())
 
     await new Promise((resolve) =>
       eventTarget.addEventListener(`fetch`, resolve, { once: true })
