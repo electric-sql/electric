@@ -15,7 +15,8 @@ defmodule Electric.Shapes.Shape do
     :table_info,
     :where,
     :selected_columns,
-    replica: :default
+    replica: :default,
+    partitions: %{}
   ]
 
   @type replica() :: :full | :default
@@ -29,6 +30,7 @@ defmodule Electric.Shapes.Shape do
           table_info: %{
             Electric.relation() => table_info()
           },
+          partitions: %{Electric.relation() => Electric.relation()},
           where: Electric.Replication.Eval.Expr.t() | nil,
           selected_columns: [String.t(), ...] | nil,
           replica: replica()
@@ -79,17 +81,21 @@ defmodule Electric.Shapes.Shape do
   def new(table, opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @shape_schema),
          inspector <- Access.fetch!(opts, :inspector),
-         {:ok, %{relation: table, relation_id: relation_id}} <- validate_table(table, inspector),
+         {:ok, relation} <- validate_table(table, inspector),
+         %{relation: table, relation_id: relation_id} <- relation,
          {:ok, column_info, pk_cols} <- load_column_info(table, inspector),
          {:ok, selected_columns} <-
            validate_selected_columns(column_info, pk_cols, Access.get(opts, :columns)),
          refs = Inspector.columns_to_expr(column_info),
          {:ok, where} <- maybe_parse_where_clause(Access.get(opts, :where), refs) do
+      children = relation |> Map.get(:children, []) |> List.wrap()
+
       {:ok,
        %__MODULE__{
          root_table: table,
          root_table_id: relation_id,
          table_info: %{table => %{pk: pk_cols, columns: column_info}},
+         partitions: Map.new(children, &{&1, table}),
          where: where,
          selected_columns: selected_columns,
          replica: Access.get(opts, :replica, :default)
@@ -188,7 +194,26 @@ defmodule Electric.Shapes.Shape do
   List tables that are a part of this shape.
   """
   @spec affected_tables(t()) :: [Electric.relation()]
-  def affected_tables(%__MODULE__{root_table: table}), do: [table]
+  def affected_tables(%__MODULE__{root_table: table} = shape) do
+    [table | partition_tables(shape)]
+  end
+
+  @doc """
+  List partitions of this Shape. Will be empty if shape is a partition table
+  itself or a normal, non-partitioned table
+  """
+  @spec partition_tables(t()) :: [Electric.relation()]
+  def partition_tables(%__MODULE__{partitions: partitions}) do
+    Map.keys(partitions)
+  end
+
+  def add_partition(
+        %__MODULE__{partitions: partitions} = shape,
+        {_, _} = root,
+        {_, _} = partition
+      ) do
+    %{shape | partitions: Map.put(partitions, partition, root)}
+  end
 
   @doc """
   Convert a change to be correctly represented within the shape.
@@ -197,9 +222,22 @@ defmodule Electric.Shapes.Shape do
   Updates, on the other hand, may be converted to an "new record" or a "deleted record"
   if the previous/new version of the updated row isn't in the shape.
   """
-  def convert_change(%__MODULE__{root_table: table}, %{relation: relation})
-      when table != relation,
-      do: []
+  def convert_change(%__MODULE__{root_table: table} = shape, %{relation: relation} = change)
+      when table != relation do
+    %{partitions: partitions} = shape
+
+    # if the change has reached here because its an update to a partition child
+    # on a root table, and the shape is on the root table, then re-write the
+    # change to come from the shape's root table
+    case Map.fetch(partitions, relation) do
+      {:ok, ^table} ->
+        # This does not re-write the change's key. Is that a problem?
+        convert_change(shape, %{change | relation: table})
+
+      _ ->
+        []
+    end
+  end
 
   def convert_change(%__MODULE__{where: nil, selected_columns: nil}, change), do: [change]
 
@@ -286,7 +324,16 @@ defmodule Electric.Shapes.Shape do
       when old_id !== new_id,
       do: true
 
-  def is_affected_by_relation_change?(_, _), do: false
+  # the relation in this case is the parent table of a partition and we're
+  # handling the case where a new partition has been added to an existing
+  # partitioned table - the new partition arrives as a relation message and is
+  # handled by the clauses above, but the the link between the new partition
+  # and the partitioned table is handled with raw relation tuples
+  def is_affected_by_relation_change?(%__MODULE__{root_table: relation}, {_, _} = relation) do
+    true
+  end
+
+  def is_affected_by_relation_change?(_shape, _relation), do: false
 
   @spec to_json_safe(t()) :: json_safe()
   def to_json_safe(%__MODULE__{} = shape) do
