@@ -1,7 +1,7 @@
 {
   "name": "@electric-sql/experimental",
   "description": "Experimental TypeScript features for ElectricSQL.",
-  "version": "0.1.2-beta.0",
+  "version": "0.1.2-beta.1",
   "author": "ElectricSQL team and contributors.",
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"

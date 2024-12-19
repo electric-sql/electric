@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- 8987142: Do not trap exits in `Electric.Shapes.Consumer` - not handled.
+- 218b7d4: fix: truncates no longer cause a stop to an incoming replication stream
+- 7caccbf: Return `202` for `waiting` and `starting` health status - accepts requests but will fail to service them.
+- d7e7c72: Introduced `PublicationManager` process to create and clean up publication filters.
+
 ## 1.0.0-beta.1
 
 ### Patch Changes

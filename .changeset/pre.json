@@ -21,11 +21,31 @@
     "@electric-examples/todo-app": "1.0.1",
     "@electric-examples/write-patterns": "0.0.1",
     "@electric-examples/yjs-provider": "0.0.1",
-    "@electric-sql/docs": "0.0.1"
+    "@electric-sql/docs": "0.0.1",
+    "@electric-examples/bash": "0.0.1",
+    "@electric-examples/nextjs": "0.0.1",
+    "@electric-examples/react": "0.0.1",
+    "@electric-examples/redis": "0.0.1",
+    "@electric-examples/remix": "0.0.1",
+    "@electric-examples/tanstack": "0.0.1"
   },
   "changesets": [
     "beige-hotels-sin",
+    "beige-mice-notice",
+    "beige-snails-brush",
+    "breezy-boats-tease",
+    "fresh-beers-allow",
+    "gorgeous-bottles-mate",
+    "green-drinks-mix",
     "healthy-comics-heal",
-    "polite-frogs-yell"
+    "lucky-boats-lie",
+    "lucky-cats-teach",
+    "mean-humans-clean",
+    "modern-poets-film",
+    "polite-frogs-yell",
+    "tender-seas-stare",
+    "wicked-papayas-tease",
+    "wild-bugs-raise",
+    "young-olives-lick"
   ]
 }

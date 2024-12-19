@@ -1,5 +1,38 @@
 # @electric-sql/client
 
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- ade15b9: Expose `shape.stream` as public readonly property.
+- 1c28aee: Start streaming only after at least one subscriber is present.
+- ade15b9: Use "get" instead of "has" for checking searchParams
+
+  Not all implementations of JS have the has(name, value) syntax e.g. Expo.
+
+- dd5aeab: This PR adds support for function-based options in the TypeScript client's params and headers. Functions can be either synchronous or asynchronous and are resolved in parallel when needed.
+
+  ```typescript
+  const stream = new ShapeStream({
+    url: 'http://localhost:3000/v1/shape',
+    params: {
+      table: 'items',
+      userId: () => getCurrentUserId(),
+      filter: async () => await getUserPreferences(),
+    },
+    headers: {
+      Authorization: async () => `Bearer ${await getAccessToken()}`,
+    },
+  })
+  ```
+
+  ## Common Use Cases
+
+  - Authentication tokens that need to be refreshed
+  - User-specific parameters that may change
+  - Dynamic filtering based on current state
+  - Multi-tenant applications where context determines the request
+
 ## 1.0.0-beta.1
 
 ### Patch Changes
