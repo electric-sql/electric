@@ -76,14 +76,19 @@ export interface PostgresParams {
   replica?: Replica
 }
 
-type ParamValue = string | string[] | (() => string | string[] | Promise<string | string[]>)
+type ParamValue =
+  | string
+  | string[]
+  | (() => string | string[] | Promise<string | string[]>)
 
 /**
  * External params type - what users provide.
  * Excludes reserved parameters to prevent dynamic variations that could cause stream shape changes.
  */
 export type ExternalParamsRecord = {
-  [K in string as K extends ReservedParamKeys ? never : K]: ParamValue | undefined
+  [K in string as K extends ReservedParamKeys ? never : K]:
+    | ParamValue
+    | undefined
 } & Partial<PostgresParams>
 
 type ReservedParamKeys =
@@ -373,7 +378,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // Resolve headers and params in parallel
         const [requestHeaders, params] = await Promise.all([
           resolveHeaders(this.options.headers),
-          this.options.params ? toInternalParams(this.options.params) : undefined,
+          this.options.params
+            ? toInternalParams(this.options.params)
+            : undefined,
         ])
 
         // Validate params after resolution
@@ -629,6 +636,6 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   }
 
   validateParams(options.params)
-  
+
   return
 }
