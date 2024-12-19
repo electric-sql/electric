@@ -16,6 +16,7 @@ async function tagLatest() {
     try {
       execSync(`npm dist-tag add ${name}@${version} latest`, {
         stdio: "inherit",
+        env: { ...process.env },
       })
     } catch (e) {
       console.error(`Failed to tag ${name}@${version}:`, e)
