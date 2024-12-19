@@ -340,9 +340,11 @@ const stream = new ShapeStream({
   },
   onError: async (error) => {
     if (error instanceof FetchError && error.status === 401) {
-      // Force token refresh or handle specific auth errors
+      // Force token refresh
       await refreshToken()
-      // The next request will automatically get a fresh token via the function-based header
+      // Return empty object to trigger a retry with the new token
+      // that will be fetched by our function-based header
+      return {}
     }
     // Rethrow errors we can't handle
     throw error
