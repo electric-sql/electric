@@ -59,7 +59,7 @@ The first two benchmarks measure a client's initial sync time:
 
 The next four measure how long it takes for clients to recieve an update after a write:
 
-3. [many disjoint shapes](#_3-many-disjoint-shapes)
+3. [many independent shapes](#_3-many-independent-shapes)
 4. [one shape with many clients](#_4-one-shape-with-many-clients)
 5. [many overlapping shapes, each with a single client](#_5-many-overlapping-shapes-each-with-a-single-client)
 6. [many overlapping shapes, one client](#_6-many-overlapping-shapes-one-client)
@@ -98,7 +98,7 @@ This measures a single client syncing a single large shape of up-to 1M rows. The
 
 ### Live updates
 
-#### 3. Many disjoint shapes
+#### 3. Many independent shapes
 
 <figure>
   <a :href="UnrelatedShapesOneClientLatency">
@@ -111,12 +111,13 @@ This measures a single client syncing a single large shape of up-to 1M rows. The
 This benchmark evaluates the time it takes for a write operation to reach a client subscribed to the relevant shape. On the x-axis, the number of active shapes is shown.
 Each shape in this benchmark is independent, ensuring that a write operation affects only one shape at a time.
 
-The two graphs differ based on the type of WHERE clause used for the shapes:
-- **Top Graph:** The WHERE clause is in the form `field = constant`, where each shape is assigned a unique constant. These types of WHERE clause, along with similar patterns,
+The two graphs differ based on the type of where clause used for the shapes:
+- **Top Graph:** The where clause is in the form `field = constant`, where each shape is assigned a unique constant. These types of where clause, along with
+  [other patterns](/docs/guides/shapes#optimised-where-clauses),
   are optimised for high performance regardless of the number of shapes — analogous to having an index on the field. As shown in the graph, the latency remains consistently
   flat at 6ms as the number of shapes increases. This 6ms latency includes 3ms for PostgreSQL to process the write operation and 3ms for Electric to propagate it.
-  We are actively working to optimise additional WHERE clause types in the future.
-- **Bottom Graph:** The WHERE clause is in the form `field LIKE constant`, an example of a non-optimised query type.
+  We are actively working to optimise additional where clause types in the future.
+- **Bottom Graph:** The where clause is in the form `field ILIKE constant`, an example of a non-optimised query type.
   In this case, the latency increases linearly with the number of shapes because Electric must evaluate each shape individually to determine if it is affected by the write.
   Despite this, the response times remain low, a tenth of a second for 10,000 shapes.
 
@@ -192,6 +193,8 @@ is using an optimised where clause, specifically `field = constant`.
 > value for each shape. This index is internal to Electric, and nothing to do with Postgres indexes. It's a hashmap if you're interested.
 > `field = const AND another_condition` is another pattern we optimise. We aim to optimise a large subset of Postgres where clauses in the future.
 > Optimised where clauses mean that we can process writes in a quarter of a millisecond, regardless of how many shapes there are.
+>
+> For more information on optimised where clauses, see the [shape API](/docs/guides/shapes#optimised-where-clauses).
 
 The top graph shows throughput for Postgres 14, the bottom graph for Postgres 15.
 
