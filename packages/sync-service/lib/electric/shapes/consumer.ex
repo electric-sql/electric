@@ -64,8 +64,6 @@ defmodule Electric.Shapes.Consumer do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    Process.flag(:trap_exit, true)
-
     :ok = ShapeCache.Storage.initialise(storage)
 
     # Store the shape definition to ensure we can restore it

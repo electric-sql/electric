@@ -55,6 +55,14 @@ defmodule Electric.ShapeCacheTest do
                     %{name: "value", type: "text", type_id: {25, 1}}
                   ])
 
+  defmodule TempPubManager do
+    def add_shape(_, opts) do
+      send(opts[:test_pid], {:called, :prepare_tables_fn})
+    end
+
+    def refresh_publication(_), do: :ok
+  end
+
   setup :verify_on_exit!
 
   setup do
@@ -122,14 +130,6 @@ defmodule Electric.ShapeCacheTest do
 
     test "triggers table prep and snapshot creation only once", ctx do
       test_pid = self()
-
-      defmodule TempPubManager do
-        def add_shape(_, opts) do
-          send(opts[:test_pid], {:called, :prepare_tables_fn})
-        end
-
-        def refresh_publication(_), do: :ok
-      end
 
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
@@ -880,7 +880,6 @@ defmodule Electric.ShapeCacheTest do
       stop_shape_cache(context)
       # Wait 1 millisecond to ensure shape handles are not generated the same
       Process.sleep(1)
-      with_cub_db_storage(context)
 
       with_shape_cache(Map.put(context, :inspector, @stub_inspector),
         create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->

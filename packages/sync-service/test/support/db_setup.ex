@@ -15,12 +15,7 @@ defmodule Support.DbSetup do
 
     full_db_name = to_string(ctx.test)
 
-    db_name_hash =
-      full_db_name
-      |> :erlang.phash2(64 ** 5)
-      |> :binary.encode_unsigned()
-      |> Base.encode64()
-      |> String.replace_trailing("==", "")
+    db_name_hash = small_hash(full_db_name)
 
     # Truncate the database name to 63 characters, use hash to guarantee uniqueness
     db_name = "#{db_name_hash} ~ #{String.slice(full_db_name, 0..50)}"
@@ -55,8 +50,9 @@ defmodule Support.DbSetup do
   end
 
   def with_publication(ctx) do
-    Postgrex.query!(ctx.pool, "CREATE PUBLICATION electric_test_publication", [])
-    {:ok, %{publication_name: "electric_test_publication"}}
+    publication_name = "electric_test_publication_#{small_hash(ctx.test)}"
+    Postgrex.query!(ctx.pool, "CREATE PUBLICATION \"#{publication_name}\"", [])
+    {:ok, %{publication_name: publication_name}}
   end
 
   def with_pg_version(ctx) do
@@ -122,6 +118,14 @@ defmodule Support.DbSetup do
 
   defp database_settings(%{database_settings: settings}), do: settings
   defp database_settings(_), do: []
+
+  defp small_hash(value),
+    do:
+      to_string(value)
+      |> :erlang.phash2(64 ** 5)
+      |> :binary.encode_unsigned()
+      |> Base.encode64()
+      |> String.replace_trailing("==", "")
 
   defp start_db_pool(connection_opts) do
     start_opts = Electric.Utils.deobfuscate_password(connection_opts) ++ @postgrex_start_opts
