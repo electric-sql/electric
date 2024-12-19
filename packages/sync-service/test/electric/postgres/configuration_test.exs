@@ -1,6 +1,7 @@
 defmodule Electric.Postgres.ConfigurationTest do
   use ExUnit.Case, async: true
   import ExUnit.CaptureLog
+  import Support.DbSetup
 
   alias Electric.Replication.PublicationManager.RelationFilter
   alias Electric.Replication.Eval
@@ -8,9 +9,9 @@ defmodule Electric.Postgres.ConfigurationTest do
 
   @pg_15 150_000
 
-  setup {Support.DbSetup, :with_unique_db}
-  setup {Support.DbSetup, :with_publication}
-  setup {Support.DbSetup, :with_pg_version}
+  setup :with_unique_db
+  setup :with_publication
+  setup :with_pg_version
 
   setup %{db_conn: conn} do
     Postgrex.query!(

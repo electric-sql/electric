@@ -9,6 +9,6 @@ defmodule Support.TransactionCase do
   use ExUnit.CaseTemplate
   import Support.DbSetup
 
-  setup_all :with_shared_db
+  setup :with_shared_db
   setup :in_transaction
 end
