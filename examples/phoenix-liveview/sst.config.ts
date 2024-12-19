@@ -22,6 +22,12 @@ export default $config({
     }
   },
   async run() {
+    if (!process.env.SECRET_KEY_BASE) {
+      throw new Error(
+        `Env variable SECRET_KEY_BASE must be set`
+      )
+    }
+
     if (!process.env.ELECTRIC_API || !process.env.ELECTRIC_ADMIN_API)
       throw new Error(
         `Env variables ELECTRIC_API and ELECTRIC_ADMIN_API must be set`
@@ -85,7 +91,8 @@ export default $config({
         },
         cpu: `0.25 vCPU`,
         memory: `0.5 GB`,
-        architecture: `arm64`, // TODO: remove this once it works
+        // Uncomment the line below if you're trying to deploy from a Mac
+        //architecture: `arm64`,
         transform: {
           target: {
             deregistrationDelay: 0,
@@ -97,12 +104,9 @@ export default $config({
         environment: {
           DATABASE_URL: $interpolate`${pgBaseUri}?ssl=true`,
           ELECTRIC_URL: `https://api-dev-production.electric-sql.com`,
-          SECRET_KEY_BASE: `L3QqWzf6ZxGgQW4MoVQUOEMXy0KN6zS1/NXValYI/wkjB2hjujpBSVUKB22s8R7E`,
+          SECRET_KEY_BASE: process.env.SECRET_KEY_BASE,
           PHX_HOST: domainName,
-          ELECTRIC_CLIENT_PARAMS: JSON.stringify({
-            database_id: electricInfo.id,
-            token: electricInfo.token,
-          }),
+          ELECTRIC_CLIENT_PARAMS: $interpolate`{ "database_id": "${electricInfo.id}", "token": "${electricInfo.token}" }`,
         },
         image: {
           context: `.`,
