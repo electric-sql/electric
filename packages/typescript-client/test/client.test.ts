@@ -5,6 +5,7 @@ import { testWithIssuesTable as it } from './support/test-context'
 import { ShapeStream, Shape, FetchError } from '../src'
 import { Message, Row, ChangeMessage } from '../src/types'
 import { MissingHeadersError } from '../src/error'
+import { resolveValue } from '../src'
 
 const BASE_URL = inject(`baseUrl`)
 
@@ -188,7 +189,6 @@ describe(`Shape`, () => {
       fetchClient: fetchWrapper,
     })
     const shape = new Shape(shapeStream)
-
     let dataUpdateCount = 0
     await new Promise<void>((resolve, reject) => {
       setTimeout(() => reject(`Timed out waiting for data changes`), 1000)
@@ -282,7 +282,8 @@ describe(`Shape`, () => {
       signal: aborter.signal,
     })
 
-    await sleep(100) // give some time for the initial fetch to complete
+    // give some time for the initial fetch to complete
+    await waitForFetch(shapeStream)
     expect(shapeStream.isConnected()).true
 
     const shape = new Shape(shapeStream)
@@ -328,6 +329,8 @@ describe(`Shape`, () => {
       },
     })
 
+    const unsubscribe = shapeStream.subscribe(() => unsubscribe())
+
     await sleep(100) // give some time for the initial fetch to complete
     expect(shapeStream.isConnected()).true
 
@@ -347,7 +350,7 @@ describe(`Shape`, () => {
     issuesTableUrl,
   }) => {
     const mockErrorHandler = vi.fn()
-    new ShapeStream({
+    const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
         table: issuesTableUrl,
@@ -360,7 +363,7 @@ describe(`Shape`, () => {
       onError: mockErrorHandler,
     })
 
-    await sleep(10) // give some time for the initial fetch to complete
+    await waitForFetch(shapeStream)
     expect(mockErrorHandler.mock.calls.length).toBe(1)
     expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
   })
@@ -383,7 +386,7 @@ describe(`Shape`, () => {
       }
     })
 
-    new ShapeStream({
+    const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
         table: issuesTableUrl,
@@ -402,7 +405,7 @@ describe(`Shape`, () => {
       onError: mockErrorHandler,
     })
 
-    await sleep(50) // give some time for the fetches to complete
+    await waitForFetch(shapeStream)
     expect(mockErrorHandler.mock.calls.length).toBe(1)
     expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
   })
@@ -417,44 +420,6 @@ describe(`Shape`, () => {
 
     const mockErrorHandler = vi.fn().mockImplementation((error) => {
       if (error instanceof FetchError && error.status === 401) {
-        return {
-          headers: {
-            Authorization: `valid credentials`,
-          },
-        }
-      }
-    })
-
-    new ShapeStream({
-      url: `${BASE_URL}/v1/shape`,
-      params: {
-        table: issuesTableUrl,
-      },
-      headers: {
-        Authorization: `invalid credentials`,
-      },
-      fetchClient: async (input, init) => {
-        const headers = init?.headers as Record<string, string>
-        if (headers && headers.Authorization === `valid credentials`) {
-          return fetch(input, init)
-        }
-
-        return new Response(undefined, {
-          status: 401,
-        })
-      },
-      onError: mockErrorHandler,
-    })
-
-    await sleep(50) // give some time for the fetches to complete
-    expect(mockErrorHandler.mock.calls.length).toBe(1)
-    expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
-  })
-
-  it(`should support async error handler`, async ({ issuesTableUrl }) => {
-    const mockErrorHandler = vi.fn().mockImplementation(async (error) => {
-      if (error instanceof FetchError && error.status === 401) {
-        await sleep(200)
         return {
           headers: {
             Authorization: `valid credentials`,
@@ -484,11 +449,55 @@ describe(`Shape`, () => {
       onError: mockErrorHandler,
     })
 
-    await sleep(50) // give some time for the first fetch to complete
+    await waitForFetch(shapeStream)
+    expect(mockErrorHandler.mock.calls.length).toBe(1)
+    expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
+  })
+
+  it(`should support async error handler`, async ({ issuesTableUrl }) => {
+    let authChanged: () => void
+    const authChangePromise = new Promise<void>((res) => {
+      authChanged = res
+    })
+    const mockErrorHandler = vi.fn().mockImplementation(async (error) => {
+      if (error instanceof FetchError && error.status === 401) {
+        await sleep(200)
+        authChanged()
+        return {
+          headers: {
+            Authorization: `valid credentials`,
+          },
+        }
+      }
+    })
+
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      headers: {
+        Authorization: `invalid credentials`,
+      },
+      fetchClient: async (input, init) => {
+        const headers = init?.headers as Record<string, string>
+        if (headers && headers.Authorization === `valid credentials`) {
+          return fetch(input, init)
+        }
+
+        return new Response(undefined, {
+          status: 401,
+        })
+      },
+      onError: mockErrorHandler,
+    })
+
+    await waitForFetch(shapeStream)
     expect(mockErrorHandler.mock.calls.length).toBe(1)
     expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
     expect(shapeStream.isConnected()).toBe(false)
 
+    await authChangePromise
     await sleep(200) // give some time for the error handler to modify the authorization header
     expect(shapeStream.isConnected()).toBe(true)
   })
@@ -515,7 +524,9 @@ describe(`Shape`, () => {
       },
     })
 
-    await sleep(10) // give some time for the initial fetch to complete
+    const unsub = shapeStream.subscribe(() => unsub())
+    await sleep(10) // give sometime for fetch to fail
+
     expect(shapeStream.isConnected()).false
 
     const expectedErrorMessage = new MissingHeadersError(url, [
@@ -543,6 +554,7 @@ describe(`Shape`, () => {
       },
     })
 
+    const unsubLive = shapeStreamLive.subscribe(() => unsubLive())
     await sleep(10) // give some time for the initial fetch to complete
     expect(shapeStreamLive.isConnected()).false
 
@@ -567,7 +579,8 @@ describe(`Shape`, () => {
       subscribe: false,
     })
 
-    await sleep(100) // give some time for the fetch to complete
+    await waitForFetch(shapeStream)
+    await sleep(50)
 
     // We should no longer be connected because
     // the initial fetch finished and we've not subscribed to changes
@@ -588,7 +601,7 @@ describe(`Shape`, () => {
 
     expect(shapeStream.isLoading()).true
 
-    await sleep(200) // give some time for the initial fetch to complete
+    await waitForFetch(shapeStream)
 
     expect(shapeStream.isLoading()).false
   })
@@ -658,4 +671,61 @@ describe(`Shape`, () => {
       await clearIssuesShape(shapeStream.shapeHandle)
     }
   })
+
+  it(`should support function-based params and headers`, async ({
+    issuesTableUrl,
+  }) => {
+    const mockParamFn = vi.fn().mockReturnValue(`test-value`)
+    const mockAsyncParamFn = vi.fn().mockResolvedValue(`test-value`)
+    const mockHeaderFn = vi.fn().mockReturnValue(`test-value`)
+    const mockAsyncHeaderFn = vi.fn().mockResolvedValue(`test-value`)
+
+    // Test with synchronous functions
+    const shapeStream1 = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+        customParam: mockParamFn,
+      },
+      headers: {
+        'X-Custom-Header': mockHeaderFn,
+      },
+    })
+    const shape1 = new Shape(shapeStream1)
+    await shape1.value
+
+    expect(mockParamFn).toHaveBeenCalled()
+    expect(mockHeaderFn).toHaveBeenCalled()
+
+    // Test with async functions
+    const shapeStream2 = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+        customParam: mockAsyncParamFn,
+      },
+      headers: {
+        'X-Custom-Header': mockAsyncHeaderFn,
+      },
+    })
+    const shape2 = new Shape(shapeStream2)
+    await shape2.value
+
+    expect(mockAsyncParamFn).toHaveBeenCalled()
+    expect(mockAsyncHeaderFn).toHaveBeenCalled()
+
+    // Verify the resolved values
+    expect(await resolveValue(mockParamFn())).toBe(`test-value`)
+    expect(await resolveValue(mockAsyncParamFn())).toBe(`test-value`)
+  })
 })
+
+function waitForFetch(stream: ShapeStream): Promise<void> {
+  let unsub = () => {}
+  return new Promise<void>((resolve) => {
+    unsub = stream.subscribe(
+      () => resolve(),
+      () => resolve()
+    )
+  }).finally(() => unsub())
+}

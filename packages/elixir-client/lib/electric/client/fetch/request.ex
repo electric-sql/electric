@@ -12,7 +12,6 @@ defmodule Electric.Client.Fetch.Request do
   defstruct [
     :stream_id,
     :endpoint,
-    :database_id,
     :shape_handle,
     :live,
     :shape,
@@ -105,7 +104,6 @@ defmodule Electric.Client.Fetch.Request do
       replica: replica,
       live: live?,
       shape_handle: shape_handle,
-      database_id: database_id,
       offset: %Offset{} = offset,
       next_cursor: cursor,
       params: params
@@ -117,8 +115,7 @@ defmodule Electric.Client.Fetch.Request do
     |> Util.map_put_if("replica", to_string(replica), replica != :default)
     |> Util.map_put_if("handle", shape_handle, is_binary(shape_handle))
     |> Util.map_put_if("live", "true", live?)
-    |> Util.map_put_if("cursor", cursor, !is_nil(cursor))
-    |> Util.map_put_if("database_id", database_id, !is_nil(database_id))
+    |> Util.map_put_if("cursor", to_string(cursor), !is_nil(cursor))
   end
 
   @doc false
@@ -126,16 +123,14 @@ defmodule Electric.Client.Fetch.Request do
     %{
       id: {__MODULE__, request_id},
       start: {__MODULE__, :start_link, [args]},
-      restart: :transient,
+      restart: :temporary,
       type: :worker
     }
   end
 
   @doc false
   def start_link({request_id, request, client, monitor_pid}) do
-    GenServer.start_link(__MODULE__, {request_id, request, client, monitor_pid},
-      name: name(request_id)
-    )
+    GenServer.start_link(__MODULE__, {request_id, request, client, monitor_pid})
   end
 
   @impl true
@@ -143,8 +138,6 @@ defmodule Electric.Client.Fetch.Request do
     Logger.debug(fn ->
       "Starting request for #{inspect(request_id)}"
     end)
-
-    Process.link(monitor_pid)
 
     state = %{
       request_id: request_id,
@@ -163,16 +156,21 @@ defmodule Electric.Client.Fetch.Request do
 
     authenticated_request = Client.authenticate_request(client, request)
 
-    case fetcher.fetch(authenticated_request, fetcher_opts) do
-      {:ok, %Fetch.Response{status: status} = response} when status in 200..299 ->
-        reply(response, state)
+    try do
+      case fetcher.fetch(authenticated_request, fetcher_opts) do
+        {:ok, %Fetch.Response{status: status} = response} when status in 200..299 ->
+          reply(response, state)
 
-      {:ok, %Fetch.Response{} = response} ->
-        # Turn HTTP errors into errors
-        reply({:error, response}, state)
+        {:ok, %Fetch.Response{} = response} ->
+          # Turn HTTP errors into errors
+          reply({:error, response}, state)
 
+        error ->
+          reply(error, state)
+      end
+    rescue
       error ->
-        reply(error, state)
+        reply({:error, error}, state)
     end
 
     {:stop, :normal, state}

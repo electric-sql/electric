@@ -56,7 +56,8 @@ defmodule Electric.PhoenixExample.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.1.1"},
       {:bandit, "~> 1.5"},
-      {:electric_phoenix, "~> 0.2.0"}
+      {:electric_phoenix, "~> 0.2.0"},
+      {:electric_client, ">= 0.2.6-pre-1", override: true}
     ]
   end
 

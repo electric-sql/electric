@@ -64,8 +64,6 @@ defmodule Electric.Shapes.Consumer do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    Process.flag(:trap_exit, true)
-
     :ok = ShapeCache.Storage.initialise(storage)
 
     # Store the shape definition to ensure we can restore it
@@ -283,9 +281,7 @@ defmodule Electric.Shapes.Consumer do
           "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
         )
 
-        :ok = shape_cache.handle_truncate(shape_handle, shape_cache_opts)
-
-        :ok = ShapeCache.Storage.cleanup!(storage)
+        cleanup(state)
 
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
 
@@ -372,8 +368,13 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp cleanup(state) do
-    %{shape_status: {shape_status, shape_status_state}} = state
+    %{
+      shape_status: {shape_status, shape_status_state},
+      publication_manager: {publication_manager, publication_manager_opts}
+    } = state
+
     shape_status.remove_shape(shape_status_state, state.shape_handle)
+    publication_manager.remove_shape(state.shape, publication_manager_opts)
     ShapeCache.Storage.cleanup!(state.storage)
   end
 

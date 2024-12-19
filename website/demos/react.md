@@ -2,7 +2,9 @@
 title: React
 description: >-
   Basic example of an Electric app using React.
+deployed_url: https://basic.examples.electric-sql.com
 source_url: https://github.com/electric-sql/electric/tree/main/examples/react
+image: /img/demos/items-screenshot.png
 example: true
 ---
 

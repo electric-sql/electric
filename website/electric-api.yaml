@@ -120,6 +120,9 @@ paths:
             Optional where clause to filter rows in the `table`.
 
             This should be a valid PostgreSQL WHERE clause using SQL syntax.
+
+            For more details on what is supported and what is optimal,
+            see the [where clause documentation](https://electric-sql.com/docs/guides/shapes#where-clause).
           examples:
             title_filter:
               value: '"title=''Electric''"'

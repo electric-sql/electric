@@ -4,9 +4,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes
   alias Electric.Shapes.Querying
-  alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
-  alias Electric.Utils
 
   require Logger
 
@@ -48,14 +46,11 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           %{
             db_pool: pool,
             storage: storage,
-            run_with_conn_fn: run_with_conn_fn,
             create_snapshot_fn: create_snapshot_fn,
-            prepare_tables_fn: prepare_tables_fn_or_mfa,
+            publication_manager: {publication_manager, publication_manager_opts},
             stack_id: stack_id,
             chunk_bytes_threshold: chunk_bytes_threshold
           } = state
-
-          affected_tables = Shape.affected_tables(shape)
 
           OpenTelemetry.with_span(
             "shape_snapshot.create_snapshot_task",
@@ -63,33 +58,23 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             stack_id,
             fn ->
               try do
-                # Grab the same connection from the pool for both operations to
-                # ensure we only queue for it once.
-                apply(run_with_conn_fn, [
-                  pool,
-                  fn pool_conn ->
-                    OpenTelemetry.with_span(
-                      "shape_snapshot.prepare_tables",
-                      shape_attrs(shape_handle, shape),
-                      stack_id,
-                      fn ->
-                        Utils.apply_fn_or_mfa(prepare_tables_fn_or_mfa, [
-                          pool_conn,
-                          affected_tables
-                        ])
-                      end
-                    )
-
-                    apply(create_snapshot_fn, [
-                      consumer,
-                      shape_handle,
-                      shape,
-                      pool_conn,
-                      storage,
-                      stack_id,
-                      chunk_bytes_threshold
-                    ])
+                OpenTelemetry.with_span(
+                  "shape_snapshot.prepare_tables",
+                  shape_attrs(shape_handle, shape),
+                  stack_id,
+                  fn ->
+                    publication_manager.add_shape(shape, publication_manager_opts)
                   end
+                )
+
+                apply(create_snapshot_fn, [
+                  consumer,
+                  shape_handle,
+                  shape,
+                  pool,
+                  storage,
+                  stack_id,
+                  chunk_bytes_threshold
                 ])
               rescue
                 error ->

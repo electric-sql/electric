@@ -16,10 +16,10 @@ defmodule Electric.Shapes.ConsumerSupervisor do
             registry: [type: :atom, required: true],
             shape_status: [type: :mod_arg, required: true],
             storage: [type: :mod_arg, required: true],
+            publication_manager: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],
             run_with_conn_fn: [type: {:fun, 2}, default: &DBConnection.run/2],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}, required: true],
-            prepare_tables_fn: [type: {:or, [:mfa, {:fun, 2}]}, required: true],
             create_snapshot_fn: [
               type: {:fun, 7},
               default: &Electric.Shapes.Consumer.Snapshotter.query_in_readonly_txn/7

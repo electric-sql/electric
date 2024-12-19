@@ -8,3 +8,6 @@ dist
 /.next/
 /out/
 next-env.d.ts
+
+# sst
+.sst

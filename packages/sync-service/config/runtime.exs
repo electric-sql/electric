@@ -7,8 +7,7 @@ if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
 
-config :logger,
-  level: env!("ELECTRIC_LOG_LEVEL", &Electric.ConfigParser.parse_log_level!/1, :info)
+config :logger, level: env!("ELECTRIC_LOG_LEVEL", &Electric.Config.parse_log_level!/1, :info)
 
 config :logger, :default_formatter,
   # Doubled line breaks serve as long message boundaries
@@ -45,8 +44,6 @@ end
 service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
 instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
 version = Electric.version()
-
-config :telemetry_poller, :default, period: 500
 
 config :opentelemetry,
   resource_detectors: [:otel_resource_env_var, :otel_resource_app_env],
@@ -107,20 +104,18 @@ config :opentelemetry,
        local_parent_not_sampled: :always_off
      }}
 
-database_url = env!("DATABASE_URL", :string!)
+database_url_config = env!("DATABASE_URL", &Electric.Config.parse_postgresql_uri!/1)
 
 database_ipv6_config =
   env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
-
-{:ok, database_url_config} = Electric.ConfigParser.parse_postgresql_uri(database_url)
 
 connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
 
 config :electric, connection_opts: Electric.Utils.obfuscate_password(connection_opts)
 
-enable_integration_testing = env!("ELECTRIC_ENABLE_INTEGRATION_TESTING", :boolean, false)
-cache_max_age = env!("ELECTRIC_CACHE_MAX_AGE", :integer, 60)
-cache_stale_age = env!("ELECTRIC_CACHE_STALE_AGE", :integer, 60 * 5)
+enable_integration_testing? = env!("ELECTRIC_ENABLE_INTEGRATION_TESTING", :boolean, nil)
+cache_max_age = env!("ELECTRIC_CACHE_MAX_AGE", :integer, nil)
+cache_stale_age = env!("ELECTRIC_CACHE_STALE_AGE", :integer, nil)
 statsd_host = env!("ELECTRIC_STATSD_HOST", :string?, nil)
 
 storage_dir = env!("ELECTRIC_STORAGE_DIR", :string, "./persistent")
@@ -143,17 +138,12 @@ persistent_kv =
           raise Dotenvy.Error, message: "ELECTRIC_PERSISTENT_STATE must be one of: MEMORY, FILE"
       end
     end,
-    {Electric.PersistentKV.Filesystem, :new!, root: persistent_state_path}
+    nil
   )
 
-chunk_bytes_threshold =
-  env!(
-    "ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD",
-    :integer,
-    Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
-  )
+chunk_bytes_threshold = env!("ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD", :integer, nil)
 
-{storage_mod, storage_opts} =
+storage =
   env!(
     "ELECTRIC_STORAGE",
     fn storage ->
@@ -175,7 +165,7 @@ chunk_bytes_threshold =
           raise Dotenvy.Error, message: "storage must be one of: MEMORY, FILE"
       end
     end,
-    {Electric.ShapeCache.FileStorage, storage_dir: shape_path}
+    nil
   )
 
 replication_stream_id =
@@ -188,32 +178,46 @@ replication_stream_id =
 
       parsed_id
     end,
-    "default"
+    nil
   )
 
-storage = {storage_mod, storage_opts}
-
 prometheus_port = env!("ELECTRIC_PROMETHEUS_PORT", :integer, nil)
+
+call_home_telemetry_url =
+  env!(
+    "ELECTRIC_TELEMETRY_URL",
+    &Electric.Config.parse_telemetry_url!/1,
+    nil
+  )
+
+system_metrics_poll_interval =
+  env!(
+    "ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL",
+    &Electric.Config.parse_human_readable_time!/1,
+    nil
+  )
+
 # The provided database id is relevant if you had used v0.8 and want to keep the storage
 # instead of having hanging files. We use a provided value as stack id, but nothing else.
-provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, "single_stack")
+provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, nil)
 
 config :electric,
   provided_database_id: provided_database_id,
-  allow_shape_deletion: enable_integration_testing,
+  allow_shape_deletion?: enable_integration_testing?,
   cache_max_age: cache_max_age,
   cache_stale_age: cache_stale_age,
   chunk_bytes_threshold: chunk_bytes_threshold,
   # Used in telemetry
   instance_id: instance_id,
+  call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
+  telemetry_url: call_home_telemetry_url,
+  system_metrics_poll_interval: system_metrics_poll_interval,
   telemetry_statsd_host: statsd_host,
-  db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, 20),
-  replication_stream_id: replication_stream_id,
-  replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, false),
-  service_port: env!("ELECTRIC_PORT", :integer, 3000),
   prometheus_port: prometheus_port,
+  db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, nil),
+  replication_stream_id: replication_stream_id,
+  replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, nil),
+  service_port: env!("ELECTRIC_PORT", :integer, nil),
   storage: storage,
   persistent_kv: persistent_kv,
-  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false),
-  call_home_telemetry: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
-  telemetry_url: "https://checkpoint.electric-sql.com"
+  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, nil)

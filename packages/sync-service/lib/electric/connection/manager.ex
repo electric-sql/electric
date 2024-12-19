@@ -319,6 +319,8 @@ defmodule Electric.Connection.Manager do
           Electric.Connection.Supervisor.start_shapes_supervisor(
             stack_id: state.stack_id,
             shape_cache_opts: shape_cache_opts,
+            pool_opts: state.pool_opts,
+            replication_opts: state.replication_opts,
             stack_events_registry: state.stack_events_registry,
             tweaks: state.tweaks
           )
@@ -538,6 +540,12 @@ defmodule Electric.Connection.Manager do
 
     Logger.warning("Database connection in #{mode} mode failed: #{message}")
 
+    Electric.StackSupervisor.dispatch_stack_event(
+      state.stack_events_registry,
+      state.stack_id,
+      {:database_connection_failed, message}
+    )
+
     step =
       cond do
         is_nil(state.lock_connection_pid) -> :start_lock_connection
@@ -696,7 +704,7 @@ defmodule Electric.Connection.Manager do
   defp query_and_report_retained_wal_size(pool, slot_name, stack_id) do
     query = """
     SELECT
-      pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)
+      pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)::int8
     FROM
       pg_replication_slots
     WHERE
@@ -704,8 +712,11 @@ defmodule Electric.Connection.Manager do
     """
 
     case Postgrex.query(pool, query, [slot_name]) do
+      # The query above can return `-1` which I'm assuming means "up-to-date".
+      # This is a confusing stat if we're measuring in bytes, so normalise to
+      # [0, :infinity)
       {:ok, %Postgrex.Result{rows: [[wal_size]]}} ->
-        :telemetry.execute([:electric, :postgres, :replication], %{wal_size: wal_size}, %{
+        :telemetry.execute([:electric, :postgres, :replication], %{wal_size: max(0, wal_size)}, %{
           stack_id: stack_id
         })
 

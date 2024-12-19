@@ -60,5 +60,8 @@ ARG RELEASE_NAME=electric
 COPY --from=builder /app/_build/prod/rel/${RELEASE_NAME} ./
 RUN mv /app/bin/${RELEASE_NAME} /app/bin/entrypoint
 
+
+HEALTHCHECK --start-period=10s CMD curl --fail http://localhost:${ELECTRIC_PORT-3000}/v1/health || exit 1
+
 ENTRYPOINT ["/app/bin/entrypoint"]
 CMD ["start"]

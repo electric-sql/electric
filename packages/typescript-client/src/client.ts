@@ -38,7 +38,7 @@ import {
   REPLICA_PARAM,
 } from './constants'
 
-const RESERVED_PARAMS = new Set([
+const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
   SHAPE_HANDLE_QUERY_PARAM,
   LIVE_QUERY_PARAM,
@@ -50,7 +50,7 @@ type Replica = `full` | `default`
 /**
  * PostgreSQL-specific shape parameters that can be provided externally
  */
-type PostgresParams = {
+export interface PostgresParams {
   /** The root table for the shape. Not required if you set the table in your proxy. */
   table?: string
 
@@ -76,22 +76,33 @@ type PostgresParams = {
   replica?: Replica
 }
 
+type ParamValue =
+  | string
+  | string[]
+  | (() => string | string[] | Promise<string | string[]>)
+
+/**
+ * External params type - what users provide.
+ * Excludes reserved parameters to prevent dynamic variations that could cause stream shape changes.
+ */
+export type ExternalParamsRecord = {
+  [K in string as K extends ReservedParamKeys ? never : K]:
+    | ParamValue
+    | undefined
+} & Partial<PostgresParams>
+
 type ReservedParamKeys =
-  | typeof COLUMNS_QUERY_PARAM
   | typeof LIVE_CACHE_BUSTER_QUERY_PARAM
   | typeof SHAPE_HANDLE_QUERY_PARAM
   | typeof LIVE_QUERY_PARAM
   | typeof OFFSET_QUERY_PARAM
-  | typeof TABLE_QUERY_PARAM
-  | typeof WHERE_QUERY_PARAM
-  | typeof REPLICA_PARAM
 
 /**
- * External params type - what users provide.
- * Includes documented PostgreSQL params and allows string or string[] values for any additional params.
+ * External headers type - what users provide.
+ * Allows string or function values for any header.
  */
-type ExternalParamsRecord = Partial<PostgresParams> & {
-  [K in string as K extends ReservedParamKeys ? never : K]: string | string[]
+export type ExternalHeadersRecord = {
+  [key: string]: string | (() => string | Promise<string>)
 }
 
 /**
@@ -103,19 +114,59 @@ type InternalParamsRecord = {
 }
 
 /**
+ * Helper function to resolve a function or value to its final value
+ */
+export async function resolveValue<T>(
+  value: T | (() => T | Promise<T>)
+): Promise<T> {
+  if (typeof value === `function`) {
+    return (value as () => T | Promise<T>)()
+  }
+  return value
+}
+
+/**
  * Helper function to convert external params to internal format
  */
-function toInternalParams(params: ExternalParamsRecord): InternalParamsRecord {
-  const result: InternalParamsRecord = {}
-  for (const [key, value] of Object.entries(params)) {
-    result[key] = Array.isArray(value) ? value.join(`,`) : value
-  }
-  return result
+async function toInternalParams(
+  params: ExternalParamsRecord
+): Promise<InternalParamsRecord> {
+  const entries = Object.entries(params)
+  const resolvedEntries = await Promise.all(
+    entries.map(async ([key, value]) => {
+      if (value === undefined) return [key, undefined]
+      const resolvedValue = await resolveValue(value)
+      return [
+        key,
+        Array.isArray(resolvedValue) ? resolvedValue.join(`,`) : resolvedValue,
+      ]
+    })
+  )
+
+  return Object.fromEntries(
+    resolvedEntries.filter(([_, value]) => value !== undefined)
+  )
+}
+
+/**
+ * Helper function to resolve headers
+ */
+async function resolveHeaders(
+  headers?: ExternalHeadersRecord
+): Promise<Record<string, string>> {
+  if (!headers) return {}
+
+  const entries = Object.entries(headers)
+  const resolvedEntries = await Promise.all(
+    entries.map(async ([key, value]) => [key, await resolveValue(value)])
+  )
+
+  return Object.fromEntries(resolvedEntries)
 }
 
 type RetryOpts = {
   params?: ExternalParamsRecord
-  headers?: Record<string, string>
+  headers?: ExternalHeadersRecord
 }
 
 type ShapeStreamErrorHandler = (
@@ -150,12 +201,18 @@ export interface ShapeStreamOptions<T = never> {
 
   /**
    * HTTP headers to attach to requests made by the client.
-   * Can be used for adding authentication headers.
+   * Values can be strings or functions (sync or async) that return strings.
+   * Function values are resolved in parallel when needed, making this useful
+   * for authentication tokens or other dynamic headers.
    */
-  headers?: Record<string, string>
+  headers?: ExternalHeadersRecord
 
   /**
    * Additional request parameters to attach to the URL.
+   * Values can be strings, string arrays, or functions (sync or async) that return these types.
+   * Function values are resolved in parallel when needed, making this useful
+   * for user-specific parameters or dynamic filters.
+   *
    * These will be merged with Electric's standard parameters.
    * Note: You cannot use Electric's reserved parameter names
    * (offset, handle, live, cursor).
@@ -257,6 +314,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     ]
   >()
 
+  #started = false
   #lastOffset: Offset
   #liveCacheBuster: string // Seconds since our Electric Epoch 😎
   #lastSyncedAt?: number // unix time
@@ -290,8 +348,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#fetchClient = createFetchWithResponseHeadersCheck(
       createFetchWithChunkBuffer(fetchWithBackoffClient)
     )
-
-    this.#start()
   }
 
   get shapeHandle() {
@@ -311,6 +367,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #start() {
+    if (this.#started) throw new Error(`Cannot start stream twice`)
+    this.#started = true
+
     try {
       while (
         (!this.options.signal?.aborted && !this.#isUpToDate) ||
@@ -318,22 +377,23 @@ export class ShapeStream<T extends Row<unknown> = Row>
       ) {
         const { url, signal } = this.options
 
+        // Resolve headers and params in parallel
+        const [requestHeaders, params] = await Promise.all([
+          resolveHeaders(this.options.headers),
+          this.options.params
+            ? toInternalParams(this.options.params)
+            : undefined,
+        ])
+
+        // Validate params after resolution
+        if (params) {
+          validateParams(params)
+        }
+
         const fetchUrl = new URL(url)
 
-        // Add any custom parameters first
-        if (this.options.params) {
-          // Check for reserved parameter names
-          const reservedParams = Object.keys(this.options.params).filter(
-            (key) => RESERVED_PARAMS.has(key)
-          )
-          if (reservedParams.length > 0) {
-            throw new Error(
-              `Cannot use reserved Electric parameter names in custom params: ${reservedParams.join(`, `)}`
-            )
-          }
-
-          // Add PostgreSQL-specific parameters from params
-          const params = toInternalParams(this.options.params)
+        // Add PostgreSQL-specific parameters
+        if (params) {
           if (params.table)
             fetchUrl.searchParams.set(TABLE_QUERY_PARAM, params.table)
           if (params.where)
@@ -381,7 +441,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         try {
           response = await this.#fetchClient(fetchUrl.toString(), {
             signal,
-            headers: this.options.headers,
+            headers: requestHeaders,
           })
           this.#connected = true
         } catch (e) {
@@ -462,6 +522,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           }
 
           // Restart
+          this.#started = false
           this.#start()
         }
         return
@@ -481,6 +542,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const subscriptionId = Math.random()
 
     this.#subscribers.set(subscriptionId, [callback, onError])
+    if (!this.#started) this.#start()
 
     return () => {
       this.#subscribers.delete(subscriptionId)
@@ -546,6 +608,21 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 }
 
+/**
+ * Validates that no reserved parameter names are used in the provided params object
+ * @throws {ReservedParamError} if any reserved parameter names are found
+ */
+function validateParams(params: Record<string, unknown> | undefined): void {
+  if (!params) return
+
+  const reservedParams = Object.keys(params).filter((key) =>
+    RESERVED_PARAMS.has(key as ReservedParamKeys)
+  )
+  if (reservedParams.length > 0) {
+    throw new ReservedParamError(reservedParams)
+  }
+}
+
 function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (!options.url) {
     throw new MissingShapeUrlError()
@@ -562,14 +639,7 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
     throw new MissingShapeHandleError()
   }
 
-  // Check for reserved parameter names
-  if (options.params) {
-    const reservedParams = Object.keys(options.params).filter((key) =>
-      RESERVED_PARAMS.has(key)
-    )
-    if (reservedParams.length > 0) {
-      throw new ReservedParamError(reservedParams)
-    }
-  }
+  validateParams(options.params)
+
   return
 }

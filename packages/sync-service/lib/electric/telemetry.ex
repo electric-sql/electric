@@ -1,5 +1,6 @@
 defmodule Electric.Telemetry do
   use Supervisor
+
   import Telemetry.Metrics
 
   def start_link(init_arg) do
@@ -7,29 +8,35 @@ defmodule Electric.Telemetry do
   end
 
   def init(opts) do
-    children = [
-      {:telemetry_poller, measurements: periodic_measurements(opts), period: 2_000}
-    ]
+    system_metrics_poll_interval =
+      Electric.Config.get_env(:system_metrics_poll_interval)
 
-    children
-    |> add_statsd_reporter(Application.fetch_env!(:electric, :telemetry_statsd_host))
-    |> add_prometheus_reporter(Application.fetch_env!(:electric, :prometheus_port))
-    |> add_call_home_reporter(Application.fetch_env!(:electric, :call_home_telemetry))
+    statsd_host = Electric.Config.get_env(:telemetry_statsd_host)
+    prometheus? = not is_nil(Electric.Config.get_env(:prometheus_port))
+    call_home_telemetry? = Electric.Config.get_env(:call_home_telemetry?)
+
+    [
+      {:telemetry_poller,
+       measurements: periodic_measurements(opts),
+       period: system_metrics_poll_interval,
+       init_delay: :timer.seconds(5)},
+      statsd_reporter_child_spec(statsd_host),
+      prometheus_reporter_child_spec(prometheus?),
+      call_home_reporter_child_spec(call_home_telemetry?)
+    ]
+    |> Enum.reject(&is_nil/1)
     |> Supervisor.init(strategy: :one_for_one)
   end
 
-  defp add_call_home_reporter(children, false), do: children
+  defp call_home_reporter_child_spec(false), do: nil
 
-  defp add_call_home_reporter(children, true) do
-    children ++
-      [
-        {Electric.Telemetry.CallHomeReporter,
-         static_info: static_info(),
-         metrics: call_home_metrics(),
-         first_report_in: {2, :minute},
-         reporting_period: {30, :minute},
-         reporter_fn: &Electric.Telemetry.CallHomeReporter.report_home/1}
-      ]
+  defp call_home_reporter_child_spec(true) do
+    {Electric.Telemetry.CallHomeReporter,
+     static_info: static_info(),
+     metrics: call_home_metrics(),
+     first_report_in: {2, :minute},
+     reporting_period: {30, :minute},
+     reporter_fn: &Electric.Telemetry.CallHomeReporter.report_home/1}
   end
 
   def static_info() do
@@ -69,6 +76,19 @@ defmodule Electric.Telemetry do
         run_queue_cpu: summary("vm.total_run_queue_lengths.cpu"),
         run_queue_io: summary("vm.total_run_queue_lengths.io")
       ],
+      system: [
+        load_avg1: last_value("system.load_percent.avg1"),
+        load_avg5: last_value("system.load_percent.avg5"),
+        load_avg15: last_value("system.load_percent.avg15"),
+        memory_free: last_value("system.memory.free_memory"),
+        memory_used: last_value("system.memory.used_memory"),
+        memory_free_percent: last_value("system.memory_percent.free_memory"),
+        memory_used_percent: last_value("system.memory_percent.used_memory"),
+        swap_free: last_value("system.swap.free"),
+        swap_used: last_value("system.swap.used"),
+        swap_free_percent: last_value("system.swap_percent.free"),
+        swap_used_percent: last_value("system.swap_percent.used")
+      ],
       usage: [
         inbound_bytes:
           sum("electric.postgres.replication.transaction_received.bytes", unit: :byte),
@@ -105,23 +125,20 @@ defmodule Electric.Telemetry do
     ]
   end
 
-  defp add_statsd_reporter(children, nil), do: children
+  defp statsd_reporter_child_spec(nil), do: nil
 
-  defp add_statsd_reporter(children, host) do
-    children ++
-      [
-        {TelemetryMetricsStatsd,
-         host: host,
-         formatter: :datadog,
-         global_tags: [instance_id: Electric.instance_id()],
-         metrics: statsd_metrics()}
-      ]
+  defp statsd_reporter_child_spec(host) do
+    {TelemetryMetricsStatsd,
+     host: host,
+     formatter: :datadog,
+     global_tags: [instance_id: Electric.instance_id()],
+     metrics: statsd_metrics()}
   end
 
-  defp add_prometheus_reporter(children, nil), do: children
+  defp prometheus_reporter_child_spec(false), do: nil
 
-  defp add_prometheus_reporter(children, _) do
-    children ++ [{TelemetryMetricsPrometheus.Core, metrics: prometheus_metrics()}]
+  defp prometheus_reporter_child_spec(true) do
+    {TelemetryMetricsPrometheus.Core, metrics: prometheus_metrics()}
   end
 
   defp statsd_metrics() do
@@ -147,7 +164,14 @@ defmodule Electric.Telemetry do
       summary("electric.storage.make_new_snapshot.stop.duration", unit: {:native, :millisecond}),
       summary("electric.querying.stream_initial_data.stop.duration",
         unit: {:native, :millisecond}
-      )
+      ),
+      last_value("system.load_percent.avg1"),
+      last_value("system.load_percent.avg5"),
+      last_value("system.load_percent.avg15"),
+      last_value("system.memory.free_memory"),
+      last_value("system.memory.used_memory"),
+      last_value("system.swap.free"),
+      last_value("system.swap.used")
     ]
     |> Enum.map(&%{&1 | tags: [:instance_id | &1.tags]})
   end
@@ -185,6 +209,8 @@ defmodule Electric.Telemetry do
       {__MODULE__, :uptime_event, []},
       {__MODULE__, :count_shapes, [stack_id]},
       {__MODULE__, :get_total_disk_usage, [opts]},
+      {__MODULE__, :get_system_load_average, [opts]},
+      {__MODULE__, :get_system_memory_usage, [opts]},
       {Electric.Connection.Manager, :report_retained_wal_size,
        [Electric.Connection.Manager.name(stack_id)]}
     ]
@@ -216,5 +242,93 @@ defmodule Electric.Telemetry do
   catch
     :exit, {:noproc, _} ->
       :ok
+  end
+
+  def get_system_load_average(opts) do
+    cores = :erlang.system_info(:logical_processors)
+
+    # > The load values are proportional to how long time a runnable Unix
+    # > process has to spend in the run queue before it is scheduled.
+    # > Accordingly, higher values mean more system load. The returned value
+    # > divided by 256 produces the figure displayed by rup and top.
+    #
+    # I'm going one step further and dividing by the number of CPUs so in a 4
+    # core system, a load of 4.0 (in top) will show as 100%.
+    # Since load can go above num cores, we can to 200%, 300% but
+    # I think this makes sense.
+    #
+    # Certainly the formula in the erlang docs:
+    #
+    # > the following simple mathematical transformation can produce the load
+    # > value as a percentage:
+    # >
+    # >   PercentLoad = 100 * (1 - D/(D + Load))
+    # >
+    # > D determines which load value should be associated with which
+    # > percentage. Choosing D = 50 means that 128 is 60% load, 256 is 80%, 512
+    # > is 90%, and so on.
+    #
+    # Makes little sense. Setting `D` as they say and plugging in a avg1 value
+    # of 128 does not give 60% so I'm not sure how to square what they say with
+    # the numbers...
+    #
+    # e.g. my machine currently has a cpu util (:cpu_sup.util()) of 4% and an
+    # avg1() of 550 ish across 24 cores (so doing very little) but that formula
+    # would give a `PercentLoad` of ~92%.
+    #
+    # My version would give value of 550 / 256 / 24 = 9%
+    [:avg1, :avg5, :avg15]
+    |> Map.new(fn probe ->
+      {probe, 100 * (apply(:cpu_sup, probe, []) / 256 / cores)}
+    end)
+    |> then(
+      &:telemetry.execute([:system, :load_percent], &1, %{
+        stack_id: opts[:stack_id]
+      })
+    )
+  end
+
+  def get_system_memory_usage(opts) do
+    {total, stats} =
+      :memsup.get_system_memory_data()
+      |> Keyword.delete(:total_memory)
+      |> Keyword.pop(:system_total_memory)
+
+    mem_stats =
+      Keyword.take(stats, [:free_memory, :available_memory, :buffered_memory, :cached_memory])
+
+    {total_swap, stats} = Keyword.pop(stats, :total_swap)
+
+    used_memory = total - Keyword.fetch!(mem_stats, :free_memory)
+    resident_memory = total - Keyword.fetch!(mem_stats, :available_memory)
+
+    memory_stats =
+      mem_stats
+      |> Map.new()
+      |> Map.put(:used_memory, used_memory)
+      |> Map.put(:resident_memory, resident_memory)
+
+    memory_percent_stats =
+      mem_stats
+      |> Map.new(fn {k, v} -> {k, 100 * v / total} end)
+      |> Map.put(:used_memory, 100 * used_memory / total)
+      |> Map.put(:resident_memory, 100 * resident_memory / total)
+
+    :telemetry.execute([:system, :memory], memory_stats, %{
+      stack_id: opts[:stack_id]
+    })
+
+    :telemetry.execute([:system, :memory_percent], memory_percent_stats, %{
+      stack_id: opts[:stack_id]
+    })
+
+    free_swap = Keyword.get(stats, :free_swap, 0)
+    used_swap = total_swap - free_swap
+
+    swap_stats = %{total: total_swap, free: free_swap, used: used_swap}
+    swap_percent_stats = %{free: 100 * free_swap / total_swap, used: 100 * used_swap / total_swap}
+
+    :telemetry.execute([:system, :swap], swap_stats, %{stack_id: opts[:stack_id]})
+    :telemetry.execute([:system, :swap_percent], swap_percent_stats, %{stack_id: opts[:stack_id]})
   end
 end

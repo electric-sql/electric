@@ -41,60 +41,62 @@ A client can choose to sync one shape, or lots of shapes. Many clients can sync 
 
 Shapes are defined by:
 
-- a `table`, such as `projects`
-- a `where` clause, used to filter the rows in that table, such as `status='active'`
-- a `columns` clause, used to only sync a subset of the columns in that table, such as `columns=id,title,status`
+- a [table](#table), such as `items`
+- an optional [where clause](#where-clause) to filter which rows are included in the shape
+- an optional [columns](#columns) clause to select which columns are included
 
-> [!IMPORTANT] Limitations
-> Shapes are currently single table, whole row only. You can sync all the rows in a table, or a subset of the rows in that table. You can't yet sync an [include tree](#single-table) without filtering or joining in the client.
+A shape contains all of the rows in the table that match the where clause, if provided. If a columns clause is provided, the synced rows will only contain those selected columns.
 
-### `table`
+> [!Warning] Limitations
+> Shapes are currently [single table](#single-table). Shape definitions are [immutable](#immutable).
 
-This is the root table of the shape. It must match a table in your Postgres database.
+### Table
+
+This is the root table of the shape. All shapes must specify a table and it must match a table in your Postgres database.
 
 The value can be just a tablename like `projects`, or can be a qualified tablename prefixed by the database schema using a `.` delimiter, such as `foo.projects`. If you don't provide a schema prefix, then the table is assumed to be in the `public.` schema.
 
-### `where` clause
+### Where clause
 
-Optional where clause to filter rows in the `table`.
+Shapes can define an optional where clause to filter out which rows from the table are included in the shape. Only rows that match the where clause will be included.
 
-This must be a valid [PostgreSQL WHERE clause](https://www.postgresql.org/docs/current/queries-table-expressions.html#QUERIES-WHERE) using SQL syntax, e.g.:
+The where clause must be a valid [PostgreSQL query expression](https://www.postgresql.org/docs/current/queries-table-expressions.html#QUERIES-WHERE) in SQL syntax, e.g.:
 
 - `title='Electric'`
 - `status IN ('backlog', 'todo')`
 
-You can use logical operators like `AND` and `OR` to group multiple conditions, e.g.:
+Where clauses support:
+
+1. columns of numerical types, `boolean`, `uuid`, `text`, `interval`, date and time types (with the exception of `timetz`), [Arrays](https://github.com/electric-sql/electric/issues/1767) (but not yet [Enums](https://github.com/electric-sql/electric/issues/1709))
+1. operators that work on those types: arithmetics, comparisons, logical/boolean operators like `OR`, string operators like `LIKE`, etc.
+
+You can use `AND` and `OR` to group multiple conditions, e.g.:
 
 - `title='Electric' OR title='SQL'`
 - `title='Electric' AND status='todo'`
 
-> [!WARNING] Limitations
-> Electric needs to be able to evaluate where clauses outside of Postgres, so it supports a subset of SQL types and expressions.
-> 1. you can use columns of numerical types, `boolean`, `uuid`, `text`, `interval`, date and time types (with the exception of `timetz`)
-> 1. operators that work on those types: arithmetics, comparisons, boolean operators like `OR`, string operators like `LIKE`, etc.
-> 1. [Arrays](https://github.com/electric-sql/electric/issues/1767) and [Enums](https://github.com/electric-sql/electric/issues/1709) are not yet supported in where clauses
->
-> For the full and up-to-date list of supported types, operators and functions, see their implementation in [`known_functions.ex`](https://github.com/electric-sql/electric/blob/main/packages/sync-service/lib/electric/replication/eval/env/known_functions.ex), while some expressions are handled in the [parser](https://github.com/electric-sql/electric/blob/main/packages/sync-service/lib/electric/replication/eval/parser.ex) (look for the `do_parse_and_validate_tree()` function).
->
-> ---
->
-> Some general rules that shape where clauses abide by are:
-> 1. where clauses can only refer to columns in the target row
-> 1. where clauses can't perform joins or refer to other tables
-> 1. where clauses can't use non-deterministic SQL functions like `count()` or `now()`
->
-> If you need to use a data type or where clause feature that isn't yet supported, please feel free to [raise a Feature Request](https://github.com/electric-sql/electric/discussions/categories/feature-requests) on GitHub.
+Where clauses are limited in that they:
 
-### `columns`
+1. can only refer to columns in the target row
+1. can't perform joins or refer to other tables
+1. can't use non-deterministic SQL functions like `count()` or `now()`
 
-Optional list of columns to include in the rows from the table, e.g.:
+See [`known_functions.ex`](https://github.com/electric-sql/electric/blob/main/packages/sync-service/lib/electric/replication/eval/env/known_functions.ex) and [`parser.ex`](https://github.com/electric-sql/electric/blob/main/packages/sync-service/lib/electric/replication/eval/parser.ex) for the source of truth on which types, operators and functions are currently supported. If you need a feature that isn't supported yet, please [raise a feature request](https://github.com/electric-sql/electric/discussions/categories/feature-requests).
 
-- `columns=id,title,status` - Only include the id, title, and status columns.
-- `columns=id,"Status-Check"` - Only include id and Status-Check columns, quoting the identifiers where necessary.
+> [!Warning] Throughput
+> Where clause evaluation impacts [data throughput](#throughput). Some where clauses are [optimized](#optimized-where-clauses).
 
-They should always include the primary key columns, and should be formed as a comma separated list of column names exactly as they are in the database schema. When not specified all columns are synced.
+### Columns
 
-If the identifier was defined as case sensitive and/or with special characters, then you must quote it in the `columns` parameter as well.
+This is an optional list of columns to select. When specified, only the columns listed are synced. When not specified all columns are synced.
+
+For example:
+
+- `columns=id,title,status` - only include the `id`, `title` and `status` columns
+- `columns=id,"Status-Check"` - only include `id` and `Status-Check` columns, quoting the identifiers where necessary
+
+The specified columns must always include the primary key column(s), and should be formed as a comma separated list of column names &mdash; exactly as they are in the database schema. If the identifier was defined as case sensitive and/or with special characters, then you must quote it.
+
 
 ## Subscribing to shapes
 
@@ -160,6 +162,36 @@ Or you can use framework integrations like the [`useShape`](/docs/integrations/r
 
 See the [Quickstart](/docs/quickstart) and [HTTP API](/docs/api/http) docs for more information.
 
+## Throughput
+
+Electric evaluates [where clauses](#where-clause) when processing changes from Postgres and matching them to [shape logs](/docs/api/http#shape-log). If there are lots of shapes, this means we have to evaluate lots of where clauses. This has an impact on data throughput.
+
+There are two kinds of where clauses:
+
+1. [optimized where clauses](#optimized-where-clauses): a subset of clauses that we've optimized the evaluation of
+1. non-optimized where clauses: all other where clauses
+
+With non-optimized where clauses, throughput is inversely proportional to the number of shapes. If you have 10 shapes, Electric can process 1,400 changes per second. If you have 100 shapes, throughput drops to 140 changes per second.
+
+With optimized where clauses, Electric can evaluate millions of clauses at once and maintain a consistent throughput of ~5,000 row changes per second **no matter how many shapes you have**. If you have 10 shapes, Electric can process 5,000 changes per second. If you have 1,000 shapes, throughput remains at 5,000 changes per second.
+
+For more details see the [benchmarks](/docs/reference/benchmarks#_7-write-throughput-with-optimized-where-clauses).
+
+### Optimized where clauses
+
+We currently optimize the evaluation of the following clauses:
+
+- `field = constant` - literal equality checks against a constant value.
+  We optimize this by indexing shapes by their constant, allowing a single lookup to retrieve all
+  shapes for that constant instead of evaluating the where clause for each shape.
+  Note that this index is internal to Electric and unrelated to Postgres indexes.
+- `field = constant AND another_condition` - the `field = constant` part of the where clause is optimized as above, and any shapes that match are iterated through to check the other condition. Providing the first condition is enough to filter out most of the shapes, the write processing will be fast. If however `field = const` matches for a large number of shapes, then the write processing will be slower since each of the shapes will need to be iterated through.
+- `a_non_optimized_condition AND field = constant` - as above. The order of the clauses is not important (Electric will filter by optimized clauses first).
+
+> [!Warning] Need additional where clause optimization?
+> We plan to optimize a much larger subset of Postgres where clauses. If you need a particular clause optimized, please [raise an issue on GitHub](https://github.com/electric-sql/electric) or [let us know on Discord](https://discord.electric-sql.com).
+
+
 ## Limitations
 
 ### Single table
@@ -183,20 +215,13 @@ You can upvote and discuss adding support for include trees here:
 
 ### Immutable
 
-Shapes are currently immutable.
+Shape definitions are currently immutable.
 
 Once a shape subscription has been started, it's definition cannot be changed. If you want to change the data in a shape, you need to start a new subscription.
 
 You can upvote and discuss adding support for mutable shapes here:
 
 - [Editable shapes #1677](https://github.com/electric-sql/electric/discussions/1677)
-
-<!--
-## Performance
-
-... add links to benchmarks here ...
-
--->
 
 ### Dropping tables
 

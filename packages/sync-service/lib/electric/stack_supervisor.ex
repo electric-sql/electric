@@ -24,6 +24,7 @@ defmodule Electric.StackSupervisor do
               1. `Electric.ShapeCache.Storage` is a process that knows how to write to disk. Takes configuration options for the underlying storage, is an end point
               2. `Electric.Shapes.Consumer` is GenStage consumer, subscribing to `LogCollector`, which acts a shared producer for all shapes. It passes any incoming operation along to the storage.
               3. `Electric.Shapes.Consumer.Snapshotter` is a temporary GenServer that executes initial snapshot query and writes that to storage
+      3. `Electric.Replication.PublicationManager` manages all filters on the publication for the replication
       2. `Electric.Replication.ShapeLogCollector` collects transactions from the replication connection, fanning them out to `Electric.Shapes.Consumer` (4.1.1.2)
       3. `Electric.ShapeCache` coordinates shape creation and handle allocation, shape metadata
   """
@@ -37,15 +38,7 @@ defmodule Electric.StackSupervisor do
                  connection_opts: [
                    type: :keyword_list,
                    required: true,
-                   keys: [
-                     hostname: [type: :string, required: true],
-                     port: [type: :integer, required: true],
-                     database: [type: :string, required: true],
-                     username: [type: :string, required: true],
-                     password: [type: {:fun, 0}, required: true],
-                     sslmode: [type: :atom, required: false],
-                     ipv6: [type: :boolean, required: false]
-                   ]
+                   keys: Electric.connection_opts_schema()
                  ],
                  replication_opts: [
                    type: :keyword_list,
@@ -148,6 +141,14 @@ defmodule Electric.StackSupervisor do
         {Electric.ShapeCache, stack_id: stack_id, server: Electric.ShapeCache.name(stack_id)}
       )
 
+    publication_manager =
+      Access.get(
+        opts,
+        :publication_manager,
+        {Electric.Replication.PublicationManager,
+         stack_id: stack_id, server: Electric.Replication.PublicationManager.name(stack_id)}
+      )
+
     inspector =
       Access.get(
         opts,
@@ -159,6 +160,7 @@ defmodule Electric.StackSupervisor do
 
     [
       shape_cache: shape_cache,
+      publication_manager: publication_manager,
       registry: shape_changes_registry_name,
       stack_events_registry: opts[:stack_events_registry],
       storage: storage_mod_arg(opts),
@@ -197,25 +199,13 @@ defmodule Electric.StackSupervisor do
     db_pool =
       Electric.ProcessRegistry.name(stack_id, Electric.DbPool)
 
-    get_pg_version_fn = fn ->
-      server = Electric.Connection.Manager.name(stack_id)
-      Electric.Connection.Manager.get_pg_version(server)
-    end
-
-    prepare_tables_mfa =
-      {
-        Electric.Postgres.Configuration,
-        :configure_tables_for_replication!,
-        [get_pg_version_fn, config.replication_opts[:publication_name]]
-      }
-
     shape_changes_registry_name = :"#{Registry.ShapeChanges}:#{stack_id}"
 
     shape_cache_opts = [
       stack_id: stack_id,
       storage: storage,
       inspector: inspector,
-      prepare_tables_fn: prepare_tables_mfa,
+      publication_manager: {Electric.Replication.PublicationManager, stack_id: stack_id},
       chunk_bytes_threshold: config.chunk_bytes_threshold,
       log_producer: shape_log_collector,
       consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),

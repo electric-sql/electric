@@ -23,6 +23,7 @@ defmodule Electric.Replication.Supervisor do
 
     # TODO: weird to have these without defaults but `consumer_supervisor` with a default
     shape_cache = Keyword.fetch!(opts, :shape_cache)
+    publication_manager = Keyword.fetch!(opts, :publication_manager)
     log_collector = Keyword.fetch!(opts, :log_collector)
     stack_id = Keyword.fetch!(opts, :stack_id)
 
@@ -33,7 +34,7 @@ defmodule Electric.Replication.Supervisor do
         {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
       )
 
-    children = [consumer_supervisor, log_collector, shape_cache]
+    children = [consumer_supervisor, publication_manager, log_collector, shape_cache]
     Supervisor.init(children, strategy: :one_for_all)
   end
 end

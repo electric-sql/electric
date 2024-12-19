@@ -835,6 +835,82 @@ defmodule Electric.Plug.RouterTest do
     @tag with_sql: [
            "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
          ]
+    test "GET returns a 409 on a truncate and can follow a new shape afterwards", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      conn = Router.call(conn("GET", "/v1/shape?table=items&offset=-1"), opts)
+
+      assert %{status: 200} = conn
+      handle = get_resp_shape_handle(conn)
+      offset = get_resp_last_offset(conn)
+      assert [%{"value" => %{"value" => "test value 1"}}] = Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          Router.call(
+            conn("GET", "/v1/shape?table=items&offset=#{offset}&handle=#{handle}&live"),
+            opts
+          )
+        end)
+
+      Postgrex.query!(db_conn, "INSERT INTO items VALUES (gen_random_uuid(), 'test value 2')", [])
+
+      conn = Task.await(task)
+
+      assert %{status: 200} = conn
+      assert ^handle = get_resp_shape_handle(conn)
+      offset = get_resp_last_offset(conn)
+      assert [%{"value" => %{"value" => "test value 2"}}, _] = Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          Router.call(
+            conn("GET", "/v1/shape?table=items&offset=#{offset}&handle=#{handle}&live"),
+            opts
+          )
+        end)
+
+      Postgrex.query!(db_conn, "TRUNCATE TABLE items", [])
+      assert %{status: 204} = Task.await(task)
+
+      conn =
+        Router.call(conn("GET", "/v1/shape?table=items&offset=#{offset}&handle=#{handle}"), opts)
+
+      assert %{status: 409} = conn
+      assert [%{"headers" => %{"control" => "must-refetch"}}] = Jason.decode!(conn.resp_body)
+
+      conn =
+        Router.call(conn("GET", "/v1/shape?table=items&offset=-1"), opts)
+
+      assert %{status: 200} = conn
+      new_handle = get_resp_shape_handle(conn)
+      refute new_handle == handle
+      offset = get_resp_last_offset(conn)
+      assert [] = Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          Router.call(
+            conn("GET", "/v1/shape?table=items&offset=#{offset}&handle=#{new_handle}&live"),
+            opts
+          )
+        end)
+
+      Postgrex.query!(db_conn, "INSERT INTO items VALUES (gen_random_uuid(), 'test value 3')", [])
+
+      conn = Task.await(task)
+
+      assert %{status: 200} = conn
+      assert ^new_handle = get_resp_shape_handle(conn)
+      # offset = get_resp_last_offset(conn)
+      assert [%{"value" => %{"value" => "test value 3"}}, @up_to_date] =
+               Jason.decode!(conn.resp_body)
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
     test "HEAD receives all headers", %{opts: opts} do
       conn_res =
         conn("GET", "/v1/shape?table=items&offset=-1")

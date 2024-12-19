@@ -536,6 +536,7 @@ defmodule Electric.ShapeCache.FileStorage do
   @impl Electric.ShapeCache.Storage
   def unsafe_cleanup!(%FS{} = opts) do
     {:ok, _} = File.rm_rf(opts.data_dir)
+    :ok
   end
 
   defp shape_definition_path(%{data_dir: data_dir} = _opts) do

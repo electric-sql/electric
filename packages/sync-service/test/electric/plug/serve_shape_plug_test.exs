@@ -40,6 +40,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
   @start_offset_50 LogOffset.new(Lsn.from_integer(50), 0)
   @test_pg_id "12345"
 
+  # Higher timeout is needed for some tests that tend to run slower on CI.
+  @receive_timeout 1000
+
   def load_column_info({"public", "users"}, _),
     do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
 
@@ -453,9 +456,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
           |> call_serve_shape_plug(ctx)
         end)
 
-      # Raised timeout here because sometimes, rarely, the task takes a little while to reach this point
-      assert_receive :got_log_stream, 300
-      Process.sleep(50)
+      assert_receive :got_log_stream, @receive_timeout
 
       # Simulate new changes arriving
       Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
@@ -512,9 +513,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
           |> call_serve_shape_plug(ctx)
         end)
 
-      # Raised timeout here because sometimes, rarely, the task takes a little while to reach this point
-      assert_receive :got_log_stream, 300
-      Process.sleep(50)
+      assert_receive :got_log_stream, @receive_timeout
 
       # Simulate shape rotation
       Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
@@ -757,7 +756,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
           |> call_serve_shape_plug(ctx)
         end)
 
-      Process.sleep(50)
+      # Wait for the task process to subscribe to stack events
+      wait_until_subscribed(ctx.stack_id, 50, 4)
 
       Electric.StackSupervisor.dispatch_stack_event(Registry.StackEvents, ctx.stack_id, :ready)
 
@@ -783,4 +783,17 @@ defmodule Electric.Plug.ServeShapePlugTest do
   defp max_age(ctx), do: Access.get(ctx, :max_age, 60)
   defp stale_age(ctx), do: Access.get(ctx, :stale_age, 300)
   defp long_poll_timeout(ctx), do: Access.get(ctx, :long_poll_timeout, 20_000)
+
+  defp wait_until_subscribed(stack_id, _sleep, 0) do
+    raise "Timed out waiting for a process to subscribe to stack events in stack \"#{stack_id}\""
+  end
+
+  defp wait_until_subscribed(stack_id, sleep, num_attempts) do
+    if Registry.lookup(Registry.StackEvents, {:stack_status, stack_id}) != [] do
+      :ok
+    else
+      Process.sleep(sleep)
+      wait_until_subscribed(stack_id, sleep, num_attempts - 1)
+    end
+  end
 end
