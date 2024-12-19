@@ -102,8 +102,5 @@ if config_env() == :prod do
   config :electric_phoenix, Electric.Client,
     base_url:
       System.get_env("ELECTRIC_URL") || raise("ELECTRIC_URL environment variable not set"),
-    params:
-      System.get_env("ELECTRIC_CLIENT_PARAMS", "{}")
-      |> :json.decode()
-      |> IO.inspect(label: :electric_client_params)
+    params: System.get_env("ELECTRIC_CLIENT_PARAMS", "{}") |> :json.decode()
 end
