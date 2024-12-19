@@ -181,7 +181,10 @@ For more details see the [benchmarks](/docs/reference/benchmarks#_7-write-throug
 
 We currently optimize the evaluation of the following clauses:
 
-- `field = constant` - literal equality checks against a constant value. We optimise this using a hashmap lookup with an index that's internal to Electric (i.e.: this is nothing to do with Postgres indexes).
+- `field = constant` - literal equality checks against a constant value.
+  We optimize this by indexing shapes by their constant, allowing a single lookup to retrieve all
+  shapes for that constant instead of evaluating the where clause for each shape.
+  Note that this index is internal to Electric and unrelated to Postgres indexes.
 - `field = constant AND another_condition` - the `field = constant` part of the where clause is optimized as above, and any shapes that match are iterated through to check the other condition. Providing the first condition is enough to filter out most of the shapes, the write processing will be fast. If however `field = const` matches for a large number of shapes, then the write processing will be slower since each of the shapes will need to be iterated through.
 - `a_non_optimized_condition AND field = constant` - as above. The order of the clauses is not important (Electric will filter by optimized clauses first).
 
