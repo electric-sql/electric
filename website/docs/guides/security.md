@@ -81,7 +81,9 @@ You can see an example of this in the [encryption example](/demos/encryption):
 
 One of the primary challenges with encryption is key management. I.e.: choosing which data to encrypt with which keys and sharing the right keys with the right users.
 
-Electric doesn't provide or prescribe any specific key management solution. However, you can use Electric to sync keys. For example, you could define a shape like:
+Electric doesn't provide or prescribe any specific key management solution. You're free to use any existing key management system, such as Hashicorp Vault, for key management. However, for end-to-end encryption, you will at some point need to get those keys to client. This is a job that Electric is good at: syncing the right data to the right users.
+
+For example, imagine you store keys in a seperate, extra secure, Postgres database and you segment your encryption by tenant (or group, or some other shared resource). You could sync keys to the client using a shape like this:
 
 ```ts
 import { ShapeStream } from '@electric-sql/client'
@@ -98,6 +100,4 @@ const stream = new ShapeStream({
 })
 ```
 
-You could then put a denormalised `tenant_id` column on all of your rows and lookup the correct key to use when decrypting and encrypting the row.
-
-Similar patterns can be used for groups and other parent resources.
+You could then put a denormalised `tenant_id` column on all of the synced tables in your main database and lookup the correct key to use when decrypting and encrypting the row in the client.
