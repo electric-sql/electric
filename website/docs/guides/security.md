@@ -41,7 +41,7 @@ This API is [public by default](#public-by-default). It should be secured in pro
 
 Electric connects to Postgres as a normal [database user](https://www.postgresql.org/docs/current/user-manag.html). It then exposes access to **any&nbsp;data** that its database user can access in Postgres to **any&nbsp;client** that can connect to the Electric HTTP API.
 
-If you don't want to expose public access to the contents of your database, you **must** secure access to the Electric HTTP API.
+You generally do _not_ want to expose public access to the contents of your database, so you **must** secure access to the Electric HTTP API.
 
 ### Network security
 
