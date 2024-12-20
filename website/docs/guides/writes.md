@@ -202,7 +202,7 @@ Through this, the implementation:
 - presents a single table interface for reads and writes
 - auto-syncs the local writes to the server
 
-The application code code in [`index.tsx`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/index.tsx) stays very simple. Most of the complexity is abstracted into the local database schema, defined in [`local-schema.sql`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql). The write-path sync utility in [`sync.ts`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) handles sending data to the server.
+The application code in [`index.tsx`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/index.tsx) stays very simple. Most of the complexity is abstracted into the local database schema, defined in [`local-schema.sql`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql). The write-path sync utility in [`sync.ts`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) handles sending data to the server.
 
 These are shown in the three tabs below:
 
