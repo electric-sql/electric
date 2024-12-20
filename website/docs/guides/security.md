@@ -81,7 +81,7 @@ You can see an example of this in the [encryption example](/demos/encryption):
 
 One of the primary challenges with encryption is key management. I.e.: choosing which data to encrypt with which keys and sharing the right keys with the right users.
 
-Electric doesn't provide or prescribe any specific key management solution. You're free to use any existing key management system, such as Hashicorp Vault, for key management. However, for end-to-end encryption, you will at some point need to get those keys to client. This is a job that Electric is good at: syncing the right data to the right users.
+Electric doesn't provide or prescribe any specific key management solution. You're free to use any existing key management system, such as Hashicorp Vault, for key management. However, for end-to-end encryption of shared data, you will at some point need to share keys between clients. This is a job that Electric is good at: syncing the right data to the right users.
 
 For example, imagine you store keys in a seperate, extra secure, Postgres database and you segment your encryption by tenant (or group, or some other shared resource). You could sync keys to the client using a shape like this:
 
