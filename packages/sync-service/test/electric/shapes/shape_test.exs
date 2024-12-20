@@ -460,6 +460,22 @@ defmodule Electric.Shapes.ShapeTest do
   end
 
   describe "JSON" do
+    test "all keys are serialised" do
+      shape = %Electric.Shapes.Shape{
+        root_table: {"public", "foo"},
+        root_table_id: 1
+      }
+
+      assert {:ok, json} = Jason.encode(shape)
+      json_value = Jason.decode!(json)
+      expected_keys = shape |> Map.from_struct() |> Map.keys() |> Enum.map(&to_string/1)
+
+      for key <- expected_keys do
+        assert is_map_key(json_value, key),
+               "JSON encoding of Shape is missing key #{inspect(key)}"
+      end
+    end
+
     test "should serialize shape with complex columns" do
       shape = %Electric.Shapes.Shape{
         root_table: {"public", "foo"},
