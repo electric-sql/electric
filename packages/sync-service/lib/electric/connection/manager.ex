@@ -371,7 +371,9 @@ defmodule Electric.Connection.Manager do
       "Handling the exit of the replication client #{inspect(pid)} with reason #{inspect(reason)}"
     )
 
-    {:noreply, %{state | replication_client_pid: nil}, {:continue, :start_replication_client}}
+    state = %{state | replication_client_pid: nil}
+    state = schedule_reconnection(:start_replication_client, state)
+    {:noreply, state}
   end
 
   # The most likely reason for the lock connection or the DB pool to exit is the database
