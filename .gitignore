@@ -22,3 +22,4 @@ wal
 /shapes
 .sst
 **/deps/*
+response.tmp
