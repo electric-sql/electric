@@ -5,6 +5,12 @@ description: >-
 outline: [2, 3]
 ---
 
+<script setup>
+import ComponentsJPG from '/static/img/docs/guides/deployment/components.jpg?url'
+import ComponentsPNG from '/static/img/docs/guides/deployment/components.png?url'
+import ComponentsSmPNG from '/static/img/docs/guides/deployment/components.sm.png?url'
+</script>
+
 <img src="/img/icons/deploy.png" class="product-icon"
     style="width: 72px"
 />
@@ -28,11 +34,11 @@ An Electric deployment has three main components. Your Postgres database, the El
 Electric connects to your Postgres using a `DATABASE_URL`. Your app connects to Electric [over HTTP](/docs/api/http), usually using a [Client library](/docs/api/clients/typescript).
 
 <figure>
-  <a href="/img/deployment/components.jpg">
-    <img src="/img/deployment/components.png" class="hidden-sm"
+  <a :href="ComponentsJPG">
+    <img :src="ComponentsPNG" class="hidden-sm"
         alt="Illustration of the main components of a successfull deployment"
     />
-    <img src="/img/deployment/components.sm.png" class="block-sm"
+    <img :src="ComponentsSmPNG" class="block-sm"
         style="max-width: 360px"
         alt="Illustration of the main components of a successfull deployment"
     />
@@ -50,6 +56,13 @@ As a result, there are three ingredients to a successful Electric deployment:
 You also often want to proxy requests to Electric through your API, or other proxy. For example, to implement [auth](./auth) and/or [caching](/docs/api/http#caching). In these cases, you'll also need to deploy your API and/or proxy layer in front of Electric.
 
 Note also that, when running Electric behind a CDN, you may want your proxy in front of the CDN. This is where primitives like [edge functions](/docs/integrations/supabase#sync-into-edge-function) and [edge workers](/docs/integrations/cloudflare#workers) can be very useful.
+
+### Securing data access
+
+By default, Electric exposes public access to the contents of your database. You generally don't want to expose the contents of your database, so you need to [lock down access](/docs/guides/security#secure-data-access) to the Electric HTTP API.
+
+See the [Security guide](/docs/guides/security) for information.
+
 
 ## 1. Running Postgres
 

@@ -63,7 +63,9 @@ You can proxy the request in your cloud, or at the edge, [in-front of a CDN](#cd
 
 ### Rules are optional
 
-You *don't* have to codify your auth logic into a database rule system. There's no need to use database rules to secure a sync engine when it runs over standard HTTP.
+You *don't* have to codify your auth logic into a database rule system.
+
+There's no need to use database rules to [secure data access](/docs/guides/security) when your sync engine runs over standard HTTP.
 
 ## Patterns
 
