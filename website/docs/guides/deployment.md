@@ -59,7 +59,7 @@ Note also that, when running Electric behind a CDN, you may want your proxy in f
 
 ### Securing data access
 
-By default, Electric exposes public access to the contents of your database. If you don't want to expose the contents of your database, you need to [lock down access](/docs/guides/security#secure-data-access) to the Electric HTTP API.
+By default, Electric exposes public access to the contents of your database. You generally don't want to expose the contents of your database, so you need to [lock down access](/docs/guides/security#secure-data-access) to the Electric HTTP API.
 
 See the [Security guide](/docs/guides/security) for information.
 
