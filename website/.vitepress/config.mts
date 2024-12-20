@@ -174,6 +174,7 @@ export default defineConfig({
             { text: 'Writes', link: '/docs/guides/writes' },
             { text: 'Installation', link: '/docs/guides/installation' },
             { text: 'Deployment', link: '/docs/guides/deployment' },
+            { text: 'Security', link: '/docs/guides/security' },
             { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
             { text: 'Client development', link: '/docs/guides/client-development' },
           ]
