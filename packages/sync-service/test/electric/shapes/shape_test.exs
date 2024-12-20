@@ -207,6 +207,31 @@ defmodule Electric.Shapes.ShapeTest do
 
       assert Shape.convert_change(shape, non_matching_update) == []
     end
+
+    test "re-writes changes to partition on shape" do
+      shape = %Shape{
+        root_table: {"public", "partition_root"},
+        root_table_id: @relation_id,
+        partitions: %{
+          {"public", "partition_01"} => {"public", "partition_root"},
+          {"public", "partition_02"} => {"public", "partition_root"}
+        }
+      }
+
+      partition_update = %UpdatedRecord{
+        relation: {"public", "partition_02"},
+        old_record: %{"id" => 1, "value" => "same", "other_value" => "old"},
+        record: %{"id" => 1, "value" => "same", "other_value" => "new"}
+      }
+
+      assert Shape.convert_change(shape, partition_update) == [
+               %UpdatedRecord{
+                 relation: {"public", "partition_root"},
+                 old_record: %{"id" => 1, "value" => "same", "other_value" => "old"},
+                 record: %{"id" => 1, "value" => "same", "other_value" => "new"}
+               }
+             ]
+    end
   end
 
   describe "new/2" do
@@ -435,6 +460,22 @@ defmodule Electric.Shapes.ShapeTest do
   end
 
   describe "JSON" do
+    test "all keys are serialised" do
+      shape = %Electric.Shapes.Shape{
+        root_table: {"public", "foo"},
+        root_table_id: 1
+      }
+
+      assert {:ok, json} = Jason.encode(shape)
+      json_value = Jason.decode!(json)
+      expected_keys = shape |> Map.from_struct() |> Map.keys() |> Enum.map(&to_string/1)
+
+      for key <- expected_keys do
+        assert is_map_key(json_value, key),
+               "JSON encoding of Shape is missing key #{inspect(key)}"
+      end
+    end
+
     test "should serialize shape with complex columns" do
       shape = %Electric.Shapes.Shape{
         root_table: {"public", "foo"},
@@ -491,6 +532,45 @@ defmodule Electric.Shapes.ShapeTest do
           }
         },
         where: nil
+      }
+
+      assert {:ok, json} = Jason.encode(shape)
+      assert ^shape = Jason.decode!(json) |> Shape.from_json_safe!()
+    end
+
+    test "should serialise shape replica setting" do
+      shape = %Electric.Shapes.Shape{
+        root_table: {"public", "foo"},
+        root_table_id: 1,
+        table_info: %{
+          {"public", "foo"} => %{
+            columns: [],
+            pk: ["first", "second", "third"]
+          }
+        },
+        where: nil,
+        replica: :full
+      }
+
+      assert {:ok, json} = Jason.encode(shape)
+      assert ^shape = Jason.decode!(json) |> Shape.from_json_safe!()
+    end
+
+    test "should serialise shape on partitioned table" do
+      shape = %Electric.Shapes.Shape{
+        root_table: {"public", "foo"},
+        root_table_id: 1,
+        table_info: %{
+          {"public", "foo"} => %{
+            columns: [],
+            pk: ["first", "second", "third"]
+          }
+        },
+        where: nil,
+        partitions: %{
+          {"public", "foo_1"} => {"public", "foo"},
+          {"public", "foo_2"} => {"public", "foo"}
+        }
       }
 
       assert {:ok, json} = Jason.encode(shape)
