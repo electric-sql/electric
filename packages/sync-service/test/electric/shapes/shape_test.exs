@@ -521,6 +521,45 @@ defmodule Electric.Shapes.ShapeTest do
       assert {:ok, json} = Jason.encode(shape)
       assert ^shape = Jason.decode!(json) |> Shape.from_json_safe!()
     end
+
+    test "should serialise shape replica setting" do
+      shape = %Electric.Shapes.Shape{
+        root_table: {"public", "foo"},
+        root_table_id: 1,
+        table_info: %{
+          {"public", "foo"} => %{
+            columns: [],
+            pk: ["first", "second", "third"]
+          }
+        },
+        where: nil,
+        replica: :full
+      }
+
+      assert {:ok, json} = Jason.encode(shape)
+      assert ^shape = Jason.decode!(json) |> Shape.from_json_safe!()
+    end
+
+    test "should serialise shape on partitioned table" do
+      shape = %Electric.Shapes.Shape{
+        root_table: {"public", "foo"},
+        root_table_id: 1,
+        table_info: %{
+          {"public", "foo"} => %{
+            columns: [],
+            pk: ["first", "second", "third"]
+          }
+        },
+        where: nil,
+        partitions: %{
+          {"public", "foo_1"} => {"public", "foo"},
+          {"public", "foo_2"} => {"public", "foo"}
+        }
+      }
+
+      assert {:ok, json} = Jason.encode(shape)
+      assert ^shape = Jason.decode!(json) |> Shape.from_json_safe!()
+    end
   end
 
   def load_column_info({"public", "table"}, _),

@@ -44,10 +44,13 @@ defmodule Electric.Shapes.Shape do
           root_table_id: non_neg_integer(),
           where: String.t(),
           selected_columns: [String.t(), ...] | nil,
-          table_info: [json_table_list(), ...]
+          table_info: [json_table_list(), ...],
+          partitions: %{[String.t()] => [String.t()]},
+          replica: String.t()
         }
 
-  def hash(%__MODULE__{} = shape), do: shape |> Map.drop([:table_info]) |> :erlang.phash2()
+  def hash(%__MODULE__{} = shape),
+    do: shape |> Map.drop([:table_info, :partitions]) |> :erlang.phash2()
 
   def generate_id(%__MODULE__{} = shape) do
     hash = hash(shape)
@@ -342,7 +345,9 @@ defmodule Electric.Shapes.Shape do
       root_table_id: root_table_id,
       where: where,
       selected_columns: selected_columns,
-      table_info: table_info
+      table_info: table_info,
+      partitions: partitions,
+      replica: replica
     } = shape
 
     query =
@@ -362,7 +367,9 @@ defmodule Electric.Shapes.Shape do
             Enum.map(table_info, fn {{schema, name}, columns} ->
               [[schema, name], json_safe_columns(columns)]
             end)
-        )
+        ),
+      partitions: Enum.map(partitions, fn {{kk, kv}, {vk, vv}} -> [[kk, kv], [vk, vv]] end),
+      replica: to_string(replica)
     }
   end
 
@@ -385,7 +392,9 @@ defmodule Electric.Shapes.Shape do
       "root_table_id" => root_table_id,
       "where" => where,
       "selected_columns" => selected_columns,
-      "table_info" => info
+      "table_info" => info,
+      "partitions" => partitions,
+      "replica" => replica
     } = map
 
     table_info =
@@ -407,13 +416,18 @@ defmodule Electric.Shapes.Shape do
       root_table_id: root_table_id,
       where: where,
       selected_columns: selected_columns,
-      table_info: table_info
+      table_info: table_info,
+      partitions: Map.new(partitions, fn [[kk, kv], [vk, vv]] -> {{kk, kv}, {vk, vv}} end),
+      replica: replica_from_json(replica)
     }
   end
 
   defp column_info_from_json({"type_id", [id, mod]}), do: {:type_id, {id, mod}}
   defp column_info_from_json({"type", type}), do: {:type, String.to_atom(type)}
   defp column_info_from_json({key, value}), do: {String.to_atom(key), value}
+
+  defp replica_from_json("full"), do: :full
+  defp replica_from_json("default"), do: :default
 end
 
 defimpl Inspect, for: Electric.Shapes.Shape do
