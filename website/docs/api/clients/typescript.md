@@ -273,7 +273,9 @@ export type ChangeMessage<T extends Row<unknown> = Row> = {
 
 Or a `ControlMessage`, representing an instruction to the client, as [documented here](../http#control-messages).
 
-#### Parsing
+#### Parsing and Custom Parsing
+
+To understand the type of each column in your shape, you can check the `electric-schema` response header in the shape response. This header contains the PostgreSQL type information for each column.
 
 By default, when constructing a `ChangeMessage.value`, `ShapeStream` parses the following Postgres types into native JavaScript values:
 
@@ -285,19 +287,30 @@ By default, when constructing a `ChangeMessage.value`, `ShapeStream` parses the 
 
 All other types aren't parsed and are left in the string format as they were served by the HTTP endpoint.
 
-##### Custom parsing
-
-You can extend this behaviour by configuring a custom parser. This is an object mapping Postgres types to parsing functions for those types. For example, we can extend the [default parser](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/parser.ts#L28-L37) to parse booleans into `1` or `0` instead of `true` or `false`:
+You can extend the default parsing behavior by defining custom parsers for specific PostgreSQL data types. This is particularly useful when you want to transform string representations of dates, JSON, or other complex types into their corresponding JavaScript objects. Here's an example:
 
 ```ts
-const stream = new ShapeStream({
-  url: `http://localhost:3000/v1/shape`,
+// Define row type
+type CustomRow = {
+  id: number
+  title: string
+  created_at: Date  // We want this to be a Date object
+}
+
+const stream = new ShapeStream<CustomRow>({
+  url: 'http://localhost:3000/v1/shape',
   params: {
-    table: `foo`
+    table: 'posts'
   },
   parser: {
-    bool: (value: string) => value === `true` ? 1 : 0
+    // Parse timestamp columns into JavaScript Date objects
+    timestampz: (date: string) => new Date(date)
   }
+})
+
+const shape = new Shape(stream)
+shape.subscribe(data => {
+  console.log(data.created_at instanceof Date) // true
 })
 ```
 
