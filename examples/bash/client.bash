@@ -105,8 +105,8 @@ process_json() {
         return 1
     fi
 
-    # Process each item in the JSON array
-    jq -c '.[]' "$tmp_body" | while IFS= read -r item; do
+    # Process last 5 items in the JSON array for control messages
+    jq -c 'if length > 5 then .[-5:] else . end | .[]' "$tmp_body" | while IFS= read -r item; do
         # Parse the JSON message
         if echo "$item" | jq -e '.headers.control' >/dev/null 2>&1; then
             echo "Found control message" >&2
