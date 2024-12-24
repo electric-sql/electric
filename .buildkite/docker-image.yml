@@ -14,9 +14,11 @@ steps:
       - export ELECTRIC_IMAGE_NAME="${DOCKERHUB_REPO}/${IMAGE_NAME}"
       - cd ./packages/sync-service
       - export ELECTRIC_VERSION=$(git describe --abbrev=7 --tags --always --first-parent --match '@core/sync-service@*' | sed -En 's|^@core/sync-service@||p')
+      - export SHORT_COMMIT_SHA=$(git rev-parse --short HEAD)
       - docker buildx build --platform linux/arm64/v8,linux/amd64 --push
         --build-arg ELECTRIC_VERSION=$${ELECTRIC_VERSION}
         -t $${ELECTRIC_IMAGE_NAME}:canary
+        -t $${ELECTRIC_IMAGE_NAME}:canary-$${SHORT_COMMIT_SHA}
         .
   - wait
   - label: "🚀 Build & publish the release image to Docker Hub"

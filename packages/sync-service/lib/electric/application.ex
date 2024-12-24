@@ -1,7 +1,7 @@
 defmodule Electric.Application do
   use Application
 
-  require Config
+  require Logger
 
   @doc """
   This callback starts the entire application, but is configured to run only when
@@ -81,6 +81,9 @@ defmodule Electric.Application do
         ],
         prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
       ])
+
+    app_vsn = Application.spec(:electric, :vsn)
+    Logger.info("Starting ElectricSQL #{app_vsn}")
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Electric.Supervisor)
   end
