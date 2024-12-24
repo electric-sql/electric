@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.0-beta.3
+
+### Patch Changes
+
+- 84eb729: Fix arithmetic bugs in system memory stat calculations.
+
 ## 1.0.0-beta.2
 
 ### Patch Changes
