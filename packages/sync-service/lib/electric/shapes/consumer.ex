@@ -3,11 +3,12 @@ defmodule Electric.Shapes.Consumer do
     restart: :temporary,
     significant: true
 
-  alias Electric.ShapeCache.LogChunker
   alias Electric.LogItems
+  alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
   alias Electric.ShapeCache
+  alias Electric.ShapeCache.LogChunker
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Utils
@@ -182,25 +183,51 @@ defmodule Electric.Shapes.Consumer do
 
   # `Shapes.Dispatcher` only works with single-events, so we can safely assert
   # that here
-  def handle_events([%Changes.Relation{}], _from, state) do
-    %{shape: %{root_table: root_table}, inspector: {inspector, inspector_opts}} = state
+  def handle_events([%Changes.Relation{} = relation], _from, state) do
+    %{shape: %{root_table: root_table} = shape, inspector: inspector} = state
 
-    Logger.info(
-      "Schema for the table #{Utils.inspect_relation(root_table)} changed - terminating shape #{state.shape_handle}"
-    )
-
-    # We clean up the relation info from ETS as it has changed and we want
-    # to source the fresh info from postgres for the next shape creation
-    inspector.clean(root_table, inspector_opts)
-
-    state =
-      reply_to_snapshot_waiters(
-        {:error, "Shape relation changed before snapshot was ready"},
-        state
+    # we now recelve relation messages from partitions, as well as ones
+    # affecting our root table so we need to be clear what we're getting -- if
+    # the relation message refers to our root table then we need to drop the
+    # shape as something has changed. if the relation is a new partition, so
+    # it's parent is our root table, then we need to just add that partition to
+    # our shape so txns from the new partition are properly mapped to our root
+    # table.
+    if relation.id == shape.root_table_id do
+      Logger.info(
+        "Schema for the table #{Utils.inspect_relation(root_table)} changed - terminating shape #{state.shape_handle}"
       )
 
-    cleanup(state)
-    {:stop, :normal, state}
+      # We clean up the relation info from ETS as it has changed and we want
+      # to source the fresh info from postgres for the next shape creation
+      Inspector.clean(root_table, inspector)
+
+      state =
+        reply_to_snapshot_waiters(
+          {:error, "Shape relation changed before snapshot was ready"},
+          state
+        )
+
+      cleanup(state)
+
+      {:stop, :normal, state}
+    else
+      # if we're receiving this relation message but the relation doesn't refer
+      # to the root table for the shape, then it **must** be because of the addition of a partition
+      # to the root table
+
+      {:ok, %{parent: ^root_table, relation: table}} =
+        Inspector.load_relation({relation.schema, relation.table}, inspector)
+
+      # a new partition has been added
+      Logger.info(
+        "New partition #{Utils.inspect_relation(table)} for table #{Utils.inspect_relation(root_table)}"
+      )
+
+      shape = Shape.add_partition(shape, root_table, table)
+
+      {:noreply, [], %{state | shape: shape}}
+    end
   end
 
   # Buffer incoming transactions until we know our xmin
