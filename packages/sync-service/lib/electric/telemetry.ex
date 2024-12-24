@@ -3,6 +3,8 @@ defmodule Electric.Telemetry do
 
   import Telemetry.Metrics
 
+  require Logger
+
   def start_link(init_arg) do
     Supervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
@@ -288,47 +290,91 @@ defmodule Electric.Telemetry do
     )
   end
 
+  @required_system_memory_keys ~w[system_total_memory free_memory buffered_memory cached_memory]a
+  @required_swap_keys ~w[total_swap free_swap]a
+
   def get_system_memory_usage(opts) do
-    {total, stats} =
-      :memsup.get_system_memory_data()
-      |> Keyword.delete(:total_memory)
-      |> Keyword.pop(:system_total_memory)
+    metadata = %{stack_id: opts[:stack_id]}
+
+    system_memory = Map.new(:memsup.get_system_memory_data())
+
+    # Sanity-check that all the required keys are present before doing any arithmetic on them
+    missing_system_memory_keys =
+      Enum.reject(@required_system_memory_keys, &Map.has_key?(system_memory, &1))
 
     mem_stats =
-      Keyword.take(stats, [:free_memory, :available_memory, :buffered_memory, :cached_memory])
+      cond do
+        missing_system_memory_keys != [] ->
+          Logger.warning(
+            "Error gathering system memory stats: " <>
+              "missing data points #{Enum.join(missing_system_memory_keys, ", ")}"
+          )
 
-    {total_swap, stats} = Keyword.pop(stats, :total_swap)
+          %{}
 
-    used_memory = total - Keyword.fetch!(mem_stats, :free_memory)
-    resident_memory = total - Keyword.fetch!(mem_stats, :available_memory)
+        system_memory.system_total_memory == 0 ->
+          Logger.warning("Error gathering system memory stats: zero total memory reported")
+          %{}
 
-    memory_stats =
-      mem_stats
-      |> Map.new()
-      |> Map.put(:used_memory, used_memory)
-      |> Map.put(:resident_memory, resident_memory)
+        true ->
+          total = system_memory.system_total_memory
 
-    memory_percent_stats =
-      mem_stats
-      |> Map.new(fn {k, v} -> {k, 100 * v / total} end)
-      |> Map.put(:used_memory, 100 * used_memory / total)
-      |> Map.put(:resident_memory, 100 * resident_memory / total)
+          used = total - system_memory.free_memory
 
-    :telemetry.execute([:system, :memory], memory_stats, %{
-      stack_id: opts[:stack_id]
-    })
+          resident =
+            with nil <- Map.get(system_memory, :available_memory) do
+              total -
+                (system_memory.free_memory + system_memory.buffered_memory +
+                   system_memory.cached_memory)
+            end
 
-    :telemetry.execute([:system, :memory_percent], memory_percent_stats, %{
-      stack_id: opts[:stack_id]
-    })
+          mem_stats =
+            system_memory
+            |> Map.take(~w[available_memory free_memory buffered_memory cached_memory]a)
+            |> Map.put(:used_memory, used)
+            |> Map.put(:resident_memory, resident)
 
-    free_swap = Keyword.get(stats, :free_swap, 0)
-    used_swap = total_swap - free_swap
+          mem_percent_stats = Map.new(mem_stats, fn {k, v} -> {k, 100 * v / total} end)
 
-    swap_stats = %{total: total_swap, free: free_swap, used: used_swap}
-    swap_percent_stats = %{free: 100 * free_swap / total_swap, used: 100 * used_swap / total_swap}
+          mem_stats = Map.put(mem_stats, :total_memory, total)
 
-    :telemetry.execute([:system, :swap], swap_stats, %{stack_id: opts[:stack_id]})
-    :telemetry.execute([:system, :swap_percent], swap_percent_stats, %{stack_id: opts[:stack_id]})
+          :telemetry.execute([:system, :memory], mem_stats, metadata)
+          :telemetry.execute([:system, :memory_percent], mem_percent_stats, metadata)
+
+          mem_stats
+      end
+
+    # Sanity-check that all the required swap keys are present
+    missing_swap_keys = Enum.reject(@required_swap_keys, &Map.has_key?(system_memory, &1))
+
+    swap_stats =
+      if missing_swap_keys != [] do
+        Logger.warning(
+          "Error gathering system swap stats: " <>
+            "missing data points #{Enum.join(missing_swap_keys, ", ")}"
+        )
+
+        %{}
+      else
+        total = system_memory.total_swap
+        free = system_memory.free_swap
+        used = total - free
+
+        swap_stats = %{total_swap: total, free_swap: free, used_swap: used}
+
+        swap_percent_stats =
+          if total > 0 do
+            %{free_swap: 100 * free / total, used_swap: 100 * used / total}
+          else
+            %{free_swap: 0, used_swap: 0}
+          end
+
+        :telemetry.execute([:system, :swap], swap_stats, metadata)
+        :telemetry.execute([:system, :swap_percent], swap_percent_stats, metadata)
+
+        swap_stats
+      end
+
+    Map.merge(mem_stats, swap_stats)
   end
 end
