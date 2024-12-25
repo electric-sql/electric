@@ -63,6 +63,8 @@ defmodule Electric.Telemetry do
     }
   end
 
+  # IMPORTANT: these metrics are validated on the receiver side, so if you change them,
+  #            make sure you also change the receiver
   def call_home_metrics() do
     [
       environment: [
