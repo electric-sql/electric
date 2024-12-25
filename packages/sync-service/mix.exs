@@ -93,6 +93,7 @@ defmodule Electric.MixProject do
         {:opentelemetry_exporter, "~> 1.8"},
         {:opentelemetry_telemetry, "~> 1.1"},
         {:opentelemetry_semantic_conventions, "~> 1.27"},
+        {:otel_metric_exporter, "~> 0.2"},
         {:pg_query_ex, "0.5.3"},
         {:plug, "~> 1.16"},
         {:postgrex, "~> 0.19"},

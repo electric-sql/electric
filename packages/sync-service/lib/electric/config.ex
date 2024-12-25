@@ -120,7 +120,8 @@ defmodule Electric.Config do
   def telemetry_export_enabled? do
     not is_nil(Electric.Config.get_env(:telemetry_statsd_host)) or
       not is_nil(Electric.Config.get_env(:prometheus_port)) or
-      Electric.Config.get_env(:call_home_telemetry?)
+      Electric.Config.get_env(:call_home_telemetry?) or
+      not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
   end
 
   @doc ~S"""
