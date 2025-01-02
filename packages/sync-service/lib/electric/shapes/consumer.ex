@@ -3,6 +3,8 @@ defmodule Electric.Shapes.Consumer do
     restart: :temporary,
     significant: true
 
+  import Electric.Postgres.Xid, only: [xid_lt_xid8: 2]
+
   alias Electric.ShapeCache.LogChunker
   alias Electric.LogItems
   alias Electric.Replication.Changes
@@ -231,7 +233,8 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp handle_txn(%Transaction{xid: xid}, %{snapshot_xmin: xmin} = state) when xid < xmin do
+  defp handle_txn(%Transaction{xid: xid}, %{snapshot_xmin: xmin} = state)
+       when xid_lt_xid8(xid, xmin) do
     {:cont, state}
   end
 
