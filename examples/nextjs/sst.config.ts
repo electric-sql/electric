@@ -3,48 +3,63 @@
 
 import { execSync } from "child_process"
 
+const isProduction = (stage) => stage.toLowerCase() === `production`
+
 export default $config({
   app(input) {
     return {
       name: `nextjs-example`,
-      removal: input?.stage === `production` ? `retain` : `remove`,
+      removal: isProduction(input?.stage) ? `retain` : `remove`,
       home: `aws`,
       providers: {
         cloudflare: `5.42.0`,
         aws: {
           version: `6.57.0`,
+          region: `eu-west-1`,
         },
-        neon: `0.6.3`,
+        postgresql: `3.14.0`,
       },
     }
   },
   async run() {
-    const project = neon.getProjectOutput({ id: process.env.NEON_PROJECT_ID! })
-    const base = {
-      projectId: project.id,
-      branchId: project.defaultBranchId,
-    }
-
-    const db = new neon.Database(`nextjs`, {
-      ...base,
-      name:
-        $app.stage === `Production`
-          ? `nextjs-production`
-          : `nextjs-${$app.stage}`,
-      ownerName: `neondb_owner`,
-    })
-
-    const databaseUri = getNeonDbUri(project, db)
-    try {
-      databaseUri.apply(applyMigrations)
-
-      const electricInfo = databaseUri.apply((uri) =>
-        addDatabaseToElectric(uri)
+    if (!process.env.ELECTRIC_API || !process.env.ELECTRIC_ADMIN_API)
+      throw new Error(
+        `Env variables ELECTRIC_API and ELECTRIC_ADMIN_API must be set`
       )
 
-      const website = deployNextJsExample(electricInfo, databaseUri)
+    if (
+      !process.env.EXAMPLES_DATABASE_HOST ||
+      !process.env.EXAMPLES_DATABASE_PASSWORD
+    ) {
+      throw new Error(
+        `Env variables EXAMPLES_DATABASE_HOST and EXAMPLES_DATABASE_PASSWORD must be set`
+      )
+    }
+
+    try {
+      const provider = new postgresql.Provider(`neon`, {
+        host: process.env.EXAMPLES_DATABASE_HOST,
+        database: `neondb`,
+        username: `neondb_owner`,
+        password: process.env.EXAMPLES_DATABASE_PASSWORD,
+      })
+
+      const dbName = isProduction($app.stage)
+        ? `nextjs-production`
+        : `nextjs-${$app.stage}`
+      const pg = new postgresql.Database(dbName, {}, { provider })
+
+      const pgUri = $interpolate`postgresql://${provider.username}:${provider.password}@${provider.host}/${pg.name}?sslmode=require`
+      const electricInfo = pgUri.apply((uri) => {
+        return addDatabaseToElectric(uri, `eu-west-1`)
+      })
+
+      const website = deployNextJsExample(electricInfo, pgUri)
+
+      pgUri.apply((uri) => applyMigrations(uri))
+
       return {
-        databaseUri,
+        pgUri,
         database_id: electricInfo.id,
         electric_token: electricInfo.token,
         website: website.url,
@@ -76,36 +91,25 @@ function deployNextJsExample(
       DATABASE_URL: uri,
     },
     domain: {
-      name: `nextjs${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+      name: `nextjs${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
       dns: sst.cloudflare.dns(),
     },
   })
 }
 
-function getNeonDbUri(
-  project: $util.Output<neon.GetProjectResult>,
-  db: neon.Database
-) {
-  const passwordOutput = neon.getBranchRolePasswordOutput({
-    projectId: project.id,
-    branchId: project.defaultBranchId,
-    roleName: db.ownerName,
-  })
-
-  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${project.databaseHost}/${db.name}?sslmode=require`
-}
-
 async function addDatabaseToElectric(
-  uri: string
+  uri: string,
+  region: `eu-west-1` | `us-east-1`
 ): Promise<{ id: string; token: string }> {
-  const adminApi = process.env.ELECTRIC_ADMIN_API
+  const adminApi = process.env.ELECTRIC_ADMIN_API!
 
-  const result = await fetch(`${adminApi}/v1/databases`, {
+  const electricUrl = new URL(`/v1/databases`, adminApi)
+  const result = await fetch(electricUrl, {
     method: `PUT`,
     headers: { "Content-Type": `application/json` },
     body: JSON.stringify({
       database_url: uri,
-      region: `us-east-1`,
+      region,
     }),
   })
 
