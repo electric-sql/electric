@@ -599,7 +599,7 @@ defmodule Electric.Plug.ServeShapePlug do
   defp start_telemetry_span(conn, _) do
     OpentelemetryTelemetry.start_telemetry_span(OpenTelemetry, "Plug_shape_get", %{}, %{})
     add_span_attrs_from_conn(conn)
-    conn
+    put_private(conn, :electric_telemetry_span, %{start_time: System.monotonic_time()})
   end
 
   # Assign root span attributes based on the latest state of Plug.Conn and end the root span.
@@ -613,7 +613,8 @@ defmodule Electric.Plug.ServeShapePlug do
       %{
         count: 1,
         bytes: assigns[:streaming_bytes_sent] || 0,
-        monotonic_time: System.monotonic_time()
+        monotonic_time: System.monotonic_time(),
+        duration: System.monotonic_time() - conn.private[:electric_telemetry_span][:start_time]
       },
       %{
         live: assigns[:live],
