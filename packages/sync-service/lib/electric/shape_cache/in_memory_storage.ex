@@ -265,7 +265,9 @@ defmodule Electric.ShapeCache.InMemoryStorage do
           Enum.map(checkpoints, &elem(&1, 0))
         end)
         |> Enum.max()
-        |> then(fn max_chunk -> :ets.insert(table, {snapshot_end(), LogOffset.new(max_chunk)}) end)
+        |> then(fn max_chunk ->
+          :ets.insert(table, {snapshot_end(), LogOffset.new(max_chunk)})
+        end)
 
         :ok
       end
