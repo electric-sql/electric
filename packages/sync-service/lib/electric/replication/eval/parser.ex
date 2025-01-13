@@ -254,13 +254,15 @@ defmodule Electric.Replication.Eval.Parser do
               :NOT_EXPR -> {&Kernel.not/1, "not"}
             end
 
-          maybe_reduce(%Func{
+          %Func{
             implementation: fun,
             name: name,
             type: :bool,
             args: args,
             location: expr.location
-          })
+          }
+          |> to_binary_operators()
+          |> maybe_reduce()
 
         %{location: loc} = node ->
           {:error, {loc, "#{internal_node_to_error(node)} is not castable to bool"}}
@@ -1119,5 +1121,16 @@ defmodule Electric.Replication.Eval.Parser do
       arg ->
         {:ok, arg}
     end)
+  end
+
+  # to_binary_operators/1 coverts a function with more than two arguments to a tree of binary operators
+  defp to_binary_operators(%Func{args: [_, _]} = func) do
+    # The function is already a binary operator (it has two arguments) so just return the function
+    func
+  end
+
+  defp to_binary_operators(%Func{args: [arg | args]} = func) do
+    # The function has more than two arguments, reduce the number of arguments to two: the first argument and a binary operator
+    %Func{func | args: [arg, to_binary_operators(%Func{func | args: args})]}
   end
 end
