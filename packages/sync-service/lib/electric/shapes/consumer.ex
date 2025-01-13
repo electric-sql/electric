@@ -449,15 +449,15 @@ defmodule Electric.Shapes.Consumer do
         item_byte_size = byte_size(json_log_item)
 
         state = %{state | current_txn_bytes: txn_bytes + item_byte_size}
+        line_tuple = {log_item.offset, log_item.key, log_item.headers.operation, json_log_item}
 
         case LogChunker.fit_into_chunk(item_byte_size, chunk_size, chunk_bytes_threshold) do
           {:ok, new_chunk_size} ->
-            {[{log_item.offset, json_log_item}],
-             %{state | current_chunk_byte_size: new_chunk_size}}
+            {[line_tuple], %{state | current_chunk_byte_size: new_chunk_size}}
 
           {:threshold_exceeded, new_chunk_size} ->
             {
-              [{log_item.offset, json_log_item}, {:chunk_boundary, log_item.offset}],
+              [line_tuple, {:chunk_boundary, log_item.offset}],
               %{state | current_chunk_byte_size: new_chunk_size}
             }
         end

@@ -56,10 +56,12 @@ defmodule Electric.UtilsTest do
 
   defp stream_sorted?(stream, mapper \\ & &1, comparator \\ &<=/2) do
     Enum.reduce_while(stream, {true, nil}, fn value, {true, prev_value} ->
+      new_value = mapper.(value)
+
       cond do
-        is_nil(prev_value) -> {:cont, {true, value}}
-        comparator.(prev_value, value) -> {:cont, {true, value}}
-        true -> {:halt, {false, {prev_value, value}}}
+        is_nil(prev_value) -> {:cont, {true, new_value}}
+        comparator.(prev_value, new_value) -> {:cont, {true, new_value}}
+        true -> {:halt, {false, {prev_value, new_value}}}
       end
     end)
     |> elem(0)

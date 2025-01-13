@@ -253,12 +253,12 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {^ref2, :new_changes, ^last_log_offset}, 1000
 
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1,
-                      [{_offset, serialized_record}]}
+                      [{_offset, _key, _type, serialized_record}]}
 
       assert %{"value" => %{"id" => "1"}} = Jason.decode!(serialized_record)
 
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle2,
-                      [{_offset, serialized_record}]}
+                      [{_offset, _key, _type, serialized_record}]}
 
       assert %{"value" => %{"id" => "2"}} = Jason.decode!(serialized_record)
     end

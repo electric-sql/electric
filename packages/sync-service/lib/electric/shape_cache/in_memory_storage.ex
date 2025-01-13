@@ -287,8 +287,11 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
     log_items
     |> Enum.map(fn
-      {:chunk_boundary, offset} -> {storage_offset(offset), :checkpoint}
-      {offset, json_log_item} -> {{:offset, storage_offset(offset)}, json_log_item}
+      {:chunk_boundary, offset} ->
+        {storage_offset(offset), :checkpoint}
+
+      {offset, _key, _op_type, json_log_item} ->
+        {{:offset, storage_offset(offset)}, json_log_item}
     end)
     |> Enum.split_with(fn item -> match?({_, :checkpoint}, item) end)
     |> then(fn {checkpoints, log_items} ->
