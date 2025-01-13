@@ -31,7 +31,7 @@ The client exports:
 These compose together, e.g.:
 
 ```ts
-import { ShapeStream } from '@electric-sql/client'
+import { ShapeStream, Shape } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
