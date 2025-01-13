@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- e29724e: Fix bug with WHERE clauses with logical operators (AND, OR, etc.) with 3 or more conditions chained together
+
 ## 1.0.0-beta.3
 
 ### Patch Changes
