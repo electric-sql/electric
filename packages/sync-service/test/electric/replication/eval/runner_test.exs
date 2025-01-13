@@ -64,7 +64,7 @@ defmodule Electric.Replication.Eval.RunnerTest do
 
     test "can evaluate AND expression with multiple conditions" do
       assert {:ok, true} =
-               ~S|test > 1 AND (test = 2 AND test < 3)|
+               ~S|test > 1 AND test = 2 AND test < 3|
                |> Parser.parse_and_validate_expression!(%{["test"] => :int4})
                |> Runner.execute(%{["test"] => 2})
     end
