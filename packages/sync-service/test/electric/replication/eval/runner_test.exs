@@ -62,6 +62,13 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Runner.execute(%{["test"] => "test"})
     end
 
+    test "can evaluate AND expression with multiple conditions" do
+      assert {:ok, true} =
+               ~S|test > 1 AND test = 2 AND test < 3|
+               |> Parser.parse_and_validate_expression!(%{["test"] => :int4})
+               |> Runner.execute(%{["test"] => 2})
+    end
+
     test "should work with array types" do
       assert {:ok, [[1, 2], [3, 4]]} =
                ~S|ARRAY[ARRAY[1, x], ARRAY['3', 2 + 2]]|
