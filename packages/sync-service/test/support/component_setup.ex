@@ -209,7 +209,7 @@ defmodule Support.ComponentSetup do
 
     # allow a reasonable time for full stack setup to account for
     # potential CI slowness, including PG
-    assert_receive {:stack_status, ^ref, :ready}, 1000
+    assert_receive {:stack_status, ^ref, :ready}, 2000
 
     %{
       stack_id: stack_id,
