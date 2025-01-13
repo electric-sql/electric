@@ -150,6 +150,25 @@ defmodule Electric.Utils do
   end
 
   @doc """
+  Map each value of the enumerable using a mapper and reverse the resulting list.
+
+  Equivalent to `Enum.reverse/1` followed by `Enum.map/2`.
+
+  ## Examples
+
+      iex> list_reverse_map([1, 2, 3], &(&1 + 1))
+      [4, 3, 2]
+  """
+  @spec list_reverse_map(Enumerable.t(elem), (elem -> result), list(result)) :: list(result)
+        when elem: var, result: var
+  def list_reverse_map(list, mapper, acc \\ [])
+
+  def list_reverse_map([], _, acc), do: acc
+
+  def list_reverse_map([head | tail], mapper, acc),
+    do: list_reverse_map(tail, mapper, [mapper.(head) | acc])
+
+  @doc """
   Parse a markdown table from a string
 
   Options:
