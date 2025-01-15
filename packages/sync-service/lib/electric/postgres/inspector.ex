@@ -31,7 +31,6 @@ defmodule Electric.Postgres.Inspector do
   @callback load_column_info(relation(), opts :: term()) ::
               {:ok, [column_info()]} | :table_not_found
 
-  # @callback introspect_relation()
   @callback clean(relation(), opts :: term()) :: true
 
   @type inspector :: {module(), opts :: term()}
@@ -66,7 +65,6 @@ defmodule Electric.Postgres.Inspector do
   @doc """
   Clean up all information about a given relation using a provided inspector.
   """
-
   @spec clean(relation(), inspector()) :: true
   def clean(relation, {module, opts}), do: module.clean(relation, opts)
 

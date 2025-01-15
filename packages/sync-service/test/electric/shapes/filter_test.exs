@@ -449,7 +449,6 @@ defmodule Electric.Shapes.FilterTest do
       assert_affected(filter, insert, MapSet.new(["s1", "s2"]))
     end
 
-    @tag :wip
     test "root shape is affected by partition addition" do
       filter =
         Filter.new(inspector: @partition_inspector)

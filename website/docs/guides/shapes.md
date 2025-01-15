@@ -84,7 +84,7 @@ curl -i 'http://localhost:3000/v1/shape?table=measurement&offset=-1'
 curl -i 'http://localhost:3000/v1/shape?table=measurement_y2025m03&offset=-1'
 ```
 
-The shape based on the `measurement_y2025m03` partition will only receive writes that fall within the partition range, that is with `logdate >= '2025-02-01' AND  logdate < '2025-03-01'` whereas the shaped based on the root `measurements` table will receive all writes to all partitions.
+The shape based on the `measurement_y2025m03` partition will only receive writes that fall within the partition range, that is with `logdate >= '2025-02-01' AND  logdate < '2025-03-01'` whereas the shape based on the root `measurements` table will receive all writes to all partitions.
 
 ### Where clause
 

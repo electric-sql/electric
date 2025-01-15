@@ -177,11 +177,8 @@ defmodule Electric.Replication.ShapeLogCollector do
         end
 
       {:ok, _} ->
-        # probably a malformed value from a test inspector
-        :ok
-
-      {:error, _} ->
-        # just ignore errors here, they're unlikely anyway
+        # probably a malformed value from a mock test inspector that isn't
+        # returning the full inspector result with a `:parent` key
         :ok
     end
   end
