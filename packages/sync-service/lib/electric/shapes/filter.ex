@@ -10,8 +10,6 @@ defmodule Electric.Shapes.Filter do
   the table specific logic to the `Filter.Table` module.
   """
 
-  alias Electric.Postgres.Inspector
-  alias Electric.Replication.Changes
   alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.Relation
@@ -24,16 +22,14 @@ defmodule Electric.Shapes.Filter do
 
   require Logger
 
-  @enforce_keys [:inspector]
-  defstruct [:inspector, tables: %{}, partitions: %{}, partition_ownership: %{}]
+  defstruct tables: %{}
 
   @type t :: %Filter{}
   @type shape_id :: any()
 
   @spec new(keyword()) :: Filter.t()
-  def new(opts) do
-    {:ok, inspector} = Keyword.fetch(opts, :inspector)
-    %Filter{inspector: inspector}
+  def new(_opts) do
+    %Filter{}
   end
 
   @doc """
@@ -55,25 +51,6 @@ defmodule Electric.Shapes.Filter do
         end
       )
     end)
-    |> Map.update!(:partitions, fn partitions ->
-      shape
-      |> Shape.partition_tables()
-      |> Enum.reduce(partitions, fn child, partitions ->
-        Map.put(partitions, child, [shape.root_table])
-      end)
-    end)
-    |> Map.update!(:partition_ownership, fn ownership ->
-      shape
-      |> Shape.affected_tables()
-      |> Enum.reduce(ownership, fn relation, relation_ownership ->
-        Map.update(
-          relation_ownership,
-          relation,
-          MapSet.new([shape_id]),
-          &MapSet.put(&1, shape_id)
-        )
-      end)
-    end)
   end
 
   @doc """
@@ -89,33 +66,13 @@ defmodule Electric.Shapes.Filter do
       |> Enum.reject(fn {_table, table} -> Table.empty?(table) end)
       |> Map.new()
     end)
-    |> Map.update!(:partition_ownership, fn ownership ->
-      Map.new(ownership, fn {relation, shape_ids} ->
-        {relation, MapSet.delete(shape_ids, shape_id)}
-      end)
-    end)
-    |> clean_up_partitions()
-  end
-
-  defp clean_up_partitions(filter) do
-    {empty, full} =
-      Enum.split_with(filter.partition_ownership, fn {_relation, shape_ids} ->
-        Enum.empty?(shape_ids)
-      end)
-
-    remove_relations = Enum.map(empty, &elem(&1, 0))
-
-    %{filter | partition_ownership: Map.new(full)}
-    |> Map.update!(:partitions, fn partitions ->
-      Enum.reduce(remove_relations, partitions, &Map.delete(&2, &1))
-    end)
   end
 
   @doc """
   Returns the shape IDs for all shapes that have been added to the filter
   that are affected by the given change.
   """
-  @spec affected_shapes(Filter.t(), Changes.change()) :: {t(), MapSet.t(shape_id())}
+  @spec affected_shapes(Filter.t(), Transaction.t() | Relation.t()) :: MapSet.t(shape_id())
   def affected_shapes(%Filter{} = filter, change) do
     shapes_affected_by_change(filter, change)
   rescue
@@ -126,43 +83,24 @@ defmodule Electric.Shapes.Filter do
       """)
 
       # We can't tell which shapes are affected, the safest thing to do is return all shapes
-      {
-        filter,
-        filter
-        |> all_shapes()
-        |> MapSet.new(fn {shape_id, _shape} -> shape_id end)
-      }
+      filter
+      |> all_shapes()
+      |> MapSet.new(fn {shape_id, _shape} -> shape_id end)
   end
 
   defp shapes_affected_by_change(%Filter{} = filter, %Relation{} = relation) do
-    table = {relation.schema, relation.table}
-
-    filter = update_partitions(filter, table)
-
-    # Check all shapes is all tables becuase the table may have been renamed
-    affected =
-      for {shape_id, shape} <- all_shapes(filter),
-          relation <- [relation | Map.get(filter.partitions, table, [])],
-          Shape.is_affected_by_relation_change?(shape, relation),
-          into: MapSet.new() do
-        shape_id
-      end
-
-    {
-      filter,
-      affected
-    }
+    # Check all shapes is all tables because the table may have been renamed
+    for {shape_id, shape} <- all_shapes(filter),
+        Shape.is_affected_by_relation_change?(shape, relation),
+        into: MapSet.new() do
+      shape_id
+    end
   end
 
-  defp shapes_affected_by_change(%Filter{} = filter, %Transaction{} = tx) do
-    %{changes: changes} = tx
-
-    {
-      filter,
-      changes
-      |> Enum.map(&affected_shapes(filter, &1))
-      |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
-    }
+  defp shapes_affected_by_change(%Filter{} = filter, %Transaction{changes: changes}) do
+    changes
+    |> Enum.map(&affected_shapes(filter, &1))
+    |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
   end
 
   defp shapes_affected_by_change(%Filter{} = filter, %NewRecord{
@@ -194,14 +132,10 @@ defmodule Electric.Shapes.Filter do
   end
 
   defp shapes_affected_by_record(filter, relation, record) do
-    relations = [relation | Map.get(filter.partitions, relation, [])]
-
-    Enum.reduce(relations, MapSet.new(), fn relation, affected ->
-      case Map.get(filter.tables, relation) do
-        nil -> affected
-        table -> MapSet.union(affected, Table.affected_shapes(table, record))
-      end
-    end)
+    case Map.get(filter.tables, relation) do
+      nil -> MapSet.new()
+      table -> Table.affected_shapes(table, record)
+    end
   end
 
   defp all_shapes(%Filter{} = filter) do
@@ -216,16 +150,6 @@ defmodule Electric.Shapes.Filter do
     case Map.get(filter.tables, table_name) do
       nil -> %{}
       table -> Table.all_shapes(table)
-    end
-  end
-
-  defp update_partitions(filter, relation) do
-    case Inspector.load_relation(relation, filter.inspector) do
-      {:ok, %{parent: {_, _} = parent}} ->
-        Map.update!(filter, :partitions, &Map.put(&1, relation, [parent]))
-
-      _ ->
-        filter
     end
   end
 end

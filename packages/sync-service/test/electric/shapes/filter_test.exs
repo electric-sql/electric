@@ -23,7 +23,7 @@ defmodule Electric.Shapes.FilterTest do
   end
 
   defp assert_affected(filter, changes, expected) do
-    {_, affected} = Filter.affected_shapes(filter, changes)
+    affected = Filter.affected_shapes(filter, changes)
     assert affected == expected
   end
 
@@ -243,7 +243,7 @@ defmodule Electric.Shapes.FilterTest do
 
       transaction = change("the_table", record)
 
-      {_filter, shapes} =
+      shapes =
         filter()
         |> Filter.add_shape("the-shape", shape)
         |> Filter.affected_shapes(transaction)
@@ -339,196 +339,6 @@ defmodule Electric.Shapes.FilterTest do
       fun.()
       {:reductions, reductions_after} = :erlang.process_info(self(), :reductions)
       reductions_after - reductions_before
-    end
-  end
-
-  @partition_inspector StubInspector.new(%{
-                         {"public", "partitioned"} => %{
-                           relation: %{
-                             children: [{"public", "partition_01"}, {"public", "partition_02"}]
-                           },
-                           columns: [
-                             %{name: "id", type: "int8", pk_position: 0},
-                             %{name: "an_array", array_type: "int8"}
-                           ]
-                         },
-                         {"public", "partition_01"} => %{
-                           relation: %{
-                             children: nil,
-                             parent: {"public", "partitioned"}
-                           },
-                           columns: [
-                             %{name: "id", type: "int8", pk_position: 0},
-                             %{name: "an_array", array_type: "int8"}
-                           ]
-                         },
-                         {"public", "partition_02"} => %{
-                           relation: %{
-                             children: nil,
-                             parent: {"public", "partitioned"}
-                           },
-                           columns: [
-                             %{name: "id", type: "int8", pk_position: 0},
-                             %{name: "an_array", array_type: "int8"}
-                           ]
-                         },
-                         {"public", "partition_03"} => %{
-                           relation: %{
-                             children: nil,
-                             parent: {"public", "partitioned"}
-                           },
-                           columns: [
-                             %{name: "id", type: "int8", pk_position: 0},
-                             %{name: "an_array", array_type: "int8"}
-                           ]
-                         }
-                       })
-
-  describe "partitioned tables" do
-    test "changes to table partition are sent to root" do
-      filter =
-        Filter.new(inspector: @partition_inspector)
-        |> Filter.add_shape("s1", Shape.new!("partitioned", inspector: @partition_inspector))
-        |> Filter.add_shape(
-          "s2",
-          Shape.new!("partitioned", where: "id = 2", inspector: @partition_inspector)
-        )
-        |> Filter.add_shape(
-          "s3",
-          Shape.new!("partitioned", where: "id = 3", inspector: @partition_inspector)
-        )
-
-      insert =
-        %Transaction{
-          changes: [
-            %NewRecord{
-              relation: {"public", "partition_01"},
-              record: %{"id" => "2"}
-            }
-          ]
-        }
-
-      assert_affected(filter, insert, MapSet.new(["s1", "s2"]))
-    end
-
-    test "changes to table partition are always sent to partition shape" do
-      filter =
-        Filter.new(inspector: @partition_inspector)
-        |> Filter.add_shape("s1", Shape.new!("partitioned", inspector: @partition_inspector))
-        |> Filter.add_shape(
-          "s2",
-          Shape.new!("partitioned", where: "id = 2", inspector: @partition_inspector)
-        )
-        |> Filter.add_shape(
-          "s3",
-          Shape.new!("partition_01", inspector: @partition_inspector)
-        )
-
-      insert =
-        %Transaction{
-          changes: [
-            %NewRecord{
-              relation: {"public", "partition_01"},
-              record: %{"id" => "2"}
-            }
-          ]
-        }
-
-      assert_affected(filter, insert, MapSet.new(["s1", "s2", "s3"]))
-
-      insert =
-        %Transaction{
-          changes: [
-            %NewRecord{
-              relation: {"public", "partition_02"},
-              record: %{"id" => "2"}
-            }
-          ]
-        }
-
-      assert_affected(filter, insert, MapSet.new(["s1", "s2"]))
-    end
-
-    test "root shape is affected by partition addition" do
-      filter =
-        Filter.new(inspector: @partition_inspector)
-        |> Filter.add_shape("s1", Shape.new!("partitioned", inspector: @partition_inspector))
-        |> Filter.add_shape(
-          "s2",
-          Shape.new!("partitioned", where: "id = 2", inspector: @partition_inspector)
-        )
-        |> Filter.add_shape(
-          "s3",
-          Shape.new!("partition_01", inspector: @partition_inspector)
-        )
-
-      relation = %Relation{schema: "public", table: "partition_03"}
-
-      assert_affected(filter, relation, MapSet.new(["s1", "s2"]))
-    end
-
-    test "after addition of new partition, shape receives updates" do
-      filter =
-        Filter.new(inspector: @partition_inspector)
-        |> Filter.add_shape("s1", Shape.new!("partitioned", inspector: @partition_inspector))
-        |> Filter.add_shape(
-          "s2",
-          Shape.new!("partitioned", where: "id = 2", inspector: @partition_inspector)
-        )
-        |> Filter.add_shape(
-          "s3",
-          Shape.new!("partition_01", inspector: @partition_inspector)
-        )
-
-      relation = %Relation{schema: "public", table: "partition_03"}
-
-      {filter, _} = Filter.affected_shapes(filter, relation)
-
-      insert =
-        %Transaction{
-          changes: [
-            %NewRecord{
-              relation: {"public", "partition_03"},
-              record: %{"id" => "2"}
-            }
-          ]
-        }
-
-      assert_affected(filter, insert, MapSet.new(["s1", "s2"]))
-    end
-
-    test "remove_shape/2 cleans up partition information" do
-      empty = Filter.new(inspector: @partition_inspector)
-
-      filter =
-        empty
-        |> Filter.add_shape("s1", Shape.new!("partitioned", inspector: @partition_inspector))
-        |> Filter.add_shape(
-          "s2",
-          Shape.new!("partitioned", where: "id = 1", inspector: @partition_inspector)
-        )
-        |> Filter.add_shape(
-          "s3",
-          Shape.new!("partition_01", where: "id = 2", inspector: @partition_inspector)
-        )
-        |> Filter.add_shape(
-          "s4",
-          Shape.new!("partition_02", where: "id > 2", inspector: @partition_inspector)
-        )
-        |> Filter.add_shape(
-          "s5",
-          Shape.new!("partition_03", where: "id > 7", inspector: @partition_inspector)
-        )
-
-      clean_filter =
-        filter
-        |> Filter.remove_shape("s2")
-        |> Filter.remove_shape("s1")
-        |> Filter.remove_shape("s4")
-        |> Filter.remove_shape("s5")
-        |> Filter.remove_shape("s3")
-
-      assert clean_filter == empty
     end
   end
 

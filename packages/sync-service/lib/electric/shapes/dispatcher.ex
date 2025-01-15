@@ -24,9 +24,10 @@ defmodule Electric.Shapes.Dispatcher do
   require Logger
 
   alias Electric.Shapes.Filter
+  alias Electric.Shapes.Partitions
 
   defmodule State do
-    defstruct [:waiting, :pending, :subscribers, :filter, :pids]
+    defstruct [:waiting, :pending, :subscribers, :filter, :partitions, :pids]
   end
 
   @behaviour GenStage.Dispatcher
@@ -40,6 +41,7 @@ defmodule Electric.Shapes.Dispatcher do
        pending: nil,
        subscribers: [],
        filter: Filter.new(opts),
+       partitions: Partitions.new(opts),
        pids: MapSet.new()
      }}
   end
@@ -60,6 +62,7 @@ defmodule Electric.Shapes.Dispatcher do
 
       subscribers = [{from, shape} | state.subscribers]
 
+      partitions = Partitions.add_shape(state.partitions, from, shape)
       filter = Filter.add_shape(state.filter, from, shape)
 
       {:ok, demand,
@@ -67,6 +70,7 @@ defmodule Electric.Shapes.Dispatcher do
          state
          | subscribers: subscribers,
            filter: filter,
+           partitions: partitions,
            pids: MapSet.put(state.pids, pid)
        }}
     end
@@ -78,41 +82,28 @@ defmodule Electric.Shapes.Dispatcher do
       subscribers = List.keydelete(state.subscribers, from, 0)
 
       filter = Filter.remove_shape(state.filter, from)
+      partitions = Partitions.remove_shape(state.partitions, from)
+
+      state = %{
+        state
+        | subscribers: subscribers,
+          filter: filter,
+          partitions: partitions,
+          pids: MapSet.delete(state.pids, pid)
+      }
 
       if pending && MapSet.member?(pending, from) do
         case waiting - 1 do
           0 ->
             # the only remaining unacked subscriber has cancelled, so we
             # return some demand
-            {:ok, 1,
-             %State{
-               state
-               | waiting: 0,
-                 pending: nil,
-                 subscribers: subscribers,
-                 filter: filter,
-                 pids: MapSet.delete(state.pids, pid)
-             }}
+            {:ok, 1, %State{state | waiting: 0, pending: nil}}
 
           new_waiting ->
-            {:ok, 0,
-             %State{
-               state
-               | waiting: new_waiting,
-                 pending: MapSet.delete(pending, from),
-                 subscribers: subscribers,
-                 filter: filter,
-                 pids: MapSet.delete(state.pids, pid)
-             }}
+            {:ok, 0, %State{state | waiting: new_waiting, pending: MapSet.delete(pending, from)}}
         end
       else
-        {:ok, 0,
-         %State{
-           state
-           | subscribers: subscribers,
-             filter: filter,
-             pids: MapSet.delete(state.pids, pid)
-         }}
+        {:ok, 0, state}
       end
     else
       {:ok, 0, state}
@@ -142,14 +133,11 @@ defmodule Electric.Shapes.Dispatcher do
   end
 
   def dispatch([event], _length, %State{waiting: 0, subscribers: subscribers} = state) do
-    {filter, affected_shapes} =
-      Filter.affected_shapes(
-        state.filter,
-        event
-      )
+    {partitions, event} = Partitions.handle_event(state.partitions, event)
 
     {waiting, pending} =
-      affected_shapes
+      state.filter
+      |> Filter.affected_shapes(event)
       |> Enum.reduce({0, MapSet.new()}, fn {pid, ref} = subscriber, {waiting, pending} ->
         Process.send(pid, {:"$gen_consumer", {self(), ref}, [event]}, [:noconnect])
         {waiting + 1, MapSet.put(pending, subscriber)}
@@ -166,7 +154,7 @@ defmodule Electric.Shapes.Dispatcher do
           {waiting, pending}
       end
 
-    {:ok, [], %State{state | filter: filter, waiting: waiting, pending: pending}}
+    {:ok, [], %State{state | partitions: partitions, waiting: waiting, pending: pending}}
   end
 
   @impl GenStage.Dispatcher
