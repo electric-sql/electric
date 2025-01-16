@@ -199,4 +199,9 @@ defmodule Electric.ShapeCache.Storage do
   def unsafe_cleanup!({mod, shape_opts}) do
     mod.unsafe_cleanup!(shape_opts)
   end
+
+  def compact({mod, shape_opts}), do: mod.compact(shape_opts)
+
+  def compact({mod, shape_opts}, offset) when is_struct(offset, LogOffset),
+    do: mod.compact(shape_opts, offset)
 end
