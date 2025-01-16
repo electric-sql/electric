@@ -5,11 +5,12 @@ defmodule Electric.Shapes.Consumer do
 
   import Electric.Postgres.Xid, only: [xid_lt_xid8: 2]
 
-  alias Electric.ShapeCache.LogChunker
   alias Electric.LogItems
+  alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
   alias Electric.ShapeCache
+  alias Electric.ShapeCache.LogChunker
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Utils
@@ -184,8 +185,8 @@ defmodule Electric.Shapes.Consumer do
 
   # `Shapes.Dispatcher` only works with single-events, so we can safely assert
   # that here
-  def handle_events([%Changes.Relation{}], _from, state) do
-    %{shape: %{root_table: root_table}, inspector: {inspector, inspector_opts}} = state
+  def handle_events([%Changes.Relation{id: id}], _from, %{shape: %{root_table_id: id}} = state) do
+    %{shape: %{root_table: root_table}, inspector: inspector} = state
 
     Logger.info(
       "Schema for the table #{Utils.inspect_relation(root_table)} changed - terminating shape #{state.shape_handle}"
@@ -193,7 +194,7 @@ defmodule Electric.Shapes.Consumer do
 
     # We clean up the relation info from ETS as it has changed and we want
     # to source the fresh info from postgres for the next shape creation
-    inspector.clean(root_table, inspector_opts)
+    Inspector.clean(root_table, inspector)
 
     state =
       reply_to_snapshot_waiters(
@@ -202,6 +203,7 @@ defmodule Electric.Shapes.Consumer do
       )
 
     cleanup(state)
+
     {:stop, :normal, state}
   end
 
@@ -286,6 +288,8 @@ defmodule Electric.Shapes.Consumer do
 
         cleanup(state)
 
+        notify_listeners(registry, :shape_rotation, shape_handle, last_log_offset)
+
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
 
       num_changes > 0 ->
@@ -339,6 +343,17 @@ defmodule Electric.Shapes.Consumer do
 
       for {pid, ref} <- registered,
           do: send(pid, {ref, :new_changes, latest_log_offset})
+    end)
+  end
+
+  defp notify_listeners(registry, :shape_rotation, shape_handle, _latest_log_offset) do
+    Registry.dispatch(registry, shape_handle, fn registered ->
+      Logger.debug(fn ->
+        "Notifying ~#{length(registered)} clients about new changes to #{shape_handle}"
+      end)
+
+      for {pid, ref} <- registered,
+          do: send(pid, {ref, :shape_rotation})
     end)
   end
 

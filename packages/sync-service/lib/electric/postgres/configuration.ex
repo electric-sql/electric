@@ -156,10 +156,27 @@ defmodule Electric.Postgres.Configuration do
   end
 
   @spec get_publication_tables(Postgrex.conn(), String.t()) :: list(Electric.relation())
-  defp get_publication_tables(conn, publication) do
+  def get_publication_tables(conn, publication) do
+    # `pg_publication_tables` is too clever for us -- if you add a partitioned
+    # table to the publication `pg_publication_tables` lists all the partitions
+    # as members, not the actual partitioned table. `pg_publication_rel`
+    # doesn't do this, it returns a direct list of the tables that were added
+    # using `ALTER PUBLICATION` and doesn't expand a partitioned table into its
+    # partitions.
     Postgrex.query!(
       conn,
-      "SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = $1",
+      """
+      SELECT pn.nspname, pc.relname
+        FROM pg_publication_rel ppr
+        JOIN pg_publication pp
+          ON ppr.prpubid = pp.oid
+        JOIN pg_class pc
+          ON pc.oid = ppr.prrelid
+        JOIN pg_namespace pn
+          ON pc.relnamespace = pn.oid
+        WHERE pp.pubname = $1
+        ORDER BY pn.nspname, pc.relname;
+      """,
       [publication]
     )
     |> Map.fetch!(:rows)
@@ -176,10 +193,15 @@ defmodule Electric.Postgres.Configuration do
         DECLARE
             tables TEXT;
         BEGIN
-            SELECT string_agg(format('%I.%I', schemaname, tablename), ', ')
-            INTO tables
-            FROM pg_publication_tables
-            WHERE pubname = '#{publication_name}' ;
+            SELECT string_agg(format('%I.%I', pn.nspname, pc.relname), ', ') INTO tables
+              FROM pg_publication_rel ppr
+              JOIN pg_publication pp
+                ON ppr.prpubid = pp.oid
+              JOIN pg_class pc
+                ON pc.oid = ppr.prrelid
+              JOIN pg_namespace pn
+                ON pc.relnamespace = pn.oid
+              WHERE pp.pubname = '#{publication_name}';
 
             IF tables IS NOT NULL THEN
                 EXECUTE format('ALTER PUBLICATION #{Utils.quote_name(publication_name)} DROP TABLE %s', tables);
@@ -211,7 +233,7 @@ defmodule Electric.Postgres.Configuration do
     FROM input_relations ir
     JOIN pg_class pc ON pc.relname = ir.tablename
     JOIN pg_namespace pn ON pn.oid = pc.relnamespace
-    WHERE pn.nspname = ir.schemaname AND pc.relkind = 'r';
+    WHERE pn.nspname = ir.schemaname AND pc.relkind IN ('r', 'p');
     """
 
     relations = Map.keys(filters)

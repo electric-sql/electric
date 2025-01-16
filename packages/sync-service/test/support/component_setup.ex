@@ -182,8 +182,8 @@ defmodule Support.ComponentSetup do
 
     stack_events_registry = Registry.StackEvents
 
-    ref = make_ref()
-    Electric.StackSupervisor.subscribe_to_stack_events(stack_events_registry, stack_id, ref)
+    ref = Electric.StackSupervisor.subscribe_to_stack_events(stack_events_registry, stack_id)
+    publication_name = "electric_test_pub_#{:erlang.phash2(stack_id)}"
 
     stack_supervisor =
       start_supervised!(
@@ -195,7 +195,7 @@ defmodule Support.ComponentSetup do
          connection_opts: ctx.db_config,
          replication_opts: [
            slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
-           publication_name: "electric_test_pub_#{:erlang.phash2(stack_id)}",
+           publication_name: publication_name,
            try_creating_publication?: true,
            slot_temporary?: true
          ],
@@ -210,14 +210,19 @@ defmodule Support.ComponentSetup do
 
     # allow a reasonable time for full stack setup to account for
     # potential CI slowness, including PG
-    assert_receive {:stack_status, ^ref, :ready}, 1000
+    assert_receive {:stack_status, ^ref, :ready}, 2000
 
     %{
       stack_id: stack_id,
+      registry: Electric.StackSupervisor.registry_name(stack_id),
       stack_events_registry: stack_events_registry,
+      shape_cache: {ShapeCache, [stack_id: stack_id]},
       persistent_kv: kv,
       stack_supervisor: stack_supervisor,
-      storage: storage
+      storage: storage,
+      inspector:
+        {EtsInspector, stack_id: stack_id, server: EtsInspector.name(stack_id: stack_id)},
+      publication_name: publication_name
     }
   end
 

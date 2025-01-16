@@ -546,7 +546,7 @@ defmodule Electric.Plug.ServeShapePlug do
         conn
         |> assign(:ot_is_shape_rotated, true)
         |> assign(:ot_is_empty_response, true)
-        |> send_resp(200, ["[", @up_to_date, "]"])
+        |> send_resp(204, ["[", @up_to_date, "]"])
     after
       # If we timeout, return an empty body and 204 as there's no response body.
       long_poll_timeout ->
