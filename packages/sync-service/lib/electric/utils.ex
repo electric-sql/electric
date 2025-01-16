@@ -446,14 +446,22 @@ defmodule Electric.Utils do
     |> Enum.to_list()
   end
 
-  defp merge_sorted_files([single_chunk], target_path, _reader, _sorter) do
-    File.stream!(single_chunk)
+  @doc """
+  Merge a list of sorted files into a single file.
+
+  Uses a reader function that takes a path to a file and returns a stream of tuples `{key, binary}`,
+  where `binary` will be written to the file as sorted by `key`.
+  """
+  def merge_sorted_files(paths, target_path, reader, sorter \\ &<=/2)
+
+  def merge_sorted_files([path], target_path, _reader, _sorter) do
+    File.stream!(path)
     |> Stream.into(File.stream!(target_path))
     |> Stream.run()
   end
 
-  defp merge_sorted_files(chunks, target_path, reader, sorter) do
-    chunks
+  def merge_sorted_files(paths, target_path, reader, sorter) do
+    paths
     |> Enum.map(reader)
     |> merge_sorted_streams(sorter, fn {_, binary} -> binary end)
     |> Stream.into(File.stream!(target_path))
@@ -478,5 +486,14 @@ defmodule Electric.Utils do
         {_, acc} -> {:cont, Enum.reverse(acc), []}
       end
     )
+  end
+
+  def concat_files(paths, into) do
+    # `:file.copy` is not optimized to use a syscall, so basic stream forming is good enough
+    paths
+    |> Enum.map(&File.stream!/1)
+    |> Stream.concat()
+    |> Stream.into(File.stream!(into))
+    |> Stream.run()
   end
 end

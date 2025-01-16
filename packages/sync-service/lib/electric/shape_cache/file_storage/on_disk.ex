@@ -43,6 +43,8 @@ defmodule Electric.ShapeCache.FileStorage.OnDisk do
   # The file uses fixed-width entries for binary search. Each entry is:
   # <<first_offset::128, first_position::64,last_offset::128, last_position::64>>
 
+  @log_file_line_overhead 8 + 8 + 4 + 1 + 8
+
   @type log_offset :: {tx_offset :: non_neg_integer, op_offset :: non_neg_integer}
   @type log_file_line_info ::
           record(:log_file_line_info,
@@ -274,9 +276,9 @@ defmodule Electric.ShapeCache.FileStorage.OnDisk do
                op_type: op_type,
                json_size: json_size,
                start_position: read_position,
-               json_start_position: read_position + 20 + key_size + 9
+               json_start_position: read_position + @log_file_line_overhead + key_size
              )
-           ], {file, read_position + 20 + key_size + 9 + json_size}}
+           ], {file, read_position + @log_file_line_overhead + key_size + json_size}}
         else
           :eof ->
             {:halt, file}
@@ -289,22 +291,41 @@ defmodule Electric.ShapeCache.FileStorage.OnDisk do
     )
   end
 
+  # The overhead in bytes of a log file line in addition to key and json binaries: tx_offset::64 + op_offset::64 + key_size::32 + op_type::8 + json_size::64
+
   def write_log_file(
         log_stream,
         log_file_path,
         chunk_size \\ LogChunker.default_chunk_size_threshold()
       ) do
     log_stream
+    |> normalize_log_stream()
+    |> write_chunk_index(log_file_path <> ".chunk_index", chunk_size)
+    # |> write_key_index(log_file_path <> ".key_index")
     |> Stream.map(fn
+      {log_offset, key_size, key, op_type, json_size, json} ->
+        <<log_offset_to_binary(log_offset)::binary, key_size::32, key::binary,
+          op_type::binary-size(1), json_size::64, json::binary>>
+    end)
+    |> Stream.into(File.stream!(log_file_path))
+    |> Stream.run()
+  end
+
+  defp normalize_log_stream(stream) do
+    Stream.map(stream, fn
       {log_offset, key, op_type, json} ->
         {log_offset, byte_size(key), key, get_op_type(op_type), byte_size(json), json}
 
       {_, _, _, _, _, _} = formed_line ->
         formed_line
     end)
-    |> Stream.transform(
+  end
+
+  defp write_chunk_index(stream, chunk_index_path, chunk_size) do
+    Stream.transform(
+      stream,
       fn ->
-        file = File.open!(log_file_path <> ".chunk_index", [:write, :raw])
+        file = File.open!(chunk_index_path, [:write, :raw])
         {file, 0, 0, nil}
       end,
       fn {offset, key_size, _, _, json_size, _} = line,
@@ -312,7 +333,7 @@ defmodule Electric.ShapeCache.FileStorage.OnDisk do
         if is_nil(last_seen_offset),
           do: IO.binwrite(file, <<log_offset_to_binary(offset)::binary, write_position::64>>)
 
-        position_after_write = write_position + 20 + key_size + 9 + json_size
+        position_after_write = write_position + @log_file_line_overhead + key_size + json_size
 
         # We're counting bytes only on JSON payloads that are actually sent to the client
         case LogChunker.fit_into_chunk(json_size, byte_count, chunk_size) do
@@ -333,13 +354,6 @@ defmodule Electric.ShapeCache.FileStorage.OnDisk do
       end,
       &File.close(elem(&1, 0))
     )
-    |> Stream.map(fn
-      {log_offset, key_size, key, op_type, json_size, json} ->
-        <<log_offset_to_binary(log_offset)::binary, key_size::32, key::binary,
-          op_type::binary-size(1), json_size::64, json::binary>>
-    end)
-    |> Stream.into(File.stream!(log_file_path))
-    |> Stream.run()
   end
 
   def read_json_chunk(log_file_path, %LogOffset{} = exclusive_min_offset) do

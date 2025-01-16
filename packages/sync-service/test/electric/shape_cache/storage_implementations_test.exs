@@ -520,6 +520,63 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         assert %{headers: %{operation: "update"}, value: %{name: "Test8"}} =
                  Jason.decode!(op4, keys: :atoms)
       end
+
+      test "compaction works multiple times", %{storage: storage} do
+        Storage.initialise(storage)
+        Storage.mark_snapshot_as_started(storage)
+        Storage.make_new_snapshot!([], storage)
+
+        for i <- 1..10 do
+          %Changes.UpdatedRecord{
+            relation: {"public", "test_table"},
+            old_record: %{"id" => "sameid", "name" => "Test#{i - 1}"},
+            record: %{"id" => "sameid", "name" => "Test#{i}"},
+            log_offset: LogOffset.new(i, 0),
+            changed_columns: MapSet.new(["name"])
+          }
+        end
+        # Super small chunk size so that each update is its own chunk
+        |> changes_to_log_items(chunk_size: 5)
+        |> Storage.append_to_log!(storage)
+
+        assert Storage.get_log_stream(LogOffset.first(), LogOffset.new(7, 0), storage)
+               |> Enum.to_list()
+               |> length() == 7
+
+        # Force compaction of all the lines
+        assert :ok = Storage.compact(storage, LogOffset.new(10, 0))
+
+        assert Storage.get_log_stream(LogOffset.first(), LogOffset.new(10, 0), storage)
+               |> Enum.to_list()
+               |> length() == 1
+
+        for i <- 10..20 do
+          %Changes.UpdatedRecord{
+            relation: {"public", "test_table"},
+            old_record: %{"id" => "sameid", "other_name" => "Test#{i - 1}"},
+            record: %{"id" => "sameid", "other_name" => "Test#{i}"},
+            log_offset: LogOffset.new(i, 0),
+            # Change the other column here to make sure previous are also included in the compaction
+            changed_columns: MapSet.new(["other_name"])
+          }
+        end
+        # Super small chunk size so that each update is its own chunk
+        |> changes_to_log_items(chunk_size: 5)
+        |> Storage.append_to_log!(storage)
+
+        assert :ok = Storage.compact(storage)
+
+        assert [line] =
+                 Storage.get_log_stream(LogOffset.first(), LogOffset.new(17, 0), storage)
+                 |> Enum.to_list()
+
+        assert Jason.decode!(line, keys: :atoms) == %{
+                 offset: "18_0",
+                 value: %{id: "sameid", name: "Test10", other_name: "Test18"},
+                 key: ~S|"public"."test_table"/"sameid"|,
+                 headers: %{operation: "update", relation: ["public", "test_table"]}
+               }
+      end
     end
 
     describe "#{module_name}.initialise/1" do
