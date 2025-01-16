@@ -28,7 +28,7 @@ defmodule Electric.Shapes.Filter do
   @type shape_id :: any()
 
   @spec new(keyword()) :: Filter.t()
-  def new(_opts) do
+  def new(_opts \\ []) do
     %Filter{}
   end
 
@@ -39,33 +39,34 @@ defmodule Electric.Shapes.Filter do
   by `affected_shapes/2` when the shape is affected by a change.
   """
   @spec add_shape(Filter.t(), shape_id(), Shape.t()) :: Filter.t()
-  def add_shape(%Filter{} = filter, shape_id, shape) do
-    filter
-    |> Map.update!(:tables, fn tables ->
-      Map.update(
-        tables,
-        shape.root_table,
-        Table.add_shape(Table.new(), {shape_id, shape}),
-        fn table ->
-          Table.add_shape(table, {shape_id, shape})
-        end
-      )
-    end)
+  def add_shape(%Filter{tables: tables}, shape_id, shape) do
+    %Filter{
+      tables:
+        Map.update(
+          tables,
+          shape.root_table,
+          Table.add_shape(Table.new(), {shape_id, shape}),
+          fn table ->
+            Table.add_shape(table, {shape_id, shape})
+          end
+        )
+    }
   end
 
   @doc """
   Remove a shape from the filter.
   """
   @spec remove_shape(Filter.t(), shape_id()) :: Filter.t()
-  def remove_shape(%Filter{} = filter, shape_id) do
-    Map.update!(filter, :tables, fn tables ->
-      tables
-      |> Enum.map(fn {table_name, table} ->
-        {table_name, Table.remove_shape(table, shape_id)}
-      end)
-      |> Enum.reject(fn {_table, table} -> Table.empty?(table) end)
-      |> Map.new()
-    end)
+  def remove_shape(%Filter{tables: tables}, shape_id) do
+    %Filter{
+      tables:
+        tables
+        |> Enum.map(fn {table_name, table} ->
+          {table_name, Table.remove_shape(table, shape_id)}
+        end)
+        |> Enum.reject(fn {_table, table} -> Table.empty?(table) end)
+        |> Map.new()
+    }
   end
 
   @doc """
@@ -131,8 +132,8 @@ defmodule Electric.Shapes.Filter do
     end
   end
 
-  defp shapes_affected_by_record(filter, relation, record) do
-    case Map.get(filter.tables, relation) do
+  defp shapes_affected_by_record(filter, table_name, record) do
+    case Map.get(filter.tables, table_name) do
       nil -> MapSet.new()
       table -> Table.affected_shapes(table, record)
     end

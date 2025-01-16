@@ -18,19 +18,10 @@ defmodule Electric.Shapes.FilterTest do
                %{name: "an_array", array_type: "int8"}
              ])
 
-  defp filter(inspector \\ @inspector) do
-    Filter.new(inspector: inspector)
-  end
-
-  defp assert_affected(filter, changes, expected) do
-    affected = Filter.affected_shapes(filter, changes)
-    assert affected == expected
-  end
-
   describe "affected_shapes/2" do
     test "returns shapes affected by insert" do
       filter =
-        filter()
+        Filter.new()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
@@ -46,12 +37,12 @@ defmodule Electric.Shapes.FilterTest do
           ]
         }
 
-      assert_affected(filter, insert, MapSet.new(["s2"]))
+      assert Filter.affected_shapes(filter, insert) == MapSet.new(["s2"])
     end
 
     test "returns shapes affected by delete" do
       filter =
-        filter()
+        Filter.new()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
@@ -67,12 +58,12 @@ defmodule Electric.Shapes.FilterTest do
           ]
         }
 
-      assert_affected(filter, delete, MapSet.new(["s2"]))
+      assert Filter.affected_shapes(filter, delete) == MapSet.new(["s2"])
     end
 
     test "returns shapes affected by update" do
       filter =
-        filter()
+        Filter.new()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
@@ -90,12 +81,12 @@ defmodule Electric.Shapes.FilterTest do
           ]
         }
 
-      assert_affected(filter, update, MapSet.new(["s2", "s3"]))
+      assert Filter.affected_shapes(filter, update) == MapSet.new(["s2", "s3"])
     end
 
     test "returns shapes affected by relation change" do
       filter =
-        filter()
+        Filter.new()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id > 7", inspector: @inspector))
@@ -107,7 +98,7 @@ defmodule Electric.Shapes.FilterTest do
 
       relation = %Relation{schema: "public", table: "t1"}
 
-      assert_affected(filter, relation, MapSet.new(["s1", "s2", "s3", "s4"]))
+      assert Filter.affected_shapes(filter, relation) == MapSet.new(["s1", "s2", "s3", "s4"])
     end
 
     test "returns shapes affected by relation rename" do
@@ -117,19 +108,19 @@ defmodule Electric.Shapes.FilterTest do
       s3 = Shape.new!("t3", inspector: @inspector)
 
       filter =
-        filter()
+        Filter.new()
         |> Filter.add_shape("s1", s1)
         |> Filter.add_shape("s2", s2)
         |> Filter.add_shape("s3", s3)
 
       rename = %Relation{schema: "public", table: "new_name", id: table_id}
 
-      assert_affected(filter, rename, MapSet.new(["s2"]))
+      assert Filter.affected_shapes(filter, rename) == MapSet.new(["s2"])
     end
 
     test "returns shapes affected by truncation" do
       filter =
-        filter()
+        Filter.new()
         |> Filter.add_shape("s1", Shape.new!("t1", where: "id = 1", inspector: @inspector))
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id > 7", inspector: @inspector))
@@ -141,31 +132,31 @@ defmodule Electric.Shapes.FilterTest do
 
       truncation = %Transaction{changes: [%TruncatedRelation{relation: {"public", "t1"}}]}
 
-      assert_affected(filter, truncation, MapSet.new(["s1", "s2", "s3", "s4"]))
+      assert Filter.affected_shapes(filter, truncation) == MapSet.new(["s1", "s2", "s3", "s4"])
     end
   end
 
   test "shape with no where clause is affected by all changes for the same table" do
     shape = Shape.new!("t1", inspector: @inspector)
-    filter = filter() |> Filter.add_shape("s", shape)
+    filter = Filter.new() |> Filter.add_shape("s", shape)
 
-    assert_affected(filter, change("t1", %{"id" => "7"}), MapSet.new(["s"]))
-    assert_affected(filter, change("t1", %{"id" => "8"}), MapSet.new(["s"]))
-    assert_affected(filter, change("t2", %{"id" => "8"}), MapSet.new([]))
+    assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
+    assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new(["s"])
+    assert Filter.affected_shapes(filter, change("t2", %{"id" => "8"})) == MapSet.new([])
   end
 
   test "shape with a where clause is affected by changes that match that where clause" do
     shape = Shape.new!("t1", where: "id = 7", inspector: @inspector)
-    filter = filter() |> Filter.add_shape("s", shape)
+    filter = Filter.new() |> Filter.add_shape("s", shape)
 
-    assert_affected(filter, change("t1", %{"id" => "7"}), MapSet.new(["s"]))
-    assert_affected(filter, change("t1", %{"id" => "8"}), MapSet.new([]))
-    assert_affected(filter, change("t2", %{"id" => "8"}), MapSet.new([]))
+    assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
+    assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new([])
+    assert Filter.affected_shapes(filter, change("t2", %{"id" => "8"})) == MapSet.new([])
   end
 
   test "invalid record value logs an error and says all shapes for the table are affected" do
     filter =
-      filter()
+      Filter.new()
       |> Filter.add_shape("shape1", Shape.new!("table", inspector: @inspector))
       |> Filter.add_shape("shape2", Shape.new!("table", where: "id = 7", inspector: @inspector))
       |> Filter.add_shape("shape3", Shape.new!("table", where: "id = 8", inspector: @inspector))
@@ -174,18 +165,15 @@ defmodule Electric.Shapes.FilterTest do
 
     log =
       capture_log(fn ->
-        assert_affected(
-          filter,
-          change("table", %{"id" => "invalid_value"}),
-          MapSet.new(["shape1", "shape2", "shape3", "shape4"])
-        )
+        assert Filter.affected_shapes(filter, change("table", %{"id" => "invalid_value"})) ==
+                 MapSet.new(["shape1", "shape2", "shape3", "shape4"])
       end)
 
     assert log =~ ~s(Could not parse value for field "id" of type :int8)
   end
 
   test "Filter.remove_shape/2" do
-    empty = filter()
+    empty = Filter.new()
 
     filter1 =
       empty
@@ -243,12 +231,9 @@ defmodule Electric.Shapes.FilterTest do
 
       transaction = change("the_table", record)
 
-      shapes =
-        filter()
-        |> Filter.add_shape("the-shape", shape)
-        |> Filter.affected_shapes(transaction)
-
-      assert shapes == MapSet.new(["the-shape"]) == affected
+      assert Filter.new()
+             |> Filter.add_shape("the-shape", shape)
+             |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"]) == affected
     end
   end
 
@@ -278,11 +263,11 @@ defmodule Electric.Shapes.FilterTest do
     test "where clause in the form `field = const` is optimised" do
       filter =
         1..@shape_count
-        |> Enum.reduce(filter(), fn i, filter ->
+        |> Enum.reduce(Filter.new(), fn i, filter ->
           Filter.add_shape(filter, i, Shape.new!("t1", where: "id = #{i}", inspector: @inspector))
         end)
 
-      assert_affected(filter, change("t1", %{"id" => "7"}), MapSet.new([7]))
+      assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
 
       reductions =
         reductions(fn ->
@@ -295,7 +280,7 @@ defmodule Electric.Shapes.FilterTest do
     test "where clause in the form `field = const AND another_condition` is optimised" do
       filter =
         1..@shape_count
-        |> Enum.reduce(filter(), fn i, filter ->
+        |> Enum.reduce(Filter.new(), fn i, filter ->
           Filter.add_shape(
             filter,
             i,
@@ -303,7 +288,7 @@ defmodule Electric.Shapes.FilterTest do
           )
         end)
 
-      assert_affected(filter, change("t1", %{"id" => "7"}), MapSet.new([7]))
+      assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
 
       reductions =
         reductions(fn ->
@@ -316,7 +301,7 @@ defmodule Electric.Shapes.FilterTest do
     test "where clause in the form `a_condition AND field = const` is optimised" do
       filter =
         1..@shape_count
-        |> Enum.reduce(filter(), fn i, filter ->
+        |> Enum.reduce(Filter.new(), fn i, filter ->
           Filter.add_shape(
             filter,
             i,
@@ -324,7 +309,7 @@ defmodule Electric.Shapes.FilterTest do
           )
         end)
 
-      assert_affected(filter, change("t1", %{"id" => "7"}), MapSet.new([7]))
+      assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
 
       reductions =
         reductions(fn ->
