@@ -172,8 +172,12 @@ defmodule Electric.StackSupervisor do
   end
 
   @doc false
-  def storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}}) do
-    {mod, arg |> Keyword.put(:stack_id, stack_id) |> mod.shared_opts()}
+  def storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}} = opts) do
+    {mod,
+     arg
+     |> Keyword.put(:stack_id, stack_id)
+     |> Keyword.put(:chunk_bytes_threshold, opts[:chunk_bytes_threshold])
+     |> mod.shared_opts()}
   end
 
   def registry_name(stack_id) do

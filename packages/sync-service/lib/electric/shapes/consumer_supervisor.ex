@@ -73,7 +73,8 @@ defmodule Electric.Shapes.ConsumerSupervisor do
     children = [
       {Electric.ShapeCache.Storage, shape_storage},
       {Electric.Shapes.Consumer, shape_config},
-      {Electric.Shapes.Consumer.Snapshotter, shape_config}
+      {Electric.Shapes.Consumer.Snapshotter, shape_config},
+      {Electric.ShapeCache.StorageCleaner, [{:storage, shape_storage} | metadata]}
     ]
 
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)

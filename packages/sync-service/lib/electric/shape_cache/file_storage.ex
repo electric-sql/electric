@@ -2,6 +2,9 @@ defmodule Electric.ShapeCache.FileStorage do
   use Retry
   require Logger
 
+  alias Electric.LogItems
+  alias Electric.ShapeCache.LogChunker
+  alias Electric.Utils
   alias Electric.ShapeCache.FileStorage.OnDisk
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Replication.LogOffset
@@ -29,8 +32,10 @@ defmodule Electric.ShapeCache.FileStorage do
     :data_dir,
     :cubdb_dir,
     :snapshot_dir,
+    :log_dir,
     :stack_id,
     :extra_opts,
+    :chunk_bytes_threshold,
     version: @version
   ]
 
@@ -40,7 +45,12 @@ defmodule Electric.ShapeCache.FileStorage do
     storage_dir = Keyword.get(opts, :storage_dir, "./shapes")
 
     # Always scope the provided storage dir by stack id
-    %{base_path: Path.join(storage_dir, stack_id), stack_id: stack_id}
+    %{
+      base_path: Path.join(storage_dir, stack_id),
+      stack_id: stack_id,
+      chunk_bytes_threshold:
+        Keyword.get(opts, :chunk_bytes_threshold, LogChunker.default_chunk_size_threshold())
+    }
   end
 
   @impl Electric.ShapeCache.Storage
@@ -61,8 +71,10 @@ defmodule Electric.ShapeCache.FileStorage do
       data_dir: data_dir,
       cubdb_dir: Path.join([data_dir, "cubdb"]),
       snapshot_dir: Path.join([data_dir, "snapshots"]),
+      log_dir: Path.join([data_dir, "log"]),
       stack_id: stack_id,
-      extra_opts: Map.get(opts, :extra_opts, %{})
+      extra_opts: Map.get(opts, :extra_opts, %{}),
+      chunk_bytes_threshold: opts.chunk_bytes_threshold
     }
   end
 
@@ -93,7 +105,8 @@ defmodule Electric.ShapeCache.FileStorage do
   defp initialise_filesystem(opts) do
     with :ok <- File.mkdir_p(opts.data_dir),
          :ok <- File.mkdir_p(opts.cubdb_dir),
-         :ok <- File.mkdir_p(opts.snapshot_dir) do
+         :ok <- File.mkdir_p(opts.snapshot_dir),
+         :ok <- File.mkdir_p(opts.log_dir) do
       :ok
     end
   end
@@ -396,23 +409,77 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   def compact(%FS{} = opts, %LogOffset{} = upper_bound) do
-    log_file_path = opts.data_dir <> "/compact_log.electric"
+    case CubDB.fetch(opts.db, @compaction_info_key) do
+      {:ok, {_, ^upper_bound}} ->
+        :ok
 
-    CubDB.select(opts.db,
-      min_key: log_start(),
-      max_key: log_key(upper_bound),
-      max_key_inclusive: true
-    )
-    |> Stream.map(fn {key, {op_key, type, json}} -> {offset(key), op_key, type, json} end)
-    |> OnDisk.write_log_file(log_file_path)
+      {:ok, {log_file_path, _}} ->
+        # compact further
+        new_log_file_path =
+          Path.join(
+            opts.log_dir,
+            "compact_log_#{DateTime.utc_now() |> DateTime.to_unix(:millisecond)}.electric"
+          )
 
-    key_index_path = OnDisk.create_sorted_key_index(log_file_path)
-    action_file_path = OnDisk.create_action_file(log_file_path, key_index_path)
+        CubDB.select(opts.db,
+          min_key: log_start(),
+          max_key: log_key(upper_bound),
+          max_key_inclusive: true
+        )
+        |> Stream.map(fn {key, {op_key, type, json}} -> {offset(key), op_key, type, json} end)
+        |> OnDisk.write_log_file(new_log_file_path)
 
-    OnDisk.apply_actions(log_file_path, action_file_path)
+        Utils.concat_files([log_file_path, new_log_file_path], new_log_file_path <> ".merged")
 
-    CubDB.put(opts.db, @compaction_info_key, {log_file_path, upper_bound})
+        key_index_path = OnDisk.create_sorted_key_index(new_log_file_path <> ".merged")
 
+        action_file_path =
+          OnDisk.create_action_file(new_log_file_path <> ".merged", key_index_path)
+
+        OnDisk.apply_actions(
+          new_log_file_path <> ".merged",
+          action_file_path,
+          &LogItems.merge_updates/2,
+          opts.chunk_bytes_threshold
+        )
+
+        File.rename!(new_log_file_path <> ".merged", new_log_file_path)
+        CubDB.put(opts.db, @compaction_info_key, {new_log_file_path, upper_bound})
+        delete_compacted_keys(opts, upper_bound)
+        File.rm!(action_file_path)
+        File.rm!(key_index_path)
+        :ok
+
+      :error ->
+        log_file_path = Path.join(opts.log_dir, "compact_log.electric")
+
+        CubDB.select(opts.db,
+          min_key: log_start(),
+          max_key: log_key(upper_bound),
+          max_key_inclusive: true
+        )
+        |> Stream.map(fn {key, {op_key, type, json}} -> {offset(key), op_key, type, json} end)
+        |> OnDisk.write_log_file(log_file_path)
+
+        key_index_path = OnDisk.create_sorted_key_index(log_file_path)
+        action_file_path = OnDisk.create_action_file(log_file_path, key_index_path)
+
+        OnDisk.apply_actions(
+          log_file_path,
+          action_file_path,
+          &LogItems.merge_updates/2,
+          opts.chunk_bytes_threshold
+        )
+
+        CubDB.put(opts.db, @compaction_info_key, {log_file_path, upper_bound})
+        delete_compacted_keys(opts, upper_bound)
+        File.rm!(action_file_path)
+        File.rm!(key_index_path)
+        :ok
+    end
+  end
+
+  defp delete_compacted_keys(%FS{} = opts, upper_bound) do
     compacted_chunks =
       CubDB.select(opts.db,
         min_key: chunk_checkpoint_start(),
@@ -429,8 +496,6 @@ defmodule Electric.ShapeCache.FileStorage do
       |> Enum.map(fn {key, _} -> key end)
 
     CubDB.delete_multi(opts.db, compacted_chunks ++ compacted_logs)
-
-    :ok
   end
 
   # This function raises if the chunk file doesn't exist.
