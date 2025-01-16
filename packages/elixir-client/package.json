@@ -3,7 +3,6 @@
   "private": true,
   "version": "0.2.6-beta.0",
   "scripts": {
-    "mix:write-static-version": "sed -i \"/version.exs/c\\ \\ version = $(elixir -r version.exs -e 'IO.inspect Electric.Version.version()')\" mix.exs",
-    "publish:hex": "pnpm mix:write-static-version && mix do deps.get, hex.publish --yes || true"
+    "publish:hex": "mix do deps.get, hex.publish --yes || true"
   }
 }
