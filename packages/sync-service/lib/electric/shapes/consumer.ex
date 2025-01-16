@@ -288,6 +288,8 @@ defmodule Electric.Shapes.Consumer do
 
         cleanup(state)
 
+        notify_listeners(registry, :shape_rotation, shape_handle, last_log_offset)
+
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
 
       num_changes > 0 ->
@@ -341,6 +343,17 @@ defmodule Electric.Shapes.Consumer do
 
       for {pid, ref} <- registered,
           do: send(pid, {ref, :new_changes, latest_log_offset})
+    end)
+  end
+
+  defp notify_listeners(registry, :shape_rotation, shape_handle, _latest_log_offset) do
+    Registry.dispatch(registry, shape_handle, fn registered ->
+      Logger.debug(fn ->
+        "Notifying ~#{length(registered)} clients about new changes to #{shape_handle}"
+      end)
+
+      for {pid, ref} <- registered,
+          do: send(pid, {ref, :shape_rotation})
     end)
   end
 

@@ -58,7 +58,7 @@ The value can be just a tablename like `projects`, or can be a qualified tablena
 
 #### Partitioned Tables
 
-Electric supports subscribing to [partitioned tables](https://www.postgresql.org/docs/17/ddl-partitioning.html), both individual partitions and the root table of all partitions.
+Electric supports subscribing to [declaratively partitioned tables](https://www.postgresql.org/docs/current/ddl-partitioning.html#DDL-PARTITIONING-DECLARATIVE), both individual partitions and the root table of all partitions.
 
 Consider the following partitioned schema:
 

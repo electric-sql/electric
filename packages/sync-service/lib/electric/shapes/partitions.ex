@@ -7,6 +7,7 @@ defmodule Electric.Shapes.Partitions do
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes.Relation
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.TruncatedRelation
 
   defstruct [:inspector, active: 0, partitions: %{}, partition_ownership: %{}]
 
@@ -148,6 +149,21 @@ defmodule Electric.Shapes.Partitions do
     Enum.flat_map(changes, &expand_change(&1, transformer))
   end
 
+  # Truncate handling:
+  # - Truncate partition root: truncation of the root plus all partitions
+  #   if you truncate the root then your basically emptying it and all partitions
+  #
+  # - Truncate partition: truncate that partition plus the partition root
+  #   truncating a partition empties it and also invalidates the contents of
+  #   any shapes on the root. other partitions are untouched as, by definition,
+  #   they don't overlap with the truncated partition.
+  defp expand_change(%TruncatedRelation{relation: relation} = change, transformer) do
+    [
+      change
+      | transformer |> truncation_dependencies(relation) |> Enum.map(&%{change | relation: &1})
+    ]
+  end
+
   defp expand_change(%{relation: relation} = change, transformer) do
     [
       change
@@ -158,4 +174,26 @@ defmodule Electric.Shapes.Partitions do
   end
 
   defp table(%{schema: schema, table: table}), do: {schema, table}
+
+  defp truncation_dependencies(transformer, root_or_partition) do
+    transformer.partitions
+    |> Map.get(root_or_partition, [])
+    |> MapSet.new()
+    |> MapSet.union(
+      transformer
+      |> invert_partition_map()
+      |> Map.get(root_or_partition, [])
+      |> MapSet.new()
+    )
+    |> MapSet.delete(root_or_partition)
+    |> MapSet.to_list()
+  end
+
+  defp invert_partition_map(%__MODULE__{partitions: partitions}) do
+    Enum.reduce(partitions, %{}, fn {partition, roots}, inverted when is_list(roots) ->
+      Enum.reduce(roots, inverted, fn root, inverted ->
+        Map.update(inverted, root, [partition], &[partition | &1])
+      end)
+    end)
+  end
 end

@@ -4,6 +4,7 @@ defmodule Electric.Shapes.PartitionsTest do
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.Relation
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.TruncatedRelation
   alias Electric.Shapes.Partitions
   alias Electric.Shapes.Shape
 
@@ -171,5 +172,52 @@ defmodule Electric.Shapes.PartitionsTest do
     assert clean_partitions == empty
 
     assert {_, %Transaction{changes: [^new]}} = Partitions.handle_event(clean_partitions, insert)
+  end
+
+  describe "truncation" do
+    setup do
+      partitions =
+        Partitions.new(inspector: @partition_inspector)
+        |> Partitions.add_shape("s1", Shape.new!("partitioned", inspector: @partition_inspector))
+        |> Partitions.add_shape(
+          "s2",
+          Shape.new!("partitioned", where: "id = 2", inspector: @partition_inspector)
+        )
+        |> Partitions.add_shape(
+          "s3",
+          Shape.new!("partition_01", where: "id = 2", inspector: @partition_inspector)
+        )
+        |> Partitions.add_shape(
+          "s4",
+          Shape.new!("partition_02", where: "id > 2", inspector: @partition_inspector)
+        )
+
+      [partitions: partitions]
+    end
+
+    test "truncation of root partition truncates root and all partitions", ctx do
+      truncate_partitioned = %TruncatedRelation{relation: {"public", "partitioned"}}
+      truncate_partition_01 = %TruncatedRelation{relation: {"public", "partition_01"}}
+      truncate_partition_02 = %TruncatedRelation{relation: {"public", "partition_02"}}
+
+      txn = %Transaction{changes: [truncate_partitioned]}
+
+      assert {_,
+              %Transaction{
+                changes: [^truncate_partitioned, ^truncate_partition_01, ^truncate_partition_02]
+              }} = Partitions.handle_event(ctx.partitions, txn)
+    end
+
+    test "truncation of partition truncates root and that partition", ctx do
+      truncate_partitioned = %TruncatedRelation{relation: {"public", "partitioned"}}
+      truncate_partition_02 = %TruncatedRelation{relation: {"public", "partition_02"}}
+
+      txn = %Transaction{changes: [truncate_partition_02]}
+
+      assert {_,
+              %Transaction{
+                changes: [^truncate_partition_02, ^truncate_partitioned]
+              }} = Partitions.handle_event(ctx.partitions, txn)
+    end
   end
 end

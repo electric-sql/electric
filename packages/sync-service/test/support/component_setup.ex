@@ -183,6 +183,7 @@ defmodule Support.ComponentSetup do
     stack_events_registry = Registry.StackEvents
 
     ref = Electric.StackSupervisor.subscribe_to_stack_events(stack_events_registry, stack_id)
+    publication_name = "electric_test_pub_#{:erlang.phash2(stack_id)}"
 
     stack_supervisor =
       start_supervised!(
@@ -194,7 +195,7 @@ defmodule Support.ComponentSetup do
          connection_opts: ctx.db_config,
          replication_opts: [
            slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
-           publication_name: "electric_test_pub_#{:erlang.phash2(stack_id)}",
+           publication_name: publication_name,
            try_creating_publication?: true,
            slot_temporary?: true
          ],
@@ -219,7 +220,9 @@ defmodule Support.ComponentSetup do
       persistent_kv: kv,
       stack_supervisor: stack_supervisor,
       storage: storage,
-      inspector: {EtsInspector, stack_id: stack_id, server: EtsInspector.name(stack_id: stack_id)}
+      inspector:
+        {EtsInspector, stack_id: stack_id, server: EtsInspector.name(stack_id: stack_id)},
+      publication_name: publication_name
     }
   end
 
