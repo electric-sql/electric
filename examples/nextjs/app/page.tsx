@@ -1,11 +1,14 @@
-import { preloadShape } from "@electric-sql/react"
-import { itemShapeOptions } from "./items"
-import { ItemsList } from "./items-list"
+import dynamic from 'next/dynamic'
 import "./Example.css"
 
-export default async function Page() {
-  // Preload shape data during SSR
-  await preloadShape(itemShapeOptions)
+// Dynamic import of ItemsList with SSR disabled
+const ClientItemsList = dynamic(
+  () => import('./items-list').then(mod => mod.ItemsList),
+  {
+    ssr: false,
+  }
+)
 
-  return <ItemsList />
+export default function Page() {
+  return <ClientItemsList />
 }
