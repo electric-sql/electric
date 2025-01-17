@@ -1,7 +1,7 @@
 "use client"
 
 import { v4 as uuidv4 } from "uuid"
-import { useOptimistic } from "react"
+import { useOptimistic, startTransition } from "react"
 import { useShape, getShapeStream } from "@electric-sql/react"
 import { ItemsView } from "./items-view"
 import { matchStream } from "./match-stream"
@@ -59,8 +59,15 @@ export function ItemsList() {
   const handleAdd = async () => {
     const id = uuidv4()
     const value = `Item ${id.slice(0, 4)}`
-    addOptimisticItem({ id, value })
-    await createItem(id)
+    startTransition(() => {
+      addOptimisticItem({ id, value })
+    })
+    try {
+      await createItem(id)
+    } catch (error) {
+      console.error('Failed to create item:', error)
+      // You might want to add error handling here to revert the optimistic update
+    }
   }
 
   const handleClear = async () => {
