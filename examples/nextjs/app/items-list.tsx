@@ -50,28 +50,44 @@ async function clearItems() {
 export function ItemsList() {
   const shapeOptions = getClientShapeOptions()
   const { data: rows } = useShape<Item>(shapeOptions)
-  console.log({ rows })
-  const [optimisticItems, addOptimisticItem] = useOptimistic(
-    rows,
-    (state, newItem: Item) => [...state, newItem]
-  )
+  const [optimisticItems, updateOptimisticItems] = useOptimistic<
+    Item[],
+    { newId?: string; isClear?: boolean }
+  >(rows, (state, { newId, isClear }) => {
+    // If clearing, return empty array
+    if (isClear) {
+      return []
+    }
+
+    // Create a new array combining all sources
+    const allItems = [...rows, ...state]
+    if (newId) {
+      const newItem = { id: newId, value: `Item ${newId.slice(0, 4)}` }
+      allItems.push(newItem)
+    }
+
+    // Deduplicate by id, keeping the last occurrence of each id
+    const uniqueItems = allItems.reduce((acc, item) => {
+      acc[item.id] = item
+      return acc
+    }, {} as Record<string, Item>)
+
+    return Object.values(uniqueItems)
+  })
 
   const handleAdd = async () => {
     const id = uuidv4()
-    const value = `Item ${id.slice(0, 4)}`
-    startTransition(() => {
-      addOptimisticItem({ id, value })
-    })
-    try {
+    startTransition(async () => {
+      updateOptimisticItems({ newId: id })
       await createItem(id)
-    } catch (error) {
-      console.error('Failed to create item:', error)
-      // You might want to add error handling here to revert the optimistic update
-    }
+    })
   }
 
   const handleClear = async () => {
-    await clearItems()
+    startTransition(async () => {
+      updateOptimisticItems({ isClear: true })
+      await clearItems()
+    })
   }
 
   return (

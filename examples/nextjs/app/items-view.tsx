@@ -10,16 +10,25 @@ export function ItemsView({ items, onAdd, onClear }: ItemsViewProps) {
   console.log({ items })
   return (
     <div className="container">
+      <div className="buttons">
+        {onAdd && (
+          <button onClick={onAdd} className="button">
+            Add
+          </button>
+        )}
+        {onClear && (
+          <button onClick={onClear} className="button">
+            Clear
+          </button>
+        )}
+      </div>
+      <br />
       <div className="items">
         {items.map((item) => (
-          <div key={item.id} className="item">
+          <p key={item.id} className="item">
             {item.id}
-          </div>
+          </p>
         ))}
-      </div>
-      <div className="buttons">
-        {onAdd && <button onClick={onAdd}>Add Item</button>}
-        {onClear && <button onClick={onClear}>Clear Items</button>}
       </div>
     </div>
   )
