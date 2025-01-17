@@ -33,15 +33,14 @@ interface SSRState {
   shapes: { [key: string]: SSRShapeData<any> }
 }
 
-let __ELECTRIC_SSR_STATE__: SSRState | undefined
+let ssrState: SSRState | undefined
 
 function hydrateSSRState() {
   if (typeof globalThis !== 'undefined' && globalThis.document) {
     const scriptEl = globalThis.document.getElementById('__ELECTRIC_SSR_STATE__')
     if (scriptEl?.textContent) {
       try {
-        const state = JSON.parse(scriptEl.textContent) as SSRState
-        setSSRState(state)
+        ssrState = JSON.parse(scriptEl.textContent)
       } catch (e) {
         console.error('Failed to parse SSR state:', e)
       }
@@ -51,44 +50,11 @@ function hydrateSSRState() {
 
 hydrateSSRState()
 
-export function getSSRState(): SSRState {
-  if (typeof globalThis !== 'undefined' && 'window' in globalThis && typeof (globalThis as any).window?.__ELECTRIC_SSR_STATE__ !== 'undefined') {
-    return (globalThis as any).window.__ELECTRIC_SSR_STATE__
-  }
-  return __ELECTRIC_SSR_STATE__ || { shapes: {} }
-}
-
-export function setSSRState(state: SSRState) {
-  if (typeof globalThis !== 'undefined' && 'window' in globalThis) {
-    (globalThis as any).window.__ELECTRIC_SSR_STATE__ = state
-  } else {
-    __ELECTRIC_SSR_STATE__ = state
-  }
-}
-
 export async function preloadShape<T extends Row<unknown>>(
   options: ShapeStreamOptions<GetExtensions<T>>
 ): Promise<Shape<T>> {
-  const shape = getShape<T>(getShapeStream<T>(options, sortedOptionsHash(options)), sortedOptionsHash(options))
-  const shapeHash = sortedOptionsHash(options)
-
-  // Store in SSR state
-  const shapeData = {
-    rows: Array.from(shape.currentValue.entries()),
-    lastSyncedAt: shape.lastSyncedAt(),
-    offset: shape.offset,
-    handle: shape.handle,
-  }
-
-  setSSRState({
-    ...getSSRState(),
-    shapes: {
-      ...getSSRState().shapes,
-      [shapeHash]: shapeData,
-    },
-  })
-
-  return shape
+  const shapeStream = getShapeStream<T>(options, sortedOptionsHash(options))
+  return getShape<T>(shapeStream, sortedOptionsHash(options))
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -127,15 +93,11 @@ export function getShapeStream<T extends Row<unknown>>(
     streamCache.delete(optionsHash)
   }
 
-  // Check for SSR data to get the offset
-  const ssrState = getSSRState()
-  const ssrData = ssrState.shapes[optionsHash] as SSRShapeData<T> | undefined
-
   // Create stream with SSR offset if available
   const streamOptions = {
     ...options,
-    offset: ssrData?.offset,
-    handle: ssrData?.handle,
+    offset: ssrState?.shapes[optionsHash]?.offset,
+    handle: ssrState?.shapes[optionsHash]?.handle,
   }
 
   const newShapeStream = new ShapeStream<T>(streamOptions)
@@ -159,8 +121,7 @@ export function getShape<T extends Row<unknown>>(
   const newShape = new Shape<T>(shapeStream)
 
   // Check for SSR data
-  const ssrState = getSSRState()
-  const ssrData = ssrState.shapes[optionsHash] as SSRShapeData<T> | undefined
+  const ssrData = ssrState?.shapes[optionsHash]
 
   if (ssrData) {
     // Initialize shape with SSR data - convert array of entries back to Map
@@ -229,29 +190,37 @@ interface UseShapeOptions<SourceData extends Row<unknown>, Selection>
   selector?: (value: UseShapeResult<SourceData>) => Selection
 }
 
-// Function to serialize SSR state
-export function serializeSSRState(): string {
-  return `window.__ELECTRIC_SSR_STATE__ = ${JSON.stringify(getSSRState())};`
+// Function to serialize SSR state for ElectricScripts
+function serializeSSRState(): string {
+  const shapes: { [key: string]: SSRShapeData<any> } = {}
+  
+  // Get shapes data from caches
+  for (const [optionsHash, stream] of streamCache.entries()) {
+    const shape = shapeCache.get(stream)
+    if (shape) {
+      shapes[optionsHash] = {
+        rows: Array.from(shape.currentValue.entries()),
+        lastSyncedAt: shape.lastSyncedAt(),
+        offset: shape.offset,
+        handle: shape.handle,
+      }
+    }
+  }
+
+  return JSON.stringify({ shapes })
 }
 
-/**
- * Component to inject Electric SSR state into HTML
- */
 export function ElectricScripts() {
-  const ssrState = getSSRState()
-
-  // Only inject script if we have SSR state
-  if (Object.keys(ssrState.shapes).length === 0) {
+  if (typeof globalThis !== 'undefined' && globalThis.document) {
     return null
   }
 
-  // Serialize state and inject as script
   return (
     <script
       id="__ELECTRIC_SSR_STATE__"
       type="application/json"
       dangerouslySetInnerHTML={{
-        __html: JSON.stringify(ssrState)
+        __html: serializeSSRState(),
       }}
     />
   )
