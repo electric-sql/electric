@@ -1,6 +1,6 @@
 import "./style.css"
 import "./App.css"
-import { ElectricScripts } from "@electric-sql/react"
+import { ElectricProvider, ElectricScripts } from "@electric-sql/react"
 import {
   Links,
   Meta,
@@ -19,10 +19,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body style={{ margin: 0, padding: 0 }}>
-        {children}
+        <ElectricProvider>
+          {children}
+          <ElectricScripts />
+        </ElectricProvider>
         <ScrollRestoration />
         <Scripts />
-        <ElectricScripts />
       </body>
     </html>
   )

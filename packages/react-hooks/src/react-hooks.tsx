@@ -6,7 +6,7 @@ import {
   GetExtensions,
   Offset,
 } from '@electric-sql/client'
-import React from 'react'
+import React, { createContext, useContext } from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
 
 declare global {
@@ -14,6 +14,8 @@ declare global {
     getElementById(id: string): { textContent?: string } | null
   } | undefined
 }
+
+const isSSR = typeof globalThis !== 'undefined' && !('window' in globalThis)
 
 type UnknownShape = Shape<Row<unknown>>
 type UnknownShapeStream = ShapeStream<Row<unknown>>
@@ -53,8 +55,9 @@ hydrateSSRState()
 export async function preloadShape<T extends Row<unknown>>(
   options: ShapeStreamOptions<GetExtensions<T>>
 ): Promise<Shape<T>> {
-  const shapeStream = getShapeStream<T>(options, sortedOptionsHash(options))
-  return getShape<T>(shapeStream, sortedOptionsHash(options))
+  const optionsHash = sortedOptionsHash(options)
+  const shapeStream = getShapeStream<T>(options, optionsHash)
+  return getShape<T>(shapeStream, optionsHash)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -190,20 +193,44 @@ interface UseShapeOptions<SourceData extends Row<unknown>, Selection>
   selector?: (value: UseShapeResult<SourceData>) => Selection
 }
 
+// Context for tracking shapes used in current render
+const ShapesContext = createContext<Set<string> | null>(null)
+
+function useShapes() {
+  const shapes = useContext(ShapesContext)
+  // Only require provider during SSR
+  if (!shapes && isSSR) {
+    throw new Error(
+      'No ElectricProvider found. Wrap your app with ElectricProvider when using SSR.'
+    )
+  }
+  return shapes || new Set()
+}
+
+function useTrackShape(optionsHash: string) {
+  const shapes = useShapes()
+  shapes.add(optionsHash)
+}
+
 // Function to serialize SSR state for ElectricScripts
-function serializeSSRState(): string {
+function serializeSSRState(usedShapes: Set<string>): string {
   const shapes: { [key: string]: SSRShapeData<any> } = {}
-  
-  // Get shapes data from caches
-  for (const [optionsHash, stream] of streamCache.entries()) {
-    const shape = shapeCache.get(stream)
-    if (shape) {
+
+  // Only get shapes that were used in this render
+  for (const optionsHash of usedShapes) {
+    try {
+      // Parse the options from the hash
+      const options = JSON.parse(optionsHash)
+      const stream = getShapeStream<Row<unknown>>(options, optionsHash)
+      const shape = getShape<Row<unknown>>(stream, optionsHash)
       shapes[optionsHash] = {
         rows: Array.from(shape.currentValue.entries()),
         lastSyncedAt: shape.lastSyncedAt(),
         offset: shape.offset,
         handle: shape.handle,
       }
+    } catch (e) {
+      console.error('Failed to parse shape options:', e)
     }
   }
 
@@ -211,18 +238,29 @@ function serializeSSRState(): string {
 }
 
 export function ElectricScripts() {
-  if (typeof globalThis !== 'undefined' && globalThis.document) {
-    return null
-  }
+  const shapes = useShapes()
+
+  // On client, reuse the server-rendered content
+  const content = !isSSR && globalThis.document
+    ? globalThis.document.getElementById('__ELECTRIC_SSR_STATE__')?.textContent || ''
+    : serializeSSRState(shapes)
 
   return (
     <script
       id="__ELECTRIC_SSR_STATE__"
       type="application/json"
       dangerouslySetInnerHTML={{
-        __html: serializeSSRState(),
+        __html: content,
       }}
     />
+  )
+}
+
+export function ElectricProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <ShapesContext.Provider value={new Set()}>
+      {children}
+    </ShapesContext.Provider>
   )
 }
 
@@ -232,14 +270,16 @@ export function useShape<
 >({
   selector = identity as (arg: UseShapeResult<SourceData>) => Selection,
   ...options
-}: UseShapeOptions<SourceData, Selection>): Selection {
-  // Calculate options hash once
-  const optionsHash = sortedOptionsHash(options as ShapeStreamOptions<GetExtensions<SourceData>>)
-  
-  const shapeStream = getShapeStream<SourceData>(
-    options as ShapeStreamOptions<GetExtensions<SourceData>>,
-    optionsHash
-  )
+}: UseShapeOptions<SourceData, Selection> &
+  ShapeStreamOptions<GetExtensions<SourceData>>): Selection {
+  const optionsHash = sortedOptionsHash(options)
+
+  // Only track shapes during SSR
+  if (isSSR) {
+    useTrackShape(optionsHash)
+  }
+
+  const shapeStream = getShapeStream<SourceData>(options, optionsHash)
   const shape = getShape<SourceData>(shapeStream, optionsHash)
 
   const useShapeData = React.useMemo(() => {
