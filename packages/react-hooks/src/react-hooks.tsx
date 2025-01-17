@@ -10,12 +10,15 @@ import React, { createContext, useContext } from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
 
 declare global {
-  var document: {
-    getElementById(id: string): { textContent?: string } | null
-  } | undefined
+  // eslint-disable-next-line
+  var document:
+    | {
+        getElementById(id: string): { textContent?: string } | null
+      }
+    | undefined
 }
 
-const isSSR = typeof globalThis !== 'undefined' && !('window' in globalThis)
+const isSSR = typeof globalThis !== `undefined` && !(`window` in globalThis)
 
 type UnknownShape = Shape<Row<unknown>>
 type UnknownShapeStream = ShapeStream<Row<unknown>>
@@ -32,19 +35,22 @@ interface SSRShapeData<T extends Row<unknown>> {
 }
 
 interface SSRState {
+  // eslint-disable-next-line
   shapes: { [key: string]: SSRShapeData<any> }
 }
 
 let ssrState: SSRState | undefined
 
 function hydrateSSRState() {
-  if (typeof globalThis !== 'undefined' && globalThis.document) {
-    const scriptEl = globalThis.document.getElementById('__ELECTRIC_SSR_STATE__')
+  if (typeof globalThis !== `undefined` && globalThis.document) {
+    const scriptEl = globalThis.document.getElementById(
+      `__ELECTRIC_SSR_STATE__`
+    )
     if (scriptEl?.textContent) {
       try {
         ssrState = JSON.parse(scriptEl.textContent)
       } catch (e) {
-        console.error('Failed to parse SSR state:', e)
+        console.error(`Failed to parse SSR state:`, e)
       }
     }
   }
@@ -201,7 +207,7 @@ function useShapes() {
   // Only require provider during SSR
   if (!shapes && isSSR) {
     throw new Error(
-      'No ElectricProvider found. Wrap your app with ElectricProvider when using SSR.'
+      `No ElectricProvider found. Wrap your app with ElectricProvider when using SSR.`
     )
   }
   return shapes || new Set()
@@ -214,6 +220,7 @@ function useTrackShape(optionsHash: string) {
 
 // Function to serialize SSR state for ElectricScripts
 function serializeSSRState(usedShapes: Set<string>): string {
+  // eslint-disable-next-line
   const shapes: { [key: string]: SSRShapeData<any> } = {}
 
   // Only get shapes that were used in this render
@@ -230,7 +237,7 @@ function serializeSSRState(usedShapes: Set<string>): string {
         handle: shape.handle,
       }
     } catch (e) {
-      console.error('Failed to parse shape options:', e)
+      console.error(`Failed to parse shape options:`, e)
     }
   }
 
@@ -241,9 +248,11 @@ export function ElectricScripts() {
   const shapes = useShapes()
 
   // On client, reuse the server-rendered content
-  const content = !isSSR && globalThis.document
-    ? globalThis.document.getElementById('__ELECTRIC_SSR_STATE__')?.textContent || ''
-    : serializeSSRState(shapes)
+  const content =
+    !isSSR && globalThis.document
+      ? globalThis.document.getElementById(`__ELECTRIC_SSR_STATE__`)
+          ?.textContent || ``
+      : serializeSSRState(shapes)
 
   return (
     <script

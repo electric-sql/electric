@@ -148,7 +148,7 @@ export class Shape<T extends Row<unknown> = Row> {
   initializeWithSSRData(data: Map<string, T>) {
     // Clear existing data
     this.#data.clear()
-    
+
     // Copy entries from SSR data
     for (const [key, value] of data.entries()) {
       this.#data.set(key, value)
