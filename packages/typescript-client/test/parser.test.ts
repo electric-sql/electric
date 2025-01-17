@@ -159,7 +159,7 @@ describe(`Postgres array parser`, () => {
 describe(`Message parser`, () => {
   const parser = new MessageParser()
 
-  it.only(`should parse null values`, () => {
+  it(`should parse null values`, () => {
     const messages = `[ { "value": { "a": null } }, { "value": { "value": null } } ]`
     const expectedParsedMessages = [
       { value: { a: null } },

@@ -7,7 +7,6 @@ interface ItemsViewProps {
 }
 
 export function ItemsView({ items, onAdd, onClear }: ItemsViewProps) {
-  console.log({ items })
   return (
     <div className="container">
       <div className="buttons">
