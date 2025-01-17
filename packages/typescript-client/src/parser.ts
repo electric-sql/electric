@@ -91,63 +91,104 @@ export function pgArrayParser<Extensions>(
 
 export class MessageParser<T extends Row<unknown>> {
   private parser: Parser<GetExtensions<T>>
+  private currentSchema?: Schema
+  private compiledRowParser?: (row: Record<string, unknown>) => Record<string, Value<GetExtensions<T>>>
+
   constructor(parser?: Parser<GetExtensions<T>>) {
-    // Merge the provided parser with the default parser
-    // to use the provided parser whenever defined
-    // and otherwise fall back to the default parser
     this.parser = { ...defaultParser, ...parser }
   }
 
+  private compileParser(schema: Schema) {
+    if (schema === this.currentSchema) return
+    
+    this.currentSchema = schema
+
+    // Generate parser code for each column
+    const parserParts: string[] = []
+    
+    for (const [columnName, columnInfo] of Object.entries(schema)) {
+      const { type: typ, dims: dimensions, not_null } = columnInfo
+      
+      let valueAccess = `row["${columnName}"]`
+      let parserCode = ''
+
+      // Handle null check unless marked as not null
+      if (!not_null) {
+        parserCode = `${valueAccess} === null || ${valueAccess} === "NULL" ? null : `
+      }
+
+      // Add type-specific parsing
+      if (dimensions && dimensions > 0) {
+        // Handle array types - we'll keep using pgArrayParser for now
+        // as optimizing array parsing would need more work
+        parserCode += `pgArrayParser(${valueAccess}, v => ${this.getTypeParser('v', typ)})`
+      } else {
+        parserCode += this.getTypeParser(valueAccess, typ)
+      }
+
+      parserParts.push(`"${columnName}": ${parserCode}`)
+    }
+
+    // Create the specialized parsing function
+    const code = `
+      return function parseRow(row) {
+        return {
+          ${parserParts.join(',\n          ')}
+        };
+      }
+    `
+
+    try {
+      // Create and store the compiled function
+      this.compiledRowParser = new Function('pgArrayParser', code)(pgArrayParser)
+    } catch (e) {
+      console.error('Failed to compile parser:', e)
+      throw e
+    }
+  }
+
+  private getTypeParser(value: string, type: string): string {
+    switch (type) {
+      case 'int2':
+      case 'int4':
+        return `(${value} | 0)` // Fast integer conversion
+
+      case 'int8':
+        return `BigInt(${value})`
+
+      case 'float4':
+      case 'float8':
+        return `Number(${value})`
+
+      case 'bool':
+        return `(${value} === "t" || ${value} === "true")`
+
+      case 'json':
+      case 'jsonb':
+        return `JSON.parse(${value})`
+
+      // For custom parsers, fall back to the provided parser
+      default:
+        if (this.parser[type]) {
+          return `(${value})`
+        }
+        return value // Identity parser for unknown types
+    }
+  }
+
   parse(messages: string, schema: Schema): Message<T>[] {
+    // Compile parser if schema changed
+    if (schema !== this.currentSchema) {
+      this.compileParser(schema)
+    }
+
+    const parseRow = this.compiledRowParser!
     return JSON.parse(messages, (key, value) => {
-      // typeof value === `object` && value !== null
-      // is needed because there could be a column named `value`
-      // and the value associated to that column will be a string or null.
-      // But `typeof null === 'object'` so we need to make an explicit check.
-      if (key === `value` && typeof value === `object` && value !== null) {
-        // Parse the row values
-        const row = value as Record<string, Value<GetExtensions<T>>>
-        Object.keys(row).forEach((key) => {
-          row[key] = this.parseRow(key, row[key] as NullableToken, schema)
-        })
+      if (key === 'value' && typeof value === 'object' && value !== null) {
+        return parseRow(value)
       }
       return value
     }) as Message<T>[]
-  }
-
-  // Parses the message values using the provided parser based on the schema information
-  private parseRow(
-    key: string,
-    value: NullableToken,
-    schema: Schema
-  ): Value<GetExtensions<T>> {
-    const columnInfo = schema[key]
-    if (!columnInfo) {
-      // We don't have information about the value
-      // so we just return it
-      return value
-    }
-
-    // Copy the object but don't include `dimensions` and `type`
-    const { type: typ, dims: dimensions, ...additionalInfo } = columnInfo
-
-    // Pick the right parser for the type
-    // and support parsing null values if needed
-    // if no parser is provided for the given type, just return the value as is
-    const typeParser = this.parser[typ] ?? identityParser
-    const parser = makeNullableParser(typeParser, columnInfo, key)
-
-    if (dimensions && dimensions > 0) {
-      // It's an array
-      const nullablePgArrayParser = makeNullableParser(
-        (value, _) => pgArrayParser(value, parser),
-        columnInfo,
-        key
-      )
-      return nullablePgArrayParser(value)
-    }
-
-    return parser(value, additionalInfo)
   }
 }
 

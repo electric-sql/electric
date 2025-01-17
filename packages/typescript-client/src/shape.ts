@@ -142,6 +142,24 @@ export class Shape<T extends Row<unknown> = Row> {
     return this.#subscribers.size
   }
 
+  /**
+   * Initialize shape with SSR data
+   */
+  initializeWithSSRData(data: Map<string, T>) {
+    // Clear existing data
+    this.#data.clear()
+    
+    // Copy entries from SSR data
+    for (const [key, value] of data.entries()) {
+      this.#data.set(key, value)
+    }
+
+    // Mark as up to date if we have data
+    if (data.size > 0) {
+      this.#hasNotifiedSubscribersUpToDate = true
+    }
+  }
+
   #process(messages: Message<T>[]): void {
     let dataMayHaveChanged = false
     let isUpToDate = false
@@ -207,5 +225,10 @@ export class Shape<T extends Row<unknown> = Row> {
     this.#subscribers.forEach((callback) => {
       callback({ value: this.currentValue, rows: this.currentRows })
     })
+  }
+
+  /** Get the current offset of the shape stream */
+  get offset(): Offset | undefined {
+    return this.stream.lastOffset
   }
 }
