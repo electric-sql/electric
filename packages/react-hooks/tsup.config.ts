@@ -5,6 +5,9 @@ export default defineConfig((options: Options) => {
   const commonOptions: Partial<Options> = {
     entry: {
       index: `src/index.ts`,
+      rsc: `src/rsc.tsx`,
+      provider: `src/provider.tsx`,
+      hydration: `src/hydration.tsx`,
     },
     tsconfig: `./tsconfig.build.json`,
     sourcemap: true,

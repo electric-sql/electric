@@ -1,4 +1,3 @@
-import { preloadShape } from "@electric-sql/react"
 import { ShapeStreamOptions } from "@electric-sql/client"
 
 // Server-side shape configuration
@@ -15,11 +14,4 @@ export const getClientShapeOptions = (): ShapeStreamOptions => {
     ...itemShapeOptions,
     url: `http://localhost:5173/shape-proxy`,
   }
-}
-
-// Server component to prefetch shape data
-export async function ItemsData() {
-  // Prefetch shape data during SSR
-  await preloadShape(itemShapeOptions)
-  return null
 }

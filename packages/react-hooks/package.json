@@ -45,6 +45,36 @@
         "types": "./dist/cjs/index.d.cts",
         "default": "./dist/cjs/index.cjs"
       }
+    },
+    "./provider": {
+      "import": {
+        "types": "./dist/react-hooks.d.ts",
+        "default": "./dist/react-hooks.mjs"
+      },
+      "require": {
+        "types": "./dist/react-hooks.d.ts",
+        "default": "./dist/react-hooks.cjs"
+      }
+    },
+    "./hydration": {
+      "import": {
+        "types": "./dist/hydration.d.ts",
+        "default": "./dist/hydration.mjs"
+      },
+      "require": {
+        "types": "./dist/hydration.d.ts",
+        "default": "./dist/hydration.cjs"
+      }
+    },
+    "./rsc": {
+      "import": {
+        "types": "./dist/rsc.d.ts",
+        "default": "./dist/rsc.mjs"
+      },
+      "require": {
+        "types": "./dist/rsc.d.ts",
+        "default": "./dist/rsc.cjs"
+      }
     }
   },
   "files": [
@@ -82,6 +112,15 @@
     "*": {
       "*": [
         "./dist/index.d.ts"
+      ],
+      "provider": [
+        "./dist/react-hooks.d.ts"
+      ],
+      "hydration": [
+        "./dist/hydration.d.ts"
+      ],
+      "rsc": [
+        "./dist/rsc.d.ts"
       ]
     }
   }

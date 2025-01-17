@@ -1,6 +1,5 @@
 import "./style.css"
 import "./App.css"
-import { ElectricScripts } from "@electric-sql/react"
 
 export const metadata = {
   title: `Next.js Forms Example`,
@@ -21,7 +20,6 @@ export default function RootLayout({
             {children}
           </header>
         </div>
-       <ElectricScripts />
       </body>
     </html>
   )

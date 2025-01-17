@@ -49,6 +49,7 @@ async function clearItems() {
 
 export function ItemsList() {
   const shapeOptions = getClientShapeOptions()
+  console.log(1)
   const { data: rows } = useShape<Item>(shapeOptions)
   const [optimisticItems, updateOptimisticItems] = useOptimistic<
     Item[],
