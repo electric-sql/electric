@@ -2,12 +2,13 @@ import { useShape, preloadShape, getShapeStream } from "@electric-sql/react"
 import { useFetchers, Form } from "@remix-run/react"
 import { v4 as uuidv4 } from "uuid"
 import type { ClientActionFunctionArgs } from "@remix-run/react"
+import type { LoaderFunction } from "@remix-run/node"
 import "../Example.css"
 import { matchStream } from "../match-stream"
 
 const itemShape = () => {
   return {
-    url: new URL(`/shape-proxy`, window.location.origin).href,
+    url: import.meta.env.ELECTRIC_URL || `http://localhost:5173/shape-proxy`,
     params: {
       table: `items`,
     },
@@ -15,6 +16,10 @@ const itemShape = () => {
 }
 
 type Item = { id: string }
+
+export const loader: LoaderFunction = async () => {
+  return await preloadShape(itemShape())
+}
 
 export const clientLoader = async () => {
   return await preloadShape(itemShape())

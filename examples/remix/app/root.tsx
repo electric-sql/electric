@@ -1,5 +1,6 @@
 import "./style.css"
 import "./App.css"
+import { ElectricScripts } from "@electric-sql/react"
 import {
   Links,
   Meta,
@@ -21,6 +22,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {children}
         <ScrollRestoration />
         <Scripts />
+        <ElectricScripts />
       </body>
     </html>
   )
