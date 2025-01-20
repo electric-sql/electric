@@ -2,10 +2,7 @@ defmodule Electric.ShapeCache.FileStorage do
   use Retry
   require Logger
 
-  alias Electric.LogItems
   alias Electric.ShapeCache.LogChunker
-  alias Electric.Utils
-  alias Electric.ShapeCache.FileStorage.OnDisk
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Replication.LogOffset
   import Electric.Replication.LogOffset, only: :macros
@@ -339,11 +336,21 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def append_to_log!(log_items, %FS{} = opts) do
+    compaction_boundary = get_compaction_boundary(opts)
+
     retry with: linear_backoff(50, 2) |> expiry(5_000) do
       log_items
-      |> Enum.map(fn
-        {:chunk_boundary, offset} -> {chunk_checkpoint_key(offset), nil}
-        {offset, key, type, json_log_item} -> {log_key(offset), {key, type, json_log_item}}
+      |> Enum.flat_map(fn
+        {:chunk_boundary, offset} ->
+          [{chunk_checkpoint_key(offset), nil}]
+
+        # We have definitely seen this, but it's not going to be in CubDB after compaction,
+        # so instead of idempotent insert we just ignore.
+        {offset, _, _, _} when is_log_offset_lt(offset, compaction_boundary) ->
+          []
+
+        {offset, key, op_type, json_log_item} ->
+          [{log_key(offset), {key, op_type, json_log_item}}]
       end)
       |> then(&CubDB.put_multi(opts.db, &1))
     else
@@ -396,7 +403,8 @@ defmodule Electric.ShapeCache.FileStorage do
       max_key: chunk_checkpoint_end(),
       reverse: true
     )
-    # Keep the last 2 chunks as-is just in case
+    # Keep the last 2 chunks as-is so that anything that relies on the live stream and
+    # transactional information/LSNs always has something to work with.
     |> Enum.take(3)
     |> case do
       [_, _, {key, _}] ->
@@ -409,11 +417,15 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   def compact(%FS{} = opts, %LogOffset{} = upper_bound) do
+    # We consider log before the stored upper bound live & uncompacted. This means that concurrent readers
+    # will be able to read out everything they want while the compaction is happening and we're only
+    # atomically updating the pointer to the live portion.
+
     case CubDB.fetch(opts.db, @compaction_info_key) do
       {:ok, {_, ^upper_bound}} ->
         :ok
 
-      {:ok, {log_file_path, _}} ->
+      {:ok, {old_log, _}} ->
         # compact further
         new_log_file_path =
           Path.join(
@@ -421,60 +433,48 @@ defmodule Electric.ShapeCache.FileStorage do
             "compact_log_#{DateTime.utc_now() |> DateTime.to_unix(:millisecond)}.electric"
           )
 
-        CubDB.select(opts.db,
-          min_key: log_start(),
-          max_key: log_key(upper_bound),
-          max_key_inclusive: true
-        )
-        |> Stream.map(fn {key, {op_key, type, json}} -> {offset(key), op_key, type, json} end)
-        |> OnDisk.write_log_file(new_log_file_path)
+        new_log =
+          CubDB.select(opts.db,
+            min_key: log_start(),
+            max_key: log_key(upper_bound),
+            max_key_inclusive: true
+          )
+          |> Stream.map(fn {key, {op_key, op_type, json}} ->
+            {offset(key), op_key, op_type, json}
+          end)
+          |> FS.LogFile.write_log_file(new_log_file_path <> ".new")
 
-        Utils.concat_files([log_file_path, new_log_file_path], new_log_file_path <> ".merged")
+        merged_log =
+          FS.Compaction.merge_and_compact(
+            old_log,
+            new_log,
+            new_log_file_path,
+            opts.chunk_bytes_threshold
+          )
 
-        key_index_path = OnDisk.create_sorted_key_index(new_log_file_path <> ".merged")
-
-        action_file_path =
-          OnDisk.create_action_file(new_log_file_path <> ".merged", key_index_path)
-
-        OnDisk.apply_actions(
-          new_log_file_path <> ".merged",
-          action_file_path,
-          &LogItems.merge_updates/2,
-          opts.chunk_bytes_threshold
-        )
-
-        File.rename!(new_log_file_path <> ".merged", new_log_file_path)
-        CubDB.put(opts.db, @compaction_info_key, {new_log_file_path, upper_bound})
+        CubDB.put(opts.db, @compaction_info_key, {merged_log, upper_bound})
         delete_compacted_keys(opts, upper_bound)
-        File.rm!(action_file_path)
-        File.rm!(key_index_path)
+        FS.Compaction.rm_log(new_log)
+        FS.Compaction.rm_log(old_log)
         :ok
 
       :error ->
         log_file_path = Path.join(opts.log_dir, "compact_log.electric")
 
-        CubDB.select(opts.db,
-          min_key: log_start(),
-          max_key: log_key(upper_bound),
-          max_key_inclusive: true
-        )
-        |> Stream.map(fn {key, {op_key, type, json}} -> {offset(key), op_key, type, json} end)
-        |> OnDisk.write_log_file(log_file_path)
+        log =
+          CubDB.select(opts.db,
+            min_key: log_start(),
+            max_key: log_key(upper_bound),
+            max_key_inclusive: true
+          )
+          |> Stream.map(fn {key, {op_key, op_type, json}} ->
+            {offset(key), op_key, op_type, json}
+          end)
+          |> FS.LogFile.write_log_file(log_file_path)
+          |> FS.Compaction.compact_in_place(opts.chunk_bytes_threshold)
 
-        key_index_path = OnDisk.create_sorted_key_index(log_file_path)
-        action_file_path = OnDisk.create_action_file(log_file_path, key_index_path)
-
-        OnDisk.apply_actions(
-          log_file_path,
-          action_file_path,
-          &LogItems.merge_updates/2,
-          opts.chunk_bytes_threshold
-        )
-
-        CubDB.put(opts.db, @compaction_info_key, {log_file_path, upper_bound})
+        CubDB.put(opts.db, @compaction_info_key, {log, upper_bound})
         delete_compacted_keys(opts, upper_bound)
-        File.rm!(action_file_path)
-        File.rm!(key_index_path)
         :ok
     end
   end
@@ -559,8 +559,9 @@ defmodule Electric.ShapeCache.FileStorage do
 
   defp stream_log_chunk(%LogOffset{} = offset, max_offset, %FS{} = opts) do
     case CubDB.fetch(opts.db, @compaction_info_key) do
-      {:ok, {log_file_path, upper_bound}} when is_log_offset_lt(offset, upper_bound) ->
-        OnDisk.read_json_chunk(log_file_path, offset)
+      {:ok, {log, upper_bound}} when is_log_offset_lt(offset, upper_bound) ->
+        FS.ChunkIndex.fetch_chunk(elem(log, 1), offset)
+        FS.LogFile.read_chunk(log, offset)
 
       _ ->
         opts.db
@@ -570,6 +571,13 @@ defmodule Electric.ShapeCache.FileStorage do
           min_key_inclusive: false
         )
         |> Stream.map(fn {_, {_, _, json_log_item}} -> json_log_item end)
+    end
+  end
+
+  defp get_compaction_boundary(%FS{} = opts) do
+    case CubDB.fetch(opts.db, @compaction_info_key) do
+      {:ok, {_, upper_bound}} -> upper_bound
+      :error -> LogOffset.first()
     end
   end
 
@@ -632,14 +640,21 @@ defmodule Electric.ShapeCache.FileStorage do
   def get_chunk_end_log_offset(offset, %FS{} = opts), do: get_chunk_end_for_log(offset, opts)
 
   defp get_chunk_end_for_log(offset, %FS{} = opts) do
-    CubDB.select(opts.db,
-      min_key: chunk_checkpoint_key(offset),
-      max_key: chunk_checkpoint_end(),
-      min_key_inclusive: false
-    )
-    |> Stream.map(fn {key, _} -> offset(key) end)
-    |> Enum.take(1)
-    |> Enum.at(0)
+    case CubDB.fetch(opts.db, @compaction_info_key) do
+      {:ok, {log, upper_bound}} when is_log_offset_lt(offset, upper_bound) ->
+        {:ok, max_offset, _} = FS.ChunkIndex.fetch_chunk(elem(log, 1), offset)
+        max_offset
+
+      _ ->
+        CubDB.select(opts.db,
+          min_key: chunk_checkpoint_key(offset),
+          max_key: chunk_checkpoint_end(),
+          min_key_inclusive: false
+        )
+        |> Stream.map(fn {key, _} -> offset(key) end)
+        |> Enum.take(1)
+        |> Enum.at(0)
+    end
   end
 
   defp get_last_snapshot_offset(%FS{} = opts) do

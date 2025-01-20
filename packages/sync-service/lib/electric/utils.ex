@@ -394,6 +394,8 @@ defmodule Electric.Utils do
     end
   end
 
+  @type sortable_binary(key) :: {key :: key, data :: binary()}
+
   @doc """
   Performs external merge sort on a file.
 
@@ -402,7 +404,7 @@ defmodule Electric.Utils do
     * `reader` - Function that takes a file path and returns a stream of records. Records should be
       in the form of `{key, binary}`, where `binary` will be written to the file sorted by `key`.
     * `sorter` - Function that compares two keys, should return true if first argument is less than or equal to second
-    * `chunk_size` - Byte size of each chunk (i.e. how much is sorted in memory at once)
+    * `chunk_size` - Byte size of each chunk (i.e. how much is sorted in memory at once). Uses 50 MB by default.
 
   The function will:
   1. Split the input file into sorted temporary chunks
@@ -410,11 +412,11 @@ defmodule Electric.Utils do
   """
   @spec external_merge_sort(
           path :: String.t(),
-          reader :: (path :: String.t() -> Enumerable.t({elem, binary()})),
+          reader :: (path :: String.t() -> Enumerable.t(sortable_binary(elem))),
           sorter :: (elem, elem -> boolean())
         ) :: :ok
         when elem: var
-  def external_merge_sort(path, reader, sorter, chunk_size \\ 50_000) do
+  def external_merge_sort(path, reader, sorter \\ &<=/2, chunk_size \\ 50 * 1024 * 1024) do
     tmp_dir = Path.join(System.tmp_dir!(), "external_sort_#{:erlang.system_time()}")
     File.mkdir_p!(tmp_dir)
 
@@ -495,5 +497,23 @@ defmodule Electric.Utils do
     |> Stream.concat()
     |> Stream.into(File.stream!(into))
     |> Stream.run()
+  end
+
+  @doc """
+  Transform the stream to call a side-effect function for each element before continuing.
+
+  Acts like `Stream.each/2` but with an aggregate. `start_fun`, `last_fun`, `after_fun`
+  have the same semantics as in `Stream.transform/5`
+  """
+  def stream_add_side_effect(stream, start_fun, reducer, last_fun \\ & &1, after_fun \\ & &1) do
+    Stream.transform(
+      stream,
+      start_fun,
+      fn elem, acc ->
+        {[elem], reducer.(elem, acc)}
+      end,
+      fn acc -> {[], last_fun.(acc)} end,
+      after_fun
+    )
   end
 end

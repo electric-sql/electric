@@ -1,4 +1,4 @@
-defmodule Electric.ShapeCache.StorageCleaner do
+defmodule Electric.ShapeCache.CompactionRunner do
   use GenServer
 
   require Logger
@@ -25,20 +25,17 @@ defmodule Electric.ShapeCache.StorageCleaner do
   @impl GenServer
   def init(opts) do
     clean_after_period(opts)
-    Process.set_label({:storage_cleaner, opts[:stack_id], opts[:shape_handle]})
+    Process.set_label({:compaction_runner, opts[:stack_id], opts[:shape_handle]})
     Logger.metadata(stack_id: opts[:stack_id], shape_handle: opts[:shape_handle])
     {:ok, opts}
   end
 
   @impl GenServer
   def handle_info(:clean, opts) do
-    Logger.info("Triggering compaction for shape #{opts[:shape_handle]}",
-      stack_id: opts[:stack_id],
-      shape_handle: opts[:shape_handle]
-    )
-
+    Logger.info("Triggering compaction for shape #{opts[:shape_handle]}")
     clean_after_period(opts)
     Storage.compact(opts[:storage])
+    Logger.info("Compaction complete for shape #{opts[:shape_handle]}")
 
     {:noreply, opts}
   end

@@ -125,6 +125,45 @@ defmodule Electric.Plug.RouterTest do
     end
 
     @tag with_sql: [
+           "INSERT INTO items VALUES ('00000000-0000-0000-0000-000000000001', 'test value 1')"
+         ]
+    test "GET after a compaction proceeds correctly",
+         %{opts: opts, db_conn: db_conn} do
+      conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
+      assert [_] = Jason.decode!(conn.resp_body)
+
+      for x <- 1..10 do
+        Postgrex.query!(
+          db_conn,
+          "UPDATE items SET value = 'test value #{x}' WHERE id = '00000000-0000-0000-0000-000000000001'",
+          []
+        )
+      end
+
+      shape_handle = get_resp_shape_handle(conn)
+
+      Process.sleep(500)
+
+      conn =
+        conn("GET", "/v1/shape?table=items&handle=#{shape_handle}&offset=0_0&live")
+        |> Router.call(opts)
+
+      assert length(Jason.decode!(conn.resp_body)) == 11
+      {:ok, offset} = LogOffset.from_string(get_resp_header(conn, "electric-offset"))
+
+      # Force compaction
+      Electric.ShapeCache.Storage.for_shape(shape_handle, opts[:storage])
+      |> Electric.ShapeCache.Storage.compact(offset)
+
+      conn =
+        conn("GET", "/v1/shape?table=items&handle=#{shape_handle}&offset=0_0")
+        |> Router.call(opts)
+
+      assert [%{"value" => %{"value" => "test value 10"}}, _] = Jason.decode!(conn.resp_body)
+      assert LogOffset.from_string(get_resp_header(conn, "electric-offset")) == {:ok, offset}
+    end
+
+    @tag with_sql: [
            "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
          ]
     test "DELETE forces the shape handle to be different on reconnect and new snapshot to be created",

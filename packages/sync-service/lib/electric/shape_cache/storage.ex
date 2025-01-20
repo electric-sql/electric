@@ -15,7 +15,11 @@ defmodule Electric.ShapeCache.Storage do
   @type storage :: {module(), compiled_opts()}
   @type shape_storage :: {module(), shape_opts()}
 
-  @type log_item :: {LogOffset.t(), Querying.json_iodata()} | {:chunk_boundary | LogOffset.t()}
+  @type operation_type :: :insert | :update | :delete
+  @type log_item ::
+          {LogOffset.t(), key :: String.t(), operation_type :: operation_type(),
+           Querying.json_iodata()}
+          | {:chunk_boundary | LogOffset.t()}
   @type log :: Enumerable.t(Querying.json_iodata())
 
   @type row :: list()
