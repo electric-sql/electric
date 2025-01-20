@@ -115,8 +115,9 @@ defmodule Electric.StackSupervisor do
     end
   end
 
-  def subscribe_to_stack_events(registry, stack_id, value) do
-    Registry.register(registry, {:stack_status, stack_id}, value)
+  def subscribe_to_stack_events(registry, stack_id, ref \\ make_ref()) do
+    {:ok, _pid} = Registry.register(registry, {:stack_status, stack_id}, ref)
+    ref
   end
 
   def dispatch_stack_event(registry, stack_id, event) do
@@ -132,7 +133,7 @@ defmodule Electric.StackSupervisor do
     opts = Map.new(opts)
     stack_id = opts[:stack_id]
 
-    shape_changes_registry_name = :"#{Registry.ShapeChanges}:#{stack_id}"
+    shape_changes_registry_name = registry_name(stack_id)
 
     shape_cache =
       Access.get(
@@ -175,6 +176,10 @@ defmodule Electric.StackSupervisor do
     {mod, arg |> Keyword.put(:stack_id, stack_id) |> mod.shared_opts()}
   end
 
+  def registry_name(stack_id) do
+    :"#{Registry.ShapeChanges}:#{stack_id}"
+  end
+
   @impl true
   def init(%{stack_id: stack_id} = config) do
     Process.set_label({:stack_supervisor, stack_id})
@@ -199,7 +204,7 @@ defmodule Electric.StackSupervisor do
     db_pool =
       Electric.ProcessRegistry.name(stack_id, Electric.DbPool)
 
-    shape_changes_registry_name = :"#{Registry.ShapeChanges}:#{stack_id}"
+    shape_changes_registry_name = registry_name(stack_id)
 
     shape_cache_opts = [
       stack_id: stack_id,

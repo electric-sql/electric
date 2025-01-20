@@ -10,7 +10,6 @@ defmodule Electric.Shapes.Filter do
   the table specific logic to the `Filter.Table` module.
   """
 
-  alias Electric.Replication.Changes
   alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.Relation
@@ -20,6 +19,7 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Filter.Table
   alias Electric.Shapes.Shape
+
   require Logger
 
   defstruct tables: %{}
@@ -27,8 +27,10 @@ defmodule Electric.Shapes.Filter do
   @type t :: %Filter{}
   @type shape_id :: any()
 
-  @spec new() :: Filter.t()
-  def new, do: %Filter{}
+  @spec new(keyword()) :: Filter.t()
+  def new(_opts \\ []) do
+    %Filter{}
+  end
 
   @doc """
   Add a shape for the filter to track.
@@ -71,7 +73,7 @@ defmodule Electric.Shapes.Filter do
   Returns the shape IDs for all shapes that have been added to the filter
   that are affected by the given change.
   """
-  @spec affected_shapes(Filter.t(), Changes.change()) :: MapSet.t(shape_id())
+  @spec affected_shapes(Filter.t(), Transaction.t() | Relation.t()) :: MapSet.t(shape_id())
   def affected_shapes(%Filter{} = filter, change) do
     shapes_affected_by_change(filter, change)
   rescue
@@ -88,7 +90,7 @@ defmodule Electric.Shapes.Filter do
   end
 
   defp shapes_affected_by_change(%Filter{} = filter, %Relation{} = relation) do
-    # Check all shapes is all tables becuase the table may have been renamed
+    # Check all shapes is all tables because the table may have been renamed
     for {shape_id, shape} <- all_shapes(filter),
         Shape.is_affected_by_relation_change?(shape, relation),
         into: MapSet.new() do

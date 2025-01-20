@@ -72,6 +72,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     setup ctx do
       parent = self()
 
+      Mock.Inspector
+      |> stub(:load_relation, fn {"public", "test_table"}, _ ->
+        {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+      end)
+      |> allow(self(), ctx.server)
+
       consumers =
         Enum.map(1..3, fn id ->
           {:ok, consumer} =
@@ -95,7 +101,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       last_log_offset = LogOffset.new(lsn, 0)
 
       Mock.Inspector
-      |> expect(:load_column_info, 2, fn {"public", "test_table"}, _ ->
+      |> stub(:load_relation, fn
+        {"public", "test_table"}, _ ->
+          {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+      end)
+      |> stub(:load_column_info, fn {"public", "test_table"}, _ ->
         {:ok, [%{pk_position: 0, name: "id"}]}
       end)
       |> allow(self(), ctx.server)
@@ -133,6 +143,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     setup ctx do
       parent = self()
 
+      Mock.Inspector
+      |> stub(:load_relation, fn {"public", "test_table"}, _ ->
+        {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+      end)
+      |> allow(self(), ctx.server)
+
       consumers =
         Enum.map(1..3, fn id ->
           {:ok, consumer} =
@@ -151,6 +167,16 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     test "should handle new relations", ctx do
       id = @shape.root_table_id
+
+      Mock.Inspector
+      |> stub(:load_relation, fn
+        {"public", "test_table"}, _ ->
+          {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+
+        {"public", "bar"}, _ ->
+          {:ok, %{id: 1235, schema: "public", name: "bar", parent: nil, children: nil}}
+      end)
+      |> allow(self(), ctx.server)
 
       relation1 = %Relation{id: id, table: "test_table", schema: "public", columns: []}
 

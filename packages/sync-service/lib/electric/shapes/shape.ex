@@ -79,7 +79,8 @@ defmodule Electric.Shapes.Shape do
   def new(table, opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @shape_schema),
          inspector <- Access.fetch!(opts, :inspector),
-         {:ok, %{relation: table, relation_id: relation_id}} <- validate_table(table, inspector),
+         {:ok, relation} <- validate_table(table, inspector),
+         %{relation: table, relation_id: relation_id} <- relation,
          {:ok, column_info, pk_cols} <- load_column_info(table, inspector),
          {:ok, selected_columns} <-
            validate_selected_columns(column_info, pk_cols, Access.get(opts, :columns)),
@@ -188,7 +189,9 @@ defmodule Electric.Shapes.Shape do
   List tables that are a part of this shape.
   """
   @spec affected_tables(t()) :: [Electric.relation()]
-  def affected_tables(%__MODULE__{root_table: table}), do: [table]
+  def affected_tables(%__MODULE__{root_table: table}) do
+    [table]
+  end
 
   @doc """
   Convert a change to be correctly represented within the shape.
@@ -286,7 +289,7 @@ defmodule Electric.Shapes.Shape do
       when old_id !== new_id,
       do: true
 
-  def is_affected_by_relation_change?(_, _), do: false
+  def is_affected_by_relation_change?(_shape, _relation), do: false
 
   @spec to_json_safe(t()) :: json_safe()
   def to_json_safe(%__MODULE__{} = shape) do

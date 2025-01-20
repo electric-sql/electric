@@ -58,7 +58,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     state = Map.merge(opts, %{producer: nil, subscriptions: {0, MapSet.new()}})
     # start in demand: :accumulate mode so that the ShapeCache is able to start
     # all active consumers before we start sending transactions
-    {:producer, state, dispatcher: Electric.Shapes.Dispatcher, demand: opts.demand}
+    {:producer, state,
+     dispatcher: {Electric.Shapes.Dispatcher, inspector: state.inspector}, demand: opts.demand}
   end
 
   def handle_subscribe(:consumer, _opts, from, state) do

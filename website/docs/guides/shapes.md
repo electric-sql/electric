@@ -56,6 +56,36 @@ This is the root table of the shape. All shapes must specify a table and it must
 
 The value can be just a tablename like `projects`, or can be a qualified tablename prefixed by the database schema using a `.` delimiter, such as `foo.projects`. If you don't provide a schema prefix, then the table is assumed to be in the `public.` schema.
 
+#### Partitioned Tables
+
+Electric supports subscribing to [declaratively partitioned tables](https://www.postgresql.org/docs/current/ddl-partitioning.html#DDL-PARTITIONING-DECLARATIVE), both individual partitions and the root table of all partitions.
+
+Consider the following partitioned schema:
+
+```sql
+CREATE TABLE measurement (
+    city_id         int not null,
+    logdate         date not null,
+    peaktemp        int,
+    unitsales       int
+) PARTITION BY RANGE (logdate);
+
+CREATE TABLE measurement_y2025m02 PARTITION OF measurement
+    FOR VALUES FROM ('2025-02-01') TO ('2025-03-01');
+
+CREATE TABLE measurement_y2025m03 PARTITION OF measurement
+    FOR VALUES FROM ('2025-03-01') TO ('2025-04-01');
+```
+
+We create 2 shapes, one on the root table `measurement` and one on the `measurement_y2025m03` partition:
+
+```sh
+curl -i 'http://localhost:3000/v1/shape?table=measurement&offset=-1'
+curl -i 'http://localhost:3000/v1/shape?table=measurement_y2025m03&offset=-1'
+```
+
+The shape based on the `measurement_y2025m03` partition will only receive writes that fall within the partition range, that is with `logdate >= '2025-02-01' AND  logdate < '2025-03-01'` whereas the shape based on the root `measurements` table will receive all writes to all partitions.
+
 ### Where clause
 
 Shapes can define an optional where clause to filter out which rows from the table are included in the shape. Only rows that match the where clause will be included.
