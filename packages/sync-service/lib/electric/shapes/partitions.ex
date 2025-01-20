@@ -36,12 +36,12 @@ defmodule Electric.Shapes.Partitions do
   partition root for every change to a partition of that root.
   """
   @spec add_shape(t(), shape_id(), Electric.Shapes.Shape.t()) :: t()
-  def add_shape(%__MODULE__{} = transformer, shape_id, shape) do
-    case Inspector.load_relation(shape.root_table, transformer.inspector) do
+  def add_shape(%__MODULE__{} = state, shape_id, shape) do
+    case Inspector.load_relation(shape.root_table, state.inspector) do
       {:ok, relation} ->
         children = List.wrap(Map.get(relation, :children, []))
 
-        transformer
+        state
         |> Map.update!(:partitions, fn partitions ->
           Enum.reduce(children, partitions, fn child, partitions ->
             Map.put(partitions, child, [shape.root_table])
@@ -65,7 +65,7 @@ defmodule Electric.Shapes.Partitions do
         # 42P01 : undefined_table
         # tables that don't exist will be caught later in the stack (hard to
         # run a snapshot against a non-existent table)
-        transformer
+        state
 
       {:error, reason} ->
         raise RuntimeError,
@@ -81,8 +81,8 @@ defmodule Electric.Shapes.Partitions do
   partition mapping table.
   """
   @spec remove_shape(t(), shape_id()) :: t()
-  def remove_shape(%__MODULE__{} = transformer, shape_id) do
-    transformer
+  def remove_shape(%__MODULE__{} = state, shape_id) do
+    state
     |> Map.update!(:partition_ownership, fn ownership ->
       Map.new(ownership, fn {relation, shape_ids} ->
         {relation, MapSet.delete(shape_ids, shape_id)}
@@ -91,38 +91,45 @@ defmodule Electric.Shapes.Partitions do
     |> clean_up_partitions()
   end
 
-  defp clean_up_partitions(transformer) do
+  defp clean_up_partitions(state) do
     {empty, full} =
-      Enum.split_with(transformer.partition_ownership, fn {_relation, shape_ids} ->
+      Enum.split_with(state.partition_ownership, fn {_relation, shape_ids} ->
         Enum.empty?(shape_ids)
       end)
 
     remove_relations = Enum.map(empty, &elem(&1, 0))
 
-    %{transformer | partition_ownership: Map.new(full)}
+    %{state | partition_ownership: Map.new(full)}
     |> Map.update!(:partitions, fn partitions ->
       Enum.reduce(remove_relations, partitions, &Map.delete(&2, &1))
     end)
     |> update_active()
   end
 
-  defp update_active(transformer) do
-    %{transformer | active: map_size(transformer.partitions)}
+  defp update_active(state) do
+    %{state | active: map_size(state.partitions)}
   end
 
   @doc """
   Utility function to update the partition map with the given relation.
   """
   @spec handle_relation(t(), Relation.t()) :: t()
-  def handle_relation(%__MODULE__{} = transformer, %Relation{} = relation) do
+  def handle_relation(%__MODULE__{} = state, %Relation{} = relation) do
     table = table(relation)
 
-    case Inspector.load_relation(table, transformer.inspector) do
+    case Inspector.load_relation(table, state.inspector) do
       {:ok, %{parent: {_, _} = parent}} ->
-        Map.update!(transformer, :partitions, &Map.put(&1, table, [parent]))
+        # TODO: we should probabaly have a way to clean the inspector cache
+        # just based on the relation, there's a chance that this results in
+        # a query to pg just to then drop the info
+        with {:ok, parent_info} <- Inspector.load_relation(parent, state.inspector) do
+          Inspector.clean(parent_info, state.inspector)
+        end
+
+        state |> Map.update!(:partitions, &Map.put(&1, table, [parent])) |> update_active()
 
       {:ok, _} ->
-        transformer
+        state
     end
   end
 
@@ -131,22 +138,22 @@ defmodule Electric.Shapes.Partitions do
   expanding changes to partitions into the partition root as appropriate.
   """
   @spec handle_event(t(), Transaction.t() | Relation.t()) :: {t(), Transaction.t() | Relation.t()}
-  def handle_event(%__MODULE__{} = transformer, %Relation{} = relation) do
-    {handle_relation(transformer, relation), relation}
+  def handle_event(%__MODULE__{} = state, %Relation{} = relation) do
+    {handle_relation(state, relation), relation}
   end
 
   # no shapes on partitioned tables is probably the overwhelming majority of
   # cases, so let's shortcut to avoid churn
-  def handle_event(%__MODULE__{active: 0} = transformer, %Transaction{} = transaction) do
-    {transformer, transaction}
+  def handle_event(%__MODULE__{active: 0} = state, %Transaction{} = transaction) do
+    {state, transaction}
   end
 
-  def handle_event(%__MODULE__{} = transformer, %Transaction{changes: changes} = transaction) do
-    {transformer, %{transaction | changes: expand_changes(changes, transformer)}}
+  def handle_event(%__MODULE__{} = state, %Transaction{changes: changes} = transaction) do
+    {state, %{transaction | changes: expand_changes(changes, state)}}
   end
 
-  defp expand_changes(changes, %__MODULE__{} = transformer) do
-    Enum.flat_map(changes, &expand_change(&1, transformer))
+  defp expand_changes(changes, %__MODULE__{} = state) do
+    Enum.flat_map(changes, &expand_change(&1, state))
   end
 
   # Truncate handling:
@@ -157,17 +164,17 @@ defmodule Electric.Shapes.Partitions do
   #   truncating a partition empties it and also invalidates the contents of
   #   any shapes on the root. other partitions are untouched as, by definition,
   #   they don't overlap with the truncated partition.
-  defp expand_change(%TruncatedRelation{relation: relation} = change, transformer) do
+  defp expand_change(%TruncatedRelation{relation: relation} = change, state) do
     [
       change
-      | transformer |> truncation_dependencies(relation) |> Enum.map(&%{change | relation: &1})
+      | state |> truncation_dependencies(relation) |> Enum.map(&%{change | relation: &1})
     ]
   end
 
-  defp expand_change(%{relation: relation} = change, transformer) do
+  defp expand_change(%{relation: relation} = change, state) do
     [
       change
-      | transformer.partitions
+      | state.partitions
         |> Map.get(relation, [])
         |> Enum.map(&%{change | relation: &1})
     ]
@@ -175,12 +182,12 @@ defmodule Electric.Shapes.Partitions do
 
   defp table(%{schema: schema, table: table}), do: {schema, table}
 
-  defp truncation_dependencies(transformer, root_or_partition) do
-    transformer.partitions
+  defp truncation_dependencies(state, root_or_partition) do
+    state.partitions
     |> Map.get(root_or_partition, [])
     |> MapSet.new()
     |> MapSet.union(
-      transformer
+      state
       |> invert_partition_map()
       |> Map.get(root_or_partition, [])
       |> MapSet.new()

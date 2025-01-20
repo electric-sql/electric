@@ -149,38 +149,12 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     OpenTelemetry.add_span_attributes("rel.is_dropped": true)
 
-    reload_partitioned_table(rel, state)
-
     {:reply, :ok, [], state}
   end
 
   defp handle_relation(rel, from, state) do
     OpenTelemetry.add_span_attributes("rel.is_dropped": false)
-    reload_partitioned_table(rel, state)
     {:noreply, [rel], %{state | producer: from}}
-  end
-
-  defp reload_partitioned_table(rel, state) do
-    case Inspector.load_relation(rel, state.inspector) do
-      {:ok, %{parent: nil}} ->
-        :ok
-
-      {:ok, %{parent: {_, _} = parent}} ->
-        # probably a new partition for an existing partitioned table
-        # so force a reload of the relation info
-
-        # TODO: we should probabaly have a way to clean the inspector cache
-        # just based on the relation, there's a chance that this results in
-        # a query to pg just to then drop the info
-        with {:ok, info} <- Inspector.load_relation(parent, state.inspector) do
-          Inspector.clean(info, state.inspector)
-        end
-
-      {:ok, _} ->
-        # probably a malformed value from a mock test inspector that isn't
-        # returning the full inspector result with a `:parent` key
-        :ok
-    end
   end
 
   defp remove_subscription(from, %{subscriptions: {count, set}} = state) do
