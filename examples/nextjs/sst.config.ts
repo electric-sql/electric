@@ -85,7 +85,7 @@ function deployNextJsExample(
 
 function getNeonDbUri(
   project: $util.Output<neon.GetProjectResult>,
-  db: neon.Database
+  db: neon.Database,
   pooled: boolean
 ) {
   const passwordOutput = neon.getBranchRolePasswordOutput({
@@ -101,7 +101,7 @@ function getNeonDbUri(
     ? endpoint.endpoints?.apply((endpoints) =>
         endpoints![0].host.replace(
           endpoints![0].id,
-          endpoints![0].id + '-pooler'
+          endpoints![0].id + `-pooler`
         )
       )
     : project.databaseHost
