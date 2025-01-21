@@ -20,7 +20,7 @@ function Comments(commentProps: CommentsProps) {
     url: `${baseUrl}/v1/shape`,
     params: {
       token,
-      database_id: databaseId,
+      source_id: databaseId,
       table: `comment`,
     },
   })! as Comment[]

@@ -26,7 +26,7 @@ export default function Index() {
     url: new URL(`${import.meta.env.VITE_ELECTRIC_URL}/v1/shape/`).href,
     params: {
       table: `todos`,
-      database_id: import.meta.env.VITE_ELECTRIC_DATABASE_ID,
+      source_id: import.meta.env.VITE_ELECTRIC_DATABASE_ID,
       token: import.meta.env.VITE_ELECTRIC_TOKEN,
     },
   })
