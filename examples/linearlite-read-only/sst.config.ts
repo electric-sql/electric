@@ -105,7 +105,7 @@ function getNeonDbUri(
     roleName: db.ownerName,
   })
 
-  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${project.databaseHost}${pooled ? '-pooler' : ''}/${db.name}?sslmode=require`
+  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${project.databaseHost}${pooled ? `-pooler` : ``}/${db.name}?sslmode=require`
 }
 
 async function addDatabaseToElectric(

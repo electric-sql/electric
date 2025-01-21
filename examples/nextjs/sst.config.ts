@@ -34,17 +34,18 @@ export default $config({
       ownerName: `neondb_owner`,
     })
 
-    const databaseUri = getNeonDbUri(project, db)
+    const pooledDatabaseUri = getNeonDbUri(project, db, true)
+    const databaseUri = getNeonDbUri(project, db, false)
     try {
-      databaseUri.apply(applyMigrations)
+      pooledDatabaseUri.apply(applyMigrations)
 
       const electricInfo = databaseUri.apply((uri) =>
         addDatabaseToElectric(uri)
       )
 
-      const website = deployNextJsExample(electricInfo, databaseUri)
+      const website = deployNextJsExample(electricInfo, pooledDatabaseUri)
       return {
-        databaseUri,
+        pooledDatabaseUri,
         database_id: electricInfo.id,
         electric_token: electricInfo.token,
         website: website.url,
@@ -85,6 +86,7 @@ function deployNextJsExample(
 function getNeonDbUri(
   project: $util.Output<neon.GetProjectResult>,
   db: neon.Database
+  pooled: boolean
 ) {
   const passwordOutput = neon.getBranchRolePasswordOutput({
     projectId: project.id,
@@ -92,7 +94,7 @@ function getNeonDbUri(
     roleName: db.ownerName,
   })
 
-  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${project.databaseHost}/${db.name}?sslmode=require`
+  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${project.databaseHost}${pooled ? `-pooler` : ``}/${db.name}?sslmode=require`
 }
 
 async function addDatabaseToElectric(
