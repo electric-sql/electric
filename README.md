@@ -99,7 +99,7 @@ The HTTP API is defined in an [OpenAPI spec](https://swagger.io/specification/) 
 
 ## Developing Electric
 
-We're using [asdf](https://asdf-vm.com/) to install Elixir, Erlang, and Node.js. Versions are defined in [.tool-versions](.tool-versions).
+We use [asdf](https://asdf-vm.com/) to install Elixir, Erlang, and Node.js. Versions are defined in [.tool-versions](.tool-versions).
 
 ### Mac setup
 
