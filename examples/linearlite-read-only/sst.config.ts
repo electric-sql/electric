@@ -104,8 +104,21 @@ function getNeonDbUri(
     branchId: project.defaultBranchId,
     roleName: db.ownerName,
   })
+  const endpoint = neon.getBranchEndpointsOutput({
+    projectId: project.id,
+    branchId: project.defaultBranchId,
+  })
 
-  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${project.databaseHost}${pooled ? `-pooler` : ``}/${db.name}?sslmode=require`
+  const databaseHost = pooled
+    ? endpoint.endpoints?.apply((endpoints) =>
+        endpoints![0].host.replace(
+          endpoints![0].id,
+          endpoints![0].id + '-pooler'
+        )
+      )
+    : project.databaseHost
+
+  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${databaseHost}/${db.name}?sslmode=require`
 }
 
 async function addDatabaseToElectric(
