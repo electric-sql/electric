@@ -34,7 +34,7 @@ export default $config({
       ownerName: `neondb_owner`,
     })
 
-    const databaseUri = getNeonDbUri(project, db, true)
+    const databaseUri = getNeonDbUri(project, db, false)
     try {
       databaseUri.apply(applyMigrations)
       databaseUri.apply(loadData)
