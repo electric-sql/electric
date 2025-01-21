@@ -6,6 +6,6 @@ export const issueShape: ShapeStreamOptions = {
   params: {
     table: `issue`,
     token,
-    database_id: databaseId,
+    source_id: databaseId,
   },
 }

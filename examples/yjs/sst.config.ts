@@ -152,13 +152,15 @@ async function addDatabaseToElectric(
   uri: string
 ): Promise<{ id: string; token: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
+  const teamId = process.env.ELECTRIC_TEAM_ID
 
-  const result = await fetch(`${adminApi}/v1/databases`, {
+  const result = await fetch(`${adminApi}/v1/sources`, {
     method: `PUT`,
     headers: { "Content-Type": `application/json` },
     body: JSON.stringify({
       database_url: uri,
       region: `us-east-1`,
+      team_id: teamId,
     }),
   })
 

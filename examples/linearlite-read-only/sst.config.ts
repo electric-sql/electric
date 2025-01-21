@@ -34,7 +34,7 @@ export default $config({
       ownerName: `neondb_owner`,
     })
 
-    const databaseUri = getNeonDbUri(project, db)
+    const databaseUri = getNeonDbUri(project, db, false)
     try {
       databaseUri.apply(applyMigrations)
       databaseUri.apply(loadData)
@@ -96,28 +96,44 @@ function deployLinearLite(
 
 function getNeonDbUri(
   project: $util.Output<neon.GetProjectResult>,
-  db: neon.Database
+  db: neon.Database,
+  pooled: boolean
 ) {
   const passwordOutput = neon.getBranchRolePasswordOutput({
     projectId: project.id,
     branchId: project.defaultBranchId,
     roleName: db.ownerName,
   })
+  const endpoint = neon.getBranchEndpointsOutput({
+    projectId: project.id,
+    branchId: project.defaultBranchId,
+  })
 
-  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${project.databaseHost}/${db.name}?sslmode=require`
+  const databaseHost = pooled
+    ? endpoint.endpoints?.apply((endpoints) =>
+        endpoints![0].host.replace(
+          endpoints![0].id,
+          endpoints![0].id + `-pooler`
+        )
+      )
+    : project.databaseHost
+
+  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${databaseHost}/${db.name}?sslmode=require`
 }
 
 async function addDatabaseToElectric(
   uri: string
 ): Promise<{ id: string; token: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
+  const teamId = process.env.ELECTRIC_TEAM_ID
 
-  const result = await fetch(`${adminApi}/v1/databases`, {
+  const result = await fetch(`${adminApi}/v1/sources`, {
     method: `PUT`,
     headers: { 'Content-Type': `application/json` },
     body: JSON.stringify({
       database_url: uri,
       region: `us-east-1`,
+      team_id: teamId,
     }),
   })
 
