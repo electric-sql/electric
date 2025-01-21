@@ -34,7 +34,7 @@ export default $config({
       ownerName: `neondb_owner`,
     })
 
-    const databaseUri = getNeonDbUri(project, db)
+    const databaseUri = getNeonDbUri(project, db, true)
     try {
       databaseUri.apply(applyMigrations)
       databaseUri.apply(loadData)
@@ -96,7 +96,8 @@ function deployLinearLite(
 
 function getNeonDbUri(
   project: $util.Output<neon.GetProjectResult>,
-  db: neon.Database
+  db: neon.Database,
+  pooled: boolean
 ) {
   const passwordOutput = neon.getBranchRolePasswordOutput({
     projectId: project.id,
@@ -104,7 +105,7 @@ function getNeonDbUri(
     roleName: db.ownerName,
   })
 
-  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${project.databaseHost}/${db.name}?sslmode=require`
+  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${project.databaseHost}${pooled ? '-pooler' : ''}/${db.name}?sslmode=require`
 }
 
 async function addDatabaseToElectric(
