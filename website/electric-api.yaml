@@ -47,7 +47,7 @@ paths:
             using a `.` delimiter, such as `foo.issues`. If you don't provide
             a schema prefix, then the table is assumed to be in the `public.` schema.
         # Query parameters
-        - name: database_id
+        - name: source_id
           in: query
           schema:
             type: string
@@ -426,7 +426,7 @@ paths:
 
             Can be qualified by the schema name.
         # Query parameters
-        - name: database_id
+        - name: source_id
           in: query
           schema:
             type: string
@@ -450,87 +450,3 @@ paths:
           description: Bad request.
         "404":
           description: Database or shape not found (or shape deletion is not enabled).
-  /v1/admin/database:
-    post:
-      summary: Add Database
-      description: |-
-        Adds a database to Electric.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - database_url
-                - database_id
-              properties:
-                database_url:
-                  type: string
-                  description: PostgreSQL connection URL for the database
-                database_use_ipv6:
-                  type: boolean
-                  default: false
-                  description: Whether to use IPv6 for database connections
-                database_id:
-                  type: string
-                  description: Unique identifier for the database (auto-generated UUID if not provided)
-      responses:
-        "200":
-          description: Database successfully added
-          content:
-            application/json:
-              schema:
-                type: string
-                description: The database ID of the added database
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                type: string
-                description: Error message
-                examples:
-                  already_exists:
-                    value: "Database already exists."
-                  db_in_use:
-                    value: "The database localhost:54321/db is already in use by another tenant."
-  /v1/admin/database/{database_id}:
-    delete:
-      summary: Remove Database
-      description: |-
-        Removes a database from Electric.
-      parameters:
-        - name: database_id
-          in: path
-          required: true
-          schema:
-            type: string
-          description: The ID of the database to remove
-      responses:
-        "200":
-          description: Database successfully removed
-          content:
-            application/json:
-              schema:
-                type: string
-                description: The ID of the removed database
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  database_id:
-                    type: array
-                    items:
-                      type: string
-                description: Validation error messages
-        "404":
-          description: Database not found
-          content:
-            application/json:
-              schema:
-                type: string
-                example: "Database {id} not found."

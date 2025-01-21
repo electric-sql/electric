@@ -201,7 +201,7 @@ Note that certain parameter names are reserved for Electric's internal use and c
 - `handle`
 - `live`
 - `cursor`
-- `database_id`
+- `source_id`
 
 The following PostgreSQL-specific parameters should be included within the `params` object:
 - `table` - The root table for the shape

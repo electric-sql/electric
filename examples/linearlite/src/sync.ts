@@ -67,7 +67,7 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
       url: issueUrl.toString(),
       params: {
         table: 'issue',
-        database_id: ELECTRIC_DATABASE_ID,
+        source_id: ELECTRIC_DATABASE_ID,
       },
     },
     table: 'issue',
@@ -103,7 +103,7 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
       url: commentUrl.toString(),
       params: {
         table: 'comment',
-        database_id: ELECTRIC_DATABASE_ID,
+        source_id: ELECTRIC_DATABASE_ID,
       },
     },
     table: 'comment',

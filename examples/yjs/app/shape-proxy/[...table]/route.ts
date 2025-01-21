@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   })
 
   if (process.env.DATABASE_ID) {
-    originUrl.searchParams.set(`database_id`, process.env.DATABASE_ID)
+    originUrl.searchParams.set(`source_id`, process.env.DATABASE_ID)
   }
 
   const headers = new Headers()
