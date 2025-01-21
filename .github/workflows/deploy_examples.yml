@@ -60,7 +60,7 @@ jobs:
           fi
 
       - name: Deploy NextJs example
-        working-directory: ./examples/nextjs-example
+        working-directory: ./examples/nextjs
         run: |
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
           if [ -f ".sst/outputs.json" ]; then
