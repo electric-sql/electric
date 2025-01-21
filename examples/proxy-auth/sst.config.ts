@@ -89,7 +89,7 @@ async function addDatabaseToElectric(
   token: string
 }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
-  const url = new URL(`/v1/databases`, adminApi)
+  const url = new URL(`/v1/sources`, adminApi)
   const result = await fetch(url, {
     method: `PUT`,
     headers: { "Content-Type": `application/json` },
