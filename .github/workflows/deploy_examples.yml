@@ -48,7 +48,7 @@ jobs:
             sst-cache-main-${{ runner.os }}
 
       - name: Deploy Linearlite Read Only
-        working-directory: examples/linearlite-read-only
+        working-directory: ./examples/linearlite-read-only
         run: |
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
           if [ -f ".sst/outputs.json" ]; then
@@ -60,7 +60,7 @@ jobs:
           fi
 
       - name: Deploy NextJs example
-        working-directory: examples/nextjs-example
+        working-directory: ./examples/nextjs-example
         run: |
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
           if [ -f ".sst/outputs.json" ]; then
