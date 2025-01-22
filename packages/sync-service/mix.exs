@@ -83,7 +83,7 @@ defmodule Electric.MixProject do
         # the memory footprint.
         #
         # See: https://github.com/lucaong/cubdb/pull/78
-        {:cubdb, git: "https://github.com/electric-sql/cubdb", branch: "hibernate-all-processes"},
+        {:electric_cubdb, "~> 2.0"},
         {:dotenvy, "~> 0.8"},
         {:ecto, "~> 3.11"},
         {:gen_stage, "~> 1.2"},
