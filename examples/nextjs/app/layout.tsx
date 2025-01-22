@@ -1,5 +1,6 @@
-import "./style.css"
 import "./App.css"
+import "./Example.css"
+import "./style.css"
 
 export const metadata = {
   title: `Next.js Forms Example`,

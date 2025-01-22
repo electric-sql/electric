@@ -1,69 +1,25 @@
-import {
-  Shape,
-  ShapeStream,
+import { Shape, ShapeStream } from '@electric-sql/client'
+import type {
   ShapeStreamOptions,
   Row,
   GetExtensions,
-  Offset,
 } from '@electric-sql/client'
-import React, { createContext, useContext } from 'react'
+import React from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
-
-declare global {
-  // eslint-disable-next-line
-  var document:
-    | {
-        getElementById(id: string): { textContent?: string } | null
-      }
-    | undefined
-}
-
-const isSSR = typeof globalThis !== `undefined` && !(`window` in globalThis)
 
 type UnknownShape = Shape<Row<unknown>>
 type UnknownShapeStream = ShapeStream<Row<unknown>>
 
-const streamCache = new Map<string, UnknownShapeStream>()
-const shapeCache = new Map<UnknownShapeStream, UnknownShape>()
-
-// SSR types
-interface SSRShapeData<T extends Row<unknown>> {
-  rows: [string, T][] // Array of [key, value] tuples
-  lastSyncedAt: number | undefined
-  offset: Offset | undefined
-  handle: string | undefined
-}
-
-interface SSRState {
-  // eslint-disable-next-line
-  shapes: { [key: string]: SSRShapeData<any> }
-}
-
-let ssrState: SSRState | undefined
-
-function hydrateSSRState() {
-  if (typeof globalThis !== `undefined` && globalThis.document) {
-    const scriptEl = globalThis.document.getElementById(
-      `__ELECTRIC_SSR_STATE__`
-    )
-    if (scriptEl?.textContent) {
-      try {
-        ssrState = JSON.parse(scriptEl.textContent)
-      } catch (e) {
-        console.error(`Failed to parse SSR state:`, e)
-      }
-    }
-  }
-}
-
-hydrateSSRState()
+export const streamCache = new Map<string, UnknownShapeStream>()
+export const shapeCache = new Map<UnknownShapeStream, UnknownShape>()
 
 export async function preloadShape<T extends Row<unknown>>(
   options: ShapeStreamOptions<GetExtensions<T>>
 ): Promise<Shape<T>> {
-  const optionsHash = sortedOptionsHash(options)
-  const shapeStream = getShapeStream<T>(options, optionsHash)
-  return getShape<T>(shapeStream, optionsHash)
+  const shapeStream = getShapeStream<T>(options)
+  const shape = getShape<T>(shapeStream)
+  await shape.rows
+  return shape
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,9 +46,10 @@ export function sortedOptionsHash<T>(options: ShapeStreamOptions<T>): string {
 }
 
 export function getShapeStream<T extends Row<unknown>>(
-  options: ShapeStreamOptions<GetExtensions<T>>,
-  optionsHash: string
+  options: ShapeStreamOptions<GetExtensions<T>>
 ): ShapeStream<T> {
+  const optionsHash = sortedOptionsHash(options)
+
   // If the stream is already cached, return it if valid
   if (streamCache.has(optionsHash)) {
     const cachedStream = streamCache.get(optionsHash)!
@@ -102,21 +59,13 @@ export function getShapeStream<T extends Row<unknown>>(
     streamCache.delete(optionsHash)
   }
 
-  // Create stream with SSR offset if available
-  const streamOptions = {
-    ...options,
-    offset: ssrState?.shapes[optionsHash]?.offset,
-    handle: ssrState?.shapes[optionsHash]?.handle,
-  }
-
-  const newShapeStream = new ShapeStream<T>(streamOptions)
+  const newShapeStream = new ShapeStream<T>(options)
   streamCache.set(optionsHash, newShapeStream)
   return newShapeStream
 }
 
 export function getShape<T extends Row<unknown>>(
-  shapeStream: ShapeStream<T>,
-  optionsHash: string
+  shapeStream: ShapeStream<T>
 ): Shape<T> {
   // If the stream is already cached, return it if valid
   if (shapeCache.has(shapeStream)) {
@@ -128,15 +77,6 @@ export function getShape<T extends Row<unknown>>(
 
   // Create new shape
   const newShape = new Shape<T>(shapeStream)
-
-  // Check for SSR data
-  const ssrData = ssrState?.shapes[optionsHash]
-
-  if (ssrData) {
-    // Initialize shape with SSR data - convert array of entries back to Map
-    const dataMap = new Map(ssrData.rows)
-    newShape.initializeWithSSRData(dataMap)
-  }
 
   shapeCache.set(shapeStream, newShape)
   return newShape
@@ -194,83 +134,55 @@ function identity<T>(arg: T): T {
   return arg
 }
 
+export type SerializedShapeData<
+  SourceData extends Row<unknown> = Row<unknown>,
+> = {
+  value: Record<string, SourceData>
+  options: ShapeStreamOptions<GetExtensions<SourceData>>
+}
+
+export const serializeShape = <SourceData extends Row<unknown>>(
+  shape: Shape<SourceData>
+): SerializedShapeData<SourceData> => {
+  return {
+    value: Object.fromEntries(shape.currentValue),
+    options: {
+      ...shape.options,
+      handle: shape.handle,
+      offset: shape.offset,
+    },
+  }
+}
+
+export const deserializeShape = <SourceData extends Row<unknown>>(
+  serializedShape: SerializedShapeData<SourceData>
+): Shape<SourceData> => {
+  const stream = new ShapeStream<SourceData>({
+    ...serializedShape.options,
+    live: true,
+  })
+  const shape = new Shape<SourceData>(stream)
+  shape.currentValue = new Map(Object.entries(serializedShape.value))
+  return shape
+}
+
+const createInitialShape = <SourceData extends Row<unknown>, Selection>(
+  options: UseShapeOptions<SourceData, Selection>
+): Shape<SourceData> => {
+  if (!options.initialShape) {
+    const shapeStream = getShapeStream<SourceData>(
+      options as ShapeStreamOptions<GetExtensions<SourceData>>
+    )
+    return getShape<SourceData>(shapeStream)
+  }
+
+  return deserializeShape(options.initialShape)
+}
+
 interface UseShapeOptions<SourceData extends Row<unknown>, Selection>
   extends ShapeStreamOptions<GetExtensions<SourceData>> {
   selector?: (value: UseShapeResult<SourceData>) => Selection
-}
-
-// Context for tracking shapes used in current render
-const ShapesContext = createContext<Set<string> | null>(null)
-
-function useShapes() {
-  const shapes = useContext(ShapesContext)
-  // Only require provider during SSR
-  if (!shapes && isSSR) {
-    throw new Error(
-      `No ElectricProvider found. Wrap your app with ElectricProvider when using SSR.`
-    )
-  }
-  return shapes || new Set()
-}
-
-function useTrackShape(optionsHash: string) {
-  const shapes = useShapes()
-  shapes.add(optionsHash)
-}
-
-// Function to serialize SSR state for ElectricScripts
-function serializeSSRState(usedShapes: Set<string>): string {
-  // eslint-disable-next-line
-  const shapes: { [key: string]: SSRShapeData<any> } = {}
-
-  // Only get shapes that were used in this render
-  for (const optionsHash of usedShapes) {
-    try {
-      // Parse the options from the hash
-      const options = JSON.parse(optionsHash)
-      const stream = getShapeStream<Row<unknown>>(options, optionsHash)
-      const shape = getShape<Row<unknown>>(stream, optionsHash)
-      shapes[optionsHash] = {
-        rows: Array.from(shape.currentValue.entries()),
-        lastSyncedAt: shape.lastSyncedAt(),
-        offset: shape.offset,
-        handle: shape.handle,
-      }
-    } catch (e) {
-      console.error(`Failed to parse shape options:`, e)
-    }
-  }
-
-  return JSON.stringify({ shapes })
-}
-
-export function ElectricScripts() {
-  const shapes = useShapes()
-
-  // On client, reuse the server-rendered content
-  const content =
-    !isSSR && globalThis.document
-      ? globalThis.document.getElementById(`__ELECTRIC_SSR_STATE__`)
-          ?.textContent || ``
-      : serializeSSRState(shapes)
-
-  return (
-    <script
-      id="__ELECTRIC_SSR_STATE__"
-      type="application/json"
-      dangerouslySetInnerHTML={{
-        __html: content,
-      }}
-    />
-  )
-}
-
-export function ElectricProvider({ children }: { children: React.ReactNode }) {
-  return (
-    <ShapesContext.Provider value={new Set()}>
-      {children}
-    </ShapesContext.Provider>
-  )
+  initialShape?: SerializedShapeData<SourceData>
 }
 
 export function useShape<
@@ -281,15 +193,7 @@ export function useShape<
   ...options
 }: UseShapeOptions<SourceData, Selection> &
   ShapeStreamOptions<GetExtensions<SourceData>>): Selection {
-  const optionsHash = sortedOptionsHash(options)
-
-  // Only track shapes during SSR
-  if (isSSR) {
-    useTrackShape(optionsHash)
-  }
-
-  const shapeStream = getShapeStream<SourceData>(options, optionsHash)
-  const shape = getShape<SourceData>(shapeStream, optionsHash)
+  const shape = createInitialShape(options)
 
   const useShapeData = React.useMemo(() => {
     let latestShapeData = parseShapeData(shape)

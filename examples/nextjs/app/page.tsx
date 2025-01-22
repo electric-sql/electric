@@ -1,14 +1,10 @@
-import dynamic from 'next/dynamic'
-import "./Example.css"
+import { ItemsList } from "./items-list"
+import type { Item } from "./types"
+import { preloadShape, serializeShape } from "@electric-sql/react"
+import { itemShapeOptions } from "./items"
 
-// Dynamic import of ItemsList with SSR disabled
-const ClientItemsList = dynamic(
-  () => import('./items-list').then(mod => mod.ItemsList),
-  {
-    ssr: false,
-  }
-)
+export default async function Page() {
+  const shape = await preloadShape<Item>(itemShapeOptions)
 
-export default function Page() {
-  return <ClientItemsList />
+  return <ItemsList initialShape={serializeShape(shape)} />
 }

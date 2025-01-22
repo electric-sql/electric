@@ -1,8 +1,10 @@
 "use client"
-
-import { v4 as uuidv4 } from "uuid"
-import { useOptimistic, startTransition } from "react"
-import { useShape, getShapeStream } from "@electric-sql/react"
+import { useOptimistic, startTransition, useState, useCallback } from "react"
+import {
+  SerializedShapeData,
+  getShapeStream,
+  useShape,
+} from "@electric-sql/react"
 import { ItemsView } from "./items-view"
 import { matchStream } from "./match-stream"
 import { type Item } from "./types"
@@ -47,36 +49,78 @@ async function clearItems() {
   return await Promise.all([findUpdatePromise, fetchPromise])
 }
 
-export function ItemsList() {
-  const shapeOptions = getClientShapeOptions()
-  const { data: rows } = useShape<Item>(shapeOptions)
-  const [optimisticItems, updateOptimisticItems] = useOptimistic<
-    Item[],
-    { newId?: string; isClear?: boolean }
-  >(rows, (state, { newId, isClear }) => {
-    // If clearing, return empty array
-    if (isClear) {
-      return []
-    }
-
-    // Create a new array combining all sources
-    const allItems = [...rows, ...state]
-    if (newId) {
-      const newItem = { id: newId, value: `Item ${newId.slice(0, 4)}` }
-      allItems.push(newItem)
-    }
-
-    // Deduplicate by id, keeping the last occurrence of each id
-    const uniqueItems = allItems.reduce((acc, item) => {
-      acc[item.id] = item
-      return acc
-    }, {} as Record<string, Item>)
-
-    return Object.values(uniqueItems)
+export function ItemsList({
+  initialShape,
+}: {
+  initialShape: SerializedShapeData<Item>
+}) {
+  const { data: items } = useShape({
+    ...getClientShapeOptions(),
+    initialShape,
   })
 
+  const [optimisticItems, setOptimisticItems] = useState(items)
+
+  const updateOptimisticItems = useCallback(
+    ({ newId, isClear }: Partial<{ newId: string; isClear: boolean }>) =>
+      setOptimisticItems((items) => {
+        // If clearing, return empty array
+        if (isClear) {
+          return []
+        }
+
+        // Create a new array combining all sources
+        const allItems = [...items, ...optimisticItems]
+        if (newId) {
+          const newItem = { id: newId, value: `Item ${newId.slice(0, 4)}` }
+          allItems.push(newItem)
+        }
+
+        // Deduplicate by id, keeping the last occurrence of each id
+        const uniqueItems = allItems.reduce(
+          (acc, item) => {
+            acc[item.id] = item
+            return acc
+          },
+          {} as Record<string, Item>
+        )
+
+        return Object.values(uniqueItems)
+      }),
+    []
+  )
+
+  // Pages can't use useOptimistic hook, so I'm using useState for now
+  // const [optimisticItems, updateOptimisticItems] = useOptimistic<
+  //   Item[],
+  //   { newId?: string; isClear?: boolean }
+  // >(items, (state, { newId, isClear }) => {
+  //   // If clearing, return empty array
+  //   if (isClear) {
+  //     return []
+  //   }
+
+  //   // Create a new array combining all sources
+  //   const allItems = [...items, ...state]
+  //   if (newId) {
+  //     const newItem = { id: newId, value: `Item ${newId.slice(0, 4)}` }
+  //     allItems.push(newItem)
+  //   }
+
+  //   // Deduplicate by id, keeping the last occurrence of each id
+  //   const uniqueItems = allItems.reduce(
+  //     (acc, item) => {
+  //       acc[item.id] = item
+  //       return acc
+  //     },
+  //     {} as Record<string, Item>
+  //   )
+
+  //   return Object.values(uniqueItems)
+  // })
+
   const handleAdd = async () => {
-    const id = uuidv4()
+    const id = crypto.randomUUID()
     startTransition(async () => {
       updateOptimisticItems({ newId: id })
       await createItem(id)

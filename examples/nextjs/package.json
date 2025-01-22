@@ -9,7 +9,7 @@
     "backend:up": "PROJECT_NAME=nextjs-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
     "backend:down": "PROJECT_NAME=nextjs-example pnpm -C ../../ run example-backend:down",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
-    "dev": "next dev --turbo -p 5174",
+    "dev": "next dev --turbo -p 5173",
     "build": "next build",
     "start": "next start",
     "format": "eslint . --fix",
