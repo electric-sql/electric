@@ -53,7 +53,7 @@ jobs:
           pnpm sst remove --stage "pr-$PR_NUMBER"
 
       - name: Remove NextJs example
-        working-directory: examples/nextjs-example
+        working-directory: examples/nextjs
         run: |
           export PR_NUMBER=${{ github.event.number }}
           echo "Removing stage pr-$PR_NUMBER"
