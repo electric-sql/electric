@@ -40,7 +40,6 @@ export default $config({
       pooled: false,
     })
 
-    const databaseUri = getNeonDbUri(project, db, false)
     try {
       databaseUri
         .apply(async (dbUri) => {
