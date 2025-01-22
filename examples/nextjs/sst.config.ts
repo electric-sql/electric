@@ -168,25 +168,29 @@ function createNeonDb({
   }
 
   const ownerName = `neondb_owner`
+
+  const createCommand = `curl -f -s "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases" \
+    -H 'Accept: application/json' \
+    -H "Authorization: Bearer $NEON_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "database": {
+        "name": "'$DATABASE_NAME'",
+        "owner_name": "${ownerName}"
+      }
+    }' \
+    && echo " SUCCESS" || echo " FAILURE"`
+
+  const deleteCommand = `curl -f -s -X 'DELETE' \
+    "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases/$DATABASE_NAME" \
+    -H 'Accept: application/json' \
+    -H "Authorization: Bearer $NEON_API_KEY" \
+    && echo " SUCCESS" || echo " FAILURE"`
+
   const result = new command.local.Command(`neon-db-command:${dbName}`, {
-    create: `curl -f -s -o /dev/null "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases" \
-                -H 'Accept: application/json' \
-                -H "Authorization: Bearer $NEON_API_KEY" \
-                -H 'Content-Type: application/json' \
-                -d '{
-                  "database": {
-                    "name": "'$DATABASE_NAME'",
-                    "owner_name": "${ownerName}"
-                  }
-                }' \
-                && echo "SUCCESS" || echo "FAILURE"`,
-    update: `echo "Cannot update Neon database with this provisioning method"`,
-    delete: `curl -f -s -o /dev/null -X 'DELETE' \
-                "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases/$DATABASE_NAME" \
-                -H 'Accept: application/json' \
-                -H "Authorization: Bearer $NEON_API_KEY" \
-                && echo "SUCCESS" || echo "FAILURE"`,
-    logging: `none`,
+    create: createCommand,
+    update: createCommand,
+    delete: deleteCommand,
     environment: {
       NEON_API_KEY: process.env.NEON_API_KEY,
       PROJECT_ID: projectId,
@@ -195,15 +199,14 @@ function createNeonDb({
     },
   })
   return $resolve([result.stdout, dbName]).apply(([stdout, dbName]) => {
-    switch (stdout) {
-      case `SUCCESS`:
-        console.log(`Created Neon database ${dbName}`)
-        return {
-          dbName,
-          ownerName,
-        }
-      default:
-        throw new Error(`Failed to create Neon database ${dbName}`)
+    if (stdout.endsWith(`SUCCESS`)) {
+      console.log(`Created Neon database ${dbName}`)
+      return {
+        dbName,
+        ownerName,
+      }
+    } else {
+      throw new Error(`Failed to create Neon database ${dbName}: ${stdout}`)
     }
   })
 }
