@@ -22,8 +22,7 @@ export default $config({
   async run() {
     const project = neon.getProjectOutput({ id: process.env.NEON_PROJECT_ID! })
 
-    const dbName =
-      $app.stage === `Production` ? `nextjs-production` : `nextjs-${$app.stage}`
+    const dbName = `nextjs-${$app.stage}`
 
     const { ownerName, dbName: resultingDbName } = createNeonDb({
       projectId: project.id,
