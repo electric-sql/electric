@@ -181,6 +181,8 @@ function createNeonDb({
     }' \
     && echo " SUCCESS" || echo " FAILURE"`
 
+  const updateCommand = `echo "Cannot update Neon database with this provisioning method SUCCESS"`
+
   const deleteCommand = `curl -f -s -X 'DELETE' \
     "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases/$DATABASE_NAME" \
     -H 'Accept: application/json' \
@@ -189,7 +191,7 @@ function createNeonDb({
 
   const result = new command.local.Command(`neon-db-command:${dbName}`, {
     create: createCommand,
-    update: createCommand,
+    update: updateCommand,
     delete: deleteCommand,
     environment: {
       NEON_API_KEY: process.env.NEON_API_KEY,
