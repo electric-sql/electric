@@ -56,7 +56,7 @@ jobs:
             echo "linearlite_read_only=$linearlite_read_only" >> $GITHUB_ENV
           else
             echo "sst outputs file not found. Exiting."
-            exit 1
+            exit 123
           fi
 
       - name: Deploy NextJs example
@@ -68,7 +68,7 @@ jobs:
             echo "nextjs=$nextjs" >> $GITHUB_ENV
           else
             echo "sst outputs file not found. Exiting."
-            exit 1
+            exit 123
           fi
 
       - name: Add comment to PR
