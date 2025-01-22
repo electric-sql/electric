@@ -40,7 +40,7 @@ export default $config({
     try {
       databaseUri
         .apply(async (dbUri) => {
-          await applyMigrations(dbUri)
+          applyMigrations(dbUri)
           return dbUri
         })
         .apply(loadData)
@@ -188,16 +188,16 @@ function createNeonDb({
         "name": "'$DATABASE_NAME'",
         "owner_name": "${ownerName}"
       }
-    }' \
-    && echo " SUCCESS" || echo " FAILURE"`
+    }' 2>&1 \
+    && echo " SUCCESS" || echo " FAILURE - Response: $?"`
 
   const updateCommand = `echo "Cannot update Neon database with this provisioning method SUCCESS"`
 
   const deleteCommand = `curl -f -v -X 'DELETE' \
     "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases/$DATABASE_NAME" \
     -H 'Accept: application/json' \
-    -H "Authorization: Bearer $NEON_API_KEY" \
-    && echo " SUCCESS" || echo " FAILURE"`
+    -H "Authorization: Bearer $NEON_API_KEY" 2>&1 \
+    && echo " SUCCESS" || echo " FAILURE - Response: $?"`
 
   const result = new command.local.Command(`neon-db-command:${dbName}`, {
     create: createCommand,
