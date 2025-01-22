@@ -53,7 +53,9 @@ defmodule Electric.Config do
     call_home_telemetry?: @build_env == :prod,
     telemetry_statsd_host: nil,
     telemetry_url: URI.new!("https://checkpoint.electric-sql.com"),
-    system_metrics_poll_interval: :timer.seconds(5)
+    system_metrics_poll_interval: :timer.seconds(5),
+    # Memory
+    shape_hibernate_after: :timer.seconds(30)
   ]
 
   def default(key) do

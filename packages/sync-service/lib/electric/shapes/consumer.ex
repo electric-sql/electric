@@ -54,7 +54,10 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def start_link(config) when is_map(config) do
-    GenStage.start_link(__MODULE__, config, name: name(config))
+    GenStage.start_link(__MODULE__, config,
+      name: name(config),
+      hibernate_after: Electric.Config.get_env(:shape_hibernate_after)
+    )
   end
 
   def init(config) do
