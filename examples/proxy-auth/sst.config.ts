@@ -13,7 +13,7 @@ export default $config({
       home: `aws`,
       providers: {
         cloudflare: `5.42.0`,
-        aws: { version: `6.57.0`, region: `eu-west-1` },
+        aws: { version: `6.57.0`, region: `eu-west-1`, profile: process.env.CI ? undefined : `marketing` },
         postgresql: `3.14.0`,
       },
     }

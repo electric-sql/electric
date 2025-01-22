@@ -13,6 +13,7 @@ export default $config({
         cloudflare: `5.42.0`,
         aws: {
           version: `6.57.0`,
+          profile: process.env.CI ? undefined : `marketing`,
         },
         neon: `0.6.3`,
         command: `1.0.1`,
