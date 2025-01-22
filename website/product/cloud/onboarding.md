@@ -33,8 +33,8 @@ We will then walk through the process to setup your Electric instance and make s
 
 Right now, for the private BETA, pricing is simple and flat:
 
-- non-commercial use is free
-- commercial use is a flat $100/month
+- non-commercial (and evaluation) use is free
+- commercial use (in production or with active support) is a flat $100/month
 
 In future, our plan is to provide low-cost, usage-based pricing with a generous free tier. We want Electric Cloud to be the most cost-effective way to both start with sync and scale sync to millions of users.
 
