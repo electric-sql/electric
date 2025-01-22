@@ -58,6 +58,12 @@ But what if you don't want to eliminate your API? What if you want or need to ke
 
 With [Electric](/product/electric), you can develop local-first apps incrementally, [using your existing API](#how-it-works).
 
+I gave a talk on this subject at the second Local-first meetup in Berlin in December 2024:
+
+<div class="embed-container">
+  <YoutubeEmbed video-id="gSGEFYuLuho" />
+</div>
+
 ## The Toaster Project
 
 There's a great book by Harvey Molotch called [Where stuff comes from](https://www.amazon.com/Where-Stuff-Comes-Toasters-Computers/dp/0415944007) which talks about how nothing exists in isolation. One of his examples is a toaster.
