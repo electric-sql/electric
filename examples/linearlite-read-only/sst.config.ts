@@ -40,7 +40,7 @@ export default $config({
     try {
       databaseUri
         .apply(async (dbUri) => {
-          await applyMigrations(dbUri)
+          applyMigrations(dbUri)
           return dbUri
         })
         .apply(loadData)
