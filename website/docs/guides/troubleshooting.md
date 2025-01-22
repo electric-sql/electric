@@ -34,7 +34,7 @@ npx @radically-straightforward/caddy run \
     --config - \
     --adapter caddyfile \
     <<EOF
-:3001 {
+localhost:3001 {
   reverse_proxy localhost:3000
   encode {
     gzip
