@@ -22,10 +22,7 @@ export default $config({
   async run() {
     const project = neon.getProjectOutput({ id: process.env.NEON_PROJECT_ID! })
 
-    const dbName =
-      $app.stage === `Production`
-        ? `linearlite-read-only-production`
-        : `linearlite-read-only-${$app.stage}`
+    const dbName = `linearlite-read-only-${$app.stage}`
 
     const { ownerName, dbName: resultingDbName } = createNeonDb({
       projectId: project.id,
