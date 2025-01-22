@@ -12,11 +12,11 @@ outline: [2, 3]
 Onboarding instructions for the Electric Cloud <Badge type="info" text="PRIVATE BETA" />.
 
 > [!Warning] Invitation only
-> These instructions are only for teams that have been invited to the Electric Cloud private BETA. To get access, please [sign-up](../sign-up.md) to the waitlist.
+> These instructions are only for teams that have been invited to the Electric Cloud private BETA. To get access, please [sign-up](./sign-up) to the waitlist.
 
 ## Onboarding to the Electric Cloud
 
-The Electric Cloud provides hosted [Electric sync](/products/electric). You bring your Postgres database(s). Electric Cloud then provisions and manages Electric sync for you.
+The Electric Cloud provides hosted [Electric sync](/product/electric). You bring your Postgres database(s). Electric Cloud then provisions and manages Electric sync for you.
 
 Initially you will be provided with a [HTTP API](/docs/api/http) endpoint that you can use to sync data. Over time, we will build out and provide additional tools for management and visibility, including a dashboard and CLI.
 
@@ -58,4 +58,4 @@ Higher levels of support are available and negotiable. All the way up to dedicat
 
 We're super excited to meet many of you and start learning together on how to build kickass sync-based apps & backend services!
 
-Make sure you're [signed up to the waitlist](./sign-up.md) and then follow the instructions in your invitation email.
+Make sure you're [signed up to the waitlist](./sign-up) and then follow the instructions in your invitation email.
