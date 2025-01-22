@@ -190,6 +190,9 @@ call_home_telemetry_url =
     nil
   )
 
+shape_hibernate_after =
+  env!("ELECTRIC_SHAPE_HIBERNATE_AFTER", &Electric.Config.parse_human_readable_time!/1, nil)
+
 system_metrics_poll_interval =
   env!(
     "ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL",
@@ -218,6 +221,7 @@ config :electric,
   replication_stream_id: replication_stream_id,
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, nil),
   service_port: env!("ELECTRIC_PORT", :integer, nil),
+  shape_hibernate_after: shape_hibernate_after,
   storage: storage,
   persistent_kv: persistent_kv,
   listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, nil)
