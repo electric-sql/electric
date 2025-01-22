@@ -70,7 +70,7 @@ function IssueRow({ issue, style }: Props) {
       </div>
       <Link
         to={`/issue/${issue.id}`}
-        className="flex items-center flex-grow min-w-0"
+        className="flex items-center flex-grow min-w-0 h-full"
       >
         <div className="flex-wrap flex-shrink ml-3 overflow-hidden font-medium line-clamp-1 overflow-ellipsis">
           {issue.title.slice(0, 3000) || ``}
