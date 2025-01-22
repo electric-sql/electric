@@ -15,27 +15,34 @@ export default $config({
           version: `6.57.0`,
         },
         neon: `0.6.3`,
+        command: `1.0.1`,
       },
     }
   },
   async run() {
     const project = neon.getProjectOutput({ id: process.env.NEON_PROJECT_ID! })
-    const base = {
+
+    const dbName =
+      $app.stage === `Production` ? `nextjs-production` : `nextjs-${$app.stage}`
+
+    const { ownerName, dbName: resultingDbName } = createNeonDb({
       projectId: project.id,
       branchId: project.defaultBranchId,
-    }
-
-    const db = new neon.Database(`nextjs`, {
-      ...base,
-      name:
-        $app.stage === `Production`
-          ? `nextjs-production`
-          : `nextjs-${$app.stage}`,
-      ownerName: `neondb_owner`,
+      dbName,
     })
 
-    const pooledDatabaseUri = getNeonDbUri(project, db, true)
-    const databaseUri = getNeonDbUri(project, db, false)
+    const pooledDatabaseUri = getNeonConnectionString({
+      project,
+      roleName: ownerName,
+      databaseName: resultingDbName,
+      pooled: true,
+    })
+    const databaseUri = getNeonConnectionString({
+      project,
+      roleName: ownerName,
+      databaseName: resultingDbName,
+      pooled: false,
+    })
     try {
       pooledDatabaseUri.apply(applyMigrations)
 
@@ -83,32 +90,6 @@ function deployNextJsExample(
   })
 }
 
-function getNeonDbUri(
-  project: $util.Output<neon.GetProjectResult>,
-  db: neon.Database,
-  pooled: boolean
-) {
-  const passwordOutput = neon.getBranchRolePasswordOutput({
-    projectId: project.id,
-    branchId: project.defaultBranchId,
-    roleName: db.ownerName,
-  })
-  const endpoint = neon.getBranchEndpointsOutput({
-    projectId: project.id,
-    branchId: project.defaultBranchId,
-  })
-  const databaseHost = pooled
-    ? endpoint.endpoints?.apply((endpoints) =>
-        endpoints![0].host.replace(
-          endpoints![0].id,
-          endpoints![0].id + `-pooler`
-        )
-      )
-    : project.databaseHost
-
-  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${databaseHost}/${db.name}?sslmode=require`
-}
-
 async function addDatabaseToElectric(
   uri: string
 ): Promise<{ id: string; token: string }> {
@@ -132,4 +113,100 @@ async function addDatabaseToElectric(
   }
 
   return await result.json()
+}
+
+function getNeonConnectionString({
+  project,
+  roleName,
+  databaseName,
+  pooled,
+}: {
+  project: $util.Output<neon.GetProjectResult>
+  roleName: $util.Input<string>
+  databaseName: $util.Input<string>
+  pooled: boolean
+}): $util.Output<string> {
+  const passwordOutput = neon.getBranchRolePasswordOutput({
+    projectId: project.id,
+    branchId: project.defaultBranchId,
+    roleName: roleName,
+  })
+
+  const endpoint = neon.getBranchEndpointsOutput({
+    projectId: project.id,
+    branchId: project.defaultBranchId,
+  })
+  const databaseHost = pooled
+    ? endpoint.endpoints?.apply((endpoints) =>
+        endpoints![0].host.replace(
+          endpoints![0].id,
+          endpoints![0].id + `-pooler`
+        )
+      )
+    : project.databaseHost
+  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${databaseHost}/${databaseName}?sslmode=require`
+}
+
+/**
+ * Uses the [Neon API](https://neon.tech/docs/manage/databases) along with
+ * a Pulumi Command resource and `curl` to create and delete Neon databases.
+ */
+function createNeonDb({
+  projectId,
+  branchId,
+  dbName,
+}: {
+  projectId: $util.Input<string>
+  branchId: $util.Input<string>
+  dbName: $util.Input<string>
+}): $util.Output<{
+  dbName: string
+  ownerName: string
+}> {
+  if (!process.env.NEON_API_KEY) {
+    throw new Error(`NEON_API_KEY is not set`)
+  }
+
+  const ownerName = `neondb_owner`
+  const result = new command.local.Command(
+    camelcase(`neon-db-command-${dbName}`),
+    {
+      create: `curl -f -s -o /dev/null "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases" \
+                -H 'Accept: application/json' \
+                -H "Authorization: Bearer $NEON_API_KEY" \
+                -H 'Content-Type: application/json' \
+                -d '{
+                  "database": {
+                    "name": "'$DATABASE_NAME'",
+                    "owner_name": "${ownerName}"
+                  }
+                }' \
+                && echo "SUCCESS" || echo "FAILURE"`,
+      update: `echo "Cannot update Neon database with this provisioning method"`,
+      delete: `curl -f -s -o /dev/null -X 'DELETE' \
+                "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases/$DATABASE_NAME" \
+                -H 'Accept: application/json' \
+                -H "Authorization: Bearer $NEON_API_KEY" \
+                && echo "SUCCESS" || echo "FAILURE"`,
+      logging: `none`,
+      environment: {
+        NEON_API_KEY: process.env.NEON_API_KEY,
+        PROJECT_ID: projectId,
+        BRANCH_ID: branchId,
+        DATABASE_NAME: dbName,
+      },
+    }
+  )
+  return $resolve([result.stdout, dbName]).apply(([stdout, dbName]) => {
+    switch (stdout) {
+      case `SUCCESS`:
+        console.log(`Created Neon database ${dbName}`)
+        return {
+          dbName,
+          ownerName,
+        }
+      default:
+        throw new Error(`Failed to create Neon database ${dbName}`)
+    }
+  })
 }
