@@ -63,8 +63,6 @@ function IssuePage() {
   )
 
   if (issue === undefined) {
-    return <div className="p-8 w-full text-center">Loading...</div>
-  } else if (issue === null) {
     return <div className="p-8 w-full text-center">Issue not found</div>
   }
 
