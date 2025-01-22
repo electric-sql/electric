@@ -2,7 +2,7 @@ name: Teardown Examples PR stack
 
 on:
   pull_request:
-    paths: ['examples/*/**']
+    paths: ["examples/*/**"]
     types: [closed]
 
 concurrency:
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: ".tool-versions"
-          cache: 'pnpm'
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -46,15 +46,15 @@ jobs:
             sst-cache-${{ runner.os }}
 
       - name: Remove Linearlite
-        working-directory: examples/linearlite
+        working-directory: examples/linearlite-read-only
         run: |
-            export PR_NUMBER=${{ github.event.number }}
-            echo "Removing stage pr-$PR_NUMBER"
-            pnpm sst remove --stage "pr-$PR_NUMBER"
+          export PR_NUMBER=${{ github.event.number }}
+          echo "Removing stage pr-$PR_NUMBER"
+          pnpm sst remove --stage "pr-$PR_NUMBER"
 
       - name: Remove NextJs example
         working-directory: examples/nextjs-example
         run: |
-            export PR_NUMBER=${{ github.event.number }}
-            echo "Removing stage pr-$PR_NUMBER"
-            pnpm sst remove --stage "pr-$PR_NUMBER"
+          export PR_NUMBER=${{ github.event.number }}
+          echo "Removing stage pr-$PR_NUMBER"
+          pnpm sst remove --stage "pr-$PR_NUMBER"
