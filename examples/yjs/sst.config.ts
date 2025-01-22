@@ -16,6 +16,7 @@ export default $config({
         cloudflare: `5.42.0`,
         aws: {
           version: `6.57.0`,
+          profile: `marketing`,
         },
         neon: `0.6.3`,
         command: `1.0.1`,
@@ -87,7 +88,7 @@ function deployAppServer(
   const cluster = new sst.aws.Cluster(`yjs-cluster-${$app.stage}`, { vpc })
   const service = cluster.addService(`yjs-service-${$app.stage}`, {
     loadBalancer: {
-      ports: [{ listen: "443/https", forward: "3000/http" }],
+      ports: [{ listen: `443/https`, forward: `3000/http` }],
       domain: {
         name: `yjs${isProduction() ? `` : `-${$app.stage}`}.examples.electric-sql.com`,
         dns: sst.cloudflare.dns(),
@@ -100,34 +101,34 @@ function deployAppServer(
       ELECTRIC_TOKEN: token,
     },
     image: {
-      context: "../..",
-      dockerfile: "Dockerfile",
+      context: `../..`,
+      dockerfile: `Dockerfile`,
     },
     dev: {
-      command: "npm run dev",
+      command: `npm run dev`,
     },
   })
 
   return service
 }
 
-function deployServerlessApp(
-  electricInfo: $util.Output<{ id: string; token: string }>,
-  uri: $util.Output<string>
-) {
-  return new sst.aws.Nextjs(`yjs`, {
-    environment: {
-      ELECTRIC_URL: process.env.ELECTRIC_API!,
-      ELECTRIC_TOKEN: electricInfo.token,
-      DATABASE_ID: electricInfo.id,
-      NEON_DATABASE_URL: uri,
-    },
-    domain: {
-      name: `yjs${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
-      dns: sst.cloudflare.dns(),
-    },
-  })
-}
+// function deployServerlessApp(
+//   electricInfo: $util.Output<{ id: string; token: string }>,
+//   uri: $util.Output<string>
+// ) {
+//   return new sst.aws.Nextjs(`yjs`, {
+//     environment: {
+//       ELECTRIC_URL: process.env.ELECTRIC_API!,
+//       ELECTRIC_TOKEN: electricInfo.token,
+//       DATABASE_ID: electricInfo.id,
+//       NEON_DATABASE_URL: uri,
+//     },
+//     domain: {
+//       name: `yjs${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
+//       dns: sst.cloudflare.dns(),
+//     },
+//   })
+// }
 
 async function addDatabaseToElectric(
   uri: string
