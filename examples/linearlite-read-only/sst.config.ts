@@ -182,7 +182,7 @@ function createNeonDb({
 
   const ownerName = `neondb_owner`
 
-  const createCommand = `curl -f -s "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases" \
+  const createCommand = `curl -f -v "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases" \
     -H 'Accept: application/json' \
     -H "Authorization: Bearer $NEON_API_KEY" \
     -H 'Content-Type: application/json' \
@@ -194,7 +194,7 @@ function createNeonDb({
     }' \
     && echo " SUCCESS" || echo " FAILURE"`
 
-  const deleteCommand = `curl -f -s -X 'DELETE' \
+  const deleteCommand = `curl -f -v -X 'DELETE' \
     "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases/$DATABASE_NAME" \
     -H 'Accept: application/json' \
     -H "Authorization: Bearer $NEON_API_KEY" \
