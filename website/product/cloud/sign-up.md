@@ -9,7 +9,7 @@ outline: deep
 
 # Sign-up
 
-[Electric Cloud](../cloud) is currently in <Badge type="info" text="private alpha" />.
+[Electric Cloud](../cloud) is currently in <Badge type="info" text="PRIVATE BETA" />.
 
 If you're interested in early-access to the Electric Cloud, you can sign up to the waitlist.
 

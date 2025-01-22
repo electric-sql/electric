@@ -31,7 +31,7 @@ onMounted(async () => {
 
 <img src="/img/icons/ddn.svg" class="product-icon" />
 
-# Cloud <Badge type="info" text="PRIVATE ALPHA" />
+# Cloud <Badge type="info" text="PRIVATE BETA" />
 
 Hosted Electric sync that's blazing fast
 and scales to millions of users

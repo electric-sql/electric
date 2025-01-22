@@ -106,7 +106,8 @@ export default defineConfig({
           items: [
             { text: 'Electric', link: '/product/electric' },
             { text: 'Cloud', link: '/product/cloud', items: [
-                { text: 'Sign-up', link: '/product/cloud/sign-up' }
+                { text: 'Sign-up', link: '/product/cloud/sign-up' },
+                { text: 'Onboarding', link: '/product/cloud/onboarding' }
               ]
             },
             { text: 'PGlite', link: '/product/pglite' },
