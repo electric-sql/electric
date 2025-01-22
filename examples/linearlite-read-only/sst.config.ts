@@ -30,6 +30,12 @@ export default $config({
       dbName,
     })
 
+    const pooledDatabaseUri = getNeonConnectionString({
+      project,
+      roleName: ownerName,
+      databaseName: resultingDbName,
+      pooled: true,
+    })
     const databaseUri = getNeonConnectionString({
       project,
       roleName: ownerName,
@@ -38,7 +44,7 @@ export default $config({
     })
 
     try {
-      databaseUri
+      pooledDatabaseUri
         .apply(async (dbUri) => {
           applyMigrations(dbUri)
           return dbUri
