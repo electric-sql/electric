@@ -43,7 +43,7 @@ export default $config({
       pooled: false,
     })
     try {
-      pooledDatabaseUri.apply(applyMigrations)
+      databaseUri.apply(applyMigrations)
 
       const electricInfo = databaseUri.apply((uri) =>
         addDatabaseToElectric(uri)
