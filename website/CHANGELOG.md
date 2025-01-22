@@ -1,5 +1,11 @@
 # @electric-sql/docs
 
+## 0.0.2-beta.1
+
+### Patch Changes
+
+- 4d7b8ba: Add support for shapes on partitioned tables
+
 ## 0.0.2-beta.0
 
 ### Patch Changes
