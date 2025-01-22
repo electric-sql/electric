@@ -58,7 +58,7 @@ But what if you don't want to eliminate your API? What if you want or need to ke
 
 With [Electric](/product/electric), you can develop local-first apps incrementally, [using your existing API](#how-it-works).
 
-I gave a talk also on this subject in the December 2024 Local-first meetup in Berlin:
+I gave a talk on this subject at the second Local-first meetup in Berlin in December 2024:
 
 <div class="embed-container">
   <YoutubeEmbed video-id="gSGEFYuLuho" />
