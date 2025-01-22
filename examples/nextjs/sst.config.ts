@@ -168,10 +168,8 @@ function createNeonDb({
   }
 
   const ownerName = `neondb_owner`
-  const result = new command.local.Command(
-    camelcase(`neon-db-command-${dbName}`),
-    {
-      create: `curl -f -s -o /dev/null "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases" \
+  const result = new command.local.Command(`neon-db-command:${dbName}`, {
+    create: `curl -f -s -o /dev/null "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases" \
                 -H 'Accept: application/json' \
                 -H "Authorization: Bearer $NEON_API_KEY" \
                 -H 'Content-Type: application/json' \
@@ -182,21 +180,20 @@ function createNeonDb({
                   }
                 }' \
                 && echo "SUCCESS" || echo "FAILURE"`,
-      update: `echo "Cannot update Neon database with this provisioning method"`,
-      delete: `curl -f -s -o /dev/null -X 'DELETE' \
+    update: `echo "Cannot update Neon database with this provisioning method"`,
+    delete: `curl -f -s -o /dev/null -X 'DELETE' \
                 "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases/$DATABASE_NAME" \
                 -H 'Accept: application/json' \
                 -H "Authorization: Bearer $NEON_API_KEY" \
                 && echo "SUCCESS" || echo "FAILURE"`,
-      logging: `none`,
-      environment: {
-        NEON_API_KEY: process.env.NEON_API_KEY,
-        PROJECT_ID: projectId,
-        BRANCH_ID: branchId,
-        DATABASE_NAME: dbName,
-      },
-    }
-  )
+    logging: `none`,
+    environment: {
+      NEON_API_KEY: process.env.NEON_API_KEY,
+      PROJECT_ID: projectId,
+      BRANCH_ID: branchId,
+      DATABASE_NAME: dbName,
+    },
+  })
   return $resolve([result.stdout, dbName]).apply(([stdout, dbName]) => {
     switch (stdout) {
       case `SUCCESS`:
