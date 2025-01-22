@@ -19,7 +19,7 @@ Recently at Electric we’ve been building some demo apps; this is both to demon
 
 ![](/img/blog/linerlite-local-first-with-react/app.png)
 
-You can try out Linearlite here: [https://linear-lite.electric-sql.com](https://linear-lite.electric-sql.com/)
+You can try out Linearlite here: [https://linearlite.examples.electric-sql.com/](https://linearlite.examples.electric-sql.com/)
 
 At Electric we already use the original Linear internally, and so know it well; replicating its functionality seemed like a great place to start when testing out our own development tools.
 
