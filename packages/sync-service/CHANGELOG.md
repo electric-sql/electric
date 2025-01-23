@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- 214435b: System metrics will now be sent to Honeycomb as well as traces
+- 214435b: Add metric publishing to Honeycomb when that exporter is enabled
+
 ## 1.0.0-beta.5
 
 ### Patch Changes
