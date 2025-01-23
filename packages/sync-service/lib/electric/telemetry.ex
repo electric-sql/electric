@@ -40,6 +40,8 @@ defmodule Electric.Telemetry do
     {OtelMetricExporter, metrics: otel_metrics(), export_period: :timer.seconds(30)}
   end
 
+  defp otel_reporter_child_spec(false), do: nil
+
   defp call_home_reporter_child_spec(false), do: nil
 
   defp call_home_reporter_child_spec(true) do
