@@ -74,6 +74,13 @@ if otlp_endpoint do
     otlp_endpoint: otlp_endpoint,
     otlp_headers: headers,
     otlp_compression: :gzip
+
+  config :otel_metric_exporter,
+    otlp_protocol: :http_protobuf,
+    otlp_endpoint: otlp_endpoint,
+    otlp_headers: Map.new(headers),
+    otlp_compression: :gzip,
+    resource: %{service: %{name: service_name, version: version}, instance: %{id: instance_id}}
 end
 
 otel_batch_processor =

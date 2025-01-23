@@ -20,6 +20,7 @@ defmodule Electric.Telemetry do
     statsd_host = Electric.Config.get_env(:telemetry_statsd_host)
     prometheus? = not is_nil(Electric.Config.get_env(:prometheus_port))
     call_home_telemetry? = Electric.Config.get_env(:call_home_telemetry?)
+    otel_metrics? = not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
 
     [
       {:telemetry_poller,
@@ -28,11 +29,18 @@ defmodule Electric.Telemetry do
        init_delay: :timer.seconds(5)},
       statsd_reporter_child_spec(statsd_host),
       prometheus_reporter_child_spec(prometheus?),
-      call_home_reporter_child_spec(call_home_telemetry?)
+      call_home_reporter_child_spec(call_home_telemetry?),
+      otel_reporter_child_spec(otel_metrics?)
     ]
     |> Enum.reject(&is_nil/1)
     |> Supervisor.init(strategy: :one_for_one)
   end
+
+  defp otel_reporter_child_spec(true) do
+    {OtelMetricExporter, metrics: otel_metrics(), export_period: :timer.seconds(30)}
+  end
+
+  defp otel_reporter_child_spec(false), do: nil
 
   defp call_home_reporter_child_spec(false), do: nil
 
@@ -193,20 +201,28 @@ defmodule Electric.Telemetry do
       last_value("vm.total_run_queue_lengths.total"),
       last_value("vm.total_run_queue_lengths.cpu"),
       last_value("vm.total_run_queue_lengths.io"),
-      last_value("electric.postgres.replication.wal_size", unit: :byte)
-      # distribution("plug.router_dispatch.stop.duration",
-      #   tags: [:route],
-      #   unit: {:native, :millisecond}
-      # ),
-      # distribution("plug.router_dispatch.exception.duration",
-      #   tags: [:route],
-      #   unit: {:native, :millisecond}
-      # ),
-      # distribution("electric.query.duration", unit: {:native, :millisecond}),
-      # distribution("electric.query.serialization_duration", unit: {:native, :millisecond}),
-      # distribution("electric.snapshot.storage", unit: {:native, :millisecond}),
-      # distribution("electric.snapshot.encoding", unit: {:native, :millisecond})
+      last_value("electric.postgres.replication.wal_size", unit: :byte),
+      counter("electric.postgres.replication.transaction_received.count"),
+      sum("electric.postgres.replication.transaction_received.bytes", unit: :byte),
+      sum("electric.storage.transaction_stored.bytes", unit: :byte)
     ]
+  end
+
+  defp otel_metrics() do
+    [
+      last_value("system.load_percent.avg1"),
+      last_value("system.load_percent.avg5"),
+      last_value("system.load_percent.avg15"),
+      distribution("electric.plug.serve_shape.duration",
+        drop: &(Map.get(&1, :live, false) || false)
+      ),
+      distribution("electric.shape_cache.create_snapshot_task.stop.duration",
+        unit: {:native, :millisecond}
+      ),
+      distribution("electric.storage.make_new_snapshot.stop.duration",
+        unit: {:native, :millisecond}
+      )
+    ] ++ prometheus_metrics()
   end
 
   defp periodic_measurements(opts) do
