@@ -6,6 +6,8 @@ import type {
 } from '@electric-sql/client'
 import React from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
+import { dehydrateShape } from './hydration'
+import type { HydratedShapeData } from './hydration'
 
 type UnknownShape = Shape<Row<unknown>>
 type UnknownShapeStream = ShapeStream<Row<unknown>>
@@ -134,38 +136,6 @@ function identity<T>(arg: T): T {
   return arg
 }
 
-export type SerializedShapeData<
-  SourceData extends Row<unknown> = Row<unknown>,
-> = {
-  value: Record<string, SourceData>
-  options: ShapeStreamOptions<GetExtensions<SourceData>>
-}
-
-export const serializeShape = <SourceData extends Row<unknown>>(
-  shape: Shape<SourceData>
-): SerializedShapeData<SourceData> => {
-  return {
-    value: Object.fromEntries(shape.currentValue),
-    options: {
-      ...shape.options,
-      handle: shape.handle,
-      offset: shape.offset,
-    },
-  }
-}
-
-export const deserializeShape = <SourceData extends Row<unknown>>(
-  serializedShape: SerializedShapeData<SourceData>
-): Shape<SourceData> => {
-  const stream = new ShapeStream<SourceData>({
-    ...serializedShape.options,
-    live: true,
-  })
-  const shape = new Shape<SourceData>(stream)
-  shape.currentValue = new Map(Object.entries(serializedShape.value))
-  return shape
-}
-
 const createInitialShape = <SourceData extends Row<unknown>, Selection>(
   options: UseShapeOptions<SourceData, Selection>
 ): Shape<SourceData> => {
@@ -176,13 +146,13 @@ const createInitialShape = <SourceData extends Row<unknown>, Selection>(
     return getShape<SourceData>(shapeStream)
   }
 
-  return deserializeShape(options.initialShape)
+  return dehydrateShape(options.initialShape)
 }
 
 interface UseShapeOptions<SourceData extends Row<unknown>, Selection>
   extends ShapeStreamOptions<GetExtensions<SourceData>> {
   selector?: (value: UseShapeResult<SourceData>) => Selection
-  initialShape?: SerializedShapeData<SourceData>
+  initialShape?: HydratedShapeData<SourceData>
 }
 
 export function useShape<

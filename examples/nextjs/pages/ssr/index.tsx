@@ -1,8 +1,8 @@
 import type { GetServerSideProps } from "next"
 import {
-  SerializedShapeData,
+  HydratedShapeData,
   preloadShape,
-  serializeShape,
+  hydrateShape,
 } from "@electric-sql/react"
 import { itemShapeOptions } from "@/app/items"
 import { Item } from "@/app/types"
@@ -11,17 +11,17 @@ import "@/app/style.css"
 import { ItemsList } from "@/app/items-list"
 
 export const getServerSideProps: GetServerSideProps<{
-  shape: SerializedShapeData<Item>
+  shape: HydratedShapeData<Item>
 }> = async () => {
   const shape = await preloadShape<Item>(itemShapeOptions)
 
   return {
     props: {
-      shape: serializeShape(shape),
+      shape: hydrateShape(shape),
     },
   }
 }
 
-export default function Page(props: { shape: SerializedShapeData<Item> }) {
+export default function Page(props: { shape: HydratedShapeData<Item> }) {
   return <ItemsList initialShape={props.shape} />
 }

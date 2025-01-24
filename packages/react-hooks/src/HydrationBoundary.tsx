@@ -1,7 +1,6 @@
 'use client'
 import React from 'react'
-import type { SerializedShapeData } from './react-hooks'
-import { deserializeShape, serializeShape } from './react-hooks'
+import { hydrateShape, dehydrateShape, HydratedShapeData } from './hydration'
 import { shapeCache, streamCache, sortedOptionsHash } from './react-hooks'
 import { Shape, ShapeStream } from '@electric-sql/client'
 import type { Row } from '@electric-sql/client'
@@ -23,9 +22,9 @@ const ElectricScript = ({ shapes }: ElectricScriptProps) => {
     return null
   }
 
-  const serializedShapes = shapes.reduce<SerializedShapeData[]>(
-    (serializedShapes, shape) => {
-      return [...serializedShapes, serializeShape(shape)]
+  const hydratedShapes = shapes.reduce<HydratedShapeData[]>(
+    (hydratedShapes, shape) => {
+      return [...hydratedShapes, hydrateShape(shape)]
     },
     []
   )
@@ -35,35 +34,38 @@ const ElectricScript = ({ shapes }: ElectricScriptProps) => {
       id="__ELECTRIC_SSR_STATE__"
       type="application/json"
       dangerouslySetInnerHTML={{
-        __html: JSON.stringify(serializedShapes),
+        __html: JSON.stringify(hydratedShapes),
       }}
     />
   )
 }
 
-export function ElectricProvider({ children }: { children: React.ReactNode }) {
+export function HydrationBoundary({ children }: { children: React.ReactNode }) {
   const shapeCacheRef = React.useRef<typeof shapeCache>(shapeCache)
   const streamCacheRef = React.useRef<typeof streamCache>(streamCache)
+  const isHydratedRef = React.useRef<boolean>(false)
 
-  if (!isSSR) {
+  if (!isSSR && !isHydratedRef.current) {
     const ssrData = document?.getElementById('__ELECTRIC_SSR_STATE__')
-    const serializedShapes: Array<SerializedShapeData> =
+    const hydratedShapes: Array<HydratedShapeData> =
       JSON.parse(ssrData?.textContent ?? '[]') ?? []
 
-    for (const serializedShape of serializedShapes) {
-      const isEmpty = Object.keys(serializedShape.value).length === 0
+    for (const hydratedShape of hydratedShapes) {
+      const isEmpty = Object.keys(hydratedShape.value).length === 0
 
       if (isEmpty) {
         continue
       }
 
-      const shape = deserializeShape(serializedShape)
+      const shape = dehydrateShape(hydratedShape)
       const stream = shape.stream as ShapeStream<Row<unknown>>
 
       const hash = sortedOptionsHash(shape.stream.options)
       streamCacheRef.current.set(hash, stream)
       shapeCacheRef.current.set(stream, shape)
     }
+
+    isHydratedRef.current = true
   }
 
   const shapes = Array.from(shapeCacheRef.current.values())

@@ -1,7 +1,7 @@
 "use client"
-import { useOptimistic, startTransition, useState, useCallback } from "react"
+import { startTransition, useState, useCallback } from "react"
 import {
-  SerializedShapeData,
+  HydratedShapeData,
   getShapeStream,
   useShape,
 } from "@electric-sql/react"
@@ -52,7 +52,7 @@ async function clearItems() {
 export function ItemsList({
   initialShape,
 }: {
-  initialShape: SerializedShapeData<Item>
+  initialShape: HydratedShapeData<Item>
 }) {
   const { data: items } = useShape({
     ...getClientShapeOptions(),
