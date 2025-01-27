@@ -1,10 +1,10 @@
 import { ItemsList } from "./items-list"
 import type { Item } from "./types"
-import { preloadShape, hydrateShape } from "@electric-sql/react"
+import { preloadShape } from "@electric-sql/react"
 import { itemShapeOptions } from "./items"
 
 export default async function Page() {
-  const shape  = await preloadShape<Item>(itemShapeOptions)
+  await preloadShape<Item>(itemShapeOptions)
 
-  return <ItemsList initialShape={hydrateShape(shape)} />
+  return <ItemsList />
 }

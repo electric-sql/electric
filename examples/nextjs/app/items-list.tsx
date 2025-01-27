@@ -1,5 +1,5 @@
 "use client"
-import { startTransition, useState, useCallback } from "react"
+import { startTransition, useState, useCallback, useEffect } from "react"
 import {
   HydratedShapeData,
   getShapeStream,
@@ -49,17 +49,15 @@ async function clearItems() {
   return await Promise.all([findUpdatePromise, fetchPromise])
 }
 
-export function ItemsList({
-  initialShape,
-}: {
-  initialShape: HydratedShapeData<Item>
-}) {
-  const { data: items } = useShape({
-    ...getClientShapeOptions(),
-    initialShape,
-  })
+export function ItemsList() {
+  const shapeOptions = getClientShapeOptions()
+  const { data: items } = useShape<Item>(shapeOptions)
 
   const [optimisticItems, setOptimisticItems] = useState(items)
+
+  useEffect(() => {
+    setOptimisticItems(items)
+  }, [items])
 
   const updateOptimisticItems = useCallback(
     ({ newId, isClear }: Partial<{ newId: string; isClear: boolean }>) =>

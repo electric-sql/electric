@@ -1,5 +1,5 @@
 import { AppProps } from "next/app"
-import { HydrationBoundary } from "@electric-sql/react"
+import { HydrationBoundary } from "@electric-sql/react/HydrationBoundary"
 import "@/app/style.css"
 import "@/app/App.css"
 import "@/app/Example.css"

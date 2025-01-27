@@ -6,8 +6,6 @@ import type {
 } from '@electric-sql/client'
 import React from 'react'
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
-import { dehydrateShape } from './hydration'
-import type { HydratedShapeData } from './hydration'
 
 type UnknownShape = Shape<Row<unknown>>
 type UnknownShapeStream = ShapeStream<Row<unknown>>
@@ -44,7 +42,9 @@ function sortObjectKeys(obj: any): any {
 }
 
 export function sortedOptionsHash<T>(options: ShapeStreamOptions<T>): string {
-  return JSON.stringify(sortObjectKeys(options))
+  return JSON.stringify(
+    sortObjectKeys({ url: options.url, params: options.params })
+  )
 }
 
 export function getShapeStream<T extends Row<unknown>>(
@@ -136,23 +136,9 @@ function identity<T>(arg: T): T {
   return arg
 }
 
-const createInitialShape = <SourceData extends Row<unknown>, Selection>(
-  options: UseShapeOptions<SourceData, Selection>
-): Shape<SourceData> => {
-  if (!options.initialShape) {
-    const shapeStream = getShapeStream<SourceData>(
-      options as ShapeStreamOptions<GetExtensions<SourceData>>
-    )
-    return getShape<SourceData>(shapeStream)
-  }
-
-  return dehydrateShape(options.initialShape)
-}
-
 interface UseShapeOptions<SourceData extends Row<unknown>, Selection>
   extends ShapeStreamOptions<GetExtensions<SourceData>> {
   selector?: (value: UseShapeResult<SourceData>) => Selection
-  initialShape?: HydratedShapeData<SourceData>
 }
 
 export function useShape<
@@ -163,7 +149,10 @@ export function useShape<
   ...options
 }: UseShapeOptions<SourceData, Selection> &
   ShapeStreamOptions<GetExtensions<SourceData>>): Selection {
-  const shape = createInitialShape(options)
+  const shapeStream = getShapeStream<SourceData>(
+    options as ShapeStreamOptions<GetExtensions<SourceData>>
+  )
+  const shape = getShape<SourceData>(shapeStream)
 
   const useShapeData = React.useMemo(() => {
     let latestShapeData = parseShapeData(shape)
