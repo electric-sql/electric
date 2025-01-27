@@ -312,8 +312,7 @@ defmodule Electric.Telemetry do
     )
   end
 
-  @required_system_memory_keys ~w[system_total_memory free_memory buffered_memory cached_memory]a
-  @required_swap_keys ~w[total_swap free_swap]a
+  @required_system_memory_keys ~w[system_total_memory free_memory]a
 
   def get_system_memory_usage(opts) do
     metadata = %{stack_id: opts[:stack_id]}
@@ -343,18 +342,11 @@ defmodule Electric.Telemetry do
 
           used = total - system_memory.free_memory
 
-          resident =
-            with nil <- Map.get(system_memory, :available_memory) do
-              total -
-                (system_memory.free_memory + system_memory.buffered_memory +
-                   system_memory.cached_memory)
-            end
-
           mem_stats =
             system_memory
             |> Map.take(~w[available_memory free_memory buffered_memory cached_memory]a)
             |> Map.put(:used_memory, used)
-            |> Map.put(:resident_memory, resident)
+            |> Map.merge(resident_memory(system_memory))
 
           mem_percent_stats = Map.new(mem_stats, fn {k, v} -> {k, 100 * v / total} end)
 
@@ -366,37 +358,68 @@ defmodule Electric.Telemetry do
           mem_stats
       end
 
-    # Sanity-check that all the required swap keys are present
-    missing_swap_keys = Enum.reject(@required_swap_keys, &Map.has_key?(system_memory, &1))
+    Map.merge(mem_stats, swap_stats(:os.type(), system_memory, metadata))
+  end
 
-    swap_stats =
-      if missing_swap_keys != [] do
-        Logger.warning(
-          "Error gathering system swap stats: " <>
-            "missing data points #{Enum.join(missing_swap_keys, ", ")}"
-        )
+  defp resident_memory(%{available_memory: available_memory}) do
+    %{resident_memory: available_memory}
+  end
 
-        %{}
+  defp resident_memory(%{
+         free_memory: free,
+         buffered_memory: buffered,
+         cached_memory: cached,
+         system_total_memory: total
+       }) do
+    %{resident_memory: total - (free + buffered + cached)}
+  end
+
+  @resident_memory_keys ~w[available_memory free_memory buffered_memory cached_memory]a
+  defp resident_memory(system_memory) do
+    missing_keys =
+      @resident_memory_keys
+      |> Enum.reject(&Map.has_key?(system_memory, &1))
+
+    Logger.warning(
+      "Error gathering resident memory stats: " <>
+        "missing data points #{Enum.join(missing_keys, ", ")}"
+    )
+
+    %{}
+  end
+
+  defp swap_stats({:unix, :darwin}, _system_memory, _metadata) do
+    # On macOS, swap stats are not available
+    %{}
+  end
+
+  defp swap_stats(_os_type, %{total_swap: total, free_swap: free}, metadata) do
+    used = total - free
+
+    swap_stats = %{total_swap: total, free_swap: free, used_swap: used}
+
+    swap_percent_stats =
+      if total > 0 do
+        %{free_swap: 100 * free / total, used_swap: 100 * used / total}
       else
-        total = system_memory.total_swap
-        free = system_memory.free_swap
-        used = total - free
-
-        swap_stats = %{total_swap: total, free_swap: free, used_swap: used}
-
-        swap_percent_stats =
-          if total > 0 do
-            %{free_swap: 100 * free / total, used_swap: 100 * used / total}
-          else
-            %{free_swap: 0, used_swap: 0}
-          end
-
-        :telemetry.execute([:system, :swap], swap_stats, metadata)
-        :telemetry.execute([:system, :swap_percent], swap_percent_stats, metadata)
-
-        swap_stats
+        %{free_swap: 0, used_swap: 0}
       end
 
-    Map.merge(mem_stats, swap_stats)
+    :telemetry.execute([:system, :swap], swap_stats, metadata)
+    :telemetry.execute([:system, :swap_percent], swap_percent_stats, metadata)
+
+    swap_stats
+  end
+
+  @required_swap_keys ~w[total_swap free_swap]a
+  defp swap_stats(_os_type, system_memory, _metadata) do
+    missing_swap_keys = Enum.reject(@required_swap_keys, &Map.has_key?(system_memory, &1))
+
+    Logger.warning(
+      "Error gathering system swap stats: " <>
+        "missing data points #{Enum.join(missing_swap_keys, ", ")}"
+    )
+
+    %{}
   end
 end

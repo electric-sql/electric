@@ -3,18 +3,30 @@ defmodule Electric.TelemetryTest do
 
   describe "get_system_memory_usage" do
     test "returns calculated memory stats" do
-      assert %{
-               total_memory: _,
-               available_memory: _,
-               buffered_memory: _,
-               cached_memory: _,
-               free_memory: _,
-               used_memory: _,
-               resident_memory: _,
-               total_swap: _,
-               free_swap: _,
-               used_swap: _
-             } = Electric.Telemetry.get_system_memory_usage([])
+      case :os.type() do
+        {:unix, :darwin} ->
+          assert %{
+                   total_memory: _,
+                   available_memory: _,
+                   free_memory: _,
+                   used_memory: _,
+                   resident_memory: _
+                 } = Electric.Telemetry.get_system_memory_usage([])
+
+        _ ->
+          assert %{
+                   total_memory: _,
+                   available_memory: _,
+                   buffered_memory: _,
+                   cached_memory: _,
+                   free_memory: _,
+                   used_memory: _,
+                   resident_memory: _,
+                   total_swap: _,
+                   free_swap: _,
+                   used_swap: _
+                 } = Electric.Telemetry.get_system_memory_usage([])
+      end
     end
   end
 end
