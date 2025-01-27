@@ -241,6 +241,8 @@ export interface ShapeStreamOptions<T = never> {
    * If the function returns void the shapestream is stopped.
    */
   onError?: ShapeStreamErrorHandler
+
+  live?: boolean
 }
 
 export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
@@ -259,6 +261,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   lastOffset: Offset
   shapeHandle?: string
   error?: unknown
+  options: ShapeStreamOptions<GetExtensions<T>>
 }
 
 /**
@@ -300,7 +303,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     DEFAULT: `default` as Replica,
   }
 
-  readonly options: ShapeStreamOptions<GetExtensions<T>>
+  public readonly options: ShapeStreamOptions<GetExtensions<T>>
   #error: unknown = null
 
   readonly #fetchClient: typeof fetch
@@ -332,6 +335,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#shapeHandle = this.options.handle
     this.#messageParser = new MessageParser<T>(options.parser)
     this.#onError = this.options.onError
+
+    if (options.live) {
+      this.#isUpToDate = true
+      this.#lastSyncedAt = Date.now()
+    }
 
     const baseFetchClient =
       options.fetchClient ??

@@ -145,7 +145,7 @@ export class Shape<T extends Row<unknown> = Row> {
   /**
    * Initialize shape with SSR data
    */
-  initializeWithSSRData(data: Map<string, T>) {
+  set currentValue(data: Map<string, T>) {
     // Clear existing data
     this.#data.clear()
 
@@ -225,6 +225,10 @@ export class Shape<T extends Row<unknown> = Row> {
     this.#subscribers.forEach((callback) => {
       callback({ value: this.currentValue, rows: this.currentRows })
     })
+  }
+
+  get options() {
+    return this.stream.options
   }
 
   /** Get the current offset of the shape stream */

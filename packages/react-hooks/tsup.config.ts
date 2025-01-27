@@ -5,6 +5,7 @@ export default defineConfig((options: Options) => {
   const commonOptions: Partial<Options> = {
     entry: {
       index: `src/index.ts`,
+      hydrationBoundary: `./src/hydration-boundary.tsx`,
     },
     tsconfig: `./tsconfig.build.json`,
     sourcemap: true,

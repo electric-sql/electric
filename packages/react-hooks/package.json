@@ -45,6 +45,16 @@
         "types": "./dist/cjs/index.d.cts",
         "default": "./dist/cjs/index.cjs"
       }
+    },
+    "./HydrationBoundary": {
+      "import": {
+        "types": "./dist/hydrationBoundary.d.ts",
+        "default": "./dist/hydrationBoundary.mjs"
+      },
+      "require": {
+        "types": "./dist/cjs/hydrationBoundary.d.cts",
+        "default": "./dist/cjs/hydrationBoundary.cjs"
+      }
     }
   },
   "files": [
