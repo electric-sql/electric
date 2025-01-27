@@ -96,7 +96,7 @@ defmodule Electric.Postgres.ConfigurationTest do
                  pg_version,
                  publication
                )
-             end) =~ "Altering identity"
+             end) =~ ~r"#{:erlang.pid_to_list(self())}.*Altering identity"
 
       assert get_table_identity(conn, {"public", "items"}) == "f"
 
@@ -112,7 +112,10 @@ defmodule Electric.Postgres.ConfigurationTest do
                  pg_version,
                  publication
                )
-             end) =~ "Altering identity"
+             end) =~ ~r"#{:erlang.pid_to_list(self())}.*Altering identity"
+
+      # Above we include the pid in the regex to ensure that the log message is from this test's process
+      # otherwise this test can sporadically fail when run concurrently with other tests that log that message
     end
 
     test "works with multiple tables", %{
