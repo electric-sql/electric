@@ -56,7 +56,7 @@ The source secret is a token that grants access to it. You should treat the sour
 
 The recommended pattern for secure use of the Electric Cloud is to add the source ID and secret parameter to the origin request made by your [auth proxy](/docs/guides/auth).
 
-For example, request a shape as normal, without the `source_id` and `source_secret` in your client:
+Specifically, this means you request shapes in your client as normal, without the `source_id` and `source_secret`. For example using the [Typescript client](/docs/api/clients/typescript):
 
 ```ts
 import { ShapeStream } from '@electric-sql/client'
@@ -69,7 +69,7 @@ const stream = new ShapeStream({
 })
 ```
 
-Then add the source ID and secret to the origin request in your [auth proxy](/docs/guides/auth). For example using a Next.js [route handler](https://nextjs.org/docs/app/building-your-application/routing/route-handlers):
+Then add the source ID and secret to the origin request in your [auth proxy](/docs/guides/auth). For example (using a Next.js [route handler](https://nextjs.org/docs/app/building-your-application/routing/route-handlers)):
 
 ```ts
 export async function GET(req: Request) {
