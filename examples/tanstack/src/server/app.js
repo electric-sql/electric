@@ -1,5 +1,8 @@
 import http from "http"
 import pg from "pg"
+import serverless from "serverless-http"
+
+const isProduction = process.env.NODE_ENV === `production`
 
 const db = new pg.Pool({
   connectionString:
@@ -20,11 +23,13 @@ const getRequestBody = async (req) => {
 const JSON_HEADERS = {
   "Content-Type": `application/json`,
 }
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": `*`,
-  "Access-Control-Allow-Methods": `GET, POST, DELETE, OPTIONS`,
-  "Access-Control-Allow-Headers": `Content-Type`,
-}
+const CORS_HEADERS = isProduction
+  ? {}
+  : {
+      "Access-Control-Allow-Origin": `*`,
+      "Access-Control-Allow-Methods": `GET, POST, DELETE, OPTIONS`,
+      "Access-Control-Allow-Headers": `Content-Type`,
+    }
 
 const server = http.createServer(async (req, res) => {
   console.log(req.method, req.url)
@@ -62,7 +67,15 @@ const server = http.createServer(async (req, res) => {
   }
 })
 
-const PORT = process.env.PORT || 3001
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-})
+let handler = server
+
+if (!isProduction) {
+  const PORT = process.env.PORT || 3001
+  server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`)
+  })
+} else {
+  handler = serverless(server)
+}
+
+export { handler }
