@@ -86,12 +86,6 @@ export interface ShapeStreamOptions<T = never> {
   url: string
 
   /**
-   * Which database to use.
-   * This is optional unless Electric is used with multiple databases.
-   */
-  databaseId?: string
-
-  /**
    * PostgreSQL-specific parameters for the shape.
    * This includes table, where clause, columns, and replica settings.
    */
