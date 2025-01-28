@@ -54,9 +54,9 @@ The source secret is a token that grants access to it. You should treat the sour
 
 ### Proxy auth
 
-The recommended pattern for secure use of the Electric Cloud is to add the `source_secret` parameter to the origin request made by your [auth proxy](/docs/guides/auth).
+The recommended pattern for secure use of the Electric Cloud is to add the source ID and secret parameter to the origin request made by your [auth proxy](/docs/guides/auth).
 
-For example, you can set the `source_id` as a parameter in your client request:
+For example, request a shape as normal, without the `source_id` and `source_secret` in your client:
 
 ```ts
 import { ShapeStream } from '@electric-sql/client'
@@ -64,32 +64,32 @@ import { ShapeStream } from '@electric-sql/client'
 const stream = new ShapeStream({
   url: `https://api.electric-sql.cloud/v1/shape`,
   params: {
-    table: `items`,
-    source_id: `8ea4e5fb-9217-4ca6-80b7-0a97581c4c10`
+    table: `items`
   }
 })
 ```
 
-And then add the corresponding secret when [proxying](/docs/guides/auth) the request to the Electric origin from your trusted auth proxy:
+Then add the source ID and secret to the origin request in your [auth proxy](/docs/guides/auth). For example using a Next.js [route handler](https://nextjs.org/docs/app/building-your-application/routing/route-handlers):
 
-```js
-Deno.serve((req) => {
-  const url = new URL(req.url)
+```ts
+export async function GET(req: Request) {
+  const proxyUrl = new URL(req.url)
 
-  // ... validate and authorize the request here ...
+  // ... validate and authorize the request ...
 
-  // Read the source ID from the request.
-  const sourceId = url.searchParams.get('source_id')
+  // Construct the origin URL.
+  const originUrl = new URL(`/v1/shape`, `https://api.electric-sql.cloud`)
+  proxyUrl.searchParams.forEach((value, key) => {
+    originUrl.searchParams.set(key, value)
+  })
 
-  // Lookup the source secret e.g.: from an env var or some kind of secret store.
-  const sourceSecret = lookupSecret(sourceId)
+  // Add the source params.
+  originUrl.searchParams.set(`source_id`, process.env.SOURCE_ID)
+  originUrl.searchParams.set(`source_secret`, process.env.SOURCE_SECRET)
 
-  // Add to the origin url.
-  const originUrl = `${ELECTRIC_URL}/v1/shape${url.search}&source_secret=${sourceSecret}`
-
-  // Proxy the request.
+  // Proxy the authorised request on to the Electric Cloud.
   return fetch(originUrl, {headers: req.headers})
-})
+}
 ```
 
 See the [security guide](/docs/guides/security) for more context.
