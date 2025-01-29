@@ -141,6 +141,8 @@ jobs:
             - nextjs: ${nextjs}
             - todoapp: ${todoapp}
             - yjs: ${yjs}
+            - writes: ${writes}
+            - auth: ${auth}
             `;
 
             const { data: comments } = await github.rest.issues.listComments({

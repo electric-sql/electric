@@ -19,7 +19,7 @@ export default $config({
         cloudflare: `5.42.0`,
         aws: {
           version: `6.66.2`,
-          // profile: process.env.CI ? undefined : `marketing`,
+          profile: process.env.CI ? undefined : `marketing`,
         },
       },
     }
@@ -96,8 +96,8 @@ async function addDatabaseToElectric(
     method: `PUT`,
     headers: {
       'Content-Type': 'application/json',
-      'CF-Access-Client-Id': adminApiTokenId ?? '',
-      'CF-Access-Client-Secret': adminApiTokenSecret ?? '',
+      'CF-Access-Client-Id': adminApiTokenId ?? ``,
+      'CF-Access-Client-Secret': adminApiTokenSecret ?? ``,
     },
     body: JSON.stringify({
       database_url: uri,
