@@ -49,6 +49,18 @@ jobs:
           restore-keys: |
             sst-cache-main-${{ runner.os }}
 
+      - name: Deploy Write Patterns example
+        working-directory: ./examples/write-patterns
+        run: |
+          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+          if [ -f ".sst/outputs.json" ]; then
+            writes=$(jq -r '.website' .sst/outputs.json)
+            echo "writes=$writes" >> $GITHUB_ENV
+          else
+            echo "sst outputs file not found. Exiting."
+            exit 123
+          fi
+
       - name: Deploy Linearlite Read Only
         working-directory: ./examples/linearlite-read-only
         run: |
@@ -80,18 +92,6 @@ jobs:
           if [ -f ".sst/outputs.json" ]; then
             todoapp=$(jq -r '.website' .sst/outputs.json)
             echo "todoapp=$todoapp" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-
-      - name: Deploy Write Patterns example
-        working-directory: ./examples/write-patterns
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          if [ -f ".sst/outputs.json" ]; then
-            writes=$(jq -r '.website' .sst/outputs.json)
-            echo "writes=$writes" >> $GITHUB_ENV
           else
             echo "sst outputs file not found. Exiting."
             exit 123
