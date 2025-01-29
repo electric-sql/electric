@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.2.6-beta.1
+
+### Patch Changes
+
+- df1c18f: Fix race condition when using mock backend
+
 ## 0.2.6-beta.0
 
 ### Patch Changes
