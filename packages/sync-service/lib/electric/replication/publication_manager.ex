@@ -263,7 +263,12 @@ defmodule Electric.Replication.PublicationManager do
         %{state | pg_version: pg_version}
 
       {:error, err} ->
-        Logger.error("Failed to get PG version, retrying after timeout: #{inspect(err)}")
+        err_msg = "Failed to get PG version, retrying after timeout: #{inspect(err)}"
+
+        if %DBConnection.ConnectionError{reason: :queue_timeout} == err,
+          do: Logger.warning(err_msg),
+          else: Logger.error(err_msg)
+
         Process.sleep(@retry_timeout)
         get_pg_version(state)
     end
