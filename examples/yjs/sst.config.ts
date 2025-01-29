@@ -5,17 +5,8 @@ import { execSync } from "child_process"
 
 const isProduction = () => $app.stage.toLocaleLowerCase() === `production`
 
-if (!process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
-  throw new Error("ELECTRIC_ADMIN_API_TOKEN_ID is not set")
-}
-
-if (!process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
-  throw new Error("ELECTRIC_ADMIN_API_TOKEN_ID is not set")
-}
-
 const adminApiTokenId = process.env.ELECTRIC_ADMIN_API_TOKEN_ID
 const adminApiTokenSecret = process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET
-
 
 export default $config({
   app(input) {
@@ -36,6 +27,14 @@ export default $config({
     }
   },
   async run() {
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
+      throw new Error("ELECTRIC_ADMIN_API_TOKEN_ID is not set")
+    }
+
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
+      throw new Error("ELECTRIC_ADMIN_API_TOKEN_ID is not set")
+    }
+    
     try {
       const project = neon.getProjectOutput({
         id: process.env.NEON_PROJECT_ID!,
