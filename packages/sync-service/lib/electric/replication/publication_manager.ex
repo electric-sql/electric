@@ -52,6 +52,11 @@ defmodule Electric.Replication.PublicationManager do
 
   @retry_timeout 300
   @max_retries 3
+
+  # The default debounce timeout is 0, which means that the publication update
+  # will be scheduled immediately to run at the end of the current process
+  # mailbox, but we are leaving this configurable in case we want larger
+  # windows to aggregate shape filter updates
   @default_debounce_timeout 0
 
   @relation_counter :relation_counter
