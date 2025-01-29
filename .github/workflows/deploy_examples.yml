@@ -61,18 +61,6 @@ jobs:
             exit 123
           fi
 
-      - name: Deploy Linearlite
-        working-directory: ./examples/linearlite
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          if [ -f ".sst/outputs.json" ]; then
-              linearlite=$(jq -r '.website' .sst/outputs.json)
-              echo "linearlite=$linearlite" >> $GITHUB_ENV
-            else
-              echo "sst outputs file not found. Exiting."
-              exit 123
-            fi
-
       - name: Deploy NextJs example
         working-directory: ./examples/nextjs
         run: |
@@ -92,18 +80,6 @@ jobs:
           if [ -f ".sst/outputs.json" ]; then
             todoapp=$(jq -r '.website' .sst/outputs.json)
             echo "todoapp=$todoapp" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-
-      - name: Deploy Yjs example
-        working-directory: ./examples/yjs
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          if [ -f ".sst/outputs.json" ]; then
-            yjs=$(jq -r '.website' .sst/outputs.json)
-            echo "yjs=$yjs" >> $GITHUB_ENV
           else
             echo "sst outputs file not found. Exiting."
             exit 123
@@ -133,6 +109,18 @@ jobs:
             exit 123
           fi
 
+      - name: Deploy Yjs example
+        working-directory: ./examples/yjs
+        run: |
+          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+          if [ -f ".sst/outputs.json" ]; then
+            yjs=$(jq -r '.website' .sst/outputs.json)
+            echo "yjs=$yjs" >> $GITHUB_ENV
+          else
+            echo "sst outputs file not found. Exiting."
+            exit 123
+          fi
+
       - name: Add comment to PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -140,7 +128,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const linearlite_read_only = process.env.linearlite_read_only;
-            const linearlite = process.env.linearlite;
             const nextjs = process.env.nextjs;
             const todoapp = process.env.todoapp;
             const yjs = process.env.yjs;
