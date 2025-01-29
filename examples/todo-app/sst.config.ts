@@ -28,11 +28,11 @@ export default $config({
   },
   async run() {
     if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
-      throw new Error("ELECTRIC_ADMIN_API_TOKEN_ID is not set")
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
     }
 
     if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
-      throw new Error("ELECTRIC_ADMIN_API_TOKEN_ID is not set")
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
     }
 
     try {

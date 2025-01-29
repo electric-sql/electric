@@ -6,14 +6,6 @@ import { execSync } from 'child_process'
 const isProduction = (stage: string) =>
   stage.toLocaleLowerCase() === `production`
 
-if (!process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
-  throw new Error('ELECTRIC_ADMIN_API_TOKEN_ID is not set')
-}
-
-if (!process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
-  throw new Error('ELECTRIC_ADMIN_API_TOKEN_ID is not set')
-}
-
 const adminApiTokenId = process.env.ELECTRIC_ADMIN_API_TOKEN_ID
 const adminApiTokenSecret = process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET
 
@@ -33,6 +25,14 @@ export default $config({
     }
   },
   async run() {
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+    }
+
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+    }
+
     try {
       const databaseUri = $interpolate`postgresql://postgres:${process.env.LINEARLITE_SUPABASE_PROJECT_PASSWORD}@db.${process.env.LINEARLITE_SUPABASE_PROJECT_ID}.supabase.co:5432/postgres`
 
@@ -95,9 +95,9 @@ async function addDatabaseToElectric(
   const result = await fetch(`${adminApi}/v1/sources`, {
     method: `PUT`,
     headers: {
-      'Content-Type': `application/json`,
-      'CF-Access-Client-Id': adminApiTokenId,
-      'CF-Access-Client-Secret': adminApiTokenSecret,
+      'Content-Type': 'application/json',
+      'CF-Access-Client-Id': adminApiTokenId ?? '',
+      'CF-Access-Client-Secret': adminApiTokenSecret ?? '',
     },
     body: JSON.stringify({
       database_url: uri,

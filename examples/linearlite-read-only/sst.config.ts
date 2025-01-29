@@ -3,14 +3,6 @@
 
 import { execSync } from 'child_process'
 
-if (!process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
-  throw new Error('ELECTRIC_ADMIN_API_TOKEN_ID is not set')
-}
-
-if (!process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
-  throw new Error('ELECTRIC_ADMIN_API_TOKEN_ID is not set')
-}
-
 const adminApiTokenId = process.env.ELECTRIC_ADMIN_API_TOKEN_ID
 const adminApiTokenSecret = process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET
 
@@ -32,6 +24,14 @@ export default $config({
     }
   },
   async run() {
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+    }
+
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+    }
+
     const project = neon.getProjectOutput({ id: process.env.NEON_PROJECT_ID! })
 
     const dbName = `linearlite-read-only-${$app.stage}`
@@ -121,9 +121,9 @@ async function addDatabaseToElectric(
   const result = await fetch(`${adminApi}/v1/sources`, {
     method: `PUT`,
     headers: {
-      'Content-Type': `application/json`,
-      'CF-Access-Client-Id': adminApiTokenId,
-      'CF-Access-Client-Secret': adminApiTokenSecret,
+      'Content-Type': 'application/json',
+      'CF-Access-Client-Id': adminApiTokenId ?? '',
+      'CF-Access-Client-Secret': adminApiTokenSecret ?? '',
     },
     body: JSON.stringify({
       database_url: uri,

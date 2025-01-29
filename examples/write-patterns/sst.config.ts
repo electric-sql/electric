@@ -28,11 +28,11 @@ export default $config({
   },
   async run() {
     if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
-      throw new Error('ELECTRIC_ADMIN_API_TOKEN_ID is not set')
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
     }
 
     if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
-      throw new Error('ELECTRIC_ADMIN_API_TOKEN_ID is not set')
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
     }
 
     const project = neon.getProjectOutput({ id: process.env.NEON_PROJECT_ID! })
@@ -154,7 +154,7 @@ async function addDatabaseToElectric(
   const result = await fetch(new URL('v1/sources', adminApi), {
     method: 'PUT',
     headers: {
-      'Content-Type': `application/json`,
+      'Content-Type': 'application/json',
       'CF-Access-Client-Id': adminApiTokenId ?? '',
       'CF-Access-Client-Secret': adminApiTokenSecret ?? '',
     },
