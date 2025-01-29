@@ -49,6 +49,31 @@ jobs:
           restore-keys: |
             sst-cache-main-${{ runner.os }}
 
+      - name: Deploy Linearlite Read Only
+        working-directory: ./examples/linearlite-read-only
+        run: |
+          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+          if [ -f ".sst/outputs.json" ]; then
+            linearlite_read_only=$(jq -r '.website' .sst/outputs.json)
+            echo "linearlite_read_only=$linearlite_read_only" >> $GITHUB_ENV
+          else
+            echo "sst outputs file not found. Exiting."
+            exit 123
+          fi
+
+      - name: Deploy Yjs example
+        working-directory: ./examples/yjs
+        run: |
+          pnpm sst remove --stage ${{ env.DEPLOY_ENV }}
+          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+          if [ -f ".sst/outputs.json" ]; then
+            yjs=$(jq -r '.website' .sst/outputs.json)
+            echo "yjs=$yjs" >> $GITHUB_ENV
+          else
+            echo "sst outputs file not found. Exiting."
+            exit 123
+          fi
+
       - name: Deploy Write Patterns example
         working-directory: ./examples/write-patterns
         run: |
@@ -57,18 +82,6 @@ jobs:
           if [ -f ".sst/outputs.json" ]; then
             writes=$(jq -r '.website' .sst/outputs.json)
             echo "writes=$writes" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-
-      - name: Deploy Linearlite Read Only
-        working-directory: ./examples/linearlite-read-only
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          if [ -f ".sst/outputs.json" ]; then
-            linearlite_read_only=$(jq -r '.website' .sst/outputs.json)
-            echo "linearlite_read_only=$linearlite_read_only" >> $GITHUB_ENV
           else
             echo "sst outputs file not found. Exiting."
             exit 123
@@ -105,19 +118,6 @@ jobs:
           if [ -f ".sst/outputs.json" ]; then
             auth=$(jq -r '.website' .sst/outputs.json)
             echo "auth=$auth" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-
-      - name: Deploy Yjs example
-        working-directory: ./examples/yjs
-        run: |
-          pnpm sst remove --stage ${{ env.DEPLOY_ENV }}
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          if [ -f ".sst/outputs.json" ]; then
-            yjs=$(jq -r '.website' .sst/outputs.json)
-            echo "yjs=$yjs" >> $GITHUB_ENV
           else
             echo "sst outputs file not found. Exiting."
             exit 123
