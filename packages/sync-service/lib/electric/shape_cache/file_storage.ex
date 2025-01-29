@@ -378,8 +378,8 @@ defmodule Electric.ShapeCache.FileStorage do
   # This function raises if the chunk file doesn't exist.
   defp stream_snapshot_chunk!(%FS{} = opts, chunk_number) do
     Stream.resource(
-      fn -> {open_snapshot_chunk(opts, chunk_number), nil} end,
-      fn {file, eof_seen} ->
+      fn -> {open_snapshot_chunk(opts, chunk_number), nil, ""} end,
+      fn {file, eof_seen, incomplete_line} ->
         case IO.binread(file, :line) do
           {:error, reason} ->
             raise IO.StreamError, reason: reason
@@ -388,7 +388,7 @@ defmodule Electric.ShapeCache.FileStorage do
             cond do
               is_nil(eof_seen) ->
                 # First time we see eof after any valid lines, we store a timestamp
-                {[], {file, System.monotonic_time(:millisecond)}}
+                {[], {file, System.monotonic_time(:millisecond), incomplete_line}}
 
               # If it's been 60s without any new lines, and also we've not seen <<4>>,
               # then likely something is wrong
@@ -398,18 +398,22 @@ defmodule Electric.ShapeCache.FileStorage do
               true ->
                 # Sleep a little and check for new lines
                 Process.sleep(20)
-                {[], {file, eof_seen}}
+                {[], {file, eof_seen, incomplete_line}}
             end
 
           # The 4 byte marker (ASCII "end of transmission") indicates the end of the snapshot file.
           <<4::utf8>> ->
-            {:halt, {file, nil}}
+            {:halt, {file, nil, ""}}
 
           line ->
-            {[line], {file, nil}}
+            if binary_slice(line, -1, 1) == "\n" do
+              {[incomplete_line <> line], {file, nil, ""}}
+            else
+              {[], {file, nil, incomplete_line <> line}}
+            end
         end
       end,
-      fn {file, _} -> File.close(file) end
+      &File.close(elem(&1, 0))
     )
   end
 
