@@ -317,8 +317,8 @@ defmodule Electric.ShapeCache.FileStorage do
     File.open!(snapshot_chunk_path(opts, chunk_number), [:write, :raw])
   end
 
-  defp snapshot_chunk_path(opts, chunk_number)
-       when is_integer(chunk_number) and chunk_number >= 0 do
+  def snapshot_chunk_path(opts, chunk_number)
+      when is_integer(chunk_number) and chunk_number >= 0 do
     Path.join([opts.snapshot_dir, "snapshot_chunk.#{chunk_number}.jsonl"])
   end
 
