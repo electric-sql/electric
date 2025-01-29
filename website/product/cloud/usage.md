@@ -54,22 +54,26 @@ The source secret is a token that grants access to it. You should treat the sour
 
 ### Proxy auth
 
-The recommended pattern for secure use of the Electric Cloud is to add the source ID and secret parameter to the origin request made by your [auth proxy](/docs/guides/auth).
+The recommended pattern for secure use of the Electric Cloud is to add the source ID and secret parameter to the origin request made by your [auth proxy](/docs/guides/auth) or API. (You can proxy requests to Electric using an edge worker, or an API. In many cases, this can be your [existing backend API](/blog/2024/11/21/local-first-with-your-existing-api#using-your-existing-api)).
 
-Specifically, this means you request shapes in your client as normal, without the `source_id` and `source_secret`. For example using the [Typescript client](/docs/api/clients/typescript):
+See the [security guide](/docs/guides/security) for more context.
+
+#### Example
+
+In your client, request the shape as normal, without the `source_id` and `source_secret` parameters. For example here using the [Typescript client](/docs/api/clients/typescript):
 
 ```ts
 import { ShapeStream } from '@electric-sql/client'
 
 const stream = new ShapeStream({
-  url: `https://api.electric-sql.cloud/v1/shape`,
+  url: `https://your-api-or-proxy.example.com/v1/shape`,
   params: {
     table: `items`
   }
 })
 ```
 
-Then add the source ID and secret to the origin request in your [auth proxy](/docs/guides/auth). For example (using a Next.js [route handler](https://nextjs.org/docs/app/building-your-application/routing/route-handlers)):
+Then add the source ID and secret to the origin request in your [auth proxy](/docs/guides/auth). For example here using a Next.js [Route Handler](https://nextjs.org/docs/app/building-your-application/routing/route-handlers)):
 
 ```ts
 export async function GET(req: Request) {
@@ -91,8 +95,6 @@ export async function GET(req: Request) {
   return fetch(originUrl, {headers: req.headers})
 }
 ```
-
-See the [security guide](/docs/guides/security) for more context.
 
 ### Support
 
