@@ -52,8 +52,8 @@ jobs:
       - name: Deploy Write Patterns example
         working-directory: ./examples/write-patterns
         run: |
-          pnpm --filter @electric-sql/client --filter @electric-sql/experimental run build
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }} --print-logs
+          pnpm --filter @electric-sql/client --filter @electric-sql/experimental --filter @electric-sql/react run build
+          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
           if [ -f ".sst/outputs.json" ]; then
             writes=$(jq -r '.website' .sst/outputs.json)
             echo "writes=$writes" >> $GITHUB_ENV
