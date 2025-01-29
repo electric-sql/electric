@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- eccdf9f: - Do not await for responses while recovering publication filters.
+  - Remove publication update debounce time - simply wait until end of current process message queue.
+- 5f2cb99: fix: ensure correct JSON formating when reading concurrently written snapshot
+
 ## 1.0.0-beta.6
 
 ### Patch Changes
