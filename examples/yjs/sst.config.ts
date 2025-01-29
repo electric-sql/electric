@@ -18,7 +18,7 @@ export default $config({
       providers: {
         cloudflare: `5.42.0`,
         aws: {
-          version: `6.57.0`,
+          version: `6.66.2`,
           profile: process.env.CI ? undefined : `marketing`,
         },
         neon: `0.6.3`,
@@ -40,7 +40,7 @@ export default $config({
         id: process.env.NEON_PROJECT_ID!,
       })
 
-      const dbName = isProduction() ? `yjs` : `yjs-${$app.stage}`
+      const dbName = isProduction() ? `yjs` : `yjs-db-${$app.stage}`
 
       const { ownerName, dbName: resultingDbName } = createNeonDb({
         projectId: project.id,

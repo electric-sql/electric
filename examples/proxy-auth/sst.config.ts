@@ -17,7 +17,7 @@ export default $config({
       providers: {
         cloudflare: `5.42.0`,
         aws: {
-          version: `6.57.0`,
+          version: `6.66.2`,
           region: `eu-west-1`,
           profile: process.env.CI ? undefined : `marketing`,
         },
