@@ -92,7 +92,7 @@ function applyMigrations(uri: string) {
 }
 
 function deployAppServer(
-  { id, token }: $util.Output<{ id: string; token: string }>,
+  { id, source_secret }: $util.Output<{ id: string; source_secret: string }>,
   uri: $util.Output<string>
 ) {
   const vpc = new sst.aws.Vpc(`yjs-vpc-${$app.stage}`, { bastion: true })
@@ -109,7 +109,7 @@ function deployAppServer(
       ELECTRIC_URL: process.env.ELECTRIC_API!,
       DATABASE_URL: uri,
       ELECTRIC_SOURCE_ID: id,
-      ELECTRIC_SOURCE_SECRET: token,
+      ELECTRIC_SOURCE_SECRET: source_secret,
     },
     image: {
       context: `../..`,
@@ -125,7 +125,7 @@ function deployAppServer(
 
 async function addDatabaseToElectric(
   uri: string
-): Promise<{ id: string; token: string }> {
+): Promise<{ id: string; source_secret: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
   const teamId = process.env.ELECTRIC_TEAM_ID
 

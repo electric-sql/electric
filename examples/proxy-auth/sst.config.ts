@@ -69,7 +69,7 @@ export default $config({
     const staticSite = new sst.aws.Nextjs(`proxy-auth`, {
       environment: {
         ELECTRIC_URL: process.env.ELECTRIC_API!,
-        ELECTRIC_SOURCE_SECRET: electricInfo.token,
+        ELECTRIC_SOURCE_SECRET: electricInfo.source_secret,
         ELECTRIC_SOURCE_ID: electricInfo.id,
       },
       domain: {
@@ -83,7 +83,7 @@ export default $config({
     return {
       databaseUri,
       // source_id: electricInfo.id,
-      // source_secret: electricInfo.token,
+      // source_secret: electricInfo.source_secret,
       url: staticSite.url,
     }
   },
@@ -99,7 +99,7 @@ function applyMigrations(uri: string) {
 }
 async function addDatabaseToElectric(
   uri: string
-): Promise<{ id: string; token: string }> {
+): Promise<{ id: string; source_secret: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
   const teamId = process.env.ELECTRIC_TEAM_ID
 

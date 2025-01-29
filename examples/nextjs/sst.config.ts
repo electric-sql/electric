@@ -54,7 +54,7 @@ export default $config({
       return {
         pooledDatabaseUri,
         // source_id: electricInfo.id,
-        // source_secret: electricInfo.token,
+        // source_secret: electricInfo.source_secret,
         website: website.url,
       }
     } catch (e) {
@@ -73,13 +73,13 @@ function applyMigrations(uri: string) {
 }
 
 function deployNextJsExample(
-  electricInfo: $util.Output<{ id: string; token: string }>,
+  electricInfo: $util.Output<{ id: string; source_secret: string }>,
   uri: $util.Output<string>
 ) {
   return new sst.aws.Nextjs(`nextjs`, {
     environment: {
       ELECTRIC_URL: process.env.ELECTRIC_API!,
-      ELECTRIC_SOURCE_SECRET: electricInfo.token,
+      ELECTRIC_SOURCE_SECRET: electricInfo.source_secret,
       ELECTRIC_SOURCE_ID: electricInfo.id,
       DATABASE_URL: uri,
     },
@@ -92,7 +92,7 @@ function deployNextJsExample(
 
 async function addDatabaseToElectric(
   uri: string
-): Promise<{ id: string; token: string }> {
+): Promise<{ id: string; source_secret: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
   const teamId = process.env.ELECTRIC_TEAM_ID
 

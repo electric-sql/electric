@@ -102,7 +102,7 @@ export default $config({
             url.slice(0, url.length - 1)
           ),
           VITE_ELECTRIC_URL: process.env.ELECTRIC_API,
-          VITE_ELECTRIC_SOURCE_SECRET: electricInfo.token,
+          VITE_ELECTRIC_SOURCE_SECRET: electricInfo.source_secret,
           VITE_ELECTRIC_SOURCE_ID: electricInfo.id,
         },
         domain: {
@@ -117,7 +117,7 @@ export default $config({
       return {
         databaseUri,
         // source_id: electricInfo.id,
-        // source_secret: electricInfo.token,
+        // source_secret: electricInfo.source_secret,
         server: service.url,
         website: website.url,
       }
@@ -138,7 +138,7 @@ function applyMigrations(uri: string) {
 
 async function addDatabaseToElectric(
   uri: string
-): Promise<{ id: string; token: string }> {
+): Promise<{ id: string; source_secret: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
   const teamId = process.env.ELECTRIC_TEAM_ID
 
