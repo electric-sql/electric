@@ -25,7 +25,9 @@ Initially you will be provided with a [HTTP API](/docs/api/http) endpoint that y
 The first step is to schedule a short onboarding call with us. You will be provided with a scheduling link in the email invitating you to access the private BETA.
 
 > [!Warning] Bring your <code>DATABASE_URL</code>
-> You need to come to the call with a connection string to at least one [Postgres instance](/docs/guides/deployment#_1-running-postgres).
+> You need to come to the call with a connection string to at least one live [Postgres instance](/docs/guides/deployment#_1-running-postgres) with logical replication enabled. You can use [this form](https://dashboard.electric-sql.cloud/validate-postgres-for-electric-cloud) to test your connection string in advance.
+>
+> If you don't have a live Postgres you can set one up using e.g.: [Supabase](/docs/integrations/supabase) or [Neon](/docs/integrations/neon). If you're exposing a local database using Ngrok, make sure it has a fixed address and you have TCP support enabled (which requires a paid Ngrok plan).
 
 We will then walk through the process to setup your Electric instance and make sure it's working. At the end of the call you will be up and running and ready to build!
 
