@@ -97,7 +97,8 @@ defmodule Electric.Replication.PublicationManager do
   @spec recover_shape(Shape.t(), Keyword.t()) :: :ok
   def recover_shape(shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
-    GenServer.call(server, {:recover_shape, shape})
+    GenServer.cast(server, {:recover_shape, shape})
+    :ok
   end
 
   @spec remove_shape(Shape.t(), Keyword.t()) :: :ok
@@ -113,11 +114,8 @@ defmodule Electric.Replication.PublicationManager do
   @spec refresh_publication(Keyword.t()) :: :ok
   def refresh_publication(opts \\ []) do
     server = Access.get(opts, :server, name(opts))
-
-    case GenServer.call(server, :refresh_publication) do
-      :ok -> :ok
-      {:error, err} -> raise err
-    end
+    GenServer.cast(server, :refresh_publication)
+    :ok
   end
 
   def start_link(opts) do
@@ -175,11 +173,6 @@ defmodule Electric.Replication.PublicationManager do
     {:noreply, state}
   end
 
-  def handle_call({:recover_shape, shape}, _from, state) do
-    state = update_relation_filters_for_shape(shape, :add, state)
-    {:reply, :ok, state}
-  end
-
   def handle_call({:remove_shape, shape}, from, state) do
     state = update_relation_filters_for_shape(shape, :remove, state)
     state = add_waiter(from, state)
@@ -187,8 +180,13 @@ defmodule Electric.Replication.PublicationManager do
     {:noreply, state}
   end
 
-  def handle_call(:refresh_publication, from, state) do
-    state = add_waiter(from, state)
+  @impl true
+  def handle_cast({:recover_shape, shape}, state) do
+    state = update_relation_filters_for_shape(shape, :add, state)
+    {:noreply, state}
+  end
+
+  def handle_cast(:refresh_publication, state) do
     state = schedule_update_publication(state.update_debounce_timeout, state)
     {:noreply, state}
   end

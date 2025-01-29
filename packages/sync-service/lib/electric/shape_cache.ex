@@ -316,7 +316,7 @@ defmodule Electric.ShapeCache do
         {:ok, _pid, _snapshot_xmin, _latest_offset} = start_shape(shape_handle, shape, state)
 
         # recover publication filter state
-        :ok = publication_manager.recover_shape(shape, publication_manager_opts)
+        publication_manager.recover_shape(shape, publication_manager_opts)
       rescue
         e ->
           Logger.error("Failed to recover shape #{shape_handle}: #{inspect(e)}")
