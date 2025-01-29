@@ -52,7 +52,7 @@ defmodule Electric.Replication.PublicationManager do
 
   @retry_timeout 300
   @max_retries 3
-  @default_debounce_timeout 50
+  @default_debounce_timeout 0
 
   @relation_counter :relation_counter
   @relation_where :relation_where
