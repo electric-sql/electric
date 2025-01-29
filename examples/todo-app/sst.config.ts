@@ -6,14 +6,6 @@ import { execSync } from "child_process"
 const isProduction = (stage: string) =>
   stage.toLocaleLowerCase() === `production`
 
-if (!process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
-  throw new Error("ELECTRIC_ADMIN_API_TOKEN_ID is not set")
-}
-
-if (!process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
-  throw new Error("ELECTRIC_ADMIN_API_TOKEN_ID is not set")
-}
-
 const adminApiTokenId = process.env.ELECTRIC_ADMIN_API_TOKEN_ID
 const adminApiTokenSecret = process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET
 
@@ -26,7 +18,7 @@ export default $config({
       providers: {
         cloudflare: `5.42.0`,
         aws: {
-          version: `6.57.0`,
+          version: `6.66.2`,
           profile: process.env.CI ? undefined : `marketing`,
         },
         neon: `0.6.3`,
@@ -35,6 +27,14 @@ export default $config({
     }
   },
   async run() {
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
+      throw new Error("ELECTRIC_ADMIN_API_TOKEN_ID is not set")
+    }
+
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
+      throw new Error("ELECTRIC_ADMIN_API_TOKEN_ID is not set")
+    }
+
     try {
       const project = neon.getProjectOutput({
         id: process.env.NEON_PROJECT_ID!,
