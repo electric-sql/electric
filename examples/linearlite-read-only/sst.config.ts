@@ -121,7 +121,7 @@ async function addDatabaseToElectric(
   const result = await fetch(`${adminApi}/v1/sources`, {
     method: `PUT`,
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': `application/json`,
       'CF-Access-Client-Id': adminApiTokenId ?? ``,
       'CF-Access-Client-Secret': adminApiTokenSecret ?? ``,
     },

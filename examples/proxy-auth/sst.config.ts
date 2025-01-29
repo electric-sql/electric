@@ -84,7 +84,7 @@ export default $config({
       databaseUri,
       // source_id: electricInfo.id,
       // source_secret: electricInfo.source_secret,
-      url: staticSite.url,
+      website: staticSite.url,
     }
   },
 })
