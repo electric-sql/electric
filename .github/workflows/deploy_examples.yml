@@ -52,6 +52,7 @@ jobs:
       - name: Deploy Write Patterns example
         working-directory: ./examples/write-patterns
         run: |
+          pnpm --filter @electric-sql/client --filter @electric-sql/experimental run build
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }} --print-logs
           if [ -f ".sst/outputs.json" ]; then
             writes=$(jq -r '.website' .sst/outputs.json)
@@ -112,6 +113,7 @@ jobs:
       - name: Deploy Yjs example
         working-directory: ./examples/yjs
         run: |
+          pnpm sst remove --stage ${{ env.DEPLOY_ENV }}
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
           if [ -f ".sst/outputs.json" ]; then
             yjs=$(jq -r '.website' .sst/outputs.json)
