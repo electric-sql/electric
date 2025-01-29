@@ -53,8 +53,8 @@ export default $config({
         },
         environment: {
           VITE_ELECTRIC_URL: process.env.ELECTRIC_API,
-          VITE_ELECTRIC_TOKEN: electricInfo.token,
-          VITE_ELECTRIC_DATABASE_ID: electricInfo.id,
+          VITE_ELECTRIC_SOURCE_SECRET: electricInfo.token,
+          VITE_ELECTRIC_SOURCE_ID: electricInfo.id,
         },
         domain: {
           name: `linearlite${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
@@ -67,8 +67,8 @@ export default $config({
 
       return {
         databaseUri,
-        database_id: electricInfo.id,
-        electric_token: electricInfo.token,
+        // source_id: electricInfo.id,
+        // source_secret: electricInfo.token,
         website: website.url,
       }
     } catch (e) {

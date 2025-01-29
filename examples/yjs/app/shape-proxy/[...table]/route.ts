@@ -10,13 +10,16 @@ export async function GET(request: Request) {
     originUrl.searchParams.set(key, value)
   })
 
-  if (process.env.DATABASE_ID) {
-    originUrl.searchParams.set(`source_id`, process.env.DATABASE_ID)
+  if (process.env.ELECTRIC_SOURCE_ID) {
+    originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
   }
 
   const headers = new Headers()
-  if (process.env.ELECTRIC_TOKEN) {
-    originUrl.searchParams.set(`token`, process.env.ELECTRIC_TOKEN)
+  if (process.env.ELECTRIC_SOURCE_SECRET) {
+    originUrl.searchParams.set(
+      `source_secret`,
+      process.env.ELECTRIC_SOURCE_SECRET
+    )
   }
 
   const newRequest = new Request(originUrl.toString(), {

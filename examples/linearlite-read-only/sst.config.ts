@@ -64,8 +64,8 @@ export default $config({
       const website = deployLinearLite(electricInfo)
       return {
         databaseUri,
-        database_id: electricInfo.id,
-        electric_token: electricInfo.token,
+        // source_id: electricInfo.id,
+        // source_secret: electricInfo.token,
         website: website.url,
       }
     } catch (e) {
@@ -98,8 +98,8 @@ function deployLinearLite(
   return new sst.aws.StaticSite(`linearlite-read-only`, {
     environment: {
       VITE_ELECTRIC_URL: process.env.ELECTRIC_API!,
-      VITE_ELECTRIC_TOKEN: electricInfo.token,
-      VITE_DATABASE_ID: electricInfo.id,
+      VITE_ELECTRIC_SOURCE_SECRET: electricInfo.token,
+      VITE_ELECTRIC_SOURCE_ID: electricInfo.id,
     },
     build: {
       command: `pnpm run --filter @electric-sql/client  --filter @electric-sql/react --filter @electric-examples/linearlite-read-only build`,

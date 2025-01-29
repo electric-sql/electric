@@ -108,8 +108,8 @@ function deployAppServer(
     environment: {
       ELECTRIC_URL: process.env.ELECTRIC_API!,
       DATABASE_URL: uri,
-      DATABASE_ID: id,
-      ELECTRIC_TOKEN: token,
+      ELECTRIC_SOURCE_ID: id,
+      ELECTRIC_SOURCE_SECRET: token,
     },
     image: {
       context: `../..`,
@@ -122,24 +122,6 @@ function deployAppServer(
 
   return service
 }
-
-// function deployServerlessApp(
-//   electricInfo: $util.Output<{ id: string; token: string }>,
-//   uri: $util.Output<string>
-// ) {
-//   return new sst.aws.Nextjs(`yjs`, {
-//     environment: {
-//       ELECTRIC_URL: process.env.ELECTRIC_API!,
-//       ELECTRIC_TOKEN: electricInfo.token,
-//       DATABASE_ID: electricInfo.id,
-//       NEON_DATABASE_URL: uri,
-//     },
-//     domain: {
-//       name: `yjs${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
-//       dns: sst.cloudflare.dns(),
-//     },
-//   })
-// }
 
 async function addDatabaseToElectric(
   uri: string

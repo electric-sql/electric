@@ -69,8 +69,8 @@ export default $config({
     const staticSite = new sst.aws.Nextjs(`proxy-auth`, {
       environment: {
         ELECTRIC_URL: process.env.ELECTRIC_API!,
-        ELECTRIC_TOKEN: electricInfo.token,
-        DATABASE_ID: electricInfo.id,
+        ELECTRIC_SOURCE_SECRET: electricInfo.token,
+        ELECTRIC_SOURCE_ID: electricInfo.id,
       },
       domain: {
         name: `proxy-auth${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
@@ -82,8 +82,8 @@ export default $config({
 
     return {
       databaseUri,
-      databaseId: electricInfo.id,
-      token: electricInfo.token,
+      // source_id: electricInfo.id,
+      // source_secret: electricInfo.token,
       url: staticSite.url,
     }
   },

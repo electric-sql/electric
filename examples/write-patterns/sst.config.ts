@@ -108,8 +108,8 @@ export default $config({
             url.slice(0, url.length - 1)
           ),
           VITE_ELECTRIC_URL: process.env.ELECTRIC_API,
-          VITE_ELECTRIC_DATABASE_ID: electricInfo.id,
-          VITE_ELECTRIC_TOKEN: electricInfo.token,
+          VITE_ELECTRIC_SOURCE_ID: electricInfo.id,
+          VITE_ELECTRIC_SOURCE_SECRET: electricInfo.token,
         },
         domain: {
           name: `write-patterns${
@@ -124,8 +124,8 @@ export default $config({
 
       return {
         databaseUri,
-        database_id: electricInfo.id,
-        electric_token: electricInfo.token,
+        // source_id: electricInfo.id,
+        // source_secret: electricInfo.token,
         server: service.url,
         website: website.url,
       }

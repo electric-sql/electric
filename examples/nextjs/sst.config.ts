@@ -53,8 +53,8 @@ export default $config({
       const website = deployNextJsExample(electricInfo, pooledDatabaseUri)
       return {
         pooledDatabaseUri,
-        database_id: electricInfo.id,
-        electric_token: electricInfo.token,
+        // source_id: electricInfo.id,
+        // source_secret: electricInfo.token,
         website: website.url,
       }
     } catch (e) {
@@ -79,8 +79,8 @@ function deployNextJsExample(
   return new sst.aws.Nextjs(`nextjs`, {
     environment: {
       ELECTRIC_URL: process.env.ELECTRIC_API!,
-      ELECTRIC_TOKEN: electricInfo.token,
-      DATABASE_ID: electricInfo.id,
+      ELECTRIC_SOURCE_SECRET: electricInfo.token,
+      ELECTRIC_SOURCE_ID: electricInfo.id,
       DATABASE_URL: uri,
     },
     domain: {
