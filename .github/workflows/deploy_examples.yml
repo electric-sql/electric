@@ -52,6 +52,7 @@ jobs:
       - name: Deploy Write Patterns example
         working-directory: ./examples/write-patterns
         run: |
+          pnpm sst unlock --stage ${{ env.DEPLOY_ENV }}
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
           if [ -f ".sst/outputs.json" ]; then
             writes=$(jq -r '.website' .sst/outputs.json)
