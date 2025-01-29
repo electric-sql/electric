@@ -5,6 +5,9 @@ import { execSync } from "child_process"
 
 const isProduction = () => $app.stage.toLocaleLowerCase() === `production`
 
+const adminApiTokenId = process.env.ELECTRIC_ADMIN_API_TOKEN_ID
+const adminApiTokenSecret = process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET
+
 export default $config({
   app(input) {
     return {
@@ -15,7 +18,7 @@ export default $config({
       providers: {
         cloudflare: `5.42.0`,
         aws: {
-          version: `6.57.0`,
+          version: `6.66.2`,
           profile: process.env.CI ? undefined : `marketing`,
         },
         neon: `0.6.3`,
@@ -24,12 +27,20 @@ export default $config({
     }
   },
   async run() {
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+    }
+
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+    }
+
     try {
       const project = neon.getProjectOutput({
         id: process.env.NEON_PROJECT_ID!,
       })
 
-      const dbName = isProduction() ? `yjs` : `yjs-${$app.stage}`
+      const dbName = isProduction() ? `yjs` : `yjs-db-${$app.stage}`
 
       const { ownerName, dbName: resultingDbName } = createNeonDb({
         projectId: project.id,
@@ -61,7 +72,7 @@ export default $config({
 
       return {
         // serverless_url: serverless.url,
-        server_url: website.url,
+        website: website.url,
         databaseUri,
         databasePooledUri: pooledUri,
       }
@@ -81,7 +92,7 @@ function applyMigrations(uri: string) {
 }
 
 function deployAppServer(
-  { id, token }: $util.Output<{ id: string; token: string }>,
+  { id, source_secret }: $util.Output<{ id: string; source_secret: string }>,
   uri: $util.Output<string>
 ) {
   const vpc = new sst.aws.Vpc(`yjs-vpc-${$app.stage}`, { bastion: true })
@@ -97,8 +108,8 @@ function deployAppServer(
     environment: {
       ELECTRIC_URL: process.env.ELECTRIC_API!,
       DATABASE_URL: uri,
-      DATABASE_ID: id,
-      ELECTRIC_TOKEN: token,
+      ELECTRIC_SOURCE_ID: id,
+      ELECTRIC_SOURCE_SECRET: source_secret,
     },
     image: {
       context: `../..`,
@@ -112,33 +123,19 @@ function deployAppServer(
   return service
 }
 
-// function deployServerlessApp(
-//   electricInfo: $util.Output<{ id: string; token: string }>,
-//   uri: $util.Output<string>
-// ) {
-//   return new sst.aws.Nextjs(`yjs`, {
-//     environment: {
-//       ELECTRIC_URL: process.env.ELECTRIC_API!,
-//       ELECTRIC_TOKEN: electricInfo.token,
-//       DATABASE_ID: electricInfo.id,
-//       NEON_DATABASE_URL: uri,
-//     },
-//     domain: {
-//       name: `yjs${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
-//       dns: sst.cloudflare.dns(),
-//     },
-//   })
-// }
-
 async function addDatabaseToElectric(
   uri: string
-): Promise<{ id: string; token: string }> {
+): Promise<{ id: string; source_secret: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
   const teamId = process.env.ELECTRIC_TEAM_ID
 
   const result = await fetch(`${adminApi}/v1/sources`, {
     method: `PUT`,
-    headers: { "Content-Type": `application/json` },
+    headers: {
+      "Content-Type": `application/json`,
+      "CF-Access-Client-Id": adminApiTokenId ?? ``,
+      "CF-Access-Client-Secret": adminApiTokenSecret ?? ``,
+    },
     body: JSON.stringify({
       database_url: uri,
       region: `us-east-1`,

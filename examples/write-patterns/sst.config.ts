@@ -6,6 +6,9 @@ import { execSync } from 'child_process'
 
 const isProduction = (stage) => stage.toLocaleLowerCase() === 'production'
 
+const adminApiTokenId = process.env.ELECTRIC_ADMIN_API_TOKEN_ID
+const adminApiTokenSecret = process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET
+
 export default $config({
   app(input) {
     return {
@@ -15,7 +18,7 @@ export default $config({
       providers: {
         cloudflare: '5.42.0',
         aws: {
-          version: '6.57.0',
+          version: `6.66.2`,
           profile: process.env.CI ? undefined : `marketing`,
         },
         neon: '0.6.3',
@@ -24,6 +27,14 @@ export default $config({
     }
   },
   async run() {
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+    }
+
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+    }
+
     const project = neon.getProjectOutput({ id: process.env.NEON_PROJECT_ID! })
 
     const dbName = isProduction($app.stage)
@@ -97,8 +108,8 @@ export default $config({
             url.slice(0, url.length - 1)
           ),
           VITE_ELECTRIC_URL: process.env.ELECTRIC_API,
-          VITE_ELECTRIC_DATABASE_ID: electricInfo.id,
-          VITE_ELECTRIC_TOKEN: electricInfo.token,
+          VITE_ELECTRIC_SOURCE_ID: electricInfo.id,
+          VITE_ELECTRIC_SOURCE_SECRET: electricInfo.source_secret,
         },
         domain: {
           name: `write-patterns${
@@ -113,8 +124,8 @@ export default $config({
 
       return {
         databaseUri,
-        database_id: electricInfo.id,
-        electric_token: electricInfo.token,
+        // source_id: electricInfo.id,
+        // source_secret: electricInfo.source_secret,
         server: service.url,
         website: website.url,
       }
@@ -134,27 +145,28 @@ function applyMigrations(uri: string) {
 }
 
 async function addDatabaseToElectric(
-  database_url: string,
-  region: 'us-east-1' | 'eu-west-1' = 'us-east-1'
-): Promise<{ id: string; token: string }> {
+  uri: string
+): Promise<{ id: string; source_secret: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
   const teamId = process.env.ELECTRIC_TEAM_ID
 
-  const result = await fetch(new URL('v1/sources', adminApi), {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+  const result = await fetch(`${adminApi}/v1/sources`, {
+    method: `PUT`,
+    headers: {
+      'Content-Type': `application/json`,
+      'CF-Access-Client-Id': adminApiTokenId ?? ``,
+      'CF-Access-Client-Secret': adminApiTokenSecret ?? ``,
+    },
     body: JSON.stringify({
-      database_url,
-      region,
+      database_url: uri,
+      region: `us-east-1`,
       team_id: teamId,
     }),
   })
 
   if (!result.ok) {
     throw new Error(
-      `Could not add database to Electric (${
-        result.status
-      }): ${await result.text()}`
+      `Could not add database to Electric (${result.status}): ${await result.text()}`
     )
   }
 

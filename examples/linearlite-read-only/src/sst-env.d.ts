@@ -4,8 +4,8 @@
 /// <reference types="vite/client" />
 interface ImportMetaEnv {
   readonly VITE_ELECTRIC_URL: string
-  readonly VITE_ELECTRIC_TOKEN: string
-  readonly VITE_DATABASE_ID: string
+  readonly VITE_ELECTRIC_SOURCE_SECRET: string
+  readonly VITE_ELECTRIC_SOURCE_ID: string
 }
 interface ImportMeta {
   readonly env: ImportMetaEnv

@@ -542,7 +542,7 @@ importers:
         version: link:../../packages/react-hooks
       next:
         specifier: ^14.2.5
-        version: 14.2.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 14.2.17(@babel/core@7.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       pg:
         specifier: ^8.12.0
         version: 8.13.1
@@ -603,7 +603,7 @@ importers:
         version: link:../../packages/react-hooks
       next:
         specifier: ^14.2.5
-        version: 14.2.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 14.2.17(@babel/core@7.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       pg:
         specifier: ^8.12.0
         version: 8.13.1
@@ -745,7 +745,7 @@ importers:
         version: 0.3.4
       tsup:
         specifier: ^8.0.1
-        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
+        version: 8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
       tsx:
         specifier: ^4.19.1
         version: 4.19.2
@@ -1091,7 +1091,7 @@ importers:
         version: 0.2.99
       next:
         specifier: ^14.2.9
-        version: 14.2.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 14.2.17(@babel/core@7.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       pg:
         specifier: ^8.13.1
         version: 8.13.1
@@ -1102,8 +1102,8 @@ importers:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
       sst:
-        specifier: ^3.3.35
-        version: 3.3.59(hono@4.6.13)
+        specifier: 3.6.25
+        version: 3.6.25
       y-codemirror.next:
         specifier: 0.3.5
         version: 0.3.5(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(yjs@13.6.20)
@@ -1198,7 +1198,7 @@ importers:
         version: 0.3.4
       tsup:
         specifier: ^8.0.1
-        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
+        version: 8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
       typescript:
         specifier: ^5.5.2
         version: 5.6.3
@@ -1274,7 +1274,7 @@ importers:
         version: 0.3.4
       tsup:
         specifier: ^8.0.1
-        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
+        version: 8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
       typescript:
         specifier: ^5.5.2
         version: 5.6.3
@@ -1334,7 +1334,7 @@ importers:
         version: 0.3.4
       tsup:
         specifier: ^8.0.1
-        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
+        version: 8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
       typescript:
         specifier: ^5.5.2
         version: 5.6.3
@@ -8836,11 +8836,6 @@ packages:
     resolution: {integrity: sha512-MGrFH9Z4NP9Iyhqn16sDtBpRRNJ0Y2hNa6D65h736fVSaPCHr4DM4sWUNvVaSuC+0OBGhwsrydQwmgfg5LncqQ==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
 
-  sst-darwin-arm64@3.3.59:
-    resolution: {integrity: sha512-v8E3pg3JK7LDFOD0ot5N+HMNOA6MDHczx1M1SsJnMcNZPLTFH/Dn1B3roUaTP55+8jLKtqSJhnp9kLtTPHR1GQ==}
-    cpu: [arm64]
-    os: [darwin]
-
   sst-darwin-arm64@3.3.64:
     resolution: {integrity: sha512-sGlGX66vjWuN/501zjjEdqIalteyuawuoUvbIQsYFZ3yYg+THSPsXR5e3ADo2LgrOelaMhOOAZ8jabGGEsptnw==}
     cpu: [arm64]
@@ -8851,9 +8846,9 @@ packages:
     cpu: [arm64]
     os: [darwin]
 
-  sst-darwin-x64@3.3.59:
-    resolution: {integrity: sha512-SOOvHPxdxXwcMEwfdDXFiaMqZTdy1UcTL74omKGAn3i0pdoDN+FK2KPa865gNd1dzyYg0P6QXcUu9hI92g9Cyg==}
-    cpu: [x64]
+  sst-darwin-arm64@3.6.25:
+    resolution: {integrity: sha512-vUf0OXeSIrPN7QPHSxYJcXqycBvcoZJ9scsV1VrTRQbYpySfWCJMD8LSAuRB+//QjcDYndSx/r/ad0Ofx+a2vw==}
+    cpu: [arm64]
     os: [darwin]
 
   sst-darwin-x64@3.3.64:
@@ -8866,10 +8861,10 @@ packages:
     cpu: [x64]
     os: [darwin]
 
-  sst-linux-arm64@3.3.59:
-    resolution: {integrity: sha512-C7RjmuO0RR6xhmz0EZDcL6FhPCInwj5odehJZkbrvW0SObdoBLZLeDF0Or/7DKKh9VuSes/dpN1UvuUtMVE5Cg==}
-    cpu: [arm64]
-    os: [linux]
+  sst-darwin-x64@3.6.25:
+    resolution: {integrity: sha512-lFW1M/1gId2PVnNxQQJYeXgGNtRVPlL1HMQ+MUCbgNjQCDAcIFJ9C1mw3RXYorfKbgiS0yQdBfLRFIgLLIIcfw==}
+    cpu: [x64]
+    os: [darwin]
 
   sst-linux-arm64@3.3.64:
     resolution: {integrity: sha512-MUd0hHMap0SXAdU+UniAAlAzEzuJNIPbnQ80SHFGKatJNgFlQmmp7jq4qR1GXjaB3/NttLKIroQ8RBXuydtUzA==}
@@ -8881,9 +8876,9 @@ packages:
     cpu: [arm64]
     os: [linux]
 
-  sst-linux-x64@3.3.59:
-    resolution: {integrity: sha512-7XZaYHl7Uun9q6koMEIICvw/+BX18hqiVmBjaC2p6J6x5tw+z7kfpK3x+yD26HLHoFNhpIBLb+6Nqj7XDyCa/Q==}
-    cpu: [x64]
+  sst-linux-arm64@3.6.25:
+    resolution: {integrity: sha512-5Xjj08Uo5J1abiCHv09lxA0SqswbP2Vz5y6DAgocTPSLMuUlgCv9m0r+w+ng3OLDoCDVb56EUY0G8zwWX1Q3gA==}
+    cpu: [arm64]
     os: [linux]
 
   sst-linux-x64@3.3.64:
@@ -8896,9 +8891,9 @@ packages:
     cpu: [x64]
     os: [linux]
 
-  sst-linux-x86@3.3.59:
-    resolution: {integrity: sha512-GA8dZw6ty12ZwvpdVXkKBtdNwNuGF8vIcOKSzAQ6eC2UmywHlvQNgz2fiWMPVz94QLnNHCHAZlL6XAR7fz7n4Q==}
-    cpu: [x86]
+  sst-linux-x64@3.6.25:
+    resolution: {integrity: sha512-805J9vxCVjQJcrSHTxnHy89a496ugneE6/hS9kLwm0okp0JUL2B1Tc3PTLq37+jksq542eTSKdJ4wRED8XFJoQ==}
+    cpu: [x64]
     os: [linux]
 
   sst-linux-x86@3.3.64:
@@ -8911,17 +8906,10 @@ packages:
     cpu: [x86]
     os: [linux]
 
-  sst@3.3.59:
-    resolution: {integrity: sha512-WzKYWMf41n/TMEVp54tEITvmZQ0iZHf2whevpqqS85dAGP6w74NbEkwPNAB5oU2RlA2sj8GgMF76NdctsYQ0JA==}
-    hasBin: true
-    peerDependencies:
-      hono: 4.x
-      valibot: 0.30.x
-    peerDependenciesMeta:
-      hono:
-        optional: true
-      valibot:
-        optional: true
+  sst-linux-x86@3.6.25:
+    resolution: {integrity: sha512-7n3x2JcnN6Fbn3y/S9xI2DzhkL6vdV7D2vi0FxxkmW+Q7kZE/L8KrV6K5+IHFVrLmW37H4hyzLAU1r4Oy0Mx7A==}
+    cpu: [x86]
+    os: [linux]
 
   sst@3.3.64:
     resolution: {integrity: sha512-Mvgbz/ylG2UOzDir9t0Qk8M0wbzQMzwm0/lk5+lywqpK8emAea43+yOIgPvaJEeGiv9i9T97XRnYLbddUGZAFA==}
@@ -8946,6 +8934,10 @@ packages:
         optional: true
       valibot:
         optional: true
+
+  sst@3.6.25:
+    resolution: {integrity: sha512-lEvXCunAEhBQ7jUTj/tF8/5vfbXS1T7nNvfzAo0ZpHE1AH/Pj3vGqI1y4Zxs+SQBfEhUbPKjOH3aDWsOWHCmfA==}
+    hasBin: true
 
   stack-utils@2.0.6:
     resolution: {integrity: sha512-XlkWvfIm6RmsWtNJx+uqtKLS8eqFbxUg0ZzLXqY0caEy9l7hruX8IpiDnjsLavoBgqCCR71TqWO8MaXYheJ3RQ==}
@@ -17172,7 +17164,7 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  next@14.2.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  next@14.2.17(@babel/core@7.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@next/env': 14.2.17
       '@swc/helpers': 0.5.5
@@ -17182,7 +17174,7 @@ snapshots:
       postcss: 8.4.31
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
-      styled-jsx: 5.1.1(react@18.3.1)
+      styled-jsx: 5.1.1(@babel/core@7.26.0)(react@18.3.1)
     optionalDependencies:
       '@next/swc-darwin-arm64': 14.2.17
       '@next/swc-darwin-x64': 14.2.17
@@ -18608,16 +18600,13 @@ snapshots:
     dependencies:
       minipass: 7.1.2
 
-  sst-darwin-arm64@3.3.59:
-    optional: true
-
   sst-darwin-arm64@3.3.64:
     optional: true
 
   sst-darwin-arm64@3.3.7:
     optional: true
 
-  sst-darwin-x64@3.3.59:
+  sst-darwin-arm64@3.6.25:
     optional: true
 
   sst-darwin-x64@3.3.64:
@@ -18626,7 +18615,7 @@ snapshots:
   sst-darwin-x64@3.3.7:
     optional: true
 
-  sst-linux-arm64@3.3.59:
+  sst-darwin-x64@3.6.25:
     optional: true
 
   sst-linux-arm64@3.3.64:
@@ -18635,7 +18624,7 @@ snapshots:
   sst-linux-arm64@3.3.7:
     optional: true
 
-  sst-linux-x64@3.3.59:
+  sst-linux-arm64@3.6.25:
     optional: true
 
   sst-linux-x64@3.3.64:
@@ -18644,7 +18633,7 @@ snapshots:
   sst-linux-x64@3.3.7:
     optional: true
 
-  sst-linux-x86@3.3.59:
+  sst-linux-x64@3.6.25:
     optional: true
 
   sst-linux-x86@3.3.64:
@@ -18653,18 +18642,8 @@ snapshots:
   sst-linux-x86@3.3.7:
     optional: true
 
-  sst@3.3.59(hono@4.6.13):
-    dependencies:
-      aws4fetch: 1.0.20
-      jose: 5.2.3
-      openid-client: 5.6.4
-    optionalDependencies:
-      hono: 4.6.13
-      sst-darwin-arm64: 3.3.59
-      sst-darwin-x64: 3.3.59
-      sst-linux-arm64: 3.3.59
-      sst-linux-x64: 3.3.59
-      sst-linux-x86: 3.3.59
+  sst-linux-x86@3.6.25:
+    optional: true
 
   sst@3.3.64(hono@4.6.13):
     dependencies:
@@ -18691,6 +18670,18 @@ snapshots:
       sst-linux-arm64: 3.3.7
       sst-linux-x64: 3.3.7
       sst-linux-x86: 3.3.7
+
+  sst@3.6.25:
+    dependencies:
+      aws4fetch: 1.0.20
+      jose: 5.2.3
+      openid-client: 5.6.4
+    optionalDependencies:
+      sst-darwin-arm64: 3.6.25
+      sst-darwin-x64: 3.6.25
+      sst-linux-arm64: 3.6.25
+      sst-linux-x64: 3.6.25
+      sst-linux-x86: 3.6.25
 
   stack-utils@2.0.6:
     dependencies:
@@ -18819,10 +18810,12 @@ snapshots:
       stylis: 4.3.2
       tslib: 2.6.2
 
-  styled-jsx@5.1.1(react@18.3.1):
+  styled-jsx@5.1.1(@babel/core@7.26.0)(react@18.3.1):
     dependencies:
       client-only: 0.0.1
       react: 18.3.1
+    optionalDependencies:
+      '@babel/core': 7.26.0
 
   stylis@4.3.2: {}
 
@@ -19085,7 +19078,7 @@ snapshots:
 
   tslib@2.8.1: {}
 
-  tsup@8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0):
+  tsup@8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0):
     dependencies:
       bundle-require: 5.0.0(esbuild@0.24.0)
       cac: 6.7.14

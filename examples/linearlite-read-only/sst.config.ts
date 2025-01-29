@@ -3,6 +3,9 @@
 
 import { execSync } from 'child_process'
 
+const adminApiTokenId = process.env.ELECTRIC_ADMIN_API_TOKEN_ID
+const adminApiTokenSecret = process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET
+
 export default $config({
   app(input) {
     return {
@@ -12,7 +15,7 @@ export default $config({
       providers: {
         cloudflare: `5.42.0`,
         aws: {
-          version: `6.57.0`,
+          version: `6.66.2`,
           profile: process.env.CI ? undefined : `marketing`,
         },
         neon: `0.6.3`,
@@ -21,6 +24,14 @@ export default $config({
     }
   },
   async run() {
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+    }
+
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+    }
+
     const project = neon.getProjectOutput({ id: process.env.NEON_PROJECT_ID! })
 
     const dbName = `linearlite-read-only-${$app.stage}`
@@ -53,8 +64,8 @@ export default $config({
       const website = deployLinearLite(electricInfo)
       return {
         databaseUri,
-        database_id: electricInfo.id,
-        electric_token: electricInfo.token,
+        // source_id: electricInfo.id,
+        // source_secret: electricInfo.source_secret,
         website: website.url,
       }
     } catch (e) {
@@ -82,13 +93,13 @@ function loadData(uri: string) {
 }
 
 function deployLinearLite(
-  electricInfo: $util.Output<{ id: string; token: string }>
+  electricInfo: $util.Output<{ id: string; source_secret: string }>
 ) {
   return new sst.aws.StaticSite(`linearlite-read-only`, {
     environment: {
       VITE_ELECTRIC_URL: process.env.ELECTRIC_API!,
-      VITE_ELECTRIC_TOKEN: electricInfo.token,
-      VITE_DATABASE_ID: electricInfo.id,
+      VITE_ELECTRIC_SOURCE_SECRET: electricInfo.source_secret,
+      VITE_ELECTRIC_SOURCE_ID: electricInfo.id,
     },
     build: {
       command: `pnpm run --filter @electric-sql/client  --filter @electric-sql/react --filter @electric-examples/linearlite-read-only build`,
@@ -103,13 +114,17 @@ function deployLinearLite(
 
 async function addDatabaseToElectric(
   uri: string
-): Promise<{ id: string; token: string }> {
+): Promise<{ id: string; source_secret: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
   const teamId = process.env.ELECTRIC_TEAM_ID
 
   const result = await fetch(`${adminApi}/v1/sources`, {
     method: `PUT`,
-    headers: { 'Content-Type': `application/json` },
+    headers: {
+      'Content-Type': `application/json`,
+      'CF-Access-Client-Id': adminApiTokenId ?? ``,
+      'CF-Access-Client-Secret': adminApiTokenSecret ?? ``,
+    },
     body: JSON.stringify({
       database_url: uri,
       region: `us-east-1`,

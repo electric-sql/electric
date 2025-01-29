@@ -12,7 +12,7 @@ export default $config({
       providers: {
         cloudflare: `5.42.0`,
         aws: {
-          version: `6.57.0`,
+          version: `6.66.2`,
           profile: process.env.CI ? undefined : `marketing`,
         },
         neon: `0.6.3`,
@@ -53,8 +53,8 @@ export default $config({
       const website = deployNextJsExample(electricInfo, pooledDatabaseUri)
       return {
         pooledDatabaseUri,
-        database_id: electricInfo.id,
-        electric_token: electricInfo.token,
+        // source_id: electricInfo.id,
+        // source_secret: electricInfo.source_secret,
         website: website.url,
       }
     } catch (e) {
@@ -73,14 +73,14 @@ function applyMigrations(uri: string) {
 }
 
 function deployNextJsExample(
-  electricInfo: $util.Output<{ id: string; token: string }>,
+  electricInfo: $util.Output<{ id: string; source_secret: string }>,
   uri: $util.Output<string>
 ) {
   return new sst.aws.Nextjs(`nextjs`, {
     environment: {
       ELECTRIC_URL: process.env.ELECTRIC_API!,
-      ELECTRIC_TOKEN: electricInfo.token,
-      DATABASE_ID: electricInfo.id,
+      ELECTRIC_SOURCE_SECRET: electricInfo.source_secret,
+      ELECTRIC_SOURCE_ID: electricInfo.id,
       DATABASE_URL: uri,
     },
     domain: {
@@ -92,13 +92,17 @@ function deployNextJsExample(
 
 async function addDatabaseToElectric(
   uri: string
-): Promise<{ id: string; token: string }> {
+): Promise<{ id: string; source_secret: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
   const teamId = process.env.ELECTRIC_TEAM_ID
 
   const result = await fetch(`${adminApi}/v1/sources`, {
     method: `PUT`,
-    headers: { "Content-Type": `application/json` },
+    headers: {
+      "Content-Type": `application/json`,
+      "CF-Access-Client-Id": process.env.ELECTRIC_ADMIN_API_TOKEN_ID!,
+      "CF-Access-Client-Secret": process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET!,
+    },
     body: JSON.stringify({
       database_url: uri,
       region: `us-east-1`,

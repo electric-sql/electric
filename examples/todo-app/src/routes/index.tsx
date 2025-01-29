@@ -26,8 +26,8 @@ export default function Index() {
     url: new URL(`${import.meta.env.VITE_ELECTRIC_URL}/v1/shape/`).href,
     params: {
       table: `todos`,
-      source_id: import.meta.env.VITE_ELECTRIC_DATABASE_ID,
-      token: import.meta.env.VITE_ELECTRIC_TOKEN,
+      source_id: import.meta.env.VITE_ELECTRIC_SOURCE_ID,
+      source_secret: import.meta.env.VITE_ELECTRIC_SOURCE_SECRET,
     },
   })
   todos.sort((a, b) => a.created_at - b.created_at)

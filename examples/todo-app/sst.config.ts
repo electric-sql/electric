@@ -6,6 +6,9 @@ import { execSync } from "child_process"
 const isProduction = (stage: string) =>
   stage.toLocaleLowerCase() === `production`
 
+const adminApiTokenId = process.env.ELECTRIC_ADMIN_API_TOKEN_ID
+const adminApiTokenSecret = process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET
+
 export default $config({
   app(input) {
     return {
@@ -15,7 +18,7 @@ export default $config({
       providers: {
         cloudflare: `5.42.0`,
         aws: {
-          version: `6.57.0`,
+          version: `6.66.2`,
           profile: process.env.CI ? undefined : `marketing`,
         },
         neon: `0.6.3`,
@@ -24,6 +27,14 @@ export default $config({
     }
   },
   async run() {
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+    }
+
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+    }
+
     try {
       const project = neon.getProjectOutput({
         id: process.env.NEON_PROJECT_ID!,
@@ -91,8 +102,8 @@ export default $config({
             url.slice(0, url.length - 1)
           ),
           VITE_ELECTRIC_URL: process.env.ELECTRIC_API,
-          VITE_ELECTRIC_TOKEN: electricInfo.token,
-          VITE_ELECTRIC_DATABASE_ID: electricInfo.id,
+          VITE_ELECTRIC_SOURCE_SECRET: electricInfo.source_secret,
+          VITE_ELECTRIC_SOURCE_ID: electricInfo.id,
         },
         domain: {
           name: `todo-app${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
@@ -105,8 +116,8 @@ export default $config({
 
       return {
         databaseUri,
-        database_id: electricInfo.id,
-        electric_token: electricInfo.token,
+        // source_id: electricInfo.id,
+        // source_secret: electricInfo.source_secret,
         server: service.url,
         website: website.url,
       }
@@ -127,13 +138,17 @@ function applyMigrations(uri: string) {
 
 async function addDatabaseToElectric(
   uri: string
-): Promise<{ id: string; token: string }> {
+): Promise<{ id: string; source_secret: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
   const teamId = process.env.ELECTRIC_TEAM_ID
 
   const result = await fetch(`${adminApi}/v1/sources`, {
     method: `PUT`,
-    headers: { "Content-Type": `application/json` },
+    headers: {
+      "Content-Type": `application/json`,
+      "CF-Access-Client-Id": adminApiTokenId ?? ``,
+      "CF-Access-Client-Secret": adminApiTokenSecret ?? ``,
+    },
     body: JSON.stringify({
       database_url: uri,
       region: `us-east-1`,

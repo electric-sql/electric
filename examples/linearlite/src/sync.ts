@@ -11,8 +11,8 @@ const WRITE_SERVER_URL = import.meta.env.VITE_WRITE_SERVER_URL
 const ELECTRIC_URL = import.meta.env.VITE_ELECTRIC_URL
   ? new URL(import.meta.env.VITE_ELECTRIC_URL).origin
   : `http://localhost:3000`
-const ELECTRIC_DATABASE_ID = import.meta.env.VITE_ELECTRIC_DATABASE_ID
-const ELECTRIC_TOKEN = import.meta.env.VITE_ELECTRIC_TOKEN
+const ELECTRIC_SOURCE_ID = import.meta.env.VITE_ELECTRIC_SOURCE_ID
+const ELECTRIC_SOURCE_SECRET = import.meta.env.VITE_ELECTRIC_SOURCE_SECRET
 const APPLY_CHANGES_URL = `${WRITE_SERVER_URL}/apply-changes`
 
 type SyncStatus = 'initial-sync' | 'done'
@@ -57,8 +57,8 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
   }
 
   const issueUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
-  if (ELECTRIC_TOKEN) {
-    issueUrl.searchParams.set('token', ELECTRIC_TOKEN)
+  if (ELECTRIC_SOURCE_SECRET) {
+    issueUrl.searchParams.set('source_secret', ELECTRIC_SOURCE_SECRET)
   }
 
   // Issues Sync
@@ -67,7 +67,7 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
       url: issueUrl.toString(),
       params: {
         table: 'issue',
-        source_id: ELECTRIC_DATABASE_ID,
+        source_id: ELECTRIC_SOURCE_ID,
       },
     },
     table: 'issue',
@@ -93,8 +93,8 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
   )
 
   const commentUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
-  if (ELECTRIC_TOKEN) {
-    commentUrl.searchParams.set('token', ELECTRIC_TOKEN)
+  if (ELECTRIC_SOURCE_SECRET) {
+    commentUrl.searchParams.set('source_secret', ELECTRIC_SOURCE_SECRET)
   }
 
   // Comments Sync
@@ -103,7 +103,7 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
       url: commentUrl.toString(),
       params: {
         table: 'comment',
-        source_id: ELECTRIC_DATABASE_ID,
+        source_id: ELECTRIC_SOURCE_ID,
       },
     },
     table: 'comment',

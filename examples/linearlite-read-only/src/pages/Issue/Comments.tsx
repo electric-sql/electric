@@ -8,7 +8,7 @@ import { formatDate } from '../../utils/date'
 import { showWarning } from '../../utils/notification'
 import { Comment, Issue } from '../../types/types'
 import { useShape } from '@electric-sql/react'
-import { baseUrl, databaseId, token } from '../../electric'
+import { baseUrl, source_id, source_secret } from '../../electric'
 
 export interface CommentsProps {
   issue: Issue
@@ -19,8 +19,8 @@ function Comments(commentProps: CommentsProps) {
   const allComments = useShape({
     url: `${baseUrl}/v1/shape`,
     params: {
-      token,
-      source_id: databaseId,
+      source_secret,
+      source_id,
       table: `comment`,
     },
   })! as Comment[]

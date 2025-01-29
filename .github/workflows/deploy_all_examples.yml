@@ -61,10 +61,14 @@ jobs:
         working-directory: ./examples/linearlite-read-only
         run: pnpm sst deploy --stage production
 
-      - name: Deploy Linearlite
-        working-directory: ./examples/linearlite
-        run: pnpm sst deploy --stage production
+      # - name: Deploy Linearlite
+      #   working-directory: ./examples/linearlite
+      #   run: pnpm sst deploy --stage production
 
       - name: Deploy NextJs example
         working-directory: ./examples/nextjs
+        run: pnpm sst deploy --stage production
+
+      - name: Deploy Yjs example
+        working-directory: ./examples/yjs
         run: pnpm sst deploy --stage production
