@@ -107,6 +107,10 @@ defmodule Electric.Shapes.Api.Response do
     Plug.Conn.delete_resp_header(conn, "electric-up-to-date")
   end
 
+  defp put_offset_header(conn, %__MODULE__{offset: nil}) do
+    conn
+  end
+
   defp put_offset_header(conn, %__MODULE__{offset: offset}) do
     Plug.Conn.put_resp_header(conn, "electric-offset", "#{offset}")
   end
