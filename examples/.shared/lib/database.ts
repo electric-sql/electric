@@ -91,7 +91,7 @@ export function createDatabaseForCloudElectric({
   })
 
   if (migrationsDirectory) {
-    databaseUri.apply(applyMigrations)
+    databaseUri.apply((uri) => applyMigrations(uri, migrationsDirectory))
   }
 
   const electricInfo = databaseUri.apply((dbUri) =>
