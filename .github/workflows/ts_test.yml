@@ -155,6 +155,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
+      - run: pnpm --if-present run prepare
       - run: pnpm --if-present run typecheck
       - run: pnpm --if-present run build
       - run: pnpm --if-present run test

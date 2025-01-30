@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "deploy": "sst deploy --stage shared",
-    "build": "sst install",
+    "prepare": "sst install",
     "lint": "eslint . --ext js,ts,tsx --report-unused-disable-directives --max-warnings 0",
     "stylecheck": "eslint . --quiet",
     "typecheck": "tsc --noEmit"
