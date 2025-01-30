@@ -2,14 +2,15 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
 import { execSync } from 'child_process'
-import { createDatabaseForCloudElectric } from '../.shared/database'
-import { isProduction } from '../.shared/infra'
+import { createDatabaseForCloudElectric } from '../.shared/lib/database'
+import { isProduction } from '../.shared/lib/infra'
 
 export default $config({
   app(input) {
     return {
       name: `linearlite-read-only`,
-      removal: input?.stage === `production` ? `retain` : `remove`,
+      removal:
+        input?.stage.toLocaleLowerCase() === `production` ? `retain` : `remove`,
       home: `aws`,
       providers: {
         cloudflare: `5.42.0`,
@@ -26,14 +27,30 @@ export default $config({
     const dbName =
       `linearlite-read-only` + isProduction() ? `` : `-stage-${$app.stage}`
 
-    const electricInfo = createDatabaseForCloudElectric({
-      dbName,
-      migrationsDirectory: `./db/migrations`,
+    const { pooledDatabaseUri, sourceId, sourceSecret } =
+      createDatabaseForCloudElectric({
+        dbName,
+        migrationsDirectory: `./db/migrations`,
+      })
+
+    pooledDatabaseUri.apply(loadData)
+
+    const website = new sst.aws.StaticSite(`linearlite-read-only`, {
+      environment: {
+        VITE_ELECTRIC_URL: process.env.ELECTRIC_API!,
+        VITE_ELECTRIC_SOURCE_SECRET: sourceSecret,
+        VITE_ELECTRIC_SOURCE_ID: sourceId,
+      },
+      build: {
+        command: `pnpm run --filter @electric-sql/client  --filter @electric-sql/react --filter @electric-examples/linearlite-read-only build`,
+        output: `dist`,
+      },
+      domain: {
+        name: `linearlite-read-only${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+        dns: sst.cloudflare.dns(),
+      },
     })
 
-    electricInfo.databaseUri.apply(loadData)
-
-    const website = deployLinearLite(electricInfo)
     return {
       website: website.url,
     }
@@ -45,28 +62,6 @@ function loadData(uri: string) {
     env: {
       ...process.env,
       DATABASE_URL: uri,
-    },
-  })
-}
-
-function deployLinearLite(electricInfo: {
-  sourceId: $util.Output<string>
-  sourceSecret: $util.Output<string>
-  databaseUri: $util.Output<string>
-}) {
-  return new sst.aws.StaticSite(`linearlite-read-only`, {
-    environment: {
-      VITE_ELECTRIC_URL: process.env.ELECTRIC_API!,
-      VITE_ELECTRIC_SOURCE_SECRET: electricInfo.sourceSecret,
-      VITE_ELECTRIC_SOURCE_ID: electricInfo.sourceId,
-    },
-    build: {
-      command: `pnpm run --filter @electric-sql/client  --filter @electric-sql/react --filter @electric-examples/linearlite-read-only build`,
-      output: `dist`,
-    },
-    domain: {
-      name: `linearlite-read-only${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
-      dns: sst.cloudflare.dns(),
     },
   })
 }

@@ -28,7 +28,7 @@ export default $config({
       ? 'write-patterns-production'
       : `write-patterns-${$app.stage}`
 
-    const { databaseUri, sourceId, sourceSecret } =
+    const { pooledDatabaseUri, sourceId, sourceSecret } =
       createDatabaseForCloudElectric({
         dbName,
         migrationsDirectory: `./shared/migrations`,
@@ -47,7 +47,7 @@ export default $config({
         },
       },
       environment: {
-        DATABASE_URL: databaseUri,
+        DATABASE_URL: pooledDatabaseUri,
       },
       image: {
         context: '../..',

@@ -25,7 +25,7 @@ export default $config({
   async run() {
     const dbName = isProduction() ? `yjs` : `yjs-db-${$app.stage}`
 
-    const { databaseUri, sourceId, sourceSecret } =
+    const { pooledDatabaseUri, sourceId, sourceSecret } =
       createDatabaseForCloudElectric({
         dbName,
         migrationsDirectory: `./db/migrations`,
@@ -43,7 +43,7 @@ export default $config({
       },
       environment: {
         ELECTRIC_URL: process.env.ELECTRIC_API!,
-        DATABASE_URL: databaseUri,
+        DATABASE_URL: pooledDatabaseUri,
         ELECTRIC_SOURCE_ID: sourceId,
         ELECTRIC_SOURCE_SECRET: sourceSecret,
       },
