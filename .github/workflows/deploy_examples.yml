@@ -114,17 +114,18 @@ jobs:
             exit 123
           fi
 
-      # - name: Deploy proxy-auth example
-      #   working-directory: ./examples/proxy-auth
-      #   run: |
-      #     pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-      #     if [ -f ".sst/outputs.json" ]; then
-      #       auth=$(jq -r '.website' .sst/outputs.json)
-      #       echo "auth=$auth" >> $GITHUB_ENV
-      #     else
-      #       echo "sst outputs file not found. Exiting."
-      #       exit 123
-      #     fi
+      - name: Deploy proxy-auth example
+        working-directory: ./examples/proxy-auth
+        continue-on-error: true
+        run: |
+          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+          if [ -f ".sst/outputs.json" ]; then
+            auth=$(jq -r '.website' .sst/outputs.json)
+            echo "auth=$auth" >> $GITHUB_ENV
+          else
+            echo "sst outputs file not found. Exiting."
+            exit 123
+          fi
 
       - name: Add comment to PR
         if: github.event_name == 'pull_request'
