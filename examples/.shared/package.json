@@ -1,0 +1,25 @@
+{
+  "name": "@electric-examples/shared",
+  "private": true,
+  "version": "0.0.1",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "deploy": "sst deploy --stage shared",
+    "lint": "eslint . --ext js,ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "stylecheck": "eslint . --quiet",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@databases/pg-migrations": "^5.0.3",
+    "@types/node": "^20.14.10",
+    "@types/pg": "^8.11.6",
+    "camelcase": "^8.0.0",
+    "dotenv": "^16.4.5",
+    "eslint": "^8.57.0",
+    "pg": "^8.13.1",
+    "sst": "3.6.25",
+    "typescript": "^5.5.3"
+  }
+}
