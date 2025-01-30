@@ -302,14 +302,37 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   @impl Electric.ShapeCache.Storage
   def cleanup!(%MS{} = opts) do
-    :ets.delete_all_objects(opts.snapshot_table)
-    :ets.delete_all_objects(opts.log_table)
-    :ets.delete_all_objects(opts.chunk_checkpoint_table)
+    for table <- tables(opts), do: :ets.delete_all_objects(table)
     :ok
+  rescue
+    _ ->
+      :ok
   end
 
   @impl Electric.ShapeCache.Storage
-  def unsafe_cleanup!(%MS{} = opts), do: cleanup!(opts)
+  def unsafe_cleanup!(%MS{} = opts) do
+    for table <- tables(opts),
+        do: ignoring_exceptions(fn -> :ets.delete(table) end, ArgumentError)
+  end
+
+  defp ignoring_exceptions(fun, exception) do
+    fun.()
+  rescue
+    error ->
+      if error.__struct__ == exception do
+        :ok
+      else
+        reraise(error, __STACKTRACE__)
+      end
+  end
+
+  defp tables(%MS{} = opts) do
+    [
+      opts.snapshot_table,
+      opts.log_table,
+      opts.chunk_checkpoint_table
+    ]
+  end
 
   # Turns a LogOffset into a tuple representation
   # for storing in the ETS table

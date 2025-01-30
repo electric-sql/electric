@@ -32,6 +32,8 @@ defmodule Support.TestStorage do
     {__MODULE__, {parent, init, storage}}
   end
 
+  def backing_storage({__MODULE__, {_parent, _init, storage}}), do: storage
+
   @impl Electric.ShapeCache.Storage
   def shared_opts(_opts) do
     raise "don't use this, initialise the memory opts directly"

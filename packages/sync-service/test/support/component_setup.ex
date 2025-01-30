@@ -41,6 +41,10 @@ defmodule Support.ComponentSetup do
     %{storage: {InMemoryStorage, storage_opts}}
   end
 
+  def with_tracing_storage(%{storage: storage}) do
+    [storage: Support.TestStorage.wrap(storage, %{})]
+  end
+
   def with_no_pool(_ctx) do
     %{pool: :no_pool}
   end

@@ -294,6 +294,10 @@ defmodule Electric.ShapeCache do
       shape_handle
     )
 
+    shape_handle
+    |> Electric.ShapeCache.Storage.for_shape(state.storage)
+    |> Electric.ShapeCache.Storage.unsafe_cleanup!()
+
     :ok
   end
 

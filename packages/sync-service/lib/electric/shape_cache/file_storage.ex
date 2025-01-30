@@ -536,13 +536,16 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def cleanup!(%FS{} = opts) do
+    # can't delete the data_dir here because the CubDb instance is still running,
+    # and trying to delete the parent directory will fail since the files inside
+    # are still in use
     :ok = cleanup_internals!(opts)
-    {:ok, _} = File.rm_rf(opts.data_dir)
-    :ok
   end
 
   @impl Electric.ShapeCache.Storage
   def unsafe_cleanup!(%FS{} = opts) do
+    {:ok, _} = File.rm_rf(opts.snapshot_dir)
+    {:ok, _} = File.rm_rf(shape_definition_path(opts))
     {:ok, _} = File.rm_rf(opts.data_dir)
     :ok
   end
