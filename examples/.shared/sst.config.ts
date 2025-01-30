@@ -38,6 +38,10 @@ export default $config({
       { provider }
     )
 
+    // Set the following environment variables with the shared infra
+    // in GitHub CI environment
+    // SHARED_INFRA_VPC_ID
+    // SHARED_INFRA_CLUSTER_ARN
     return {
       sharedVpc: vpc.id,
       sharedCluster: cluster.id,
