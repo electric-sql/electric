@@ -47,23 +47,20 @@ defmodule Electric.Shapes.ApiTest do
     do: Support.StubInspector.load_relation(tbl, nil)
 
   defp configure_request(ctx) do
-    {api, opts} =
-      Api.configure(
-        stack_id: ctx.stack_id,
-        pg_id: @test_pg_id,
-        stack_events_registry: Registry.StackEvents,
-        stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
-        shape_cache: {Mock.ShapeCache, []},
-        storage: {Mock.Storage, []},
-        inspector: {__MODULE__, []},
-        registry: @registry,
-        long_poll_timeout: long_poll_timeout(ctx),
-        max_age: max_age(ctx),
-        stale_age: stale_age(ctx),
-        encoder: Electric.Shapes.Api.Encoder.Term
-      )
-
-    Keyword.merge(opts, api: api)
+    Api.plug_opts(
+      stack_id: ctx.stack_id,
+      pg_id: @test_pg_id,
+      stack_events_registry: Registry.StackEvents,
+      stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
+      shape_cache: {Mock.ShapeCache, []},
+      storage: {Mock.Storage, []},
+      inspector: {__MODULE__, []},
+      registry: @registry,
+      long_poll_timeout: long_poll_timeout(ctx),
+      max_age: max_age(ctx),
+      stale_age: stale_age(ctx),
+      encoder: Electric.Shapes.Api.Encoder.Term
+    )
   end
 
   defp ready_stack(ctx) do

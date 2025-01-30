@@ -231,24 +231,21 @@ defmodule Support.ComponentSetup do
   end
 
   def build_router_opts(ctx, overrides \\ []) do
-    {api, opts} =
-      Electric.Shapes.Api.configure(
-        [
-          long_poll_timeout: 4_000,
-          max_age: 60,
-          stale_age: 300,
-          allow_shape_deletion: true
-        ]
-        |> Keyword.merge(
-          Electric.StackSupervisor.build_shared_opts(
-            stack_id: ctx.stack_id,
-            stack_events_registry: ctx.stack_events_registry,
-            storage: ctx.storage
-          )
+    Electric.Shapes.Api.plug_opts(
+      [
+        long_poll_timeout: 4_000,
+        max_age: 60,
+        stale_age: 300,
+        allow_shape_deletion: true
+      ]
+      |> Keyword.merge(
+        Electric.StackSupervisor.build_shared_opts(
+          stack_id: ctx.stack_id,
+          stack_events_registry: ctx.stack_events_registry,
+          storage: ctx.storage
         )
-        |> Keyword.merge(overrides)
       )
-
-    Keyword.merge(opts, api: api)
+      |> Keyword.merge(overrides)
+    )
   end
 end

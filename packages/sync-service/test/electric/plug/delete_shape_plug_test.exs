@@ -38,8 +38,8 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   end
 
   def call_delete_shape_plug(conn, ctx, allow \\ true) do
-    {api, opts} =
-      Electric.Shapes.Api.configure(
+    config =
+      Electric.Shapes.Api.plug_opts(
         stack_id: ctx.stack_id,
         stack_events_registry: Registry.StackEvents,
         stack_ready_timeout: 100,
@@ -53,8 +53,6 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         stale_age: Access.get(ctx, :stale_age, 300),
         allow_shape_deletion: allow
       )
-
-    config = Keyword.merge(opts, api: api)
 
     DeleteShapePlug.call(conn, config)
   end

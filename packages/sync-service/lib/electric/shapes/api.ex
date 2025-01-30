@@ -44,6 +44,12 @@ defmodule Electric.Shapes.Api do
     {%__MODULE__{config: config}, unused_opts}
   end
 
+  def plug_opts(opts) do
+    {api, config} = configure(opts)
+
+    Keyword.merge(config, api: api)
+  end
+
   @doc """
   Validate the parameters for the request.
 
