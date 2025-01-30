@@ -22,7 +22,7 @@ export default $config({
     }
   },
   async run() {
-    const dbName = `nextjs${isProduction() ? `` : `-stage-${$app.stage}`}` 
+    const dbName = `nextjs${isProduction() ? `` : `-stage-${$app.stage}`}`
 
     const { sourceId, sourceSecret, pooledDatabaseUri } =
       createDatabaseForCloudElectric({
