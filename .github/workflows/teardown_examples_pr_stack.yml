@@ -47,6 +47,7 @@ jobs:
 
       - name: Remove Linearlite
         working-directory: examples/linearlite-read-only
+        continue-on-error: true
         run: |
           export PR_NUMBER=${{ github.event.number }}
           echo "Removing stage pr-$PR_NUMBER"
@@ -54,6 +55,7 @@ jobs:
 
       - name: Remove NextJs example
         working-directory: examples/nextjs
+        continue-on-error: true
         run: |
           export PR_NUMBER=${{ github.event.number }}
           echo "Removing stage pr-$PR_NUMBER"
