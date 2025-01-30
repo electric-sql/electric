@@ -45,8 +45,24 @@ jobs:
           restore-keys: |
             sst-cache-${{ runner.os }}
 
-      - name: Remove Linearlite
+      - name: Deploy Yjs example
+        working-directory: ./examples/yjs
+        continue-on-error: true
+        run: |
+          export PR_NUMBER=${{ github.event.number }}
+          echo "Removing stage pr-$PR_NUMBER"
+          pnpm sst remove --stage "pr-$PR_NUMBER"
+
+      - name: Remove Linearlite Read Only
         working-directory: examples/linearlite-read-only
+        continue-on-error: true
+        run: |
+          export PR_NUMBER=${{ github.event.number }}
+          echo "Removing stage pr-$PR_NUMBER"
+          pnpm sst remove --stage "pr-$PR_NUMBER"
+
+      - name: Deploy Write Patterns example
+        working-directory: ./examples/write-patterns
         continue-on-error: true
         run: |
           export PR_NUMBER=${{ github.event.number }}
@@ -55,6 +71,22 @@ jobs:
 
       - name: Remove NextJs example
         working-directory: examples/nextjs
+        continue-on-error: true
+        run: |
+          export PR_NUMBER=${{ github.event.number }}
+          echo "Removing stage pr-$PR_NUMBER"
+          pnpm sst remove --stage "pr-$PR_NUMBER"
+
+      - name: Deploy TODO App example
+        working-directory: ./examples/todo-app
+        continue-on-error: true
+        run: |
+          export PR_NUMBER=${{ github.event.number }}
+          echo "Removing stage pr-$PR_NUMBER"
+          pnpm sst remove --stage "pr-$PR_NUMBER"
+
+      - name: Deploy proxy-auth example
+        working-directory: ./examples/proxy-auth
         continue-on-error: true
         run: |
           export PR_NUMBER=${{ github.event.number }}
