@@ -598,7 +598,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert get_resp_header(conn, "electric-handle") == [@test_shape_handle]
 
       assert get_resp_header(conn, "location") == [
-               "/?handle=#{@test_shape_handle}&offset=-1&table=public.users"
+               "/?table=public.users&handle=#{@test_shape_handle}&offset=-1"
              ]
     end
 
@@ -631,7 +631,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert get_resp_header(conn, "electric-handle") == [new_shape_handle]
 
       assert get_resp_header(conn, "location") == [
-               "/?handle=#{new_shape_handle}&offset=-1&table=public.users"
+               "/?table=public.users&handle=#{new_shape_handle}&offset=-1"
              ]
     end
 

@@ -72,11 +72,11 @@ defmodule Electric.Shapes.Api.Response do
   end
 
   defp put_location_header(conn, %__MODULE__{status: 409} = response) do
-    params = %{
+    params = [
       table: Electric.Utils.relation_to_sql(response.shape.root_table),
       handle: response.handle,
       offset: "-1"
-    }
+    ]
 
     query = URI.encode_query(params)
 
