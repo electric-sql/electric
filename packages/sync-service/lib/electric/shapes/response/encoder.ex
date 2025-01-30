@@ -33,13 +33,21 @@ defmodule Electric.Shapes.Response.Encoder.JSON do
   end
 
   def message(term) do
-    Stream.map([term], &Jason.encode!/1)
+    Stream.map([term], &Jason.encode_to_iodata!/1)
   end
 
   @impl Electric.Shapes.Response.Encoder
   # the log is streamed from storage as a stream of json-encoded messages
   def log(item_stream) do
-    to_json_stream(item_stream)
+    item_stream |> Stream.map(&ensure_json/1) |> to_json_stream()
+  end
+
+  defp ensure_json(json) when is_binary(json) do
+    json
+  end
+
+  defp ensure_json(term) do
+    Jason.encode_to_iodata!(term)
   end
 
   @json_list_start "["

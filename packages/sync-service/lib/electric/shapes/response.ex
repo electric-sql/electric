@@ -5,6 +5,7 @@ defmodule Electric.Shapes.Response do
     :handle,
     :offset,
     :shape,
+    chunked: false,
     up_to_date: false,
     status: 200,
     trace_attrs: %{},
@@ -16,6 +17,7 @@ defmodule Electric.Shapes.Response do
       args
       |> Keyword.put_new(:status, 400)
       |> Keyword.put(:body, Request.encode_message(request, message))
+      |> Keyword.put(:shape, get_in(request.params.shape_definition))
 
     struct(__MODULE__, opts)
   end

@@ -87,6 +87,17 @@ defmodule Electric.Shapes.RequestTest do
   describe "validate/2" do
     setup [:with_stack_id_from_test, :ready_stack, :configure_request]
 
+    test "returns 400 for invalid table", ctx do
+      assert {:error, %{status: 400} = response} =
+               Request.validate(%{table: ".invalid_shape", offset: "-1"}, ctx.request)
+
+      assert response_body(response) == %{
+               table: [
+                 "Invalid zero-length delimited identifier"
+               ]
+             }
+    end
+
     test "returns error for invalid offset", ctx do
       assert {:error, %{status: 400} = response} =
                Request.validate(%{table: "foo", offset: "invalid"}, ctx.request)
@@ -305,7 +316,7 @@ defmodule Electric.Shapes.RequestTest do
                  ctx.request
                )
 
-      assert {:ok, response} = Request.serve(request)
+      assert response = Request.serve(request)
       assert response.status == 200
       assert response.handle == test_shape_handle
 
@@ -358,9 +369,10 @@ defmodule Electric.Shapes.RequestTest do
                  ctx.request
                )
 
-      assert {:ok, response} = Request.serve(request)
+      assert response = Request.serve(request)
 
       assert response.status == 200
+      assert response.chunked
 
       assert response_body(response) == [
                %{
@@ -409,8 +421,9 @@ defmodule Electric.Shapes.RequestTest do
                  ctx.request
                )
 
-      assert {:ok, response} = Request.serve(request)
+      assert response = Request.serve(request)
       assert response.status == 200
+      assert response.chunked
 
       assert response_body(response) == [
                %{
@@ -481,9 +494,10 @@ defmodule Electric.Shapes.RequestTest do
       end)
 
       # The conn process should exit after sending the response
-      assert {:ok, response} = Task.await(task)
+      assert response = Task.await(task)
 
       assert response.status == 200
+      assert response.chunked
 
       assert response_body(response) == [
                "test result",
@@ -537,9 +551,10 @@ defmodule Electric.Shapes.RequestTest do
         send(pid, {ref, :shape_rotation})
       end)
 
-      assert {:ok, response} = Task.await(task)
+      assert response = Task.await(task)
 
       assert response.status == 204
+      refute response.chunked
       assert response_body(response) == [%{headers: %{control: "up-to-date"}}]
       assert response.up_to_date
     end
@@ -573,9 +588,10 @@ defmodule Electric.Shapes.RequestTest do
                  ctx.request
                )
 
-      assert {:ok, response} = Request.serve(request)
+      assert response = Request.serve(request)
 
       assert response.status == 204
+      refute response.chunked
 
       assert response_body(response) == [%{headers: %{control: "up-to-date"}}]
       assert response.up_to_date

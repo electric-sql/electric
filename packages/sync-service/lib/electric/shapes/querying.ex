@@ -137,7 +137,7 @@ defmodule Electric.Shapes.Querying do
   end
 
   defp escape_relation(relation) do
-    relation |> Utils.relation_to_sql() |> String.replace(~S|'|, ~S|''|)
+    relation |> Utils.relation_to_sql(true) |> String.replace(~S|'|, ~S|''|)
   end
 
   defp escape_column_value(column) do

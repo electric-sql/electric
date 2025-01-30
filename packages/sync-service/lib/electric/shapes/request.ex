@@ -1,6 +1,5 @@
 defmodule Electric.Shapes.Request do
   alias Electric.Replication.LogOffset
-  alias Finch.Request
   alias Electric.Shapes
   alias Electric.Shapes.Request, as: R
   alias Electric.Shapes.Response
@@ -15,12 +14,12 @@ defmodule Electric.Shapes.Request do
 
   defstruct [
     :chunk_end_offset,
-    :config,
     :handle,
     :last_offset,
     :new_changes_ref,
-    :params,
-    :response,
+    config: %R.Config{},
+    params: %R.Params{},
+    response: %Response{},
     valid: false
   ]
 
@@ -67,16 +66,23 @@ defmodule Electric.Shapes.Request do
     end
   end
 
+  @doc """
+  A utility function to serve a configured, valid request to completion
+  """
   def serve(%R{} = request) when is_valid(request) do
+    request
+    |> init()
+    |> serve_shape_log()
+  end
+
+  @doc """
+  Get a request's offset status information.
+  """
+  def init(%R{} = request) do
     request
     |> listen_for_new_changes()
     |> determine_log_chunk_offset()
     |> determine_up_to_date()
-    |> serve_shape_log()
-    |> then(fn %{response: response} -> {:ok, response} end)
-  catch
-    :throw, response ->
-      {:error, response}
   end
 
   defp load_shape_info(%R{} = request) do
@@ -214,6 +220,8 @@ defmodule Electric.Shapes.Request do
     end
   end
 
+  # If chunk offsets are available, use those instead of the latest available
+  # offset to optimize for cache hits and response sizes
   defp determine_log_chunk_offset(%R{} = request) do
     %{handle: handle, last_offset: last_offset, params: %{offset: offset}, config: config} =
       request
@@ -245,9 +253,14 @@ defmodule Electric.Shapes.Request do
     end
   end
 
-  defp serve_shape_log(%R{} = request) do
+  @doc """
+  Return shape log data.
+  """
+  def serve_shape_log(%R{} = request) do
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
-      do_serve_shape_log(request)
+      request
+      |> do_serve_shape_log()
+      |> then(fn %{response: response} -> response end)
     end)
   end
 
@@ -272,7 +285,7 @@ defmodule Electric.Shapes.Request do
     else
       body = Stream.concat([log, maybe_up_to_date(request)])
 
-      Map.update!(request, :response, &%{&1 | body: encode_log(request, body)})
+      Map.update!(request, :response, &%{&1 | chunked: true, body: encode_log(request, body)})
     end
   end
 
@@ -331,7 +344,7 @@ defmodule Electric.Shapes.Request do
     OpenTelemetry.with_span(name, attributes, stack_id(request), fun)
   end
 
-  defp stack_id(%R{config: %{stack_id: stack_id}}), do: stack_id
+  def stack_id(%R{config: %{stack_id: stack_id}}), do: stack_id
 
   defp encode_log(request, stream) do
     encode(request, :log, stream)

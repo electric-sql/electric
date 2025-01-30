@@ -5,6 +5,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Plug.ServeShapePlug
+  alias Electric.Shapes.Request
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
@@ -62,21 +63,23 @@ defmodule Electric.Plug.ServeShapePlugTest do
   end
 
   def call_serve_shape_plug(conn, ctx) do
-    config = [
-      stack_id: ctx.stack_id,
-      pg_id: @test_pg_id,
-      stack_events_registry: Registry.StackEvents,
-      stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
-      shape_cache: {Mock.ShapeCache, []},
-      storage: {Mock.Storage, []},
-      inspector: {__MODULE__, []},
-      registry: @registry,
-      long_poll_timeout: long_poll_timeout(ctx),
-      max_age: max_age(ctx),
-      stale_age: stale_age(ctx)
-    ]
+    request =
+      Request.configure(
+        stack_id: ctx.stack_id,
+        pg_id: @test_pg_id,
+        stack_events_registry: Registry.StackEvents,
+        stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
+        shape_cache: {Mock.ShapeCache, []},
+        storage: {Mock.Storage, []},
+        inspector: {__MODULE__, []},
+        registry: @registry,
+        long_poll_timeout: long_poll_timeout(ctx),
+        max_age: max_age(ctx),
+        stale_age: stale_age(ctx),
+        encoder: :json
+      )
 
-    ServeShapePlug.call(conn, config)
+    ServeShapePlug.call(conn, request: request)
   end
 
   describe "serving shape" do
@@ -596,7 +599,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert get_resp_header(conn, "electric-handle") == [@test_shape_handle]
 
       assert get_resp_header(conn, "location") == [
-               "/?table=public.users&handle=#{@test_shape_handle}&offset=-1"
+               "/?handle=#{@test_shape_handle}&offset=-1&table=public.users"
              ]
     end
 
@@ -629,7 +632,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert get_resp_header(conn, "electric-handle") == [new_shape_handle]
 
       assert get_resp_header(conn, "location") == [
-               "/?table=public.users&handle=#{new_shape_handle}&offset=-1"
+               "/?handle=#{new_shape_handle}&offset=-1&table=public.users"
              ]
     end
 

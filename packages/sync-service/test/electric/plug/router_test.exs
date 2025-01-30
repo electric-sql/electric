@@ -843,7 +843,7 @@ defmodule Electric.Plug.RouterTest do
       new_shape_handle = get_resp_header(conn, "electric-handle")
 
       assert get_resp_header(conn, "location") ==
-               "/v1/shape?table=items&handle=#{new_shape_handle}&offset=-1"
+               "/v1/shape?handle=#{new_shape_handle}&offset=-1&table=public.items"
     end
 
     test "GET receives 409 when shape handle is not found but there is another shape matching the definition",
