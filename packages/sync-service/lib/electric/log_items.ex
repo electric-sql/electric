@@ -126,4 +126,13 @@ defmodule Electric.LogItems do
     |> Enum.zip()
     |> Map.new()
   end
+
+  def merge_updates(u1, u2) do
+    %{
+      "key" => u1["key"],
+      "offset" => u2["offset"],
+      "headers" => Map.take(u1["headers"], ["operation", "relation"]),
+      "value" => Map.merge(u1["value"], u2["value"])
+    }
+  end
 end

@@ -150,6 +150,25 @@ defmodule Electric.Utils do
   end
 
   @doc """
+  Map each value of the enumerable using a mapper and reverse the resulting list.
+
+  Equivalent to `Enum.reverse/1` followed by `Enum.map/2`.
+
+  ## Examples
+
+      iex> list_reverse_map([1, 2, 3], &(&1 + 1))
+      [4, 3, 2]
+  """
+  @spec list_reverse_map(Enumerable.t(elem), (elem -> result), list(result)) :: list(result)
+        when elem: var, result: var
+  def list_reverse_map(list, mapper, acc \\ [])
+
+  def list_reverse_map([], _, acc), do: acc
+
+  def list_reverse_map([head | tail], mapper, acc),
+    do: list_reverse_map(tail, mapper, [mapper.(head) | acc])
+
+  @doc """
   Parse a markdown table from a string
 
   Options:
@@ -308,4 +327,193 @@ defmodule Electric.Utils do
   def map_values(map, fun), do: Map.new(map, fn {k, v} -> {k, fun.(v)} end)
 
   defp wrap_in_fun(val), do: fn -> val end
+
+  @doc """
+  Merge a list of streams by taking the minimum element from each stream and emitting it and its
+  stream. The streams are compared using the given comparator function.
+
+  ## Examples
+
+      iex> merge_sorted_streams([[1, 2, 3], [2, 3, 4]]) |> Enum.to_list()
+      [1, 2, 2, 3, 3, 4]
+
+      iex> merge_sorted_streams([[1, 2, 3], [4, 5, 6]]) |> Enum.to_list()
+      [1, 2, 3, 4, 5, 6]
+
+      iex> merge_sorted_streams([[10], [4, 5, 6]]) |> Enum.to_list()
+      [4, 5, 6, 10]
+  """
+  def merge_sorted_streams(streams, comparator \\ &<=/2, mapper \\ & &1) do
+    Stream.resource(
+      fn ->
+        Enum.flat_map(streams, fn stream ->
+          case Enum.take(stream, 1) do
+            [value] -> [{value, Stream.drop(stream, 1)}]
+            [] -> []
+          end
+        end)
+      end,
+      fn
+        [] ->
+          {:halt, nil}
+
+        values_and_streams ->
+          {val, stream} = Enum.min_by(values_and_streams, fn {value, _} -> value end, comparator)
+
+          acc =
+            case Enum.take(stream, 1) do
+              [next_val] ->
+                List.keyreplace(values_and_streams, val, 0, {next_val, Stream.drop(stream, 1)})
+
+              [] ->
+                List.keydelete(values_and_streams, val, 0)
+            end
+
+          {[mapper.(val)], acc}
+      end,
+      fn _ -> nil end
+    )
+  end
+
+  @doc """
+  Open a file, retrying if it doesn't exist yet, up to `attempts_left` times, with 20ms delay between
+  attempts.
+  """
+  @spec open_with_retry(path :: String.t(), opts :: [File.mode()]) :: :file.io_device()
+  def open_with_retry(path, opts, attempts_left \\ 100) when is_list(opts) do
+    case File.open(path, opts) do
+      {:ok, file} ->
+        file
+
+      {:error, :enoent} ->
+        Process.sleep(20)
+        open_with_retry(path, opts, attempts_left - 1)
+
+      {:error, reason} ->
+        raise IO.StreamError, reason: reason
+    end
+  end
+
+  @type sortable_binary(key) :: {key :: key, data :: binary()}
+
+  @doc """
+  Performs external merge sort on a file.
+
+  ## Parameters
+    * `path` - Path to the file to sort
+    * `reader` - Function that takes a file path and returns a stream of records. Records should be
+      in the form of `{key, binary}`, where `binary` will be written to the file sorted by `key`.
+    * `sorter` - Function that compares two keys, should return true if first argument is less than or equal to second
+    * `chunk_size` - Byte size of each chunk (i.e. how much is sorted in memory at once). Uses 50 MB by default.
+
+  The function will:
+  1. Split the input file into sorted temporary chunks
+  2. Merge the sorted chunks back into the original file
+  """
+  @spec external_merge_sort(
+          path :: String.t(),
+          reader :: (path :: String.t() -> Enumerable.t(sortable_binary(elem))),
+          sorter :: (elem, elem -> boolean())
+        ) :: :ok
+        when elem: var
+  def external_merge_sort(path, reader, sorter \\ &<=/2, chunk_size \\ 50 * 1024 * 1024) do
+    tmp_dir = Path.join(System.tmp_dir!(), "external_sort_#{:erlang.system_time()}")
+    File.mkdir_p!(tmp_dir)
+
+    try do
+      chunks = split_into_sorted_chunks(path, reader, sorter, tmp_dir, chunk_size)
+      merge_sorted_files(chunks, path, reader, sorter)
+      :ok
+    after
+      File.rm_rf!(tmp_dir)
+    end
+  end
+
+  defp split_into_sorted_chunks(path, reader, sorter, tmp_dir, chunk_size) do
+    path
+    |> reader.()
+    |> chunk_by_size(chunk_size)
+    |> Stream.with_index()
+    |> Stream.map(fn {chunk, idx} ->
+      chunk_path = Path.join(tmp_dir, "chunk_#{idx}")
+
+      chunk
+      |> Enum.sort(sorter)
+      |> Stream.map(fn {_, value} -> value end)
+      |> Stream.into(File.stream!(chunk_path))
+      |> Stream.run()
+
+      chunk_path
+    end)
+    |> Enum.to_list()
+  end
+
+  @doc """
+  Merge a list of sorted files into a single file.
+
+  Uses a reader function that takes a path to a file and returns a stream of tuples `{key, binary}`,
+  where `binary` will be written to the file as sorted by `key`.
+  """
+  def merge_sorted_files(paths, target_path, reader, sorter \\ &<=/2)
+
+  def merge_sorted_files([path], target_path, _reader, _sorter) do
+    File.stream!(path)
+    |> Stream.into(File.stream!(target_path))
+    |> Stream.run()
+  end
+
+  def merge_sorted_files(paths, target_path, reader, sorter) do
+    paths
+    |> Enum.map(reader)
+    |> merge_sorted_streams(sorter, fn {_, binary} -> binary end)
+    |> Stream.into(File.stream!(target_path))
+    |> Stream.run()
+  end
+
+  defp chunk_by_size(stream, size) do
+    Stream.chunk_while(
+      stream,
+      {0, []},
+      fn {_, value} = full_value, {acc_size, acc} ->
+        value_size = byte_size(value)
+
+        if acc_size + value_size > size do
+          {:cont, Enum.reverse(acc), {0, [full_value]}}
+        else
+          {:cont, {acc_size + value_size, [full_value | acc]}}
+        end
+      end,
+      fn
+        {_, []} -> {:cont, []}
+        {_, acc} -> {:cont, Enum.reverse(acc), []}
+      end
+    )
+  end
+
+  def concat_files(paths, into) do
+    # `:file.copy` is not optimized to use a syscall, so basic stream forming is good enough
+    paths
+    |> Enum.map(&File.stream!/1)
+    |> Stream.concat()
+    |> Stream.into(File.stream!(into))
+    |> Stream.run()
+  end
+
+  @doc """
+  Transform the stream to call a side-effect function for each element before continuing.
+
+  Acts like `Stream.each/2` but with an aggregate. `start_fun`, `last_fun`, `after_fun`
+  have the same semantics as in `Stream.transform/5`
+  """
+  def stream_add_side_effect(stream, start_fun, reducer, last_fun \\ & &1, after_fun \\ & &1) do
+    Stream.transform(
+      stream,
+      start_fun,
+      fn elem, acc ->
+        {[elem], reducer.(elem, acc)}
+      end,
+      fn acc -> {[], last_fun.(acc)} end,
+      after_fun
+    )
+  end
 end

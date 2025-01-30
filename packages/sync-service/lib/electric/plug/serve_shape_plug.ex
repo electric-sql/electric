@@ -36,6 +36,8 @@ defmodule Electric.Plug.ServeShapePlug do
     import Ecto.Changeset
     alias Electric.Replication.LogOffset
 
+    @tmp_compaction_flag :experimental_compaction
+
     @primary_key false
     embedded_schema do
       field(:table, :string)
@@ -46,6 +48,7 @@ defmodule Electric.Plug.ServeShapePlug do
       field(:columns, :string)
       field(:shape_definition, :string)
       field(:replica, Ecto.Enum, values: [:default, :full], default: :default)
+      field(@tmp_compaction_flag, :boolean, default: false)
     end
 
     def validate(params, opts) do
@@ -135,10 +138,17 @@ defmodule Electric.Plug.ServeShapePlug do
       where = fetch_field!(changeset, :where)
       columns = get_change(changeset, :columns, nil)
       replica = fetch_field!(changeset, :replica)
+      compaction_enabled? = fetch_field!(changeset, @tmp_compaction_flag)
 
       case Shapes.Shape.new(
              table,
-             opts ++ [where: where, columns: columns, replica: replica]
+             opts ++
+               [
+                 where: where,
+                 columns: columns,
+                 replica: replica,
+                 storage: %{compaction: if(compaction_enabled?, do: :enabled, else: :disabled)}
+               ]
            ) do
         {:ok, result} ->
           put_change(changeset, :shape_definition, result)
@@ -655,7 +665,8 @@ defmodule Electric.Plug.ServeShapePlug do
     conn
     |> fetch_query_params()
     |> assign(:error_str, error_str)
-    |> end_telemetry_span()
+
+    # |> end_telemetry_span()
 
     conn
   end
