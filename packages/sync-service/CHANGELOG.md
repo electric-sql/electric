@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.0.0-beta.8
+
+### Patch Changes
+
+- edfb9f3: feat: add compaction flag to Electric that allows `UPDATE` events within a shape to be compacted to save space and bandwidth
+- 7f36cc1: Use `Storage.unsafe_cleanup!/1` to delete data after a shape has been removed
+
 ## 1.0.0-beta.7
 
 ### Patch Changes
