@@ -191,13 +191,13 @@ export function createDatabaseForCloudElectric({
     databaseUri.apply(applyMigrations)
   }
 
-  // const electricInfo = databaseUri.apply((dbUri) =>
-  //   addDatabaseToElectric({ dbUri })
-  // )
+  const electricInfo = databaseUri.apply((dbUri) =>
+    addDatabaseToElectric({ dbUri })
+  )
 
   return {
-    sourceId: `test`, //electricInfo.id,
-    sourceSecret: `test`, //electricInfo.source_secret,
+    sourceId: electricInfo.id,
+    sourceSecret: electricInfo.source_secret,
     databaseUri,
     pooledDatabaseUri,
   }
