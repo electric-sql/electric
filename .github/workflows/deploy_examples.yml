@@ -51,24 +51,8 @@ jobs:
           restore-keys: |
             sst-cache-main-${{ runner.os }}
 
-      - name: Deploy Yjs example
-        working-directory: ./examples/yjs
-        continue-on-error: true
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          code=$!
-          if [ -f ".sst/outputs.json" ]; then
-            yjs=$(jq -r '.website' .sst/outputs.json)
-            echo "yjs=$yjs" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-          exit $code
-
       - name: Deploy Linearlite Read Only
         working-directory: ./examples/linearlite-read-only
-        continue-on-error: true
         run: |
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
           code=$!
@@ -81,9 +65,22 @@ jobs:
           fi
           exit $code
 
+      - name: Deploy Yjs example
+        working-directory: ./examples/yjs
+        run: |
+          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+          code=$!
+          if [ -f ".sst/outputs.json" ]; then
+            yjs=$(jq -r '.website' .sst/outputs.json)
+            echo "yjs=$yjs" >> $GITHUB_ENV
+          else
+            echo "sst outputs file not found. Exiting."
+            exit 123
+          fi
+          exit $code
+
       - name: Deploy Write Patterns example
         working-directory: ./examples/write-patterns
-        continue-on-error: true
         run: |
           pnpm --filter @electric-sql/client --filter @electric-sql/experimental --filter @electric-sql/react run build
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
@@ -99,7 +96,6 @@ jobs:
 
       - name: Deploy NextJs example
         working-directory: ./examples/nextjs
-        continue-on-error: true
         run: |
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
           code=$!
@@ -114,7 +110,6 @@ jobs:
 
       - name: Deploy TODO App example
         working-directory: ./examples/todo-app
-        continue-on-error: true
         run: |
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
           code=$!
@@ -129,7 +124,6 @@ jobs:
 
       - name: Deploy proxy-auth example
         working-directory: ./examples/proxy-auth
-        continue-on-error: true
         run: |
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
           code=$!

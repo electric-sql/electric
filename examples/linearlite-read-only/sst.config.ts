@@ -24,35 +24,38 @@ export default $config({
     }
   },
   async run() {
-    const dbName =
-      `linearlite-read-only` + isProduction() ? `` : `-stage-${$app.stage}`
+    try {
+      const dbName = `linearlite-read-only${isProduction() ? `` : `-stage-${$app.stage}`}`
 
-    const { pooledDatabaseUri, sourceId, sourceSecret } =
-      createDatabaseForCloudElectric({
-        dbName,
-        migrationsDirectory: `./db/migrations`,
+      const { pooledDatabaseUri, sourceId, sourceSecret } =
+        createDatabaseForCloudElectric({
+          dbName,
+          migrationsDirectory: `./db/migrations`,
+        })
+
+      pooledDatabaseUri.apply(loadData)
+
+      const website = new sst.aws.StaticSite(`linearlite-read-only`, {
+        environment: {
+          VITE_ELECTRIC_URL: process.env.ELECTRIC_API!,
+          VITE_ELECTRIC_SOURCE_SECRET: sourceSecret,
+          VITE_ELECTRIC_SOURCE_ID: sourceId,
+        },
+        build: {
+          command: `pnpm run --filter @electric-sql/client  --filter @electric-sql/react --filter @electric-examples/linearlite-read-only build`,
+          output: `dist`,
+        },
+        domain: {
+          name: `linearlite-read-only${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+          dns: sst.cloudflare.dns(),
+        },
       })
 
-    pooledDatabaseUri.apply(loadData)
-
-    const website = new sst.aws.StaticSite(`linearlite-read-only`, {
-      environment: {
-        VITE_ELECTRIC_URL: process.env.ELECTRIC_API!,
-        VITE_ELECTRIC_SOURCE_SECRET: sourceSecret,
-        VITE_ELECTRIC_SOURCE_ID: sourceId,
-      },
-      build: {
-        command: `pnpm run --filter @electric-sql/client  --filter @electric-sql/react --filter @electric-examples/linearlite-read-only build`,
-        output: `dist`,
-      },
-      domain: {
-        name: `linearlite-read-only${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
-        dns: sst.cloudflare.dns(),
-      },
-    })
-
-    return {
-      website: website.url,
+      return {
+        website: website.url,
+      }
+    } catch (error) {
+      console.error(`Failed to deploy linearlite-read-only`, error)
     }
   },
 })
