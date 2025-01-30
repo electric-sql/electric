@@ -30,9 +30,9 @@ export default $config({
         migrationsDirectory: `./db/migrations`,
       })
 
-    const cluster = getSharedCluster(`yjs-service`)
+    const cluster = getSharedCluster(`yjs-${$app.stage}`)
 
-    const service = cluster.addService(`yjs-service`, {
+    const service = cluster.addService(`yjs-${$app.stage}-service`, {
       loadBalancer: {
         ports: [{ listen: `443/https`, forward: `3000/http` }],
         domain: {
