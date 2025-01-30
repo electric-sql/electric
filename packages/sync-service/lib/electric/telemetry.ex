@@ -210,6 +210,8 @@ defmodule Electric.Telemetry do
 
   defp otel_metrics() do
     [
+      last_value("system.cpu.core_count"),
+      last_value("system.cpu.utilization.total"),
       last_value("electric.storage.used", unit: {:byte, :kilobyte}),
       last_value("electric.shapes.total_shapes.count"),
       last_value("system.load_percent.avg1"),
@@ -224,7 +226,9 @@ defmodule Electric.Telemetry do
       distribution("electric.storage.make_new_snapshot.stop.duration",
         unit: {:native, :millisecond}
       )
-    ] ++ prometheus_metrics()
+    ] ++
+      prometheus_metrics() ++
+      Enum.map(0..63, &last_value("system.cpu.utilization.core_#{&1}"))
   end
 
   defp periodic_measurements(opts) do
@@ -234,6 +238,7 @@ defmodule Electric.Telemetry do
       # A module, function and arguments to be invoked periodically.
       {__MODULE__, :uptime_event, []},
       {__MODULE__, :count_shapes, [stack_id]},
+      {__MODULE__, :cpu_utilization, []},
       {__MODULE__, :get_total_disk_usage, [opts]},
       {__MODULE__, :get_system_load_average, [opts]},
       {__MODULE__, :get_system_memory_usage, [opts]},
@@ -268,6 +273,18 @@ defmodule Electric.Telemetry do
   catch
     :exit, {:noproc, _} ->
       :ok
+  end
+
+  def cpu_utilization do
+    cores =
+      :cpu_sup.util([:per_cpu])
+      |> Map.new(fn {cpu_index, busy, _free, _misc} -> {:"core_#{cpu_index}", busy} end)
+
+    cores
+    |> Map.put(:total, cores |> Map.values() |> mean())
+    |> then(&:telemetry.execute([:system, :cpu, :utilization], &1))
+
+    :telemetry.execute([:system, :cpu], %{core_count: Enum.count(cores)})
   end
 
   def get_system_load_average(opts) do
@@ -423,5 +440,11 @@ defmodule Electric.Telemetry do
     )
 
     %{}
+  end
+
+  defp mean([]), do: nil
+
+  defp mean(list) when is_list(list) do
+    Enum.sum(list) / Enum.count(list)
   end
 end
