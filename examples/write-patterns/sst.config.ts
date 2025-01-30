@@ -9,10 +9,10 @@ export default $config({
   app(input) {
     return {
       name: 'write-patterns',
-      removal: input?.stage === 'production' ? 'retain' : 'remove',
+      removal:
+        input?.stage.toLocaleLowerCase() === `production` ? `retain` : `remove`,
       home: 'aws',
       providers: {
-        cloudflare: '5.42.0',
         aws: {
           version: `6.66.2`,
           profile: process.env.CI ? undefined : `marketing`,

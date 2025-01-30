@@ -911,8 +911,8 @@ importers:
         specifier: ^6.23.1
         version: 6.28.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       sst:
-        specifier: 3.3.7
-        version: 3.3.7(hono@4.6.13)
+        specifier: 3.6.35
+        version: 3.6.35
       uuid:
         specifier: ^10.0.0
         version: 10.0.0
@@ -1014,8 +1014,8 @@ importers:
         specifier: 19.0.0-rc.1
         version: 19.0.0-rc.1(react@19.0.0-rc.1)
       sst:
-        specifier: 3.3.64
-        version: 3.3.64(hono@4.6.13)
+        specifier: 3.6.35
+        version: 3.6.35
       uuid:
         specifier: ^10.0.0
         version: 10.0.0
