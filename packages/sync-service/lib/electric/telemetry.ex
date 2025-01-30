@@ -210,6 +210,8 @@ defmodule Electric.Telemetry do
 
   defp otel_metrics() do
     [
+      last_value("electric.storage.used", unit: {:byte, :kilobyte}),
+      last_value("electric.shapes.total_shapes.count"),
       last_value("system.load_percent.avg1"),
       last_value("system.load_percent.avg5"),
       last_value("system.load_percent.avg15"),
