@@ -61,66 +61,66 @@ jobs:
             exit 123
           fi
 
-      - name: Deploy Linearlite Read Only
-        working-directory: ./examples/linearlite-read-only
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          if [ -f ".sst/outputs.json" ]; then
-            linearlite_read_only=$(jq -r '.website' .sst/outputs.json)
-            echo "linearlite_read_only=$linearlite_read_only" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
+      # - name: Deploy Linearlite Read Only
+      #   working-directory: ./examples/linearlite-read-only
+      #   run: |
+      #     pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+      #     if [ -f ".sst/outputs.json" ]; then
+      #       linearlite_read_only=$(jq -r '.website' .sst/outputs.json)
+      #       echo "linearlite_read_only=$linearlite_read_only" >> $GITHUB_ENV
+      #     else
+      #       echo "sst outputs file not found. Exiting."
+      #       exit 123
+      #     fi
 
-      - name: Deploy Write Patterns example
-        working-directory: ./examples/write-patterns
-        run: |
-          pnpm --filter @electric-sql/client --filter @electric-sql/experimental --filter @electric-sql/react run build
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          if [ -f ".sst/outputs.json" ]; then
-            writes=$(jq -r '.website' .sst/outputs.json)
-            echo "writes=$writes" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
+      # - name: Deploy Write Patterns example
+      #   working-directory: ./examples/write-patterns
+      #   run: |
+      #     pnpm --filter @electric-sql/client --filter @electric-sql/experimental --filter @electric-sql/react run build
+      #     pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+      #     if [ -f ".sst/outputs.json" ]; then
+      #       writes=$(jq -r '.website' .sst/outputs.json)
+      #       echo "writes=$writes" >> $GITHUB_ENV
+      #     else
+      #       echo "sst outputs file not found. Exiting."
+      #       exit 123
+      #     fi
 
-      - name: Deploy NextJs example
-        working-directory: ./examples/nextjs
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          if [ -f ".sst/outputs.json" ]; then
-            nextjs=$(jq -r '.website' .sst/outputs.json)
-            echo "nextjs=$nextjs" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
+      # - name: Deploy NextJs example
+      #   working-directory: ./examples/nextjs
+      #   run: |
+      #     pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+      #     if [ -f ".sst/outputs.json" ]; then
+      #       nextjs=$(jq -r '.website' .sst/outputs.json)
+      #       echo "nextjs=$nextjs" >> $GITHUB_ENV
+      #     else
+      #       echo "sst outputs file not found. Exiting."
+      #       exit 123
+      #     fi
 
-      - name: Deploy TODO App example
-        working-directory: ./examples/todo-app
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          if [ -f ".sst/outputs.json" ]; then
-            todoapp=$(jq -r '.website' .sst/outputs.json)
-            echo "todoapp=$todoapp" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
+      # - name: Deploy TODO App example
+      #   working-directory: ./examples/todo-app
+      #   run: |
+      #     pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+      #     if [ -f ".sst/outputs.json" ]; then
+      #       todoapp=$(jq -r '.website' .sst/outputs.json)
+      #       echo "todoapp=$todoapp" >> $GITHUB_ENV
+      #     else
+      #       echo "sst outputs file not found. Exiting."
+      #       exit 123
+      #     fi
 
-      - name: Deploy proxy-auth example
-        working-directory: ./examples/proxy-auth
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          if [ -f ".sst/outputs.json" ]; then
-            auth=$(jq -r '.website' .sst/outputs.json)
-            echo "auth=$auth" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
+      # - name: Deploy proxy-auth example
+      #   working-directory: ./examples/proxy-auth
+      #   run: |
+      #     pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+      #     if [ -f ".sst/outputs.json" ]; then
+      #       auth=$(jq -r '.website' .sst/outputs.json)
+      #       echo "auth=$auth" >> $GITHUB_ENV
+      #     else
+      #       echo "sst outputs file not found. Exiting."
+      #       exit 123
+      #     fi
 
       - name: Add comment to PR
         if: github.event_name == 'pull_request'

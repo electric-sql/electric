@@ -2,18 +2,12 @@
 /* tslint:disable */
 /* eslint-disable */
 /* deno-fmt-ignore-file */
-import "sst"
-export {}
+
 declare module "sst" {
   export interface Resource {
-    "yjs-service-production": {
-      "service": string
-      "type": "sst.aws.Service"
-      "url": string
-    }
-    "yjs-vpc-production": {
-      "bastion": string
-      "type": "sst.aws.Vpc"
-    }
   }
 }
+/// <reference path="sst-env.d.ts" />
+
+import "sst"
+export {}
