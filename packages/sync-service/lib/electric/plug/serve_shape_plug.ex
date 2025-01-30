@@ -27,7 +27,6 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :put_resp_content_type, "application/json"
 
   plug :validate_request
-  plug :init_request
   plug :put_schema_header
   plug :put_resp_cache_headers
   plug :generate_etag
@@ -45,81 +44,15 @@ defmodule Electric.Plug.ServeShapePlug do
       Map.merge(conn.query_params, conn.path_params)
       |> Map.update("live", "false", &(&1 != "false"))
 
-    case Request.validate(all_params, request) do
+    case Request.validate(request, all_params) do
       {:ok, request} ->
         assign(conn, :request, request)
 
       {:error, response} ->
         conn
-        |> map_response(response)
+        |> Response.send(response)
         |> halt()
     end
-  end
-
-  defp init_request(conn, _) do
-    %{assigns: %{request: request}} = conn
-
-    assign(conn, :request, Request.init(request))
-  end
-
-  defp map_response(conn, %Response{chunked: false} = response) do
-    conn
-    |> put_resp_headers(response)
-    |> send_resp(response.status, Enum.into(response.body, []))
-  end
-
-  defp map_response(conn, %Response{} = response) do
-    conn
-    |> put_resp_headers(response)
-    |> send_stream(response.body, response.status)
-  end
-
-  defp put_resp_headers(conn, response) do
-    conn
-    |> put_location_header(response)
-    |> put_shape_handle_header(response)
-    |> put_up_to_date_header(response)
-    |> put_offset_header(response)
-  end
-
-  defp put_location_header(conn, %Response{status: 409} = response) do
-    params = %{
-      table: Electric.Utils.relation_to_sql(response.shape.root_table),
-      handle: response.handle,
-      offset: "-1"
-    }
-
-    query = URI.encode_query(params)
-
-    put_resp_header(
-      conn,
-      "location",
-      "#{conn.request_path}?#{query}"
-    )
-  end
-
-  defp put_location_header(conn, %Response{} = _response) do
-    conn
-  end
-
-  defp put_shape_handle_header(conn, %Response{handle: nil}) do
-    conn
-  end
-
-  defp put_shape_handle_header(conn, response) do
-    put_resp_header(conn, "electric-handle", response.handle)
-  end
-
-  defp put_up_to_date_header(conn, %Response{up_to_date: true}) do
-    put_resp_header(conn, "electric-up-to-date", "")
-  end
-
-  defp put_up_to_date_header(conn, %Response{up_to_date: false}) do
-    delete_resp_header(conn, "electric-up-to-date")
-  end
-
-  defp put_offset_header(conn, %Response{offset: offset}) do
-    put_resp_header(conn, "electric-offset", "#{offset}")
   end
 
   defp schema(shape) do
@@ -221,42 +154,7 @@ defmodule Electric.Plug.ServeShapePlug do
 
     conn
     |> assign(:response, response)
-    |> map_response(response)
-  end
-
-  defp send_stream(conn, stream, status) do
-    stack_id = Request.stack_id(conn.assigns.request)
-    conn = send_chunked(conn, status)
-
-    {conn, bytes_sent} =
-      Enum.reduce_while(stream, {conn, 0}, fn chunk, {conn, bytes_sent} ->
-        chunk_size = IO.iodata_length(chunk)
-
-        OpenTelemetry.with_span(
-          "shape_get.plug.stream_chunk",
-          [chunk_size: chunk_size],
-          stack_id,
-          fn ->
-            case chunk(conn, chunk) do
-              {:ok, conn} ->
-                {:cont, {conn, bytes_sent + chunk_size}}
-
-              {:error, "closed"} ->
-                error_str = "Connection closed unexpectedly while streaming response"
-                conn = assign(conn, :error_str, error_str)
-                {:halt, {conn, bytes_sent}}
-
-              {:error, reason} ->
-                error_str = "Error while streaming response: #{inspect(reason)}"
-                Logger.error(error_str)
-                conn = assign(conn, :error_str, error_str)
-                {:halt, {conn, bytes_sent}}
-            end
-          end
-        )
-      end)
-
-    assign(conn, :streaming_bytes_sent, bytes_sent)
+    |> Response.send(response)
   end
 
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do

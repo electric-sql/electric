@@ -17,6 +17,7 @@ defmodule Electric.Shapes.Request do
     :handle,
     :last_offset,
     :new_changes_ref,
+    :new_changes_pid,
     config: %R.Config{},
     params: %R.Params{},
     response: %Response{},
@@ -27,6 +28,8 @@ defmodule Electric.Shapes.Request do
           config: Map.t(),
           params: Request.Params.t()
         }
+
+  # @keys __struct__() |> Map.from_struct() |> Map.keys()
 
   # Aliasing for pattern matching
   @before_all_offset LogOffset.before_all()
@@ -44,25 +47,42 @@ defmodule Electric.Shapes.Request do
   @must_refetch [%{headers: %{control: "must-refetch"}}]
 
   def configure(opts) do
-    %__MODULE__{config: R.Config.new(opts)}
+    config = R.Config.new(opts)
+
+    used_keys = config |> Map.from_struct() |> Map.keys()
+    unused_opts = Keyword.drop(opts, used_keys)
+    {%__MODULE__{config: config}, unused_opts}
   end
 
-  def validate(params, request) when is_configured(request) do
-    %{config: %{inspector: inspector}} = request
+  @doc """
+  Validate the parameters for the request.
 
+  Options:
+
+  - `seek: boolean()` - (default: true) once validated should we load the shape's
+    latest offset information.
+  """
+  @spec validate(t(), %{(atom() | binary()) => term()}) :: {:ok, t()} | {:error, Response.t()}
+  def validate(request, params, opts \\ [seek: true, load: true])
+
+  def validate(request, params, seek: seek?, load: load?) when is_configured(request) do
     with :ok <- hold_until_stack_ready(request) do
-      case R.Params.validate(params, inspector: inspector) do
-        {:ok, request_params} ->
-          load_shape_info(%{
-            request
-            | params: request_params,
-              valid: true,
-              response: %Response{shape: request_params.shape_definition}
-          })
-
-        {:error, reason} ->
-          {:error, Response.error(request, reason)}
+      with {:ok, request} <- validate_params(request, params),
+           {:ok, request} <- load_shape_info(request, load?) do
+        {:ok, seek(request, seek?)}
       end
+    end
+  end
+
+  defp validate_params(request, params) do
+    with {:ok, request_params} <- R.Params.validate(request, params) do
+      {:ok,
+       %{
+         request
+         | params: request_params,
+           valid: true,
+           response: %Response{shape: request_params.shape_definition}
+       }}
     end
   end
 
@@ -70,22 +90,23 @@ defmodule Electric.Shapes.Request do
   A utility function to serve a configured, valid request to completion
   """
   def serve(%R{} = request) when is_valid(request) do
-    request
-    |> init()
-    |> serve_shape_log()
+    serve_shape_log(request)
   end
 
-  @doc """
-  Get a request's offset status information.
-  """
-  def init(%R{} = request) do
+  defp seek(%R{} = request, false), do: request
+
+  defp seek(%R{} = request, true) do
     request
     |> listen_for_new_changes()
     |> determine_log_chunk_offset()
     |> determine_up_to_date()
   end
 
-  defp load_shape_info(%R{} = request) do
+  defp load_shape_info(%R{} = request, false) do
+    {:ok, request}
+  end
+
+  defp load_shape_info(%R{} = request, true) do
     with_span(request, "shape_get.plug.load_shape_info", fn ->
       request
       |> get_or_create_shape_handle()
@@ -214,7 +235,7 @@ defmodule Electric.Shapes.Request do
 
       Logger.debug("Client #{inspect(self())} is registered for changes to #{handle}")
 
-      %{request | new_changes_ref: ref}
+      %{request | new_changes_pid: self(), new_changes_ref: ref}
     else
       request
     end
@@ -257,11 +278,28 @@ defmodule Electric.Shapes.Request do
   Return shape log data.
   """
   def serve_shape_log(%R{} = request) do
+    validate_serve_usage!(request)
+
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
       request
       |> do_serve_shape_log()
       |> then(fn %{response: response} -> response end)
     end)
+  end
+
+  defp validate_serve_usage!(request) do
+    case {request.new_changes_pid, self()} do
+      {nil, _} ->
+        :ok
+
+      {pid, pid} when is_pid(pid) ->
+        :ok
+
+      {_, _} ->
+        raise RuntimeError,
+          message:
+            "Request.serve/1 must be called from the same process that called Request.validate/2"
+    end
   end
 
   defp do_serve_shape_log(%R{} = request) do

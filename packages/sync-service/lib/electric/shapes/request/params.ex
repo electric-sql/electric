@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Request.Params do
   use Ecto.Schema
 
   alias Electric.Replication.LogOffset
+  alias Electric.Shapes.Response
   alias Electric.Shapes.Shape
 
   import Ecto.Changeset
@@ -24,7 +25,9 @@ defmodule Electric.Shapes.Request.Params do
 
   @type t() :: %__MODULE__{}
 
-  def validate(params, opts) do
+  def validate(request, params) do
+    %{config: %{inspector: inspector}} = request
+
     %__MODULE__{}
     |> cast(params, __schema__(:fields) -- [:shape_definition],
       message: fn _, _ -> "must be %{type}" end
@@ -34,7 +37,7 @@ defmodule Electric.Shapes.Request.Params do
     |> cast_columns()
     |> validate_handle_with_offset()
     |> validate_live_with_offset()
-    |> cast_root_table(opts)
+    |> cast_root_table(inspector: inspector)
     |> apply_action(:validate)
     |> case do
       {:ok, params} ->
@@ -48,7 +51,7 @@ defmodule Electric.Shapes.Request.Params do
             end)
           end)
 
-        {:error, reason}
+        {:error, Response.error(request, reason)}
     end
   end
 

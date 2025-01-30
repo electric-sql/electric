@@ -38,20 +38,23 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   end
 
   def call_delete_shape_plug(conn, ctx, allow \\ true) do
-    config = [
-      stack_id: ctx.stack_id,
-      stack_events_registry: Registry.StackEvents,
-      stack_ready_timeout: 100,
-      pg_id: @test_pg_id,
-      shape_cache: {Mock.ShapeCache, []},
-      storage: {Mock.Storage, []},
-      inspector: {__MODULE__, []},
-      registry: @registry,
-      long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
-      max_age: Access.get(ctx, :max_age, 60),
-      stale_age: Access.get(ctx, :stale_age, 300),
-      allow_shape_deletion: allow
-    ]
+    {request, opts} =
+      Electric.Shapes.Request.configure(
+        stack_id: ctx.stack_id,
+        stack_events_registry: Registry.StackEvents,
+        stack_ready_timeout: 100,
+        pg_id: @test_pg_id,
+        shape_cache: {Mock.ShapeCache, []},
+        storage: {Mock.Storage, []},
+        inspector: {__MODULE__, []},
+        registry: @registry,
+        long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
+        max_age: Access.get(ctx, :max_age, 60),
+        stale_age: Access.get(ctx, :stale_age, 300),
+        allow_shape_deletion: allow
+      )
+
+    config = Keyword.merge(opts, request: request)
 
     DeleteShapePlug.call(conn, config)
   end
@@ -113,6 +116,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
     test "should clean shape based on shape_handle", ctx do
       Mock.ShapeCache
+      |> expect(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, 0} end)
       |> expect(:clean_shape, fn @test_shape_handle, _ -> :ok end)
 
       conn =

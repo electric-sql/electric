@@ -63,7 +63,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
   end
 
   def call_serve_shape_plug(conn, ctx) do
-    request =
+    {request, opts} =
       Request.configure(
         stack_id: ctx.stack_id,
         pg_id: @test_pg_id,
@@ -79,7 +79,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         encoder: :json
       )
 
-    ServeShapePlug.call(conn, request: request)
+    ServeShapePlug.call(conn, [{:request, request} | opts])
   end
 
   describe "serving shape" do
