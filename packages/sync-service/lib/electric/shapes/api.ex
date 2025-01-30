@@ -1,35 +1,24 @@
-defmodule Electric.Shapes.Request do
+defmodule Electric.Shapes.Api do
   alias Electric.Replication.LogOffset
   alias Electric.Shapes
-  alias Electric.Shapes.Request, as: R
-  alias Electric.Shapes.Response
   alias Electric.Telemetry.OpenTelemetry
+
+  alias __MODULE__
+  alias __MODULE__.Request
+  alias __MODULE__.Response
 
   import Electric.Replication.LogOffset, only: [is_log_offset_lt: 2]
 
   require Logger
 
-  defguardp is_configured(request) when not is_nil(request.config)
-  defguardp is_valid(request) when request.valid == true
+  defguardp is_configured(api) when not is_nil(api.config)
+  defguardp is_valid_request(request) when request.valid == true
 
-  defstruct [
-    :chunk_end_offset,
-    :handle,
-    :last_offset,
-    :new_changes_ref,
-    :new_changes_pid,
-    config: %R.Config{},
-    params: %R.Params{},
-    response: %Response{},
-    valid: false
-  ]
+  defstruct [:config]
 
   @type t() :: %__MODULE__{
-          config: Map.t(),
-          params: Request.Params.t()
+          config: Api.Config.t()
         }
-
-  # @keys __struct__() |> Map.from_struct() |> Map.keys()
 
   # Aliasing for pattern matching
   @before_all_offset LogOffset.before_all()
@@ -47,10 +36,11 @@ defmodule Electric.Shapes.Request do
   @must_refetch [%{headers: %{control: "must-refetch"}}]
 
   def configure(opts) do
-    config = R.Config.new(opts)
+    config = Api.Config.new(opts)
 
     used_keys = config |> Map.from_struct() |> Map.keys()
     unused_opts = Keyword.drop(opts, used_keys)
+
     {%__MODULE__{config: config}, unused_opts}
   end
 
@@ -61,27 +51,31 @@ defmodule Electric.Shapes.Request do
 
   - `seek: boolean()` - (default: true) once validated should we load the shape's
     latest offset information.
-  """
-  @spec validate(t(), %{(atom() | binary()) => term()}) :: {:ok, t()} | {:error, Response.t()}
-  def validate(request, params, opts \\ [seek: true, load: true])
 
-  def validate(request, params, seek: seek?, load: load?) when is_configured(request) do
-    with :ok <- hold_until_stack_ready(request) do
-      with {:ok, request} <- validate_params(request, params),
+  - `load: boolean()` - (default: true) validate and optionallly create a shape
+    based on the handle and shape parameters.
+  """
+  @spec validate(t(), %{(atom() | binary()) => term()}) ::
+          {:ok, Request.t()} | {:error, Response.t()}
+  def validate(api, params, opts \\ [seek: true, load: true])
+
+  def validate(api, params, seek: seek?, load: load?) when is_configured(api) do
+    with :ok <- hold_until_stack_ready(api) do
+      with {:ok, request} <- validate_params(api, params),
            {:ok, request} <- load_shape_info(request, load?) do
         {:ok, seek(request, seek?)}
       end
     end
   end
 
-  defp validate_params(request, params) do
-    with {:ok, request_params} <- R.Params.validate(request, params) do
+  defp validate_params(api, params) do
+    with {:ok, request_params} <- Api.Params.validate(api, params) do
       {:ok,
-       %{
-         request
-         | params: request_params,
-           valid: true,
-           response: %Response{shape: request_params.shape_definition}
+       %Request{
+         config: api.config,
+         params: request_params,
+         valid: true,
+         response: %Response{shape: request_params.shape_definition}
        }}
     end
   end
@@ -89,25 +83,25 @@ defmodule Electric.Shapes.Request do
   @doc """
   A utility function to serve a configured, valid request to completion
   """
-  def serve(%R{} = request) when is_valid(request) do
+  def serve(%Request{} = request) when is_valid_request(request) do
     serve_shape_log(request)
   end
 
-  defp seek(%R{} = request, false), do: request
+  defp seek(%Request{} = request, false), do: request
 
-  defp seek(%R{} = request, true) do
+  defp seek(%Request{} = request, true) do
     request
     |> listen_for_new_changes()
     |> determine_log_chunk_offset()
     |> determine_up_to_date()
   end
 
-  defp load_shape_info(%R{} = request, false) do
+  defp load_shape_info(%Request{} = request, false) do
     {:ok, request}
   end
 
-  defp load_shape_info(%R{} = request, true) do
-    with_span(request, "shape_get.plug.load_shape_info", fn ->
+  defp load_shape_info(%Request{} = request, true) do
+    with_span(request, "shape_get.api.load_shape_info", fn ->
       request
       |> get_or_create_shape_handle()
       |> handle_shape_info(request)
@@ -116,19 +110,19 @@ defmodule Electric.Shapes.Request do
 
   # No handle is provided so we can get the existing one for this shape
   # or create a new shape if it does not yet exist
-  defp get_or_create_shape_handle(%R{params: %{handle: nil}} = request) do
+  defp get_or_create_shape_handle(%Request{params: %{handle: nil}} = request) do
     %{params: %{shape_definition: shape}, config: config} = request
     Shapes.get_or_create_shape_handle(config, shape)
   end
 
   # A shape handle is provided so we need to return the shape that matches the
   # shape handle and the shape definition
-  defp get_or_create_shape_handle(%R{} = request) do
+  defp get_or_create_shape_handle(%Request{} = request) do
     %{params: %{shape_definition: shape}, config: config} = request
     Shapes.get_shape(config, shape)
   end
 
-  defp handle_shape_info(nil, %R{} = request) do
+  defp handle_shape_info(nil, %Request{} = request) do
     %{params: %{shape_definition: shape, handle: shape_handle}, config: config} = request
     # There is no shape that matches the shape definition (because shape info is `nil`)
     if shape_handle != nil && Shapes.has_shape?(config, shape_handle) do
@@ -150,7 +144,7 @@ defmodule Electric.Shapes.Request do
 
   defp handle_shape_info(
          {active_shape_handle, last_offset},
-         %R{params: %{offset: offset, handle: shape_handle}} = request
+         %Request{params: %{offset: offset, handle: shape_handle}} = request
        )
        when (is_nil(shape_handle) or shape_handle == active_shape_handle) and
               is_log_offset_lt(last_offset, offset) do
@@ -159,7 +153,7 @@ defmodule Electric.Shapes.Request do
 
   defp handle_shape_info(
          {active_shape_handle, last_offset},
-         %R{params: %{handle: shape_handle}} = request
+         %Request{params: %{handle: shape_handle}} = request
        )
        when is_nil(shape_handle) or shape_handle == active_shape_handle do
     # We found a shape that matches the shape definition
@@ -172,7 +166,10 @@ defmodule Electric.Shapes.Request do
      )}
   end
 
-  defp handle_shape_info({active_shape_handle, _}, %R{params: %{handle: shape_handle}} = request) do
+  defp handle_shape_info(
+         {active_shape_handle, _},
+         %Request{params: %{handle: shape_handle}} = request
+       ) do
     if Shapes.has_shape?(request.config, shape_handle) do
       # The shape with the provided ID exists but does not match the shape definition
       # otherwise we would have found it and it would have matched the previous function clause
@@ -193,12 +190,14 @@ defmodule Electric.Shapes.Request do
     end
   end
 
-  defp hold_until_stack_ready(%R{} = request) do
-    stack_id = stack_id(request)
-    stack_ready_timeout = Access.get(request.config, :stack_ready_timeout, 5_000)
-    stack_events_registry = request.config[:stack_events_registry]
+  defp hold_until_stack_ready(%Api{config: config} = api) do
+    stack_id = stack_id(api)
 
-    ref = Electric.StackSupervisor.subscribe_to_stack_events(stack_events_registry, stack_id)
+    ref =
+      Electric.StackSupervisor.subscribe_to_stack_events(
+        config.stack_events_registry,
+        stack_id
+      )
 
     if Electric.ProcessRegistry.alive?(stack_id, Electric.Replication.Supervisor) do
       :ok
@@ -207,17 +206,17 @@ defmodule Electric.Shapes.Request do
         {:stack_status, ^ref, :ready} ->
           :ok
       after
-        stack_ready_timeout ->
-          {:error, Response.error(request, %{message: "Stack not ready"}, status: 503)}
+        config.stack_ready_timeout ->
+          {:error, Response.error(api, %{message: "Stack not ready"}, status: 503)}
       end
     end
   end
 
-  defp listen_for_new_changes(%R{params: %{live: false}} = request) do
+  defp listen_for_new_changes(%Request{params: %{live: false}} = request) do
     request
   end
 
-  defp listen_for_new_changes(%R{params: %{live: true}} = request) do
+  defp listen_for_new_changes(%Request{params: %{live: true}} = request) do
     %{
       last_offset: last_offset,
       handle: handle,
@@ -243,7 +242,7 @@ defmodule Electric.Shapes.Request do
 
   # If chunk offsets are available, use those instead of the latest available
   # offset to optimize for cache hits and response sizes
-  defp determine_log_chunk_offset(%R{} = request) do
+  defp determine_log_chunk_offset(%Request{} = request) do
     %{handle: handle, last_offset: last_offset, params: %{offset: offset}, config: config} =
       request
 
@@ -257,7 +256,7 @@ defmodule Electric.Shapes.Request do
     )
   end
 
-  defp determine_up_to_date(%R{} = request) do
+  defp determine_up_to_date(%Request{} = request) do
     %{
       last_offset: last_offset,
       chunk_end_offset: chunk_end_offset,
@@ -277,7 +276,7 @@ defmodule Electric.Shapes.Request do
   @doc """
   Return shape log data.
   """
-  def serve_shape_log(%R{} = request) do
+  def serve_shape_log(%Request{} = request) do
     validate_serve_usage!(request)
 
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
@@ -302,7 +301,7 @@ defmodule Electric.Shapes.Request do
     end
   end
 
-  defp do_serve_shape_log(%R{} = request) do
+  defp do_serve_shape_log(%Request{} = request) do
     %{
       handle: shape_handle,
       chunk_end_offset: chunk_end_offset,
@@ -327,7 +326,7 @@ defmodule Electric.Shapes.Request do
     end
   end
 
-  defp hold_until_change(%R{} = request) do
+  defp hold_until_change(%Request{} = request) do
     %{
       new_changes_ref: ref,
       handle: shape_handle,
@@ -360,40 +359,41 @@ defmodule Electric.Shapes.Request do
     end
   end
 
-  defp empty_response(%R{} = request) do
+  defp empty_response(%Request{} = request) do
     request
     |> update_attrs(%{ot_is_empty_response: true})
     |> Map.update!(:response, &%{&1 | status: 204, body: encode_log(request, [@up_to_date])})
   end
 
-  defp update_attrs(%R{response: response} = request, attrs) do
+  defp update_attrs(%Request{response: response} = request, attrs) do
     %{request | response: Map.update!(response, :trace_attrs, &Map.merge(&1, attrs))}
   end
 
-  defp maybe_up_to_date(%R{response: %{up_to_date: true}}) do
+  defp maybe_up_to_date(%Request{response: %{up_to_date: true}}) do
     [@up_to_date_json]
   end
 
-  defp maybe_up_to_date(%R{response: %{up_to_date: false}}) do
+  defp maybe_up_to_date(%Request{response: %{up_to_date: false}}) do
     []
   end
 
-  defp with_span(%R{} = request, name, attributes \\ [], fun) do
+  defp with_span(%Request{} = request, name, attributes \\ [], fun) do
     OpenTelemetry.with_span(name, attributes, stack_id(request), fun)
   end
 
-  def stack_id(%R{config: %{stack_id: stack_id}}), do: stack_id
+  @spec stack_id(%{config: %{stack_id: String.t()}}) :: Enum.t()
+  def stack_id(%{config: %{stack_id: stack_id}}), do: stack_id
 
   defp encode_log(request, stream) do
     encode(request, :log, stream)
   end
 
-  @spec encode_message(t(), term()) :: Enum.t()
-  def encode_message(request, message) do
-    encode(request, :message, message)
+  @spec encode_message(%{config: %{encoder: module()}}, term()) :: Enum.t()
+  def encode_message(api, message) do
+    encode(api, :message, message)
   end
 
-  defp encode(%R{config: %{encoder: encoder}}, type, message) when type in [:message, :log] do
+  defp encode(%{config: %{encoder: encoder}}, type, message) when type in [:message, :log] do
     apply(encoder, type, [message])
   end
 end

@@ -2,8 +2,7 @@ defmodule Electric.Plug.DeleteShapePlug do
   use Plug.Builder, copy_opts_to_assign: :config
 
   alias Electric.Shapes
-  alias Electric.Shapes.Request
-  alias Electric.Shapes.Response
+  alias Electric.Shapes.Api
 
   require Logger
 
@@ -25,7 +24,7 @@ defmodule Electric.Plug.DeleteShapePlug do
   end
 
   defp validate_request(%Plug.Conn{assigns: %{config: config}} = conn, _) do
-    request = Access.fetch!(config, :request)
+    api = Access.fetch!(config, :api)
 
     all_params =
       Map.merge(conn.query_params, conn.path_params)
@@ -33,13 +32,13 @@ defmodule Electric.Plug.DeleteShapePlug do
       |> Map.put("offset", "-1")
 
     # validate but don't seek - we don't need the latest shape offset information
-    case Request.validate(request, all_params, seek: false, load: true) do
+    case Api.validate(api, all_params, seek: false, load: true) do
       {:ok, request} ->
         assign(conn, :request, request)
 
       {:error, response} ->
         conn
-        |> Response.send(response)
+        |> Api.Response.send(response)
         |> halt()
     end
   end

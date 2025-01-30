@@ -1,5 +1,5 @@
-defmodule Electric.Shapes.Response do
-  alias Electric.Shapes.Request
+defmodule Electric.Shapes.Api.Response do
+  alias Electric.Shapes.Api
   alias Electric.Telemetry.OpenTelemetry
 
   require Logger
@@ -16,6 +16,7 @@ defmodule Electric.Shapes.Response do
   ]
 
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
+
   @type t() :: %__MODULE__{
           handle: nil | shape_handle(),
           offset: nil | Electric.Replication.LogOffset.t(),
@@ -27,12 +28,23 @@ defmodule Electric.Shapes.Response do
           body: Enum.t()
         }
 
-  @spec error(Request.t(), term(), keyword()) :: t()
-  def error(request, message, args \\ []) do
+  def error(api_or_request, message, args \\ [])
+
+  @spec error(Api.t(), term(), keyword()) :: t()
+  def error(%Api{} = api, message, args) do
     opts =
       args
       |> Keyword.put_new(:status, 400)
-      |> Keyword.put(:body, Request.encode_message(request, message))
+      |> Keyword.put(:body, Api.encode_message(api, message))
+
+    struct(__MODULE__, opts)
+  end
+
+  def error(%Api.Request{} = request, message, args) do
+    opts =
+      args
+      |> Keyword.put_new(:status, 400)
+      |> Keyword.put(:body, Api.encode_message(request, message))
       |> Keyword.put(:shape, get_in(request.params.shape_definition))
 
     struct(__MODULE__, opts)
@@ -100,7 +112,7 @@ defmodule Electric.Shapes.Response do
   end
 
   defp send_stream(%Plug.Conn{} = conn, %__MODULE__{body: stream, status: status}) do
-    stack_id = Request.stack_id(conn.assigns.request)
+    stack_id = Api.stack_id(conn.assigns.request)
     conn = Plug.Conn.send_chunked(conn, status)
 
     {conn, bytes_sent} =

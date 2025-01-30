@@ -231,8 +231,8 @@ defmodule Support.ComponentSetup do
   end
 
   def build_router_opts(ctx, overrides \\ []) do
-    {request, opts} =
-      Electric.Shapes.Request.configure(
+    {api, opts} =
+      Electric.Shapes.Api.configure(
         [
           long_poll_timeout: 4_000,
           max_age: 60,
@@ -249,6 +249,6 @@ defmodule Support.ComponentSetup do
         |> Keyword.merge(overrides)
       )
 
-    Keyword.merge(opts, request: request)
+    Keyword.merge(opts, api: api)
   end
 end

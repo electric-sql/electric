@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.Request.Config do
+defmodule Electric.Shapes.Api.Config do
   defstruct [
     :inspector,
     :pg_id,
@@ -11,7 +11,7 @@ defmodule Electric.Shapes.Request.Config do
     max_age: 60,
     stack_ready_timeout: 100,
     stale_age: 300,
-    encoder: :json
+    encoder: Electric.Shapes.Api.Encoder.JSON
   ]
 
   @type t() :: %__MODULE__{}
@@ -23,7 +23,7 @@ defmodule Electric.Shapes.Request.Config do
   end
 
   defp validate_encoder!(config) do
-    Map.update!(config, :encoder, &Electric.Shapes.Response.Encoder.validate!/1)
+    Map.update!(config, :encoder, &Electric.Shapes.Api.Encoder.validate!/1)
   end
 
   @impl Access

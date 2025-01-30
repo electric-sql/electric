@@ -6,8 +6,7 @@ defmodule Electric.Plug.ServeShapePlug do
   import Plug.Conn, except: [halt: 1]
 
   alias Electric.Plug.Utils
-  alias Electric.Shapes.Request
-  alias Electric.Shapes.Response
+  alias Electric.Shapes.Api
   alias Electric.Schema
   alias Electric.Replication.LogOffset
   alias Electric.Telemetry.OpenTelemetry
@@ -38,19 +37,20 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp validate_request(%Conn{assigns: %{config: config}} = conn, _) do
     Logger.info("Query String: #{conn.query_string}")
-    request = Access.fetch!(config, :request)
+
+    api = Access.fetch!(config, :api)
 
     all_params =
       Map.merge(conn.query_params, conn.path_params)
       |> Map.update("live", "false", &(&1 != "false"))
 
-    case Request.validate(request, all_params) do
+    case Api.validate(api, all_params) do
       {:ok, request} ->
         assign(conn, :request, request)
 
       {:error, response} ->
         conn
-        |> Response.send(response)
+        |> Api.Response.send(response)
         |> halt()
     end
   end
@@ -150,11 +150,11 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp serve_shape_log(%Conn{assigns: %{request: request}} = conn, _) do
-    response = Request.serve_shape_log(request)
+    response = Api.serve_shape_log(request)
 
     conn
     |> assign(:response, response)
-    |> Response.send(response)
+    |> Api.Response.send(response)
   end
 
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do

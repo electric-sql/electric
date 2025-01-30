@@ -1,17 +1,9 @@
-defmodule Electric.Shapes.Response.Encoder do
+defmodule Electric.Shapes.Api.Encoder do
   @callback message(term()) :: Enum.t()
   @callback log(term()) :: Enum.t()
 
-  alias __MODULE__
-
   def validate!(impl) do
     case impl do
-      :json ->
-        Encoder.JSON
-
-      :term ->
-        Encoder.Term
-
       module when is_atom(module) ->
         # just assume that the module implements the behaviour
         module
@@ -19,15 +11,15 @@ defmodule Electric.Shapes.Response.Encoder do
       invalid ->
         raise ArgumentError,
           message:
-            "Expected a module that implements the Shapes.Response.Encoder protocol. Got #{inspect(invalid)}"
+            "Expected a module that implements the #{__MODULE__} protocol. Got #{inspect(invalid)}"
     end
   end
 end
 
-defmodule Electric.Shapes.Response.Encoder.JSON do
-  @behaviour Electric.Shapes.Response.Encoder
+defmodule Electric.Shapes.Api.Encoder.JSON do
+  @behaviour Electric.Shapes.Api.Encoder
 
-  @impl Electric.Shapes.Response.Encoder
+  @impl Electric.Shapes.Api.Encoder
   def message(message) when is_binary(message) do
     [message]
   end
@@ -36,7 +28,7 @@ defmodule Electric.Shapes.Response.Encoder.JSON do
     Stream.map([term], &Jason.encode_to_iodata!/1)
   end
 
-  @impl Electric.Shapes.Response.Encoder
+  @impl Electric.Shapes.Api.Encoder
   # the log is streamed from storage as a stream of json-encoded messages
   def log(item_stream) do
     item_stream |> Stream.map(&ensure_json/1) |> to_json_stream()
@@ -64,10 +56,10 @@ defmodule Electric.Shapes.Response.Encoder.JSON do
   end
 end
 
-defmodule Electric.Shapes.Response.Encoder.Term do
-  @behaviour Electric.Shapes.Response.Encoder
+defmodule Electric.Shapes.Api.Encoder.Term do
+  @behaviour Electric.Shapes.Api.Encoder
 
-  @impl Electric.Shapes.Response.Encoder
+  @impl Electric.Shapes.Api.Encoder
 
   def message(message) when is_binary(message) do
     [Jason.decode!(message)]
@@ -77,7 +69,7 @@ defmodule Electric.Shapes.Response.Encoder.Term do
     [term]
   end
 
-  @impl Electric.Shapes.Response.Encoder
+  @impl Electric.Shapes.Api.Encoder
   # the log is streamed from storage as a stream of json-encoded messages
   def log(item_stream) do
     Stream.map(item_stream, &maybe_decode_json!/1)

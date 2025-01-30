@@ -38,8 +38,8 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   end
 
   def call_delete_shape_plug(conn, ctx, allow \\ true) do
-    {request, opts} =
-      Electric.Shapes.Request.configure(
+    {api, opts} =
+      Electric.Shapes.Api.configure(
         stack_id: ctx.stack_id,
         stack_events_registry: Registry.StackEvents,
         stack_ready_timeout: 100,
@@ -54,7 +54,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         allow_shape_deletion: allow
       )
 
-    config = Keyword.merge(opts, request: request)
+    config = Keyword.merge(opts, api: api)
 
     DeleteShapePlug.call(conn, config)
   end

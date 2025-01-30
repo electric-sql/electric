@@ -1,8 +1,8 @@
-defmodule Electric.Shapes.Request.Params do
+defmodule Electric.Shapes.Api.Params do
   use Ecto.Schema
 
   alias Electric.Replication.LogOffset
-  alias Electric.Shapes.Response
+  alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
 
   import Ecto.Changeset
@@ -25,8 +25,8 @@ defmodule Electric.Shapes.Request.Params do
 
   @type t() :: %__MODULE__{}
 
-  def validate(request, params) do
-    %{config: %{inspector: inspector}} = request
+  def validate(api, params) do
+    %{config: %{inspector: inspector}} = api
 
     %__MODULE__{}
     |> cast(params, __schema__(:fields) -- [:shape_definition],
@@ -51,7 +51,7 @@ defmodule Electric.Shapes.Request.Params do
             end)
           end)
 
-        {:error, Response.error(request, reason)}
+        {:error, Api.Response.error(api, reason)}
     end
   end
 

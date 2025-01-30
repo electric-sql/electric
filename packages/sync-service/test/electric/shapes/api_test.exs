@@ -1,9 +1,9 @@
-defmodule Electric.Shapes.RequestTest do
+defmodule Electric.Shapes.ApiTest do
   use ExUnit.Case, async: true
 
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
-  alias Electric.Shapes.Request
+  alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
 
   alias Support.Mock
@@ -47,8 +47,8 @@ defmodule Electric.Shapes.RequestTest do
     do: Support.StubInspector.load_relation(tbl, nil)
 
   defp configure_request(ctx) do
-    {request, opts} =
-      Request.configure(
+    {api, opts} =
+      Api.configure(
         stack_id: ctx.stack_id,
         pg_id: @test_pg_id,
         stack_events_registry: Registry.StackEvents,
@@ -60,10 +60,10 @@ defmodule Electric.Shapes.RequestTest do
         long_poll_timeout: long_poll_timeout(ctx),
         max_age: max_age(ctx),
         stale_age: stale_age(ctx),
-        encoder: :term
+        encoder: Electric.Shapes.Api.Encoder.Term
       )
 
-    Keyword.merge(opts, request: request)
+    Keyword.merge(opts, api: api)
   end
 
   defp ready_stack(ctx) do
@@ -89,7 +89,7 @@ defmodule Electric.Shapes.RequestTest do
 
     test "returns 400 for invalid table", ctx do
       assert {:error, %{status: 400} = response} =
-               Request.validate(ctx.request, %{table: ".invalid_shape", offset: "-1"})
+               Api.validate(ctx.api, %{table: ".invalid_shape", offset: "-1"})
 
       assert response_body(response) == %{
                table: [
@@ -100,29 +100,29 @@ defmodule Electric.Shapes.RequestTest do
 
     test "returns error for invalid offset", ctx do
       assert {:error, %{status: 400} = response} =
-               Request.validate(ctx.request, %{table: "foo", offset: "invalid"})
+               Api.validate(ctx.api, %{table: "foo", offset: "invalid"})
 
       assert response_body(response) == %{offset: ["has invalid format"]}
     end
 
     test "returns error when table param is missing", ctx do
       assert {:error, %{status: 400} = response} =
-               Request.validate(ctx.request, %{offset: "-1"})
+               Api.validate(ctx.api, %{offset: "-1"})
 
       assert response_body(response) == %{table: ["can't be blank"]}
     end
 
     test "returns error when table does not exist", ctx do
       assert {:error, %{status: 400} = response} =
-               Request.validate(ctx.request, %{table: "_val1d_schëmaΦ$.Φtàble", offset: "-1"})
+               Api.validate(ctx.api, %{table: "_val1d_schëmaΦ$.Φtàble", offset: "-1"})
 
       assert response_body(response) == %{table: ["table not found"]}
     end
 
     test "returns error for missing shape_handle when offset != -1", ctx do
       assert {:error, %{status: 400} = response} =
-               Request.validate(
-                 ctx.request,
+               Api.validate(
+                 ctx.api,
                  %{table: "public.users", offset: "#{LogOffset.first()}"}
                )
 
@@ -131,8 +131,8 @@ defmodule Electric.Shapes.RequestTest do
 
     test "returns error for live request when offset == -1", ctx do
       assert {:error, %{status: 400} = response} =
-               Request.validate(
-                 ctx.request,
+               Api.validate(
+                 ctx.api,
                  %{
                    table: "public.users",
                    live: true,
@@ -152,8 +152,8 @@ defmodule Electric.Shapes.RequestTest do
       invalid_offset = LogOffset.increment(@test_offset)
 
       assert {:error, %{status: 400} = response} =
-               Request.validate(
-                 ctx.request,
+               Api.validate(
+                 ctx.api,
                  %{
                    table: "public.users",
                    handle: "#{@test_shape_handle}",
@@ -176,8 +176,8 @@ defmodule Electric.Shapes.RequestTest do
       end)
 
       assert {:error, %{status: 400} = response} =
-               Request.validate(
-                 ctx.request,
+               Api.validate(
+                 ctx.api,
                  %{
                    table: "public.users",
                    handle: "#{request_handle}",
@@ -202,8 +202,8 @@ defmodule Electric.Shapes.RequestTest do
       end)
 
       assert {:error, %{status: 400} = response} =
-               Request.validate(
-                 ctx.request,
+               Api.validate(
+                 ctx.api,
                  %{
                    table: "public.users",
                    handle: request_handle,
@@ -228,8 +228,8 @@ defmodule Electric.Shapes.RequestTest do
       end)
 
       assert {:error, %{status: 409} = response} =
-               Request.validate(
-                 ctx.request,
+               Api.validate(
+                 ctx.api,
                  %{
                    table: "public.users",
                    handle: request_handle,
@@ -256,8 +256,8 @@ defmodule Electric.Shapes.RequestTest do
       |> stub(:for_shape, fn new_shape_handle, opts -> {new_shape_handle, opts} end)
 
       assert {:error, %{status: 409} = response} =
-               Request.validate(
-                 ctx.request,
+               Api.validate(
+                 ctx.api,
                  %{
                    table: "public.users",
                    handle: @test_shape_handle,
@@ -271,8 +271,8 @@ defmodule Electric.Shapes.RequestTest do
 
     test "returns error when omitting primary key columns in selection", ctx do
       assert {:error, %{status: 400} = response} =
-               Request.validate(
-                 ctx.request,
+               Api.validate(
+                 ctx.api,
                  %{
                    table: "public.users",
                    offset: "-1",
@@ -307,8 +307,8 @@ defmodule Electric.Shapes.RequestTest do
       end)
 
       assert {:ok, request} =
-               Request.validate(
-                 ctx.request,
+               Api.validate(
+                 ctx.api,
                  %{
                    table: "public.users",
                    offset: "-1",
@@ -316,7 +316,7 @@ defmodule Electric.Shapes.RequestTest do
                  }
                )
 
-      assert response = Request.serve(request)
+      assert response = Api.serve_shape_log(request)
       assert response.status == 200
       assert response.handle == test_shape_handle
 
@@ -364,12 +364,12 @@ defmodule Electric.Shapes.RequestTest do
       end)
 
       assert {:ok, request} =
-               Request.validate(
-                 ctx.request,
+               Api.validate(
+                 ctx.api,
                  %{table: "public.users", offset: "-1"}
                )
 
-      assert response = Request.serve(request)
+      assert response = Api.serve_shape_log(request)
 
       assert response.status == 200
       assert response.chunked
@@ -412,8 +412,8 @@ defmodule Electric.Shapes.RequestTest do
       end)
 
       assert {:ok, request} =
-               Request.validate(
-                 ctx.request,
+               Api.validate(
+                 ctx.api,
                  %{
                    table: "public.users",
                    offset: "#{@start_offset_50}",
@@ -421,7 +421,7 @@ defmodule Electric.Shapes.RequestTest do
                  }
                )
 
-      assert response = Request.serve(request)
+      assert response = Api.serve_shape_log(request)
       assert response.status == 200
       assert response.chunked
 
@@ -473,8 +473,8 @@ defmodule Electric.Shapes.RequestTest do
       task =
         Task.async(fn ->
           assert {:ok, request} =
-                   Request.validate(
-                     ctx.request,
+                   Api.validate(
+                     ctx.api,
                      %{
                        table: "public.users",
                        offset: "#{@test_offset}",
@@ -483,7 +483,7 @@ defmodule Electric.Shapes.RequestTest do
                      }
                    )
 
-          Request.serve(request)
+          Api.serve_shape_log(request)
         end)
 
       assert_receive :got_log_stream, @receive_timeout
@@ -531,8 +531,8 @@ defmodule Electric.Shapes.RequestTest do
       task =
         Task.async(fn ->
           assert {:ok, request} =
-                   Request.validate(
-                     ctx.request,
+                   Api.validate(
+                     ctx.api,
                      %{
                        table: "public.users",
                        offset: "#{@test_offset}",
@@ -541,7 +541,7 @@ defmodule Electric.Shapes.RequestTest do
                      }
                    )
 
-          Request.serve(request)
+          Api.serve_shape_log(request)
         end)
 
       assert_receive :got_log_stream, @receive_timeout
@@ -578,8 +578,8 @@ defmodule Electric.Shapes.RequestTest do
       end)
 
       assert {:ok, request} =
-               Request.validate(
-                 ctx.request,
+               Api.validate(
+                 ctx.api,
                  %{
                    table: "public.users",
                    offset: "#{@test_offset}",
@@ -588,7 +588,7 @@ defmodule Electric.Shapes.RequestTest do
                  }
                )
 
-      assert response = Request.serve(request)
+      assert response = Api.serve_shape_log(request)
 
       assert response.status == 204
       refute response.chunked
@@ -603,7 +603,7 @@ defmodule Electric.Shapes.RequestTest do
 
     test "returns 503", ctx do
       assert {:error, response} =
-               Request.validate(ctx.request, %{table: "public.users", offset: "-1"})
+               Api.validate(ctx.api, %{table: "public.users", offset: "-1"})
 
       assert response.status == 503
 
@@ -614,8 +614,8 @@ defmodule Electric.Shapes.RequestTest do
     test "waits until stack ready and proceeds", ctx do
       task =
         Task.async(fn ->
-          Request.validate(
-            ctx.request,
+          Api.validate(
+            ctx.api,
             %{table: "public.users", offset: "-1", columns: "id,invalid"}
           )
         end)

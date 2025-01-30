@@ -5,7 +5,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Plug.ServeShapePlug
-  alias Electric.Shapes.Request
+  alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
@@ -63,8 +63,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
   end
 
   def call_serve_shape_plug(conn, ctx) do
-    {request, opts} =
-      Request.configure(
+    {api, opts} =
+      Api.configure(
         stack_id: ctx.stack_id,
         pg_id: @test_pg_id,
         stack_events_registry: Registry.StackEvents,
@@ -75,11 +75,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
         registry: @registry,
         long_poll_timeout: long_poll_timeout(ctx),
         max_age: max_age(ctx),
-        stale_age: stale_age(ctx),
-        encoder: :json
+        stale_age: stale_age(ctx)
       )
 
-    ServeShapePlug.call(conn, [{:request, request} | opts])
+    ServeShapePlug.call(conn, [{:api, api} | opts])
   end
 
   describe "serving shape" do
