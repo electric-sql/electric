@@ -731,7 +731,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.initialise(shape_opts)
         storage.set_shape_definition(@shape, shape_opts)
 
-        assert 2274 = Electric.ShapeCache.Storage.get_total_disk_usage({storage, opts})
+        assert 2330 = Electric.ShapeCache.Storage.get_total_disk_usage({storage, opts})
       end
     end
   end

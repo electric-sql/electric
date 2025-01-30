@@ -15,6 +15,7 @@ defmodule Electric.Shapes.Shape do
     :table_info,
     :where,
     :selected_columns,
+    storage: %{compaction: :disabled},
     replica: :default
   ]
 
@@ -22,6 +23,9 @@ defmodule Electric.Shapes.Shape do
   @type table_info() :: %{
           columns: [Inspector.column_info(), ...],
           pk: [String.t(), ...]
+        }
+  @type storage_config :: %{
+          compaction: :enabled | :disabled
         }
   @type t() :: %__MODULE__{
           root_table: Electric.relation(),
@@ -31,7 +35,8 @@ defmodule Electric.Shapes.Shape do
           },
           where: Electric.Replication.Eval.Expr.t() | nil,
           selected_columns: [String.t(), ...] | nil,
-          replica: replica()
+          replica: replica(),
+          storage: storage_config() | nil
         }
 
   @type json_relation() :: [String.t(), ...]
@@ -45,7 +50,8 @@ defmodule Electric.Shapes.Shape do
           table_info: [json_table_list(), ...]
         }
 
-  def hash(%__MODULE__{} = shape), do: shape |> Map.drop([:table_info]) |> :erlang.phash2()
+  def hash(%__MODULE__{} = shape),
+    do: shape |> Map.drop([:table_info, :storage]) |> :erlang.phash2()
 
   def generate_id(%__MODULE__{} = shape) do
     hash = hash(shape)
@@ -74,6 +80,10 @@ defmodule Electric.Shapes.Shape do
                   inspector: [
                     type: :mod_arg,
                     default: {Electric.Postgres.Inspector, Electric.DbPool}
+                  ],
+                  storage: [
+                    type: {:or, [:map, nil]},
+                    default: nil
                   ]
                 )
   def new(table, opts) do
@@ -93,7 +103,8 @@ defmodule Electric.Shapes.Shape do
          table_info: %{table => %{pk: pk_cols, columns: column_info}},
          where: where,
          selected_columns: selected_columns,
-         replica: Access.get(opts, :replica, :default)
+         replica: Access.get(opts, :replica, :default),
+         storage: Access.get(opts, :storage)
        }}
     end
   end
@@ -294,31 +305,16 @@ defmodule Electric.Shapes.Shape do
   @spec to_json_safe(t()) :: json_safe()
   def to_json_safe(%__MODULE__{} = shape) do
     %{
-      root_table: {schema, name},
-      root_table_id: root_table_id,
-      where: where,
-      selected_columns: selected_columns,
-      table_info: table_info
-    } = shape
-
-    query =
-      case where do
-        %{query: query} -> query
-        nil -> nil
-      end
-
-    %{
-      root_table: [schema, name],
-      root_table_id: root_table_id,
-      where: query,
-      selected_columns: selected_columns,
+      root_table: Tuple.to_list(shape.root_table),
+      root_table_id: shape.root_table_id,
+      where: if(shape.where, do: shape.where.query),
+      selected_columns: shape.selected_columns,
+      replica: shape.replica,
+      storage: shape.storage,
       table_info:
-        if(table_info,
-          do:
-            Enum.map(table_info, fn {{schema, name}, columns} ->
-              [[schema, name], json_safe_columns(columns)]
-            end)
-        )
+        Enum.map(shape.table_info, fn {relation, columns} ->
+          [Tuple.to_list(relation), json_safe_columns(columns)]
+        end)
     }
   end
 
@@ -335,15 +331,15 @@ defmodule Electric.Shapes.Shape do
   defp column_info_to_json_safe({k, v}), do: {k, v}
 
   @spec from_json_safe!(json_safe()) :: t() | no_return()
-  def from_json_safe!(map) do
-    %{
-      "root_table" => [schema, name],
-      "root_table_id" => root_table_id,
-      "where" => where,
-      "selected_columns" => selected_columns,
-      "table_info" => info
-    } = map
-
+  def from_json_safe!(
+        %{
+          "root_table" => [schema, name],
+          "root_table_id" => root_table_id,
+          "where" => where,
+          "selected_columns" => selected_columns,
+          "table_info" => info
+        } = data
+      ) do
     table_info =
       Enum.reduce(info, %{}, fn [[schema, name], table_info], info ->
         %{"columns" => columns, "pk" => pk} = table_info
@@ -363,9 +359,15 @@ defmodule Electric.Shapes.Shape do
       root_table_id: root_table_id,
       where: where,
       selected_columns: selected_columns,
-      table_info: table_info
+      table_info: table_info,
+      replica: String.to_atom(Map.get(data, "replica", "default")),
+      storage: storage_config_from_json(Map.get(data, "storage"))
     }
   end
+
+  defp storage_config_from_json(nil), do: %{compaction: :disabled}
+  defp storage_config_from_json(%{"compaction" => "enabled"}), do: %{compaction: :enabled}
+  defp storage_config_from_json(%{"compaction" => "disabled"}), do: %{compaction: :disabled}
 
   defp column_info_from_json({"type_id", [id, mod]}), do: {:type_id, {id, mod}}
   defp column_info_from_json({"type", type}), do: {:type, String.to_atom(type)}
