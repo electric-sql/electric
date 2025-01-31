@@ -19,6 +19,36 @@ importers:
         specifier: ^10.3.10
         version: 10.4.5
 
+  examples/.shared:
+    devDependencies:
+      '@databases/pg-migrations':
+        specifier: ^5.0.3
+        version: 5.0.3(typescript@5.6.3)
+      '@types/node':
+        specifier: ^20.14.10
+        version: 20.17.6
+      '@types/pg':
+        specifier: ^8.11.6
+        version: 8.11.10
+      camelcase:
+        specifier: ^8.0.0
+        version: 8.0.0
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.4.5
+      eslint:
+        specifier: ^8.57.0
+        version: 8.57.1
+      pg:
+        specifier: ^8.13.1
+        version: 8.13.1
+      sst:
+        specifier: 3.6.25
+        version: 3.6.25
+      typescript:
+        specifier: ^5.5.3
+        version: 5.6.3
+
   examples/bash: {}
 
   examples/encryption:
@@ -318,8 +348,8 @@ importers:
         specifier: ^8.4.39
         version: 8.4.47
       sst:
-        specifier: 3.3.7
-        version: 3.3.7(hono@4.6.13)
+        specifier: 3.6.35
+        version: 3.6.35
       supabase:
         specifier: ^1.226.3
         version: 1.226.4
@@ -520,8 +550,8 @@ importers:
         specifier: ^8.4.39
         version: 8.4.47
       sst:
-        specifier: 3.3.7
-        version: 3.3.7(hono@4.6.13)
+        specifier: 3.6.35
+        version: 3.6.35
       tailwindcss:
         specifier: ^3.4.4
         version: 3.4.14
@@ -542,7 +572,7 @@ importers:
         version: link:../../packages/react-hooks
       next:
         specifier: ^14.2.5
-        version: 14.2.17(@babel/core@7.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 14.2.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       pg:
         specifier: ^8.12.0
         version: 8.13.1
@@ -584,8 +614,8 @@ importers:
         specifier: ^8.57.0
         version: 8.57.1
       sst:
-        specifier: 3.3.7
-        version: 3.3.7(hono@4.6.13)
+        specifier: 3.6.35
+        version: 3.6.35
       typescript:
         specifier: ^5.5.3
         version: 5.6.3
@@ -603,7 +633,7 @@ importers:
         version: link:../../packages/react-hooks
       next:
         specifier: ^14.2.5
-        version: 14.2.17(@babel/core@7.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 14.2.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       pg:
         specifier: ^8.12.0
         version: 8.13.1
@@ -614,8 +644,8 @@ importers:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
       sst:
-        specifier: 3.3.64
-        version: 3.3.64(hono@4.6.13)
+        specifier: 3.6.35
+        version: 3.6.35
       uuid:
         specifier: ^10.0.0
         version: 10.0.0
@@ -911,8 +941,8 @@ importers:
         specifier: ^6.23.1
         version: 6.28.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       sst:
-        specifier: 3.3.7
-        version: 3.3.7(hono@4.6.13)
+        specifier: 3.6.35
+        version: 3.6.35
       uuid:
         specifier: ^10.0.0
         version: 10.0.0
@@ -1014,8 +1044,8 @@ importers:
         specifier: 19.0.0-rc.1
         version: 19.0.0-rc.1(react@19.0.0-rc.1)
       sst:
-        specifier: 3.3.64
-        version: 3.3.64(hono@4.6.13)
+        specifier: 3.6.35
+        version: 3.6.35
       uuid:
         specifier: ^10.0.0
         version: 10.0.0
@@ -1091,7 +1121,7 @@ importers:
         version: 0.2.99
       next:
         specifier: ^14.2.9
-        version: 14.2.17(@babel/core@7.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 14.2.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       pg:
         specifier: ^8.13.1
         version: 8.13.1
@@ -1102,8 +1132,8 @@ importers:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
       sst:
-        specifier: 3.6.25
-        version: 3.6.25
+        specifier: 3.6.35
+        version: 3.6.35
       y-codemirror.next:
         specifier: 0.3.5
         version: 0.3.5(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(yjs@13.6.20)
@@ -5267,6 +5297,10 @@ packages:
     resolution: {integrity: sha512-Gmy6FhYlCY7uOElZUSbxo2UCDH8owEk996gkbrpsgGtrJLM3J7jGxl9Ic7Qwwj4ivOE5AWZWRMecDdF7hqGjFA==}
     engines: {node: '>=10'}
 
+  camelcase@8.0.0:
+    resolution: {integrity: sha512-8WB3Jcas3swSvjIeA2yvCJ+Miyz5l1ZmB6HFb9R1317dt9LCQoswg/BGrmAmkWVEszSrrg4RwmO46qIm2OEnSA==}
+    engines: {node: '>=16'}
+
   camelize@1.0.1:
     resolution: {integrity: sha512-dU+Tx2fsypxTgtLoE36npi3UqcjSSMNYfkqgmoEhtZrraP5VWq0K7FkWVTYa8eMPtnU/G2txVsfdCJTn9uzpuQ==}
 
@@ -8836,29 +8870,14 @@ packages:
     resolution: {integrity: sha512-MGrFH9Z4NP9Iyhqn16sDtBpRRNJ0Y2hNa6D65h736fVSaPCHr4DM4sWUNvVaSuC+0OBGhwsrydQwmgfg5LncqQ==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
 
-  sst-darwin-arm64@3.3.64:
-    resolution: {integrity: sha512-sGlGX66vjWuN/501zjjEdqIalteyuawuoUvbIQsYFZ3yYg+THSPsXR5e3ADo2LgrOelaMhOOAZ8jabGGEsptnw==}
-    cpu: [arm64]
-    os: [darwin]
-
-  sst-darwin-arm64@3.3.7:
-    resolution: {integrity: sha512-2CQh78YIdvrRpO8enZ/Jx51JsUSFtk564u9w4ldcu5SsMMDY1ocdw5p/XIwBy1eKeRtrXLizd35sYbtSfSy6sw==}
-    cpu: [arm64]
-    os: [darwin]
-
   sst-darwin-arm64@3.6.25:
     resolution: {integrity: sha512-vUf0OXeSIrPN7QPHSxYJcXqycBvcoZJ9scsV1VrTRQbYpySfWCJMD8LSAuRB+//QjcDYndSx/r/ad0Ofx+a2vw==}
     cpu: [arm64]
     os: [darwin]
 
-  sst-darwin-x64@3.3.64:
-    resolution: {integrity: sha512-qH8vDyPMbRASBt5T5+dIyheJ7DoGjHaeGBWzloDVN9Ukz+H3W37rSR4cWEkZlYAwxx32DoiFl6hNIhH39TFpAw==}
-    cpu: [x64]
-    os: [darwin]
-
-  sst-darwin-x64@3.3.7:
-    resolution: {integrity: sha512-+hiDT3+am+CBO3xBy8yl3bmFeTjGXUT/+7V6NFOV2yxlRP3A8J65nEjWdzPTU/u7hRl+leE8EBu14j0grt/7/A==}
-    cpu: [x64]
+  sst-darwin-arm64@3.6.35:
+    resolution: {integrity: sha512-1NSas4wm2hSBZbLOLklvRiRw+vC1IttvxrsDgj2XqFesZ/J4NknVacmym2V82JPkAI/TUcKpgf27i4JTEj7NlQ==}
+    cpu: [arm64]
     os: [darwin]
 
   sst-darwin-x64@3.6.25:
@@ -8866,29 +8885,19 @@ packages:
     cpu: [x64]
     os: [darwin]
 
-  sst-linux-arm64@3.3.64:
-    resolution: {integrity: sha512-MUd0hHMap0SXAdU+UniAAlAzEzuJNIPbnQ80SHFGKatJNgFlQmmp7jq4qR1GXjaB3/NttLKIroQ8RBXuydtUzA==}
-    cpu: [arm64]
-    os: [linux]
-
-  sst-linux-arm64@3.3.7:
-    resolution: {integrity: sha512-dYolpXAjq0S8QjL8sTKzcRpPNgZDeMcJ9PHnt/8GpdqxNxEpGlNF9gMl2cB7mleJyJYBNMPvi4YEeCGtcazmeQ==}
-    cpu: [arm64]
-    os: [linux]
+  sst-darwin-x64@3.6.35:
+    resolution: {integrity: sha512-jpFpUqrJGM8BMVj5V6A5x+VWgW7l/n1u7DUoV4HP/GcLW2WbtdN0ug1BjLdfpEGQ50sRzO6XJSZx2t3JFKDtDQ==}
+    cpu: [x64]
+    os: [darwin]
 
   sst-linux-arm64@3.6.25:
     resolution: {integrity: sha512-5Xjj08Uo5J1abiCHv09lxA0SqswbP2Vz5y6DAgocTPSLMuUlgCv9m0r+w+ng3OLDoCDVb56EUY0G8zwWX1Q3gA==}
     cpu: [arm64]
     os: [linux]
 
-  sst-linux-x64@3.3.64:
-    resolution: {integrity: sha512-8V42iyy9hc2bcW570DCzFIZrL1wOlSx0PF2M+Zlq7jhVGbhBTTZ13HHIo//W7ETtsAhItBeknZil6LidLz4ZDg==}
-    cpu: [x64]
-    os: [linux]
-
-  sst-linux-x64@3.3.7:
-    resolution: {integrity: sha512-K2vPOZ5DS8mJmE4QtffgZN5Nem1MIBhoVozNtZ0NoufeKHbFz0Hyw9wbqxYSbs2MOoVNKvG8qwcX99ojVXTFKw==}
-    cpu: [x64]
+  sst-linux-arm64@3.6.35:
+    resolution: {integrity: sha512-VFFVk1b6wPg/nBgHPUARJZmJQnQKebJr9m+Cu6jDfVyNsIpCo+q1W/uKbia7Y2fSpMMS6Pdw5480CJvmLtz/7g==}
+    cpu: [arm64]
     os: [linux]
 
   sst-linux-x64@3.6.25:
@@ -8896,14 +8905,9 @@ packages:
     cpu: [x64]
     os: [linux]
 
-  sst-linux-x86@3.3.64:
-    resolution: {integrity: sha512-TuJ5Zf9Lt5nTUOFKR+/EqPbpmzvtngHzQ5qvVq0k0wgPFC/ZgZItJtgZlspz8LL7wFl5dt2Y7VTVUHpov4PKNQ==}
-    cpu: [x86]
-    os: [linux]
-
-  sst-linux-x86@3.3.7:
-    resolution: {integrity: sha512-4rXj54+UJd+HLmrhCHQ0k9AOkugHZhhh6sCUnkUNChJr5ei62pRscUQ7ge8/jywvfzHZGZw3eXXJWCCsjilXFA==}
-    cpu: [x86]
+  sst-linux-x64@3.6.35:
+    resolution: {integrity: sha512-Iw48glLvm6W6xV+lUus37xdOuzgFnHJ/wFF2fhzsw/NrWo2nmft5YPj7Cg3XQqBGtPR82v0xU/MaPX0PPbu0Zw==}
+    cpu: [x64]
     os: [linux]
 
   sst-linux-x86@3.6.25:
@@ -8911,32 +8915,17 @@ packages:
     cpu: [x86]
     os: [linux]
 
-  sst@3.3.64:
-    resolution: {integrity: sha512-Mvgbz/ylG2UOzDir9t0Qk8M0wbzQMzwm0/lk5+lywqpK8emAea43+yOIgPvaJEeGiv9i9T97XRnYLbddUGZAFA==}
-    hasBin: true
-    peerDependencies:
-      hono: 4.x
-      valibot: 0.30.x
-    peerDependenciesMeta:
-      hono:
-        optional: true
-      valibot:
-        optional: true
-
-  sst@3.3.7:
-    resolution: {integrity: sha512-qIJPQnGeIHarWZoUvphwi6R1nu6Pccd3Q2Qy9ltBLs4Z47TkSdwBNeqCBhgAzWA0eLDwStTXliexyQCcNM6gDQ==}
-    hasBin: true
-    peerDependencies:
-      hono: 4.x
-      valibot: 0.30.x
-    peerDependenciesMeta:
-      hono:
-        optional: true
-      valibot:
-        optional: true
+  sst-linux-x86@3.6.35:
+    resolution: {integrity: sha512-I1C+QuL4j0t5whv6GzRSWFcyRGZKIxTNNVS82KYFiJdA6YPMYvTE2Tp5eYixBA1WutQAFBwkC4brhhovJHz1uQ==}
+    cpu: [x86]
+    os: [linux]
 
   sst@3.6.25:
     resolution: {integrity: sha512-lEvXCunAEhBQ7jUTj/tF8/5vfbXS1T7nNvfzAo0ZpHE1AH/Pj3vGqI1y4Zxs+SQBfEhUbPKjOH3aDWsOWHCmfA==}
+    hasBin: true
+
+  sst@3.6.35:
+    resolution: {integrity: sha512-dEadN3Z+FlXja0gVF0f8sz0BXrxZhzWz9ODLcSScOonApA2WOBBl36HiClh7+oppFNl+IwKeh3AvXtvjVQt8tg==}
     hasBin: true
 
   stack-utils@2.0.6:
@@ -14463,6 +14452,8 @@ snapshots:
 
   camelcase@6.3.0: {}
 
+  camelcase@8.0.0: {}
+
   camelize@1.0.1: {}
 
   caniuse-lite@1.0.30001677: {}
@@ -15504,7 +15495,7 @@ snapshots:
       '@ungap/structured-clone': 1.2.0
       ajv: 6.12.6
       chalk: 4.1.2
-      cross-spawn: 7.0.3
+      cross-spawn: 7.0.6
       debug: 4.3.7(supports-color@5.5.0)
       doctrine: 3.0.0
       escape-string-regexp: 4.0.0
@@ -17164,7 +17155,7 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  next@14.2.17(@babel/core@7.26.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  next@14.2.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@next/env': 14.2.17
       '@swc/helpers': 0.5.5
@@ -17174,7 +17165,7 @@ snapshots:
       postcss: 8.4.31
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
-      styled-jsx: 5.1.1(@babel/core@7.26.0)(react@18.3.1)
+      styled-jsx: 5.1.1(react@18.3.1)
     optionalDependencies:
       '@next/swc-darwin-arm64': 14.2.17
       '@next/swc-darwin-x64': 14.2.17
@@ -18600,76 +18591,35 @@ snapshots:
     dependencies:
       minipass: 7.1.2
 
-  sst-darwin-arm64@3.3.64:
-    optional: true
-
-  sst-darwin-arm64@3.3.7:
-    optional: true
-
   sst-darwin-arm64@3.6.25:
     optional: true
 
-  sst-darwin-x64@3.3.64:
-    optional: true
-
-  sst-darwin-x64@3.3.7:
+  sst-darwin-arm64@3.6.35:
     optional: true
 
   sst-darwin-x64@3.6.25:
     optional: true
 
-  sst-linux-arm64@3.3.64:
-    optional: true
-
-  sst-linux-arm64@3.3.7:
+  sst-darwin-x64@3.6.35:
     optional: true
 
   sst-linux-arm64@3.6.25:
     optional: true
 
-  sst-linux-x64@3.3.64:
-    optional: true
-
-  sst-linux-x64@3.3.7:
+  sst-linux-arm64@3.6.35:
     optional: true
 
   sst-linux-x64@3.6.25:
     optional: true
 
-  sst-linux-x86@3.3.64:
-    optional: true
-
-  sst-linux-x86@3.3.7:
+  sst-linux-x64@3.6.35:
     optional: true
 
   sst-linux-x86@3.6.25:
     optional: true
 
-  sst@3.3.64(hono@4.6.13):
-    dependencies:
-      aws4fetch: 1.0.20
-      jose: 5.2.3
-      openid-client: 5.6.4
-    optionalDependencies:
-      hono: 4.6.13
-      sst-darwin-arm64: 3.3.64
-      sst-darwin-x64: 3.3.64
-      sst-linux-arm64: 3.3.64
-      sst-linux-x64: 3.3.64
-      sst-linux-x86: 3.3.64
-
-  sst@3.3.7(hono@4.6.13):
-    dependencies:
-      aws4fetch: 1.0.20
-      jose: 5.2.3
-      openid-client: 5.6.4
-    optionalDependencies:
-      hono: 4.6.13
-      sst-darwin-arm64: 3.3.7
-      sst-darwin-x64: 3.3.7
-      sst-linux-arm64: 3.3.7
-      sst-linux-x64: 3.3.7
-      sst-linux-x86: 3.3.7
+  sst-linux-x86@3.6.35:
+    optional: true
 
   sst@3.6.25:
     dependencies:
@@ -18682,6 +18632,18 @@ snapshots:
       sst-linux-arm64: 3.6.25
       sst-linux-x64: 3.6.25
       sst-linux-x86: 3.6.25
+
+  sst@3.6.35:
+    dependencies:
+      aws4fetch: 1.0.20
+      jose: 5.2.3
+      openid-client: 5.6.4
+    optionalDependencies:
+      sst-darwin-arm64: 3.6.35
+      sst-darwin-x64: 3.6.35
+      sst-linux-arm64: 3.6.35
+      sst-linux-x64: 3.6.35
+      sst-linux-x86: 3.6.35
 
   stack-utils@2.0.6:
     dependencies:
@@ -18810,12 +18772,10 @@ snapshots:
       stylis: 4.3.2
       tslib: 2.6.2
 
-  styled-jsx@5.1.1(@babel/core@7.26.0)(react@18.3.1):
+  styled-jsx@5.1.1(react@18.3.1):
     dependencies:
       client-only: 0.0.1
       react: 18.3.1
-    optionalDependencies:
-      '@babel/core': 7.26.0
 
   stylis@4.3.2: {}
 

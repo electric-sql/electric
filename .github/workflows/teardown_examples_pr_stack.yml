@@ -13,6 +13,18 @@ jobs:
     name: Teardown Examples PR stack
     environment: Pull request
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          [
+            "yjs",
+            "linearlite-read-only",
+            "write-patterns",
+            "nextjs",
+            "todo-app",
+            "proxy-auth",
+          ]
 
     env:
       DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
@@ -45,15 +57,8 @@ jobs:
           restore-keys: |
             sst-cache-${{ runner.os }}
 
-      - name: Remove Linearlite
-        working-directory: examples/linearlite-read-only
-        run: |
-          export PR_NUMBER=${{ github.event.number }}
-          echo "Removing stage pr-$PR_NUMBER"
-          pnpm sst remove --stage "pr-$PR_NUMBER"
-
-      - name: Remove NextJs example
-        working-directory: examples/nextjs
+      - name: Remove ${{ matrix.example }} example
+        working-directory: ./examples/${{ matrix.example }}
         run: |
           export PR_NUMBER=${{ github.event.number }}
           echo "Removing stage pr-$PR_NUMBER"
