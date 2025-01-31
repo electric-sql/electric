@@ -8,6 +8,7 @@
   "scripts": {
     "deploy": "sst deploy --stage shared",
     "lint": "eslint . --ext js,ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "prepare": "sst install",
     "stylecheck": "eslint . --quiet",
     "typecheck": "tsc --noEmit"
   },
