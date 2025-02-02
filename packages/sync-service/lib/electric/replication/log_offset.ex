@@ -60,6 +60,8 @@ defmodule Electric.Replication.LogOffset do
     new(tx_offset, op_offset)
   end
 
+  def new(%__MODULE__{} = offset), do: offset
+
   @doc """
   Compare two log offsets
 

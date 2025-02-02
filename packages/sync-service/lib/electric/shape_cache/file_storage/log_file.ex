@@ -7,8 +7,8 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.LogChunker
 
-  # 16 bytes offset + 4 bytes key size + 1 byte op type + 8 bytes json size = 29 bytes
-  @line_overhead 16 + 4 + 1 + 8
+  # 16 bytes offset + 4 bytes key size + 1 byte op type + 1 byte processed flag + 8 bytes json size = 30 bytes
+  @line_overhead 16 + 4 + 1 + 1 + 8
 
   @type operation_type() :: :insert | :update | :delete
   @type op_type() :: ?u | ?i | ?d
@@ -45,6 +45,7 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
       <<tx_offset::64, op_offset::64,
         key_size::32, key::binary-size(key_size),
         op_type::binary-size(1),
+        processed_flag::8,
         json_size::64, json::binary-size(json_size)>>
   """
   @spec write_log_file(
@@ -62,10 +63,11 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
     |> ChunkIndex.write_from_stream(log_file_path <> ".chunk_index", chunk_size)
     |> KeyIndex.write_from_stream(log_file_path <> ".key_index")
     |> Stream.map(fn
-      {log_offset, key_size, key, op_type, json_size, json} ->
-        # avoid constructing a binary that includes the json
+      {log_offset, key_size, key, op_type, flag, json_size, json} ->
+        # Add processed flag (0 for unprocessed) to header
         [
-          <<offset(log_offset)::binary, key_size::32, key::binary, op_type::8, json_size::64>>,
+          <<offset(log_offset)::binary, key_size::32, key::binary, op_type::8, flag::8,
+            json_size::64>>,
           json
         ]
     end)
@@ -95,7 +97,20 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
           {[], file}
 
         {_, :keep}, file ->
-          {[read_line(file)], file}
+          case read_line(file) do
+            {offset, key_size, key, op_type, 0, _json_size, json} ->
+              # First compaction - process JSON and mark as processed
+              processed_json = process_json(json)
+
+              new_line =
+                {offset, key_size, key, op_type, 1, byte_size(processed_json), processed_json}
+
+              {[new_line], file}
+
+            line ->
+              # Already processed or not insert/delete - keep as-is
+              {[line], file}
+          end
 
         {_, {:compact, offsets}}, file ->
           {[compact_log_file_lines(file, offsets, merge_updates_fun)], file}
@@ -108,9 +123,9 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
   defp read_line(file) do
     with <<tx_offset::64, op_offset::64, key_size::32>> <- IO.binread(file, 20),
          <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
-         <<op_type::8, json_size::64>> <- IO.binread(file, 9),
+         <<op_type::8, processed_flag::8, json_size::64>> <- IO.binread(file, 10),
          <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
-      {{tx_offset, op_offset}, key_size, key, op_type, json_size, json}
+      {{tx_offset, op_offset}, key_size, key, op_type, processed_flag, json_size, json}
     end
   end
 
@@ -122,7 +137,7 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
         when elem: var
   defp compact_log_file_lines(file, file_offsets, merge_updates_fun) do
     # The line to be replaced with compaction will keep it's offset & key
-    {offset, key_size, key, op_type, _, _} = read_line(file)
+    {offset, key_size, key, op_type, _, _, _} = read_line(file)
 
     # Save position
     {:ok, current_position} = :file.position(file, :cur)
@@ -146,7 +161,7 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
     # Restore position to continue reading in the outer loop
     {:ok, _} = :file.position(file, {:bof, current_position})
 
-    {offset, key_size, key, op_type, byte_size(merged_json), merged_json}
+    {offset, key_size, key, op_type, 1, byte_size(merged_json), merged_json}
   end
 
   @doc """
@@ -156,9 +171,9 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
   def normalize_log_stream(stream) do
     Stream.map(stream, fn
       {log_offset, key, op_type, json} ->
-        {log_offset, byte_size(key), key, get_op_type(op_type), byte_size(json), json}
+        {log_offset, byte_size(key), key, get_op_type(op_type), 0, byte_size(json), json}
 
-      {_, _, _, _, _, _} = formed_line ->
+      {_, _, _, _, _, _, _} = formed_line ->
         formed_line
     end)
   end
@@ -193,7 +208,7 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
   @spec expected_position(non_neg_integer(), log_item_with_sizes()) :: non_neg_integer()
   def expected_position(
         current_position,
-        {_log_offset, key_size, _key, _op_type, json_size, _json}
+        {_log_offset, key_size, _key, _op_type, _processed_flag, json_size, _json}
       ) do
     current_position + key_size + json_size + @line_overhead
   end
@@ -204,7 +219,7 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
   Used by other modules that know the log file structure.
   """
   @spec expected_json_position(non_neg_integer(), log_item_with_sizes()) :: non_neg_integer()
-  def expected_json_position(current_position, {_, key_size, _, _, _, _}) do
+  def expected_json_position(current_position, {_, key_size, _, _, _, _, _}) do
     current_position + key_size + @line_overhead
   end
 
@@ -245,8 +260,8 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
   defp extract_jsons_from_binary(<<>>, _, acc), do: Enum.reverse(acc)
 
   defp extract_jsons_from_binary(
-         <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size),
-           _::binary-size(1), json_size::64, _::binary-size(json_size), rest::binary>>,
+         <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
+           json_size::64, _::binary-size(json_size), rest::binary>>,
          %LogOffset{
            tx_offset: tx_offset2,
            op_offset: op_offset2
@@ -257,7 +272,7 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
        do: extract_jsons_from_binary(rest, log_offset, acc)
 
   defp extract_jsons_from_binary(
-         <<_::128, key_size::32, _::binary-size(key_size), _::binary-size(1), json_size::64,
+         <<_::128, key_size::32, _::binary-size(key_size), _::8, _flag::8, json_size::64,
            json::binary-size(json_size), rest::binary>>,
          log_offset,
          acc
@@ -274,4 +289,11 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
     do: <<tx_offset::64, op_offset::64>>
 
   def offset({tx_offset, op_offset}), do: <<tx_offset::64, op_offset::64>>
+
+  defp process_json(json) do
+    json
+    |> Jason.decode!()
+    |> update_in(["headers"], &Map.drop(&1 || %{}, ["txid"]))
+    |> Jason.encode!()
+  end
 end
