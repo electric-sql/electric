@@ -47,6 +47,8 @@ defmodule Electric.Shapes.Shape do
           root_table_id: non_neg_integer(),
           where: String.t(),
           selected_columns: [String.t(), ...] | nil,
+          replica: String.t(),
+          storage: %{required(String.t()) => String.t()},
           table_info: [json_table_list(), ...]
         }
 

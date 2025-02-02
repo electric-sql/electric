@@ -307,7 +307,7 @@ defmodule Electric.Plug.ServeShapePlug do
     shape.table_info
     |> Map.fetch!(shape.root_table)
     |> Map.fetch!(:columns)
-    |> Schema.from_column_info()
+    |> Schema.from_column_info(shape.selected_columns)
     |> Jason.encode!()
   end
 

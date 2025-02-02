@@ -42,9 +42,15 @@ defmodule Electric.Schema do
   @doc """
   Convert column information into a schema map
   """
-  @spec from_column_info(Inspector.column_info()) :: %{column_name() => schema()}
-  def from_column_info(column_info) do
-    Map.new(column_info, fn col -> {col.name, schema(col)} end)
+  @spec from_column_info(Inspector.column_info(), [String.t(), ...] | nil) :: %{
+          column_name() => schema()
+        }
+  def from_column_info(column_info, included_columns \\ nil) do
+    column_info
+    |> Enum.filter(fn col ->
+      included_columns == nil or col.name in included_columns
+    end)
+    |> Map.new(fn col -> {col.name, schema(col)} end)
   end
 
   @spec schema(Inspector.column_info()) :: schema()
