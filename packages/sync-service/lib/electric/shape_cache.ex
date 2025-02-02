@@ -108,7 +108,7 @@ defmodule Electric.ShapeCache do
       shape_state
     else
       server = Access.get(opts, :server, name(opts))
-      GenStage.call(server, {:create_or_wait_shape_handle, shape})
+      GenStage.call(server, {:create_or_wait_shape_handle, shape, opts[:otel_ctx]})
     end
   end
 
@@ -245,7 +245,7 @@ defmodule Electric.ShapeCache do
 
   @impl GenServer
   def handle_call(
-        {:create_or_wait_shape_handle, shape},
+        {:create_or_wait_shape_handle, shape, otel_ctx},
         _from,
         %{shape_status: shape_status} = state
       ) do
@@ -255,7 +255,9 @@ defmodule Electric.ShapeCache do
       else
         {:ok, shape_handle} = shape_status.add_shape(state.shape_status_state, shape)
 
-        {:ok, _pid, _snapshot_xmin, latest_offset} = start_shape(shape_handle, shape, state)
+        {:ok, _pid, _snapshot_xmin, latest_offset} =
+          start_shape(shape_handle, shape, state, otel_ctx)
+
         {{shape_handle, latest_offset}, state}
       end
 
@@ -332,7 +334,7 @@ defmodule Electric.ShapeCache do
     end)
   end
 
-  defp start_shape(shape_handle, shape, state) do
+  defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
     with {:ok, pid} <-
            Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
              state.consumer_supervisor,
@@ -355,7 +357,8 @@ defmodule Electric.ShapeCache do
              registry: state.registry,
              db_pool: state.db_pool,
              run_with_conn_fn: state.run_with_conn_fn,
-             create_snapshot_fn: state.create_snapshot_fn
+             create_snapshot_fn: state.create_snapshot_fn,
+             otel_ctx: otel_ctx
            ) do
       consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
 

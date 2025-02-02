@@ -23,7 +23,8 @@ defmodule Electric.Shapes.ConsumerSupervisor do
             create_snapshot_fn: [
               type: {:fun, 7},
               default: &Electric.Shapes.Consumer.Snapshotter.query_in_readonly_txn/7
-            ]
+            ],
+            otel_ctx: [type: :any, required: false]
           )
 
   def name(stack_id, shape_handle) when is_binary(shape_handle) do
