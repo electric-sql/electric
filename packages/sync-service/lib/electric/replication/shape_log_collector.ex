@@ -44,11 +44,13 @@ defmodule Electric.Replication.ShapeLogCollector do
   # determining how long a write should reasonably take and if that fails
   # it should raise.
   def store_transaction(%Transaction{} = txn, server) do
-    GenStage.call(server, {:new_txn, txn}, :infinity)
+    trace_context = OpenTelemetry.get_current_context()
+    GenStage.call(server, {:new_txn, txn, trace_context}, :infinity)
   end
 
   def handle_relation_msg(%Changes.Relation{} = rel, server) do
-    GenServer.call(server, {:relation_msg, rel}, :infinity)
+    trace_context = OpenTelemetry.get_current_context()
+    GenServer.call(server, {:relation_msg, rel, trace_context}, :infinity)
   end
 
   def init(opts) do
@@ -94,14 +96,17 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:noreply, [], remove_subscription(from, state)}
   end
 
-  def handle_call({:new_txn, %Transaction{xid: xid, lsn: lsn} = txn}, from, state) do
+  def handle_call({:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, trace_context}, from, state) do
+    OpenTelemetry.set_current_context(trace_context)
+
     Logger.info("Received transaction #{xid} from Postgres at #{lsn}")
     Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
 
     handle_transaction(txn, from, state)
   end
 
-  def handle_call({:relation_msg, %Relation{} = rel}, from, state) do
+  def handle_call({:relation_msg, %Relation{} = rel, trace_context}, from, state) do
+    OpenTelemetry.set_current_context(trace_context)
     Logger.info("Received relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
     Logger.debug(fn -> "Relation received in ShapeLogCollector: #{inspect(rel)}" end)
 

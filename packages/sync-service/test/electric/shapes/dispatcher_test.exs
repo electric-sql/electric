@@ -65,11 +65,11 @@ defmodule Electric.Shapes.DispatcherTest do
 
     {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
-    assert_receive {C, ^ref1, [^event]}
+    assert_receive {C, ^ref1, [{^event, _ctx}]}
     assert {:ok, 0, dispatcher} = D.ask(1, c1, dispatcher)
-    assert_receive {C, ^ref2, [^event]}
+    assert_receive {C, ^ref2, [{^event, _ctx}]}
     assert {:ok, 0, dispatcher} = D.ask(1, c2, dispatcher)
-    assert_receive {C, ^ref3, [^event]}
+    assert_receive {C, ^ref3, [{^event, _ctx}]}
     # now that all consumers have received and processed the message we should
     # forward demand onto the producer
     assert {:ok, 1, _dispatcher} = D.ask(1, c3, dispatcher)
@@ -90,11 +90,11 @@ defmodule Electric.Shapes.DispatcherTest do
 
     {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
-    refute_receive {C, ^ref1, [^event]}
+    refute_receive {C, ^ref1, [{^event, _ctx}]}
 
-    assert_receive {C, ^ref2, [^event]}
+    assert_receive {C, ^ref2, [{^event, _ctx}]}
     assert {:ok, 0, dispatcher} = D.ask(1, c2, dispatcher)
-    assert_receive {C, ^ref3, [^event]}
+    assert_receive {C, ^ref3, [{^event, _ctx}]}
     assert {:ok, 1, _dispatcher} = D.ask(1, c3, dispatcher)
   end
 
@@ -113,14 +113,14 @@ defmodule Electric.Shapes.DispatcherTest do
 
     {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
-    assert_receive {C, ^ref1, [^event]}
+    assert_receive {C, ^ref1, [{^event, _ctx}]}
     assert {:ok, 0, dispatcher} = D.ask(1, c1, dispatcher)
 
     {:ok, 0, dispatcher} = D.cancel(c1, dispatcher)
 
-    assert_receive {C, ^ref2, [^event]}
+    assert_receive {C, ^ref2, [{^event, _ctx}]}
     assert {:ok, 0, dispatcher} = D.ask(1, c2, dispatcher)
-    assert_receive {C, ^ref3, [^event]}
+    assert_receive {C, ^ref3, [{^event, _ctx}]}
     assert {:ok, 1, _dispatcher} = D.ask(1, c3, dispatcher)
   end
 
@@ -141,14 +141,14 @@ defmodule Electric.Shapes.DispatcherTest do
 
     {:ok, 0, dispatcher} = D.cancel(c2, dispatcher)
 
-    assert_receive {C, ^ref1, [^event]}
+    assert_receive {C, ^ref1, [{^event, _ctx}]}
     assert {:ok, 0, dispatcher} = D.ask(1, c1, dispatcher)
 
     # we've cancelled but haven't killed the pid (and even if we had, it will
     # have likely already sent the confirmation message)
-    assert_receive {C, ^ref2, [^event]}
+    assert_receive {C, ^ref2, [{^event, _ctx}]}
 
-    assert_receive {C, ^ref3, [^event]}
+    assert_receive {C, ^ref3, [{^event, _ctx}]}
     assert {:ok, 1, _dispatcher} = D.ask(1, c3, dispatcher)
   end
 
@@ -168,7 +168,7 @@ defmodule Electric.Shapes.DispatcherTest do
 
     {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
 
-    assert_receive {C, ^ref1, [^event]}
+    assert_receive {C, ^ref1, [{^event, _ctx}]}
     assert {:ok, 0, dispatcher} = D.ask(1, c1, dispatcher)
 
     {:ok, 0, dispatcher} = D.cancel(c2, dispatcher)
@@ -189,9 +189,9 @@ defmodule Electric.Shapes.DispatcherTest do
     event = @transaction
 
     {:ok, [], dispatcher} = D.dispatch([event], 1, dispatcher)
-    refute_receive {C, ^ref1, [^event]}
-    refute_receive {C, ^ref2, [^event]}
-    refute_receive {C, ^ref3, [^event]}
+    refute_receive {C, ^ref1, [{^event, _ctx}]}
+    refute_receive {C, ^ref2, [{^event, _ctx}]}
+    refute_receive {C, ^ref3, [{^event, _ctx}]}
     # none of the subscribers want the event, but we need to simulate the full cycle
     # so the dispatcher should generate some fake demand. This goes to the 
     # last subscriber, which is at the head of the list

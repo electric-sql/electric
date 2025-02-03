@@ -25,6 +25,7 @@ defmodule Electric.Shapes.Dispatcher do
 
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Partitions
+  alias Electric.Telemetry.OpenTelemetry
 
   defmodule State do
     defstruct [:waiting, :pending, :subscribers, :filter, :partitions, :pids]
@@ -135,11 +136,13 @@ defmodule Electric.Shapes.Dispatcher do
   def dispatch([event], _length, %State{waiting: 0, subscribers: subscribers} = state) do
     {partitions, event} = Partitions.handle_event(state.partitions, event)
 
+    context = OpenTelemetry.get_current_context()
+
     {waiting, pending} =
       state.filter
       |> Filter.affected_shapes(event)
       |> Enum.reduce({0, MapSet.new()}, fn {pid, ref} = subscriber, {waiting, pending} ->
-        Process.send(pid, {:"$gen_consumer", {self(), ref}, [event]}, [:noconnect])
+        Process.send(pid, {:"$gen_consumer", {self(), ref}, [{event, context}]}, [:noconnect])
         {waiting + 1, MapSet.put(pending, subscriber)}
       end)
       |> case do
