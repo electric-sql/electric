@@ -62,6 +62,7 @@ defmodule Electric.Connection.Manager do
       # Registry used for stack events
       :stack_events_registry,
       :tweaks,
+      :ipv6_enabled,
       awaiting_active: [],
       drop_slot_requested: false,
       monitoring_started?: false
@@ -187,7 +188,8 @@ defmodule Electric.Connection.Manager do
         backoff: {:backoff.init(1000, 10_000), nil},
         stack_id: Keyword.fetch!(opts, :stack_id),
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
-        tweaks: Keyword.fetch!(opts, :tweaks)
+        tweaks: Keyword.fetch!(opts, :tweaks),
+        ipv6_enabled: connection_opts[:ipv6]
       }
 
     # Try to acquire the connection lock on the replication slot
@@ -525,6 +527,32 @@ defmodule Electric.Connection.Manager do
     handle_connection_error(error, state, mode)
   end
 
+  defp handle_connection_error(
+         %DBConnection.ConnectionError{message: message} = error,
+         %State{connection_opts: connection_opts, ipv6_enabled: true} = state,
+         mode
+       ) do
+    # If domain cannot be resolved, assume there is no AAAA record for it
+    # and fall back to IPv4 and regular A records
+    if String.starts_with?(message, "tcp connect (") and
+         String.ends_with?(message, "): non-existing domain - :nxdomain") do
+      Logger.warning(
+        "Database connection in #{mode} mode failed to find valid IPv6 address for #{connection_opts[:hostname]} - falling back to IPv4"
+      )
+
+      # disable IPv6 and retry immediately
+      state = %{
+        state
+        | connection_opts: connection_opts |> Keyword.put(:ipv6, false) |> update_tcp_opts()
+      }
+
+      step = current_connection_step(state)
+      handle_continue(step, state)
+    else
+      handle_connection_error(error, state, mode)
+    end
+  end
+
   defp handle_connection_error(error, state, mode) do
     halt_if_fatal_error!(error)
 
@@ -548,16 +576,19 @@ defmodule Electric.Connection.Manager do
       {:database_connection_failed, message}
     )
 
-    step =
-      cond do
-        is_nil(state.lock_connection_pid) -> :start_lock_connection
-        is_nil(state.replication_client_pid) -> :start_replication_client
-        is_nil(state.pool_pid) -> :start_connection_pool
-      end
-
+    step = current_connection_step(state)
     state = schedule_reconnection(step, state)
     {:noreply, state}
   end
+
+  defp current_connection_step(%State{lock_connection_pid: pid}) when not is_pid(pid),
+    do: :start_lock_connection
+
+  defp current_connection_step(%State{replication_client_pid: pid}) when not is_pid(pid),
+    do: :start_replication_client
+
+  defp current_connection_step(%State{pool_pid: pid}) when not is_pid(pid),
+    do: :start_connection_pool
 
   defp pg_error_extra_info(pg_error) do
     extra_info_items =
