@@ -31,7 +31,7 @@ defmodule Electric.ShapeCache.FileStorage.ChunkIndex do
       stream,
       # agg is {file, write_position, byte_count, last_seen_offset}
       fn -> {File.open!(path, [:write, :raw]), 0, 0, nil} end,
-      fn {offset, _, _, _, json_size, _} = line,
+      fn {offset, _, _, _, _, json_size, _} = line,
          {file, write_position, byte_count, last_seen_offset} ->
         # Start the chunk if there's no last offset
         if is_nil(last_seen_offset),
