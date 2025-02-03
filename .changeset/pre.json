@@ -27,7 +27,8 @@
     "@electric-examples/react": "0.0.1",
     "@electric-examples/redis": "0.0.1",
     "@electric-examples/remix": "0.0.1",
-    "@electric-examples/tanstack": "0.0.1"
+    "@electric-examples/tanstack": "0.0.1",
+    "@electric-examples/shared": "0.0.1"
   },
   "changesets": [
     "beige-hotels-sin",
@@ -49,6 +50,7 @@
     "modern-toes-drop",
     "polite-frogs-yell",
     "seven-files-thank",
+    "small-pianos-explain",
     "stale-bats-tickle",
     "tame-snails-retire",
     "ten-socks-promise",

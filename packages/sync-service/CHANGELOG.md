@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.0-beta.9
+
+### Patch Changes
+
+- 802680f: feat: make sure lines that underwent compaction don't reference any transaction id
+
 ## 1.0.0-beta.8
 
 ### Patch Changes
