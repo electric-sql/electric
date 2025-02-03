@@ -63,8 +63,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
   end
 
   def call_serve_shape_plug(conn, ctx) do
-    {api, opts} =
-      Api.configure(
+    opts =
+      Api.plug_opts(
         stack_id: ctx.stack_id,
         pg_id: @test_pg_id,
         stack_events_registry: Registry.StackEvents,
@@ -78,7 +78,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         stale_age: stale_age(ctx)
       )
 
-    ServeShapePlug.call(conn, [{:api, api} | opts])
+    ServeShapePlug.call(conn, opts)
   end
 
   describe "serving shape" do
