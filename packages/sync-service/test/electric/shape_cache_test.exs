@@ -198,7 +198,7 @@ defmodule Electric.ShapeCacheTest do
       # after the snapshot has been created (simulated by directly
       # calling GenServer)
       assert {^shape_handle, _} =
-               GenServer.call(link_pid, {:create_or_wait_shape_handle, @shape})
+               GenServer.call(link_pid, {:create_or_wait_shape_handle, @shape, nil})
 
       assert_received {:called, :create_snapshot_fn}
     end

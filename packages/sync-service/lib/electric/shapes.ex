@@ -42,7 +42,10 @@ defmodule Electric.Shapes do
   def get_or_create_shape_handle(config, shape_def) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
 
-    shape_cache.get_or_create_shape_handle(shape_def, opts)
+    shape_cache.get_or_create_shape_handle(
+      shape_def,
+      Keyword.put(opts, :otel_ctx, :otel_ctx.get_current())
+    )
   end
 
   @doc """

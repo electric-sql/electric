@@ -40,70 +40,77 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     } =
       state
 
-    case Shapes.Consumer.whereis(stack_id, shape_handle) do
-      consumer when is_pid(consumer) ->
-        if not Storage.snapshot_started?(state.storage) do
-          %{
-            db_pool: pool,
-            storage: storage,
-            create_snapshot_fn: create_snapshot_fn,
-            publication_manager: {publication_manager, publication_manager_opts},
-            stack_id: stack_id,
-            chunk_bytes_threshold: chunk_bytes_threshold
-          } = state
+    ctx_token = if not is_nil(state[:otel_ctx]), do: :otel_ctx.attach(state[:otel_ctx])
 
-          OpenTelemetry.with_span(
-            "shape_snapshot.create_snapshot_task",
-            shape_attrs(shape_handle, shape),
-            stack_id,
-            fn ->
-              try do
-                OpenTelemetry.with_span(
-                  "shape_snapshot.prepare_tables",
-                  shape_attrs(shape_handle, shape),
-                  stack_id,
-                  fn ->
-                    publication_manager.add_shape(shape, publication_manager_opts)
-                  end
-                )
+    result =
+      case Shapes.Consumer.whereis(stack_id, shape_handle) do
+        consumer when is_pid(consumer) ->
+          if not Storage.snapshot_started?(state.storage) do
+            %{
+              db_pool: pool,
+              storage: storage,
+              create_snapshot_fn: create_snapshot_fn,
+              publication_manager: {publication_manager, publication_manager_opts},
+              stack_id: stack_id,
+              chunk_bytes_threshold: chunk_bytes_threshold
+            } = state
 
-                apply(create_snapshot_fn, [
-                  consumer,
-                  shape_handle,
-                  shape,
-                  pool,
-                  storage,
-                  stack_id,
-                  chunk_bytes_threshold
-                ])
-              rescue
-                error ->
-                  GenServer.cast(
-                    consumer,
-                    {:snapshot_failed, shape_handle, error, __STACKTRACE__}
+            OpenTelemetry.with_span(
+              "shape_snapshot.create_snapshot_task",
+              shape_attrs(shape_handle, shape),
+              stack_id,
+              fn ->
+                try do
+                  OpenTelemetry.with_span(
+                    "shape_snapshot.prepare_tables",
+                    shape_attrs(shape_handle, shape),
+                    stack_id,
+                    fn ->
+                      publication_manager.add_shape(shape, publication_manager_opts)
+                    end
                   )
+
+                  apply(create_snapshot_fn, [
+                    consumer,
+                    shape_handle,
+                    shape,
+                    pool,
+                    storage,
+                    stack_id,
+                    chunk_bytes_threshold
+                  ])
+                rescue
+                  error ->
+                    GenServer.cast(
+                      consumer,
+                      {:snapshot_failed, shape_handle, error, __STACKTRACE__}
+                    )
+                end
               end
-            end
+            )
+          else
+            # Let the shape cache know that the snapshot is available. When the
+            # shape cache starts and restores the shapes from disk, it doesn't
+            # know about the snapshot status of each shape, and because the
+            # storage does some clean up on start, e.g. in the case of a format
+            # upgrade, we only know the actual on-disk state of the shape data
+            # once things are running.
+            GenServer.cast(consumer, {:snapshot_exists, shape_handle})
+          end
+
+          {:stop, :normal, state}
+
+        nil ->
+          Logger.error(
+            "Unable to start snapshot - invalid ShapeCache reference #{inspect(state.shape_cache)}"
           )
-        else
-          # Let the shape cache know that the snapshot is available. When the
-          # shape cache starts and restores the shapes from disk, it doesn't
-          # know about the snapshot status of each shape, and because the
-          # storage does some clean up on start, e.g. in the case of a format
-          # upgrade, we only know the actual on-disk state of the shape data
-          # once things are running.
-          GenServer.cast(consumer, {:snapshot_exists, shape_handle})
-        end
 
-        {:stop, :normal, state}
+          {:stop, {:error, "shape cache server invalid"}, state}
+      end
 
-      nil ->
-        Logger.error(
-          "Unable to start snapshot - invalid ShapeCache reference #{inspect(state.shape_cache)}"
-        )
+    if not is_nil(ctx_token), do: :otel_ctx.detach(ctx_token)
 
-        {:stop, {:error, "shape cache server invalid"}, state}
-    end
+    result
   end
 
   @doc false
