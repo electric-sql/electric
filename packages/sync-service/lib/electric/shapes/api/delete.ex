@@ -33,8 +33,8 @@ defmodule Electric.Shapes.Api.Delete do
   end
 
   defp get_shape_handle(%Request{} = request) do
-    %{params: %{shape_definition: shape}, config: config} = request
-    Shapes.get_shape(config, shape)
+    %{params: %{shape_definition: shape}, api: api} = request
+    Shapes.get_shape(api, shape)
   end
 
   # delete request that just has the shape handle
@@ -43,7 +43,7 @@ defmodule Electric.Shapes.Api.Delete do
          %Request{params: %{table: nil, handle: handle}} = request
        )
        when is_binary(handle) do
-    if Shapes.has_shape?(request.config, handle) do
+    if Shapes.has_shape?(request.api, handle) do
       {:ok,
        Map.update!(
          %{request | handle: handle},

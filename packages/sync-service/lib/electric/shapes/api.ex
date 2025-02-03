@@ -11,14 +11,26 @@ defmodule Electric.Shapes.Api do
 
   require Logger
 
-  defguardp is_configured(api) when not is_nil(api.config)
+  defguardp is_configured(api) when api.configured
   defguardp is_valid_request(request) when request.valid == true
 
-  defstruct [:config]
+  defstruct [
+    :inspector,
+    :pg_id,
+    :registry,
+    :shape_cache,
+    :stack_events_registry,
+    :stack_id,
+    :storage,
+    long_poll_timeout: 20_000,
+    max_age: 60,
+    stack_ready_timeout: 100,
+    stale_age: 300,
+    encoder: Electric.Shapes.Api.Encoder.JSON,
+    configured: false
+  ]
 
-  @type t() :: %__MODULE__{
-          config: Api.Config.t()
-        }
+  @type t() :: %__MODULE__{}
 
   # Aliasing for pattern matching
   @before_all_offset LogOffset.before_all()
@@ -28,19 +40,27 @@ defmodule Electric.Shapes.Api do
   @offset_out_of_bounds %{offset: ["out of bounds for this shape"]}
   @must_refetch [%{headers: %{control: "must-refetch"}}]
 
-  def configure(opts) do
-    config = Api.Config.new(opts)
+  # Need to implement Access behaviour because we use that to extract config
+  # when using shapes api
+  @behaviour Access
 
-    used_keys = config |> Map.from_struct() |> Map.keys()
+  def configure(opts) do
+    api = %__MODULE__{configured: true} |> struct(opts) |> validate_encoder!()
+
+    used_keys = api |> Map.from_struct() |> Map.keys()
     unused_opts = Keyword.drop(opts, used_keys)
 
-    {%__MODULE__{config: config}, unused_opts}
+    {api, unused_opts}
   end
 
   def plug_opts(opts) do
     {api, config} = configure(opts)
 
     Keyword.merge(config, api: api)
+  end
+
+  defp validate_encoder!(api) do
+    Map.update!(api, :encoder, &Electric.Shapes.Api.Encoder.validate!/1)
   end
 
   @doc """
@@ -81,7 +101,7 @@ defmodule Electric.Shapes.Api do
   def request_for_params(api, request_params, response \\ %Response{}) do
     {:ok,
      %Request{
-       config: api.config,
+       api: api,
        params: request_params,
        valid: true,
        response: response
@@ -113,21 +133,21 @@ defmodule Electric.Shapes.Api do
   # No handle is provided so we can get the existing one for this shape
   # or create a new shape if it does not yet exist
   defp get_or_create_shape_handle(%Request{params: %{handle: nil}} = request) do
-    %{params: %{shape_definition: shape}, config: config} = request
-    Shapes.get_or_create_shape_handle(config, shape)
+    %{params: %{shape_definition: shape}, api: api} = request
+    Shapes.get_or_create_shape_handle(api, shape)
   end
 
   # A shape handle is provided so we need to return the shape that matches the
   # shape handle and the shape definition
   defp get_or_create_shape_handle(%Request{} = request) do
-    %{params: %{shape_definition: shape}, config: config} = request
-    Shapes.get_shape(config, shape)
+    %{params: %{shape_definition: shape}, api: api} = request
+    Shapes.get_shape(api, shape)
   end
 
   defp handle_shape_info(nil, %Request{} = request) do
-    %{params: %{shape_definition: shape, handle: shape_handle}, config: config} = request
+    %{params: %{shape_definition: shape, handle: shape_handle}, api: api} = request
     # There is no shape that matches the shape definition (because shape info is `nil`)
-    if shape_handle != nil && Shapes.has_shape?(config, shape_handle) do
+    if shape_handle != nil && Shapes.has_shape?(api, shape_handle) do
       # but there is a shape that matches the shape handle
       # thus the shape handle does not match the shape definition
       # and we return a 400 bad request status code
@@ -138,7 +158,7 @@ defmodule Electric.Shapes.Api do
       # Hence, create a new shape for this shape definition
       # and return a 409 with a redirect to the newly created shape.
       # (will be done by the recursive `handle_shape_info` call)
-      config
+      api
       |> Shapes.get_or_create_shape_handle(shape)
       |> handle_shape_info(request)
     end
@@ -172,7 +192,7 @@ defmodule Electric.Shapes.Api do
          {active_shape_handle, _},
          %Request{params: %{handle: shape_handle}} = request
        ) do
-    if Shapes.has_shape?(request.config, shape_handle) do
+    if Shapes.has_shape?(request.api, shape_handle) do
       # The shape with the provided ID exists but does not match the shape definition
       # otherwise we would have found it and it would have matched the previous function clause
       {:error, Response.shape_definition_mismatch(request)}
@@ -192,12 +212,12 @@ defmodule Electric.Shapes.Api do
     end
   end
 
-  defp hold_until_stack_ready(%Api{config: config} = api) do
+  defp hold_until_stack_ready(%Api{} = api) do
     stack_id = stack_id(api)
 
     ref =
       Electric.StackSupervisor.subscribe_to_stack_events(
-        config.stack_events_registry,
+        api.stack_events_registry,
         stack_id
       )
 
@@ -208,7 +228,7 @@ defmodule Electric.Shapes.Api do
         {:stack_status, ^ref, :ready} ->
           :ok
       after
-        config.stack_ready_timeout ->
+        api.stack_ready_timeout ->
           {:error, Response.error(api, %{message: "Stack not ready"}, status: 503)}
       end
     end
@@ -223,7 +243,7 @@ defmodule Electric.Shapes.Api do
       last_offset: last_offset,
       handle: handle,
       params: %{offset: offset},
-      config: %{registry: registry}
+      api: %{registry: registry}
     } = request
 
     # Only start listening when we know there is a possibility that nothing is going to be returned
@@ -245,11 +265,11 @@ defmodule Electric.Shapes.Api do
   # If chunk offsets are available, use those instead of the latest available
   # offset to optimize for cache hits and response sizes
   defp determine_log_chunk_offset(%Request{} = request) do
-    %{handle: handle, last_offset: last_offset, params: %{offset: offset}, config: config} =
+    %{handle: handle, last_offset: last_offset, params: %{offset: offset}, api: api} =
       request
 
     chunk_end_offset =
-      Shapes.get_chunk_end_log_offset(config, handle, offset) || last_offset
+      Shapes.get_chunk_end_log_offset(api, handle, offset) || last_offset
 
     Map.update!(
       %{request | chunk_end_offset: chunk_end_offset},
@@ -308,11 +328,11 @@ defmodule Electric.Shapes.Api do
       handle: shape_handle,
       chunk_end_offset: chunk_end_offset,
       params: %{offset: offset, live: live?},
-      config: config
+      api: api
     } = request
 
     log =
-      Shapes.get_merged_log_stream(config, shape_handle,
+      Shapes.get_merged_log_stream(api, shape_handle,
         since: offset,
         up_to: chunk_end_offset
       )
@@ -332,7 +352,7 @@ defmodule Electric.Shapes.Api do
     %{
       new_changes_ref: ref,
       handle: shape_handle,
-      config: %{long_poll_timeout: long_poll_timeout}
+      api: %{long_poll_timeout: long_poll_timeout}
     } = request
 
     Logger.debug("Client #{inspect(self())} is waiting for changes to #{shape_handle}")
@@ -383,19 +403,39 @@ defmodule Electric.Shapes.Api do
     OpenTelemetry.with_span(name, attributes, stack_id(request), fun)
   end
 
-  @spec stack_id(%{config: %{stack_id: String.t()}}) :: Enum.t()
-  def stack_id(%{config: %{stack_id: stack_id}}), do: stack_id
+  @spec stack_id(Api.t() | Request.t()) :: String.t()
+  def stack_id(%Api{stack_id: stack_id}), do: stack_id
+  def stack_id(%Request{api: %{stack_id: stack_id}}), do: stack_id
 
-  defp encode_log(request, stream) do
-    encode(request, :log, stream)
+  defp encode_log(%Request{api: api}, stream) do
+    encode(api, :log, stream)
   end
 
-  @spec encode_message(%{config: %{encoder: module()}}, term()) :: Enum.t()
-  def encode_message(api, message) do
+  @spec encode_message(Api.t() | Request.t(), term()) :: Enum.t()
+  def encode_message(%Api{} = api, message) do
     encode(api, :message, message)
   end
 
-  defp encode(%{config: %{encoder: encoder}}, type, message) when type in [:message, :log] do
+  def encode_message(%Request{api: api}, message) do
+    encode(api, :message, message)
+  end
+
+  defp encode(%Api{encoder: encoder}, type, message) when type in [:message, :log] do
     apply(encoder, type, [message])
+  end
+
+  @impl Access
+  def fetch(%__MODULE__{} = config, key) do
+    Map.fetch(config, key)
+  end
+
+  @impl Access
+  def get_and_update(%__MODULE__{} = _config, _key, _function) do
+    raise RuntimeError, message: "Cannot get_and_update a #{__MODULE__} struct"
+  end
+
+  @impl Access
+  def pop(%__MODULE__{} = _config, _key) do
+    raise RuntimeError, message: "Cannot pop a #{__MODULE__} struct"
   end
 end

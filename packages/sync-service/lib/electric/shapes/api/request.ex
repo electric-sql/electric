@@ -7,7 +7,7 @@ defmodule Electric.Shapes.Api.Request do
     :last_offset,
     :new_changes_ref,
     :new_changes_pid,
-    config: %Api.Config{},
+    api: %Api{},
     params: %Api.Params{},
     response: %Api.Response{},
     valid: false

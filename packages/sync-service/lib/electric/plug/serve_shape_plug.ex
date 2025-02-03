@@ -127,7 +127,7 @@ defmodule Electric.Plug.ServeShapePlug do
         )
 
       # For live requests we want short cache lifetimes and to update the live cursor
-      %{params: %{live: true}, config: config} ->
+      %{params: %{live: true}, api: api} ->
         conn
         |> put_resp_header(
           "cache-control",
@@ -135,16 +135,16 @@ defmodule Electric.Plug.ServeShapePlug do
         )
         |> put_resp_header(
           "electric-cursor",
-          config.long_poll_timeout
+          api.long_poll_timeout
           |> Utils.get_next_interval_timestamp(conn.query_params["cursor"])
           |> Integer.to_string()
         )
 
-      %{params: %{live: false}, config: config} ->
+      %{params: %{live: false}, api: api} ->
         conn
         |> put_resp_header(
           "cache-control",
-          "public, max-age=#{config.max_age}, stale-while-revalidate=#{config.stale_age}"
+          "public, max-age=#{api.max_age}, stale-while-revalidate=#{api.stale_age}"
         )
     end
   end

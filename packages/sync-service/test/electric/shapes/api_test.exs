@@ -333,7 +333,11 @@ defmodule Electric.Shapes.ApiTest do
 
     setup do
       admin_shape =
-        Shape.new!("public.users", where: "value = 'admin'", inspector: {__MODULE__, []})
+        Shape.new!("public.users",
+          where: "value = 'admin'",
+          inspector: {__MODULE__, []},
+          storage: %{compaction: :disabled}
+        )
 
       [admin_shape: admin_shape]
     end

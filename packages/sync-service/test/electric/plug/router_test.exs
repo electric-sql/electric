@@ -151,7 +151,7 @@ defmodule Electric.Plug.RouterTest do
       {:ok, offset} = LogOffset.from_string(get_resp_header(conn, "electric-offset"))
 
       # Force compaction
-      Electric.ShapeCache.Storage.for_shape(shape_handle, opts[:storage])
+      Electric.ShapeCache.Storage.for_shape(shape_handle, opts[:api].storage)
       |> Electric.ShapeCache.Storage.compact(offset)
 
       conn =

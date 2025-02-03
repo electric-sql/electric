@@ -47,7 +47,7 @@ defmodule Electric.Plug.DeleteShapePlug do
     %{assigns: %{request: request}} = conn
 
     if request.handle !== nil do
-      with :ok <- Shapes.clean_shape(request.handle, request.config) do
+      with :ok <- Shapes.clean_shape(request.handle, request.api) do
         send_resp(conn, 202, "")
       end
     else

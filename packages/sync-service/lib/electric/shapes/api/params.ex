@@ -25,9 +25,7 @@ defmodule Electric.Shapes.Api.Params do
 
   @type t() :: %__MODULE__{}
 
-  def validate(api, params) do
-    %{config: %{inspector: inspector}} = api
-
+  def validate(%Electric.Shapes.Api{} = api, params) do
     params
     |> cast_params()
     |> validate_required([:table, :offset])
@@ -35,16 +33,14 @@ defmodule Electric.Shapes.Api.Params do
     |> cast_columns()
     |> validate_handle_with_offset()
     |> validate_live_with_offset()
-    |> cast_root_table(inspector: inspector)
+    |> cast_root_table(inspector: api.inspector)
     |> apply_action(:validate)
     |> convert_error(api)
   end
 
   # we allow deletion by shape definition, shape definition and handle or just
   # handle
-  def validate_for_delete(api, params) do
-    %{config: %{inspector: inspector}} = api
-
+  def validate_for_delete(%Electric.Shapes.Api{} = api, params) do
     params
     |> cast_params()
     |> case do
@@ -55,7 +51,7 @@ defmodule Electric.Shapes.Api.Params do
         changeset
         |> validate_required([:table])
         |> cast_columns()
-        |> cast_root_table(inspector: inspector)
+        |> cast_root_table(inspector: api.inspector)
         |> apply_action(:validate)
         |> convert_error(api)
 
