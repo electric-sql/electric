@@ -32,7 +32,7 @@ defmodule Electric.Plug.DeleteShapePlug do
       |> Map.put("offset", "-1")
 
     # validate but don't seek - we don't need the latest shape offset information
-    case Api.validate(api, all_params, seek: false, load: true) do
+    case Api.validate_for_delete(api, all_params) do
       {:ok, request} ->
         assign(conn, :request, request)
 

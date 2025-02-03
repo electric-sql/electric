@@ -328,6 +328,90 @@ defmodule Electric.Shapes.ApiTest do
     end
   end
 
+  describe "validate_for_delete/2" do
+    setup [:with_stack_id_from_test, :ready_stack, :configure_request]
+
+    setup do
+      admin_shape =
+        Shape.new!("public.users", where: "value = 'admin'", inspector: {__MODULE__, []})
+
+      [admin_shape: admin_shape]
+    end
+
+    test "does not create a shape if one doesn't exist for the definition", ctx do
+      %{admin_shape: admin_shape} = ctx
+
+      Mock.ShapeCache
+      |> expect(:get_shape, fn ^admin_shape, _opts ->
+        nil
+      end)
+
+      assert {:error, %{status: 404} = _response} =
+               Api.validate_for_delete(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   where: "value = 'admin'"
+                 }
+               )
+    end
+
+    test "passes a request for an existing shape matching the handle", ctx do
+      %{admin_shape: admin_shape} = ctx
+
+      handle = "admin-shape-handle"
+
+      Mock.ShapeCache
+      |> expect(:get_shape, fn ^admin_shape, _opts ->
+        {handle, @before_all_offset}
+      end)
+
+      assert {:ok, %{handle: ^handle} = _response} =
+               Api.validate_for_delete(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   where: "value = 'admin'",
+                   handle: handle
+                 }
+               )
+    end
+
+    test "rejects requests where the handle does not match the shape", ctx do
+      %{admin_shape: admin_shape} = ctx
+
+      handle = "admin-shape-handle"
+
+      Mock.ShapeCache
+      |> expect(:get_shape, fn ^admin_shape, _opts ->
+        {handle, @before_all_offset}
+      end)
+
+      assert {:error, %{status: 400} = _response} =
+               Api.validate_for_delete(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   where: "value = 'admin'",
+                   handle: "not-the-" <> handle
+                 }
+               )
+    end
+
+    test "allows requests to delete by shape handle only", ctx do
+      handle = "admin-shape-handle"
+
+      Mock.ShapeCache
+      |> expect(:has_shape?, fn ^handle, _opts -> true end)
+
+      assert {:ok, _request} =
+               Api.validate_for_delete(
+                 ctx.api,
+                 %{handle: handle}
+               )
+    end
+  end
+
   defp response_body(%{body: [message]} = _response) do
     message
   end

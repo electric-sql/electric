@@ -23,13 +23,6 @@ defmodule Electric.Shapes.Api do
   # Aliasing for pattern matching
   @before_all_offset LogOffset.before_all()
 
-  @shape_definition_mismatch %{
-    message:
-      "The specified shape definition and handle do not match. " <>
-        "Please ensure the shape definition is correct or omit " <>
-        "the shape handle from the request to obtain a new one."
-  }
-
   @up_to_date %{headers: %{control: "up-to-date"}}
   @up_to_date_json Jason.encode!(@up_to_date)
   @offset_out_of_bounds %{offset: ["out of bounds for this shape"]}
@@ -63,27 +56,36 @@ defmodule Electric.Shapes.Api do
   """
   @spec validate(t(), %{(atom() | binary()) => term()}) ::
           {:ok, Request.t()} | {:error, Response.t()}
-  def validate(api, params, opts \\ [seek: true, load: true])
-
-  def validate(api, params, seek: seek?, load: load?) when is_configured(api) do
+  def validate(api, params) when is_configured(api) do
     with :ok <- hold_until_stack_ready(api) do
       with {:ok, request} <- validate_params(api, params),
-           {:ok, request} <- load_shape_info(request, load?) do
-        {:ok, seek(request, seek?)}
+           {:ok, request} <- load_shape_info(request) do
+        {:ok, seek(request)}
       end
+    end
+  end
+
+  def validate_for_delete(api, params) do
+    with :ok <- hold_until_stack_ready(api) do
+      Api.Delete.validate_for_delete(api, params)
     end
   end
 
   defp validate_params(api, params) do
     with {:ok, request_params} <- Api.Params.validate(api, params) do
-      {:ok,
-       %Request{
-         config: api.config,
-         params: request_params,
-         valid: true,
-         response: %Response{shape: request_params.shape_definition}
-       }}
+      request_for_params(api, request_params, %Response{shape: request_params.shape_definition})
     end
+  end
+
+  @doc false
+  def request_for_params(api, request_params, response \\ %Response{}) do
+    {:ok,
+     %Request{
+       config: api.config,
+       params: request_params,
+       valid: true,
+       response: response
+     }}
   end
 
   @doc """
@@ -93,20 +95,14 @@ defmodule Electric.Shapes.Api do
     serve_shape_log(request)
   end
 
-  defp seek(%Request{} = request, false), do: request
-
-  defp seek(%Request{} = request, true) do
+  defp seek(%Request{} = request) do
     request
     |> listen_for_new_changes()
     |> determine_log_chunk_offset()
     |> determine_up_to_date()
   end
 
-  defp load_shape_info(%Request{} = request, false) do
-    {:ok, request}
-  end
-
-  defp load_shape_info(%Request{} = request, true) do
+  defp load_shape_info(%Request{} = request) do
     with_span(request, "shape_get.api.load_shape_info", fn ->
       request
       |> get_or_create_shape_handle()
@@ -135,7 +131,7 @@ defmodule Electric.Shapes.Api do
       # but there is a shape that matches the shape handle
       # thus the shape handle does not match the shape definition
       # and we return a 400 bad request status code
-      {:error, Response.error(request, @shape_definition_mismatch)}
+      {:error, Response.shape_definition_mismatch(request)}
     else
       # The shape handle does not exist or no longer exists
       # e.g. it may have been deleted.
@@ -179,7 +175,7 @@ defmodule Electric.Shapes.Api do
     if Shapes.has_shape?(request.config, shape_handle) do
       # The shape with the provided ID exists but does not match the shape definition
       # otherwise we would have found it and it would have matched the previous function clause
-      {:error, Response.error(request, @shape_definition_mismatch)}
+      {:error, Response.shape_definition_mismatch(request)}
     else
       # The requested shape_handle is not found, returns 409 along with a location redirect for clients to
       # re-request the shape from scratch with the new shape id which acts as a consistent cache buster

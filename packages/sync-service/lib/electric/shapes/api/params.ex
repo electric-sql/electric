@@ -28,10 +28,8 @@ defmodule Electric.Shapes.Api.Params do
   def validate(api, params) do
     %{config: %{inspector: inspector}} = api
 
-    %__MODULE__{}
-    |> cast(params, __schema__(:fields) -- [:shape_definition],
-      message: fn _, _ -> "must be %{type}" end
-    )
+    params
+    |> cast_params()
     |> validate_required([:table, :offset])
     |> cast_offset()
     |> cast_columns()
@@ -39,20 +37,57 @@ defmodule Electric.Shapes.Api.Params do
     |> validate_live_with_offset()
     |> cast_root_table(inspector: inspector)
     |> apply_action(:validate)
+    |> convert_error(api)
+  end
+
+  # we allow deletion by shape definition, shape definition and handle or just
+  # handle
+  def validate_for_delete(api, params) do
+    %{config: %{inspector: inspector}} = api
+
+    params
+    |> cast_params()
     |> case do
-      {:ok, params} ->
-        {:ok, params}
+      # if the params specify a table then the request includes the shape
+      # definition (and maybe handle) for a deletion we don't need to validate
+      # the offset or live flags etc
+      %{changes: %{table: _table}} = changeset ->
+        changeset
+        |> validate_required([:table])
+        |> cast_columns()
+        |> cast_root_table(inspector: inspector)
+        |> apply_action(:validate)
+        |> convert_error(api)
 
-      {:error, changeset} ->
-        reason =
-          traverse_errors(changeset, fn {msg, opts} ->
-            Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-              opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-            end)
-          end)
-
-        {:error, Api.Response.error(api, reason)}
+      # if no table is specified, then just validate that there's a handle
+      changeset ->
+        changeset
+        |> validate_required([:handle],
+          message: "can't be blank when shape definition is missing"
+        )
+        |> apply_action(:validate)
+        |> convert_error(api)
     end
+  end
+
+  defp cast_params(params) do
+    %__MODULE__{}
+    |> cast(params, __schema__(:fields) -- [:shape_definition],
+      message: fn _, _ -> "must be %{type}" end
+    )
+  end
+
+  defp convert_error({:ok, params}, _api), do: {:ok, params}
+
+  defp convert_error({:error, changeset}, api) do
+    reason =
+      traverse_errors(changeset, fn {msg, opts} ->
+        Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
+          opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
+        end)
+      end)
+
+    {:error, Api.Response.error(api, reason)}
   end
 
   def cast_offset(%Ecto.Changeset{valid?: false} = changeset), do: changeset

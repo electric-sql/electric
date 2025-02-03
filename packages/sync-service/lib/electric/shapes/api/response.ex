@@ -28,6 +28,17 @@ defmodule Electric.Shapes.Api.Response do
           body: Enum.t()
         }
 
+  @shape_definition_mismatch %{
+    message:
+      "The specified shape definition and handle do not match. " <>
+        "Please ensure the shape definition is correct or omit " <>
+        "the shape handle from the request to obtain a new one."
+  }
+
+  def shape_definition_mismatch(request) do
+    error(request, @shape_definition_mismatch)
+  end
+
   def error(api_or_request, message, args \\ [])
 
   @spec error(Api.t(), term(), keyword()) :: t()

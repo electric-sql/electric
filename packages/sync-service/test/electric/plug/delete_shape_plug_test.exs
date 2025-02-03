@@ -84,7 +84,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
              }
     end
 
-    test "returns 400 for invalid params", ctx do
+    test "returns 400 for invalid table", ctx do
       conn =
         ctx
         |> conn("DELETE", "?table=.invalid_shape")
@@ -99,9 +99,24 @@ defmodule Electric.Plug.DeleteShapePlugTest do
              }
     end
 
+    test "returns 400 for invalid params", ctx do
+      conn =
+        ctx
+        |> conn("DELETE", "?")
+        |> call_delete_shape_plug(ctx)
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "handle" => [
+                 "can't be blank when shape definition is missing"
+               ]
+             }
+    end
+
     test "should clean shape based on shape definition", ctx do
       Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts -> {@test_shape_handle, 0} end)
+      |> expect(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, 0} end)
       |> expect(:clean_shape, fn @test_shape_handle, _ -> :ok end)
 
       conn =
@@ -112,14 +127,14 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       assert conn.status == 202
     end
 
-    test "should clean shape based on shape_handle", ctx do
+    test "should clean shape based only on shape_handle", ctx do
       Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, 0} end)
+      |> expect(:has_shape?, fn @test_shape_handle, _opts -> true end)
       |> expect(:clean_shape, fn @test_shape_handle, _ -> :ok end)
 
       conn =
         ctx
-        |> conn(:delete, "?table=public.users&handle=#{@test_shape_handle}")
+        |> conn(:delete, "?handle=#{@test_shape_handle}")
         |> call_delete_shape_plug(ctx)
 
       assert conn.status == 202
