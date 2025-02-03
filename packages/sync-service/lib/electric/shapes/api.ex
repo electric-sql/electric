@@ -12,7 +12,6 @@ defmodule Electric.Shapes.Api do
   require Logger
 
   defguardp is_configured(api) when api.configured
-  defguardp is_valid_request(request) when request.valid == true
 
   defstruct [
     :inspector,
@@ -106,13 +105,6 @@ defmodule Electric.Shapes.Api do
        valid: true,
        response: response
      }}
-  end
-
-  @doc """
-  A utility function to serve a configured, valid request to completion
-  """
-  def serve(%Request{} = request) when is_valid_request(request) do
-    serve_shape_log(request)
   end
 
   defp seek(%Request{} = request) do
