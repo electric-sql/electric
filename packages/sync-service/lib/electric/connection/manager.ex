@@ -543,7 +543,8 @@ defmodule Electric.Connection.Manager do
       # disable IPv6 and retry immediately
       state = %{
         state
-        | connection_opts: connection_opts |> Keyword.put(:ipv6, false) |> update_tcp_opts()
+        | ipv6_enabled: false,
+          connection_opts: connection_opts |> Keyword.put(:ipv6, false) |> update_tcp_opts()
       }
 
       step = current_connection_step(state)
