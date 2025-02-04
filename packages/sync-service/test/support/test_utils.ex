@@ -17,8 +17,8 @@ defmodule Support.TestUtils do
     changes
     |> Enum.map(&Changes.fill_key(&1, pk))
     |> Enum.flat_map(&LogItems.from_change(&1, xid, pk, replica))
-    |> Enum.map(fn item ->
-      {item.offset, item.key, item.headers.operation, Jason.encode!(item)}
+    |> Enum.map(fn {offset, item} ->
+      {offset, item.key, item.headers.operation, Jason.encode!(item)}
     end)
     |> Enum.flat_map_reduce(0, fn {offset, _, _, json_log_item} = line, acc ->
       case LogChunker.fit_into_chunk(byte_size(json_log_item), acc, chunk_size) do

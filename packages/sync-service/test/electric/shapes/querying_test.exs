@@ -24,32 +24,27 @@ defmodule Electric.Shapes.QueryingTest do
              %{
                key: ~S["public"."items"/"1"],
                value: %{id: "1", value: "1"},
-               headers: %{operation: "insert", relation: ["public", "items"]},
-               offset: "0_0"
+               headers: %{operation: "insert", relation: ["public", "items"]}
              },
              %{
                key: ~S["public"."items"/"2"],
                value: %{id: "2", value: "2"},
-               headers: %{operation: "insert", relation: ["public", "items"]},
-               offset: "0_0"
+               headers: %{operation: "insert", relation: ["public", "items"]}
              },
              %{
                key: ~S["public"."items"/"3"],
                value: %{id: "3", value: "3"},
-               headers: %{operation: "insert", relation: ["public", "items"]},
-               offset: "0_0"
+               headers: %{operation: "insert", relation: ["public", "items"]}
              },
              %{
                key: ~S["public"."items"/"4"],
                value: %{id: "4", value: "4"},
-               headers: %{operation: "insert", relation: ["public", "items"]},
-               offset: "0_0"
+               headers: %{operation: "insert", relation: ["public", "items"]}
              },
              %{
                key: ~S["public"."items"/"5"],
                value: %{id: "5", value: "5"},
-               headers: %{operation: "insert", relation: ["public", "items"]},
-               offset: "0_0"
+               headers: %{operation: "insert", relation: ["public", "items"]}
              }
            ] == decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
   end

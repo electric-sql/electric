@@ -100,11 +100,12 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                  %{
                    key: ~S|"public"."test_table"/"123"|,
                    value: %{id: "123", name: "Test"},
-                   offset: offset |> LogOffset.to_iolist() |> :erlang.iolist_to_binary(),
                    headers: %{
                      operation: "insert",
                      txid: 1,
-                     relation: ["public", "test_table"]
+                     relation: ["public", "test_table"],
+                     lsn: 1000,
+                     op_position: 0
                    }
                  }
                ] == Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
@@ -459,7 +460,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                  |> Enum.to_list()
 
         assert Jason.decode!(line, keys: :atoms) == %{
-                 offset: "8_0",
                  value: %{id: "sameid", name: "Test8"},
                  key: ~S|"public"."test_table"/"sameid"|,
                  headers: %{operation: "update", relation: ["public", "test_table"]}
@@ -571,7 +571,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                  |> Enum.to_list()
 
         assert Jason.decode!(line, keys: :atoms) == %{
-                 offset: "18_0",
                  value: %{id: "sameid", name: "Test10", other_name: "Test18"},
                  key: ~S|"public"."test_table"/"sameid"|,
                  headers: %{operation: "update", relation: ["public", "test_table"]}

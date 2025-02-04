@@ -15,23 +15,35 @@ defmodule Electric.LogItemsTest do
 
       assert LogItems.from_change(record, 1, ["pk"], :default) ==
                [
-                 %{
-                   offset: LogOffset.new(0, 0),
-                   value: %{"hello" => "world", "pk" => "10"},
-                   key: "my_key",
-                   headers: %{relation: ["public", "test"], operation: :insert, txid: 1}
-                 }
+                 {LogOffset.new(0, 0),
+                  %{
+                    value: %{"hello" => "world", "pk" => "10"},
+                    key: "my_key",
+                    headers: %{
+                      relation: ["public", "test"],
+                      operation: :insert,
+                      txid: 1,
+                      lsn: 0,
+                      op_position: 0
+                    }
+                  }}
                ]
 
       # And with empty PK
       assert LogItems.from_change(record, 1, [], :default) ==
                [
-                 %{
-                   offset: LogOffset.new(0, 0),
-                   value: %{"hello" => "world", "pk" => "10"},
-                   key: "my_key",
-                   headers: %{relation: ["public", "test"], operation: :insert, txid: 1}
-                 }
+                 {LogOffset.new(0, 0),
+                  %{
+                    value: %{"hello" => "world", "pk" => "10"},
+                    key: "my_key",
+                    headers: %{
+                      relation: ["public", "test"],
+                      operation: :insert,
+                      txid: 1,
+                      lsn: 0,
+                      op_position: 0
+                    }
+                  }}
                ]
     end
 
@@ -45,12 +57,18 @@ defmodule Electric.LogItemsTest do
 
       assert LogItems.from_change(record, 1, ["pk"], :default) ==
                [
-                 %{
-                   offset: LogOffset.new(0, 0),
-                   value: %{"pk" => "10"},
-                   key: "my_key",
-                   headers: %{relation: ["public", "test"], operation: :delete, txid: 1}
-                 }
+                 {LogOffset.new(0, 0),
+                  %{
+                    value: %{"pk" => "10"},
+                    key: "my_key",
+                    headers: %{
+                      relation: ["public", "test"],
+                      operation: :delete,
+                      txid: 1,
+                      lsn: 0,
+                      op_position: 0
+                    }
+                  }}
                ]
     end
 
@@ -64,12 +82,18 @@ defmodule Electric.LogItemsTest do
 
       assert LogItems.from_change(record, 1, [], :default) ==
                [
-                 %{
-                   offset: LogOffset.new(0, 0),
-                   value: %{"hello" => "world", "value" => "10"},
-                   key: "my_key",
-                   headers: %{relation: ["public", "test"], operation: :delete, txid: 1}
-                 }
+                 {LogOffset.new(0, 0),
+                  %{
+                    value: %{"hello" => "world", "value" => "10"},
+                    key: "my_key",
+                    headers: %{
+                      relation: ["public", "test"],
+                      operation: :delete,
+                      txid: 1,
+                      lsn: 0,
+                      op_position: 0
+                    }
+                  }}
                ]
     end
 
@@ -85,12 +109,18 @@ defmodule Electric.LogItemsTest do
 
       assert LogItems.from_change(record, 1, ["pk"], :default) ==
                [
-                 %{
-                   offset: LogOffset.new(0, 0),
-                   value: %{"pk" => "10", "test" => "new"},
-                   key: "my_key",
-                   headers: %{relation: ["public", "test"], operation: :update, txid: 1}
-                 }
+                 {LogOffset.new(0, 0),
+                  %{
+                    value: %{"pk" => "10", "test" => "new"},
+                    key: "my_key",
+                    headers: %{
+                      relation: ["public", "test"],
+                      operation: :update,
+                      txid: 1,
+                      lsn: 0,
+                      op_position: 0
+                    }
+                  }}
                ]
     end
 
@@ -106,12 +136,18 @@ defmodule Electric.LogItemsTest do
 
       assert LogItems.from_change(record, 1, ["pk"], :full) ==
                [
-                 %{
-                   offset: LogOffset.first(),
-                   value: %{"pk" => "10", "hello" => "world", "test" => "new"},
-                   key: "my_key",
-                   headers: %{relation: ["public", "test"], operation: :update, txid: 1}
-                 }
+                 {LogOffset.first(),
+                  %{
+                    value: %{"pk" => "10", "hello" => "world", "test" => "new"},
+                    key: "my_key",
+                    headers: %{
+                      relation: ["public", "test"],
+                      operation: :update,
+                      txid: 1,
+                      lsn: 0,
+                      op_position: 0
+                    }
+                  }}
                ]
     end
 
@@ -126,12 +162,18 @@ defmodule Electric.LogItemsTest do
 
       assert LogItems.from_change(record, 1, ["pk"], :full) ==
                [
-                 %{
-                   offset: LogOffset.first(),
-                   value: %{"pk" => "10", "hello" => "world", "test" => "me"},
-                   key: "my_key",
-                   headers: %{relation: ["public", "test"], operation: :delete, txid: 1}
-                 }
+                 {LogOffset.first(),
+                  %{
+                    value: %{"pk" => "10", "hello" => "world", "test" => "me"},
+                    key: "my_key",
+                    headers: %{
+                      relation: ["public", "test"],
+                      operation: :delete,
+                      txid: 1,
+                      lsn: 0,
+                      op_position: 0
+                    }
+                  }}
                ]
     end
 
@@ -148,28 +190,32 @@ defmodule Electric.LogItemsTest do
 
       assert LogItems.from_change(record, 1, ["pk"], :default) ==
                [
-                 %{
-                   offset: LogOffset.new(0, 0),
-                   value: %{"pk" => "9"},
-                   key: "old_key",
-                   headers: %{
-                     relation: ["public", "test"],
-                     operation: :delete,
-                     txid: 1,
-                     key_change_to: "new_key"
-                   }
-                 },
-                 %{
-                   offset: LogOffset.new(0, 1),
-                   value: %{"hello" => "world", "pk" => "10", "test" => "new"},
-                   key: "new_key",
-                   headers: %{
-                     relation: ["public", "test"],
-                     operation: :insert,
-                     txid: 1,
-                     key_change_from: "old_key"
-                   }
-                 }
+                 {LogOffset.new(0, 0),
+                  %{
+                    value: %{"pk" => "9"},
+                    key: "old_key",
+                    headers: %{
+                      relation: ["public", "test"],
+                      operation: :delete,
+                      txid: 1,
+                      key_change_to: "new_key",
+                      lsn: 0,
+                      op_position: 0
+                    }
+                  }},
+                 {LogOffset.new(0, 1),
+                  %{
+                    value: %{"hello" => "world", "pk" => "10", "test" => "new"},
+                    key: "new_key",
+                    headers: %{
+                      relation: ["public", "test"],
+                      operation: :insert,
+                      txid: 1,
+                      key_change_from: "old_key",
+                      lsn: 0,
+                      op_position: 1
+                    }
+                  }}
                ]
     end
 
@@ -186,28 +232,32 @@ defmodule Electric.LogItemsTest do
 
       assert LogItems.from_change(record, 1, [], :default) ==
                [
-                 %{
-                   offset: LogOffset.new(0, 0),
-                   value: %{"hello" => "world", "test" => "me"},
-                   key: "old_key",
-                   headers: %{
-                     relation: ["public", "test"],
-                     operation: :delete,
-                     txid: 1,
-                     key_change_to: "new_key"
-                   }
-                 },
-                 %{
-                   offset: LogOffset.new(0, 1),
-                   value: %{"hello" => "world", "test" => "new"},
-                   key: "new_key",
-                   headers: %{
-                     relation: ["public", "test"],
-                     operation: :insert,
-                     txid: 1,
-                     key_change_from: "old_key"
-                   }
-                 }
+                 {LogOffset.new(0, 0),
+                  %{
+                    value: %{"hello" => "world", "test" => "me"},
+                    key: "old_key",
+                    headers: %{
+                      relation: ["public", "test"],
+                      operation: :delete,
+                      txid: 1,
+                      key_change_to: "new_key",
+                      lsn: 0,
+                      op_position: 0
+                    }
+                  }},
+                 {LogOffset.new(0, 1),
+                  %{
+                    value: %{"hello" => "world", "test" => "new"},
+                    key: "new_key",
+                    headers: %{
+                      relation: ["public", "test"],
+                      operation: :insert,
+                      txid: 1,
+                      key_change_from: "old_key",
+                      lsn: 0,
+                      op_position: 1
+                    }
+                  }}
                ]
     end
   end

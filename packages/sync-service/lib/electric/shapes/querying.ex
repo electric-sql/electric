@@ -1,5 +1,4 @@
 defmodule Electric.Shapes.Querying do
-  alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.LogChunker
   alias Electric.Utils
   alias Electric.Shapes.Shape
@@ -63,7 +62,6 @@ defmodule Electric.Shapes.Querying do
     key_part = build_key_part(root_table, pk_cols)
     value_part = build_value_part(columns)
     headers_part = build_headers_part(root_table)
-    offset_part = ~s['"offset":"#{LogOffset.first()}"']
 
     # We're building a JSON string that looks like this:
     #
@@ -75,11 +73,10 @@ defmodule Electric.Shapes.Querying do
     #     "email": "john.doe@example.com",
     #     "nullable": null
     #   },
-    #   "headers": {"operation": "insert", "relation": ["public", "test_table"]},
-    #   "offset": "0_0"
+    #   "headers": {"operation": "insert", "relation": ["public", "test_table"]}
     # }
     query =
-      ~s['{' || #{key_part} || ',' || #{value_part} || ',' || #{headers_part} || ',' || #{offset_part} || '}']
+      ~s['{' || #{key_part} || ',' || #{value_part} || ',' || #{headers_part} || '}']
 
     {query, []}
   end

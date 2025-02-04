@@ -11,12 +11,13 @@ defmodule Electric.LogItems do
   client accepts.
   """
 
-  @type log_item :: %{
-          key: String.t(),
-          value: map(),
-          headers: map(),
-          offset: LogOffset.t()
-        }
+  @type log_item ::
+          {LogOffset.t(),
+           %{
+             key: String.t(),
+             value: map(),
+             headers: map()
+           }}
 
   @spec from_change(
           Changes.data_change(),
@@ -26,62 +27,86 @@ defmodule Electric.LogItems do
         ) :: [log_item(), ...]
   def from_change(%Changes.NewRecord{} = change, txid, _, _replica) do
     [
-      %{
-        key: change.key,
-        value: change.record,
-        headers: %{operation: :insert, txid: txid, relation: Tuple.to_list(change.relation)},
-        offset: change.log_offset
-      }
+      {change.log_offset,
+       %{
+         key: change.key,
+         value: change.record,
+         headers: %{
+           operation: :insert,
+           txid: txid,
+           relation: Tuple.to_list(change.relation),
+           lsn: change.log_offset.tx_offset,
+           op_position: change.log_offset.op_offset
+         }
+       }}
     ]
   end
 
   def from_change(%Changes.DeletedRecord{} = change, txid, pk_cols, replica) do
     [
-      %{
-        key: change.key,
-        value: take_pks_or_all(change.old_record, pk_cols, replica),
-        headers: %{operation: :delete, txid: txid, relation: Tuple.to_list(change.relation)},
-        offset: change.log_offset
-      }
+      {change.log_offset,
+       %{
+         key: change.key,
+         value: take_pks_or_all(change.old_record, pk_cols, replica),
+         headers: %{
+           operation: :delete,
+           txid: txid,
+           relation: Tuple.to_list(change.relation),
+           lsn: change.log_offset.tx_offset,
+           op_position: change.log_offset.op_offset
+         }
+       }}
     ]
   end
 
   # `old_key` is nil when it's unchanged. This is not possible when there is no PK defined.
   def from_change(%Changes.UpdatedRecord{old_key: nil} = change, txid, pk_cols, replica) do
     [
-      %{
-        key: change.key,
-        value: update_values(change, pk_cols, replica),
-        headers: %{operation: :update, txid: txid, relation: Tuple.to_list(change.relation)},
-        offset: change.log_offset
-      }
+      {change.log_offset,
+       %{
+         key: change.key,
+         value: update_values(change, pk_cols, replica),
+         headers: %{
+           operation: :update,
+           txid: txid,
+           relation: Tuple.to_list(change.relation),
+           lsn: change.log_offset.tx_offset,
+           op_position: change.log_offset.op_offset
+         }
+       }}
     ]
   end
 
   def from_change(%Changes.UpdatedRecord{} = change, txid, pk_cols, replica) do
+    new_offset = LogOffset.increment(change.log_offset)
+
     [
-      %{
-        key: change.old_key,
-        value: take_pks_or_all(change.old_record, pk_cols, replica),
-        headers: %{
-          operation: :delete,
-          txid: txid,
-          relation: Tuple.to_list(change.relation),
-          key_change_to: change.key
-        },
-        offset: change.log_offset
-      },
-      %{
-        key: change.key,
-        value: change.record,
-        headers: %{
-          operation: :insert,
-          txid: txid,
-          relation: Tuple.to_list(change.relation),
-          key_change_from: change.old_key
-        },
-        offset: LogOffset.increment(change.log_offset)
-      }
+      {change.log_offset,
+       %{
+         key: change.old_key,
+         value: take_pks_or_all(change.old_record, pk_cols, replica),
+         headers: %{
+           operation: :delete,
+           txid: txid,
+           relation: Tuple.to_list(change.relation),
+           key_change_to: change.key,
+           lsn: change.log_offset.tx_offset,
+           op_position: change.log_offset.op_offset
+         }
+       }},
+      {new_offset,
+       %{
+         key: change.key,
+         value: change.record,
+         headers: %{
+           operation: :insert,
+           txid: txid,
+           relation: Tuple.to_list(change.relation),
+           key_change_from: change.old_key,
+           lsn: new_offset.tx_offset,
+           op_position: new_offset.op_offset
+         }
+       }}
     ]
   end
 
@@ -97,40 +122,9 @@ defmodule Electric.LogItems do
     record
   end
 
-  @spec from_snapshot_row_stream(
-          row_stream :: Enumerable.t(list()),
-          offset :: LogOffset.t(),
-          shape :: Shape.t(),
-          query_info :: Postgrex.Query.t()
-        ) :: Enumerable.t(log_item())
-  def from_snapshot_row_stream(row_stream, offset, shape, query_info) do
-    Stream.map(row_stream, &from_snapshot_row(&1, offset, shape, query_info))
-  end
-
-  defp from_snapshot_row(row, offset, shape, query_info) do
-    value = value(row, query_info)
-
-    key = Changes.build_key(shape.root_table, value, Shape.pk(shape))
-
-    %{
-      key: key,
-      value: value,
-      headers: %{operation: :insert, relation: shape.root_table |> Tuple.to_list()},
-      offset: offset
-    }
-  end
-
-  # We're assuming that the postgres query casts every column to string
-  defp value(row, %Postgrex.Query{columns: columns}) do
-    [columns, row]
-    |> Enum.zip()
-    |> Map.new()
-  end
-
   def merge_updates(u1, u2) do
     %{
       "key" => u1["key"],
-      "offset" => u2["offset"],
       "headers" => Map.take(u1["headers"], ["operation", "relation"]),
       "value" => Map.merge(u1["value"], u2["value"])
     }

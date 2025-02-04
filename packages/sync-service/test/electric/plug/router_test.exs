@@ -77,7 +77,6 @@ defmodule Electric.Plug.RouterTest do
                %{
                  "headers" => %{"operation" => "insert"},
                  "key" => _,
-                 "offset" => @first_offset,
                  "value" => %{
                    "id" => _,
                    "value" => "test value 1"
@@ -224,7 +223,6 @@ defmodule Electric.Plug.RouterTest do
                %{
                  "headers" => %{"operation" => "insert"},
                  "key" => ^key,
-                 "offset" => @first_offset,
                  "value" => %{
                    "first" => "a",
                    "second" => "b",
@@ -262,7 +260,6 @@ defmodule Electric.Plug.RouterTest do
                %{
                  "headers" => %{"operation" => "insert"},
                  "key" => ^key2,
-                 "offset" => _,
                  "value" => %{
                    "first" => "e",
                    "second" => "f",
@@ -431,12 +428,12 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 200} = conn
       shape_handle = get_resp_shape_handle(conn)
+      next_offset = get_resp_last_offset(conn)
 
       assert [
                %{
                  "value" => %{"id" => "1", "value1" => "test value 1"},
-                 "key" => key,
-                 "offset" => next_offset
+                 "key" => key
                }
              ] = Jason.decode!(conn.resp_body)
 
@@ -538,7 +535,6 @@ defmodule Electric.Plug.RouterTest do
       assert op == %{
                "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
                "key" => ~s|"public"."serial_ids"/"2"|,
-               "offset" => "0_0",
                "value" => %{"id" => "2", "num" => "10"}
              }
 
@@ -596,28 +592,33 @@ defmodule Electric.Plug.RouterTest do
 
       assert [
                %{
-                 "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
+                 "headers" => %{
+                   "operation" => "insert",
+                   "relation" => ["public", "serial_ids"],
+                   "lsn" => op1_lsn,
+                   "op_position" => op1_op_position
+                 },
                  "key" => ~s|"public"."serial_ids"/"1"|,
-                 "value" => %{"id" => "1", "num" => "6"},
-                 "offset" => op1_offset
+                 "value" => %{"id" => "1", "num" => "6"}
                },
                %{
-                 "headers" => %{"operation" => "delete", "relation" => ["public", "serial_ids"]},
+                 "headers" => %{
+                   "operation" => "delete",
+                   "relation" => ["public", "serial_ids"],
+                   "lsn" => op2_lsn,
+                   "op_position" => op2_op_position
+                 },
                  "key" => ~s|"public"."serial_ids"/"3"|,
-                 "value" => %{"id" => "3"},
-                 "offset" => op2_offset
+                 "value" => %{"id" => "3"}
                }
              ] = [op1, op2]
 
-      last_offset = get_resp_last_offset(conn)
+      {:ok, last_log_offset} = LogOffset.from_string(get_resp_last_offset(conn))
 
       # Verify that both ops share the same tx offset and differ in their op offset by a known
       # amount.
-      [op1_log_offset, op2_log_offset, last_log_offset] =
-        Enum.map([op1_offset, op2_offset, last_offset], fn offset ->
-          {:ok, log_offset} = LogOffset.from_string(offset)
-          log_offset
-        end)
+      op1_log_offset = LogOffset.new(op1_lsn, op1_op_position)
+      op2_log_offset = LogOffset.new(op2_lsn, op2_op_position)
 
       assert op2_log_offset == last_log_offset
 
@@ -647,13 +648,11 @@ defmodule Electric.Plug.RouterTest do
                %{
                  "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
                  "key" => ~s|"public"."serial_ids"/"1"|,
-                 "offset" => "0_0",
                  "value" => %{"id" => "1", "num" => "1"}
                },
                %{
                  "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
                  "key" => ~s|"public"."serial_ids"/"2"|,
-                 "offset" => "0_0",
                  "value" => %{"id" => "2", "num" => "2"}
                }
              ]
@@ -680,28 +679,33 @@ defmodule Electric.Plug.RouterTest do
 
       assert [
                %{
-                 "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
+                 "headers" => %{
+                   "operation" => "insert",
+                   "relation" => ["public", "serial_ids"],
+                   "lsn" => op1_lsn,
+                   "op_position" => op1_op_position
+                 },
                  "key" => ~s|"public"."serial_ids"/"3"|,
-                 "value" => %{"id" => "3", "num" => "20"},
-                 "offset" => op1_offset
+                 "value" => %{"id" => "3", "num" => "20"}
                },
                %{
-                 "headers" => %{"operation" => "delete", "relation" => ["public", "serial_ids"]},
+                 "headers" => %{
+                   "operation" => "delete",
+                   "relation" => ["public", "serial_ids"],
+                   "lsn" => op2_lsn,
+                   "op_position" => op2_op_position
+                 },
                  "key" => ~s|"public"."serial_ids"/"2"|,
-                 "value" => %{"id" => "2"},
-                 "offset" => op2_offset
+                 "value" => %{"id" => "2"}
                }
              ] = [op1, op2]
 
-      last_offset = get_resp_last_offset(conn)
+      {:ok, last_log_offset} = LogOffset.from_string(get_resp_last_offset(conn))
 
       # Verify that both ops share the same tx offset and differ in their op offset by a known
       # amount.
-      [op1_log_offset, op2_log_offset, last_log_offset] =
-        Enum.map([op1_offset, op2_offset, last_offset], fn offset ->
-          {:ok, log_offset} = LogOffset.from_string(offset)
-          log_offset
-        end)
+      op1_log_offset = LogOffset.new(op1_lsn, op1_op_position)
+      op2_log_offset = LogOffset.new(op2_lsn, op2_op_position)
 
       assert op2_log_offset == last_log_offset
 
