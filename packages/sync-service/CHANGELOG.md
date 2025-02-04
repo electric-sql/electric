@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 1.0.0-beta.10
+
+### Patch Changes
+
+- 5516d70: Fallback to IPv4 if `DATABASE_USE_IPV6` is enabled but an IPv6 address could not be resolved.
+- 0d71dc4: fix: don't expose information about columns that weren't selected
+- c4e4e75: Connect shape consumer spans to replication traces and add OTEL metrics
+- f8a94aa: chore: ensure proper trace span connection for snapshot creation
+
 ## 1.0.0-beta.9
 
 ### Patch Changes
