@@ -102,7 +102,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                    value: %{id: "123", name: "Test"},
                    headers: %{
                      operation: "insert",
-                     txid: 1,
+                     txids: [1],
                      relation: ["public", "test_table"],
                      lsn: 1000,
                      op_position: 0

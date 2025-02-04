@@ -22,7 +22,7 @@ defmodule Electric.LogItemsTest do
                     headers: %{
                       relation: ["public", "test"],
                       operation: :insert,
-                      txid: 1,
+                      txids: [1],
                       lsn: 0,
                       op_position: 0
                     }
@@ -39,7 +39,7 @@ defmodule Electric.LogItemsTest do
                     headers: %{
                       relation: ["public", "test"],
                       operation: :insert,
-                      txid: 1,
+                      txids: [1],
                       lsn: 0,
                       op_position: 0
                     }
@@ -64,7 +64,7 @@ defmodule Electric.LogItemsTest do
                     headers: %{
                       relation: ["public", "test"],
                       operation: :delete,
-                      txid: 1,
+                      txids: [1],
                       lsn: 0,
                       op_position: 0
                     }
@@ -89,7 +89,7 @@ defmodule Electric.LogItemsTest do
                     headers: %{
                       relation: ["public", "test"],
                       operation: :delete,
-                      txid: 1,
+                      txids: [1],
                       lsn: 0,
                       op_position: 0
                     }
@@ -116,7 +116,7 @@ defmodule Electric.LogItemsTest do
                     headers: %{
                       relation: ["public", "test"],
                       operation: :update,
-                      txid: 1,
+                      txids: [1],
                       lsn: 0,
                       op_position: 0
                     }
@@ -143,7 +143,7 @@ defmodule Electric.LogItemsTest do
                     headers: %{
                       relation: ["public", "test"],
                       operation: :update,
-                      txid: 1,
+                      txids: [1],
                       lsn: 0,
                       op_position: 0
                     }
@@ -169,7 +169,7 @@ defmodule Electric.LogItemsTest do
                     headers: %{
                       relation: ["public", "test"],
                       operation: :delete,
-                      txid: 1,
+                      txids: [1],
                       lsn: 0,
                       op_position: 0
                     }
@@ -197,7 +197,7 @@ defmodule Electric.LogItemsTest do
                     headers: %{
                       relation: ["public", "test"],
                       operation: :delete,
-                      txid: 1,
+                      txids: [1],
                       key_change_to: "new_key",
                       lsn: 0,
                       op_position: 0
@@ -210,7 +210,7 @@ defmodule Electric.LogItemsTest do
                     headers: %{
                       relation: ["public", "test"],
                       operation: :insert,
-                      txid: 1,
+                      txids: [1],
                       key_change_from: "old_key",
                       lsn: 0,
                       op_position: 1
@@ -239,7 +239,7 @@ defmodule Electric.LogItemsTest do
                     headers: %{
                       relation: ["public", "test"],
                       operation: :delete,
-                      txid: 1,
+                      txids: [1],
                       key_change_to: "new_key",
                       lsn: 0,
                       op_position: 0
@@ -252,7 +252,7 @@ defmodule Electric.LogItemsTest do
                     headers: %{
                       relation: ["public", "test"],
                       operation: :insert,
-                      txid: 1,
+                      txids: [1],
                       key_change_from: "old_key",
                       lsn: 0,
                       op_position: 1

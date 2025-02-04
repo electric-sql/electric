@@ -21,11 +21,11 @@ defmodule Electric.LogItems do
 
   @spec from_change(
           Changes.data_change(),
-          txid :: non_neg_integer() | nil,
+          txids :: nil | non_neg_integer() | [non_neg_integer(), ...],
           pk_cols :: [String.t()],
           replica :: Shape.replica()
         ) :: [log_item(), ...]
-  def from_change(%Changes.NewRecord{} = change, txid, _, _replica) do
+  def from_change(%Changes.NewRecord{} = change, txids, _, _replica) do
     [
       {change.log_offset,
        %{
@@ -33,7 +33,7 @@ defmodule Electric.LogItems do
          value: change.record,
          headers: %{
            operation: :insert,
-           txid: txid,
+           txids: List.wrap(txids),
            relation: Tuple.to_list(change.relation),
            lsn: change.log_offset.tx_offset,
            op_position: change.log_offset.op_offset
@@ -42,7 +42,7 @@ defmodule Electric.LogItems do
     ]
   end
 
-  def from_change(%Changes.DeletedRecord{} = change, txid, pk_cols, replica) do
+  def from_change(%Changes.DeletedRecord{} = change, txids, pk_cols, replica) do
     [
       {change.log_offset,
        %{
@@ -50,7 +50,7 @@ defmodule Electric.LogItems do
          value: take_pks_or_all(change.old_record, pk_cols, replica),
          headers: %{
            operation: :delete,
-           txid: txid,
+           txids: List.wrap(txids),
            relation: Tuple.to_list(change.relation),
            lsn: change.log_offset.tx_offset,
            op_position: change.log_offset.op_offset
@@ -60,7 +60,7 @@ defmodule Electric.LogItems do
   end
 
   # `old_key` is nil when it's unchanged. This is not possible when there is no PK defined.
-  def from_change(%Changes.UpdatedRecord{old_key: nil} = change, txid, pk_cols, replica) do
+  def from_change(%Changes.UpdatedRecord{old_key: nil} = change, txids, pk_cols, replica) do
     [
       {change.log_offset,
        %{
@@ -68,7 +68,7 @@ defmodule Electric.LogItems do
          value: update_values(change, pk_cols, replica),
          headers: %{
            operation: :update,
-           txid: txid,
+           txids: List.wrap(txids),
            relation: Tuple.to_list(change.relation),
            lsn: change.log_offset.tx_offset,
            op_position: change.log_offset.op_offset
@@ -77,7 +77,7 @@ defmodule Electric.LogItems do
     ]
   end
 
-  def from_change(%Changes.UpdatedRecord{} = change, txid, pk_cols, replica) do
+  def from_change(%Changes.UpdatedRecord{} = change, txids, pk_cols, replica) do
     new_offset = LogOffset.increment(change.log_offset)
 
     [
@@ -87,7 +87,7 @@ defmodule Electric.LogItems do
          value: take_pks_or_all(change.old_record, pk_cols, replica),
          headers: %{
            operation: :delete,
-           txid: txid,
+           txids: List.wrap(txids),
            relation: Tuple.to_list(change.relation),
            key_change_to: change.key,
            lsn: change.log_offset.tx_offset,
@@ -100,7 +100,7 @@ defmodule Electric.LogItems do
          value: change.record,
          headers: %{
            operation: :insert,
-           txid: txid,
+           txids: List.wrap(txids),
            relation: Tuple.to_list(change.relation),
            key_change_from: change.old_key,
            lsn: new_offset.tx_offset,
@@ -128,5 +128,9 @@ defmodule Electric.LogItems do
       "headers" => Map.take(u1["headers"], ["operation", "relation"]),
       "value" => Map.merge(u1["value"], u2["value"])
     }
+  end
+
+  def keep_generic_headers(item) do
+    Map.update!(item, "headers", &Map.take(&1, ["operation", "relation"]))
   end
 end
