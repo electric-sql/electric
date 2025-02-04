@@ -29,40 +29,25 @@ defmodule Electric.Shapes.Querying do
 
       {json_like_select, params} = json_like_select(shape)
 
-      case Postgrex.prepare(conn, table, ~s|SELECT #{json_like_select} FROM #{table} #{where}|) do
-        {:ok, query} ->
-          Postgrex.stream(conn, query, params)
-          |> Stream.flat_map(& &1.rows)
-          |> Stream.transform(0, fn [line], chunk_size ->
-            # Reason to add 1 byte to expected length is to account for  `\n` breaks when the data is written.
-            case LogChunker.fit_into_chunk(
-                   IO.iodata_length(line) + 1,
-                   chunk_size,
-                   chunk_bytes_threshold
-                 ) do
-              {:ok, new_chunk_size} ->
-                {[line], new_chunk_size}
+      query =
+        Postgrex.prepare!(conn, table, ~s|SELECT #{json_like_select} FROM #{table} #{where}|)
 
-              {:threshold_exceeded, new_chunk_size} ->
-                {[line, :chunk_boundary], new_chunk_size}
-            end
-          end)
+      Postgrex.stream(conn, query, params)
+      |> Stream.flat_map(& &1.rows)
+      |> Stream.transform(0, fn [line], chunk_size ->
+        # Reason to add 1 byte to expected length is to account for  `\n` breaks when the data is written.
+        case LogChunker.fit_into_chunk(
+               IO.iodata_length(line) + 1,
+               chunk_size,
+               chunk_bytes_threshold
+             ) do
+          {:ok, new_chunk_size} ->
+            {[line], new_chunk_size}
 
-        {:error, error} ->
-          {:current_stacktrace, [_ | stacktrace]} = Process.info(self(), :current_stacktrace)
-
-          Logger.error(
-            "Unable to prepare snapshot query:\n#{Exception.format(:error, error, stacktrace)}"
-          )
-
-          # just return an empty list. passing on the exception is tricky as
-          # handling it further up the stack, e.g. while streaming a response
-          # to a client, is much harder. so return a valid, if null, response.
-          #
-          # This is likely to only happen in tests, when we're asynchronously
-          # dropping tables before this has a chance to run
-          []
-      end
+          {:threshold_exceeded, new_chunk_size} ->
+            {[line, :chunk_boundary], new_chunk_size}
+        end
+      end)
     end)
   end
 

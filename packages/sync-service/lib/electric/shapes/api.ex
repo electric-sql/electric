@@ -323,20 +323,33 @@ defmodule Electric.Shapes.Api do
       api: api
     } = request
 
-    log =
-      Shapes.get_merged_log_stream(api, shape_handle,
-        since: offset,
-        up_to: chunk_end_offset
-      )
+    case Shapes.get_merged_log_stream(api, shape_handle, since: offset, up_to: chunk_end_offset) do
+      {:ok, log} ->
+        if live? && Enum.take(log, 1) == [] do
+          request
+          |> update_attrs(%{ot_is_immediate_response: false})
+          |> hold_until_change()
+        else
+          body = Stream.concat([log, maybe_up_to_date(request)])
 
-    if live? && Enum.take(log, 1) == [] do
-      request
-      |> update_attrs(%{ot_is_immediate_response: false})
-      |> hold_until_change()
-    else
-      body = Stream.concat([log, maybe_up_to_date(request)])
+          Map.update!(request, :response, &%{&1 | chunked: true, body: encode_log(request, body)})
+        end
 
-      Map.update!(request, :response, &%{&1 | chunked: true, body: encode_log(request, body)})
+      {:error, error} ->
+        {:current_stacktrace, [_ | stacktrace]} = Process.info(self(), :current_stacktrace)
+
+        %{
+          request
+          | response:
+              Response.error(
+                request,
+                %{
+                  error:
+                    "Unable retrieve shape log:\n#{Exception.format(:error, error, stacktrace)}"
+                },
+                status: 500
+              )
+        }
     end
   end
 

@@ -18,7 +18,7 @@ defmodule Electric.Shapes do
 
     if shape_cache.has_shape?(shape_handle, shape_cache_opts) do
       with :started <- shape_cache.await_snapshot_start(shape_handle, shape_cache_opts) do
-        Storage.get_log_stream(offset, max_offset, storage)
+        {:ok, Storage.get_log_stream(offset, max_offset, storage)}
       end
     else
       raise "Unknown shape: #{shape_handle}"
