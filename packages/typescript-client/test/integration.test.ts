@@ -3,7 +3,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
 import { assert, describe, expect, inject, vi } from 'vitest'
 import { FetchError, Shape, ShapeStream } from '../src'
-import { Message, Offset } from '../src/types'
+import { Message } from '../src/types'
 import { isChangeMessage, isUpToDateMessage } from '../src/helpers'
 import {
   IssueRow,
@@ -503,7 +503,6 @@ describe(`HTTP Sync`, () => {
     await insertIssues({ title: `foo1` }, { title: `foo2` }, { title: `foo3` })
     await sleep(50)
 
-    let lastOffset: Offset = `-1`
     const issueStream = new ShapeStream<IssueRow>({
       url: `${BASE_URL}/v1/shape`,
       params: {
@@ -514,10 +513,7 @@ describe(`HTTP Sync`, () => {
     })
 
     await h.forEachMessage(issueStream, aborter, (res, msg) => {
-      if (`offset` in msg) {
-        expect(msg.offset).to.not.eq(`0_`)
-        lastOffset = msg.offset
-      } else if (isUpToDateMessage(msg)) {
+      if (isUpToDateMessage(msg)) {
         res()
       }
     })
@@ -538,7 +534,7 @@ describe(`HTTP Sync`, () => {
       },
       subscribe: false,
       signal: newAborter.signal,
-      offset: lastOffset,
+      offset: issueStream.lastOffset,
       handle: issueStream.shapeHandle,
     })
 
@@ -621,10 +617,13 @@ describe(`HTTP Sync`, () => {
     )
     const messages = (await res.json()) as Message[]
     expect(messages.length).toEqual(10) // 9 inserts + up-to-date
-    const midMessage = messages.slice(-6)[0]
-    expect(midMessage).to.have.own.property(`offset`)
-    const midOffset = (midMessage as { offset: string }).offset
     const shapeHandle = res.headers.get(`electric-handle`)
+    const shapeOffset = res.headers.get(`electric-offset`)!
+    const fakeMidOffset = shapeOffset
+      .split(`_`)
+      .map(Number)
+      .map((x, i) => (i === 0 ? x - 1 : x))
+      .join(`_`)
     const etag = res.headers.get(`etag`)
     expect(etag, `Response should have etag header`).not.toBe(null)
 
@@ -640,7 +639,7 @@ describe(`HTTP Sync`, () => {
 
     // Get etag for catchup
     const catchupEtagRes = await fetch(
-      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=${midOffset}&handle=${shapeHandle}`,
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=${fakeMidOffset}&handle=${shapeHandle}`,
       {}
     )
     const catchupEtag = catchupEtagRes.headers.get(`etag`)
@@ -651,7 +650,7 @@ describe(`HTTP Sync`, () => {
     // Catch-up offsets should also use the same etag as they're
     // also working through the end of the current log.
     const catchupEtagValidation = await fetch(
-      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=${midOffset}&handle=${shapeHandle}`,
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=${fakeMidOffset}&handle=${shapeHandle}`,
       {
         headers: { 'If-None-Match': catchupEtag! },
       }
@@ -760,7 +759,6 @@ describe(`HTTP Sync`, () => {
     await insertIssues({ id: uuidv4(), title: `foo` })
 
     // Get initial data
-    let lastOffset: Offset = `-1`
     const issueStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
@@ -771,9 +769,6 @@ describe(`HTTP Sync`, () => {
     })
 
     await h.forEachMessage(issueStream, aborter, (res, msg) => {
-      if (`offset` in msg) {
-        lastOffset = msg.offset
-      }
       if (isUpToDateMessage(msg)) {
         res()
         aborter.abort()
@@ -819,7 +814,7 @@ describe(`HTTP Sync`, () => {
       },
       subscribe: false,
       signal: newAborter.signal,
-      offset: lastOffset,
+      offset: issueStream.lastOffset,
       handle: issueStream.shapeHandle,
       fetchClient: fetchWrapper,
     })
