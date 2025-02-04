@@ -1,0 +1,107 @@
+name: Electric Phoenix CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/electric-phoenix
+    env:
+      MIX_ENV: test
+      POSTGRES_VERSION: 140006
+      ELECTRIC_PORT: 3100
+      PG_PORT: 54324
+      ELECTRIC_URL: "http://127.0.0.1:3100"
+      DATABASE_URL: "postgresql://postgres:password@127.0.0.1:54324/postgres?sslmode=disable"
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 54324:5432
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Set PG settings"
+        run: |
+          docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
+          docker restart ${{ job.services.postgres.id }}
+
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
+
+      - name: Cache electric-phoenix dependencies
+        uses: actions/cache@v4
+        with:
+          path: packages/electric-phoenix/deps
+          key: ${{ runner.os }}-electric-phoenix-deps-${{ hashFiles('packages/electric-phoenix/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-electric-phoenix-deps-${{ hashFiles('packages/electric-phoenix/mix.lock') }}
+            ${{ runner.os }}-electric-phoenix-deps-
+
+      - name: Cache electric-phoenix compiled code
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/electric-phoenix/_build/*/lib
+            !packages/electric-phoenix/_build/*/lib/electric_client
+          key: "${{ runner.os }}-electric-phoenix-build-[${{ github.ref_name }}]-${{ github.sha }}"
+          restore-keys: |
+            ${{ runner.os }}-electric-phoenix-build-[${{ github.ref_name }}]-${{ github.sha }}
+            ${{ runner.os }}-electric-phoenix-build-[${{ github.ref_name }}]-
+            ${{ runner.os }}-electric-phoenix-build-
+
+      - name: Install dependencies
+        run: mix deps.get && mix deps.compile
+
+      - name: Compiles without warnings
+        run: mix compile --force --all-warnings --warnings-as-errors
+
+      - name: Run tests
+        run: mix test
+
+  formatting:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/electric-phoenix
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
+
+      - name: Cache dependencies
+        id: cache-deps
+        uses: actions/cache/restore@v4
+        with:
+          path: packages/electric-phoenix/deps
+          key: ${{ runner.os }}-electric-phoenix-deps-${{ hashFiles('packages/electric-phoenix/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-electric-phoenix-deps-${{ hashFiles('packages/electric-phoenix/mix.lock') }}
+            ${{ runner.os }}-electric-phoenix-deps-
+
+      - run: mix deps.get
+
+      - run: mix format --check-formatted
