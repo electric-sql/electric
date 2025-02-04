@@ -528,14 +528,16 @@ defmodule Electric.Connection.Manager do
   end
 
   defp handle_connection_error(
-         %DBConnection.ConnectionError{message: message} = error,
+         %DBConnection.ConnectionError{message: message, severity: :error} = error,
          %State{connection_opts: connection_opts, ipv6_enabled: true} = state,
          mode
        ) do
+    # If network is unreachable, IPv6 is not enabled on the machine
     # If domain cannot be resolved, assume there is no AAAA record for it
-    # and fall back to IPv4 and regular A records
+    # Fall back to IPv4 for these cases
     if String.starts_with?(message, "tcp connect (") and
-         String.ends_with?(message, "): non-existing domain - :nxdomain") do
+         (String.ends_with?(message, "): non-existing domain - :nxdomain") or
+            String.ends_with?(message, "): network is unreachable - :enetunreach")) do
       Logger.warning(
         "Database connection in #{mode} mode failed to find valid IPv6 address for #{connection_opts[:hostname]} - falling back to IPv4"
       )
@@ -550,6 +552,7 @@ defmodule Electric.Connection.Manager do
       step = current_connection_step(state)
       handle_continue(step, state)
     else
+      # Pass through other errors to avoid infinite loop
       handle_connection_error({:passthrough, message}, state, mode)
     end
   end
