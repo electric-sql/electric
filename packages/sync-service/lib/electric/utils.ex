@@ -169,6 +169,52 @@ defmodule Electric.Utils do
     do: list_reverse_map(tail, mapper, [mapper.(head) | acc])
 
   @doc """
+  Flat map reduce that marks the last element of the enumerable.
+
+  This is equivalent to `Enum.flat_map_reduce/3`, but mapping function receives a boolean
+  indicating if the element is the last one.
+
+  ## Examples
+
+      iex> flat_map_reduce_mark_last(
+      ...>   [1, 2, 3],
+      ...>   0,
+      ...>   fn
+      ...>     x, false, acc -> {[x], acc + x}
+      ...>     x, true, acc -> {[x * 2], acc + x}
+      ...>   end
+      ...> )
+      {[1, 2, 6], 6}
+  """
+  def flat_map_reduce_mark_last(enum, acc, fun) do
+    {items_rev, {acc, pending}} =
+      Enum.reduce(enum, {[], {acc, nil}}, fn elem, {items, {acc, pending}} ->
+        {new_items, new_acc} = fun.(elem, false, acc)
+
+        case pending do
+          nil ->
+            {items, {new_acc, {new_items, acc, elem}}}
+
+          {prev_items, _, _} ->
+            {reduce_reverse(prev_items, items), {new_acc, {new_items, acc, elem}}}
+        end
+      end)
+
+    case pending do
+      nil ->
+        {:lists.reverse(items_rev), acc}
+
+      {_, acc, last_elem} ->
+        {final_items, final_acc} = fun.(last_elem, true, acc)
+        {:lists.reverse(reduce_reverse(final_items, items_rev)), final_acc}
+    end
+  end
+
+  defp reduce_reverse(list, acc) do
+    Enum.reduce(list, acc, fn x, acc -> [x | acc] end)
+  end
+
+  @doc """
   Parse a markdown table from a string
 
   Options:

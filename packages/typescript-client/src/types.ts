@@ -33,7 +33,6 @@ export type ChangeMessage<T extends Row<unknown> = Row> = {
   key: string
   value: T
   headers: Header & { operation: Operation }
-  offset: Offset
 }
 
 // Define the type for a record

@@ -10,7 +10,7 @@ defmodule Electric.ShapeCache.FileStorage do
 
   # If the storage format changes, increase `@version` to prevent
   # the incompatable older versions being read
-  @version 2
+  @version 3
   @version_key :version
 
   @shape_definition_file_name "shape_defintion.json"

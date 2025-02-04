@@ -293,7 +293,7 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
   defp process_json(json) do
     json
     |> Jason.decode!()
-    |> update_in(["headers"], &Map.drop(&1 || %{}, ["txid"]))
+    |> LogItems.keep_generic_headers()
     |> Jason.encode!()
   end
 end

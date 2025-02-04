@@ -14,11 +14,11 @@ defmodule Electric.ShapeCache.FileStorage.CompactionTest do
 
       log_stream = [
         {%LogOffset{tx_offset: 1, op_offset: 1}, "key1", :insert,
-         ~S|{"value":"v1","headers":{"operation": "insert", "txid":123}}|},
+         ~S|{"value":"v1","headers":{"operation": "insert", "txids":[123]}}|},
         {%LogOffset{tx_offset: 2, op_offset: 1}, "key1", :update,
-         ~S|{"value":"v2","headers":{"operation": "update", "txid":124}}|},
+         ~S|{"value":"v2","headers":{"operation": "update", "txids":[124]}}|},
         {%LogOffset{tx_offset: 3, op_offset: 1}, "key2", :delete,
-         ~S|{"value":"v3","headers":{"operation": "delete", "txid":125}}|}
+         ~S|{"value":"v3","headers":{"operation": "delete", "txids":[125]}}|}
       ]
 
       paths = LogFile.write_log_file(log_stream, log_file_path)

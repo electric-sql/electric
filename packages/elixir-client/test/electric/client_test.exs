@@ -215,18 +215,15 @@ defmodule Electric.ClientTest do
       assert [
                %ChangeMessage{
                  headers: %{operation: :insert, relation: ["public", ^table]},
-                 value: %{"id" => ^id1},
-                 offset: %Electric.Client.Offset{tx: 0, op: 0}
+                 value: %{"id" => ^id1}
                },
                %ChangeMessage{
                  headers: %{operation: :insert, relation: ["public", ^table]},
-                 value: %{"id" => ^id2},
-                 offset: %Electric.Client.Offset{tx: 0, op: 0}
+                 value: %{"id" => ^id2}
                },
                %ChangeMessage{
                  headers: %{operation: :insert, relation: ["public", ^table]},
-                 value: %{"id" => ^id3},
-                 offset: %Electric.Client.Offset{tx: 0, op: 0}
+                 value: %{"id" => ^id3}
                },
                up_to_date0()
              ] = msgs
@@ -248,18 +245,15 @@ defmodule Electric.ClientTest do
       assert [
                %ChangeMessage{
                  headers: %{operation: :insert, relation: ["public", ^table]},
-                 value: %{"id" => ^id1},
-                 offset: %Electric.Client.Offset{tx: 0, op: 0}
+                 value: %{"id" => ^id1}
                },
                %ChangeMessage{
                  headers: %{operation: :insert, relation: ["public", ^table]},
-                 value: %{"id" => ^id2},
-                 offset: %Electric.Client.Offset{tx: 0, op: 0}
+                 value: %{"id" => ^id2}
                },
                %ChangeMessage{
                  headers: %{operation: :insert, relation: ["public", ^table]},
-                 value: %{"id" => ^id3},
-                 offset: %Electric.Client.Offset{tx: 0, op: 0}
+                 value: %{"id" => ^id3}
                },
                up_to_date0()
              ] = Client.stream(ctx.client, table) |> Enum.take(4)
@@ -465,13 +459,11 @@ defmodule Electric.ClientTest do
       assert [
                %ChangeMessage{
                  headers: @insert,
-                 offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
                up_to_date(1, 0),
                %ChangeMessage{
                  headers: @insert,
-                 offset: offset(2, 0),
                  value: %{"id" => "2222"}
                },
                up_to_date(2, 0)
@@ -547,13 +539,11 @@ defmodule Electric.ClientTest do
       assert [
                %ChangeMessage{
                  headers: @insert,
-                 offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
                up_to_date(1, 0),
                %ChangeMessage{
                  headers: @insert,
-                 offset: offset(2, 0),
                  value: %{"id" => "2222"}
                },
                up_to_date(2, 0)
@@ -649,13 +639,11 @@ defmodule Electric.ClientTest do
       assert [
                %ChangeMessage{
                  headers: @insert,
-                 offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
                up_to_date(1, 0),
                %ChangeMessage{
                  headers: @insert,
-                 offset: offset(2, 0),
                  value: %{"id" => "2222"}
                },
                up_to_date(2, 0)
@@ -724,14 +712,12 @@ defmodule Electric.ClientTest do
       assert [
                %ChangeMessage{
                  headers: @insert,
-                 offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
                up_to_date(1, 0),
                %ControlMessage{control: :must_refetch, offset: offset(1, 0)},
                %ChangeMessage{
                  headers: ^headers,
-                 offset: offset(1, 0),
                  value: %{"id" => "1111"}
                },
                up_to_date(1, 0)
@@ -855,13 +841,11 @@ defmodule Electric.ClientTest do
       assert [
                %ChangeMessage{
                  value: %{"id" => "1111"},
-                 headers: %Headers{operation: :insert},
-                 offset: %Electric.Client.Offset{tx: 1, op: 0}
+                 headers: %Headers{operation: :insert}
                },
                %ChangeMessage{
                  value: %{"id" => "2222"},
-                 headers: %Headers{operation: :insert},
-                 offset: %Electric.Client.Offset{tx: 2, op: 0}
+                 headers: %Headers{operation: :insert}
                },
                up_to_date(2, 0),
                %ResumeMessage{
@@ -924,13 +908,11 @@ defmodule Electric.ClientTest do
       assert [
                %ChangeMessage{
                  value: %{"id" => "3333"},
-                 headers: %Headers{operation: :insert},
-                 offset: %Electric.Client.Offset{tx: 3, op: 0}
+                 headers: %Headers{operation: :insert}
                },
                %ChangeMessage{
                  value: %{"id" => "4444"},
-                 headers: %Headers{operation: :insert},
-                 offset: %Electric.Client.Offset{tx: 4, op: 0}
+                 headers: %Headers{operation: :insert}
                },
                up_to_date(4, 0)
              ] = events
@@ -988,23 +970,19 @@ defmodule Electric.ClientTest do
       assert [
                %ChangeMessage{
                  value: %{"id" => "1111", "value" => "original 1111"},
-                 headers: %Headers{operation: :insert},
-                 offset: %Electric.Client.Offset{tx: 0, op: 0}
+                 headers: %Headers{operation: :insert}
                },
                %ChangeMessage{
                  value: %{"id" => "2222", "value" => "original 2222"},
-                 headers: %Headers{operation: :insert},
-                 offset: %Electric.Client.Offset{tx: 0, op: 0}
+                 headers: %Headers{operation: :insert}
                },
                %ChangeMessage{
                  value: %{"id" => "3333", "value" => "original 3333"},
-                 headers: %Headers{operation: :insert},
-                 offset: %Electric.Client.Offset{tx: 0, op: 0}
+                 headers: %Headers{operation: :insert}
                },
                %ChangeMessage{
                  value: %{"id" => "2222", "value" => "updated 2222"},
-                 headers: %Headers{operation: :update},
-                 offset: %Electric.Client.Offset{tx: 1234, op: 0}
+                 headers: %Headers{operation: :update}
                },
                %ResumeMessage{
                  shape_handle: "my-shape",

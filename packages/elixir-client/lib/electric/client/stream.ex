@@ -156,7 +156,6 @@ defmodule Electric.Client.Stream do
 
   defp handle_response(%Fetch.Response{status: status} = resp, stream)
        when status in 200..299 do
-    start_offset = stream.offset
     shape_handle = shape_handle!(resp)
     final_offset = last_offset(resp, stream.offset)
     next_cursor = resp.next_cursor
@@ -164,15 +163,13 @@ defmodule Electric.Client.Stream do
     %{value_mapper_fun: value_mapper_fun} =
       stream =
       handle_schema(resp, %{stream | shape_handle: shape_handle, next_cursor: next_cursor})
+      |> Map.put(:offset, final_offset)
 
     resp.body
     |> List.wrap()
     |> Enum.flat_map(&Message.parse(&1, shape_handle, final_offset, value_mapper_fun))
     |> Enum.map(&Map.put(&1, :request_timestamp, resp.request_timestamp))
-    |> Enum.reduce_while({start_offset, stream}, &handle_msg/2)
-    # don't set the offset until we're done processing the messages. ehis keeps
-    # the previous offset reached alive in the stream state
-    |> then(fn {_offset, state} -> %{state | offset: final_offset} end)
+    |> Enum.reduce_while(stream, &handle_msg/2)
     |> dispatch()
   end
 
@@ -199,26 +196,26 @@ defmodule Electric.Client.Stream do
     raise Client.Error, message: "Unable to retrieve data stream", resp: error
   end
 
-  defp handle_msg(%Message.ControlMessage{control: :up_to_date} = msg, {offset, stream}) do
-    handle_up_to_date(offset, %{stream | buffer: :queue.in(msg, stream.buffer), up_to_date?: true})
+  defp handle_msg(%Message.ControlMessage{control: :up_to_date} = msg, stream) do
+    handle_up_to_date(%{stream | buffer: :queue.in(msg, stream.buffer), up_to_date?: true})
   end
 
-  defp handle_msg(%Message.ChangeMessage{} = msg, {_offset, stream}) do
-    {:cont, {msg.offset, %{stream | offset: msg.offset, buffer: :queue.in(msg, stream.buffer)}}}
+  defp handle_msg(%Message.ChangeMessage{} = msg, stream) do
+    {:cont, %{stream | buffer: :queue.in(msg, stream.buffer)}}
   end
 
-  defp handle_up_to_date(offset, %{opts: %{live: true}} = stream) do
-    {:cont, {offset, stream}}
+  defp handle_up_to_date(%{opts: %{live: true}} = stream) do
+    {:cont, stream}
   end
 
-  defp handle_up_to_date(offset, %{opts: %{live: false}} = stream) do
+  defp handle_up_to_date(%{opts: %{live: false}} = stream) do
     resume_message = %Message.ResumeMessage{
       schema: stream.schema,
-      offset: offset,
+      offset: stream.offset,
       shape_handle: stream.shape_handle
     }
 
-    {:halt, {offset, %{stream | buffer: :queue.in(resume_message, stream.buffer), state: :done}}}
+    {:halt, %{stream | buffer: :queue.in(resume_message, stream.buffer), state: :done}}
   end
 
   defp after_fetch({msgs, %{opts: %{oneshot: true}} = stream}) do

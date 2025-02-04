@@ -214,9 +214,7 @@ paths:
                 The latest offset in the batch of data you have recieved.
 
                 If no data is returned, this will be equal to the `offset` parameter
-                you have provided. This header simplifies client development by
-                avoiding the need to parse the last offset out of the stream of
-                log entries.
+                you have provided.
 
                 Must be used as the value of the `offset` parameter in your
                 next request.
@@ -284,19 +282,40 @@ paths:
                             - update
                             - delete
                           description: The type of operation that is performed on the row of the shape that is identified by the `key`.
-                    offset:
-                      type: string
-                      description: |-
-                        The offset of the row in the shape stream.
-                        This is an opaque identifier.
+                        lsn:
+                          type: string
+                          description: |-
+                            The logical sequence number of the operation.
 
-                        Note that operations with the same offset were commited in the
-                        same transaction. So you can group operations into transactions
-                        using the `offset` property.
+                            Only present on operations that were received from the event stream.
+                            It's missing on initial query results and on compacted items.
+                            Operations with the same LSN were committed in the same transaction and
+                            can be ordered by `op_position` within the same LSN.
+                        op_position:
+                          type: string
+                          description: |-
+                            The position of the operation in the transaction.
 
-                        (Note also that when you recieve an `up-to-date` control message
-                        this indicates that you have recieved all of the operations in
-                        a transaction.)
+                            Only present on operations that were received from the event stream.
+                            It's missing on initial query results and on compacted items.    
+                        last:
+                          type: boolean
+                          description: |-
+                            Whether this is the last operation in the transaction for this shape.
+
+                            Last operation in a transaction for the shape does not mean a last
+                            operation in the transaction for the database.
+
+                            Only present on operations that were received from the event stream.
+                            It's missing on initial query results and on compacted items.
+                        txids:
+                          type: array
+                          description: |-
+                            The list of transaction IDs that this operation was part of.
+
+                            Currently, this will only contain a single transaction ID, but future
+                            stream processors may merge operations from multiple transactions into a single
+                            operation in the event stream.
                     key:
                       type: string
                       description: Row ID
@@ -322,7 +341,8 @@ paths:
                 example:
                   - headers:
                       operation: insert
-                    offset: 0_0
+                      lsn: 1234
+                      op_position: 0
                     key: issue-1
                     value:
                       id: issue-1
@@ -330,13 +350,15 @@ paths:
                       status: backlog
                   - headers:
                       operation: insert
-                      control: up-to-date
-                    offset: 1934_0
+                      lsn: 1234
+                      op_position: 7
                     key: issue-2
                     value:
                       id: issue-2
                       title: Hello
                       status: backlog
+                  - headers:
+                      control: up-to-date
         "204":
           description: >-
             No content. The `live=true` polling request timed out without
