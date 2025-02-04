@@ -298,6 +298,24 @@ paths:
 
                             Only present on operations that were received from the event stream.
                             It's missing on initial query results and on compacted items.    
+                        last:
+                          type: boolean
+                          description: |-
+                            Whether this is the last operation in the transaction for this shape.
+
+                            Last operation in a transaction for the shape does not mean a last
+                            operation in the transaction for the database.
+
+                            Only present on operations that were received from the event stream.
+                            It's missing on initial query results and on compacted items.
+                        txids:
+                          type: array
+                          description: |-
+                            The list of transaction IDs that this operation was part of.
+
+                            Currently, this will only contain a single transaction ID, but future
+                            stream processors may merge operations from multiple transactions into a single
+                            operation in the event stream.
                     key:
                       type: string
                       description: Row ID
