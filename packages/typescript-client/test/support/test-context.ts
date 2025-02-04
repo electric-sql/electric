@@ -48,17 +48,17 @@ export const testWithDbClient = test.extend<{
       ) => {
         const baseUrl = inject(`baseUrl`)
         const url = new URL(`${baseUrl}/v1/shape`)
+        url.searchParams.set(`table`, table)
 
         if (options.handle) {
           url.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, options.handle)
-        } else {
-          url.searchParams.set(`table`, table)
         }
 
         const resp = await fetch(url.toString(), { method: `DELETE` })
+
         if (!resp.ok) {
           // if we've been passed a shape handle then we should expect this delete call to succeed.
-          if (!options.handle && resp.status === 404) {
+          if (resp.status === 404) {
             // the shape wasn't found, so maybe it wasn't created in the first place
           } else {
             console.error(

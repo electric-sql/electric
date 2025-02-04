@@ -46,10 +46,9 @@ defmodule Electric.Plug.DeleteShapePlug do
   defp truncate_or_delete_shape(%Plug.Conn{} = conn, _) do
     %{assigns: %{request: request}} = conn
 
-    if request.handle !== nil do
-      with :ok <- Shapes.clean_shape(request.handle, request.api) do
-        send_resp(conn, 202, "")
-      end
+    if !is_nil(request.handle) do
+      :ok = Shapes.clean_shape(request.handle, request.api)
+      send_resp(conn, 202, "")
     else
       send_resp(conn, 404, Jason.encode!(%{message: "Shape not found"}))
     end
