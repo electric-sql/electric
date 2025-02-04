@@ -14,7 +14,7 @@ defmodule Electric.Plug.DeleteShapePlug do
   plug :truncate_or_delete_shape
 
   defp allow_shape_deletion(%Plug.Conn{} = conn, _) do
-    if conn.assigns.config[:allow_shape_deletion] do
+    if get_in(conn.assigns.config[:api].allow_shape_deletion) do
       conn
     else
       conn

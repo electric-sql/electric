@@ -21,6 +21,7 @@ defmodule Electric.Shapes.Api do
     :stack_events_registry,
     :stack_id,
     :storage,
+    allow_shape_deletion: false,
     long_poll_timeout: 20_000,
     max_age: 60,
     stack_ready_timeout: 100,
