@@ -7,9 +7,13 @@ defmodule Electric.Shapes.Api.Delete do
   alias Electric.Shapes.Api.Response
 
   def validate_for_delete(api, params) do
-    with {:ok, request} <- validate_params_for_delete(api, params),
-         {:ok, request} <- load_shape_info_for_delete(request) do
-      {:ok, request}
+    if api.allow_shape_deletion do
+      with {:ok, request} <- validate_params_for_delete(api, params),
+           {:ok, request} <- load_shape_info_for_delete(request) do
+        {:ok, request}
+      end
+    else
+      {:error, Response.error(api, %{status: "DELETE not allowed"}, status: 405)}
     end
   end
 

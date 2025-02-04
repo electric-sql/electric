@@ -71,16 +71,16 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       :ok
     end
 
-    test "returns 404 if shape deletion is not allowed", ctx do
+    test "returns 405 if shape deletion is not allowed", ctx do
       conn =
         ctx
         |> conn("DELETE", "?table=.invalid_shape")
         |> call_delete_shape_plug(ctx, false)
 
-      assert conn.status == 404
+      assert conn.status == 405
 
       assert Jason.decode!(conn.resp_body) == %{
-               "status" => "Not found"
+               "status" => "DELETE not allowed"
              }
     end
 

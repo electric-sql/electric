@@ -59,7 +59,7 @@ defmodule Electric.Shapes.Api do
     Keyword.merge(config, api: api)
   end
 
-  defp validate_encoder!(api) do
+  defp validate_encoder!(%Api{} = api) do
     Map.update!(api, :encoder, &Electric.Shapes.Api.Encoder.validate!/1)
   end
 
@@ -76,7 +76,7 @@ defmodule Electric.Shapes.Api do
   """
   @spec validate(t(), %{(atom() | binary()) => term()}) ::
           {:ok, Request.t()} | {:error, Response.t()}
-  def validate(api, params) when is_configured(api) do
+  def validate(%Api{} = api, params) when is_configured(api) do
     with :ok <- hold_until_stack_ready(api) do
       with {:ok, request} <- validate_params(api, params),
            {:ok, request} <- load_shape_info(request) do
@@ -85,7 +85,7 @@ defmodule Electric.Shapes.Api do
     end
   end
 
-  def validate_for_delete(api, params) do
+  def validate_for_delete(%Api{} = api, params) do
     with :ok <- hold_until_stack_ready(api) do
       Api.Delete.validate_for_delete(api, params)
     end
@@ -100,7 +100,7 @@ defmodule Electric.Shapes.Api do
   end
 
   @doc false
-  def request_for_params(api, request_params, response \\ %Response{}) do
+  def request_for_params(%Api{} = api, request_params, response \\ %Response{}) do
     {:ok,
      %Request{
        api: api,

@@ -59,6 +59,7 @@ defmodule Electric.Shapes.ApiTest do
       long_poll_timeout: long_poll_timeout(ctx),
       max_age: max_age(ctx),
       stale_age: stale_age(ctx),
+      allow_shape_deletion: true,
       encoder: Electric.Shapes.Api.Encoder.Term
     )
   end
@@ -340,6 +341,17 @@ defmodule Electric.Shapes.ApiTest do
         )
 
       [admin_shape: admin_shape]
+    end
+
+    test "does not allow deletions if flag not set", ctx do
+      assert {:error, %{status: 405} = _response} =
+               Api.validate_for_delete(
+                 Map.put(ctx.api, :allow_shape_deletion, false),
+                 %{
+                   table: "public.users",
+                   where: "value = 'admin'"
+                 }
+               )
     end
 
     test "does not create a shape if one doesn't exist for the definition", ctx do

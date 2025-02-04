@@ -8,19 +8,8 @@ defmodule Electric.Plug.DeleteShapePlug do
   plug :fetch_query_params
   plug :put_resp_content_type, "application/json"
 
-  plug :allow_shape_deletion
   plug :validate_request
   plug :truncate_or_delete_shape
-
-  defp allow_shape_deletion(%Plug.Conn{} = conn, _) do
-    if get_in(conn.assigns.config[:api].allow_shape_deletion) do
-      conn
-    else
-      conn
-      |> send_resp(404, Jason.encode_to_iodata!(%{status: "Not found"}))
-      |> halt()
-    end
-  end
 
   defp validate_request(%Plug.Conn{assigns: %{config: config}} = conn, _) do
     api = Access.fetch!(config, :api)
@@ -30,7 +19,6 @@ defmodule Electric.Plug.DeleteShapePlug do
       |> Map.take(["table", "handle"])
       |> Map.put("offset", "-1")
 
-    # validate but don't seek - we don't need the latest shape offset information
     case Api.validate_for_delete(api, all_params) do
       {:ok, request} ->
         assign(conn, :request, request)
