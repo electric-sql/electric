@@ -57,7 +57,7 @@ defmodule Electric.Client.Message do
   end
 
   defmodule ChangeMessage do
-    defstruct [:key, :value, :headers, :offset, :request_timestamp]
+    defstruct [:key, :value, :headers, :request_timestamp]
 
     @type key :: String.t()
     @type value :: %{String.t() => binary()}
@@ -65,7 +65,6 @@ defmodule Electric.Client.Message do
             key: key(),
             value: value(),
             headers: Headers.t(),
-            offset: Offset.t(),
             request_timestamp: DateTime.t()
           }
 
@@ -74,7 +73,6 @@ defmodule Electric.Client.Message do
     def from_message(msg, handle, value_mapping_fun) do
       %{
         "headers" => headers,
-        "offset" => offset,
         "value" => raw_value
       } = msg
 
@@ -92,7 +90,6 @@ defmodule Electric.Client.Message do
 
       %__MODULE__{
         key: msg["key"],
-        offset: Client.Offset.from_string!(offset),
         headers: Headers.from_message(headers, handle),
         value: value
       }
