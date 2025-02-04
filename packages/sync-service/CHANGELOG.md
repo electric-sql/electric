@@ -1,5 +1,16 @@
 # @core/sync-service
 
+## 1.0.0-beta.11
+
+### Minor Changes
+
+- f1a9247: feat!: change the wire protocol to remove `offset` and add an explicit `lsn` header. Only valid offset now is the one provided in headers
+
+### Patch Changes
+
+- f1a9247: feat: add a special header to last operation in transaction for a given shape
+- f1a9247: feat: replace `txid` with `txids` header
+
 ## 1.0.0-beta.10
 
 ### Patch Changes

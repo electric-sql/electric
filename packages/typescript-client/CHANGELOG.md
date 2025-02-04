@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.0.0-beta.3
+
+### Minor Changes
+
+- f1a9247: feat!: change the wire protocol to remove `offset` and add an explicit `lsn` header. Only valid offset now is the one provided in headers
+
 ## 1.0.0-beta.2
 
 ### Patch Changes
