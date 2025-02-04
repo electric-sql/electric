@@ -161,7 +161,8 @@ defmodule Electric.MixProject do
       links: %{
         "Electric SQL" => "https://electric-sql.com",
         "Github" => @github_repo
-      }
+      },
+      files: ~w(lib .formatter.exs mix.exs README.md CHANGELOG.md LICENSE package.json)
     ]
   end
 
