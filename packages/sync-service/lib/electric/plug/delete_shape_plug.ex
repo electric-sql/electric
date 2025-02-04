@@ -1,7 +1,6 @@
 defmodule Electric.Plug.DeleteShapePlug do
   use Plug.Builder, copy_opts_to_assign: :config
 
-  alias Electric.Shapes
   alias Electric.Shapes.Api
 
   require Logger
@@ -47,8 +46,9 @@ defmodule Electric.Plug.DeleteShapePlug do
     %{assigns: %{request: request}} = conn
 
     if !is_nil(request.handle) do
-      :ok = Shapes.clean_shape(request.handle, request.api)
-      send_resp(conn, 202, "")
+      response = Api.delete_shape(request)
+
+      Api.Response.send(conn, response)
     else
       send_resp(conn, 404, Jason.encode!(%{message: "Shape not found"}))
     end

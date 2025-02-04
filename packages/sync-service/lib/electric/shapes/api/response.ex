@@ -1,5 +1,6 @@
 defmodule Electric.Shapes.Api.Response do
   alias Electric.Shapes.Api
+  alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
   require Logger
@@ -7,7 +8,7 @@ defmodule Electric.Shapes.Api.Response do
   defstruct [
     :handle,
     :offset,
-    :shape,
+    :shape_definition,
     chunked: false,
     up_to_date: false,
     status: 200,
@@ -20,7 +21,7 @@ defmodule Electric.Shapes.Api.Response do
   @type t() :: %__MODULE__{
           handle: nil | shape_handle(),
           offset: nil | Electric.Replication.LogOffset.t(),
-          shape: nil | Electric.Shapes.Shape.t(),
+          shape_definition: nil | Shape.t(),
           chunked: boolean(),
           up_to_date: boolean(),
           status: pos_integer(),
@@ -56,7 +57,7 @@ defmodule Electric.Shapes.Api.Response do
       args
       |> Keyword.put_new(:status, 400)
       |> Keyword.put(:body, Api.encode_message(request, message))
-      |> Keyword.put(:shape, get_in(request.params.shape_definition))
+      |> Keyword.put(:shape_definition, get_in(request.params.shape_definition))
 
     struct(__MODULE__, opts)
   end
@@ -84,7 +85,7 @@ defmodule Electric.Shapes.Api.Response do
 
   defp put_location_header(conn, %__MODULE__{status: 409} = response) do
     params = [
-      table: Electric.Utils.relation_to_sql(response.shape.root_table),
+      table: Electric.Utils.relation_to_sql(response.shape_definition.root_table),
       handle: response.handle,
       offset: "-1"
     ]

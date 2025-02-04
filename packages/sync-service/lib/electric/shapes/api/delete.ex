@@ -16,7 +16,7 @@ defmodule Electric.Shapes.Api.Delete do
   defp validate_params_for_delete(api, params) do
     with {:ok, request_params} <- Api.Params.validate_for_delete(api, params) do
       Api.request_for_params(api, request_params, %Response{
-        shape: request_params.shape_definition
+        shape_definition: request_params.shape_definition
       })
     end
   end

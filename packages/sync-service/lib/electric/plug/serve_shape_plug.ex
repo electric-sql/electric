@@ -7,7 +7,6 @@ defmodule Electric.Plug.ServeShapePlug do
 
   alias Electric.Plug.Utils
   alias Electric.Shapes.Api
-  alias Electric.Schema
   alias Electric.Replication.LogOffset
   alias Electric.Telemetry.OpenTelemetry
   alias Plug.Conn
@@ -55,19 +54,11 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  defp schema(shape) do
-    shape.table_info
-    |> Map.fetch!(shape.root_table)
-    |> Map.fetch!(:columns)
-    |> Schema.from_column_info(shape.selected_columns)
-    |> Jason.encode!()
-  end
-
   # Only adds schema header when not in live mode
   defp put_schema_header(conn, _) when not is_live_request(conn) do
     %{assigns: %{request: request}} = conn
-    shape = request.params.shape_definition
-    put_resp_header(conn, "electric-schema", schema(shape))
+    schema = Api.schema(request) |> Jason.encode!()
+    put_resp_header(conn, "electric-schema", schema)
   end
 
   defp put_schema_header(conn, _), do: conn

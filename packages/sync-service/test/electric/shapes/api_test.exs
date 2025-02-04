@@ -469,7 +469,7 @@ defmodule Electric.Shapes.ApiTest do
              ]
 
       assert response.handle == @test_shape_handle
-      assert response.shape == @test_shape
+      assert response.shape_definition == @test_shape
       assert response.offset == @first_offset
     end
 
@@ -526,7 +526,7 @@ defmodule Electric.Shapes.ApiTest do
              ]
 
       assert response.handle == @test_shape_handle
-      assert response.shape == @test_shape
+      assert response.shape_definition == @test_shape
       assert response.offset == next_next_offset
       refute response.up_to_date
     end

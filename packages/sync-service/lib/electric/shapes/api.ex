@@ -93,7 +93,9 @@ defmodule Electric.Shapes.Api do
 
   defp validate_params(api, params) do
     with {:ok, request_params} <- Api.Params.validate(api, params) do
-      request_for_params(api, request_params, %Response{shape: request_params.shape_definition})
+      request_for_params(api, request_params, %Response{
+        shape_definition: request_params.shape_definition
+      })
     end
   end
 
@@ -106,6 +108,13 @@ defmodule Electric.Shapes.Api do
        valid: true,
        response: response
      }}
+  end
+
+  @spec delete_shape(Request.t()) :: :ok | {:error, term()}
+  def delete_shape(%Request{handle: handle} = request) when is_binary(handle) do
+    :ok = Shapes.clean_shape(handle, request.api)
+
+    %Response{status: 202, body: []}
   end
 
   defp seek(%Request{} = request) do
@@ -428,6 +437,21 @@ defmodule Electric.Shapes.Api do
 
   defp encode(%Api{encoder: encoder}, type, message) when type in [:message, :log] do
     apply(encoder, type, [message])
+  end
+
+  def schema(%Request{params: params}) do
+    schema(params)
+  end
+
+  def schema(%{shape_definition: %Shapes.Shape{} = shape}) do
+    shape.table_info
+    |> Map.fetch!(shape.root_table)
+    |> Map.fetch!(:columns)
+    |> Electric.Schema.from_column_info(shape.selected_columns)
+  end
+
+  def schema(_) do
+    nil
   end
 
   @impl Access
