@@ -48,6 +48,18 @@ defmodule Electric.Application do
     publication_name = "electric_publication_#{replication_stream_id}"
     slot_name = "electric_slot_#{replication_stream_id}"
 
+    api_server =
+      if Electric.Config.get_env(:enable_http_api) do
+        [
+          {Bandit,
+           plug: {Electric.Plug.Router, router_opts},
+           port: Electric.Config.get_env(:service_port),
+           thousand_island_options: http_listener_options()}
+        ]
+      else
+        []
+      end
+
     # The root application supervisor starts the core global processes, including the HTTP
     # server and the database connection manager. The latter is responsible for establishing
     # all needed connections to the database (acquiring the exclusive access lock, opening a
@@ -78,16 +90,40 @@ defmodule Electric.Application do
             chunk_bytes_threshold: Electric.Config.get_env(:chunk_bytes_threshold),
             name: Electric.StackSupervisor
           },
-          {Electric.Telemetry.ApplicationTelemetry, []},
-          {Bandit,
-           plug: {Electric.Plug.Router, router_opts},
-           port: Electric.Config.get_env(:service_port),
-           thousand_island_options: http_listener_options()}
+          {Electric.Telemetry.ApplicationTelemetry, []}
         ],
+        api_server,
         prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
       ])
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Electric.Supervisor)
+  end
+
+  @doc """
+  Returns a configured Electric.Shapes.Api instance
+  """
+  def api(overrides \\ []) do
+    config =
+      Enum.reduce(
+        [
+          Electric.StackSupervisor.build_shared_opts(
+            stack_id: Electric.Config.get_env(:provided_database_id),
+            stack_events_registry: Registry.StackEvents,
+            storage: Electric.Config.get_env(:storage)
+          ),
+          [
+            long_poll_timeout: 20_000,
+            max_age: Electric.Config.get_env(:cache_max_age),
+            stale_age: Electric.Config.get_env(:cache_stale_age),
+            allow_shape_deletion: Electric.Config.get_env(:allow_shape_deletion?)
+          ],
+          overrides
+        ],
+        [],
+        &Keyword.merge(&2, &1)
+      )
+
+    Electric.Shapes.Api.configure!(config)
   end
 
   defp prometheus_endpoint(nil), do: []

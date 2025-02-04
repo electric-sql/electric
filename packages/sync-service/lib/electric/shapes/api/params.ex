@@ -10,6 +10,27 @@ defmodule Electric.Shapes.Api.Params do
   @tmp_compaction_flag :experimental_compaction
 
   @primary_key false
+  defmodule ColumnList do
+    use Ecto.Type
+
+    def type, do: {:array, :string}
+
+    def cast([_ | _] = columns) do
+      {:ok, Enum.map(columns, &to_string/1)}
+    end
+
+    def cast(columns) when is_binary(columns) do
+      with {:error, reason} <- Electric.Plug.Utils.parse_columns_param(columns) do
+        {:error, message: reason}
+      end
+    end
+
+    def cast(_), do: :error
+
+    def load([_ | _] = columns), do: {:ok, columns}
+
+    def dump([_ | _] = columns), do: {:ok, columns}
+  end
 
   embedded_schema do
     field(:table, :string)
@@ -17,7 +38,7 @@ defmodule Electric.Shapes.Api.Params do
     field(:handle, :string)
     field(:live, :boolean, default: false)
     field(:where, :string)
-    field(:columns, :string)
+    field(:columns, ColumnList)
     field(:shape_definition, :string)
     field(:replica, Ecto.Enum, values: [:default, :full], default: :default)
     field(@tmp_compaction_flag, :boolean, default: false)
@@ -30,7 +51,6 @@ defmodule Electric.Shapes.Api.Params do
     |> cast_params()
     |> validate_required([:table, :offset])
     |> cast_offset()
-    |> cast_columns()
     |> validate_handle_with_offset()
     |> validate_live_with_offset()
     |> cast_root_table(inspector: api.inspector)
@@ -50,7 +70,6 @@ defmodule Electric.Shapes.Api.Params do
       %{changes: %{table: _table}} = changeset ->
         changeset
         |> validate_required([:table])
-        |> cast_columns()
         |> cast_root_table(inspector: api.inspector)
         |> apply_action(:validate)
         |> convert_error(api)
@@ -68,9 +87,7 @@ defmodule Electric.Shapes.Api.Params do
 
   defp cast_params(params) do
     %__MODULE__{}
-    |> cast(params, __schema__(:fields) -- [:shape_definition],
-      message: fn _, _ -> "must be %{type}" end
-    )
+    |> cast(params, __schema__(:fields) -- [:shape_definition])
   end
 
   defp convert_error({:ok, params}, _api), do: {:ok, params}
@@ -97,21 +114,6 @@ defmodule Electric.Shapes.Api.Params do
 
       {:error, message} ->
         add_error(changeset, :offset, message)
-    end
-  end
-
-  def cast_columns(%Ecto.Changeset{valid?: false} = changeset), do: changeset
-
-  def cast_columns(%Ecto.Changeset{} = changeset) do
-    case fetch_field!(changeset, :columns) do
-      nil ->
-        changeset
-
-      columns ->
-        case Electric.Plug.Utils.parse_columns_param(columns) do
-          {:ok, parsed_cols} -> put_change(changeset, :columns, parsed_cols)
-          {:error, reason} -> add_error(changeset, :columns, reason)
-        end
     end
   end
 

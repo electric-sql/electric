@@ -154,6 +154,14 @@ defmodule Electric.Client.Stream do
     |> after_fetch()
   end
 
+  defp ensure_enum(body) do
+    case Enumerable.impl_for(body) do
+      nil -> List.wrap(body)
+      Enumerable.Map -> List.wrap(body)
+      _impl -> body
+    end
+  end
+
   defp handle_response(%Fetch.Response{status: status} = resp, stream)
        when status in 200..299 do
     shape_handle = shape_handle!(resp)
@@ -166,7 +174,7 @@ defmodule Electric.Client.Stream do
       |> Map.put(:offset, final_offset)
 
     resp.body
-    |> List.wrap()
+    |> ensure_enum()
     |> Enum.flat_map(&Message.parse(&1, shape_handle, final_offset, value_mapper_fun))
     |> Enum.map(&Map.put(&1, :request_timestamp, resp.request_timestamp))
     |> Enum.reduce_while(stream, &handle_msg/2)
