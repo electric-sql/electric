@@ -445,12 +445,16 @@ defmodule Electric.Shapes.Consumer do
       |> Stream.flat_map(
         &LogItems.from_change(&1, xid, Shape.pk(shape, &1.relation), shape.replica)
       )
-      |> Enum.flat_map_reduce(log_state, fn {offset, log_item},
-                                            %{
-                                              current_chunk_byte_size: chunk_size,
-                                              current_txn_bytes: txn_bytes
-                                            } = state ->
-        json_log_item = Jason.encode!(log_item)
+      |> Utils.flat_map_reduce_mark_last(log_state, fn {offset, log_item},
+                                                       last?,
+                                                       %{
+                                                         current_chunk_byte_size: chunk_size,
+                                                         current_txn_bytes: txn_bytes
+                                                       } = state ->
+        json_log_item =
+          if(last?, do: put_in(log_item, [:headers, :last], true), else: log_item)
+          |> Jason.encode!()
+
         item_byte_size = byte_size(json_log_item)
 
         state = %{state | current_txn_bytes: txn_bytes + item_byte_size}

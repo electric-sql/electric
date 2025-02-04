@@ -606,7 +606,8 @@ defmodule Electric.Plug.RouterTest do
                    "operation" => "delete",
                    "relation" => ["public", "serial_ids"],
                    "lsn" => op2_lsn,
-                   "op_position" => op2_op_position
+                   "op_position" => op2_op_position,
+                   "last" => true
                  },
                  "key" => ~s|"public"."serial_ids"/"3"|,
                  "value" => %{"id" => "3"}
