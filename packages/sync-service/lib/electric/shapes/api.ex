@@ -11,6 +11,24 @@ defmodule Electric.Shapes.Api do
 
   require Logger
 
+  @options [
+    inspector: [type: :mod_arg, required: true],
+    pg_id: [type: :string],
+    registry: [type: :atom, required: true],
+    shape_cache: [type: :mod_arg, required: true],
+    stack_events_registry: [type: :atom, required: true],
+    stack_id: [type: :string, required: true],
+    storage: [type: :mod_arg, required: true],
+    allow_shape_deletion: [type: :boolean],
+    long_poll_timeout: [type: :integer],
+    max_age: [type: :integer],
+    stack_ready_timeout: [type: :integer],
+    stale_age: [type: :integer],
+    encoder: [type: :atom]
+  ]
+  @schema NimbleOptions.new!(@options)
+  @option_keys Keyword.keys(@options) |> MapSet.new()
+
   defguardp is_configured(api) when api.configured
 
   defstruct [
@@ -32,6 +50,7 @@ defmodule Electric.Shapes.Api do
   ]
 
   @type t() :: %__MODULE__{}
+  @type options() :: [unquote(NimbleOptions.option_typespec(@schema))]
 
   # Aliasing for pattern matching
   @before_all_offset LogOffset.before_all()
@@ -42,13 +61,24 @@ defmodule Electric.Shapes.Api do
   # when using shapes api
   @behaviour Access
 
+  @doc false
+  def options_schema do
+    @schema
+  end
+
+  def configure!(opts) do
+    {api, _unused_opts} = configure(opts)
+    api
+  end
+
   def configure(opts) do
-    api = %__MODULE__{configured: true} |> struct(opts) |> validate_encoder!()
+    {valid, extra} = Keyword.split_with(opts, fn {k, _} -> MapSet.member?(@option_keys, k) end)
 
-    used_keys = api |> Map.from_struct() |> Map.keys()
-    unused_opts = Keyword.drop(opts, used_keys)
+    options = NimbleOptions.validate!(valid, @schema)
 
-    {api, unused_opts}
+    api = %__MODULE__{configured: true} |> struct(options) |> validate_encoder!()
+
+    {api, extra}
   end
 
   def plug_opts(opts) do

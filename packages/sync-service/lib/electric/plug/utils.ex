@@ -47,6 +47,10 @@ defmodule Electric.Plug.Utils do
     end)
   end
 
+  def parse_columns_param([col | _] = columns) when is_binary(col) do
+    {:ok, columns}
+  end
+
   @doc """
   Calculate the next interval that should be used for long polling based on the
   current time and previous interval used.

@@ -1,5 +1,5 @@
 defmodule Electric.ClientTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   @moduletag :capture_log
 
@@ -180,7 +180,9 @@ defmodule Electric.ClientTest do
       shape = ShapeDefinition.new!(ctx.tablename)
 
       on_exit(fn ->
-        Client.delete_shape(client, shape)
+        ExUnit.CaptureLog.capture_log(fn ->
+          Client.delete_shape(client, shape)
+        end)
       end)
 
       [client: client, shape: shape]
