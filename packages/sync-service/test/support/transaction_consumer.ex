@@ -45,7 +45,7 @@ defmodule Support.TransactionConsumer do
     {:manual, {id, from, parent}}
   end
 
-  def handle_events([txn], _from, {id, subscription, parent}) do
+  def handle_events([{txn, _ctx}], _from, {id, subscription, parent}) do
     send(parent, {__MODULE__, {id, self()}, [txn]})
     GenStage.ask(subscription, 1)
     {:noreply, [], {id, subscription, parent}}

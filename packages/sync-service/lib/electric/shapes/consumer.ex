@@ -188,7 +188,12 @@ defmodule Electric.Shapes.Consumer do
 
   # `Shapes.Dispatcher` only works with single-events, so we can safely assert
   # that here
-  def handle_events([%Changes.Relation{id: id}], _from, %{shape: %{root_table_id: id}} = state) do
+  def handle_events([{event, trace_context}], _from, state) do
+    OpenTelemetry.set_current_context(trace_context)
+    handle_event(event, state)
+  end
+
+  defp handle_event(%Changes.Relation{id: id}, %{shape: %{root_table_id: id}} = state) do
     %{shape: %{root_table: root_table}, inspector: inspector} = state
 
     Logger.info(
@@ -211,20 +216,20 @@ defmodule Electric.Shapes.Consumer do
   end
 
   # Buffer incoming transactions until we know our xmin
-  def handle_events([%Transaction{xid: xid}] = txns, _from, %{snapshot_xmin: nil} = state) do
+  defp handle_event(%Transaction{xid: xid} = txn, %{snapshot_xmin: nil} = state) do
     Logger.debug(fn ->
       "Consumer for #{state.shape_handle} buffering 1 transaction with xid #{xid}"
     end)
 
-    {:noreply, [], %{state | buffer: state.buffer ++ txns}}
+    {:noreply, [], %{state | buffer: state.buffer ++ [txn]}}
   end
 
-  def handle_events([%Transaction{}] = txns, _from, state) do
+  defp handle_event(%Transaction{} = txn, state) do
     OpenTelemetry.with_span(
       "shape_write.consumer.handle_txns",
       [snapshot_xmin: state.snapshot_xmin],
       state.stack_id,
-      fn -> handle_txns(txns, state) end
+      fn -> handle_txns([txn], state) end
     )
   end
 
