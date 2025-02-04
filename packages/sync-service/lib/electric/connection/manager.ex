@@ -550,7 +550,7 @@ defmodule Electric.Connection.Manager do
       step = current_connection_step(state)
       handle_continue(step, state)
     else
-      handle_connection_error(error, state, mode)
+      handle_connection_error({:passthrough, message}, state, mode)
     end
   end
 
@@ -567,6 +567,9 @@ defmodule Electric.Connection.Manager do
 
         %Postgrex.Error{postgres: %{message: message} = pg_error} ->
           message <> pg_error_extra_info(pg_error)
+
+        {:passthrough, message} ->
+          message
       end
 
     Logger.warning("Database connection in #{mode} mode failed: #{message}")
