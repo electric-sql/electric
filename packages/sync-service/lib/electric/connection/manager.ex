@@ -649,6 +649,12 @@ defmodule Electric.Connection.Manager do
          } = error,
          state
        ) do
+    Electric.StackSupervisor.dispatch_stack_event(
+      state.stack_events_registry,
+      state.stack_id,
+      {:database_slot_invalidated, %{error: error}}
+    )
+
     # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
     # process is waiting for the supervisor to shut down its children, one of which is the
     # manager process itself.
