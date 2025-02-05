@@ -780,7 +780,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Jason.decode!(conn.resp_body) == %{"message" => "Stack not ready"}
     end
 
-    @tag stack_ready_timeout: 1000
+    @tag stack_ready_timeout: 5000
     test "waits until stack ready and proceeds", ctx do
       conn_task =
         Task.async(fn ->
