@@ -89,6 +89,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
       atttypmod as type_mod,
       attnotnull as not_null,
       pg_type.typname as type,
+      pg_type.typtype as type_kind, -- e.g. an enum is kind 'e'
       elem_pg_type.typname as array_type, -- type of the element inside the array or nil if it's not an array
       format_type(pg_attribute.atttypid, pg_attribute.atttypmod) AS formatted_type,
       array_position(indkey, attnum) as pk_position
@@ -109,10 +110,28 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
       :table_not_found
     else
       columns = Enum.map(result.columns, &String.to_atom/1)
-      rows = Enum.map(result.rows, fn row -> Enum.zip(columns, row) |> Map.new() end)
+
+      rows =
+        Enum.map(result.rows, fn row ->
+          Enum.zip_with(columns, row, fn
+            :type_kind, val -> {:type_kind, map_type_kind(val)}
+            col, val -> {col, val}
+          end)
+          |> Map.new()
+        end)
+
       {:ok, rows}
     end
   end
+
+  @spec map_type_kind(String.t()) :: Electric.Postgres.Inspector.type_kind()
+  defp map_type_kind("b"), do: :base
+  defp map_type_kind("c"), do: :composite
+  defp map_type_kind("d"), do: :domain
+  defp map_type_kind("e"), do: :enum
+  defp map_type_kind("p"), do: :pseudo
+  defp map_type_kind("r"), do: :range
+  defp map_type_kind("m"), do: :multirange
 
   def clean(_, _), do: true
 end

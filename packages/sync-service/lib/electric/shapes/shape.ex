@@ -372,6 +372,7 @@ defmodule Electric.Shapes.Shape do
   defp storage_config_from_json(%{"compaction" => "disabled"}), do: %{compaction: :disabled}
 
   defp column_info_from_json({"type_id", [id, mod]}), do: {:type_id, {id, mod}}
+  defp column_info_from_json({"type_kind", kind}), do: {:type_kind, String.to_existing_atom(kind)}
   defp column_info_from_json({"type", type}), do: {:type, String.to_atom(type)}
   defp column_info_from_json({key, value}), do: {String.to_atom(key), value}
 end

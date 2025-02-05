@@ -4,11 +4,13 @@ defmodule Electric.Postgres.Inspector do
   @type relation :: Electric.relation()
   @type relation_id :: Electric.relation_id()
   @type relation_kind :: :ordinary_table | :partitioned_table
+  @type type_kind :: :base | :composite | :domain | :enum | :pseudo | :range | :multirange
 
   @type column_info :: %{
           name: String.t(),
           type: String.t(),
           type_mod: integer() | nil,
+          type_kind: type_kind(),
           formatted_type: String.t(),
           pk_position: non_neg_integer() | nil,
           type_id: {typid :: non_neg_integer(), typmod :: integer()},
@@ -93,6 +95,9 @@ defmodule Electric.Postgres.Inspector do
     Map.new(columns, fn
       %{name: name, array_type: arr_type} when not is_nil(arr_type) ->
         {[name], {:array, atom_type(arr_type)}}
+
+      %{name: name, type_kind: :enum, type: type_name} ->
+        {[name], {:enum, type_name}}
 
       %{name: name, type: type} ->
         {[name], atom_type(type)}

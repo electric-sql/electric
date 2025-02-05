@@ -746,6 +746,12 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
+  defp find_cast_in_function(_env, {:enum, _to_type}) do
+    # we can't convert arbitrary strings to enums until we know
+    # the DDL for the enum
+    :error
+  end
+
   defp find_cast_in_function(env, to_type) do
     case Map.fetch(env.funcs, {"#{to_type}", 1}) do
       {:ok, [%{args: [:text], implementation: impl}]} -> {:ok, impl}
@@ -753,9 +759,11 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp find_cast_out_function(env, to_type) do
-    case Map.fetch(env.funcs, {"#{to_type}out", 1}) do
-      {:ok, [%{args: [^to_type], implementation: impl}]} -> {:ok, impl}
+  defp find_cast_out_function(_env, {:enum, _enum_type}), do: {:ok, :as_is}
+
+  defp find_cast_out_function(env, from_type) do
+    case Map.fetch(env.funcs, {"#{from_type}out", 1}) do
+      {:ok, [%{args: [^from_type], implementation: impl}]} -> {:ok, impl}
       _ -> :error
     end
   end
@@ -799,6 +807,7 @@ defmodule Electric.Replication.Eval.Parser do
 
   defp readable(:unknown), do: "unknown"
   defp readable({:array, type}), do: "#{readable(type)}[]"
+  defp readable({:enum, type}), do: "enum #{type}"
   defp readable({:internal, type}), do: "internal type #{readable(type)}"
   defp readable(type), do: to_string(type)
 
