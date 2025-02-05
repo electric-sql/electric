@@ -77,11 +77,10 @@ defmodule Electric.Shapes.Api do
   @spec validate(t(), %{(atom() | binary()) => term()}) ::
           {:ok, Request.t()} | {:error, Response.t()}
   def validate(%Api{} = api, params) when is_configured(api) do
-    with :ok <- hold_until_stack_ready(api) do
-      with {:ok, request} <- validate_params(api, params),
-           {:ok, request} <- load_shape_info(request) do
-        {:ok, seek(request)}
-      end
+    with :ok <- hold_until_stack_ready(api),
+         {:ok, request} <- validate_params(api, params),
+         {:ok, request} <- load_shape_info(request) do
+      {:ok, seek(request)}
     end
   end
 
