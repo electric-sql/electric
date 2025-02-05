@@ -69,14 +69,6 @@ defmodule Electric.Connection.Manager do
     ]
   end
 
-  defmodule ConnectionBackoff do
-    defstruct [
-      :backoff,
-      :retries_started_at,
-      :timer_ref
-    ]
-  end
-
   use GenServer
 
   require Logger
@@ -193,7 +185,11 @@ defmodule Electric.Connection.Manager do
         timeline_opts: timeline_opts,
         shape_cache_opts: shape_cache_opts,
         pg_lock_acquired: false,
-        connection_backoff: %ConnectionBackoff{backoff: :backoff.init(1000, 10_000)},
+        connection_backoff: %{
+          backoff: :backoff.init(1000, 10_000),
+          retries_started_at: nil,
+          timer_ref: nil
+        },
         stack_id: Keyword.fetch!(opts, :stack_id),
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
         tweaks: Keyword.fetch!(opts, :tweaks),
@@ -367,11 +363,11 @@ defmodule Electric.Connection.Manager do
   @impl true
   def handle_info(
         {:timeout, tref, step},
-        %{connection_backoff: %ConnectionBackoff{timer_ref: tref} = conn_backoff} = state
+        %{connection_backoff: %{timer_ref: tref} = conn_backoff} = state
       ) do
     state = %State{
       state
-      | connection_backoff: %ConnectionBackoff{conn_backoff | timer_ref: nil}
+      | connection_backoff: %{conn_backoff | timer_ref: nil}
     }
 
     handle_continue(step, state)
@@ -656,7 +652,7 @@ defmodule Electric.Connection.Manager do
   defp schedule_reconnection(
          step,
          %State{
-           connection_backoff: %ConnectionBackoff{
+           connection_backoff: %{
              backoff: backoff,
              retries_started_at: retries_started_at
            }
@@ -668,7 +664,7 @@ defmodule Electric.Connection.Manager do
 
     %State{
       state
-      | connection_backoff: %ConnectionBackoff{
+      | connection_backoff: %{
           backoff: backoff,
           retries_started_at: retries_started_at || System.monotonic_time(:millisecond),
           timer_ref: tref
@@ -677,29 +673,29 @@ defmodule Electric.Connection.Manager do
   end
 
   # If total backoff time is 0 then there were no reconnection attempts
-  defp mark_connection_succeeded(
-         %State{connection_backoff: %ConnectionBackoff{retries_started_at: nil}} = state
-       ),
-       do: state
+  defp mark_connection_succeeded(%State{connection_backoff: %{retries_started_at: nil}} = state),
+    do: state
 
   # Otherwise, reset the backoff and total backoff time
-  defp mark_connection_succeeded(
-         %State{connection_backoff: %ConnectionBackoff{backoff: backoff}} = state
-       ) do
+  defp mark_connection_succeeded(%State{connection_backoff: %{backoff: backoff}} = state) do
     {_, backoff} = :backoff.succeed(backoff)
     Logger.info("Reconnection succeeded after #{inspect(total_retry_time(state))}ms")
 
     %State{
       state
-      | connection_backoff: %ConnectionBackoff{backoff: backoff}
+      | connection_backoff: %{
+          state.connection_backoff
+          | backoff: backoff,
+            retries_started_at: nil
+        }
     }
   end
 
-  defp total_retry_time(%State{connection_backoff: %ConnectionBackoff{retries_started_at: nil}}),
+  defp total_retry_time(%State{connection_backoff: %{retries_started_at: nil}}),
     do: 0
 
   defp total_retry_time(%State{
-         connection_backoff: %ConnectionBackoff{retries_started_at: retries_started_at}
+         connection_backoff: %{retries_started_at: retries_started_at}
        }),
        do: retries_started_at - System.monotonic_time(:millisecond)
 
