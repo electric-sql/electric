@@ -56,7 +56,7 @@ defmodule Electric.Shapes.Api do
   def plug_opts(opts) do
     {api, config} = configure(opts)
 
-    Keyword.merge(config, api: api)
+    Keyword.put(config, :api, api)
   end
 
   defp validate_encoder!(%Api{} = api) do
@@ -106,7 +106,6 @@ defmodule Electric.Shapes.Api do
      %Request{
        api: api,
        params: request_params,
-       valid: true,
        response: response
      }}
   end
@@ -173,7 +172,7 @@ defmodule Electric.Shapes.Api do
        )
        when (is_nil(shape_handle) or shape_handle == active_shape_handle) and
               is_log_offset_lt(last_offset, offset) do
-    {:error, Response.error(request, @offset_out_of_bounds)}
+    {:error, Response.invalid_request(request, errors: @offset_out_of_bounds)}
   end
 
   defp handle_shape_info(
@@ -184,9 +183,8 @@ defmodule Electric.Shapes.Api do
     # We found a shape that matches the shape definition
     # and the shape has the same ID as the shape handle provided by the user
     {:ok,
-     Map.update!(
+     Request.update_response(
        %{request | handle: active_shape_handle, last_offset: last_offset},
-       :response,
        &%{&1 | handle: active_shape_handle}
      )}
   end
@@ -232,7 +230,7 @@ defmodule Electric.Shapes.Api do
           :ok
       after
         api.stack_ready_timeout ->
-          {:error, Response.error(api, %{message: "Stack not ready"}, status: 503)}
+          {:error, Response.error(api, "Stack not ready", status: 503)}
       end
     end
   end
@@ -274,9 +272,8 @@ defmodule Electric.Shapes.Api do
     chunk_end_offset =
       Shapes.get_chunk_end_log_offset(api, handle, offset) || last_offset
 
-    Map.update!(
+    Request.update_response(
       %{request | chunk_end_offset: chunk_end_offset},
-      :response,
       &%{&1 | offset: chunk_end_offset}
     )
   end
@@ -292,22 +289,21 @@ defmodule Electric.Shapes.Api do
     # Also if client is requesting the start of the log, we don't set `up-to-date`
     # here either as we want to set a long max-age on the cache-control.
     if LogOffset.compare(chunk_end_offset, last_offset) == :lt || offset == @before_all_offset do
-      Map.update!(request, :response, &%{&1 | up_to_date: false})
+      Request.update_response(request, &%{&1 | up_to_date: false})
     else
-      Map.update!(request, :response, &%{&1 | up_to_date: true})
+      Request.update_response(request, &%{&1 | up_to_date: true})
     end
   end
 
   @doc """
   Return shape log data.
   """
+  @spec serve_shape_log(Request.t()) :: Response.t()
   def serve_shape_log(%Request{} = request) do
     validate_serve_usage!(request)
 
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
-      request
-      |> do_serve_shape_log()
-      |> then(fn %{response: response} -> response end)
+      do_serve_shape_log(request)
     end)
   end
 
@@ -331,7 +327,8 @@ defmodule Electric.Shapes.Api do
       handle: shape_handle,
       chunk_end_offset: chunk_end_offset,
       params: %{offset: offset, live: live?},
-      api: api
+      api: api,
+      response: response
     } = request
 
     case Shapes.get_merged_log_stream(api, shape_handle, since: offset, up_to: chunk_end_offset) do
@@ -343,24 +340,17 @@ defmodule Electric.Shapes.Api do
         else
           body = Stream.concat([log, maybe_up_to_date(request)])
 
-          Map.update!(request, :response, &%{&1 | chunked: true, body: encode_log(request, body)})
+          %{response | chunked: true, body: encode_log(request, body)}
         end
 
       {:error, error} ->
-        {:current_stacktrace, [_ | stacktrace]} = Process.info(self(), :current_stacktrace)
+        # Errors will be logged further up the stack
 
-        %{
-          request
-          | response:
-              Response.error(
-                request,
-                %{
-                  error:
-                    "Unable retrieve shape log:\n#{Exception.format(:error, error, stacktrace)}"
-                },
-                status: 500
-              )
-        }
+        Response.error(
+          request,
+          "Unable retrieve shape log: #{Exception.format(:error, error, [])}",
+          status: 500
+        )
     end
   end
 
@@ -377,7 +367,7 @@ defmodule Electric.Shapes.Api do
       {^ref, :new_changes, latest_log_offset} ->
         # Stream new log since currently "held" offset
         %{request | last_offset: latest_log_offset, chunk_end_offset: latest_log_offset}
-        |> Map.update!(:response, &%{&1 | offset: latest_log_offset})
+        |> Request.update_response(&%{&1 | offset: latest_log_offset})
         |> determine_up_to_date()
         |> do_serve_shape_log()
 
@@ -398,13 +388,15 @@ defmodule Electric.Shapes.Api do
   end
 
   defp empty_response(%Request{} = request) do
-    request
-    |> update_attrs(%{ot_is_empty_response: true})
-    |> Map.update!(:response, &%{&1 | status: 204, body: encode_log(request, [@up_to_date])})
+    %{response: response} = update_attrs(request, %{ot_is_empty_response: true})
+
+    %{response | status: 204, body: encode_log(request, [@up_to_date])}
   end
 
-  defp update_attrs(%Request{response: response} = request, attrs) do
-    %{request | response: Map.update!(response, :trace_attrs, &Map.merge(&1, attrs))}
+  defp update_attrs(%Request{} = request, attrs) do
+    Request.update_response(request, fn response ->
+      Map.update!(response, :trace_attrs, &Map.merge(&1, attrs))
+    end)
   end
 
   defp maybe_up_to_date(%Request{response: %{up_to_date: true}}) do

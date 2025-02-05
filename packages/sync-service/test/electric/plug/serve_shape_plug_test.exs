@@ -101,9 +101,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "table" => [
-                 "Invalid zero-length delimited identifier"
-               ]
+               "message" => "Invalid request",
+               "errors" => %{
+                 "table" => [
+                   "Invalid zero-length delimited identifier"
+                 ]
+               }
              }
     end
 
@@ -115,7 +118,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 400
 
-      assert Jason.decode!(conn.resp_body) == %{"offset" => ["has invalid format"]}
+      assert Jason.decode!(conn.resp_body) == %{
+               "message" => "Invalid request",
+               "errors" => %{
+                 "offset" => ["has invalid format"]
+               }
+             }
     end
 
     test "returns 400 when table param is missing", ctx do
@@ -126,7 +134,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 400
 
-      assert %{"table" => ["can't be blank"]} = Jason.decode!(conn.resp_body)
+      assert %{
+               "message" => "Invalid request",
+               "errors" => %{
+                 "table" => ["can't be blank"]
+               }
+             } = Jason.decode!(conn.resp_body)
     end
 
     test "returns 400 when table does not exist", ctx do
@@ -140,7 +153,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "table" => ["table not found"]
+               "message" => "Invalid request",
+               "errors" => %{
+                 "table" => ["table not found"]
+               }
              }
     end
 
@@ -153,7 +169,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "handle" => ["can't be blank when offset != -1"]
+               "message" => "Invalid request",
+               "errors" => %{
+                 "handle" => ["can't be blank when offset != -1"]
+               }
              }
     end
 
@@ -177,7 +196,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "offset" => ["out of bounds for this shape"]
+               "message" => "Invalid request",
+               "errors" => %{
+                 "offset" => ["out of bounds for this shape"]
+               }
              }
     end
 
@@ -194,7 +216,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "live" => ["can't be true when offset == -1"]
+               "message" => "Invalid request",
+               "errors" => %{
+                 "live" => ["can't be true when offset == -1"]
+               }
              }
     end
 
@@ -673,7 +698,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "columns" => ["Must include all primary key columns, missing: id"]
+               "message" => "Invalid request",
+               "errors" => %{
+                 "columns" => ["Must include all primary key columns, missing: id"]
+               }
              }
     end
 
@@ -686,7 +714,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "columns" => ["The following columns could not be found: invalid"]
+               "message" => "Invalid request",
+               "errors" => %{
+                 "columns" => ["The following columns could not be found: invalid"]
+               }
              }
     end
 

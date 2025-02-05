@@ -10,8 +10,7 @@ defmodule Electric.Shapes.Api.Request do
     :new_changes_pid,
     api: %Api{},
     params: %Api.Params{},
-    response: %Api.Response{},
-    valid: false
+    response: %Api.Response{}
   ]
 
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
@@ -23,7 +22,11 @@ defmodule Electric.Shapes.Api.Request do
           new_changes_pid: nil | pid(),
           api: Api.t(),
           params: Api.Params.t(),
-          response: Api.Response.t(),
-          valid: boolean()
+          response: Api.Response.t()
         }
+
+  @spec update_response(t(), (Api.Response.t() -> Api.Response.t())) :: t()
+  def update_response(%{response: %Api.Response{} = response} = request, fun) do
+    %{request | response: fun.(response)}
+  end
 end

@@ -80,7 +80,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       assert conn.status == 405
 
       assert Jason.decode!(conn.resp_body) == %{
-               "status" => "DELETE not allowed"
+               "message" => "DELETE not allowed"
              }
     end
 
@@ -93,9 +93,12 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "table" => [
-                 "Invalid zero-length delimited identifier"
-               ]
+               "message" => "Invalid request",
+               "errors" => %{
+                 "table" => [
+                   "Invalid zero-length delimited identifier"
+                 ]
+               }
              }
     end
 
@@ -108,9 +111,12 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "handle" => [
-                 "can't be blank when shape definition is missing"
-               ]
+               "message" => "Invalid request",
+               "errors" => %{
+                 "handle" => [
+                   "can't be blank when shape definition is missing"
+                 ]
+               }
              }
     end
 

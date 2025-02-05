@@ -15,7 +15,7 @@ defmodule Electric.Shapes.Api.Delete do
         {:ok, request}
       end
     else
-      {:error, Response.error(api, %{status: "DELETE not allowed"}, status: 405)}
+      {:error, Response.error(api, "DELETE not allowed", status: 405)}
     end
   end
 
@@ -57,12 +57,12 @@ defmodule Electric.Shapes.Api.Delete do
          &%{&1 | handle: handle}
        )}
     else
-      {:error, Response.error(request, %{message: "No existing shape found"}, status: 404)}
+      {:error, Response.error(request, "No existing shape found", status: 404)}
     end
   end
 
   defp handle_shape_info_for_delete(nil, %Request{} = request) do
-    {:error, Response.error(request, %{message: "No existing shape found"}, status: 404)}
+    {:error, Response.error(request, "No existing shape found", status: 404)}
   end
 
   # handle in params does not match handle of existing shape matching definition

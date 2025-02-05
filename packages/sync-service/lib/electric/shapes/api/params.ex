@@ -83,7 +83,7 @@ defmodule Electric.Shapes.Api.Params do
         end)
       end)
 
-    {:error, Api.Response.error(api, reason)}
+    {:error, Api.Response.invalid_request(api, errors: reason)}
   end
 
   def cast_offset(%Ecto.Changeset{valid?: false} = changeset), do: changeset

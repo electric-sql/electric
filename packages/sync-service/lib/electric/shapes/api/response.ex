@@ -47,7 +47,7 @@ defmodule Electric.Shapes.Api.Response do
     opts =
       args
       |> Keyword.put_new(:status, 400)
-      |> Keyword.put(:body, Api.encode_message(api, message))
+      |> Keyword.put(:body, error_body(api, message, args))
 
     struct(__MODULE__, opts)
   end
@@ -56,10 +56,29 @@ defmodule Electric.Shapes.Api.Response do
     opts =
       args
       |> Keyword.put_new(:status, 400)
-      |> Keyword.put(:body, Api.encode_message(request, message))
-      |> Keyword.put(:shape_definition, get_in(request.params.shape_definition))
+      |> Keyword.put(:body, error_body(request, message, args))
+      |> Keyword.put(:shape_definition, request.params.shape_definition)
 
     struct(__MODULE__, opts)
+  end
+
+  def invalid_request(api_or_request, args) do
+    error(api_or_request, "Invalid request", args)
+  end
+
+  defp error_body(api_or_request, message, args) when is_binary(message) do
+    error_body(api_or_request, %{message: message}, args)
+  end
+
+  defp error_body(api_or_request, message, args) do
+    body =
+      if errors = Keyword.get(args, :errors) do
+        Map.put(message, :errors, errors)
+      else
+        message
+      end
+
+    Api.encode_message(api_or_request, body)
   end
 
   @spec send(Plug.Conn.t(), t()) :: Plug.Conn.t()

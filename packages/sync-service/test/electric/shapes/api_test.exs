@@ -90,9 +90,12 @@ defmodule Electric.Shapes.ApiTest do
                Api.validate(ctx.api, %{table: ".invalid_shape", offset: "-1"})
 
       assert response_body(response) == %{
-               table: [
-                 "Invalid zero-length delimited identifier"
-               ]
+               message: "Invalid request",
+               errors: %{
+                 table: [
+                   "Invalid zero-length delimited identifier"
+                 ]
+               }
              }
     end
 
@@ -100,21 +103,36 @@ defmodule Electric.Shapes.ApiTest do
       assert {:error, %{status: 400} = response} =
                Api.validate(ctx.api, %{table: "foo", offset: "invalid"})
 
-      assert response_body(response) == %{offset: ["has invalid format"]}
+      assert response_body(response) == %{
+               message: "Invalid request",
+               errors: %{
+                 offset: ["has invalid format"]
+               }
+             }
     end
 
     test "returns error when table param is missing", ctx do
       assert {:error, %{status: 400} = response} =
                Api.validate(ctx.api, %{offset: "-1"})
 
-      assert response_body(response) == %{table: ["can't be blank"]}
+      assert response_body(response) == %{
+               message: "Invalid request",
+               errors: %{
+                 table: ["can't be blank"]
+               }
+             }
     end
 
     test "returns error when table does not exist", ctx do
       assert {:error, %{status: 400} = response} =
                Api.validate(ctx.api, %{table: "_val1d_schëmaΦ$.Φtàble", offset: "-1"})
 
-      assert response_body(response) == %{table: ["table not found"]}
+      assert response_body(response) == %{
+               message: "Invalid request",
+               errors: %{
+                 table: ["table not found"]
+               }
+             }
     end
 
     test "returns error for missing shape_handle when offset != -1", ctx do
@@ -124,7 +142,12 @@ defmodule Electric.Shapes.ApiTest do
                  %{table: "public.users", offset: "#{LogOffset.first()}"}
                )
 
-      assert response_body(response) == %{handle: ["can't be blank when offset != -1"]}
+      assert response_body(response) == %{
+               message: "Invalid request",
+               errors: %{
+                 handle: ["can't be blank when offset != -1"]
+               }
+             }
     end
 
     test "returns error for live request when offset == -1", ctx do
@@ -138,7 +161,12 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert response_body(response) == %{live: ["can't be true when offset == -1"]}
+      assert response_body(response) == %{
+               message: "Invalid request",
+               errors: %{
+                 live: ["can't be true when offset == -1"]
+               }
+             }
     end
 
     test "returns error when offset is out of bounds", ctx do
@@ -159,7 +187,12 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert response_body(response) == %{offset: ["out of bounds for this shape"]}
+      assert response_body(response) == %{
+               message: "Invalid request",
+               errors: %{
+                 offset: ["out of bounds for this shape"]
+               }
+             }
     end
 
     test "the shape handle does not match the shape definition", ctx do
@@ -279,7 +312,10 @@ defmodule Electric.Shapes.ApiTest do
                )
 
       assert response_body(response) == %{
-               columns: ["Must include all primary key columns, missing: id"]
+               message: "Invalid request",
+               errors: %{
+                 columns: ["Must include all primary key columns, missing: id"]
+               }
              }
     end
 
