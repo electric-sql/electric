@@ -114,7 +114,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
       rows =
         Enum.map(result.rows, fn row ->
           Enum.zip_with(columns, row, fn
-            :type_kind, val -> {:type_kind, map_type_kind(val)}
+            :type_kind, val -> {:type_kind, parse_type_kind(val)}
             col, val -> {col, val}
           end)
           |> Map.new()
@@ -124,14 +124,14 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
     end
   end
 
-  @spec map_type_kind(String.t()) :: Electric.Postgres.Inspector.type_kind()
-  defp map_type_kind("b"), do: :base
-  defp map_type_kind("c"), do: :composite
-  defp map_type_kind("d"), do: :domain
-  defp map_type_kind("e"), do: :enum
-  defp map_type_kind("p"), do: :pseudo
-  defp map_type_kind("r"), do: :range
-  defp map_type_kind("m"), do: :multirange
+  @spec parse_type_kind(String.t()) :: Electric.Postgres.Inspector.type_kind()
+  defp parse_type_kind("b"), do: :base
+  defp parse_type_kind("c"), do: :composite
+  defp parse_type_kind("d"), do: :domain
+  defp parse_type_kind("e"), do: :enum
+  defp parse_type_kind("p"), do: :pseudo
+  defp parse_type_kind("r"), do: :range
+  defp parse_type_kind("m"), do: :multirange
 
   def clean(_, _), do: true
 end
