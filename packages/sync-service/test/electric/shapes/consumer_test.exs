@@ -19,6 +19,8 @@ defmodule Electric.Shapes.ConsumerTest do
 
   import Mox
 
+  @receive_timeout 1_000
+
   @shape_handle1 "#{__MODULE__}-shape1"
   @shape1 Shape.new!("public.test_table",
             inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
@@ -120,7 +122,7 @@ defmodule Electric.Shapes.ConsumerTest do
           |> expect(:set_snapshot_xmin, 1, fn _, ^shape_handle, _ -> :ok end)
           |> expect(:mark_snapshot_started, 1, fn _, ^shape_handle -> :ok end)
           |> allow(self(), fn ->
-            Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
+            Consumer.whereis(ctx.stack_id, shape_handle)
           end)
 
           {:ok, consumer} =
@@ -147,7 +149,9 @@ defmodule Electric.Shapes.ConsumerTest do
             )
 
           assert_receive {Support.TestStorage, :set_shape_definition, ^shape_handle, ^shape}
-
+          # Wait for the virtual snapshot to have started to avoid overriding any of the
+          # defined Mox expectations
+          :started = GenServer.call(Consumer.name(ctx.stack_id, shape_handle), :await_snapshot_start)
           consumer
         end
 
@@ -186,14 +190,14 @@ defmodule Electric.Shapes.ConsumerTest do
         })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
-      assert_receive {^ref, :new_changes, ^last_log_offset}, 1000
+      assert_receive {^ref, :new_changes, ^last_log_offset}, @receive_timeout
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
 
       txn2 = %{txn | xid: xid}
 
       assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.producer)
-      assert_receive {^ref, :new_changes, ^last_log_offset}, 1000
+      assert_receive {^ref, :new_changes, ^last_log_offset}, @receive_timeout
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
     end
@@ -243,8 +247,8 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
 
-      assert_receive {^ref1, :new_changes, ^last_log_offset}, 1000
-      assert_receive {^ref2, :new_changes, ^last_log_offset}, 1000
+      assert_receive {^ref1, :new_changes, ^last_log_offset}, @receive_timeout
+      assert_receive {^ref2, :new_changes, ^last_log_offset}, @receive_timeout
 
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1,
                       [{_offset, _key, _type, serialized_record}]}
@@ -415,8 +419,8 @@ defmodule Electric.Shapes.ConsumerTest do
         })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
+      assert_receive {^ref, :new_changes, ^last_log_offset}, @receive_timeout
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
-      assert_receive {^ref, :new_changes, ^last_log_offset}, 1000
     end
 
     test "does not clean shapes if relation didn't change", ctx do
