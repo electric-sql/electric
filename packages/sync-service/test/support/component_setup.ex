@@ -146,7 +146,8 @@ defmodule Support.ComponentSetup do
     {:ok, _} =
       ShapeLogCollector.start_link(
         stack_id: ctx.stack_id,
-        inspector: ctx.inspector
+        inspector: ctx.inspector,
+        persistent_kv: ctx.persistent_kv
       )
 
     %{shape_log_collector: ShapeLogCollector.name(ctx.stack_id)}
@@ -241,7 +242,8 @@ defmodule Support.ComponentSetup do
       Electric.StackSupervisor.build_shared_opts(
         stack_id: ctx.stack_id,
         stack_events_registry: ctx.stack_events_registry,
-        storage: ctx.storage
+        storage: ctx.storage,
+        persistent_kv: ctx.persistent_kv
       )
     )
     |> Keyword.merge(overrides)

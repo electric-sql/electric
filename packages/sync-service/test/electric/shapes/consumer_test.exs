@@ -78,7 +78,7 @@ defmodule Electric.Shapes.ConsumerTest do
   defp run_with_conn_noop(conn, cb), do: cb.(conn)
 
   describe "event handling" do
-    setup [:with_in_memory_storage]
+    setup [:with_in_memory_storage, :with_persistent_kv]
 
     setup(ctx) do
       shapes = Map.get(ctx, :shapes, %{@shape_handle1 => @shape1, @shape_handle2 => @shape2})
@@ -109,6 +109,7 @@ defmodule Electric.Shapes.ConsumerTest do
         ShapeLogCollector.start_link(
           stack_id: ctx.stack_id,
           demand: :forward,
+          persistent_kv: ctx.persistent_kv,
           inspector:
             Support.StubInspector.new([
               %{name: "id", type: "int8", pk_position: 0}
@@ -650,6 +651,7 @@ defmodule Electric.Shapes.ConsumerTest do
       {Support.ComponentSetup, :with_registry},
       {Support.ComponentSetup, :with_cub_db_storage},
       {Support.ComponentSetup, :with_log_chunking},
+      {Support.ComponentSetup, :with_persistent_kv},
       {Support.ComponentSetup, :with_shape_log_collector},
       {Support.ComponentSetup, :with_noop_publication_manager}
     ]

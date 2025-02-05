@@ -23,6 +23,11 @@ defmodule Electric.Application do
 
     storage = Electric.Config.get_env(:storage)
 
+    {kv_module, kv_fun, kv_params} =
+      Electric.Config.get_env(:persistent_kv)
+
+    persistent_kv = apply(kv_module, kv_fun, [kv_params])
+
     router_opts =
       Electric.Shapes.Api.plug_opts(
         [
@@ -34,14 +39,11 @@ defmodule Electric.Application do
           Electric.StackSupervisor.build_shared_opts(
             stack_id: stack_id,
             stack_events_registry: Registry.StackEvents,
-            storage: storage
+            storage: storage,
+            persistent_kv: persistent_kv
           )
       )
 
-    {kv_module, kv_fun, kv_params} =
-      Electric.Config.get_env(:persistent_kv)
-
-    persistent_kv = apply(kv_module, kv_fun, [kv_params])
     replication_stream_id = Electric.Config.get_env(:replication_stream_id)
     publication_name = "electric_publication_#{replication_stream_id}"
     slot_name = "electric_slot_#{replication_stream_id}"

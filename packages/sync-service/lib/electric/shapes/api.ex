@@ -17,6 +17,7 @@ defmodule Electric.Shapes.Api do
     :inspector,
     :pg_id,
     :registry,
+    :persistent_kv,
     :shape_cache,
     :stack_events_registry,
     :stack_id,
@@ -34,9 +35,6 @@ defmodule Electric.Shapes.Api do
 
   # Aliasing for pattern matching
   @before_all_offset LogOffset.before_all()
-
-  @up_to_date %{headers: %{control: "up-to-date"}}
-  @up_to_date_json Jason.encode!(@up_to_date)
   @offset_out_of_bounds %{offset: ["out of bounds for this shape"]}
   @must_refetch [%{headers: %{control: "must-refetch"}}]
 
@@ -338,7 +336,20 @@ defmodule Electric.Shapes.Api do
           |> update_attrs(%{ot_is_immediate_response: false})
           |> hold_until_change()
         else
-          body = Stream.concat([log, maybe_up_to_date(request)])
+          global_last_seen_lsn = get_global_last_seen_lsn(request)
+
+          up_to_date_lsn =
+            if live? do
+              # In live mode, if we've gotten an actual update and are here and not in `empty_response`,
+              # then for this shape and this request we trust the locally last seen LSN.
+              chunk_end_offset.tx_offset
+            else
+              # In non-live mode, we're reading from disk. We trust the global max because it's updated
+              # after all disk writes. We take the max because we might be reading from disk before a global update.
+              max(global_last_seen_lsn, chunk_end_offset.tx_offset)
+            end
+
+          body = Stream.concat([log, maybe_up_to_date(request, up_to_date_lsn)])
 
           %{response | chunked: true, body: encode_log(request, body)}
         end
@@ -390,7 +401,24 @@ defmodule Electric.Shapes.Api do
   defp empty_response(%Request{} = request) do
     %{response: response} = update_attrs(request, %{ot_is_empty_response: true})
 
-    %{response | status: 204, body: encode_log(request, [@up_to_date])}
+    %{
+      response
+      | status: 204,
+        body: encode_log(request, [up_to_date_ctl(get_global_last_seen_lsn(request))])
+    }
+  end
+
+  defp get_global_last_seen_lsn(%Request{} = request) do
+    case Electric.PersistentKV.get(
+           request.api.persistent_kv,
+           "#{request.api.stack_id}:last_processed_lsn"
+         ) do
+      {:ok, up_to_date_lsn} ->
+        up_to_date_lsn
+
+      {:error, :not_found} ->
+        0
+    end
   end
 
   defp update_attrs(%Request{} = request, attrs) do
@@ -399,12 +427,16 @@ defmodule Electric.Shapes.Api do
     end)
   end
 
-  defp maybe_up_to_date(%Request{response: %{up_to_date: true}}) do
-    [@up_to_date_json]
+  defp maybe_up_to_date(%Request{response: %{up_to_date: true}}, up_to_date_lsn) do
+    [up_to_date_ctl(up_to_date_lsn)]
   end
 
-  defp maybe_up_to_date(%Request{response: %{up_to_date: false}}) do
+  defp maybe_up_to_date(%Request{response: %{up_to_date: false}}, _) do
     []
+  end
+
+  defp up_to_date_ctl(up_to_date_lsn) do
+    %{headers: %{control: "up-to-date", global_last_seen_lsn: up_to_date_lsn}}
   end
 
   defp with_span(%Request{} = request, name, attributes \\ [], fun) do

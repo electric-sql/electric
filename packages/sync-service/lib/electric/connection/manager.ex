@@ -62,6 +62,7 @@ defmodule Electric.Connection.Manager do
       # Registry used for stack events
       :stack_events_registry,
       :tweaks,
+      :persistent_kv,
       :ipv6_enabled,
       awaiting_active: [],
       drop_slot_requested: false,
@@ -193,6 +194,7 @@ defmodule Electric.Connection.Manager do
         stack_id: Keyword.fetch!(opts, :stack_id),
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
         tweaks: Keyword.fetch!(opts, :tweaks),
+        persistent_kv: Keyword.fetch!(opts, :persistent_kv),
         ipv6_enabled: connection_opts[:ipv6]
       }
 
@@ -331,7 +333,8 @@ defmodule Electric.Connection.Manager do
             pool_opts: state.pool_opts,
             replication_opts: state.replication_opts,
             stack_events_registry: state.stack_events_registry,
-            tweaks: state.tweaks
+            tweaks: state.tweaks,
+            persistent_kv: state.persistent_kv
           )
 
         # Everything is ready to start accepting and processing logical messages from Postgres.

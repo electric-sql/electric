@@ -58,6 +58,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
     :ok
   end
 
+  setup :with_persistent_kv
+
   def conn(_ctx, method, params, "?" <> _ = query_string) do
     Plug.Test.conn(method, "/" <> query_string, params)
   end
@@ -75,7 +77,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
         registry: @registry,
         long_poll_timeout: long_poll_timeout(ctx),
         max_age: max_age(ctx),
-        stale_age: stale_age(ctx)
+        stale_age: stale_age(ctx),
+        persistent_kv: ctx.persistent_kv
       )
 
     ServeShapePlug.call(conn, opts)
@@ -497,7 +500,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == [
                "test result",
-               %{"headers" => %{"control" => "up-to-date"}}
+               %{
+                 "headers" => %{
+                   "control" => "up-to-date",
+                   "global_last_seen_lsn" => next_offset.tx_offset
+                 }
+               }
              ]
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
@@ -553,7 +561,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       refute Process.alive?(conn.owner)
 
       assert conn.status == 204
-      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "up-to-date"}}]
+      assert [%{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
       assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
     end
 
@@ -588,7 +596,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 204
 
-      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "up-to-date"}}]
+      assert [%{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == [
                "public, max-age=5, stale-while-revalidate=5"
