@@ -84,6 +84,8 @@ defmodule Electric.Shapes.Api do
     end
   end
 
+  @spec validate_for_delete(t(), %{(atom() | binary()) => term()}) ::
+          {:ok, Request.t()} | {:error, Response.t()}
   def validate_for_delete(%Api{} = api, params) do
     with :ok <- hold_until_stack_ready(api) do
       Api.Delete.validate_for_delete(api, params)
@@ -109,7 +111,7 @@ defmodule Electric.Shapes.Api do
      }}
   end
 
-  @spec delete_shape(Request.t()) :: :ok | {:error, term()}
+  @spec delete_shape(Request.t()) :: Response.t()
   def delete_shape(%Request{handle: handle} = request) when is_binary(handle) do
     :ok = Shapes.clean_shape(handle, request.api)
 

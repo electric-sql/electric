@@ -42,7 +42,7 @@ defmodule Electric.Shapes.Api.Response do
 
   def error(api_or_request, message, args \\ [])
 
-  @spec error(Api.t(), term(), keyword()) :: t()
+  @spec error(Api.t() | Api.Request.t(), term(), keyword()) :: t()
   def error(%Api{} = api, message, args) do
     opts =
       args

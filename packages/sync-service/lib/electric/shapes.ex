@@ -28,7 +28,7 @@ defmodule Electric.Shapes do
   @doc """
   Get the shape that corresponds to this shape definition and return it along with the latest offset of the shape
   """
-  @spec get_shape(keyword(), Shape.t()) :: {shape_handle(), LogOffset.t()} | nil
+  @spec get_shape(Access.t(), Shape.t()) :: {shape_handle(), LogOffset.t()} | nil
   def get_shape(config, shape_def) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
 
@@ -38,7 +38,7 @@ defmodule Electric.Shapes do
   @doc """
   Get or create a shape handle and return it along with the latest offset of the shape
   """
-  @spec get_or_create_shape_handle(keyword(), Shape.t()) :: {shape_handle(), LogOffset.t()}
+  @spec get_or_create_shape_handle(Access.t(), Shape.t()) :: {shape_handle(), LogOffset.t()}
   def get_or_create_shape_handle(config, shape_def) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
 
@@ -53,7 +53,7 @@ defmodule Electric.Shapes do
 
   If `nil` is returned, chunk is not complete and the shape's latest offset should be used
   """
-  @spec get_chunk_end_log_offset(keyword(), shape_handle(), LogOffset.t()) ::
+  @spec get_chunk_end_log_offset(Access.t(), shape_handle(), LogOffset.t()) ::
           LogOffset.t() | nil
   def get_chunk_end_log_offset(config, shape_handle, offset) do
     storage = shape_storage(config, shape_handle)
@@ -63,7 +63,7 @@ defmodule Electric.Shapes do
   @doc """
   Check whether the log has an entry for a given shape handle
   """
-  @spec has_shape?(keyword(), shape_handle()) :: boolean()
+  @spec has_shape?(Access.t(), shape_handle()) :: boolean()
   def has_shape?(config, shape_handle) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
 
@@ -73,14 +73,14 @@ defmodule Electric.Shapes do
   @doc """
   Clean up all data (meta data and shape log + snapshot) associated with the given shape handle
   """
-  @spec clean_shape(shape_handle(), keyword()) :: :ok
+  @spec clean_shape(shape_handle(), Access.t()) :: :ok
   def clean_shape(shape_handle, opts \\ []) do
     {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
     shape_cache.clean_shape(shape_handle, opts)
     :ok
   end
 
-  @spec clean_shapes([shape_handle()], keyword()) :: :ok
+  @spec clean_shapes([shape_handle()], Access.t()) :: :ok
   def clean_shapes(shape_handles, opts \\ []) do
     {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
 

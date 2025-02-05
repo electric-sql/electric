@@ -6,6 +6,8 @@ defmodule Electric.Shapes.Api.Delete do
   alias Electric.Shapes.Api.Request
   alias Electric.Shapes.Api.Response
 
+  @spec validate_for_delete(Api.t(), %{(atom() | binary()) => term()}) ::
+          {:ok, Request.t()} | {:error, Response.t()}
   def validate_for_delete(api, params) do
     if api.allow_shape_deletion do
       with {:ok, request} <- validate_params_for_delete(api, params),
