@@ -610,8 +610,7 @@ defmodule Electric.Connection.Manager do
     )
 
     step = current_connection_step(state)
-    state = schedule_reconnection(step, state)
-    {:noreply, state}
+    schedule_reconnection(step, state)
   end
 
   defp current_connection_step(%State{lock_connection_pid: pid}) when not is_pid(pid),
