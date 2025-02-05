@@ -194,6 +194,10 @@ defmodule Electric.Telemetry do
 
   defp prometheus_metrics() do
     [
+      last_value("system.cpu.core_count"),
+      last_value("system.cpu.utilization.total"),
+      last_value("electric.storage.used", unit: {:byte, :kilobyte}),
+      last_value("electric.shapes.total_shapes.count"),
       last_value("vm.memory.total", unit: :byte),
       last_value("vm.memory.processes_used", unit: :byte),
       last_value("vm.memory.binary", unit: :byte),
@@ -205,15 +209,17 @@ defmodule Electric.Telemetry do
       counter("electric.postgres.replication.transaction_received.count"),
       sum("electric.postgres.replication.transaction_received.bytes", unit: :byte),
       sum("electric.storage.transaction_stored.bytes", unit: :byte)
-    ]
+    ] ++
+      Enum.map(
+        # Add "system.cpu.utilization.core_*" but since there's no wildcard support we
+        # explicitly add 64 cores. If there are fewer cores, the missing ones will be ignored.
+        0..63,
+        &last_value("system.cpu.utilization.core_#{&1}")
+      )
   end
 
   defp otel_metrics() do
     [
-      last_value("system.cpu.core_count"),
-      last_value("system.cpu.utilization.total"),
-      last_value("electric.storage.used", unit: {:byte, :kilobyte}),
-      last_value("electric.shapes.total_shapes.count"),
       last_value("system.load_percent.avg1"),
       last_value("system.load_percent.avg5"),
       last_value("system.load_percent.avg15"),
@@ -226,9 +232,7 @@ defmodule Electric.Telemetry do
       distribution("electric.storage.make_new_snapshot.stop.duration",
         unit: {:native, :millisecond}
       )
-    ] ++
-      prometheus_metrics() ++
-      Enum.map(0..63, &last_value("system.cpu.utilization.core_#{&1}"))
+    ] ++ prometheus_metrics()
   end
 
   defp periodic_measurements(opts) do
