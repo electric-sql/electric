@@ -44,6 +44,10 @@ defmodule Electric.MixProject do
           ~r/^Support.*/
         ]
       ],
+      dialyzer: [
+        plt_add_apps: [:mix, :ex_unit],
+        check_plt: true
+      ],
       description: description(),
       package: package(),
       docs: docs(),
