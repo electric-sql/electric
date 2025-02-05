@@ -151,7 +151,9 @@ defmodule Electric.Shapes.ConsumerTest do
           assert_receive {Support.TestStorage, :set_shape_definition, ^shape_handle, ^shape}
           # Wait for the virtual snapshot to have started to avoid overriding any of the
           # defined Mox expectations
-          :started = GenServer.call(Consumer.name(ctx.stack_id, shape_handle), :await_snapshot_start)
+          :started =
+            GenServer.call(Consumer.name(ctx.stack_id, shape_handle), :await_snapshot_start)
+
           consumer
         end
 
