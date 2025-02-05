@@ -123,7 +123,6 @@ defmodule Electric.Shapes.ConsumerTest do
             Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
           end)
 
-
           {:ok, consumer} =
             start_supervised(
               {Shapes.ConsumerSupervisor,
