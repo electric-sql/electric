@@ -9,9 +9,6 @@ defmodule Electric.ShapeCacheBehaviour do
   @type shape_def :: Shape.t()
   @type xmin :: non_neg_integer()
 
-  @doc "Update a shape's status with a new log offset"
-  @callback update_shape_latest_offset(shape_handle(), LogOffset.t(), keyword()) :: :ok
-
   @callback get_shape(shape_def(), opts :: Access.t()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()} | nil
   @callback get_or_create_shape_handle(shape_def(), opts :: Access.t()) ::
@@ -110,24 +107,6 @@ defmodule Electric.ShapeCache do
     else
       server = Access.get(opts, :server, name(opts))
       GenStage.call(server, {:create_or_wait_shape_handle, shape, opts[:otel_ctx]})
-    end
-  end
-
-  @impl Electric.ShapeCacheBehaviour
-  @spec update_shape_latest_offset(shape_handle(), LogOffset.t(), opts :: Access.t()) ::
-          :ok | {:error, term()}
-  def update_shape_latest_offset(shape_handle, latest_offset, opts) do
-    meta_table = get_shape_meta_table(opts)
-    shape_status = Access.get(opts, :shape_status, ShapeStatus)
-
-    if shape_status.set_latest_offset(meta_table, shape_handle, latest_offset) do
-      :ok
-    else
-      Logger.warning(
-        "Tried to update latest offset for shape #{shape_handle} which doesn't exist"
-      )
-
-      :error
     end
   end
 
@@ -348,13 +327,6 @@ defmodule Electric.ShapeCache do
              publication_manager: state.publication_manager,
              chunk_bytes_threshold: state.chunk_bytes_threshold,
              log_producer: state.log_producer,
-             shape_cache:
-               {__MODULE__,
-                %{
-                  server: state.name,
-                  shape_meta_table: state.shape_meta_table,
-                  stack_id: state.stack_id
-                }},
              registry: state.registry,
              db_pool: state.db_pool,
              run_with_conn_fn: state.run_with_conn_fn,

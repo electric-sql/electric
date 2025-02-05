@@ -123,10 +123,6 @@ defmodule Electric.Shapes.ConsumerTest do
             Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
           end)
 
-          Mock.ShapeCache
-          |> allow(self(), fn ->
-            Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
-          end)
 
           {:ok, consumer} =
             start_supervised(
@@ -142,7 +138,6 @@ defmodule Electric.Shapes.ConsumerTest do
                    Electric.DbPool
                  ),
                registry: registry_name,
-               shape_cache: {Mock.ShapeCache, []},
                shape_status: {Mock.ShapeStatus, []},
                publication_manager: {Mock.PublicationManager, []},
                storage: storage,
@@ -170,8 +165,8 @@ defmodule Electric.Shapes.ConsumerTest do
       last_log_offset = log_offset(@shape_handle1, ctx)
       lsn = lsn(@shape_handle1, ctx)
 
-      Mock.ShapeCache
-      |> expect(:update_shape_latest_offset, 2, fn @shape_handle1, ^last_log_offset, _ -> :ok end)
+      Mock.ShapeStatus
+      |> expect(:set_latest_offset, 2, fn _, @shape_handle1, ^last_log_offset -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
 
       ref = make_ref()
@@ -210,10 +205,10 @@ defmodule Electric.Shapes.ConsumerTest do
 
       xid = 150
 
-      Mock.ShapeCache
-      |> expect(:update_shape_latest_offset, 2, fn
-        @shape_handle1, ^last_log_offset, _ -> :ok
-        @shape_handle2, ^last_log_offset, _ -> :ok
+      Mock.ShapeStatus
+      |> expect(:set_latest_offset, 2, fn
+        _, @shape_handle1, ^last_log_offset -> :ok
+        _, @shape_handle2, ^last_log_offset -> :ok
       end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
@@ -277,12 +272,9 @@ defmodule Electric.Shapes.ConsumerTest do
       ref1 = Shapes.Consumer.monitor(ctx.stack_id, @shape_handle1)
       ref2 = Shapes.Consumer.monitor(ctx.stack_id, @shape_handle2)
 
-      Mock.ShapeCache
-      |> expect(:update_shape_latest_offset, fn @shape_handle2, _offset, _ -> :ok end)
-      |> allow(
-        self(),
-        Shapes.Consumer.whereis(ctx.stack_id, @shape_handle2)
-      )
+      Mock.ShapeStatus
+      |> expect(:set_latest_offset, fn _, @shape_handle2, _offset -> :ok end)
+      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
 
       txn =
         %Transaction{
@@ -408,8 +400,8 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      Mock.ShapeCache
-      |> expect(:update_shape_latest_offset, fn @shape_handle1, ^last_log_offset, _ -> :ok end)
+      Mock.ShapeStatus
+      |> expect(:set_latest_offset, fn _, @shape_handle1, ^last_log_offset -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
 
       ref = make_ref()
@@ -539,8 +531,8 @@ defmodule Electric.Shapes.ConsumerTest do
 
     test "unexpected error while handling events stops affected consumer and cleans affected shape",
          ctx do
-      Mock.ShapeCache
-      |> expect(:update_shape_latest_offset, fn @shape_handle1, _, _ ->
+      Mock.ShapeStatus
+      |> expect(:set_latest_offset, fn _, @shape_handle1, _ ->
         raise "The unexpected error"
       end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
