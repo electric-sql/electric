@@ -48,7 +48,7 @@ defmodule Electric.Connection.Manager do
       # PID of the shape log collector
       :shape_log_collector_pid,
       # Backoff term used for reconnection with exponential back-off
-      :backoff,
+      :connection_backoff,
       # Flag indicating whether the lock on the replication has been acquired
       :pg_lock_acquired,
       # PostgreSQL server version
@@ -66,6 +66,14 @@ defmodule Electric.Connection.Manager do
       awaiting_active: [],
       drop_slot_requested: false,
       monitoring_started?: false
+    ]
+  end
+
+  defmodule ConnectionBackoff do
+    defstruct [
+      :backoff,
+      :retries_started_at,
+      :timer_ref
     ]
   end
 
@@ -185,7 +193,7 @@ defmodule Electric.Connection.Manager do
         timeline_opts: timeline_opts,
         shape_cache_opts: shape_cache_opts,
         pg_lock_acquired: false,
-        backoff: {:backoff.init(1000, 10_000), nil},
+        connection_backoff: %ConnectionBackoff{backoff: :backoff.init(1000, 10_000)},
         stack_id: Keyword.fetch!(opts, :stack_id),
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
         tweaks: Keyword.fetch!(opts, :tweaks),
@@ -254,6 +262,7 @@ defmodule Electric.Connection.Manager do
 
     case start_lock_connection(opts) do
       {:ok, pid, connection_opts} ->
+        state = mark_connection_succeeded(state)
         state = %{state | lock_connection_pid: pid, connection_opts: connection_opts}
 
         Electric.StackSupervisor.dispatch_stack_event(
@@ -280,6 +289,7 @@ defmodule Electric.Connection.Manager do
 
     case start_replication_client(opts) do
       {:ok, pid, connection_opts} ->
+        state = mark_connection_succeeded(state)
         state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
 
         if is_nil(state.pool_pid) do
@@ -306,6 +316,7 @@ defmodule Electric.Connection.Manager do
   def handle_continue(:start_connection_pool, state) do
     case start_connection_pool(state.connection_opts, state.pool_opts) do
       {:ok, pool_pid} ->
+        state = mark_connection_succeeded(state)
         # Checking the timeline continuity to see if we need to purge all shapes persisted so far.
         check_result =
           Electric.Timeline.check(
@@ -354,8 +365,15 @@ defmodule Electric.Connection.Manager do
   end
 
   @impl true
-  def handle_info({:timeout, tref, step}, %{backoff: {backoff, tref}} = state) do
-    state = %{state | backoff: {backoff, nil}}
+  def handle_info(
+        {:timeout, tref, step},
+        %{connection_backoff: %ConnectionBackoff{timer_ref: tref} = conn_backoff} = state
+      ) do
+    state = %State{
+      state
+      | connection_backoff: %ConnectionBackoff{conn_backoff | timer_ref: nil}
+    }
+
     handle_continue(step, state)
   end
 
@@ -580,7 +598,11 @@ defmodule Electric.Connection.Manager do
     Electric.StackSupervisor.dispatch_stack_event(
       state.stack_events_registry,
       state.stack_id,
-      {:database_connection_failed, message}
+      {:database_connection_failed,
+       %{
+         message: message,
+         total_retry_time: total_retry_time(state)
+       }}
     )
 
     step = current_connection_step(state)
@@ -631,12 +653,55 @@ defmodule Electric.Connection.Manager do
 
   defp halt_if_fatal_error!(_), do: nil
 
-  defp schedule_reconnection(step, %State{backoff: {backoff, _}} = state) do
+  defp schedule_reconnection(
+         step,
+         %State{
+           connection_backoff: %ConnectionBackoff{
+             backoff: backoff,
+             retries_started_at: retries_started_at
+           }
+         } = state
+       ) do
     {time, backoff} = :backoff.fail(backoff)
     tref = :erlang.start_timer(time, self(), step)
     Logger.warning("Reconnecting in #{inspect(time)}ms")
-    %State{state | backoff: {backoff, tref}}
+
+    %State{
+      state
+      | connection_backoff: %ConnectionBackoff{
+          backoff: backoff,
+          retries_started_at: retries_started_at || System.monotonic_time(:millisecond),
+          timer_ref: tref
+        }
+    }
   end
+
+  # If total backoff time is 0 then there were no reconnection attempts
+  defp mark_connection_succeeded(
+         %State{connection_backoff: %ConnectionBackoff{retries_started_at: nil}} = state
+       ),
+       do: state
+
+  # Otherwise, reset the backoff and total backoff time
+  defp mark_connection_succeeded(
+         %State{connection_backoff: %ConnectionBackoff{backoff: backoff}} = state
+       ) do
+    {_, backoff} = :backoff.succeed(backoff)
+    Logger.info("Reconnection succeeded after #{inspect(total_retry_time(state))}ms")
+
+    %State{
+      state
+      | connection_backoff: %ConnectionBackoff{backoff: backoff}
+    }
+  end
+
+  defp total_retry_time(%State{connection_backoff: %ConnectionBackoff{retries_started_at: nil}}),
+    do: 0
+
+  defp total_retry_time(%State{
+         connection_backoff: %ConnectionBackoff{retries_started_at: retries_started_at}
+       }),
+       do: retries_started_at - System.monotonic_time(:millisecond)
 
   defp update_ssl_opts(connection_opts) do
     ssl_opts =
