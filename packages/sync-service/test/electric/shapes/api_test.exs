@@ -334,7 +334,10 @@ defmodule Electric.Shapes.ApiTest do
                )
 
       assert response_body(response) == %{
-               columns: ["Invalid zero-length delimited identifier"]
+               message: "Invalid request",
+               errors: %{
+                 columns: ["Invalid zero-length delimited identifier"]
+               }
              }
     end
 
