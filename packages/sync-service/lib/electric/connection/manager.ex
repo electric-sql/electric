@@ -700,7 +700,7 @@ defmodule Electric.Connection.Manager do
   defp total_retry_time(%State{
          connection_backoff: %{retries_started_at: retries_started_at}
        }),
-       do: retries_started_at - System.monotonic_time(:millisecond)
+       do: System.monotonic_time(:millisecond) - retries_started_at
 
   defp update_ssl_opts(connection_opts) do
     ssl_opts =
