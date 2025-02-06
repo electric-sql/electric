@@ -225,5 +225,23 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       assert {:ok, [%{name: "a"}, %{name: "b"}, %{name: "c"}]} =
                EtsInspector.load_column_info({"public", "partitioned_items_100"}, opts)
     end
+
+    @tag with_sql: [
+           ~s|CREATE TYPE foo_enum AS ENUM ('a', 'b', 'c');|,
+           ~s|CREATE TABLE "enum_table" (foo foo_enum)|
+         ]
+    test "can load enum types with type kind", %{opts: opts} do
+      assert {:ok, [%{name: "foo", type_kind: :enum, type: "foo_enum"}]} =
+               EtsInspector.load_column_info({"public", "enum_table"}, opts)
+    end
+
+    @tag with_sql: [
+           ~s|CREATE DOMAIN foo_domain AS text CHECK ( VALUE ~ 'test');|,
+           ~s|CREATE TABLE "domain_table" (foo foo_domain)|
+         ]
+    test "can load domain types with type kind", %{opts: opts} do
+      assert {:ok, [%{name: "foo", type_kind: :domain, type: "foo_domain"}]} =
+               EtsInspector.load_column_info({"public", "domain_table"}, opts)
+    end
   end
 end

@@ -45,6 +45,17 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Ref{path: ["test"], type: :bool} = result
     end
 
+    test "should correctly cast an enum to text" do
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|foo::text|,
+                 %{["foo"] => {:enum, "foo_enum"}},
+                 Env.empty()
+               )
+
+      assert %Ref{path: ["foo"], type: :text} = result
+    end
+
     test "should correctly parse a boolean function" do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(~S|"test" OR true|, %{["test"] => :bool})

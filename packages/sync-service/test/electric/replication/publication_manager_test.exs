@@ -8,6 +8,13 @@ defmodule Electric.Replication.PublicationManagerTest do
 
   import Support.ComponentSetup
 
+  @where_clause_1 %Expr{query: "id = '1'", used_refs: %{["id"] => :text}}
+  @where_clause_2 %Expr{query: "id = '2'", used_refs: %{["id"] => :text}}
+  @where_clause_enum %Expr{
+    query: "id = '1' AND foo_enum::text = 'bar'",
+    used_refs: %{["foo_enum"] => {:enum, "foo_enum"}}
+  }
+
   defp generate_shape(relation, where_clause \\ nil, selected_columns \\ nil) do
     %Shape{
       root_table: relation,
@@ -15,11 +22,19 @@ defmodule Electric.Replication.PublicationManagerTest do
       table_info: %{
         relation => %{
           columns:
-            ([
-               %{name: "id", type: :text, type_id: {25, 1}},
-               %{name: "value", type: :text, type_id: {25, 1}}
-             ] ++ (selected_columns || []))
-            |> Enum.map(fn col -> %{name: col, type: :text, type_id: {25, 1}} end),
+            [
+              %{name: "id", type: :text, type_kind: :base, type_id: {25, 1}},
+              %{name: "value", type: :text, type_kind: :base, type_id: {25, 1}},
+              %{
+                name: "foo_enum",
+                type: {:enum, "foo_enum"},
+                type_kind: :enum,
+                type_id: {2999, 1}
+              }
+            ] ++
+              Enum.map(selected_columns || [], fn col ->
+                %{name: col, type: :text, type_id: {25, 1}}
+              end),
           pk: ["id"]
         }
       },
@@ -54,20 +69,20 @@ defmodule Electric.Replication.PublicationManagerTest do
 
   describe "add_shape/2" do
     test "should add filters for single shape", %{opts: opts} do
-      shape = generate_shape({"public", "items"}, %{query: "id = 1"})
+      shape = generate_shape({"public", "items"}, @where_clause_1)
       assert :ok == PublicationManager.add_shape(shape, opts)
 
       assert_receive {:filters,
                       [
                         %RelationFilter{
                           relation: {"public", "items"},
-                          where_clauses: [%{query: "id = 1"}]
+                          where_clauses: [@where_clause_1]
                         }
                       ]}
     end
 
     test "should accept multiple shapes for different relations", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, %{query: "id = 1"})
+      shape1 = generate_shape({"public", "items"}, @where_clause_1)
       shape2 = generate_shape({"public", "other"})
       assert :ok == PublicationManager.add_shape(shape1, opts)
       assert :ok == PublicationManager.add_shape(shape2, opts)
@@ -76,16 +91,16 @@ defmodule Electric.Replication.PublicationManagerTest do
                       [
                         %RelationFilter{
                           relation: {"public", "items"},
-                          where_clauses: [%{query: "id = 1"}]
+                          where_clauses: [@where_clause_1]
                         },
                         %RelationFilter{relation: {"public", "other"}}
                       ]}
     end
 
     test "should merge where clauses for same relation", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, %{query: "id = 1"})
-      shape2 = generate_shape({"public", "items"}, %{query: "id = 2"})
-      shape3 = generate_shape({"public", "items"}, %{query: "id = 1"})
+      shape1 = generate_shape({"public", "items"}, @where_clause_1)
+      shape2 = generate_shape({"public", "items"}, @where_clause_2)
+      shape3 = generate_shape({"public", "items"}, @where_clause_1)
       assert :ok == PublicationManager.add_shape(shape1, opts)
       assert :ok == PublicationManager.add_shape(shape2, opts)
       assert :ok == PublicationManager.add_shape(shape3, opts)
@@ -94,16 +109,29 @@ defmodule Electric.Replication.PublicationManagerTest do
                       [
                         %RelationFilter{
                           relation: {"public", "items"},
-                          where_clauses: [%{query: "id = 2"}, %{query: "id = 1"}]
+                          where_clauses: [@where_clause_2, @where_clause_1]
                         }
                       ]}
     end
 
     test "should remove where clauses when one covers everything", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, %{query: "id = 1"})
+      shape1 = generate_shape({"public", "items"}, @where_clause_1)
       shape2 = generate_shape({"public", "items"}, nil)
       assert :ok == PublicationManager.add_shape(shape1, opts)
       assert :ok == PublicationManager.add_shape(shape2, opts)
+
+      assert_receive {:filters,
+                      [
+                        %RelationFilter{
+                          relation: {"public", "items"},
+                          where_clauses: nil
+                        }
+                      ]}
+    end
+
+    test "should ignore where clauses that use unsupported column types (enums)", %{opts: opts} do
+      shape = generate_shape({"public", "items"}, @where_clause_enum)
+      assert :ok == PublicationManager.add_shape(shape, opts)
 
       assert_receive {:filters,
                       [
@@ -145,13 +173,15 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
 
     test "should include selected columns referenced in where clauses", %{opts: opts} do
+      where_clause = %Expr{
+        query: "id = '1'",
+        used_refs: %{["id"] => :int8, ["created_at"] => :timestamp}
+      }
+
       shape =
         generate_shape(
           {"public", "items"},
-          %Expr{
-            query: "id = 1",
-            used_refs: %{["id"] => :int8, ["created_at"] => :timestamp}
-          },
+          where_clause,
           ["id", "value"]
         )
 
@@ -161,7 +191,7 @@ defmodule Electric.Replication.PublicationManagerTest do
                       [
                         %RelationFilter{
                           relation: {"public", "items"},
-                          where_clauses: [%{query: "id = 1"}],
+                          where_clauses: [^where_clause],
                           selected_columns: ["value", "id", "created_at"]
                         }
                       ]}
@@ -169,9 +199,9 @@ defmodule Electric.Replication.PublicationManagerTest do
 
     @tag update_debounce_timeout: 50
     test "should not update publication if new shape adds nothing", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, %{query: "id = 1"})
-      shape2 = generate_shape({"public", "items"}, %{query: "id = 2"})
-      shape3 = generate_shape({"public", "items"}, %{query: "id = 1"})
+      shape1 = generate_shape({"public", "items"}, @where_clause_1)
+      shape2 = generate_shape({"public", "items"}, @where_clause_2)
+      shape3 = generate_shape({"public", "items"}, @where_clause_1)
 
       task1 = Task.async(fn -> PublicationManager.add_shape(shape1, opts) end)
       task2 = Task.async(fn -> PublicationManager.add_shape(shape2, opts) end)
@@ -182,7 +212,7 @@ defmodule Electric.Replication.PublicationManagerTest do
                       [
                         %RelationFilter{
                           relation: {"public", "items"},
-                          where_clauses: [%{query: "id = 2"}, %{query: "id = 1"}]
+                          where_clauses: [@where_clause_2, @where_clause_1]
                         }
                       ]}
 
@@ -194,7 +224,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
   describe "remove_shape/2" do
     test "should remove single shape", %{opts: opts} do
-      shape = generate_shape({"public", "items"}, %{query: "id = 1"})
+      shape = generate_shape({"public", "items"}, @where_clause_1)
       assert :ok == PublicationManager.add_shape(shape, opts)
       assert :ok == PublicationManager.remove_shape(shape, opts)
 
@@ -203,9 +233,9 @@ defmodule Electric.Replication.PublicationManagerTest do
 
     @tag update_debounce_timeout: 50
     test "should reference count to avoid removing needed filters", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, %{query: "id = 1"})
-      shape2 = generate_shape({"public", "items"}, %{query: "id = 2"})
-      shape3 = generate_shape({"public", "items"}, %{query: "id = 1"})
+      shape1 = generate_shape({"public", "items"}, @where_clause_1)
+      shape2 = generate_shape({"public", "items"}, @where_clause_2)
+      shape3 = generate_shape({"public", "items"}, @where_clause_1)
       task1 = Task.async(fn -> PublicationManager.add_shape(shape1, opts) end)
       task2 = Task.async(fn -> PublicationManager.add_shape(shape2, opts) end)
       task3 = Task.async(fn -> PublicationManager.add_shape(shape3, opts) end)
@@ -216,7 +246,7 @@ defmodule Electric.Replication.PublicationManagerTest do
                       [
                         %RelationFilter{
                           relation: {"public", "items"},
-                          where_clauses: [%{query: "id = 2"}, %{query: "id = 1"}]
+                          where_clauses: [@where_clause_2, @where_clause_1]
                         }
                       ]}
 
@@ -228,7 +258,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
   describe "recover_shape/2" do
     test "should add filters for single shape without updating anything", %{opts: opts} do
-      shape = generate_shape({"public", "items"}, %{query: "id = 1"})
+      shape = generate_shape({"public", "items"}, @where_clause_1)
       assert :ok == PublicationManager.recover_shape(shape, opts)
 
       refute_receive {:filters, _}, 500
@@ -237,7 +267,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
   describe "refresh_publication/2" do
     test "should update publication if there are changes to add", %{opts: opts} do
-      shape = generate_shape({"public", "items"}, %{query: "id = 1"})
+      shape = generate_shape({"public", "items"}, @where_clause_1)
       assert :ok == PublicationManager.recover_shape(shape, opts)
 
       refute_receive {:filters, _}, 500
@@ -248,7 +278,7 @@ defmodule Electric.Replication.PublicationManagerTest do
                       [
                         %RelationFilter{
                           relation: {"public", "items"},
-                          where_clauses: [%{query: "id = 1"}]
+                          where_clauses: [@where_clause_1]
                         }
                       ]}
     end

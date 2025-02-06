@@ -394,7 +394,25 @@ defmodule Electric.Replication.PublicationManager do
           MapSet.t(Electric.Replication.Eval.Expr.t() | nil)
   defp get_where_clauses_for_shape(%Shape{where: nil}), do: MapSet.new([nil])
   # TODO: flatten where clauses by splitting top level ANDs
-  defp get_where_clauses_for_shape(%Shape{where: where}), do: MapSet.new([where])
+  defp get_where_clauses_for_shape(%Shape{
+         where: where,
+         table_info: table_info,
+         root_table: root_table
+       }) do
+    unqualified_refs = Expr.unqualified_refs(where)
+
+    table_info[root_table].columns
+    |> Enum.filter(&(&1.name in unqualified_refs))
+    |> Enum.any?(fn
+      %{type_kind: kind} when kind in [:enum, :domain, :composite] -> true
+      _ -> false
+    end)
+    |> if do
+      MapSet.new([nil])
+    else
+      MapSet.new([where])
+    end
+  end
 
   @spec add_waiter(GenServer.from(), state()) :: state()
   defp add_waiter(from, %__MODULE__{waiters: waiters} = state),
