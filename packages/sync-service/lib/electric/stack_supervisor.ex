@@ -28,6 +28,7 @@ defmodule Electric.StackSupervisor do
       2. `Electric.Replication.ShapeLogCollector` collects transactions from the replication connection, fanning them out to `Electric.Shapes.Consumer` (4.1.1.2)
       3. `Electric.ShapeCache` coordinates shape creation and handle allocation, shape metadata
   """
+  alias Hex.API.Key
   alias Electric.ShapeCache.LogChunker
   use Supervisor, restart: :transient
 
@@ -111,9 +112,15 @@ defmodule Electric.StackSupervisor do
                )
 
   def start_link(opts) do
+    opts = obfuscate_password(opts)
+
     with {:ok, config} <- NimbleOptions.validate(Map.new(opts), @opts_schema) do
       Supervisor.start_link(__MODULE__, config, Keyword.take(opts, [:name]))
     end
+  end
+
+  defp obfuscate_password(opts) when is_list(opts) do
+    Keyword.update(opts, :connection_opts, [], &Electric.Utils.obfuscate_password/1)
   end
 
   def subscribe_to_stack_events(registry, stack_id, ref \\ make_ref()) do
@@ -176,9 +183,9 @@ defmodule Electric.StackSupervisor do
   def storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}} = opts) do
     {mod,
      arg
-     |> Keyword.put(:stack_id, stack_id)
-     |> Keyword.put(
-       :chunk_bytes_threshold,
+     |> put_in([:stack_id], stack_id)
+     |> put_in(
+       [:chunk_bytes_threshold],
        opts[:chunk_bytes_threshold] || LogChunker.default_chunk_size_threshold()
      )
      |> mod.shared_opts()}

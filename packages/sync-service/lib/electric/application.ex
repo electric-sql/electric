@@ -11,6 +11,7 @@ defmodule Electric.Application do
   """
   @impl true
   def start(_type, _args) do
+    dbg(:electric)
     :erlang.system_flag(:backtrace_depth, 50)
 
     Electric.Config.ensure_instance_id()
@@ -23,20 +24,7 @@ defmodule Electric.Application do
 
     storage = Electric.Config.get_env(:storage)
 
-    router_opts =
-      Electric.Shapes.Api.plug_opts(
-        [
-          long_poll_timeout: 20_000,
-          max_age: Electric.Config.get_env(:cache_max_age),
-          stale_age: Electric.Config.get_env(:cache_stale_age),
-          allow_shape_deletion: Electric.Config.get_env(:allow_shape_deletion?)
-        ] ++
-          Electric.StackSupervisor.build_shared_opts(
-            stack_id: stack_id,
-            stack_events_registry: Registry.StackEvents,
-            storage: storage
-          )
-      )
+    router_opts = api_config()
 
     {kv_module, kv_fun, kv_params} =
       Electric.Config.get_env(:persistent_kv)
@@ -85,6 +73,27 @@ defmodule Electric.Application do
       ])
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Electric.Supervisor)
+  end
+
+  def api_config(opts \\ []) do
+    stack_id = Electric.Config.get_env(:provided_database_id)
+    storage = Electric.Config.get_env(:storage)
+
+    [
+      long_poll_timeout: 20_000,
+      max_age: Electric.Config.get_env(:cache_max_age),
+      stale_age: Electric.Config.get_env(:cache_stale_age),
+      allow_shape_deletion: Electric.Config.get_env(:allow_shape_deletion?)
+    ]
+    |> Keyword.merge(
+      Electric.StackSupervisor.build_shared_opts(
+        stack_id: stack_id,
+        stack_events_registry: Registry.StackEvents,
+        storage: storage
+      )
+    )
+    |> Keyword.merge(opts)
+    |> Electric.Shapes.Api.plug_opts()
   end
 
   defp prometheus_endpoint(nil), do: []

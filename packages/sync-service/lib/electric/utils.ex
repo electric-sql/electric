@@ -379,8 +379,12 @@ defmodule Electric.Utils do
   process that implements an OTP behaviour crashes).
   """
   @spec obfuscate_password(Keyword.t()) :: Keyword.t()
-  def obfuscate_password(connection_opts) do
+  def obfuscate_password(connection_opts) when is_list(connection_opts) do
     Keyword.update!(connection_opts, :password, &wrap_in_fun/1)
+  end
+
+  def obfuscate_password(connection_opts) when is_map(connection_opts) do
+    Map.update!(connection_opts, :password, &wrap_in_fun/1)
   end
 
   @doc """
@@ -401,6 +405,7 @@ defmodule Electric.Utils do
   @spec map_values(map(), (term() -> term())) :: map()
   def map_values(map, fun), do: Map.new(map, fn {k, v} -> {k, fun.(v)} end)
 
+  defp wrap_in_fun(val) when is_function(val, 0), do: val
   defp wrap_in_fun(val), do: fn -> val end
 
   @doc """
