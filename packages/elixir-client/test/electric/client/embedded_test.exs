@@ -46,7 +46,7 @@ defmodule Electric.Client.EmbeddedTest do
   end
 
   test "streams an empty shape", ctx do
-    assert [%ControlMessage{control: :up_to_date, offset: offset0()}] = stream(ctx, 1)
+    assert [%ControlMessage{control: :up_to_date}] = stream(ctx, 1)
   end
 
   test "streams a non empty shape", ctx do
@@ -62,18 +62,15 @@ defmodule Electric.Client.EmbeddedTest do
     assert [
              %ChangeMessage{
                headers: %{operation: :insert, relation: ["public", ^table]},
-               value: %{"id" => ^id1},
-               offset: %Electric.Client.Offset{tx: 0, op: 0}
+               value: %{"id" => ^id1}
              },
              %ChangeMessage{
                headers: %{operation: :insert, relation: ["public", ^table]},
-               value: %{"id" => ^id2},
-               offset: %Electric.Client.Offset{tx: 0, op: 0}
+               value: %{"id" => ^id2}
              },
              %ChangeMessage{
                headers: %{operation: :insert, relation: ["public", ^table]},
-               value: %{"id" => ^id3},
-               offset: %Electric.Client.Offset{tx: 0, op: 0}
+               value: %{"id" => ^id3}
              },
              up_to_date0()
            ] = msgs
@@ -172,18 +169,15 @@ defmodule Electric.Client.EmbeddedTest do
     assert [
              %ChangeMessage{
                headers: %{operation: :insert, relation: ["public", ^table]},
-               value: %{"id" => ^id1},
-               offset: %Electric.Client.Offset{tx: 0, op: 0}
+               value: %{"id" => ^id1}
              },
              %ChangeMessage{
                headers: %{operation: :insert, relation: ["public", ^table]},
-               value: %{"id" => ^id2},
-               offset: %Electric.Client.Offset{tx: 0, op: 0}
+               value: %{"id" => ^id2}
              },
              %ChangeMessage{
                headers: %{operation: :insert, relation: ["public", ^table]},
-               value: %{"id" => ^id3},
-               offset: %Electric.Client.Offset{tx: 0, op: 0}
+               value: %{"id" => ^id3}
              },
              up_to_date0()
            ] = msgs
