@@ -3,10 +3,7 @@ defmodule Electric.Client.Stream do
 
   alias Electric.Client.Fetch
   alias Electric.Client.Message
-  alias Electric.Client.Offset
   alias Electric.Client
-
-  require Electric.Client.Offset
 
   defstruct [
     :id,
@@ -18,7 +15,7 @@ defmodule Electric.Client.Stream do
     buffer: :queue.new(),
     up_to_date?: false,
     replica: :default,
-    offset: Offset.before_all(),
+    offset: Client.Offset.before_all(),
     shape_handle: nil,
     next_cursor: nil,
     state: :init,
@@ -91,7 +88,7 @@ defmodule Electric.Client.Stream do
           parser: nil | {module(), term()},
           buffer: :queue.queue(),
           up_to_date?: boolean(),
-          offset: Offset.t(),
+          offset: Client.offset(),
           replica: Client.replica(),
           shape_handle: nil | Client.shape_handle(),
           state: :init | :stream | :done,
@@ -283,7 +280,7 @@ defmodule Electric.Client.Stream do
   defp reset(stream, shape_handle) do
     %{
       stream
-      | offset: Offset.before_all(),
+      | offset: Client.Offset.before_all(),
         shape_handle: shape_handle,
         up_to_date?: false,
         buffer: :queue.new(),
@@ -305,7 +302,11 @@ defmodule Electric.Client.Stream do
     shape_handle
   end
 
-  defp last_offset(%Fetch.Response{last_offset: %Offset{} = offset}, _offset) do
+  defp last_offset(%Fetch.Response{last_offset: nil}, offset) do
+    offset
+  end
+
+  defp last_offset(%Fetch.Response{last_offset: offset}, _offset) do
     offset
   end
 

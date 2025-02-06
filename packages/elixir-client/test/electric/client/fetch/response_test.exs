@@ -20,7 +20,7 @@ defmodule Electric.Client.Fetch.ResponseTest do
              status: 200,
              headers: ^expected_headers,
              shape_handle: "1234987-2349827349",
-             last_offset: %Electric.Client.Offset{tx: 29827, op: 3},
+             last_offset: "29827_3",
              schema: ^schema,
              next_cursor: 2_394_829_387
            } = Fetch.Response.decode!(200, headers, [])
@@ -40,7 +40,7 @@ defmodule Electric.Client.Fetch.ResponseTest do
              status: 200,
              headers: ^headers,
              shape_handle: "1234987-2349827349",
-             last_offset: %Electric.Client.Offset{tx: 29827, op: 3},
+             last_offset: "29827_3",
              schema: ^schema,
              next_cursor: 2_394_829_387
            } = Fetch.Response.decode!(200, headers, [])

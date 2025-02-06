@@ -189,6 +189,7 @@ defmodule Electric.Client do
                  )
 
   @type shape_handle :: String.t()
+  @type offset :: Electric.Client.Offset.t()
   @type cursor :: integer()
   @type replica :: :default | :full
   @type column :: %{

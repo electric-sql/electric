@@ -57,10 +57,8 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
       nil
     end
 
-    # TODO: when we remove offset parsing from the elixir client, then it makes
-    # sense to use to_string on the server offset
     defp convert_offset(%Electric.Replication.LogOffset{} = server_offset) do
-      Electric.Client.Offset.from_string!(to_string(server_offset))
+      to_string(server_offset)
     end
   end
 end
