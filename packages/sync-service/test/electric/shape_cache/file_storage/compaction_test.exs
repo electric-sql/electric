@@ -77,5 +77,31 @@ defmodule Electric.ShapeCache.FileStorage.CompactionTest do
              |> Enum.to_list()
              |> length == 4
     end
+
+    test "compacts a large enough log file full of updates (failing property)", %{
+      tmp_dir: tmp_dir
+    } do
+      log_file_path = Path.join(tmp_dir, "log_file")
+
+      paths =
+        Enum.map(1..10_000, fn i ->
+          # Test with different key sizes and UTF symbols
+          key =
+            Enum.random(
+              ~w|key1 k2 longer_key_3 very_very_very_very_very_long_key_4 nice_important_key_5 المفتاح_6 密钥7|
+            )
+
+          upd(offset: {i, 1}, rec: [id: key, value: {"value1", "value new #{i}"}])
+        end)
+        |> TestUtils.changes_to_log_items()
+        |> Stream.reject(&match?({:chunk_boundary, _}, &1))
+        |> LogFile.write_log_file(log_file_path)
+
+      paths = Compaction.compact_in_place(paths, 50_000)
+
+      assert LogFile.read_chunk(paths, %LogOffset{tx_offset: 0, op_offset: 0})
+             |> Enum.to_list()
+             |> length == 7
+    end
   end
 end
