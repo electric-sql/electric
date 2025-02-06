@@ -1,5 +1,15 @@
 # @core/sync-service
 
+## 1.0.0-beta.12
+
+### Patch Changes
+
+- 519fc8a: Separate `ConnectionBackoff` logic for `Connection.Manager` to enhance `:bakckoff` functionality.
+- 40dcfe8: Add support for casting enums to text in where clauses (e.g. `type::text = 'foo'`).
+- b84cd5c: Expose globally last-seen LSN on up-to-date messages
+- 2dd8ca0: Reset reconnection attempt backoff timer and add more information to connection failure events.
+- 8955a58: Refactor to use an internal api to provide the shape change stream
+
 ## 1.0.0-beta.11
 
 ### Minor Changes
