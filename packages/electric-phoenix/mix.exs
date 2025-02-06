@@ -47,15 +47,25 @@ defmodule Electric.Phoenix.MixProject do
   defp deps_for_env(:test) do
     [
       {:floki, "~> 0.36", only: [:test]},
+      {:bandit, "~> 1.5", only: [:test]},
       {:uuid, "~> 1.1", only: [:test]},
-      {:electric, path: "../../../electric/packages/sync-service/", only: [:test]},
-      {:electric_client, path: "../../../electric/packages/elixir-client/", only: [:test]}
+      {:mox, "~> 1.1", only: [:test]},
+      {:electric, path: "../sync-service/", env: :dev, only: [:test], override: true},
+      {:electric_client, path: "../elixir-client/", env: :dev, only: [:test], override: true}
+    ]
+  end
+
+  defp deps_for_env(:dev) do
+    [
+      {:electric, path: "../sync-service/", env: :dev, only: [:dev, :test], override: true},
+      {:electric_client, path: "../elixir-client/", env: :dev, only: [:dev, :test]}
     ]
   end
 
   defp deps_for_env(_) do
     [
-      {:electric_client, "0.2.6-beta.1"}
+      {:electric_client, "0.2.6-beta.2"},
+      {:electric, "1.0.0-beta.12", optional: true}
     ]
   end
 

@@ -29,9 +29,16 @@ defmodule Electric.Phoenix.LiveViewTest.Router do
   scope "/" do
     pipe_through([:browser])
 
-    get "/shape/items", Electric.Phoenix.Plug,
+    get("/shape/items", Electric.Phoenix.Plug,
       shape: Electric.Client.shape!("items", where: "visible = true")
+    )
 
-    get "/shape/generic", Electric.Phoenix.Plug, []
+    get("/shape/generic", Electric.Phoenix.Plug, [])
+  end
+
+  scope "/api" do
+    pipe_through([:browser])
+
+    forward("/", Electric.Phoenix.Plug.Shapes, [])
   end
 end

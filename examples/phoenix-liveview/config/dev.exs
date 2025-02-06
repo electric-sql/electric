@@ -1,15 +1,21 @@
 import Config
 
-# Configure your database
-config :electric_phoenix_example, Electric.PhoenixExample.Repo,
+connection_opts = [
   username: "postgres",
   password: "password",
   hostname: "localhost",
   database: "electric",
-  port: 54321,
-  stacktrace: true,
-  show_sensitive_data_on_connection_error: true,
-  pool_size: 10
+  port: 54321
+]
+
+# Configure your database
+config :electric_phoenix_example,
+       Electric.PhoenixExample.Repo,
+       Keyword.merge(connection_opts,
+         stacktrace: true,
+         show_sensitive_data_on_connection_error: true,
+         pool_size: 10
+       )
 
 # For development, we disable any cache and enable
 # debugging and code reloading.
@@ -86,3 +92,19 @@ config :phoenix_live_view,
 config :electric_phoenix, Electric.Client,
   base_url: System.get_env("ELECTRIC_URL", "http://localhost:3000/"),
   params: System.get_env("ELECTRIC_CLIENT_PARAMS", "{}") |> :json.decode()
+
+config :sentry,
+  environment_name: config_env(),
+  client: Electric.Telemetry.SentryReqHTTPClient
+
+config :electric,
+  # connection_opts: Electric.Utils.obfuscate_password(connection_opts),
+  connection_opts: connection_opts,
+  # enable the http api so that the client tests against a real endpoint can
+  # run against our embedded electric instance.
+  enable_http_api: false,
+  allow_shape_deletion?: false,
+  # use a non-default replication stream id so we can run the client
+  # tests at the same time as an active electric instance
+  replication_stream_id: "liveview_example",
+  storage_dir: Path.join(System.tmp_dir!(), "electric/liveview_example#{System.monotonic_time()}")
