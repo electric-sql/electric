@@ -463,12 +463,12 @@ defmodule Electric.ClientTest do
                  headers: @insert,
                  value: %{"id" => "1111"}
                },
-               up_to_date(1, 0),
+               up_to_date("1_0"),
                %ChangeMessage{
                  headers: @insert,
                  value: %{"id" => "2222"}
                },
-               up_to_date(2, 0)
+               up_to_date("2_0")
              ] = stream(ctx, 4)
 
       assert_receive {:offset, "-1"}
@@ -543,12 +543,12 @@ defmodule Electric.ClientTest do
                  headers: @insert,
                  value: %{"id" => "1111"}
                },
-               up_to_date(1, 0),
+               up_to_date("1_0"),
                %ChangeMessage{
                  headers: @insert,
                  value: %{"id" => "2222"}
                },
-               up_to_date(2, 0)
+               up_to_date("2_0")
              ] = stream(ctx, 4)
     end
 
@@ -643,12 +643,12 @@ defmodule Electric.ClientTest do
                  headers: @insert,
                  value: %{"id" => "1111"}
                },
-               up_to_date(1, 0),
+               up_to_date("1_0"),
                %ChangeMessage{
                  headers: @insert,
                  value: %{"id" => "2222"}
                },
-               up_to_date(2, 0)
+               up_to_date("2_0")
              ] = stream(ctx, 4)
     end
 
@@ -716,13 +716,13 @@ defmodule Electric.ClientTest do
                  headers: @insert,
                  value: %{"id" => "1111"}
                },
-               up_to_date(1, 0),
-               %ControlMessage{control: :must_refetch, offset: offset(1, 0)},
+               up_to_date("1_0"),
+               %ControlMessage{control: :must_refetch, offset: "1_0"},
                %ChangeMessage{
                  headers: ^headers,
                  value: %{"id" => "1111"}
                },
-               up_to_date(1, 0)
+               up_to_date("1_0")
              ] = stream(ctx, 5)
 
       assert_receive {:offset, "-1"}
@@ -849,10 +849,10 @@ defmodule Electric.ClientTest do
                  value: %{"id" => "2222"},
                  headers: %Headers{operation: :insert}
                },
-               up_to_date(2, 0),
+               up_to_date("2_0"),
                %ResumeMessage{
                  shape_handle: "my-shape",
-                 offset: offset(2, 0),
+                 offset: "2_0",
                  schema: %{id: %{type: "text"}}
                }
              ] = events
@@ -901,7 +901,7 @@ defmodule Electric.ClientTest do
 
       resume = %ResumeMessage{
         shape_handle: "my-shape",
-        offset: offset(2, 0),
+        offset: "2_0",
         schema: %{id: %{type: "text"}}
       }
 
@@ -916,7 +916,7 @@ defmodule Electric.ClientTest do
                  value: %{"id" => "4444"},
                  headers: %Headers{operation: :insert}
                },
-               up_to_date(4, 0)
+               up_to_date("4_0")
              ] = events
     end
 
@@ -988,7 +988,7 @@ defmodule Electric.ClientTest do
                },
                %ResumeMessage{
                  shape_handle: "my-shape",
-                 offset: offset(1234, 0),
+                 offset: "1234_0",
                  schema: %{id: %{type: "text"}}
                }
              ] = events

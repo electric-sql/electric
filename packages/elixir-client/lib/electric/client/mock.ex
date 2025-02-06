@@ -184,7 +184,7 @@ defmodule Electric.Client.Mock do
     %{
       value: opts[:value] || %{},
       headers: change_headers(opts[:operation] || :insert),
-      offset: Offset.to_string(opts[:offset] || Offset.first())
+      offset: opts[:offset] || Offset.first()
     }
     |> jsonify()
   end
@@ -212,11 +212,7 @@ defmodule Electric.Client.Mock do
   def headers(args) do
     %{}
     |> put_optional_header("electric-handle", args[:shape_handle])
-    |> put_optional_header(
-      "electric-offset",
-      args[:last_offset],
-      &Client.Offset.to_string/1
-    )
+    |> put_optional_header("electric-offset", args[:last_offset])
     |> put_optional_header("electric-schema", args[:schema], &Jason.encode!/1)
   end
 

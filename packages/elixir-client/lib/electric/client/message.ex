@@ -40,7 +40,7 @@ defmodule Electric.Client.Message do
     @type control :: :must_refetch | :up_to_date
     @type t :: %__MODULE__{
             control: control(),
-            offset: Offset.t(),
+            offset: Client.offset(),
             handle: Client.shape_handle(),
             request_timestamp: DateTime.t()
           }
