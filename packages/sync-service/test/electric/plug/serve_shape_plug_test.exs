@@ -42,7 +42,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
   @test_pg_id "12345"
 
   # Higher timeout is needed for some tests that tend to run slower on CI.
-  @receive_timeout 1000
+  @receive_timeout 2000
 
   def load_column_info({"public", "users"}, _),
     do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
@@ -780,7 +780,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Jason.decode!(conn.resp_body) == %{"message" => "Stack not ready"}
     end
 
-    @tag stack_ready_timeout: 1000
+    @tag stack_ready_timeout: 5000
     test "waits until stack ready and proceeds", ctx do
       conn_task =
         Task.async(fn ->

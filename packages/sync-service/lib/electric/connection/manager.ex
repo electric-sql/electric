@@ -69,14 +69,6 @@ defmodule Electric.Connection.Manager do
     ]
   end
 
-  defmodule ConnectionBackoff do
-    defstruct [
-      :backoff,
-      :retries_started_at,
-      :timer_ref
-    ]
-  end
-
   use GenServer
 
   require Logger
@@ -193,7 +185,11 @@ defmodule Electric.Connection.Manager do
         timeline_opts: timeline_opts,
         shape_cache_opts: shape_cache_opts,
         pg_lock_acquired: false,
-        connection_backoff: %ConnectionBackoff{backoff: :backoff.init(1000, 10_000)},
+        connection_backoff: %{
+          backoff: :backoff.init(1000, 10_000),
+          retries_started_at: nil,
+          timer_ref: nil
+        },
         stack_id: Keyword.fetch!(opts, :stack_id),
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
         tweaks: Keyword.fetch!(opts, :tweaks),
@@ -207,13 +203,13 @@ defmodule Electric.Connection.Manager do
   end
 
   @impl true
-  def handle_call(:get_pg_version, _from, %{pg_version: pg_version} = state) do
+  def handle_call(:get_pg_version, _from, %State{pg_version: pg_version} = state) do
     # If we haven't queried the PG version by the time it is requested, that's a fatal error.
     false = is_nil(pg_version)
     {:reply, pg_version, state}
   end
 
-  def handle_call(:get_status, _from, %{pg_lock_acquired: pg_lock_acquired} = state) do
+  def handle_call(:get_status, _from, %State{pg_lock_acquired: pg_lock_acquired} = state) do
     status =
       cond do
         not pg_lock_acquired ->
@@ -230,8 +226,8 @@ defmodule Electric.Connection.Manager do
     {:reply, status, state}
   end
 
-  def handle_call(:await_active, from, %{pool_pid: nil} = state) do
-    {:noreply, %{state | awaiting_active: [from | state.awaiting_active]}}
+  def handle_call(:await_active, from, %State{pool_pid: nil} = state) do
+    {:noreply, %State{state | awaiting_active: [from | state.awaiting_active]}}
   end
 
   def handle_call(:await_active, _from, state) do
@@ -239,7 +235,7 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_call(:drop_replication_slot_on_stop, _from, state) do
-    {:reply, :ok, %{state | drop_slot_requested: true}}
+    {:reply, :ok, %State{state | drop_slot_requested: true}}
   end
 
   def handle_call(:report_retained_wal_size, _from, state) do
@@ -263,7 +259,7 @@ defmodule Electric.Connection.Manager do
     case start_lock_connection(opts) do
       {:ok, pid, connection_opts} ->
         state = mark_connection_succeeded(state)
-        state = %{state | lock_connection_pid: pid, connection_opts: connection_opts}
+        state = %State{state | lock_connection_pid: pid, connection_opts: connection_opts}
 
         Electric.StackSupervisor.dispatch_stack_event(
           state.stack_events_registry,
@@ -290,7 +286,7 @@ defmodule Electric.Connection.Manager do
     case start_replication_client(opts) do
       {:ok, pid, connection_opts} ->
         state = mark_connection_succeeded(state)
-        state = %{state | replication_client_pid: pid, connection_opts: connection_opts}
+        state = %State{state | replication_client_pid: pid, connection_opts: connection_opts}
 
         if is_nil(state.pool_pid) do
           # This is the case where Connection.Manager starts connections from the initial state.
@@ -346,7 +342,7 @@ defmodule Electric.Connection.Manager do
         log_collector_pid = lookup_log_collector_pid(shapes_sup_pid)
         Process.monitor(log_collector_pid)
 
-        state = %{
+        state = %State{
           state
           | pool_pid: pool_pid,
             shape_log_collector_pid: log_collector_pid,
@@ -357,7 +353,7 @@ defmodule Electric.Connection.Manager do
           GenServer.reply(awaiting, :ok)
         end
 
-        {:noreply, %{state | awaiting_active: []}}
+        {:noreply, %State{state | awaiting_active: []}}
 
       {:error, reason} ->
         handle_connection_error(reason, state, "regular")
@@ -367,11 +363,11 @@ defmodule Electric.Connection.Manager do
   @impl true
   def handle_info(
         {:timeout, tref, step},
-        %{connection_backoff: %ConnectionBackoff{timer_ref: tref} = conn_backoff} = state
+        %State{connection_backoff: %{timer_ref: tref} = conn_backoff} = state
       ) do
     state = %State{
       state
-      | connection_backoff: %ConnectionBackoff{conn_backoff | timer_ref: nil}
+      | connection_backoff: %{conn_backoff | timer_ref: nil}
     }
 
     handle_continue(step, state)
@@ -391,7 +387,7 @@ defmodule Electric.Connection.Manager do
       "Handling the exit of the replication client #{inspect(pid)} with reason #{inspect(reason)}"
     )
 
-    state = %{state | replication_client_pid: nil}
+    state = %State{state | replication_client_pid: nil}
     state = schedule_reconnection(:start_replication_client, state)
     {:noreply, state}
   end
@@ -408,7 +404,10 @@ defmodule Electric.Connection.Manager do
     {:stop, {:shutdown, reason}, state}
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, reason}, %{shape_log_collector_pid: pid} = state) do
+  def handle_info(
+        {:DOWN, _ref, :process, pid, reason},
+        %State{shape_log_collector_pid: pid} = state
+      ) do
     # The replication client would normally exit together with the shape log collector when it
     # is blocked on a call to either `ShapeLogCollector.handle_relation_msg/2` or
     # `ShapeLogCollector.store_transaction/2` and the log collector encounters a storage error.
@@ -433,7 +432,7 @@ defmodule Electric.Connection.Manager do
       drop_slot(state)
     end
 
-    {:noreply, %{state | shape_log_collector_pid: nil, replication_client_pid: nil}}
+    {:noreply, %State{state | shape_log_collector_pid: nil, replication_client_pid: nil}}
   end
 
   # Periodically log the status of the lock connection until it is acquired for
@@ -448,11 +447,11 @@ defmodule Electric.Connection.Manager do
   end
 
   @impl true
-  def handle_cast(:exclusive_connection_lock_acquired, %{pg_lock_acquired: false} = state) do
+  def handle_cast(:exclusive_connection_lock_acquired, %State{pg_lock_acquired: false} = state) do
     # As soon as we acquire the connection lock, we try to start the replication connection
     # first because it requires additional privileges compared to regular "pooled" connections,
     # so failure to open a replication connection should be reported ASAP.
-    {:noreply, %{state | pg_lock_acquired: true}, {:continue, :start_replication_client}}
+    {:noreply, %State{state | pg_lock_acquired: true}, {:continue, :start_replication_client}}
   end
 
   def handle_cast({:pg_info_looked_up, {server_version, system_identifier, timeline_id}}, state) do
@@ -467,7 +466,7 @@ defmodule Electric.Connection.Manager do
     )
 
     {:noreply,
-     %{
+     %State{
        state
        | pg_version: server_version,
          pg_system_identifier: system_identifier,
@@ -561,7 +560,7 @@ defmodule Electric.Connection.Manager do
       )
 
       # disable IPv6 and retry immediately
-      state = %{
+      state = %State{
         state
         | ipv6_enabled: false,
           connection_opts: connection_opts |> Keyword.put(:ipv6, false) |> update_tcp_opts()
@@ -656,7 +655,7 @@ defmodule Electric.Connection.Manager do
   defp schedule_reconnection(
          step,
          %State{
-           connection_backoff: %ConnectionBackoff{
+           connection_backoff: %{
              backoff: backoff,
              retries_started_at: retries_started_at
            }
@@ -668,7 +667,7 @@ defmodule Electric.Connection.Manager do
 
     %State{
       state
-      | connection_backoff: %ConnectionBackoff{
+      | connection_backoff: %{
           backoff: backoff,
           retries_started_at: retries_started_at || System.monotonic_time(:millisecond),
           timer_ref: tref
@@ -677,29 +676,29 @@ defmodule Electric.Connection.Manager do
   end
 
   # If total backoff time is 0 then there were no reconnection attempts
-  defp mark_connection_succeeded(
-         %State{connection_backoff: %ConnectionBackoff{retries_started_at: nil}} = state
-       ),
-       do: state
+  defp mark_connection_succeeded(%State{connection_backoff: %{retries_started_at: nil}} = state),
+    do: state
 
   # Otherwise, reset the backoff and total backoff time
-  defp mark_connection_succeeded(
-         %State{connection_backoff: %ConnectionBackoff{backoff: backoff}} = state
-       ) do
+  defp mark_connection_succeeded(%State{connection_backoff: %{backoff: backoff}} = state) do
     {_, backoff} = :backoff.succeed(backoff)
     Logger.info("Reconnection succeeded after #{inspect(total_retry_time(state))}ms")
 
     %State{
       state
-      | connection_backoff: %ConnectionBackoff{backoff: backoff}
+      | connection_backoff: %{
+          state.connection_backoff
+          | backoff: backoff,
+            retries_started_at: nil
+        }
     }
   end
 
-  defp total_retry_time(%State{connection_backoff: %ConnectionBackoff{retries_started_at: nil}}),
+  defp total_retry_time(%State{connection_backoff: %{retries_started_at: nil}}),
     do: 0
 
   defp total_retry_time(%State{
-         connection_backoff: %ConnectionBackoff{retries_started_at: retries_started_at}
+         connection_backoff: %{retries_started_at: retries_started_at}
        }),
        do: retries_started_at - System.monotonic_time(:millisecond)
 
@@ -780,11 +779,11 @@ defmodule Electric.Connection.Manager do
     log_collector_pid
   end
 
-  defp drop_slot(%{pool_pid: nil} = _state) do
+  defp drop_slot(%State{pool_pid: nil} = _state) do
     Logger.warning("Skipping slot drop, pool connection not available")
   end
 
-  defp drop_slot(%{pool_pid: pool} = state) do
+  defp drop_slot(%State{pool_pid: pool} = state) do
     publication_name = Keyword.fetch!(state.replication_opts, :publication_name)
     slot_name = Keyword.fetch!(state.replication_opts, :slot_name)
     slot_temporary? = Keyword.fetch!(state.replication_opts, :slot_temporary?)

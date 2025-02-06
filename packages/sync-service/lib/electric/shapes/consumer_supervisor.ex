@@ -12,7 +12,6 @@ defmodule Electric.Shapes.ConsumerSupervisor do
             shape: [type: {:struct, Electric.Shapes.Shape}, required: true],
             inspector: [type: :mod_arg, required: true],
             log_producer: [type: @genserver_name_schema, required: true],
-            shape_cache: [type: :mod_arg, required: true],
             registry: [type: :atom, required: true],
             shape_status: [type: :mod_arg, required: true],
             storage: [type: :mod_arg, required: true],

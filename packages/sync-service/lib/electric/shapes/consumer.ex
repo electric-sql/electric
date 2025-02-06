@@ -264,7 +264,7 @@ defmodule Electric.Shapes.Consumer do
       shape_handle: shape_handle,
       log_state: log_state,
       chunk_bytes_threshold: chunk_bytes_threshold,
-      shape_cache: {shape_cache, shape_cache_opts},
+      shape_status: {shape_status, shape_status_state},
       registry: registry,
       storage: storage
     } = state
@@ -326,7 +326,7 @@ defmodule Electric.Shapes.Consumer do
           Map.new(shape_attrs(state.shape_handle, state.shape))
         )
 
-        shape_cache.update_shape_latest_offset(shape_handle, last_log_offset, shape_cache_opts)
+        shape_status.set_latest_offset(shape_status_state, shape_handle, last_log_offset)
 
         notify_listeners(registry, :new_changes, shape_handle, last_log_offset)
 

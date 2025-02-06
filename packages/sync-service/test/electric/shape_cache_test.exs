@@ -328,53 +328,6 @@ defmodule Electric.ShapeCacheTest do
              } = map
     end
 
-    test "updates latest offset correctly", %{
-      shape_cache_opts: opts,
-      storage: storage
-    } do
-      {shape_handle, initial_offset} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
-
-      assert {^shape_handle, offset_after_snapshot} =
-               ShapeCache.get_or_create_shape_handle(@shape, opts)
-
-      expected_offset_after_log_entry =
-        LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
-
-      :ok =
-        ShapeCache.update_shape_latest_offset(shape_handle, expected_offset_after_log_entry, opts)
-
-      assert {^shape_handle, offset_after_log_entry} =
-               ShapeCache.get_or_create_shape_handle(@shape, opts)
-
-      assert initial_offset == @zero_offset
-      assert initial_offset == offset_after_snapshot
-      assert LogOffset.compare(offset_after_log_entry, offset_after_snapshot) == :gt
-      assert offset_after_log_entry == expected_offset_after_log_entry
-
-      # Stop snapshot process gracefully to prevent errors being logged in the test
-      storage = Storage.for_shape(shape_handle, storage)
-
-      stream =
-        Storage.get_log_stream(
-          LogOffset.before_all(),
-          LogOffset.last_before_real_offsets(),
-          storage
-        )
-
-      Stream.run(stream)
-    end
-
-    test "errors if appending to untracked shape_handle", %{shape_cache_opts: opts} do
-      shape_handle = "foo"
-      log_offset = LogOffset.new(1000, 0)
-
-      {:error, log} =
-        with_log(fn -> ShapeCache.update_shape_latest_offset(shape_handle, log_offset, opts) end)
-
-      assert log =~ "Tried to update latest offset for shape #{shape_handle} which doesn't exist"
-    end
-
     test "correctly propagates the error", %{shape_cache_opts: opts} do
       shape = %Shape{
         @shape
