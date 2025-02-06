@@ -107,7 +107,7 @@ defmodule Electric.MixProject do
         {:sentry, "~> 10.0"},
         {:telemetry_metrics_prometheus_core, "~> 1.1"},
         {:telemetry_metrics_statsd, "~> 0.7"},
-        {:telemetry_poller, "~> 1.1"},
+        {:telemetry_poller, "~> 1.1", runtime: false},
         {:tls_certificate_check, "~> 1.23"},
         {:tz, "~> 0.27"}
       ],

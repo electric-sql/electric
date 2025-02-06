@@ -23,6 +23,9 @@ defmodule Electric.Telemetry do
     otel_metrics? = not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
 
     [
+      # The telemetry_poller application starts its own poller by default but we disable that
+      # and add its default measurements to the list of our custom ones. This allows for all
+      # periodic measurements to be defined in one place.
       {:telemetry_poller,
        measurements: periodic_measurements(opts),
        period: system_metrics_poll_interval,
@@ -243,9 +246,12 @@ defmodule Electric.Telemetry do
     stack_id = Keyword.fetch!(opts, :stack_id)
 
     [
+      # Default measurements included with the telemetry_poller application:
       :memory,
       :total_run_queue_lengths,
       :system_counts,
+
+      # Our custom measurements:
       {__MODULE__, :uptime_event, []},
       {__MODULE__, :count_shapes, [stack_id]},
       {__MODULE__, :cpu_utilization, []},
