@@ -35,14 +35,27 @@ defmodule Electric.Phoenix.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:electric_client, "0.2.6-beta.1"},
       {:nimble_options, "~> 1.1"},
       {:phoenix_live_view, "~> 1.0"},
       {:plug, "~> 1.0"},
       {:jason, "~> 1.0"},
       {:ecto_sql, "~> 3.10", optional: true},
-      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:floki, "~> 0.36", only: [:test]}
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
+    ] ++ deps_for_env(Mix.env())
+  end
+
+  defp deps_for_env(:test) do
+    [
+      {:floki, "~> 0.36", only: [:test]},
+      {:uuid, "~> 1.1", only: [:test]},
+      {:electric, path: "../../../electric/packages/sync-service/", only: [:test]},
+      {:electric_client, path: "../../../electric/packages/elixir-client/", only: [:test]}
+    ]
+  end
+
+  defp deps_for_env(_) do
+    [
+      {:electric_client, "0.2.6-beta.1"}
     ]
   end
 

@@ -7,6 +7,7 @@ defmodule Electric.Phoenix.LiveViewTest do
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
   import Phoenix.Component
+  import Support.DbSetup
 
   require Ecto.Query
 
@@ -252,6 +253,61 @@ defmodule Electric.Phoenix.LiveViewTest do
       assert html =~ ~r|"electric-mock-auth":"[a-z0-9]+"|
       assert html =~ ~r|"table":"users"|
       assert html =~ ~r|"where":"\(\\"visible\\" = TRUE\)"|
+    end
+  end
+
+  describe "electric_stream with actual electric instance" do
+    setup [:with_unique_db]
+
+    setup(ctx) do
+      tablename = "users"
+
+      Postgrex.query!(
+        ctx.db_conn,
+        """
+          CREATE TABLE \"#{tablename}\" (
+            id uuid primary key not null default gen_random_uuid(),
+            name text not null
+          );
+        """,
+        []
+      )
+
+      users = [
+        %{id: "6dfea52e-1096-4b62-aafd-838ddd49477d", name: "User 1"},
+        %{id: "9fc8f0a7-42e9-4473-9981-43a1904cd88a", name: "User 2"},
+        %{id: "4252d858-8764-4069-bb8c-e670f899b80a", name: "User 3"}
+      ]
+
+      for %{id: id, name: name} <- users do
+        Postgrex.query!(
+          ctx.db_conn,
+          """
+            INSERT INTO "#{tablename}" (id, name) VALUES ($1, $2)
+          """,
+          [UUID.string_to_binary!(id), name]
+        )
+      end
+
+      {:ok, client} = Electric.Client.embedded()
+
+      {:ok, shape} = Electric.Client.shape(tablename)
+      [client: client, tablename: tablename, shape: shape, users: users]
+    end
+
+    test "things", ctx do
+      %{conn: conn} = ctx
+
+      conn =
+        conn
+        |> put_private(:electric_client, ctx.client)
+        |> put_private(:test_pid, self())
+
+      {:ok, lv, html} = live(conn, "/stream")
+
+      for %{name: name} <- ctx.users do
+        assert html =~ name
+      end
     end
   end
 end
