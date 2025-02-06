@@ -58,7 +58,14 @@ defmodule Electric.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, :tls_certificate_check, :os_mon, :runtime_tools],
+      extra_applications: [
+        :logger,
+        :tls_certificate_check,
+        :os_mon,
+        :runtime_tools,
+        :wx,
+        :observer
+      ],
       # Using a compile-time flag to select the application module or lack thereof allows
       # using this app as a dependency with this additional flag
       mod:
