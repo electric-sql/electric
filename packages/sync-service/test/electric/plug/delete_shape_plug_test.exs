@@ -38,20 +38,21 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   end
 
   def call_delete_shape_plug(conn, ctx, allow \\ true) do
-    config = [
-      stack_id: ctx.stack_id,
-      stack_events_registry: Registry.StackEvents,
-      stack_ready_timeout: 100,
-      pg_id: @test_pg_id,
-      shape_cache: {Mock.ShapeCache, []},
-      storage: {Mock.Storage, []},
-      inspector: {__MODULE__, []},
-      registry: @registry,
-      long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
-      max_age: Access.get(ctx, :max_age, 60),
-      stale_age: Access.get(ctx, :stale_age, 300),
-      allow_shape_deletion: allow
-    ]
+    config =
+      Electric.Shapes.Api.plug_opts(
+        stack_id: ctx.stack_id,
+        stack_events_registry: Registry.StackEvents,
+        stack_ready_timeout: 100,
+        pg_id: @test_pg_id,
+        shape_cache: {Mock.ShapeCache, []},
+        storage: {Mock.Storage, []},
+        inspector: {__MODULE__, []},
+        registry: @registry,
+        long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
+        max_age: Access.get(ctx, :max_age, 60),
+        stale_age: Access.get(ctx, :stale_age, 300),
+        allow_shape_deletion: allow
+      )
 
     DeleteShapePlug.call(conn, config)
   end
@@ -70,20 +71,20 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       :ok
     end
 
-    test "returns 404 if shape deletion is not allowed", ctx do
+    test "returns 405 if shape deletion is not allowed", ctx do
       conn =
         ctx
         |> conn("DELETE", "?table=.invalid_shape")
         |> call_delete_shape_plug(ctx, false)
 
-      assert conn.status == 404
+      assert conn.status == 405
 
       assert Jason.decode!(conn.resp_body) == %{
-               "status" => "Not found"
+               "message" => "DELETE not allowed"
              }
     end
 
-    test "returns 400 for invalid params", ctx do
+    test "returns 400 for invalid table", ctx do
       conn =
         ctx
         |> conn("DELETE", "?table=.invalid_shape")
@@ -92,15 +93,36 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       assert conn.status == 400
 
       assert Jason.decode!(conn.resp_body) == %{
-               "table" => [
-                 "Invalid zero-length delimited identifier"
-               ]
+               "message" => "Invalid request",
+               "errors" => %{
+                 "table" => [
+                   "Invalid zero-length delimited identifier"
+                 ]
+               }
+             }
+    end
+
+    test "returns 400 for invalid params", ctx do
+      conn =
+        ctx
+        |> conn("DELETE", "?")
+        |> call_delete_shape_plug(ctx)
+
+      assert conn.status == 400
+
+      assert Jason.decode!(conn.resp_body) == %{
+               "message" => "Invalid request",
+               "errors" => %{
+                 "handle" => [
+                   "can't be blank when shape definition is missing"
+                 ]
+               }
              }
     end
 
     test "should clean shape based on shape definition", ctx do
       Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts -> {@test_shape_handle, 0} end)
+      |> expect(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, 0} end)
       |> expect(:clean_shape, fn @test_shape_handle, _ -> :ok end)
 
       conn =
@@ -111,13 +133,14 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       assert conn.status == 202
     end
 
-    test "should clean shape based on shape_handle", ctx do
+    test "should clean shape based only on shape_handle", ctx do
       Mock.ShapeCache
+      |> expect(:has_shape?, fn @test_shape_handle, _opts -> true end)
       |> expect(:clean_shape, fn @test_shape_handle, _ -> :ok end)
 
       conn =
         ctx
-        |> conn(:delete, "?table=public.users&handle=#{@test_shape_handle}")
+        |> conn(:delete, "?handle=#{@test_shape_handle}")
         |> call_delete_shape_plug(ctx)
 
       assert conn.status == 202

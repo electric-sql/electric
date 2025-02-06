@@ -4,6 +4,8 @@ defmodule Electric.Shapes.Querying do
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
+  require Logger
+
   @doc """
   Streams the initial data for a shape. Query results are returned as a stream of JSON strings, as prepared on PostgreSQL.
   """
@@ -137,7 +139,7 @@ defmodule Electric.Shapes.Querying do
   end
 
   defp escape_relation(relation) do
-    relation |> Utils.relation_to_sql() |> String.replace(~S|'|, ~S|''|)
+    relation |> Utils.relation_to_sql(true) |> String.replace(~S|'|, ~S|''|)
   end
 
   defp escape_column_value(column) do

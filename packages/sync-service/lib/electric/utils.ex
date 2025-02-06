@@ -266,15 +266,44 @@ defmodule Electric.Utils do
   ## Examples
 
       iex> relation_to_sql({"public", "items"})
+      ~S|public.items|
+
+      iex> relation_to_sql({"public", "items"}, true)
       ~S|"public"."items"|
+
+      iex> relation_to_sql({"public", "items-again"})
+      ~S|public."items-again"|
 
       iex> relation_to_sql({"with spaces", ~S|and "quoted"!|})
       ~S|"with spaces"."and ""quoted""!"|
   """
   @spec relation_to_sql(Electric.relation()) :: String.t()
-  def relation_to_sql({schema, table}) do
-    ~s|"#{escape_quotes(schema)}"."#{escape_quotes(table)}"|
+  def relation_to_sql(relation, force_quote \\ false)
+
+  def relation_to_sql({schema, table}, true) do
+    ~s|#{quote_name(schema)}.#{quote_name(table)}|
   end
+
+  def relation_to_sql({schema, table}, false) do
+    ~s|#{maybe_quote(schema)}.#{maybe_quote(table)}|
+  end
+
+  defp maybe_quote(name) do
+    if needs_quoting?(name) do
+      quote_name(name)
+    else
+      name
+    end
+  end
+
+  @safe_chars Enum.flat_map([?a..?z, [?_], ?0..?9], & &1)
+
+  defp needs_quoting?(<<c::8, _rest::binary>>) when c not in @safe_chars do
+    true
+  end
+
+  defp needs_quoting?(<<_::binary-1, rest::binary>>), do: needs_quoting?(rest)
+  defp needs_quoting?(<<>>), do: false
 
   def escape_quotes(text), do: :binary.replace(text, ~S|"|, ~S|""|, [:global])
 

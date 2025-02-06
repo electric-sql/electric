@@ -316,6 +316,8 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def unsafe_cleanup!(%MS{} = opts) do
     for table <- tables(opts),
         do: ignoring_exceptions(fn -> :ets.delete(table) end, ArgumentError)
+
+    :ok
   end
 
   defp ignoring_exceptions(fun, exception) do

@@ -24,17 +24,19 @@ defmodule Electric.Application do
     storage = Electric.Config.get_env(:storage)
 
     router_opts =
-      [
-        long_poll_timeout: 20_000,
-        max_age: Electric.Config.get_env(:cache_max_age),
-        stale_age: Electric.Config.get_env(:cache_stale_age),
-        allow_shape_deletion: Electric.Config.get_env(:allow_shape_deletion?)
-      ] ++
-        Electric.StackSupervisor.build_shared_opts(
-          stack_id: stack_id,
-          stack_events_registry: Registry.StackEvents,
-          storage: storage
-        )
+      Electric.Shapes.Api.plug_opts(
+        [
+          long_poll_timeout: 20_000,
+          max_age: Electric.Config.get_env(:cache_max_age),
+          stale_age: Electric.Config.get_env(:cache_stale_age),
+          allow_shape_deletion: Electric.Config.get_env(:allow_shape_deletion?)
+        ] ++
+          Electric.StackSupervisor.build_shared_opts(
+            stack_id: stack_id,
+            stack_events_registry: Registry.StackEvents,
+            storage: storage
+          )
+      )
 
     {kv_module, kv_fun, kv_params} =
       Electric.Config.get_env(:persistent_kv)

@@ -245,5 +245,6 @@ defmodule Support.ComponentSetup do
       )
     )
     |> Keyword.merge(overrides)
+    |> Electric.Shapes.Api.plug_opts()
   end
 end

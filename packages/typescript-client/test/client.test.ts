@@ -261,6 +261,7 @@ describe(`Shape`, () => {
         table: issuesTableUrl,
       },
     })
+    await waitForFetch(shapeStream)
     const shape = new Shape(shapeStream)
 
     const subFn = vi.fn((_) => void 0)
@@ -621,6 +622,7 @@ describe(`Shape`, () => {
 
     expect(shapeStream.lastOffset).toBe(`-1`)
     expect(shape.lastOffset).toBe(shapeStream.lastOffset)
+    await waitForFetch(shapeStream)
 
     shape.unsubscribeAll()
   })

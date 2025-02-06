@@ -25,7 +25,8 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
   """
   @type log_item_with_sizes() ::
           {offset(), key_size :: non_neg_integer(), key :: String.t(), op_type :: op_type(),
-           json_size :: non_neg_integer(), json :: String.t()}
+           processed_flag :: non_neg_integer(), json_size :: non_neg_integer(),
+           json :: String.t()}
   @type log_item() :: normal_log_item() | log_item_with_sizes()
 
   @typedoc """

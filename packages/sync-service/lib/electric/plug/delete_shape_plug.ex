@@ -1,61 +1,44 @@
 defmodule Electric.Plug.DeleteShapePlug do
-  require Logger
   use Plug.Builder, copy_opts_to_assign: :config
 
-  alias Electric.Shapes
-  alias Electric.Plug.ServeShapePlug.Params
-  import Electric.Plug.Utils, only: [hold_conn_until_stack_ready: 2]
+  alias Electric.Shapes.Api
+
+  require Logger
 
   plug :fetch_query_params
   plug :put_resp_content_type, "application/json"
 
-  plug :hold_conn_until_stack_ready
-
-  plug :allow_shape_deletion
-  plug :validate_query_params
-
+  plug :validate_request
   plug :truncate_or_delete_shape
 
-  defp allow_shape_deletion(%Plug.Conn{} = conn, _) do
-    if conn.assigns.config[:allow_shape_deletion] do
-      conn
-    else
-      conn
-      |> send_resp(404, Jason.encode_to_iodata!(%{status: "Not found"}))
-      |> halt()
-    end
-  end
+  defp validate_request(%Plug.Conn{assigns: %{config: config}} = conn, _) do
+    api = Access.fetch!(config, :api)
 
-  defp validate_query_params(%Plug.Conn{} = conn, _) do
     all_params =
       Map.merge(conn.query_params, conn.path_params)
       |> Map.take(["table", "handle"])
       |> Map.put("offset", "-1")
 
-    case Params.validate(all_params, inspector: conn.assigns.config[:inspector]) do
-      {:ok, params} ->
-        %{conn | assigns: Map.merge(conn.assigns, params)}
+    case Api.validate_for_delete(api, all_params) do
+      {:ok, request} ->
+        assign(conn, :request, request)
 
-      {:error, error_map} ->
+      {:error, response} ->
         conn
-        |> send_resp(400, Jason.encode_to_iodata!(error_map))
+        |> Api.Response.send(response)
         |> halt()
     end
   end
 
   defp truncate_or_delete_shape(%Plug.Conn{} = conn, _) do
-    if conn.assigns.handle !== nil do
-      with :ok <- Shapes.clean_shape(conn.assigns.handle, conn.assigns.config) do
-        send_resp(conn, 202, "")
-      end
+    %{assigns: %{request: request}} = conn
+
+    if !is_nil(request.handle) do
+      response = Api.delete_shape(request)
+
+      Api.Response.send(conn, response)
     else
-      # FIXME: This has a race condition where we accidentally create a snapshot & shape handle, but clean
-      #        it before snapshot is actually made.
-      with {shape_handle, _} <-
-             Shapes.get_or_create_shape_handle(conn.assigns.config, conn.assigns.shape_definition),
-           :ok <- Shapes.clean_shape(shape_handle, conn.assigns.config) do
-        send_resp(conn, 202, "")
-      end
+      send_resp(conn, 404, Jason.encode!(%{message: "Shape not found"}))
     end
   end
 end
