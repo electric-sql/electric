@@ -1,5 +1,6 @@
 defmodule Electric.ShapeCache.FileStorage.KeyIndexTest do
   use ExUnit.Case, async: true
+  import Electric.ShapeCache.FileStorage.KeyIndex, only: [key_index_item: 2]
   alias Electric.ShapeCache.FileStorage.KeyIndex
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.FileStorage.LogFile
@@ -45,6 +46,42 @@ defmodule Electric.ShapeCache.FileStorage.KeyIndexTest do
       # Test streaming
       result = KeyIndex.stream(key_index_path) |> Enum.to_list()
       assert length(result) > 0
+    end
+  end
+
+  describe "sort/1" do
+    test "sorts key file in place while maintaining correct structure", %{tmp_dir: tmp_dir} do
+      key_index_path = Path.join(tmp_dir, "key_index")
+
+      offsets = Enum.map(1..10_000, &{&1, 1})
+      offsets = Enum.map(offsets, &LogOffset.new/1)
+
+      offsets
+      |> Enum.map(fn offset ->
+        {offset, "much longer key #{offset}", :insert, "much longer value"}
+      end)
+      |> LogFile.normalize_log_stream()
+      |> KeyIndex.write_from_stream(key_index_path)
+      |> Stream.run()
+
+      items =
+        KeyIndex.stream(key_index_path)
+        |> Enum.to_list()
+
+      assert items
+             |> Enum.map(&key_index_item(&1, :offset)) == offsets
+
+      KeyIndex.sort(key_index_path)
+
+      assert KeyIndex.stream(key_index_path)
+             |> Enum.to_list()
+             |> Enum.map(&key_index_item(&1, :offset)) ==
+               Enum.sort_by(
+                 offsets,
+                 &{"much longer key #{&1}", &1.tx_offset, &1.op_offset}
+               )
+
+      # end
     end
   end
 end
