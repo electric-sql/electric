@@ -70,6 +70,7 @@ defmodule Electric.Connection.Manager do
   end
 
   use GenServer
+  alias Electric.Connection.Manager.ConnectionBackoff
 
   require Logger
 
@@ -185,11 +186,7 @@ defmodule Electric.Connection.Manager do
         timeline_opts: timeline_opts,
         shape_cache_opts: shape_cache_opts,
         pg_lock_acquired: false,
-        connection_backoff: %{
-          backoff: :backoff.init(1000, 10_000),
-          retries_started_at: nil,
-          timer_ref: nil
-        },
+        connection_backoff: {ConnectionBackoff.init(1000, 10_000), nil},
         stack_id: Keyword.fetch!(opts, :stack_id),
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
         tweaks: Keyword.fetch!(opts, :tweaks),
@@ -363,13 +360,9 @@ defmodule Electric.Connection.Manager do
   @impl true
   def handle_info(
         {:timeout, tref, step},
-        %State{connection_backoff: %{timer_ref: tref} = conn_backoff} = state
+        %State{connection_backoff: {conn_backoff, tref}} = state
       ) do
-    state = %State{
-      state
-      | connection_backoff: %{conn_backoff | timer_ref: nil}
-    }
-
+    state = %State{state | connection_backoff: {conn_backoff, nil}}
     handle_continue(step, state)
   end
 
@@ -600,7 +593,7 @@ defmodule Electric.Connection.Manager do
       {:database_connection_failed,
        %{
          message: message,
-         total_retry_time: total_retry_time(state)
+         total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
        }}
     )
 
@@ -655,52 +648,24 @@ defmodule Electric.Connection.Manager do
   defp schedule_reconnection(
          step,
          %State{
-           connection_backoff: %{
-             backoff: backoff,
-             retries_started_at: retries_started_at
-           }
+           connection_backoff: {conn_backoff, _}
          } = state
        ) do
-    {time, backoff} = :backoff.fail(backoff)
+    {time, conn_backoff} = ConnectionBackoff.fail(conn_backoff)
     tref = :erlang.start_timer(time, self(), step)
     Logger.warning("Reconnecting in #{inspect(time)}ms")
-
-    %State{
-      state
-      | connection_backoff: %{
-          backoff: backoff,
-          retries_started_at: retries_started_at || System.monotonic_time(:millisecond),
-          timer_ref: tref
-        }
-    }
+    %State{state | connection_backoff: {conn_backoff, tref}}
   end
 
-  # If total backoff time is 0 then there were no reconnection attempts
-  defp mark_connection_succeeded(%State{connection_backoff: %{retries_started_at: nil}} = state),
-    do: state
+  defp mark_connection_succeeded(%State{connection_backoff: {conn_backoff, tref}} = state) do
+    {total_retry_time, conn_backoff} = ConnectionBackoff.succeed(conn_backoff)
 
-  # Otherwise, reset the backoff and total backoff time
-  defp mark_connection_succeeded(%State{connection_backoff: %{backoff: backoff}} = state) do
-    {_, backoff} = :backoff.succeed(backoff)
-    Logger.info("Reconnection succeeded after #{inspect(total_retry_time(state))}ms")
+    if total_retry_time > 0 do
+      Logger.info("Reconnection succeeded after #{inspect(total_retry_time)}ms")
+    end
 
-    %State{
-      state
-      | connection_backoff: %{
-          state.connection_backoff
-          | backoff: backoff,
-            retries_started_at: nil
-        }
-    }
+    %State{state | connection_backoff: {conn_backoff, tref}}
   end
-
-  defp total_retry_time(%State{connection_backoff: %{retries_started_at: nil}}),
-    do: 0
-
-  defp total_retry_time(%State{
-         connection_backoff: %{retries_started_at: retries_started_at}
-       }),
-       do: retries_started_at - System.monotonic_time(:millisecond)
 
   defp update_ssl_opts(connection_opts) do
     ssl_opts =
