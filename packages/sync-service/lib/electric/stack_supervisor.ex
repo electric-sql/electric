@@ -160,6 +160,8 @@ defmodule Electric.StackSupervisor do
          server: Electric.Postgres.Inspector.EtsInspector.name(stack_id: stack_id)}
       )
 
+    persistent_kv = Access.fetch!(opts, :persistent_kv)
+
     [
       shape_cache: shape_cache,
       publication_manager: publication_manager,
@@ -168,6 +170,7 @@ defmodule Electric.StackSupervisor do
       storage: storage_mod_arg(opts),
       inspector: inspector,
       stack_id: stack_id,
+      persistent_kv: persistent_kv,
       get_service_status: fn -> Electric.ServiceStatus.check(stack_id) end
     ]
   end
@@ -214,6 +217,8 @@ defmodule Electric.StackSupervisor do
 
     shape_changes_registry_name = registry_name(stack_id)
 
+    :ets.new(:"#{stack_id}:stack_meta", [:set, :public, :named_table])
+
     shape_cache_opts = [
       stack_id: stack_id,
       storage: storage,
@@ -247,6 +252,7 @@ defmodule Electric.StackSupervisor do
         stack_id: stack_id,
         persistent_kv: config.persistent_kv
       ],
+      persistent_kv: config.persistent_kv,
       shape_cache_opts: shape_cache_opts,
       tweaks: config.tweaks
     ]

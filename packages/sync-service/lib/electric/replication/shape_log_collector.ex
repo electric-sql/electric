@@ -5,6 +5,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   """
   use GenStage
 
+  alias Electric.PersistentKV
+  alias Electric.Postgres
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.{Relation, Transaction}
@@ -15,6 +17,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
             inspector: [type: :mod_arg, required: true],
+            persistent_kv: [type: :any, required: true],
             # see https://hexdocs.pm/gen_stage/GenStage.html#c:init/1-options
             demand: [type: {:in, [:forward, :accumulate]}, default: :accumulate]
           )
@@ -57,7 +60,20 @@ defmodule Electric.Replication.ShapeLogCollector do
     Process.set_label({:shape_log_collector, opts.stack_id})
     Logger.metadata(stack_id: opts.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
-    state = Map.merge(opts, %{producer: nil, subscriptions: {0, MapSet.new()}})
+
+    last_seen_lsn =
+      case PersistentKV.get(opts.persistent_kv, "#{opts.stack_id}:last_processed_lsn") do
+        {:ok, last_seen_lsn} -> last_seen_lsn
+        {:error, :not_found} -> 0
+      end
+
+    state =
+      Map.merge(opts, %{
+        producer: nil,
+        subscriptions: {0, MapSet.new()},
+        last_seen_lsn: last_seen_lsn
+      })
+
     # start in demand: :accumulate mode so that the ShapeCache is able to start
     # all active consumers before we start sending transactions
     {:producer, state,
@@ -85,7 +101,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   # client.
   def handle_demand(_demand, %{producer: producer} = state) do
     GenServer.reply(producer, :ok)
-    {:noreply, [], %{state | producer: nil}}
+    {:noreply, [], update_last_processed_lsn(%{state | producer: nil})}
   end
 
   def handle_cancel({:cancel, _}, from, state) do
@@ -124,6 +140,11 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
 
+    state =
+      state
+      |> put_last_seen_lsn(txn.lsn)
+      |> update_last_processed_lsn()
+
     {:reply, :ok, [], state}
   end
 
@@ -144,7 +165,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     # we don't reply to this call. we only reply when we receive demand from
     # the consumers, signifying that every one has processed this txn
-    {:noreply, [txn], %{state | producer: from}}
+    {:noreply, [txn], %{state | producer: from} |> put_last_seen_lsn(txn.lsn)}
   end
 
   defp handle_relation(rel, _from, %{subscriptions: {0, _}} = state) do
@@ -181,6 +202,23 @@ defmodule Electric.Replication.ShapeLogCollector do
     Logger.debug(fn ->
       "#{active} consumers of replication stream"
     end)
+
+    state
+  end
+
+  defp put_last_seen_lsn(state, lsn) do
+    %{state | last_seen_lsn: max(state.last_seen_lsn, Postgres.Lsn.to_integer(lsn))}
+  end
+
+  defp update_last_processed_lsn(state) do
+    # state = %{state | last_processed_lsn: state.last_seen_lsn}
+    Logger.debug("Updating last processed lsn to #{state.last_seen_lsn}")
+
+    PersistentKV.set(
+      state.persistent_kv,
+      "#{state.stack_id}:last_processed_lsn",
+      state.last_seen_lsn
+    )
 
     state
   end

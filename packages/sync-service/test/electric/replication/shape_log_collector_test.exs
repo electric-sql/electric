@@ -15,7 +15,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     only: [
       with_in_memory_storage: 1,
       with_stack_id_from_test: 1,
-      with_noop_publication_manager: 1
+      with_noop_publication_manager: 1,
+      with_persistent_kv: 1
     ]
 
   import Mox
@@ -23,7 +24,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   @moduletag :capture_log
 
   setup :verify_on_exit!
-  setup [:with_stack_id_from_test, :with_in_memory_storage, :with_noop_publication_manager]
+
+  setup [
+    :with_stack_id_from_test,
+    :with_in_memory_storage,
+    :with_noop_publication_manager,
+    :with_persistent_kv
+  ]
 
   setup(ctx) do
     # Start a test Registry
@@ -34,6 +41,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     opts = [
       stack_id: ctx.stack_id,
       inspector: {Mock.Inspector, []},
+      persistent_kv: ctx.persistent_kv,
       demand: :forward
     ]
 

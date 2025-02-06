@@ -41,6 +41,7 @@ defmodule Electric.Connection.Supervisor do
     db_pool_opts = Keyword.fetch!(opts, :pool_opts)
     replication_opts = Keyword.fetch!(opts, :replication_opts)
     inspector = Keyword.fetch!(shape_cache_opts, :inspector)
+    persistent_kv = Keyword.fetch!(opts, :persistent_kv)
 
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
@@ -51,7 +52,8 @@ defmodule Electric.Connection.Supervisor do
        db_pool: Keyword.fetch!(db_pool_opts, :name)}
 
     shape_log_collector_spec =
-      {Electric.Replication.ShapeLogCollector, stack_id: stack_id, inspector: inspector}
+      {Electric.Replication.ShapeLogCollector,
+       stack_id: stack_id, inspector: inspector, persistent_kv: persistent_kv}
 
     child_spec =
       Supervisor.child_spec(

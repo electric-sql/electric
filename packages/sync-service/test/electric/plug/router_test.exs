@@ -198,6 +198,108 @@ defmodule Electric.Plug.RouterTest do
                Jason.decode!(conn.resp_body)
     end
 
+    @tag with_sql: ["INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"]
+    test "follows a table and returns last-seen lsn", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      # Request a snapshot
+      conn =
+        conn("GET", "/v1/shape?table=items&offset=-1")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      shape_handle = get_resp_shape_handle(conn)
+
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape?table=items&offset=#{@first_offset}&handle=#{shape_handle}&live")
+          |> Router.call(opts)
+        end)
+
+      # insert a new thing
+      Postgrex.query!(
+        db_conn,
+        "INSERT INTO items VALUES (gen_random_uuid(), 'test value 2')",
+        []
+      )
+
+      conn = Task.await(task)
+
+      assert %{status: 200} = conn
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert", "lsn" => lsn},
+                 "value" => %{
+                   "value" => "test value 2"
+                 }
+               },
+               %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => lsn}}
+             ] = Jason.decode!(conn.resp_body)
+    end
+
+    @tag with_sql: ["INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"]
+    test "non-live responses return last-seen lsn", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      # Request a snapshot
+      conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
+      conn2 = conn("GET", "/v1/shape?table=serial_ids&offset=-1") |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      shape_handle = get_resp_shape_handle(conn)
+      shape_handle2 = get_resp_shape_handle(conn2)
+      # Wait to see the insert
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape?table=items&offset=#{@first_offset}&handle=#{shape_handle}&live")
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "INSERT INTO items VALUES (gen_random_uuid(), 'test value 2')", [])
+      assert %{status: 200} = Task.await(task)
+
+      conn =
+        conn("GET", "/v1/shape?table=items&offset=#{@first_offset}&handle=#{shape_handle}")
+        |> Router.call(opts)
+
+      assert [
+               %{"headers" => %{"operation" => "insert", "lsn" => lsn}},
+               %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => lsn}}
+             ] = Jason.decode!(conn.resp_body)
+
+      # Make another insert unrelated to observed shape and wait for that to be propagated
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape?table=serial_ids&offset=#{@first_offset}&handle=#{shape_handle2}&live"
+          )
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "INSERT INTO serial_ids (id) VALUES (2)", [])
+      assert %{status: 200} = conn = Task.await(task)
+
+      assert [%{"headers" => %{"operation" => "insert", "lsn" => lsn}}, _] =
+               Jason.decode!(conn.resp_body)
+
+      # Now the "tail" on the original shape should have a different lsn
+      conn =
+        conn("GET", "/v1/shape?table=items&offset=#{@first_offset}&handle=#{shape_handle}")
+        |> Router.call(opts)
+
+      assert [
+               %{"headers" => %{"operation" => "insert", "lsn" => lsn1}},
+               %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => lsn2}}
+             ] = Jason.decode!(conn.resp_body)
+
+      assert lsn2 > lsn1
+      assert lsn2 == lsn
+    end
+
     @tag with_sql: [
            "CREATE TABLE foo (second TEXT NOT NULL, first TEXT NOT NULL, fourth TEXT, third TEXT NOT NULL, PRIMARY KEY (first, second, third))",
            "INSERT INTO foo (first, second, third, fourth) VALUES ('a', 'b', 'c', 'd')"

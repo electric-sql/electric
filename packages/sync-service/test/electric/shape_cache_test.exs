@@ -69,6 +69,8 @@ defmodule Electric.ShapeCacheTest do
     %{inspector: @stub_inspector, run_with_conn_fn: fn _, cb -> cb.(:connection) end}
   end
 
+  setup :with_persistent_kv
+
   describe "get_or_create_shape_handle/2" do
     setup [
       :with_stack_id_from_test,

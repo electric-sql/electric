@@ -60,7 +60,8 @@ defmodule Electric.Shapes.ApiTest do
       max_age: max_age(ctx),
       stale_age: stale_age(ctx),
       allow_shape_deletion: true,
-      encoder: Electric.Shapes.Api.Encoder.Term
+      encoder: Electric.Shapes.Api.Encoder.Term,
+      persistent_kv: ctx.persistent_kv
     )
   end
 
@@ -81,6 +82,8 @@ defmodule Electric.Shapes.ApiTest do
     start_link_supervised!({Registry, keys: :duplicate, name: @registry})
     :ok
   end
+
+  setup :with_persistent_kv
 
   describe "validate/2" do
     setup [:with_stack_id_from_test, :ready_stack, :configure_request]
@@ -634,7 +637,12 @@ defmodule Electric.Shapes.ApiTest do
 
       assert response_body(response) == [
                "test result",
-               %{"headers" => %{"control" => "up-to-date"}}
+               %{
+                 headers: %{
+                   control: "up-to-date",
+                   global_last_seen_lsn: next_offset.tx_offset
+                 }
+               }
              ]
 
       assert response.offset == next_offset
@@ -688,7 +696,7 @@ defmodule Electric.Shapes.ApiTest do
 
       assert response.status == 204
       refute response.chunked
-      assert response_body(response) == [%{headers: %{control: "up-to-date"}}]
+      assert [%{headers: %{control: "up-to-date"}}] = response_body(response)
       assert response.up_to_date
     end
 
@@ -726,7 +734,7 @@ defmodule Electric.Shapes.ApiTest do
       assert response.status == 204
       refute response.chunked
 
-      assert response_body(response) == [%{headers: %{control: "up-to-date"}}]
+      assert [%{headers: %{control: "up-to-date"}}] = response_body(response)
       assert response.up_to_date
     end
   end
