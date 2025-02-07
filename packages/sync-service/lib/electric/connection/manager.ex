@@ -377,15 +377,15 @@ defmodule Electric.Connection.Manager do
   # connection and the DB pool. If any of the latter two shut down, Connection.Manager will
   # itself terminate to be restarted by its supervisor in a clean state.
   def handle_info({:EXIT, pid, reason}, %State{replication_client_pid: pid} = state) do
-    halt_if_fatal_error!(reason)
+    with false <- stop_if_fatal_error(reason, state) do
+      Logger.debug(
+        "Handling the exit of the replication client #{inspect(pid)} with reason #{inspect(reason)}"
+      )
 
-    Logger.debug(
-      "Handling the exit of the replication client #{inspect(pid)} with reason #{inspect(reason)}"
-    )
-
-    state = %State{state | replication_client_pid: nil}
-    state = schedule_reconnection(:start_replication_client, state)
-    {:noreply, state}
+      state = %State{state | replication_client_pid: nil}
+      state = schedule_reconnection(:start_replication_client, state)
+      {:noreply, state}
+    end
   end
 
   # The most likely reason for the lock connection or the DB pool to exit is the database
@@ -571,8 +571,13 @@ defmodule Electric.Connection.Manager do
   end
 
   defp handle_connection_error(error, state, mode) do
-    halt_if_fatal_error!(error)
+    with false <- stop_if_fatal_error(error, state) do
+      state = schedule_reconnection_after_error(error, state, mode)
+      {:noreply, state}
+    end
+  end
 
+  defp schedule_reconnection_after_error(error, state, mode) do
     message =
       case error do
         %DBConnection.ConnectionError{message: message} ->
@@ -601,8 +606,7 @@ defmodule Electric.Connection.Manager do
     )
 
     step = current_connection_step(state)
-    state = schedule_reconnection(step, state)
-    {:noreply, state}
+    schedule_reconnection(step, state)
   end
 
   defp current_connection_step(%State{lock_connection_pid: pid}) when not is_pid(pid),
@@ -630,23 +634,31 @@ defmodule Electric.Connection.Manager do
     end
   end
 
-  @invalid_slot_detail "This slot has been invalidated because it exceeded the maximum reserved size."
-
-  defp halt_if_fatal_error!(
+  defp stop_if_fatal_error(
          %Postgrex.Error{
            postgres: %{
              code: :object_not_in_prerequisite_state,
-             detail: @invalid_slot_detail,
-             pg_code: "55000",
-             routine: "StartLogicalReplication"
+             detail: "This slot has been invalidated" <> _,
+             pg_code: "55000"
            }
-         } = error
+         } = error,
+         state
        ) do
-    System.stop(1)
-    exit(error)
+    Electric.StackSupervisor.dispatch_stack_event(
+      state.stack_events_registry,
+      state.stack_id,
+      {:database_slot_invalidated, %{error: error}}
+    )
+
+    # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
+    # process is waiting for the supervisor to shut down its children, one of which is the
+    # manager process itself.
+    Task.start(Electric.Connection.Supervisor, :shutdown, [state.stack_id, error])
+
+    {:noreply, state}
   end
 
-  defp halt_if_fatal_error!(_), do: nil
+  defp stop_if_fatal_error(_, _), do: false
 
   defp schedule_reconnection(
          step,
