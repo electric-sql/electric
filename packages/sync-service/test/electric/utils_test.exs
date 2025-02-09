@@ -36,6 +36,30 @@ defmodule Electric.UtilsTest do
       assert :ok = Utils.external_merge_sort(path, &stream_test_file/1, &<=/2, 1_000)
       assert stream_sorted?(stream_test_file(path))
     end
+
+    @tag file_size: 10_000
+    test ~S"sorts a large file externally if that file contains \r\n bytes mid-string", %{
+      path: path
+    } do
+      Stream.unfold(0, fn
+        bytes when bytes >= 10_000 ->
+          nil
+
+        bytes ->
+          {<<Enum.random(0..0xFFFFFFFF)::32, :crypto.strong_rand_bytes(18)::binary, ?\r, ?\n,
+             :crypto.strong_rand_bytes(20)::binary>>, bytes + 4 + 40}
+      end)
+      |> Stream.into(File.stream!(path))
+      |> Stream.run()
+
+      refute stream_sorted?(stream_test_file(path))
+      assert :ok = Utils.external_merge_sort(path, &stream_test_file/1, &<=/2, 1_000)
+      assert stream_sorted?(stream_test_file(path))
+
+      for {_, line} <- stream_test_file(path) do
+        assert <<_::32, _::binary-size(18), ?\r, ?\n, _::binary-size(20)>> = line
+      end
+    end
   end
 
   defp stream_test_file(path) do
