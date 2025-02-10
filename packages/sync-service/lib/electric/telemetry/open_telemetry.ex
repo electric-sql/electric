@@ -32,6 +32,8 @@ defmodule Electric.Telemetry.OpenTelemetry do
   require Logger
   require OpenTelemetry.SemanticConventions.Trace
 
+  alias Electric.Telemetry.OptionalSpans
+
   @typep span_name :: String.t()
   @typep attr_name :: String.t()
   @typep span_attrs :: :opentelemetry.attributes_map()
@@ -52,6 +54,14 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @spec with_span(span_name(), span_attrs(), String.t(), (-> t)) :: t when t: term
   def with_span(name, attributes, stack_id \\ nil, fun)
       when is_binary(name) and (is_list(attributes) or is_map(attributes)) do
+    if OptionalSpans.include?(name) do
+      do_with_span(name, attributes, stack_id, fun)
+    else
+      fun.()
+    end
+  end
+
+  defp do_with_span(name, attributes, stack_id, fun) do
     stack_id = stack_id || get_from_baggage("stack_id")
     stack_attributes = get_stack_span_attrs(stack_id)
     all_attributes = stack_attributes |> Map.merge(Map.new(attributes))
