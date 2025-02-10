@@ -12,6 +12,7 @@ defmodule Electric.Shapes.Filter.Index do
   alias Electric.Replication.Eval.Env
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.WhereClause
+  alias Electric.Telemetry.OpenTelemetry
   require Logger
 
   defstruct [:type, :values]
@@ -52,11 +53,17 @@ defmodule Electric.Shapes.Filter.Index do
         MapSet.new()
 
       shapes ->
-        for {shape_id, shape} <- shapes,
-            WhereClause.includes_record?(shape.and_where, record),
-            into: MapSet.new() do
-          shape_id
-        end
+        OpenTelemetry.with_span(
+          "filter.index.filter_matched_shapes",
+          [field: field, matched_shapes_count: map_size(shapes)],
+          fn ->
+            for {shape_id, shape} <- shapes,
+                WhereClause.includes_record?(shape.and_where, record),
+                into: MapSet.new() do
+              shape_id
+            end
+          end
+        )
     end
   end
 
