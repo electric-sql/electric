@@ -34,6 +34,8 @@ defmodule Electric.StackSupervisor do
 
   alias Electric.ShapeCache.LogChunker
 
+  require Logger
+
   @opts_schema NimbleOptions.new!(
                  name: [type: :any, required: false],
                  stack_id: [type: :string, required: true],
@@ -201,6 +203,8 @@ defmodule Electric.StackSupervisor do
 
   @impl true
   def init(%{stack_id: stack_id} = config) do
+    Logger.debug("The single StackSupervisor is initializing...")
+
     Process.set_label({:stack_supervisor, stack_id})
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)

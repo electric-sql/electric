@@ -15,6 +15,29 @@
 
 ###
 
+[macro capture_stack_supervisor_pid]
+  ?pid=(<\d+\.\d+\.\d+>) \[debug\] The single StackSupervisor is initializing...
+  # All interactive commands and matches are performed within a single IEx session,
+  # so we can assign local variables here which is of a hassle than using lux variables.
+  !stack_supervisor_pid = :erlang.list_to_pid(~c"$1")
+  !stack_supervisor_mon = Process.monitor(stack_supervisor_pid)
+[endmacro]
+
+[macro verify_connection_and_stack_supervisors_shutdown stack_id invalidated_slot_error]
+  ??$invalidated_slot_error
+  ??[error] Stopping connection supervisor with stack_id=$stack_id due to an unrecoverable error
+
+  !receive do \
+     {:DOWN, ^stack_supervisor_mon, :process, ^stack_supervisor_pid, _} -> IO.puts "stack supervisor is down" \
+   end
+  ??stack supervisor is down
+
+  !IO.puts("Stack supervisor pid: #{inspect Process.whereis(Electric.StackSupervisor)}")
+  ??Stack supervisor pid: nil
+[endmacro]
+
+###
+
 ## Start a new Postgres cluster configured for easy replication slot invalidation.
 [invoke setup_pg \
   "--wal-segsize=1" \
@@ -24,6 +47,8 @@
 [invoke setup_electric]
 
 [shell electric]
+  [invoke capture_stack_supervisor_pid]
+
   ??[info] Starting replication from postgres
 
   # Verify that the stack supervisor is registered using regular process registration. If we
@@ -40,14 +65,6 @@
 [shell pg]
   ?invalidating slot "electric_slot_integration" because its restart_lsn [\d\w]+/[\d\w]+ exceeds max_slot_wal_keep_size
 
-[macro verify_connection_and_stack_supervisors_shutdown stack_id invalidated_slot_error]
-  ??$invalidated_slot_error
-  ??[error] Stopping connection supervisor with stack_id=$stack_id due to an unrecoverable error
-
-  !IO.puts("Stack supervisor pid: #{inspect Process.whereis(Electric.StackSupervisor)}")
-  ??Stack supervisor pid: nil
-[endmacro]
-
 ## Observe the fatal connection error.
 [shell electric]
   # Reset the failure pattern because we'll be matching on an error.
@@ -58,6 +75,8 @@
   # Restart the OTP application to verify that the supervisors shut down again due to the invalidated slot.
   !:ok = Application.stop(:electric)
   !:ok = Application.start(:electric)
+
+  [invoke capture_stack_supervisor_pid]
 
   ??[info] Starting replication from postgres
 
