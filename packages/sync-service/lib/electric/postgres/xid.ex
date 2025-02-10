@@ -1,66 +1,92 @@
 defmodule Electric.Postgres.Xid do
-  import Bitwise
-
-  @int32_max 0xFFFFFFFF
-  @int32_half_max 0x7FFFFFFF
+  @uint32_max 0xFFFFFFFF
+  @uint32_half_max 0x80000000
 
   @type anyxid :: pos_integer
   @type cmp_result :: :lt | :eq | :gt
 
-  defguardp int32?(int) when abs(int) <= @int32_max
+  # We don't include 0 in the definition of uint32 because it is not a valid transaction ID.
+  defguardp uint32?(num) when num > 0 and num <= @uint32_max
 
-  # This is a specialized guard for that specifically determines whether the 32-bit first
-  # argument is less than the xid8 argument. For the general principle this is based on, look
-  # at the implementation of `compare/2` below.
-  defguard xid_lt_xid8(xid, xid8)
-           when int32?(xid) and
-                  ((xid - band(xid8, @int32_max) <= @int32_half_max and
-                      xid < band(xid8, @int32_max)) or
-                     (xid - band(xid8, @int32_max) > @int32_half_max and
-                        xid > band(xid8, @int32_max)))
+  @doc """
+  In Postgres, any xid has ~2 billion values preceding it and ~2 billion values following it.
+  Regular autovacuuming maintains this invariant. When we see a difference between two
+  xids that is larger than 2^31, we know there's been at least one transaction ID wraparound.
+  Given the invariant mentioned earlier, we assume there's been only one wraparound and so the xid
+  whose value is larger precedes the other one (or, equivalently, the smaller xid belongs to a
+  more recent transaction).
 
+  ## Tests
+
+  iex> compare(3, 3)
+  :eq
+
+  iex> compare(#{@uint32_max}, #{@uint32_max})
+  :eq
+
+  iex> compare(1, #{@uint32_max})
+  :gt
+
+  iex> compare(2, 1)
+  :gt
+
+  iex> compare(2, 2)
+  :eq
+
+  iex> compare(2, 3)
+  :lt
+
+  iex> compare(1, #{@uint32_half_max})
+  :lt
+
+  iex> compare(1, #{@uint32_half_max + 1})
+  :lt
+
+  iex> compare(1, #{@uint32_half_max + 2})
+  :gt
+
+  iex> compare(#{@uint32_max}, 1)
+  :lt
+
+  iex> compare(#{@uint32_half_max}, 1)
+  :gt
+
+  iex> compare(#{@uint32_half_max + 1}, 1)
+  :lt
+
+  iex> compare(#{@uint32_half_max}, #{@uint32_max})
+  :lt
+
+  iex> compare(#{@uint32_half_max - 1}, #{@uint32_max})
+  :lt
+
+  iex> compare(#{@uint32_half_max - 2}, #{@uint32_max})
+  :gt
+  """
   @spec compare(anyxid, anyxid) :: cmp_result
 
-  def compare(xid, xid), do: :eq
-
-  # When both arguments are 32-bit integers or both have values that don't fit in 32 bits, use the
-  # direct comparison.
-  def compare(xid_l, xid_r)
-      when (int32?(xid_l) and int32?(xid_r)) or not (int32?(xid_l) or int32?(xid_r)),
-      do: direct_cmp(xid_l, xid_r)
-
-  # When one of the arguments is 32-bit and the other one has a value that doesn't fit in 32 bits,
-  # perform the comparison on masked values.
-  #
-  # In Postgres, any xid has ~2 billion values preceding it and ~2 billion values following it.
-  # Regular autovacuuming maintains this invariant. So when we see a difference between two
-  # xids that is larger than 2^31, it means the 32-bit argument is a wrapped value, so it
-  # must be the most recent one.
-  def compare(xid8, xid) when int32?(xid) do
-    compare(xid, xid8)
-    |> reverse_cmp_result()
+  # If both numbers do not fit into 32 bits, then both are of type xid8 and we compare them
+  # using regular comparison.
+  def compare(xid8_l, xid8_r)
+      when not uint32?(xid8_l) and not uint32?(xid8_r) and xid8_l > 0 and xid8_r > 0 do
+    cmp(xid8_l, xid8_r)
   end
 
-  def compare(xid, xid8) when int32?(xid) do
-    xid8_masked = band(xid8, @int32_max)
+  # If one of the numbers is a 32-bit unsigned integer, we compare the two numbers using
+  # modulo-2^32 arithmetic.
+  def compare(xid_l, xid_r) when (uint32?(xid_l) or uint32?(xid_r)) and xid_l > 0 and xid_r > 0 do
+    # This produces equivalent results to the following C code:
+    #
+    #     uint32 xid_l, xid_r;
+    #     int32 signed_diff = (int32)(xid_l - xid_r);
+    #
+    <<signed_diff::signed-32>> = <<xid_l - xid_r::unsigned-32>>
 
-    diff = xid - xid8_masked
-    wrapped? = diff > @int32_half_max
-
-    diff_to_cmp_result(wrapped?, diff)
+    # If signed_diff is a negative number, xid_l precedes xid_r.
+    cmp(signed_diff, 0)
   end
 
-  @spec diff_to_cmp_result(wrapped? :: boolean, diff :: integer) :: cmp_result
-  defp diff_to_cmp_result(false, diff) when diff > 0, do: :gt
-  defp diff_to_cmp_result(false, diff) when diff < 0, do: :lt
-  defp diff_to_cmp_result(true, diff) when diff > 0, do: :lt
-  defp diff_to_cmp_result(true, diff) when diff < 0, do: :gt
-
-  ###
-
-  defp direct_cmp(xid_l, xid_r) when xid_l < xid_r, do: :lt
-  defp direct_cmp(xid_l, xid_r) when xid_l > xid_r, do: :gt
-
-  defp reverse_cmp_result(:lt), do: :gt
-  defp reverse_cmp_result(:gt), do: :lt
+  defp cmp(a, b) when a == b, do: :eq
+  defp cmp(a, b) when a < b, do: :lt
+  defp cmp(a, b) when a > b, do: :gt
 end
