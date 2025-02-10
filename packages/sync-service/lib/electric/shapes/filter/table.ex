@@ -15,6 +15,7 @@ defmodule Electric.Shapes.Filter.Table do
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.Filter.Table
   alias Electric.Shapes.WhereClause
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -107,11 +108,11 @@ defmodule Electric.Shapes.Filter.Table do
     |> Map.new()
   end
 
-  def affected_shapes(%Table{indexes: indexes} = table, record) do
-    indexes
-    |> Enum.map(fn {field, index} -> Index.affected_shapes(index, field, record) end)
-    |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
-    |> MapSet.union(other_shapes_affected(table, record))
+  def affected_shapes(%Table{} = table, record) do
+    MapSet.union(
+      indexed_shapes_affected(table, record),
+      other_shapes_affected(table, record)
+    )
   rescue
     error ->
       Logger.error("""
@@ -125,12 +126,30 @@ defmodule Electric.Shapes.Filter.Table do
       |> MapSet.new(fn {shape_id, _shape} -> shape_id end)
   end
 
+  defp indexed_shapes_affected(%Table{indexes: indexes}, record) do
+    OpenTelemetry.with_span(
+      "filter.filter_using_indexes",
+      [table: "TODO", index_count: map_size(indexes)],
+      fn ->
+        indexes
+        |> Enum.map(fn {field, index} -> Index.affected_shapes(index, field, record) end)
+        |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
+      end
+    )
+  end
+
   defp other_shapes_affected(%{other_shapes: shapes}, record) do
-    for {shape_id, shape} <- shapes,
-        WhereClause.includes_record?(shape.where, record),
-        into: MapSet.new() do
-      shape_id
-    end
+    OpenTelemetry.with_span(
+      "filter.filter_other_shapes",
+      [table: "TODO", shape_count: map_size(shapes)],
+      fn ->
+        for {shape_id, shape} <- shapes,
+            WhereClause.includes_record?(shape.where, record),
+            into: MapSet.new() do
+          shape_id
+        end
+      end
+    )
   end
 
   def all_shapes(%Table{indexes: indexes, other_shapes: other_shapes}) do
