@@ -28,7 +28,6 @@ defmodule Electric.StackSupervisor do
       2. `Electric.Replication.ShapeLogCollector` collects transactions from the replication connection, fanning them out to `Electric.Shapes.Consumer` (4.1.1.2)
       3. `Electric.ShapeCache` coordinates shape creation and handle allocation, shape metadata
   """
-  alias Hex.API.Key
   alias Electric.ShapeCache.LogChunker
   use Supervisor, restart: :transient
 
