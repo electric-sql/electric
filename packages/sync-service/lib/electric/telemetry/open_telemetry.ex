@@ -93,7 +93,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   """
   @spec add_span_attributes(span_ctx() | nil, span_attrs()) :: boolean()
   def add_span_attributes(span_ctx \\ nil, attributes) do
-    span_ctx = span_ctx || get_current_context()
+    span_ctx = span_ctx || current_span_context()
     :otel_span.set_attributes(span_ctx, attributes)
   end
 
@@ -140,20 +140,26 @@ defmodule Electric.Telemetry.OpenTelemetry do
        Exception.format_stacktrace(stacktrace)}
     ]
 
-    ctx = get_current_context()
+    ctx = current_span_context()
     :otel_span.add_event(ctx, "exception", semantic_attributes ++ attributes)
     :otel_span.set_status(ctx, :error, message)
   end
 
   defp tracer, do: :opentelemetry.get_tracer()
 
+  # Get the span and baggage context for the current process
+  # Use this to pass the context to another process, see `set_current_context/1`
   def get_current_context do
-    :otel_tracer.current_span_ctx()
+    {current_span_context(), :otel_baggage.get_all()}
   end
 
-  # Set the span on otel_ctx of the current process to `span_ctx`, so that subsequent `with_span()`
-  # calls are registered as its child.
-  def set_current_context(span_ctx) do
+  # Set the span and baggage context for the current process
+  def set_current_context({span_ctx, baggage}) do
     :otel_tracer.set_current_span(span_ctx)
+    :otel_baggage.set(baggage)
+  end
+
+  defp current_span_context do
+    :otel_tracer.current_span_ctx()
   end
 end
