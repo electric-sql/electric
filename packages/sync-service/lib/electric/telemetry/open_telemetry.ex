@@ -18,7 +18,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
 
     - Propagating span context across Elixir processes, to allow for a span started in one
       process to be registered as a parent of a span started in a different process. See
-      `async_fun/4`.
+      `get_current_context/1` and `set_current_context/1`.
 
     - Adding dynamic attributes to the current span, after it has already started. See
       `add_span_attributes/2`.
@@ -43,7 +43,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   Returns the result of calling the function `fun`.
 
   Calling this function inside another span establishes a parent-child relationship between
-  the two, as long as both calls happen within the same Elixir process. See `async_fun/4` for
+  the two, as long as both calls happen within the same Elixir process. Use `get_current_context/1` for
   interprocess progragation of span context.
   """
   @spec with_span(span_name(), span_attrs(), String.t(), (-> t)) :: t when t: term
@@ -82,20 +82,6 @@ defmodule Electric.Telemetry.OpenTelemetry do
     {duration, result} = :timer.tc(fun)
     add_span_attributes(span_ctx, %{name => duration})
     result
-  end
-
-  @doc """
-  Wrap the given `fun` in an anonymous function, attaching the current process' span context to it.
-
-  If the wrapped function starts a new span in a different Elixir process, the attached span
-  context will be used to establish the parent-child relationship between spans across the
-  process boundary.
-  """
-  @spec async_fun(span_ctx() | nil, span_name(), span_attrs(), String.t(), (-> t)) :: (-> t)
-        when t: term
-  def async_fun(span_ctx \\ nil, name, attributes, stack_id, fun)
-      when is_binary(name) and (is_list(attributes) or is_map(attributes)) do
-    wrap_fun_with_context(span_ctx, fn -> with_span(name, attributes, stack_id, fun) end)
   end
 
   @doc """
@@ -169,14 +155,5 @@ defmodule Electric.Telemetry.OpenTelemetry do
   # calls are registered as its child.
   def set_current_context(span_ctx) do
     :otel_tracer.set_current_span(span_ctx)
-  end
-
-  defp wrap_fun_with_context(span_ctx, fun) do
-    span_ctx = span_ctx || get_current_context()
-
-    fn ->
-      set_current_context(span_ctx)
-      fun.()
-    end
   end
 end
