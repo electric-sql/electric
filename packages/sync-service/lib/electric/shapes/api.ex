@@ -19,6 +19,10 @@ defmodule Electric.Shapes.Api do
     stack_events_registry: [type: :atom, required: true],
     stack_id: [type: :string, required: true],
     storage: [type: :mod_arg, required: true],
+    persistent_kv: [
+      type: {:custom, __MODULE__, :implements_persistent_kv, []},
+      required: true
+    ],
     allow_shape_deletion: [type: :boolean],
     long_poll_timeout: [type: :integer],
     max_age: [type: :integer],
@@ -60,6 +64,19 @@ defmodule Electric.Shapes.Api do
   # Need to implement Access behaviour because we use that to extract config
   # when using shapes api
   @behaviour Access
+
+  @doc false
+  def implements_persistent_kv({m, f, a}) do
+    # wrap the args in a list because they're a keyword list, not an arg list
+    implements_persistent_kv(apply(m, f, [a]))
+  end
+
+  def implements_persistent_kv(%_{} = struct) do
+    case Electric.PersistentKV.impl_for(struct) do
+      nil -> {:error, "#{inspect(struct)} does not implement the Electric.PersistentKV protocol"}
+      _ -> {:ok, struct}
+    end
+  end
 
   @doc false
   def options_schema do

@@ -185,4 +185,14 @@ defmodule Electric.Client.EmbeddedTest do
     # 1 timestamp for the snapshot, 1 for the up-to-date response
     assert length(Enum.uniq_by(msgs, & &1.request_timestamp)) == 2
   end
+
+  test "rejects zero-length columns", ctx do
+    %{tablename: table} = ctx
+
+    shape = ShapeDefinition.new!(table, where: "value IS NOT NULL", columns: ["id", ""])
+
+    assert_raise Electric.Client.Error, fn ->
+      _msgs = stream(%{ctx | shape: shape}, 4)
+    end
+  end
 end

@@ -16,7 +16,7 @@ defmodule Electric.Shapes.Api.Params do
     def type, do: {:array, :string}
 
     def cast([_ | _] = columns) do
-      {:ok, Enum.map(columns, &to_string/1)}
+      validate_column_names(columns)
     end
 
     def cast(columns) when is_binary(columns) do
@@ -30,6 +30,13 @@ defmodule Electric.Shapes.Api.Params do
     def load([_ | _] = columns), do: {:ok, columns}
 
     def dump([_ | _] = columns), do: {:ok, columns}
+
+    defp validate_column_names(columns) do
+      Enum.reduce_while(columns, {:ok, columns}, fn
+        "", _acc -> {:halt, {:error, message: "Invalid zero-length identifier"}}
+        _, acc -> {:cont, acc}
+      end)
+    end
   end
 
   embedded_schema do

@@ -109,7 +109,8 @@ defmodule Electric.Application do
           Electric.StackSupervisor.build_shared_opts(
             stack_id: Electric.Config.get_env(:provided_database_id),
             stack_events_registry: Registry.StackEvents,
-            storage: Electric.Config.get_env(:storage)
+            storage: Electric.Config.get_env(:storage),
+            persistent_kv: Electric.Config.get_env(:persistent_kv)
           ),
           [
             long_poll_timeout: 20_000,

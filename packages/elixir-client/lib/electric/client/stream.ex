@@ -172,7 +172,7 @@ defmodule Electric.Client.Stream do
 
     resp.body
     |> ensure_enum()
-    |> Enum.flat_map(&Message.parse(&1, shape_handle, final_offset, value_mapper_fun))
+    |> Enum.flat_map(&Message.parse(&1, shape_handle, value_mapper_fun))
     |> Enum.map(&Map.put(&1, :request_timestamp, resp.request_timestamp))
     |> Enum.reduce_while(stream, &handle_msg/2)
     |> dispatch()
@@ -183,12 +183,11 @@ defmodule Electric.Client.Stream do
   defp handle_response({:error, %Fetch.Response{status: status} = resp}, stream)
        when status in [409] do
     %{value_mapper_fun: value_mapper_fun} = stream
-    offset = last_offset(resp, stream.offset)
     handle = shape_handle(resp)
 
     stream
     |> reset(handle)
-    |> buffer(Enum.flat_map(resp.body, &Message.parse(&1, handle, offset, value_mapper_fun)))
+    |> buffer(Enum.flat_map(resp.body, &Message.parse(&1, handle, value_mapper_fun)))
     |> dispatch()
   end
 

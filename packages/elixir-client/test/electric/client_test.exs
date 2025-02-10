@@ -189,7 +189,7 @@ defmodule Electric.ClientTest do
     end
 
     test "streams an empty shape", ctx do
-      assert [%ControlMessage{control: :up_to_date, offset: offset0()}] = stream(ctx, 1)
+      assert [%ControlMessage{control: :up_to_date}] = stream(ctx, 1)
     end
 
     test "generates a unique id for the stream", ctx do
@@ -403,7 +403,7 @@ defmodule Electric.ClientTest do
             "offset" => "1_0",
             "value" => %{"id" => "1111"}
           },
-          %{"headers" => %{"control" => "up-to-date"}}
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
         ])
 
       body2 =
@@ -413,7 +413,7 @@ defmodule Electric.ClientTest do
             "offset" => "2_0",
             "value" => %{"id" => "2222"}
           },
-          %{"headers" => %{"control" => "up-to-date"}}
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
         ])
 
       schema = Jason.encode!(%{"id" => %{type: "text"}})
@@ -463,12 +463,12 @@ defmodule Electric.ClientTest do
                  headers: @insert,
                  value: %{"id" => "1111"}
                },
-               up_to_date("1_0"),
+               up_to_date(9998),
                %ChangeMessage{
                  headers: @insert,
                  value: %{"id" => "2222"}
                },
-               up_to_date("2_0")
+               up_to_date(9999)
              ] = stream(ctx, 4)
 
       assert_receive {:offset, "-1"}
@@ -484,7 +484,7 @@ defmodule Electric.ClientTest do
             "offset" => "1_0",
             "value" => %{"id" => "1111"}
           },
-          %{"headers" => %{"control" => "up-to-date"}}
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
         ])
 
       body2 =
@@ -494,7 +494,7 @@ defmodule Electric.ClientTest do
             "offset" => "2_0",
             "value" => %{"id" => "2222"}
           },
-          %{"headers" => %{"control" => "up-to-date"}}
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
         ])
 
       schema = Jason.encode!(%{"id" => %{type: "text"}})
@@ -543,12 +543,12 @@ defmodule Electric.ClientTest do
                  headers: @insert,
                  value: %{"id" => "1111"}
                },
-               up_to_date("1_0"),
+               up_to_date(9998),
                %ChangeMessage{
                  headers: @insert,
                  value: %{"id" => "2222"}
                },
-               up_to_date("2_0")
+               up_to_date(9999)
              ] = stream(ctx, 4)
     end
 
@@ -556,19 +556,17 @@ defmodule Electric.ClientTest do
       body1 = [
         %{
           "headers" => %{"operation" => "insert"},
-          "offset" => "1_0",
           "value" => %{"id" => "1111"}
         },
-        %{"headers" => %{"control" => "up-to-date"}}
+        %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
       ]
 
       body2 = [
         %{
           "headers" => %{"operation" => "insert"},
-          "offset" => "2_0",
           "value" => %{"id" => "2222"}
         },
-        %{"headers" => %{"control" => "up-to-date"}}
+        %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
       ]
 
       # see https://hexdocs.pm/req/Req.Steps.html#retry/1 for the list of
@@ -643,12 +641,12 @@ defmodule Electric.ClientTest do
                  headers: @insert,
                  value: %{"id" => "1111"}
                },
-               up_to_date("1_0"),
+               up_to_date(9998),
                %ChangeMessage{
                  headers: @insert,
                  value: %{"id" => "2222"}
                },
-               up_to_date("2_0")
+               up_to_date(9999)
              ] = stream(ctx, 4)
     end
 
@@ -659,7 +657,7 @@ defmodule Electric.ClientTest do
           "offset" => "1_0",
           "value" => %{"id" => "1111"}
         },
-        %{"headers" => %{"control" => "up-to-date"}}
+        %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => "1234"}}
       ]
 
       {:ok, responses} =
@@ -716,13 +714,13 @@ defmodule Electric.ClientTest do
                  headers: @insert,
                  value: %{"id" => "1111"}
                },
-               up_to_date("1_0"),
-               %ControlMessage{control: :must_refetch, offset: "1_0"},
+               up_to_date(1234),
+               %ControlMessage{control: :must_refetch},
                %ChangeMessage{
                  headers: ^headers,
                  value: %{"id" => "1111"}
                },
-               up_to_date("1_0")
+               up_to_date(1234)
              ] = stream(ctx, 5)
 
       assert_receive {:offset, "-1"}
@@ -796,7 +794,7 @@ defmodule Electric.ClientTest do
           "offset" => "2_0",
           "value" => %{"id" => "2222"}
         },
-        %{"headers" => %{"control" => "up-to-date"}}
+        %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
       ]
 
       body3 = [
@@ -805,7 +803,7 @@ defmodule Electric.ClientTest do
           "offset" => "2_0",
           "value" => %{"id" => "2222"}
         },
-        %{"headers" => %{"control" => "up-to-date"}}
+        %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
       ]
 
       {:ok, responses} =
@@ -849,7 +847,7 @@ defmodule Electric.ClientTest do
                  value: %{"id" => "2222"},
                  headers: %Headers{operation: :insert}
                },
-               up_to_date("2_0"),
+               up_to_date(9999),
                %ResumeMessage{
                  shape_handle: "my-shape",
                  offset: "2_0",
@@ -873,7 +871,7 @@ defmodule Electric.ClientTest do
           "offset" => "4_0",
           "value" => %{"id" => "4444"}
         },
-        %{"headers" => %{"control" => "up-to-date"}}
+        %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
       ]
 
       {:ok, responses} =
@@ -916,7 +914,7 @@ defmodule Electric.ClientTest do
                  value: %{"id" => "4444"},
                  headers: %Headers{operation: :insert}
                },
-               up_to_date("4_0")
+               up_to_date(9999)
              ] = events
     end
 
