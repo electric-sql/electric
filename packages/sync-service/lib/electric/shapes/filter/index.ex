@@ -12,6 +12,7 @@ defmodule Electric.Shapes.Filter.Index do
   alias Electric.Replication.Eval.Env
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.WhereClause
+  alias Electric.Telemetry.OpenTelemetry
   require Logger
 
   defstruct [:type, :values]
@@ -21,14 +22,16 @@ defmodule Electric.Shapes.Filter.Index do
   def empty?(%Index{values: values}), do: values == %{}
 
   def add_shape(%Index{} = index, value, {shape_id, shape}, and_where) do
+    shape_info = %{shape: shape, and_where: and_where}
+
     %{
       index
       | values:
           Map.update(
             index.values,
             value,
-            [%{shape_id: shape_id, and_where: and_where, shape: shape}],
-            fn shapes -> [%{shape_id: shape_id, and_where: and_where, shape: shape} | shapes] end
+            %{shape_id => shape_info},
+            &Map.put(&1, shape_id, shape_info)
           )
     }
   end
@@ -38,10 +41,8 @@ defmodule Electric.Shapes.Filter.Index do
       index
       | values:
           index.values
-          |> Map.new(fn {value, shapes} ->
-            {value, shapes |> Enum.reject(&(&1.shape_id == shape_id))}
-          end)
-          |> Enum.reject(fn {_value, shapes} -> shapes == [] end)
+          |> Map.new(fn {value, shapes} -> {value, Map.delete(shapes, shape_id)} end)
+          |> Enum.reject(fn {_value, shapes} -> shapes == %{} end)
           |> Map.new()
     }
   end
@@ -52,10 +53,17 @@ defmodule Electric.Shapes.Filter.Index do
         MapSet.new()
 
       shapes ->
-        shapes
-        |> Enum.filter(&WhereClause.includes_record?(&1.and_where, record))
-        |> Enum.map(& &1.shape_id)
-        |> MapSet.new()
+        OpenTelemetry.with_span(
+          "filter.index.filter_matched_shapes",
+          [field: field, matched_shapes_count: map_size(shapes)],
+          fn ->
+            for {shape_id, shape} <- shapes,
+                WhereClause.includes_record?(shape.and_where, record),
+                into: MapSet.new() do
+              shape_id
+            end
+          end
+        )
     end
   end
 
@@ -73,7 +81,7 @@ defmodule Electric.Shapes.Filter.Index do
 
   def all_shapes(%Index{values: values}) do
     for {_value, shapes} <- values,
-        %{shape_id: shape_id, shape: shape} <- shapes,
+        {shape_id, %{shape: shape}} <- shapes,
         into: %{} do
       {shape_id, shape}
     end

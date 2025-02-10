@@ -18,7 +18,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
 
     - Propagating span context across Elixir processes, to allow for a span started in one
       process to be registered as a parent of a span started in a different process. See
-      `async_fun/4`.
+      `get_current_context/1` and `set_current_context/1`.
 
     - Adding dynamic attributes to the current span, after it has already started. See
       `add_span_attributes/2`.
@@ -32,6 +32,8 @@ defmodule Electric.Telemetry.OpenTelemetry do
   require Logger
   require OpenTelemetry.SemanticConventions.Trace
 
+  alias Electric.Telemetry.OptionalSpans
+
   @typep span_name :: String.t()
   @typep attr_name :: String.t()
   @typep span_attrs :: :opentelemetry.attributes_map()
@@ -43,12 +45,24 @@ defmodule Electric.Telemetry.OpenTelemetry do
   Returns the result of calling the function `fun`.
 
   Calling this function inside another span establishes a parent-child relationship between
-  the two, as long as both calls happen within the same Elixir process. See `async_fun/4` for
+  the two, as long as both calls happen within the same Elixir process. Use `get_current_context/1` for
   interprocess progragation of span context.
+
+  The `stack_id` parameter must be set in root spans. For child spans the stack_id is optional
+  and will be inherited from the parent span.
   """
   @spec with_span(span_name(), span_attrs(), String.t(), (-> t)) :: t when t: term
-  def with_span(name, attributes, stack_id, fun)
+  def with_span(name, attributes, stack_id \\ nil, fun)
       when is_binary(name) and (is_list(attributes) or is_map(attributes)) do
+    if OptionalSpans.include?(name) do
+      do_with_span(name, attributes, stack_id, fun)
+    else
+      fun.()
+    end
+  end
+
+  defp do_with_span(name, attributes, stack_id, fun) do
+    stack_id = stack_id || get_from_baggage("stack_id")
     stack_attributes = get_stack_span_attrs(stack_id)
     all_attributes = stack_attributes |> Map.merge(Map.new(attributes))
 
@@ -66,6 +80,8 @@ defmodule Electric.Telemetry.OpenTelemetry do
     erlang_telemetry_event = [
       :electric | name |> String.split(".", trim: true) |> Enum.map(&String.to_atom/1)
     ]
+
+    set_in_baggage("stack_id", stack_id)
 
     :telemetry.span(erlang_telemetry_event, all_attributes, fn ->
       fun_result = :otel_tracer.with_span(tracer(), name, span_opts, fn _span_ctx -> fun.() end)
@@ -85,20 +101,6 @@ defmodule Electric.Telemetry.OpenTelemetry do
   end
 
   @doc """
-  Wrap the given `fun` in an anonymous function, attaching the current process' span context to it.
-
-  If the wrapped function starts a new span in a different Elixir process, the attached span
-  context will be used to establish the parent-child relationship between spans across the
-  process boundary.
-  """
-  @spec async_fun(span_ctx() | nil, span_name(), span_attrs(), String.t(), (-> t)) :: (-> t)
-        when t: term
-  def async_fun(span_ctx \\ nil, name, attributes, stack_id, fun)
-      when is_binary(name) and (is_list(attributes) or is_map(attributes)) do
-    wrap_fun_with_context(span_ctx, fn -> with_span(name, attributes, stack_id, fun) end)
-  end
-
-  @doc """
   Add dynamic attributes to the current span.
 
   For example, if a span is started prior to issuing a DB request, an attribute named
@@ -107,7 +109,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   """
   @spec add_span_attributes(span_ctx() | nil, span_attrs()) :: boolean()
   def add_span_attributes(span_ctx \\ nil, attributes) do
-    span_ctx = span_ctx || get_current_context()
+    span_ctx = span_ctx || current_span_context()
     :otel_span.set_attributes(span_ctx, attributes)
   end
 
@@ -154,29 +156,37 @@ defmodule Electric.Telemetry.OpenTelemetry do
        Exception.format_stacktrace(stacktrace)}
     ]
 
-    ctx = get_current_context()
+    ctx = current_span_context()
     :otel_span.add_event(ctx, "exception", semantic_attributes ++ attributes)
     :otel_span.set_status(ctx, :error, message)
   end
 
   defp tracer, do: :opentelemetry.get_tracer()
 
+  # Get the span and baggage context for the current process
+  # Use this to pass the context to another process, see `set_current_context/1`
   def get_current_context do
-    :otel_tracer.current_span_ctx()
+    {current_span_context(), :otel_baggage.get_all()}
   end
 
-  # Set the span on otel_ctx of the current process to `span_ctx`, so that subsequent `with_span()`
-  # calls are registered as its child.
-  def set_current_context(span_ctx) do
+  # Set the span and baggage context for the current process
+  def set_current_context({span_ctx, baggage}) do
     :otel_tracer.set_current_span(span_ctx)
+    :otel_baggage.set(baggage)
   end
 
-  defp wrap_fun_with_context(span_ctx, fun) do
-    span_ctx = span_ctx || get_current_context()
+  def set_in_baggage(key, value) do
+    :otel_baggage.set(key, value)
+  end
 
-    fn ->
-      set_current_context(span_ctx)
-      fun.()
+  def get_from_baggage(key) do
+    case :otel_baggage.get_all() do
+      %{^key => {value, _metadata}} -> value
+      _ -> nil
     end
+  end
+
+  defp current_span_context do
+    :otel_tracer.current_span_ctx()
   end
 end

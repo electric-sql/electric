@@ -23,20 +23,23 @@ defmodule Electric.Telemetry.Sampler do
   end
 
   @impl true
-  def should_sample(ctx, _trace_id, _links, span_name, _span_kind, _attributes, %{
-        sampling_probability: sampling_probability
-      }) do
-    tracestate = Tracer.current_span_ctx(ctx) |> OpenTelemetry.Span.tracestate()
-
-    if span_name in @probabilistic_span_names do
-      if :rand.uniform() <= sampling_probability do
-        {:record_and_sample, [], tracestate}
-      else
-        {:drop, [], tracestate}
-      end
+  def should_sample(ctx, _, _, span_name, _, _, state)
+      when span_name in @probabilistic_span_names do
+    if :rand.uniform() <= state.sampling_probability do
+      {:record_and_sample, [], tracestate(ctx)}
     else
-      # Always sample other spans
-      {:record_and_sample, [], tracestate}
+      {:drop, [], tracestate(ctx)}
     end
+  end
+
+  @impl true
+  def should_sample(ctx, _trace_id, _links, _span_name, _span_kind, _attributes, _) do
+    {:record_and_sample, [], tracestate(ctx)}
+  end
+
+  defp tracestate(ctx) do
+    ctx
+    |> Tracer.current_span_ctx()
+    |> OpenTelemetry.Span.tracestate()
   end
 end
