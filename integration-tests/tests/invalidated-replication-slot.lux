@@ -18,7 +18,7 @@
 [macro capture_stack_supervisor_pid]
   ?pid=(<\d+\.\d+\.\d+>) \[debug\] The single StackSupervisor is initializing...
   # All interactive commands and matches are performed within a single IEx session,
-  # so we can assign local variables here which is of a hassle than using lux variables.
+  # so we can assign local variables here which is less of a hassle than using lux variables.
   !stack_supervisor_pid = :erlang.list_to_pid(~c"$1")
   !stack_supervisor_mon = Process.monitor(stack_supervisor_pid)
 [endmacro]
