@@ -45,10 +45,14 @@ defmodule Electric.Telemetry.OpenTelemetry do
   Calling this function inside another span establishes a parent-child relationship between
   the two, as long as both calls happen within the same Elixir process. Use `get_current_context/1` for
   interprocess progragation of span context.
+
+  The `stack_id` parameter must be set in root spans. For child spans the stack_id is optional
+  and will be inherited from the parent span.
   """
   @spec with_span(span_name(), span_attrs(), String.t(), (-> t)) :: t when t: term
-  def with_span(name, attributes, stack_id, fun)
+  def with_span(name, attributes, stack_id \\ nil, fun)
       when is_binary(name) and (is_list(attributes) or is_map(attributes)) do
+    stack_id = stack_id || get_from_baggage("stack_id")
     stack_attributes = get_stack_span_attrs(stack_id)
     all_attributes = stack_attributes |> Map.merge(Map.new(attributes))
 
@@ -66,6 +70,8 @@ defmodule Electric.Telemetry.OpenTelemetry do
     erlang_telemetry_event = [
       :electric | name |> String.split(".", trim: true) |> Enum.map(&String.to_atom/1)
     ]
+
+    set_in_baggage("stack_id", stack_id)
 
     :telemetry.span(erlang_telemetry_event, all_attributes, fn ->
       fun_result = :otel_tracer.with_span(tracer(), name, span_opts, fn _span_ctx -> fun.() end)
@@ -157,6 +163,17 @@ defmodule Electric.Telemetry.OpenTelemetry do
   def set_current_context({span_ctx, baggage}) do
     :otel_tracer.set_current_span(span_ctx)
     :otel_baggage.set(baggage)
+  end
+
+  def set_in_baggage(key, value) do
+    :otel_baggage.set(key, value)
+  end
+
+  def get_from_baggage(key) do
+    case :otel_baggage.get_all() do
+      %{^key => {value, _metadata}} -> value
+      _ -> nil
+    end
   end
 
   defp current_span_context do
