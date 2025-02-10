@@ -36,21 +36,49 @@ defmodule Electric.Client.Message do
   end
 
   defmodule ControlMessage do
-    defstruct [:control, :offset, :handle, :request_timestamp]
+    defstruct [:control, :global_last_seen_lsn, :handle, :request_timestamp]
+
     @type control :: :must_refetch | :up_to_date
     @type t :: %__MODULE__{
             control: control(),
-            offset: Offset.t(),
+            global_last_seen_lsn: pos_integer(),
             handle: Client.shape_handle(),
             request_timestamp: DateTime.t()
           }
 
-    def from_message(%{"headers" => %{"control" => control}}, handle, offset) do
-      %__MODULE__{control: control_atom(control), offset: offset, handle: handle}
+    def from_message(
+          %{"headers" => %{"control" => control} = headers},
+          handle
+        ) do
+      %__MODULE__{
+        control: control_atom(control),
+        global_last_seen_lsn: global_last_seen_lsn(headers),
+        handle: handle
+      }
+    end
+
+    def from_message(
+          %{headers: %{control: control} = headers},
+          handle
+        ) do
+      %__MODULE__{
+        control: control_atom(control),
+        global_last_seen_lsn: global_last_seen_lsn(headers),
+        handle: handle
+      }
     end
 
     defp control_atom("must-refetch"), do: :must_refetch
     defp control_atom("up-to-date"), do: :up_to_date
+    defp control_atom(a) when is_atom(a), do: a
+
+    defp global_last_seen_lsn(headers) do
+      parse_lsn(headers["global_last_seen_lsn"] || headers[:global_last_seen_lsn])
+    end
+
+    defp parse_lsn(nil), do: nil
+    defp parse_lsn(lsn) when is_binary(lsn), do: String.to_integer(lsn)
+    defp parse_lsn(lsn) when is_integer(lsn), do: lsn
 
     def up_to_date, do: %__MODULE__{control: :up_to_date}
     def must_refetch, do: %__MODULE__{control: :must_refetch}
@@ -129,15 +157,19 @@ defmodule Electric.Client.Message do
 
   defguard is_insert(msg) when is_struct(msg, ChangeMessage) and msg.headers.operation == :insert
 
-  def parse(%{"value" => _} = msg, shape_handle, _offset, value_mapper_fun) do
+  def parse(%{"value" => _} = msg, shape_handle, value_mapper_fun) do
     [ChangeMessage.from_message(msg, shape_handle, value_mapper_fun)]
   end
 
-  def parse(%{"headers" => %{"control" => _}} = msg, shape_handle, offset, _value_mapper_fun) do
-    [ControlMessage.from_message(msg, shape_handle, offset)]
+  def parse(%{"headers" => %{"control" => _}} = msg, shape_handle, _value_mapper_fun) do
+    [ControlMessage.from_message(msg, shape_handle)]
   end
 
-  def parse("", _handle, _offset, _value_mapper_fun) do
+  def parse(%{headers: %{control: _}} = msg, shape_handle, _value_mapper_fun) do
+    [ControlMessage.from_message(msg, shape_handle)]
+  end
+
+  def parse("", _handle, _value_mapper_fun) do
     []
   end
 end

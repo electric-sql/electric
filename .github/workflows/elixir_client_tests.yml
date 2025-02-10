@@ -20,7 +20,7 @@ jobs:
       POSTGRES_VERSION: 140006
       ELECTRIC_PORT: 3100
       PG_PORT: 54323
-      ELECTRIC_URL: "http://127.0.0.1:3100"
+      ELECTRIC_URL: "http://127.0.0.1:3333"
       DATABASE_URL: "postgresql://postgres:password@127.0.0.1:54323/postgres?sslmode=disable"
     services:
       postgres:
@@ -67,58 +67,11 @@ jobs:
             ${{ runner.os }}-elixir-client-build-[${{ github.ref_name }}]-
             ${{ runner.os }}-elixir-client-build-
 
-      - name: Cache sync-service dependencies
-        uses: actions/cache@v4
-        with:
-          path: packages/sync-service/deps
-          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
-          restore-keys: |
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-sync-service-deps-
-
-      - name: Cache sync-service compiled code
-        uses: actions/cache@v4
-        with:
-          path: |
-            packages/sync-service/_build/*/lib
-            !packages/sync-service/_build/*/lib/electric
-          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}"
-          restore-keys: |
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-sync-service-build-
-
       - name: Install dependencies
         run: mix deps.get && mix deps.compile
 
       - name: Compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
-
-      - name: Install sync-service dependencies
-        run: mix deps.get && mix deps.compile
-        working-directory: packages/sync-service
-        env:
-          MIX_ENV: prod
-
-      - uses: JarvusInnovations/background-action@v1
-        name: Bootstrap System Under Test (SUT)
-        with:
-          run: |
-            mix start_dev
-            env mix run --no-halt &
-
-          wait-on: "http://127.0.0.1:3100"
-
-          tail: true
-          log-output-resume: stderr
-          wait-for: 1m
-          log-output: true
-          log-output-if: failure
-          working-directory: packages/sync-service
-        env:
-          MIX_ENV: prod
 
       - name: Run tests
         run: mix test

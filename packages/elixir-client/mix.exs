@@ -45,7 +45,8 @@ defmodule Electric.Client.MixProject do
       {:bypass, "~> 2.1", only: [:test]},
       {:postgrex, "~> 0.19", only: [:test]},
       {:postgresql_uri, "~> 0.1", only: [:test]},
-      {:uuid, "~> 1.1", only: [:test]}
+      {:uuid, "~> 1.1", only: [:test]},
+      {:electric, path: "../sync-service", only: [:test]}
     ]
   end
 

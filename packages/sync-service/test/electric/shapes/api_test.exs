@@ -322,6 +322,45 @@ defmodule Electric.Shapes.ApiTest do
              }
     end
 
+    test "returns error for invalid column spec", ctx do
+      assert {:error, %{status: 400} = response} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "-1",
+                   columns: ",,,"
+                 }
+               )
+
+      assert response_body(response) == %{
+               message: "Invalid request",
+               errors: %{
+                 columns: ["Invalid zero-length delimited identifier"]
+               }
+             }
+
+      assert {:error, %{status: 400} = _response} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "-1",
+                   columns: ["id", ""]
+                 }
+               )
+
+      assert {:error, %{status: 400} = _response} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "-1",
+                   columns: ["id", nil]
+                 }
+               )
+    end
+
     test "honours replica query param for shape", ctx do
       test_shape_handle = "test-shape-without-deltas"
       next_offset = LogOffset.increment(@first_offset)

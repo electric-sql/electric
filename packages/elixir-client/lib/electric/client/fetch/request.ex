@@ -3,7 +3,6 @@ defmodule Electric.Client.Fetch.Request do
 
   alias Electric.Client
   alias Electric.Client.Fetch
-  alias Electric.Client.Offset
   alias Electric.Client.ShapeDefinition
   alias Electric.Client.Util
 
@@ -18,7 +17,7 @@ defmodule Electric.Client.Fetch.Request do
     :next_cursor,
     replica: :default,
     method: :get,
-    offset: Offset.before_all(),
+    offset: Client.Offset.before_all(),
     params: %{},
     headers: %{},
     authenticated: false
@@ -31,7 +30,7 @@ defmodule Electric.Client.Fetch.Request do
     stream_id: quote(do: term()),
     method: quote(do: :get | :head | :delete),
     endpoint: quote(do: URI.t()),
-    offset: quote(do: Electric.Client.Offset.t()),
+    offset: quote(do: Electric.Client.offset()),
     shape_handle: quote(do: Electric.Client.shape_handle() | nil),
     replica: quote(do: Electric.Client.replica()),
     live: quote(do: boolean()),
@@ -104,14 +103,14 @@ defmodule Electric.Client.Fetch.Request do
       replica: replica,
       live: live?,
       shape_handle: shape_handle,
-      offset: %Offset{} = offset,
+      offset: offset,
       next_cursor: cursor,
       params: params
     } = request
 
     (params || %{})
     |> Map.merge(ShapeDefinition.params(shape))
-    |> Map.merge(%{"offset" => Offset.to_string(offset)})
+    |> Map.merge(%{"offset" => to_string(offset)})
     |> Util.map_put_if("replica", to_string(replica), replica != :default)
     |> Util.map_put_if("handle", shape_handle, is_binary(shape_handle))
     |> Util.map_put_if("live", "true", live?)

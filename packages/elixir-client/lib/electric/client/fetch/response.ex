@@ -60,7 +60,7 @@ defmodule Electric.Client.Fetch.Response do
   defp decode_shape_handle(_headers), do: nil
 
   defp decode_offset(%{"electric-offset" => offset}) do
-    offset |> unlist() |> Client.Offset.from_string!()
+    unlist(offset)
   end
 
   defp decode_offset(_headers), do: nil
