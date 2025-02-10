@@ -4,17 +4,17 @@ defmodule Support.ClientHelpers do
   defmacro offset0, do: "0_inf"
 
   defmacro up_to_date() do
-    quote(do: %ControlMessage{control: :up_to_date, offset: _})
+    quote(do: %ControlMessage{control: :up_to_date, global_last_seen_lsn: _})
   end
 
-  defmacro up_to_date(offset) do
+  defmacro up_to_date(lsn) do
     quote(
       do: %ControlMessage{
         control: :up_to_date,
-        offset: unquote(offset)
+        global_last_seen_lsn: unquote(lsn)
       }
     )
   end
 
-  defmacro up_to_date0(), do: quote(do: up_to_date("0_inf"))
+  defmacro up_to_date0(), do: quote(do: up_to_date(0))
 end

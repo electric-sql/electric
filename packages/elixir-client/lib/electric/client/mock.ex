@@ -29,7 +29,6 @@ defmodule Electric.Client.Mock do
 
   alias Electric.Client
   alias Electric.Client.Fetch
-  alias Electric.Client.Offset
 
   @behaviour Electric.Client.Fetch
 
@@ -147,8 +146,9 @@ defmodule Electric.Client.Mock do
   end
 
   @spec up_to_date() :: map()
-  def up_to_date(_opts \\ []) do
-    %{"headers" => %{"control" => "up-to-date"}}
+  def up_to_date(opts \\ []) do
+    lsn = Keyword.get(opts, :lsn, nil)
+    %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => lsn}}
   end
 
   @doc """
@@ -160,20 +160,17 @@ defmodule Electric.Client.Mock do
   """
   @spec transaction(values :: [map()], transaction_opts()) :: [map()]
   def transaction(values, opts \\ []) do
-    tx_offset = Keyword.get(opts, :lsn, 0)
-
     up_to_date =
       if Keyword.get(opts, :up_to_date, true) do
-        [up_to_date()]
+        [up_to_date(opts)]
       else
         []
       end
 
     values
-    |> Enum.with_index()
-    |> Enum.map(fn {value, op_offset} ->
+    |> Enum.map(fn value ->
       opts
-      |> Keyword.merge(value: value, offset: Offset.new(tx_offset, op_offset))
+      |> Keyword.merge(value: value)
       |> change()
     end)
     |> Enum.concat(up_to_date)
@@ -183,8 +180,7 @@ defmodule Electric.Client.Mock do
   def change(opts) do
     %{
       value: opts[:value] || %{},
-      headers: change_headers(opts[:operation] || :insert),
-      offset: opts[:offset] || Offset.first()
+      headers: change_headers(opts[:operation] || :insert)
     }
     |> jsonify()
   end
