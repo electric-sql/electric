@@ -3,8 +3,6 @@ defmodule Electric.Shapes.Consumer do
     restart: :temporary,
     significant: true
 
-  import Electric.Postgres.Xid, only: [xid_lt_xid8: 2]
-
   alias Electric.LogItems
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
@@ -243,19 +241,18 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp handle_txn(%Transaction{xid: xid}, %{snapshot_xmin: xmin} = state)
-       when xid_lt_xid8(xid, xmin) do
-    {:cont, state}
-  end
+  defp handle_txn(%Transaction{xid: xid} = txn, %{snapshot_xmin: xmin} = state) do
+    if Electric.Postgres.Xid.compare(xid, xmin) == :lt do
+      {:cont, state}
+    else
+      ot_attrs =
+        [xid: txn.xid, total_num_changes: txn.num_changes] ++
+          shape_attrs(state.shape_handle, state.shape)
 
-  defp handle_txn(%Transaction{} = txn, state) do
-    ot_attrs =
-      [xid: txn.xid, total_num_changes: txn.num_changes] ++
-        shape_attrs(state.shape_handle, state.shape)
-
-    OpenTelemetry.with_span("shape_write.consumer.handle_txn", ot_attrs, state.stack_id, fn ->
-      do_handle_txn(txn, state)
-    end)
+      OpenTelemetry.with_span("shape_write.consumer.handle_txn", ot_attrs, state.stack_id, fn ->
+        do_handle_txn(txn, state)
+      end)
+    end
   end
 
   defp do_handle_txn(%Transaction{} = txn, state) do
