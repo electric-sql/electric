@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.0-beta.13
+
+### Patch Changes
+
+- 54fb0ac: Avoid stopping the beam process when an unrecoverable error is encountered. Instead, stop the main OTP supervisor. Required for multi-tenancy.
+
 ## 1.0.0-beta.12
 
 ### Patch Changes

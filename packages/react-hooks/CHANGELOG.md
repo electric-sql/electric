@@ -1,5 +1,11 @@
 # @electric-sql/react
 
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- 2d9a636: Loosen `react` peer dependency to prevent conflict warnings.
+
 ## 1.0.0-beta.3
 
 ### Patch Changes
