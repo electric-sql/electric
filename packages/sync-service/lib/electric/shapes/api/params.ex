@@ -179,6 +179,9 @@ defmodule Electric.Shapes.Api.Params do
           message, changeset when is_binary(message) ->
             add_error(changeset, field, message)
         end)
+
+      {:error, %NimbleOptions.ValidationError{message: message, key: key}} ->
+        add_error(changeset, key, message)
     end
   end
 end
