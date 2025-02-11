@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.0-beta.14
+
+### Patch Changes
+
+- 3867309: Fix the startup failure problem caused by broken release packaging.
+
 ## 1.0.0-beta.13
 
 ### Patch Changes
