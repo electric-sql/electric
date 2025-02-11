@@ -250,7 +250,7 @@ defmodule Electric.ShapeCache.FileStorage do
     # Temporary fallback to @xmin_key until we do a breaking release that drops that key entirely.
     with nil <- CubDB.get(opts.db, @pg_snapshot_key),
          xmin when not is_nil(xmin) <- CubDB.get(opts.db, @xmin_key) do
-      %{xmin: xmin, xmax: nil, xip_list: nil}
+      %{xmin: xmin, xmax: xmin + 1, xip_list: [xmin], filter_txns?: true}
     end
   end
 

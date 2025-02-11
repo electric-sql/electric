@@ -3,6 +3,8 @@ defmodule Electric.Shapes.Consumer do
     restart: :temporary,
     significant: true
 
+  import Electric.Postgres.Xid, only: [compare: 2]
+
   alias Electric.LogItems
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
@@ -136,6 +138,7 @@ defmodule Electric.Shapes.Consumer do
       "Snapshot known for shape_handle: #{shape_handle} xmin: #{xmin}, xmax: #{xmax}, xip_list: #{Enum.join(xip_list, ",")}"
     )
 
+    pg_snapshot = Map.put(pg_snapshot, :filter_txns?, true)
     state = set_pg_snapshot(pg_snapshot, state)
     handle_txns(state.buffer, %{state | buffer: []})
   end
@@ -226,10 +229,7 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, [], %{state | buffer: state.buffer ++ [txn]}}
   end
 
-  defp handle_event(
-         %Transaction{} = txn,
-         %{pg_snapshot: %{xmin: xmin, xmax: xmax}} = state
-       ) do
+  defp handle_event(%Transaction{} = txn, %{pg_snapshot: %{xmin: xmin, xmax: xmax}} = state) do
     OpenTelemetry.with_span(
       "shape_write.consumer.handle_txns",
       [snapshot_xmin: xmin, snapshot_xmax: xmax],
@@ -248,18 +248,51 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp handle_txn(%Transaction{xid: xid} = txn, %{pg_snapshot: %{xmin: xmin}} = state) do
-    if Electric.Postgres.Xid.compare(xid, xmin) == :lt do
-      {:cont, state}
-    else
-      ot_attrs =
-        [xid: txn.xid, total_num_changes: txn.num_changes] ++
-          shape_attrs(state.shape_handle, state.shape)
+  defp handle_txn(txn, %{pg_snapshot: %{filter_txns?: false}} = state) do
+    handle_txn_in_span(txn, state)
+  end
 
-      OpenTelemetry.with_span("shape_write.consumer.handle_txn", ot_attrs, state.stack_id, fn ->
-        do_handle_txn(txn, state)
-      end)
+  defp handle_txn(
+         %Transaction{xid: xid} = txn,
+         %{pg_snapshot: %{xmin: xmin, xmax: xmax, xip_list: xip_list}} = state
+       ) do
+    cond do
+      compare(xid, xmin) == :lt ->
+        # Transaction already included in the shape snapshot because it had committed before
+        # the snapshot transaction started.
+        {:cont, state}
+
+      compare(xid, xmax) == :lt and xid not in xip_list ->
+        # Transaction commited sometime between xmin and the start of the snapshot transaction.
+        {:cont, state}
+
+      compare(xid, xmin) == :eq or xid in xip_list ->
+        # Transaction was active at the time of taking the snapshot so its effects weren't
+        # visible to the snapshot transaction.
+        handle_txn_in_span(txn, state)
+
+      compare(xid, xmax) != :lt ->
+        # The first transaction received from the replication stream whose xid >= xmax.
+        #
+        # From now on the only kinds of transactions coming in from the replication stream will
+        # be either those active at the time of taking the snapshot or those commited after the
+        # snapshot transaction had started. Both kinds need to be appended to the shape log.
+        #
+        # At this point we can disable transaction filtering on the snapshot to avoid further
+        # xid comparisons.
+        state = stop_filtering_txns(state)
+        handle_txn_in_span(txn, state)
     end
+  end
+
+  defp handle_txn_in_span(txn, state) do
+    ot_attrs =
+      [xid: txn.xid, total_num_changes: txn.num_changes] ++
+        shape_attrs(state.shape_handle, state.shape)
+
+    OpenTelemetry.with_span("shape_write.consumer.handle_txn", ot_attrs, state.stack_id, fn ->
+      do_handle_txn(txn, state)
+    end)
   end
 
   defp do_handle_txn(%Transaction{} = txn, state) do
@@ -398,6 +431,12 @@ defmodule Electric.Shapes.Consumer do
     %{shape_status: {shape_status, shape_status_state}} = state
     :ok = shape_status.mark_snapshot_started(shape_status_state, shape_handle)
     reply_to_snapshot_waiters(:started, state)
+  end
+
+  defp stop_filtering_txns(state) do
+    pg_snapshot = Map.put(state.pg_snapshot, :filter_txns?, false)
+    ShapeCache.Storage.set_pg_snapshot(pg_snapshot, state.storage)
+    %{state | pg_snapshot: pg_snapshot}
   end
 
   defp cleanup(state) do

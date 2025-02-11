@@ -7,7 +7,12 @@ defmodule Electric.ShapeCache.Storage do
 
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
   @type xmin :: Electric.ShapeCacheBehaviour.xmin()
-  @type pg_snapshot :: %{xmin: pos_integer(), xmax: pos_integer, xip_list: [pos_integer]}
+  @type pg_snapshot :: %{
+          xmin: pos_integer(),
+          xmax: pos_integer(),
+          xip_list: [pos_integer()],
+          filter_txns?: boolean()
+        }
   @type offset :: LogOffset.t()
 
   @type compiled_opts :: term()
