@@ -41,6 +41,9 @@ if !is_nil(sentry_dsn) do
     dsn: sentry_dsn
 end
 
+# Disable the default telemetry_poller process since we start our own in `Electric.Telemetry`.
+config :telemetry_poller, default: false
+
 service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
 instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
 version = Electric.version()
