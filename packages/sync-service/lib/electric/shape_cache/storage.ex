@@ -7,6 +7,7 @@ defmodule Electric.ShapeCache.Storage do
 
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
   @type xmin :: Electric.ShapeCacheBehaviour.xmin()
+  @type pg_snapshot :: %{xmin: pos_integer(), xmax: pos_integer, xip_list: [pos_integer]}
   @type offset :: LogOffset.t()
 
   @type compiled_opts :: term()
@@ -47,13 +48,14 @@ defmodule Electric.ShapeCache.Storage do
   @callback get_total_disk_usage(compiled_opts()) :: non_neg_integer()
 
   @doc """
-  Get the current xmin and offset for the shape storage.
+  Get the current pg_snapshot and offset for the shape storage.
 
   If the instance is new, then it MUST return `{LogOffset.first(), nil}`.
   """
-  @callback get_current_position(shape_opts()) :: {:ok, offset(), xmin() | nil} | {:error, term()}
+  @callback get_current_position(shape_opts()) ::
+              {:ok, offset(), pg_snapshot() | nil} | {:error, term()}
 
-  @callback set_snapshot_xmin(xmin(), shape_opts()) :: :ok
+  @callback set_pg_snapshot(pg_snapshot(), shape_opts()) :: :ok
 
   @doc "Check if snapshot for a given shape handle already exists"
   @callback snapshot_started?(shape_opts()) :: boolean()
@@ -159,8 +161,8 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def set_snapshot_xmin(xmin, {mod, shape_opts}) do
-    mod.set_snapshot_xmin(xmin, shape_opts)
+  def set_pg_snapshot(pg_snapshot, {mod, shape_opts}) do
+    mod.set_pg_snapshot(pg_snapshot, shape_opts)
   end
 
   @impl __MODULE__

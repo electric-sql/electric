@@ -73,20 +73,20 @@ defmodule Electric.Shapes.Consumer do
     # Store the shape definition to ensure we can restore it
     :ok = ShapeCache.Storage.set_shape_definition(config.shape, storage)
 
-    {:ok, latest_offset, snapshot_xmin} = ShapeCache.Storage.get_current_position(storage)
+    {:ok, latest_offset, pg_snapshot} = ShapeCache.Storage.get_current_position(storage)
 
     :ok =
       shape_status.initialise_shape(
         shape_status_state,
         config.shape_handle,
-        snapshot_xmin,
+        pg_snapshot[:xmin],
         latest_offset
       )
 
     state =
       Map.merge(config, %{
         latest_offset: latest_offset,
-        snapshot_xmin: snapshot_xmin,
+        pg_snapshot: pg_snapshot,
         log_state: @initial_log_state,
         inspector: config.inspector,
         snapshot_started: false,
@@ -98,8 +98,8 @@ defmodule Electric.Shapes.Consumer do
     {:consumer, state, subscribe_to: [{producer, [max_demand: 1, shape: config.shape]}]}
   end
 
-  def handle_call(:initial_state, _from, %{snapshot_xmin: xmin, latest_offset: offset} = state) do
-    {:reply, {:ok, xmin, offset}, [], state}
+  def handle_call(:initial_state, _from, %{latest_offset: offset} = state) do
+    {:reply, {:ok, offset}, [], state}
   end
 
   def handle_call({:monitor, pid}, _from, %{monitors: monitors} = state) do
@@ -128,11 +128,15 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_cast(
-        {:snapshot_xmin_known, shape_handle, xmin},
+        {:pg_snapshot_known, shape_handle,
+         %{xmin: xmin, xmax: xmax, xip_list: xip_list} = pg_snapshot},
         %{shape_handle: shape_handle} = state
       ) do
-    Logger.debug("Snapshot xmin known shape_handle: #{shape_handle} xmin: #{xmin}")
-    state = set_snapshot_xmin(xmin, state)
+    Logger.debug(
+      "Snapshot known for shape_handle: #{shape_handle} xmin: #{xmin}, xmax: #{xmax}, xip_list: #{Enum.join(xip_list, ",")}"
+    )
+
+    state = set_pg_snapshot(pg_snapshot, state)
     handle_txns(state.buffer, %{state | buffer: []})
   end
 
@@ -162,7 +166,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
-    state = set_snapshot_xmin(state.snapshot_xmin, state)
+    state = set_pg_snapshot(state.pg_snapshot, state)
     state = set_snapshot_started(state)
     {:noreply, [], state}
   end
@@ -213,8 +217,8 @@ defmodule Electric.Shapes.Consumer do
     {:stop, :normal, state}
   end
 
-  # Buffer incoming transactions until we know our xmin
-  defp handle_event(%Transaction{xid: xid} = txn, %{snapshot_xmin: nil} = state) do
+  # Buffer incoming transactions until we know our pg_snapshot
+  defp handle_event(%Transaction{xid: xid} = txn, %{pg_snapshot: nil} = state) do
     Logger.debug(fn ->
       "Consumer for #{state.shape_handle} buffering 1 transaction with xid #{xid}"
     end)
@@ -222,10 +226,13 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, [], %{state | buffer: state.buffer ++ [txn]}}
   end
 
-  defp handle_event(%Transaction{} = txn, state) do
+  defp handle_event(
+         %Transaction{} = txn,
+         %{pg_snapshot: %{xmin: xmin, xmax: xmax}} = state
+       ) do
     OpenTelemetry.with_span(
       "shape_write.consumer.handle_txns",
-      [snapshot_xmin: state.snapshot_xmin],
+      [snapshot_xmin: xmin, snapshot_xmax: xmax],
       state.stack_id,
       fn -> handle_txns([txn], state) end
     )
@@ -241,7 +248,7 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp handle_txn(%Transaction{xid: xid} = txn, %{snapshot_xmin: xmin} = state) do
+  defp handle_txn(%Transaction{xid: xid} = txn, %{pg_snapshot: %{xmin: xmin}} = state) do
     if Electric.Postgres.Xid.compare(xid, xmin) == :lt do
       {:cont, state}
     else
@@ -362,12 +369,15 @@ defmodule Electric.Shapes.Consumer do
     end)
   end
 
-  defp set_snapshot_xmin(xmin, %{snapshot_xmin: nil} = state) do
-    ShapeCache.Storage.set_snapshot_xmin(xmin, state.storage)
-    set_snapshot_xmin(xmin, %{state | snapshot_xmin: xmin})
+  defp set_pg_snapshot(pg_snapshot, %{pg_snapshot: nil} = state) do
+    ShapeCache.Storage.set_pg_snapshot(pg_snapshot, state.storage)
+    set_pg_snapshot(pg_snapshot, %{state | pg_snapshot: pg_snapshot})
   end
 
-  defp set_snapshot_xmin(xmin, %{snapshot_xmin: xmin, shape_handle: shape_handle} = state) do
+  defp set_pg_snapshot(
+         %{xmin: xmin},
+         %{pg_snapshot: %{xmin: xmin}, shape_handle: shape_handle} = state
+       ) do
     %{shape_status: {shape_status, shape_status_state}} = state
 
     unless shape_status.set_snapshot_xmin(shape_status_state, shape_handle, xmin),

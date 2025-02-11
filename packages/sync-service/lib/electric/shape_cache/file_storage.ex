@@ -16,6 +16,7 @@ defmodule Electric.ShapeCache.FileStorage do
   @shape_definition_file_name "shape_defintion.json"
 
   @xmin_key :snapshot_xmin
+  @pg_snapshot_key :pg_snapshot
   @snapshot_meta_key :snapshot_meta
   @snapshot_started_key :snapshot_started
   @compaction_info_key :compaction_info
@@ -112,7 +113,7 @@ defmodule Electric.ShapeCache.FileStorage do
   def initialise(%FS{} = opts) do
     stored_version = stored_version(opts)
 
-    if stored_version != opts.version || snapshot_xmin(opts) == nil ||
+    if stored_version != opts.version || is_nil(pg_snapshot(opts)) ||
          not File.exists?(shape_definition_path(opts)) ||
          not CubDB.has_key?(opts.db, @snapshot_meta_key) do
       cleanup_internals!(opts)
@@ -218,7 +219,7 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def get_current_position(%FS{} = opts) do
-    {:ok, latest_offset(opts), snapshot_xmin(opts)}
+    {:ok, latest_offset(opts), pg_snapshot(opts)}
   end
 
   defp latest_offset(opts) do
@@ -245,13 +246,17 @@ defmodule Electric.ShapeCache.FileStorage do
     end
   end
 
-  defp snapshot_xmin(opts) do
-    CubDB.get(opts.db, @xmin_key)
+  defp pg_snapshot(opts) do
+    # Temporary fallback to @xmin_key until we do a breaking release that drops that key entirely.
+    with nil <- CubDB.get(opts.db, @pg_snapshot_key),
+         xmin when not is_nil(xmin) <- CubDB.get(opts.db, @xmin_key) do
+      %{xmin: xmin, xmax: nil, xip_list: nil}
+    end
   end
 
   @impl Electric.ShapeCache.Storage
-  def set_snapshot_xmin(xmin, %FS{} = opts) do
-    CubDB.put(opts.db, @xmin_key, xmin)
+  def set_pg_snapshot(pg_snapshot, %FS{} = opts) do
+    CubDB.put(opts.db, @pg_snapshot_key, pg_snapshot)
   end
 
   @impl Electric.ShapeCache.Storage
@@ -663,8 +668,9 @@ defmodule Electric.ShapeCache.FileStorage do
 
   defp cleanup_internals!(%FS{} = opts) do
     [
-      @snapshot_meta_key,
       @xmin_key,
+      @pg_snapshot_key,
+      @snapshot_meta_key,
       @snapshot_started_key
     ]
     |> Enum.concat(keys_from_range(log_start(), log_end(), opts))

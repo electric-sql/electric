@@ -594,7 +594,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         # storage.set_shape_definition(@shape, opts)
         storage.mark_snapshot_as_started(opts)
         storage.make_new_snapshot!(@data_stream, opts)
-        storage.set_snapshot_xmin(11, opts)
+        storage.set_pg_snapshot(%{xmin: 11, xmax: 12, xip_list: []}, opts)
         assert storage.snapshot_started?(opts)
 
         storage.initialise(opts)
@@ -602,7 +602,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         refute storage.snapshot_started?(opts)
       end
 
-      test "removes the shape if the snapshot_xmin has not been set", %{
+      test "removes the shape if pg_snapshot has not been set", %{
         module: storage,
         opts: opts
       } do
@@ -611,7 +611,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.set_shape_definition(@shape, opts)
         storage.mark_snapshot_as_started(opts)
         storage.make_new_snapshot!(@data_stream, opts)
-        # storage.set_snapshot_xmin(11, opts)
         assert storage.snapshot_started?(opts)
 
         storage.initialise(opts)
@@ -627,7 +626,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         storage.set_shape_definition(@shape, opts)
         storage.mark_snapshot_as_started(opts)
-        storage.set_snapshot_xmin(22, opts)
+        storage.set_pg_snapshot(%{xmin: 22, xmax: 23, xip_list: []}, opts)
 
         storage.initialise(opts)
 
@@ -643,7 +642,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.set_shape_definition(@shape, opts)
         storage.mark_snapshot_as_started(opts)
         storage.make_new_snapshot!(@data_stream, opts)
-        storage.set_snapshot_xmin(11, opts)
+        storage.set_pg_snapshot(%{xmin: 11, xmax: 12, xip_list: []}, opts)
 
         storage.initialise(%{opts | version: "new-version"})
 

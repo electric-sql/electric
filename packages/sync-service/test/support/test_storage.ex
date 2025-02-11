@@ -15,7 +15,7 @@ defmodule Support.TestStorage do
       # setup "shape-1" with a snapshot
       init = %{
         "shape-1" => [
-          {:set_snapshot_xmin, [123]},
+          {:set_pg_snapshot, [%{xmin: 123, xmax: 124, xip_list: [123]}]},
           {:mark_snapshot_as_started, []},
           {:make_new_snapshot!, [
             # snapshot entries
@@ -91,9 +91,9 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def set_snapshot_xmin(xmin, {parent, shape_handle, _, storage}) do
-    send(parent, {__MODULE__, :set_snapshot_xmin, shape_handle, xmin})
-    Storage.set_snapshot_xmin(xmin, storage)
+  def set_pg_snapshot(pg_snapshot, {parent, shape_handle, _, storage}) do
+    send(parent, {__MODULE__, :set_pg_snapshot, shape_handle, pg_snapshot})
+    Storage.set_pg_snapshot(pg_snapshot, storage)
   end
 
   @impl Electric.ShapeCache.Storage

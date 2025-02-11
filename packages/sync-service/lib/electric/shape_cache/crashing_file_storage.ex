@@ -15,7 +15,7 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
   defdelegate get_all_stored_shapes(opts), to: FileStorage
   defdelegate get_total_disk_usage(opts), to: FileStorage
   defdelegate get_current_position(opts), to: FileStorage
-  defdelegate set_snapshot_xmin(xmin, opts), to: FileStorage
+  defdelegate set_pg_snapshot(pg_snapshot, opts), to: FileStorage
   defdelegate snapshot_started?(opts), to: FileStorage
   defdelegate make_new_snapshot!(data_stream, opts), to: FileStorage
   defdelegate mark_snapshot_as_started(opts), to: FileStorage
