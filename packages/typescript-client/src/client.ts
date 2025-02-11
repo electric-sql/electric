@@ -260,7 +260,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   shapeHandle?: string
   error?: unknown
 
-  refresh(): Promise<void>
+  forceDisconnectAndRefresh(): Promise<void>
 }
 
 /**
@@ -427,7 +427,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // Add Electric's internal parameters
         fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
 
-        if (this.#isUpToDate) {
+        if (this.#isUpToDate && !this.#isRefreshing) {
           fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
           fetchUrl.searchParams.set(
             LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -470,16 +470,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
           })
           this.#connected = true
         } catch (e) {
-          if (e instanceof FetchBackoffAbortError) break // interrupted
-          if (!(e instanceof FetchError)) throw e // should never happen
-
-          // Handle abort error during refresh
+          // Handle abort error triggered by refresh
           if (
             this.#isRefreshing &&
             this.#requestAbortController.signal.aborted
           ) {
+            // Loop back to the top of the while loop to start a new request
             continue
           }
+
+          if (e instanceof FetchBackoffAbortError) break // interrupted
+          if (!(e instanceof FetchError)) throw e // should never happen
 
           if (e.status == 409) {
             // Upon receiving a 409, we should start from scratch
@@ -624,11 +625,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   /**
    * Refreshes the shape stream.
-   * This preemptively aborts any ongoing long poll and reconnection without
+   * This preemptively aborts any ongoing long poll and reconnects without
    * long polling, ensuring that the stream receives an up to date message with the
    * latest LSN from Postgres at that point in time.
    */
-  async refresh(): Promise<void> {
+  async forceDisconnectAndRefresh(): Promise<void> {
     if (this.#refreshPromise) {
       return this.#refreshPromise
     }
