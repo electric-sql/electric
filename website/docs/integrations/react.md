@@ -159,3 +159,28 @@ const itemsShape = getShape<Item>({
 ```
 
 This allows you to avoid materialising multiple shapes for the same stream.
+
+### `AbortController`
+
+In some cases, you may need to clean up a shape subscription to prevent conflicts. To handle this, you can use the AbortController.
+
+```tsx
+function MyComponent() {
+  const [controller, _] = useState(new AbortController())
+  
+  const { data } = useShape({
+    ...
+    signal: controller.signal
+  })
+
+  useEffect(() => {
+    return () {
+      controller.abort()
+    }
+  }, [])
+
+  ...
+}
+```
+
+Additionally, if you only require the data without the need for ongoing subscription updates, you can set the subscribe option to false when configuring the shape:  `subscribe: false`
