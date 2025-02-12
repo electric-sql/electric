@@ -719,7 +719,7 @@ describe(`Shape`, () => {
     expect(await resolveValue(mockAsyncParamFn())).toBe(`test-value`)
   })
 
-  it(`should support refresh() to force a sync`, async ({
+  it(`should support forceDisconnectAndRefresh() to force a sync`, async ({
     issuesTableUrl,
     insertIssues,
     updateIssue,
@@ -756,6 +756,7 @@ describe(`Shape`, () => {
           async () => {
             try {
               const response = await fetch(input, init)
+              console.log(`response`, response)
               resolve(response)
             } catch (e) {
               reject(e)
@@ -777,19 +778,26 @@ describe(`Shape`, () => {
     // Subscribe to start the stream
     const shape = new Shape(shapeStream)
 
-    // Wait for initial fetch to start
+    // Wait for initial fetch to start: offset: -1
     await sleep(50)
     expect(pendingRequests.length).toBe(1)
+    expect(pendingRequests[0][0].toString()).toContain(`offset=-1`)
 
     // Complete initial fetch
     await resolveRequests()
 
-    // Wait for initial fetch to start
+    // Wait for second fetch to start: offset: 0_0
     await sleep(50)
     expect(pendingRequests.length).toBe(1)
+    expect(pendingRequests[0][0].toString()).toContain(`offset=0_0`)
 
-    // Complete initial fetch
+    // Complete second fetch
     await resolveRequests()
+    await sleep(50)
+
+    // We should be in live mode
+    expect(pendingRequests.length).toBe(1)
+    expect(pendingRequests[0][0].toString()).toContain(`live=true`)
 
     // Update data while stream is long polling
     await updateIssue({ id, title: `updated title` })
@@ -799,10 +807,16 @@ describe(`Shape`, () => {
 
     // Verify the long polling request was aborted and a new request started
     await sleep(50)
-    expect(pendingRequests.length).toBe(2) // Initial + aborted long poll + refresh request
+    expect(pendingRequests.length).toBe(2) // Aborted long poll + refresh request
+    expect(pendingRequests[0][0].toString()).toContain(`live=true`) // The aborted long poll
+    expect(pendingRequests[1][0].toString()).not.toContain(`live=true`) // The refresh request
 
     // Complete refresh request
+    // This will abort the long poll and start a new one
     await resolveRequests()
+
+    // Wait for the refresh to complete, this resolves once the next request
+    // after calling forceDisconnectAndRefresh() has completed
     await refreshPromise
 
     // Verify we got the updated data
@@ -816,7 +830,8 @@ describe(`Shape`, () => {
 
     // Verify we return to normal processing (long polling)
     await sleep(50)
-    expect(pendingRequests.length).toBe(1) // Previous requests + new long poll
+    expect(pendingRequests.length).toBe(1) // New long poll
+    expect(pendingRequests[0][0].toString()).toContain(`live=true`)
   })
 })
 
