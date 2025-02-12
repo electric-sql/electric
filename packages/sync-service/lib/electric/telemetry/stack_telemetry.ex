@@ -80,6 +80,13 @@ defmodule Electric.Telemetry.StackTelemetry do
     for_stack = for_stack(opts)
 
     [
+      environment: [
+        pg_version:
+          last_value("electric.postgres.info_looked_up.pg_version",
+            reporter_options: [persist_between_sends: true],
+            keep: for_stack
+          )
+      ],
       usage: [
         inbound_bytes:
           sum("electric.postgres.replication.transaction_received.bytes",

@@ -80,12 +80,6 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
   #            make sure you also change the receiver
   def call_home_metrics() do
     [
-      environment: [
-        pg_version:
-          last_value("electric.postgres.info_looked_up.pg_version",
-            reporter_options: [persist_between_sends: true]
-          )
-      ],
       resources: [
         uptime:
           last_value("vm.uptime.total",
