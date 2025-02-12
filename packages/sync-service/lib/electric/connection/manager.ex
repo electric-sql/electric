@@ -541,7 +541,7 @@ defmodule Electric.Connection.Manager do
   end
 
   defp handle_connection_error(
-         %DBConnection.ConnectionError{message: message, severity: :error},
+         %DBConnection.ConnectionError{message: message, severity: :error} = error,
          %State{connection_opts: connection_opts, ipv6_enabled: true} = state,
          mode
        ) do
@@ -565,12 +565,17 @@ defmodule Electric.Connection.Manager do
       step = current_connection_step(state)
       handle_continue(step, state)
     else
-      # Pass through other errors to avoid infinite loop
-      handle_connection_error({:passthrough, message}, state, mode)
+      fail_on_error_or_reconnect(error, state, mode)
     end
   end
 
   defp handle_connection_error(error, state, mode) do
+    fail_on_error_or_reconnect(error, state, mode)
+  end
+
+  # This separate function is needed for `handle_connection_error()` not to get stuck in a
+  # recursive function call loop.
+  defp fail_on_error_or_reconnect(error, state, mode) do
     with false <- stop_if_fatal_error(error, state) do
       state = schedule_reconnection_after_error(error, state, mode)
       {:noreply, state}
@@ -588,9 +593,6 @@ defmodule Electric.Connection.Manager do
 
         %Postgrex.Error{postgres: %{message: message} = pg_error} ->
           message <> pg_error_extra_info(pg_error)
-
-        {:passthrough, message} ->
-          message
       end
 
     Logger.warning("Database connection in #{mode} mode failed: #{message}")
