@@ -1,4 +1,9 @@
 defmodule Electric.Telemetry.ApplicationTelemetry do
+  @moduledoc """
+  Collects and exports application level telemetry such as CPU, memory and BEAM metrics.
+
+  See also StackTelemetry for stack specific telemetry.
+  """
   use Supervisor
 
   import Telemetry.Metrics

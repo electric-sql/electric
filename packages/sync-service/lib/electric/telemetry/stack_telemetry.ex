@@ -1,4 +1,11 @@
 defmodule Electric.Telemetry.StackTelemetry do
+  @moduledoc """
+  Collects and exports stack level telemetry such as database and shape metrics.
+
+  If multiple databases are used, each database will have it's own stack and it's own StackTelemetry.
+
+  See also ApplicationTelemetry for application/system level specific telemetry.
+  """
   use Supervisor
 
   import Telemetry.Metrics
