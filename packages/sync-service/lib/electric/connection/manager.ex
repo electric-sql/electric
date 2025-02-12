@@ -615,10 +615,21 @@ defmodule Electric.Connection.Manager do
 
   defp maybe_fallback_to_ipv4(error, _connection_opts), do: {:error, error}
 
-  defp maybe_fallback_to_no_ssl(
-         {:error, %Postgrex.Error{message: "ssl not available"}} = error,
-         connection_opts
-       ) do
+  defp maybe_fallback_to_no_ssl({:error, reason} = error, connection_opts) do
+    case reason do
+      %Postgrex.Error{message: "ssl not available"} ->
+        do_fallback_to_no_ssl(error, connection_opts)
+
+      # Seen this when connecting to Fly Postgres
+      %DBConnection.ConnectionError{message: "ssl connect: closed"} ->
+        do_fallback_to_no_ssl(error, connection_opts)
+
+      _ ->
+        error
+    end
+  end
+
+  defp do_fallback_to_no_ssl(error, connection_opts) do
     sslmode = connection_opts[:sslmode]
 
     if sslmode == :require do
@@ -635,8 +646,6 @@ defmodule Electric.Connection.Manager do
       {:ok, Keyword.put(connection_opts, :ssl, false)}
     end
   end
-
-  defp maybe_fallback_to_no_ssl(error, _connection_opts), do: error
 
   defp handle_connection_error(
          {:shutdown, {:failed_to_start_child, Electric.Postgres.ReplicationClient, error}},
