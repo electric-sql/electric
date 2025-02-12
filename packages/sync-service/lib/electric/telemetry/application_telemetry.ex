@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry do
+defmodule Electric.Telemetry.ApplicationTelemetry do
   use Supervisor
 
   import Telemetry.Metrics
