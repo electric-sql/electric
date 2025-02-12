@@ -756,7 +756,6 @@ describe(`Shape`, () => {
           async () => {
             try {
               const response = await fetch(input, init)
-              console.log(`response`, response)
               resolve(response)
             } catch (e) {
               reject(e)

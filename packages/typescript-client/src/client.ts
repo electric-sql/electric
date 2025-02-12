@@ -36,6 +36,7 @@ import {
   WHERE_QUERY_PARAM,
   TABLE_QUERY_PARAM,
   REPLICA_PARAM,
+  FORCE_DISCONNECT_AND_REFRESH,
 } from './constants'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
@@ -325,13 +326,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #shapeHandle?: string
   #schema?: Schema
   #onError?: ShapeStreamErrorHandler
-
   #requestAbortController?: AbortController
-
   #isRefreshing = false
-  #refreshPromise?: Promise<void>
-  #refreshPromiseResolver?: () => void
-  #refreshPromiseRejecter?: (reason?: unknown) => void
+  #tickPromise?: Promise<void>
+  #tickPromiseResolver?: () => void
+  #tickPromiseRejecter?: (reason?: unknown) => void
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -449,16 +448,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // Create a new AbortController for this request
         this.#requestAbortController = new AbortController()
 
-        // If user provided a signal, listen to it
+        // If user provided a signal, listen to it and pass on the reason for the abort
         let abortListener: (() => void) | undefined
         if (signal) {
           abortListener = () => {
-            this.#requestAbortController?.abort()
+            this.#requestAbortController?.abort(signal.reason)
           }
           signal.addEventListener(`abort`, abortListener, { once: true })
           if (signal.aborted) {
             // If the signal is already aborted, abort the request immediately
-            this.#requestAbortController?.abort()
+            this.#requestAbortController?.abort(signal.reason)
           }
         }
 
@@ -472,8 +471,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         } catch (e) {
           // Handle abort error triggered by refresh
           if (
-            this.#isRefreshing &&
-            this.#requestAbortController.signal.aborted
+            (e instanceof FetchError || e instanceof FetchBackoffAbortError) &&
+            this.#requestAbortController.signal.aborted &&
+            this.#requestAbortController.signal.reason ===
+              FORCE_DISCONNECT_AND_REFRESH
           ) {
             // Loop back to the top of the while loop to start a new request
             continue
@@ -546,13 +547,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           await this.#publish(batch)
         }
 
-        if (this.#isRefreshing) {
-          this.#refreshPromiseResolver?.()
-          this.#refreshPromise = undefined
-          this.#refreshPromiseResolver = undefined
-          this.#refreshPromiseRejecter = undefined
-          this.#isRefreshing = false
-        }
+        this.#tickPromiseResolver?.()
       }
     } catch (err) {
       this.#error = err
@@ -580,7 +575,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       throw err
     } finally {
       this.#connected = false
-      this.#refreshPromiseRejecter?.()
+      this.#tickPromiseRejecter?.()
     }
   }
 
@@ -623,6 +618,23 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return !this.#isUpToDate
   }
 
+  /** Await the next tick of the request loop */
+  async nextTick() {
+    if (this.#tickPromise) {
+      return this.#tickPromise
+    }
+    this.#tickPromise = new Promise((resolve, reject) => {
+      this.#tickPromiseResolver = resolve
+      this.#tickPromiseRejecter = reject
+    })
+    this.#tickPromise.finally(() => {
+      this.#tickPromise = undefined
+      this.#tickPromiseResolver = undefined
+      this.#tickPromiseRejecter = undefined
+    })
+    return this.#tickPromise
+  }
+
   /**
    * Refreshes the shape stream.
    * This preemptively aborts any ongoing long poll and reconnects without
@@ -630,20 +642,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * latest LSN from Postgres at that point in time.
    */
   async forceDisconnectAndRefresh(): Promise<void> {
-    if (this.#refreshPromise) {
-      return this.#refreshPromise
-    }
     this.#isRefreshing = true
-    if (this.#isUpToDate) {
+    if (this.#isUpToDate && !this.#requestAbortController?.signal.aborted) {
       // If we are "up to date", any current request will be a "live" request
       // and needs to be aborted
-      this.#requestAbortController?.abort()
+      this.#requestAbortController?.abort(FORCE_DISCONNECT_AND_REFRESH)
     }
-    this.#refreshPromise = new Promise((resolve, reject) => {
-      this.#refreshPromiseResolver = resolve
-      this.#refreshPromiseRejecter = reject
-    })
-    return this.#refreshPromise
+    await this.nextTick()
+    this.#isRefreshing = false
   }
 
   async #publish(messages: Message<T>[]): Promise<void> {
