@@ -197,18 +197,19 @@ defmodule Electric.Telemetry.StackTelemetry do
   end
 
   defp otel_metrics(opts) do
+    for_stack = for_stack(opts)
+
     [
       distribution("electric.plug.serve_shape.duration",
-        drop: &(Map.get(&1, :live, false) || false),
-        keep: for_stack(opts)
+        keep: &(&1[:live] != true && for_stack.(&1))
       ),
       distribution("electric.shape_cache.create_snapshot_task.stop.duration",
         unit: {:native, :millisecond},
-        keep: for_stack(opts)
+        keep: for_stack
       ),
       distribution("electric.storage.make_new_snapshot.stop.duration",
         unit: {:native, :millisecond},
-        keep: for_stack(opts)
+        keep: for_stack
       )
     ] ++ prometheus_metrics(opts)
   end
