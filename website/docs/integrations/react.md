@@ -164,6 +164,8 @@ This allows you to avoid materialising multiple shapes for the same stream.
 
 If you'd like to abort the shape's subscription to live updates e.g. after unmounting a component or navigating away from a route, you can use the [`AbortController`](https://developer.mozilla.org/en-US/docs/Web/API/AbortController).
 
+The following is a simple example which aborts the subscription when the component is unmounted.
+
 ```tsx
 function MyComponent() {
   const [controller, _] = useState(new AbortController())
