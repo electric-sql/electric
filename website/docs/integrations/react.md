@@ -159,3 +159,31 @@ const itemsShape = getShape<Item>({
 ```
 
 This allows you to avoid materialising multiple shapes for the same stream.
+
+### How to abort a shape subscription — `AbortController`
+
+If you'd like to abort the shape's subscription to live updates e.g. after unmounting a component or navigating away from a route, you can use the [`AbortController`](https://developer.mozilla.org/en-US/docs/Web/API/AbortController).
+
+The following is a simple example which aborts the subscription when the component is unmounted.
+
+```tsx
+function MyComponent() {
+  const [controller, _] = useState(new AbortController())
+  
+  const { data } = useShape({
+    ...
+    signal: controller.signal
+  })
+
+  useEffect(() => {
+    return () {
+      // Live updates are now disabled.
+      controller.abort()
+    }
+  }, [])
+
+  ...
+}
+```
+
+Note that if you have multiple components using the same component, this will stop updates for all subscribers. Which is probably not what you want. We plan to add a better API for unsubscribing from updates & cleaning up shapes that are no longer needed. If interested, please file an issue to start a discussion.
