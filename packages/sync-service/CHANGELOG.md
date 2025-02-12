@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.0-beta.15
+
+### Patch Changes
+
+- 3eb347b: Add optional telemetry to profile where clause filtering
+
 ## 1.0.0-beta.14
 
 ### Patch Changes
