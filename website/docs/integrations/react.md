@@ -160,9 +160,9 @@ const itemsShape = getShape<Item>({
 
 This allows you to avoid materialising multiple shapes for the same stream.
 
-### `AbortController`
+### How to abort a shape subscription — `AbortController`
 
-In some cases, you may need to clean up a shape subscription to prevent conflicts. To handle this, you can use the AbortController.
+If you'd like to abort the shape's subscription to live updates e.g. after unmounting a component or navigating away from a route, you can use the [`AbortController`](https://developer.mozilla.org/en-US/docs/Web/API/AbortController).
 
 ```tsx
 function MyComponent() {
@@ -175,6 +175,7 @@ function MyComponent() {
 
   useEffect(() => {
     return () {
+      // Live updates are now disabled.
       controller.abort()
     }
   }, [])
@@ -183,4 +184,4 @@ function MyComponent() {
 }
 ```
 
-Additionally, if you only require the data without the need for ongoing subscription updates, you can set the subscribe option to false when configuring the shape:  `subscribe: false`
+Note that if you have multiple components using the same component, this will stop updates for all subscribers. Which is probably not what you want. We plan to add a better API for unsubscribing from updates & cleaning up shapes that are no longer needed. If interested, please file an issue to start a discussion.
