@@ -27,10 +27,15 @@ Luckily, HTTP/2, introduced in 2015, fixes this problem by _multiplexing_ each r
 
 To fix this, you can setup a local reverse-proxy using the popular [Caddy server](https://caddyserver.com). Caddy automatically sets up HTTP/2 and proxies requests to Electric, getting around the 6 requests limitation with HTTP/1.1 in the browser.
 
-This command runs Caddy so it's listening on port 3001 and proxying shape requests to Electric which listens on port 3000. If you're loading shapes through your API or framework dev server, replace `3000` with the port that your API or dev server is listening on.
+1. Install Caddy for your OS — https://caddyserver.com/docs/install
+2. Run `caddy trust` so Caddy can install its certificate into your OS. This is necessary for http/2 to Just Work™ without SSL warnings/errors in your browser — https://caddyserver.com/docs/command-line#caddy-trust
+
+Note — it's really important you run Caddy directly from your computer and not in e.g. a Docker container as otherwise, Caddy won't be able to use http/2 and will fallback to http/1 defeating the purpose of using it!
+
+Once you have Caddy installed and have added its certs — you can run this command to start Caddy listening on port 3001 and proxying shape requests to Electric on port 3000. If you're loading shapes through your API or framework dev server, replace `3000` with the port that your API or dev server is listening on. The browser should talk directly to Caddy.
 
 ```sh
-npx @radically-straightforward/caddy run \
+caddy run \
     --config - \
     --adapter caddyfile \
     <<EOF
@@ -43,7 +48,7 @@ localhost:3001 {
 EOF
 ```
 
-Now change your shape URLs to use port `3001` instead of port 3000 and everything will run much faster 🚀
+Now change your shape URLs in your frontend code to use port `3001` instead of port 3000 and everything will run much faster 🚀
 
 ### Shape logs &mdash; how do I clear the server state?
 
