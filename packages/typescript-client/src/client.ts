@@ -619,7 +619,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   /** Await the next tick of the request loop */
-  async nextTick() {
+  async #nextTick() {
     if (this.#tickPromise) {
       return this.#tickPromise
     }
@@ -648,7 +648,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       // and needs to be aborted
       this.#requestAbortController?.abort(FORCE_DISCONNECT_AND_REFRESH)
     }
-    await this.nextTick()
+    await this.#nextTick()
     this.#isRefreshing = false
   }
 
