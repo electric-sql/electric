@@ -16,6 +16,8 @@ defmodule Electric.Telemetry do
   end
 
   def init(opts) do
+    Process.set_label(:application_telemetry_supervisor)
+
     system_metrics_poll_interval = Electric.Config.get_env(:system_metrics_poll_interval)
     statsd_host = Electric.Config.get_env(:telemetry_statsd_host)
     prometheus? = not is_nil(Electric.Config.get_env(:prometheus_port))
@@ -107,39 +109,6 @@ defmodule Electric.Telemetry do
         swap_used: last_value("system.swap.used"),
         swap_free_percent: last_value("system.swap_percent.free"),
         swap_used_percent: last_value("system.swap_percent.used")
-      ],
-      usage: [
-        inbound_bytes:
-          sum("electric.postgres.replication.transaction_received.bytes", unit: :byte),
-        inbound_transactions: sum("electric.postgres.replication.transaction_received.count"),
-        inbound_operations: sum("electric.postgres.replication.transaction_received.operations"),
-        stored_bytes: sum("electric.storage.transaction_stored.bytes", unit: :byte),
-        stored_transactions: sum("electric.storage.transaction_stored.count"),
-        stored_operations: sum("electric.storage.transaction_stored.operations"),
-        total_used_storage_kb: last_value("electric.storage.used", unit: {:byte, :kilobyte}),
-        total_shapes: last_value("electric.shapes.total_shapes.count"),
-        active_shapes:
-          summary("electric.plug.serve_shape.monotonic_time",
-            unit: :unique,
-            reporter_options: [count_unique: :shape_handle],
-            keep: &(&1.status < 300)
-          ),
-        unique_clients:
-          summary("electric.plug.serve_shape.monotonic_time",
-            unit: :unique,
-            reporter_options: [count_unique: :client_ip],
-            keep: &(&1.status < 300)
-          ),
-        sync_requests:
-          counter("electric.plug.serve_shape.monotonic_time",
-            drop: &(Map.get(&1, :live, false) || false)
-          ),
-        live_requests:
-          counter("electric.plug.serve_shape.monotonic_time",
-            keep: &(Map.get(&1, :live, false) || false)
-          ),
-        served_bytes: sum("electric.plug.serve_shape.bytes", unit: :byte),
-        wal_size: summary("electric.postgres.replication.wal_size", unit: :byte)
       ]
     ]
   end
@@ -169,21 +138,6 @@ defmodule Electric.Telemetry do
       last_value("vm.total_run_queue_lengths.total"),
       last_value("vm.total_run_queue_lengths.cpu"),
       last_value("vm.total_run_queue_lengths.io"),
-      summary("plug.router_dispatch.stop.duration",
-        tags: [:route],
-        unit: {:native, :millisecond}
-      ),
-      summary("plug.router_dispatch.exception.duration",
-        tags: [:route],
-        unit: {:native, :millisecond}
-      ),
-      summary("electric.shape_cache.create_snapshot_task.stop.duration",
-        unit: {:native, :millisecond}
-      ),
-      summary("electric.storage.make_new_snapshot.stop.duration", unit: {:native, :millisecond}),
-      summary("electric.querying.stream_initial_data.stop.duration",
-        unit: {:native, :millisecond}
-      ),
       last_value("system.load_percent.avg1"),
       last_value("system.load_percent.avg5"),
       last_value("system.load_percent.avg15"),
@@ -199,10 +153,6 @@ defmodule Electric.Telemetry do
     [
       last_value("system.cpu.core_count"),
       last_value("system.cpu.utilization.total"),
-      last_value("electric.postgres.replication.wal_size", unit: :byte),
-      last_value("electric.storage.used", unit: {:byte, :kilobyte}),
-      last_value("electric.shapes.total_shapes.count"),
-      last_value("vm.memory.total", unit: :byte),
       last_value("vm.memory.processes_used", unit: :byte),
       last_value("vm.memory.binary", unit: :byte),
       last_value("vm.memory.ets", unit: :byte),
@@ -212,10 +162,11 @@ defmodule Electric.Telemetry do
       last_value("vm.total_run_queue_lengths.total"),
       last_value("vm.total_run_queue_lengths.cpu"),
       last_value("vm.total_run_queue_lengths.io"),
-      last_value("electric.postgres.replication.wal_size", unit: :byte),
-      counter("electric.postgres.replication.transaction_received.count"),
-      sum("electric.postgres.replication.transaction_received.bytes", unit: :byte),
-      sum("electric.storage.transaction_stored.bytes", unit: :byte)
+      last_value("vm.uptime.total",
+        unit: :second,
+        measurement: &:erlang.convert_time_unit(&1.total, :native, :second)
+      ),
+      last_value("vm.memory.total", unit: :byte)
     ] ++
       Enum.map(
         # Add "system.cpu.utilization.core_*" but since there's no wildcard support we
@@ -229,22 +180,11 @@ defmodule Electric.Telemetry do
     [
       last_value("system.load_percent.avg1"),
       last_value("system.load_percent.avg5"),
-      last_value("system.load_percent.avg15"),
-      distribution("electric.plug.serve_shape.duration",
-        drop: &(Map.get(&1, :live, false) || false)
-      ),
-      distribution("electric.shape_cache.create_snapshot_task.stop.duration",
-        unit: {:native, :millisecond}
-      ),
-      distribution("electric.storage.make_new_snapshot.stop.duration",
-        unit: {:native, :millisecond}
-      )
+      last_value("system.load_percent.avg15")
     ] ++ prometheus_metrics()
   end
 
   defp periodic_measurements(opts) do
-    stack_id = Keyword.fetch!(opts, :stack_id)
-
     [
       # Default measurements included with the telemetry_poller application:
       :memory,
@@ -253,13 +193,9 @@ defmodule Electric.Telemetry do
 
       # Our custom measurements:
       {__MODULE__, :uptime_event, []},
-      {__MODULE__, :count_shapes, [stack_id]},
       {__MODULE__, :cpu_utilization, []},
-      {__MODULE__, :get_total_disk_usage, [opts]},
       {__MODULE__, :get_system_load_average, [opts]},
-      {__MODULE__, :get_system_memory_usage, [opts]},
-      {Electric.Connection.Manager, :report_retained_wal_size,
-       [Electric.Connection.Manager.name(stack_id)]}
+      {__MODULE__, :get_system_memory_usage, [opts]}
     ]
   end
 
@@ -267,28 +203,6 @@ defmodule Electric.Telemetry do
     :telemetry.execute([:vm, :uptime], %{
       total: :erlang.monotonic_time() - :erlang.system_info(:start_time)
     })
-  end
-
-  def count_shapes(stack_id) do
-    Electric.ShapeCache.list_shapes(stack_id: stack_id)
-    |> length()
-    |> then(
-      &:telemetry.execute([:electric, :shapes, :total_shapes], %{count: &1}, %{stack_id: stack_id})
-    )
-  end
-
-  def get_total_disk_usage(opts) do
-    storage = Electric.StackSupervisor.storage_mod_arg(Map.new(opts))
-
-    Electric.ShapeCache.Storage.get_total_disk_usage(storage)
-    |> then(
-      &:telemetry.execute([:electric, :storage], %{used: &1}, %{
-        stack_id: opts[:stack_id]
-      })
-    )
-  catch
-    :exit, {:noproc, _} ->
-      :ok
   end
 
   def cpu_utilization do
