@@ -12,9 +12,9 @@ defmodule Electric.Telemetry.StackTelemetry do
 
   require Logger
 
-  def start_link(init_arg) do
+  def start_link(opts) do
     if Electric.Config.telemetry_export_enabled?() do
-      Supervisor.start_link(__MODULE__, init_arg)
+      Supervisor.start_link(__MODULE__, opts)
     else
       # Avoid starting the telemetry supervisor and its telemetry_poller child if we're not
       # intending to export periodic measurements metrics anywhere.
@@ -46,7 +46,15 @@ defmodule Electric.Telemetry.StackTelemetry do
   end
 
   defp otel_reporter_child_spec(true, opts) do
-    {OtelMetricExporter, metrics: otel_metrics(opts), export_period: :timer.seconds(30)}
+    {OtelMetricExporter,
+     name: :"stack_telemetry_#{stack_id(opts)}",
+     metrics: otel_metrics(opts),
+     export_period: :timer.seconds(30),
+     resource: %{
+       name: "metrics",
+       stack_id: stack_id(opts),
+       instance_id: Electric.instance_id()
+     }}
   end
 
   defp otel_reporter_child_spec(false, _opts), do: nil

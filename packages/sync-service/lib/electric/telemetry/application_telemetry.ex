@@ -47,7 +47,13 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
   end
 
   defp otel_reporter_child_spec(true) do
-    {OtelMetricExporter, metrics: otel_metrics(), export_period: :timer.seconds(30)}
+    {OtelMetricExporter,
+     metrics: otel_metrics(),
+     export_period: :timer.seconds(30),
+     resource: %{
+       name: "metrics",
+       instance_id: Electric.instance_id()
+     }}
   end
 
   defp otel_reporter_child_spec(false), do: nil
