@@ -10,9 +10,9 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
 
   require Logger
 
-  def start_link(init_arg) do
+  def start_link(opts) do
     if Electric.Config.telemetry_export_enabled?() do
-      Supervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
+      Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
     else
       # Avoid starting the telemetry supervisor and its telemetry_poller child if we're not
       # intending to export periodic measurements metrics anywhere.
@@ -20,7 +20,7 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
     end
   end
 
-  def init(opts) do
+  def init(_opts) do
     Process.set_label(:application_telemetry_supervisor)
 
     system_metrics_poll_interval = Electric.Config.get_env(:system_metrics_poll_interval)
@@ -34,7 +34,7 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
       # and add its default measurements to the list of our custom ones. This allows for all
       # periodic measurements to be defined in one place.
       {:telemetry_poller,
-       measurements: periodic_measurements(opts),
+       measurements: periodic_measurements(),
        period: system_metrics_poll_interval,
        init_delay: :timer.seconds(5)},
       statsd_reporter_child_spec(statsd_host),
@@ -182,7 +182,7 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
     ] ++ prometheus_metrics()
   end
 
-  defp periodic_measurements(opts) do
+  defp periodic_measurements() do
     [
       # Default measurements included with the telemetry_poller application:
       :memory,
@@ -192,8 +192,8 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
       # Our custom measurements:
       {__MODULE__, :uptime_event, []},
       {__MODULE__, :cpu_utilization, []},
-      {__MODULE__, :get_system_load_average, [opts]},
-      {__MODULE__, :get_system_memory_usage, [opts]}
+      {__MODULE__, :get_system_load_average, []},
+      {__MODULE__, :get_system_memory_usage, []}
     ]
   end
 
@@ -215,7 +215,7 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
     :telemetry.execute([:system, :cpu], %{core_count: Enum.count(cores)})
   end
 
-  def get_system_load_average(opts) do
+  def get_system_load_average do
     cores = :erlang.system_info(:logical_processors)
 
     # > The load values are proportional to how long time a runnable Unix
@@ -252,18 +252,12 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
     |> Map.new(fn probe ->
       {probe, 100 * (apply(:cpu_sup, probe, []) / 256 / cores)}
     end)
-    |> then(
-      &:telemetry.execute([:system, :load_percent], &1, %{
-        stack_id: opts[:stack_id]
-      })
-    )
+    |> then(&:telemetry.execute([:system, :load_percent], &1))
   end
 
   @required_system_memory_keys ~w[system_total_memory free_memory]a
 
-  def get_system_memory_usage(opts) do
-    metadata = %{stack_id: opts[:stack_id]}
-
+  def get_system_memory_usage() do
     system_memory = Map.new(:memsup.get_system_memory_data())
 
     # Sanity-check that all the required keys are present before doing any arithmetic on them
@@ -299,13 +293,13 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
 
           mem_stats = Map.put(mem_stats, :total_memory, total)
 
-          :telemetry.execute([:system, :memory], mem_stats, metadata)
-          :telemetry.execute([:system, :memory_percent], mem_percent_stats, metadata)
+          :telemetry.execute([:system, :memory], mem_stats)
+          :telemetry.execute([:system, :memory_percent], mem_percent_stats)
 
           mem_stats
       end
 
-    Map.merge(mem_stats, swap_stats(:os.type(), system_memory, metadata))
+    Map.merge(mem_stats, swap_stats(:os.type(), system_memory))
   end
 
   defp resident_memory(%{available_memory: available_memory}) do
@@ -335,12 +329,12 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
     %{}
   end
 
-  defp swap_stats({:unix, :darwin}, _system_memory, _metadata) do
+  defp swap_stats({:unix, :darwin}, _system_memory) do
     # On macOS, swap stats are not available
     %{}
   end
 
-  defp swap_stats(_os_type, %{total_swap: total, free_swap: free}, metadata) do
+  defp swap_stats(_os_type, %{total_swap: total, free_swap: free}) do
     used = total - free
 
     swap_stats = %{total_swap: total, free_swap: free, used_swap: used}
@@ -352,14 +346,14 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
         %{free_swap: 0, used_swap: 0}
       end
 
-    :telemetry.execute([:system, :swap], swap_stats, metadata)
-    :telemetry.execute([:system, :swap_percent], swap_percent_stats, metadata)
+    :telemetry.execute([:system, :swap], swap_stats)
+    :telemetry.execute([:system, :swap_percent], swap_percent_stats)
 
     swap_stats
   end
 
   @required_swap_keys ~w[total_swap free_swap]a
-  defp swap_stats(_os_type, system_memory, _metadata) do
+  defp swap_stats(_os_type, system_memory) do
     missing_swap_keys = Enum.reject(@required_swap_keys, &Map.has_key?(system_memory, &1))
 
     Logger.warning(

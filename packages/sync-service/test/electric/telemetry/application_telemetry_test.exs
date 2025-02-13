@@ -13,7 +13,7 @@ defmodule Electric.TelemetryTest do
                    free_memory: _,
                    used_memory: _,
                    resident_memory: _
-                 } = ApplicationTelemetry.get_system_memory_usage([])
+                 } = ApplicationTelemetry.get_system_memory_usage()
 
         _ ->
           assert %{
@@ -27,7 +27,7 @@ defmodule Electric.TelemetryTest do
                    total_swap: _,
                    free_swap: _,
                    used_swap: _
-                 } = ApplicationTelemetry.get_system_memory_usage([])
+                 } = ApplicationTelemetry.get_system_memory_usage()
       end
     end
   end

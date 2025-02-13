@@ -78,7 +78,7 @@ defmodule Electric.Application do
             chunk_bytes_threshold: Electric.Config.get_env(:chunk_bytes_threshold),
             name: Electric.StackSupervisor
           },
-          {Electric.Telemetry.ApplicationTelemetry, storage: storage},
+          {Electric.Telemetry.ApplicationTelemetry, []},
           {Bandit,
            plug: {Electric.Plug.Router, router_opts},
            port: Electric.Config.get_env(:service_port),
