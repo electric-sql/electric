@@ -35,7 +35,7 @@ defmodule Electric.Telemetry.StackTelemetry do
       {:telemetry_poller,
        measurements: periodic_measurements(opts),
        period: system_metrics_poll_interval,
-       init_delay: :timer.seconds(5)},
+       init_delay: :timer.seconds(3)},
       statsd_reporter_child_spec(statsd_host, opts),
       prometheus_reporter_child_spec(prometheus?, opts),
       call_home_reporter_child_spec(call_home_telemetry?, opts),
