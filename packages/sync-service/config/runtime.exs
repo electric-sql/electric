@@ -83,7 +83,11 @@ if otlp_endpoint do
     otlp_endpoint: otlp_endpoint,
     otlp_headers: Map.new(headers),
     otlp_compression: :gzip,
-    resource: %{service: %{name: service_name, version: version}, instance: %{id: instance_id}}
+    resource: %{
+      name: "metrics",
+      service: %{name: service_name, version: version},
+      instance: %{id: instance_id}
+    }
 end
 
 otel_batch_processor =

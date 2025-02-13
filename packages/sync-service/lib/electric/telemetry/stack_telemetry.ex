@@ -50,11 +50,7 @@ defmodule Electric.Telemetry.StackTelemetry do
      name: :"stack_telemetry_#{stack_id(opts)}",
      metrics: otel_metrics(opts),
      export_period: :timer.seconds(30),
-     resource: %{
-       name: "metrics",
-       stack_id: stack_id(opts),
-       instance_id: Electric.instance_id()
-     }}
+     resource: %{stack_id: stack_id(opts)}}
   end
 
   defp otel_reporter_child_spec(false, _opts), do: nil
