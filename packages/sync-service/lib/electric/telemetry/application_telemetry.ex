@@ -59,8 +59,7 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
      static_info: static_info(),
      metrics: call_home_metrics(),
      first_report_in: {2, :minute},
-     reporting_period: {30, :minute},
-     reporter_fn: &Electric.Telemetry.CallHomeReporter.report_home/1}
+     reporting_period: {30, :minute}}
   end
 
   def static_info() do
