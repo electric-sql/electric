@@ -47,7 +47,7 @@ defmodule Electric.Telemetry.StackTelemetry do
 
   defp otel_reporter_child_spec(true, opts) do
     {OtelMetricExporter,
-     name: :"stack_telemetry_#{stack_id(opts)}",
+     name: :"stack_otel_telemetry_#{stack_id(opts)}",
      metrics: otel_metrics(opts),
      export_period: :timer.seconds(30),
      resource: %{stack_id: stack_id(opts)}}
@@ -59,6 +59,7 @@ defmodule Electric.Telemetry.StackTelemetry do
 
   defp call_home_reporter_child_spec(true, opts) do
     {Electric.Telemetry.CallHomeReporter,
+     name: :"stack_call_home_telemetry_#{stack_id(opts)}",
      static_info: static_info(opts),
      metrics: call_home_metrics(opts),
      first_report_in: {2, :minute},
@@ -153,7 +154,8 @@ defmodule Electric.Telemetry.StackTelemetry do
   defp prometheus_reporter_child_spec(false, _opts), do: nil
 
   defp prometheus_reporter_child_spec(true, opts) do
-    {TelemetryMetricsPrometheus.Core, metrics: prometheus_metrics(opts)}
+    {TelemetryMetricsPrometheus.Core,
+     name: :"stack_prometheus_telemetry_#{stack_id(opts)}", metrics: prometheus_metrics(opts)}
   end
 
   defp statsd_metrics(opts) do
