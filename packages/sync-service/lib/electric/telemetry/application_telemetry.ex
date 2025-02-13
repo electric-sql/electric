@@ -168,8 +168,8 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
     ] ++
       Enum.map(
         # Add "system.cpu.utilization.core_*" but since there's no wildcard support we
-        # explicitly add 64 cores. If there are fewer cores, the missing ones will be ignored.
-        0..63,
+        # explicitly add the cores here.
+        0..(:erlang.system_info(:logical_processors) - 1),
         &last_value("system.cpu.utilization.core_#{&1}")
       )
   end
