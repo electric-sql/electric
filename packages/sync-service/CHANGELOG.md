@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.0-beta.18
+
+### Patch Changes
+
+- 2f6452c: Change stack_id to source_id in open telemetry export
+
 ## 1.0.0-beta.17
 
 ### Patch Changes
