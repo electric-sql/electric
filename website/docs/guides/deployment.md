@@ -129,7 +129,7 @@ Images are deployed to Docker Hub at [electricsql/electric](https://hub.docker.c
 
 Electric caches [Shape logs](/docs/api/http#shape-log) and metadata on the filesystem. Your Electric host must provide a persistent filesystem. Ideally this should be large, fast and locally mounted, such as a NVMe SSD. If you're configuring a machine and you want to optimise it for Electric, the factors to optimise for, in order of important, are:
 
-1. disk speed &mdash; low latency, high throughout reads and writes
+1. disk speed &mdash; low latency, high throughput reads and writes
 2. memory
 3. CPU
 
