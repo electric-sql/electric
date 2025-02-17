@@ -11,8 +11,8 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
   require Logger
 
   def start_link(opts) do
-    if Electric.Config.telemetry_export_enabled?() do
-      Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
+    if telemetry_export_enabled?(Map.new(opts)) do
+      Supervisor.start_link(__MODULE__, Map.new(opts), name: __MODULE__)
     else
       # Avoid starting the telemetry supervisor and its telemetry_poller child if we're not
       # intending to export periodic measurements metrics anywhere.
@@ -20,47 +20,52 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
     end
   end
 
-  def init(_opts) do
+  def init(opts) do
     Process.set_label(:application_telemetry_supervisor)
 
-    system_metrics_poll_interval = Electric.Config.get_env(:system_metrics_poll_interval)
-    statsd_host = Electric.Config.get_env(:telemetry_statsd_host)
-    prometheus? = not is_nil(Electric.Config.get_env(:prometheus_port))
-    call_home_telemetry? = Electric.Config.get_env(:call_home_telemetry?)
-    otel_metrics? = not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
-
-    [
-      # The telemetry_poller application starts its own poller by default but we disable that
-      # and add its default measurements to the list of our custom ones. This allows for all
-      # periodic measurements to be defined in one place.
-      {:telemetry_poller,
-       measurements: periodic_measurements(),
-       period: system_metrics_poll_interval,
-       init_delay: :timer.seconds(5)},
-      statsd_reporter_child_spec(statsd_host),
-      prometheus_reporter_child_spec(prometheus?),
-      call_home_reporter_child_spec(call_home_telemetry?),
-      otel_reporter_child_spec(otel_metrics?)
-    ]
-    |> Enum.reject(&is_nil/1)
+    [telemetry_poller_child_spec(opts) | exporter_child_specs(opts)]
     |> Supervisor.init(strategy: :one_for_one)
   end
 
-  defp otel_reporter_child_spec(true) do
+  defp telemetry_poller_child_spec(opts) do
+    # The telemetry_poller application starts its own poller by default but we disable that
+    # and add its default measurements to the list of our custom ones. This allows for all
+    # periodic measurements to be defined in one place.
+    {:telemetry_poller,
+     measurements: periodic_measurements(),
+     period: opts.system_metrics_poll_interval,
+     init_delay: :timer.seconds(5)}
+  end
+
+  defp telemetry_export_enabled?(opts) do
+    exporter_child_specs(opts) != []
+  end
+
+  defp exporter_child_specs(opts) do
+    [
+      statsd_reporter_child_spec(opts),
+      prometheus_reporter_child_spec(opts),
+      call_home_reporter_child_spec(opts),
+      otel_reporter_child_spec(opts)
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp otel_reporter_child_spec(%{otel_metrics?: true}) do
     {OtelMetricExporter, metrics: otel_metrics(), export_period: :timer.seconds(30)}
   end
 
-  defp otel_reporter_child_spec(false), do: nil
+  defp otel_reporter_child_spec(_), do: nil
 
-  defp call_home_reporter_child_spec(false), do: nil
-
-  defp call_home_reporter_child_spec(true) do
+  defp call_home_reporter_child_spec(%{call_home_telemetry?: true}) do
     {Electric.Telemetry.CallHomeReporter,
      static_info: static_info(),
      metrics: call_home_metrics(),
      first_report_in: {2, :minute},
      reporting_period: {30, :minute}}
   end
+
+  defp call_home_reporter_child_spec(_), do: nil
 
   def static_info() do
     {total_mem, _, _} = :memsup.get_memory_data()
@@ -111,21 +116,21 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
     ]
   end
 
-  defp statsd_reporter_child_spec(nil), do: nil
-
-  defp statsd_reporter_child_spec(host) do
+  defp statsd_reporter_child_spec(%{statsd_host: host, instance_id: instance_id}) do
     {TelemetryMetricsStatsd,
      host: host,
      formatter: :datadog,
-     global_tags: [instance_id: Electric.instance_id()],
+     global_tags: [instance_id: instance_id],
      metrics: statsd_metrics()}
   end
 
-  defp prometheus_reporter_child_spec(false), do: nil
+  defp statsd_reporter_child_spec(_), do: nil
 
-  defp prometheus_reporter_child_spec(true) do
+  defp prometheus_reporter_child_spec(%{prometheus?: true}) do
     {TelemetryMetricsPrometheus.Core, metrics: prometheus_metrics()}
   end
+
+  defp prometheus_reporter_child_spec(_), do: nil
 
   defp statsd_metrics() do
     [
