@@ -18,7 +18,7 @@ defmodule Electric.Telemetry.CallHomeReporter do
     static_info = Keyword.get(opts, :static_info, %{})
     first_report_in = cast_time_to_ms(Keyword.fetch!(opts, :first_report_in))
     reporting_period = cast_time_to_ms(Keyword.fetch!(opts, :reporting_period))
-    reporter_fn = Keyword.fetch!(opts, :reporter_fn)
+    reporter_fn = Keyword.get(opts, :reporter_fn, &report_home/1)
 
     GenServer.start_link(
       __MODULE__,
