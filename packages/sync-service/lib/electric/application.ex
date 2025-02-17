@@ -60,6 +60,15 @@ defmodule Electric.Application do
         []
       end
 
+    telemetry_opts = [
+      instance_id: Electric.instance_id(),
+      system_metrics_poll_interval: Electric.Config.get_env(:system_metrics_poll_interval),
+      statsd_host: Electric.Config.get_env(:telemetry_statsd_host),
+      prometheus?: not is_nil(Electric.Config.get_env(:prometheus_port)),
+      call_home_telemetry?: Electric.Config.get_env(:call_home_telemetry?),
+      otel_metrics?: not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
+    ]
+
     # The root application supervisor starts the core global processes, including the HTTP
     # server and the database connection manager. The latter is responsible for establishing
     # all needed connections to the database (acquiring the exclusive access lock, opening a
@@ -88,9 +97,10 @@ defmodule Electric.Application do
             pool_opts: [pool_size: Electric.Config.get_env(:db_pool_size)],
             storage: storage,
             chunk_bytes_threshold: Electric.Config.get_env(:chunk_bytes_threshold),
-            name: Electric.StackSupervisor
+            name: Electric.StackSupervisor,
+            telemetry_opts: telemetry_opts
           },
-          {Electric.Telemetry.ApplicationTelemetry, []}
+          {Electric.Telemetry.ApplicationTelemetry, telemetry_opts}
         ],
         api_server,
         prometheus_endpoint(Electric.Config.get_env(:prometheus_port))

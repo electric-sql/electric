@@ -12,59 +12,77 @@ defmodule Electric.Telemetry.StackTelemetry do
 
   require Logger
 
+  @opts_schema NimbleOptions.new!(
+                 Electric.Telemetry.Opts.schema() ++
+                   [
+                     stack_id: [type: :string, required: true],
+                     storage: [type: :mod_arg, required: true]
+                   ]
+               )
+
   def start_link(opts) do
-    if Electric.Config.telemetry_export_enabled?() do
-      Supervisor.start_link(__MODULE__, opts)
-    else
-      # Avoid starting the telemetry supervisor and its telemetry_poller child if we're not
-      # intending to export periodic measurements metrics anywhere.
-      :ignore
+    with {:ok, opts} <- NimbleOptions.validate(opts, @opts_schema) do
+      if telemetry_export_enabled?(Map.new(opts)) do
+        Supervisor.start_link(__MODULE__, Map.new(opts))
+      else
+        # Avoid starting the telemetry supervisor and its telemetry_poller child if we're not
+        # intending to export periodic measurements metrics anywhere.
+        :ignore
+      end
     end
   end
 
   def init(opts) do
-    Process.set_label({:stack_telemetry_supervisor, stack_id(opts)})
+    Process.set_label({:stack_telemetry_supervisor, opts.stack_id})
 
-    system_metrics_poll_interval = Electric.Config.get_env(:system_metrics_poll_interval)
-    statsd_host = Electric.Config.get_env(:telemetry_statsd_host)
-    prometheus? = not is_nil(Electric.Config.get_env(:prometheus_port))
-    call_home_telemetry? = Electric.Config.get_env(:call_home_telemetry?)
-    otel_metrics? = not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
-
-    [
-      {:telemetry_poller,
-       measurements: periodic_measurements(opts),
-       period: system_metrics_poll_interval,
-       init_delay: :timer.seconds(3)},
-      statsd_reporter_child_spec(statsd_host, opts),
-      prometheus_reporter_child_spec(prometheus?, opts),
-      call_home_reporter_child_spec(call_home_telemetry?, opts),
-      otel_reporter_child_spec(otel_metrics?, opts)
-    ]
-    |> Enum.reject(&is_nil/1)
+    [telemetry_poller_child_spec(opts) | exporter_child_specs(opts)]
     |> Supervisor.init(strategy: :one_for_one)
   end
 
-  defp otel_reporter_child_spec(true, opts) do
-    {OtelMetricExporter,
-     name: :"stack_otel_telemetry_#{stack_id(opts)}",
-     metrics: otel_metrics(opts),
-     export_period: :timer.seconds(30),
-     resource: %{stack_id: stack_id(opts)}}
+  defp telemetry_poller_child_spec(opts) do
+    # The telemetry_poller application starts its own poller by default but we disable that
+    # and add its default measurements to the list of our custom ones. This allows for all
+    # periodic measurements to be defined in one place.
+    {:telemetry_poller,
+     measurements: periodic_measurements(opts),
+     period: opts.system_metrics_poll_interval,
+     init_delay: :timer.seconds(3)}
   end
 
-  defp otel_reporter_child_spec(false, _opts), do: nil
+  defp telemetry_export_enabled?(opts) do
+    exporter_child_specs(opts) != []
+  end
 
-  defp call_home_reporter_child_spec(false, _opts), do: nil
+  defp exporter_child_specs(opts) do
+    [
+      statsd_reporter_child_spec(opts),
+      prometheus_reporter_child_spec(opts),
+      call_home_reporter_child_spec(opts),
+      otel_reporter_child_spec(opts)
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
 
-  defp call_home_reporter_child_spec(true, opts) do
+  defp otel_reporter_child_spec(%{otel_metrics?: true} = opts) do
+    {OtelMetricExporter,
+     name: :"stack_otel_telemetry_#{opts.stack_id}",
+     metrics: otel_metrics(opts),
+     export_period: :timer.seconds(30),
+     resource: %{stack_id: opts.stack_id}}
+  end
+
+  defp otel_reporter_child_spec(_), do: nil
+
+  defp call_home_reporter_child_spec(%{call_home_telemetry?: true} = opts) do
     {Electric.Telemetry.CallHomeReporter,
-     name: :"stack_call_home_telemetry_#{stack_id(opts)}",
+     name: :"stack_call_home_telemetry_#{opts.stack_id}",
      static_info: static_info(opts),
      metrics: call_home_metrics(opts),
      first_report_in: {2, :minute},
      reporting_period: {30, :minute}}
   end
+
+  defp call_home_reporter_child_spec(_), do: nil
 
   def static_info(opts) do
     {total_mem, _, _} = :memsup.get_memory_data()
@@ -80,7 +98,7 @@ defmodule Electric.Telemetry.StackTelemetry do
         cores: processors,
         ram: total_mem,
         electric_instance_id: Electric.instance_id(),
-        stack_id: stack_id(opts)
+        stack_id: opts.stack_id
       }
     }
   end
@@ -141,22 +159,22 @@ defmodule Electric.Telemetry.StackTelemetry do
     ]
   end
 
-  defp statsd_reporter_child_spec(nil, _opts), do: nil
-
-  defp statsd_reporter_child_spec(host, opts) do
+  defp statsd_reporter_child_spec(%{statsd_host: host} = opts) when host != nil do
     {TelemetryMetricsStatsd,
      host: host,
      formatter: :datadog,
-     global_tags: [instance_id: Electric.instance_id()],
+     global_tags: [instance_id: opts.instance_id],
      metrics: statsd_metrics(opts)}
   end
 
-  defp prometheus_reporter_child_spec(false, _opts), do: nil
+  defp statsd_reporter_child_spec(_), do: nil
 
-  defp prometheus_reporter_child_spec(true, opts) do
+  defp prometheus_reporter_child_spec(%{prometheus?: true} = opts) do
     {TelemetryMetricsPrometheus.Core,
-     name: :"stack_prometheus_telemetry_#{stack_id(opts)}", metrics: prometheus_metrics(opts)}
+     name: :"stack_prometheus_telemetry_#{opts.stack_id}", metrics: prometheus_metrics(opts)}
   end
+
+  defp prometheus_reporter_child_spec(_), do: nil
 
   defp statsd_metrics(opts) do
     [
@@ -221,10 +239,10 @@ defmodule Electric.Telemetry.StackTelemetry do
 
   defp periodic_measurements(opts) do
     [
-      {__MODULE__, :count_shapes, [stack_id(opts)]},
+      {__MODULE__, :count_shapes, [opts.stack_id]},
       {__MODULE__, :get_total_disk_usage, [opts]},
       {Electric.Connection.Manager, :report_retained_wal_size,
-       [Electric.Connection.Manager.name(stack_id(opts))]}
+       [Electric.Connection.Manager.name(opts.stack_id)]}
     ]
   end
 
@@ -237,7 +255,7 @@ defmodule Electric.Telemetry.StackTelemetry do
   end
 
   def get_total_disk_usage(opts) do
-    storage = Electric.StackSupervisor.storage_mod_arg(Map.new(opts))
+    storage = Electric.StackSupervisor.storage_mod_arg(opts)
 
     Electric.ShapeCache.Storage.get_total_disk_usage(storage)
     |> then(
@@ -250,12 +268,8 @@ defmodule Electric.Telemetry.StackTelemetry do
       :ok
   end
 
-  defp stack_id(opts) do
-    Keyword.fetch!(opts, :stack_id)
-  end
-
   def for_stack(opts) do
-    stack_id = stack_id(opts)
+    stack_id = opts.stack_id
 
     fn metadata ->
       metadata[:stack_id] == stack_id
