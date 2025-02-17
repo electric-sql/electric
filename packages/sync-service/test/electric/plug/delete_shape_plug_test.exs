@@ -51,11 +51,14 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         long_poll_timeout: Access.get(ctx, :long_poll_timeout, 20_000),
         max_age: Access.get(ctx, :max_age, 60),
         stale_age: Access.get(ctx, :stale_age, 300),
-        allow_shape_deletion: allow
+        allow_shape_deletion: allow,
+        persistent_kv: ctx.persistent_kv
       )
 
     DeleteShapePlug.call(conn, config)
   end
+
+  setup :with_persistent_kv
 
   describe "DeleteShapePlug" do
     setup :with_stack_id_from_test
