@@ -10,13 +10,17 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
 
   require Logger
 
+  @opts_schema NimbleOptions.new!(Electric.Telemetry.Opts.schema())
+
   def start_link(opts) do
-    if telemetry_export_enabled?(Map.new(opts)) do
-      Supervisor.start_link(__MODULE__, Map.new(opts), name: __MODULE__)
-    else
-      # Avoid starting the telemetry supervisor and its telemetry_poller child if we're not
-      # intending to export periodic measurements metrics anywhere.
-      :ignore
+    with {:ok, opts} <- NimbleOptions.validate(opts, @opts_schema) do
+      if telemetry_export_enabled?(Map.new(opts)) do
+        Supervisor.start_link(__MODULE__, Map.new(opts), name: __MODULE__)
+      else
+        # Avoid starting the telemetry supervisor and its telemetry_poller child if we're not
+        # intending to export periodic measurements metrics anywhere.
+        :ignore
+      end
     end
   end
 

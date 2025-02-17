@@ -12,13 +12,23 @@ defmodule Electric.Telemetry.StackTelemetry do
 
   require Logger
 
+  @opts_schema NimbleOptions.new!(
+                 Electric.Telemetry.Opts.schema() ++
+                   [
+                     stack_id: [type: :string, required: true],
+                     storage: [type: :mod_arg, required: true]
+                   ]
+               )
+
   def start_link(opts) do
-    if telemetry_export_enabled?(Map.new(opts)) do
-      Supervisor.start_link(__MODULE__, Map.new(opts))
-    else
-      # Avoid starting the telemetry supervisor and its telemetry_poller child if we're not
-      # intending to export periodic measurements metrics anywhere.
-      :ignore
+    with {:ok, opts} <- NimbleOptions.validate(opts, @opts_schema) do
+      if telemetry_export_enabled?(Map.new(opts)) do
+        Supervisor.start_link(__MODULE__, Map.new(opts))
+      else
+        # Avoid starting the telemetry supervisor and its telemetry_poller child if we're not
+        # intending to export periodic measurements metrics anywhere.
+        :ignore
+      end
     end
   end
 
