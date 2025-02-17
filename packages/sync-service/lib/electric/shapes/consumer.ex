@@ -262,6 +262,14 @@ defmodule Electric.Shapes.Consumer do
          %Transaction{xid: xid} = txn,
          %{pg_snapshot: %{xmin: xmin, xmax: xmax, xip_list: xip_list}} = state
        ) do
+    # xmin is the lowest active transaction ID, there can be txids > xmin that have
+    # committed and so would already be included in the shape's data snapshot.
+    # For this reason we store the full pg_snapshot and compare the incoming xid not only
+    # against xmin but also against xip_list, the list of transactions active at the time of
+    # taking the original data snapshot.
+    #
+    # See Postgres docs for details on the pg_snapshot fields:
+    # https://www.postgresql.org/docs/current/functions-info.html#FUNCTIONS-PG-SNAPSHOT-PARTS
     cond do
       compare(xid, xmin) == :lt ->
         # Transaction already included in the shape snapshot because it had committed before
