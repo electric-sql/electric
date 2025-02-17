@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.3.0-beta.3
+
+### Patch Changes
+
+- 8ce1353: Add embedded mode to Elixir client using the new Shapes API
+
 ## 0.3.0-beta.2
 
 ### Minor Changes
