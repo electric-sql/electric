@@ -113,19 +113,6 @@ defmodule Electric.Config do
     Application.fetch_env!(:electric, key)
   end
 
-  @doc """
-  True when at least one metric exporter is enabled.
-
-  This function is used to skip starting the Electric.Telemetry supervisor when there's no need
-  to capture periodic measurements. Useful in the dev and test environments.
-  """
-  def telemetry_export_enabled? do
-    not is_nil(Electric.Config.get_env(:telemetry_statsd_host)) or
-      not is_nil(Electric.Config.get_env(:prometheus_port)) or
-      Electric.Config.get_env(:call_home_telemetry?) or
-      not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
-  end
-
   @doc ~S"""
   Parse a PostgreSQL URI into a keyword list.
 
