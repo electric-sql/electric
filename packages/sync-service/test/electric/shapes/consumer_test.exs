@@ -669,7 +669,7 @@ defmodule Electric.Shapes.ConsumerTest do
           run_with_conn_fn: &run_with_conn_noop/2,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
-            pg_snapshot = %{xmin: 10, xmax: 11, xip_list: [10]}
+            pg_snapshot = {10, 11, [10]}
             GenServer.cast(parent, {:pg_snapshot_known, shape_handle, pg_snapshot})
             Storage.make_new_snapshot!([], storage)
             GenServer.cast(parent, {:snapshot_started, shape_handle})

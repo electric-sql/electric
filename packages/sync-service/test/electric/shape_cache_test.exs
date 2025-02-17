@@ -55,8 +55,9 @@ defmodule Electric.ShapeCacheTest do
                     %{name: "value", type: "text", type_id: {25, 1}}
                   ])
 
-  @pg_snapshot_xmin_10 %{xmin: 10, xmax: 11, xip_list: [10]}
-  @pg_snapshot_xmin_100 %{xmin: 100, xmax: 101, xip_list: [100]}
+  # {xmin, xmax, xip_list}
+  @pg_snapshot_xmin_10 {10, 11, [10]}
+  @pg_snapshot_xmin_100 {100, 101, [100]}
 
   defmodule TempPubManager do
     def add_shape(_, opts) do
@@ -856,7 +857,7 @@ defmodule Electric.ShapeCacheTest do
       meta_table = Keyword.fetch!(opts, :shape_meta_table)
       [{^shape_handle, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
       {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(meta_table, shape_handle)
-      assert snapshot_xmin == @pg_snapshot_xmin_10.xmin
+      assert snapshot_xmin == elem(@pg_snapshot_xmin_10, 0)
 
       %{shape_cache_opts: opts} = restart_shape_cache(context)
       :started = ShapeCache.await_snapshot_start(shape_handle, opts)
@@ -864,7 +865,7 @@ defmodule Electric.ShapeCacheTest do
       meta_table = Keyword.fetch!(opts, :shape_meta_table)
       assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
       {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(meta_table, shape_handle)
-      assert snapshot_xmin == @pg_snapshot_xmin_10.xmin
+      assert snapshot_xmin == elem(@pg_snapshot_xmin_10, 0)
     end
 
     test "restores publication filters", %{shape_cache_opts: opts} = context do

@@ -130,16 +130,22 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_cast(
-        {:pg_snapshot_known, shape_handle,
-         %{xmin: xmin, xmax: xmax, xip_list: xip_list} = pg_snapshot},
+        {:pg_snapshot_known, shape_handle, {xmin, xmax, xip_list}},
         %{shape_handle: shape_handle} = state
       ) do
     Logger.debug(
       "Snapshot known for shape_handle: #{shape_handle} xmin: #{xmin}, xmax: #{xmax}, xip_list: #{Enum.join(xip_list, ",")}"
     )
 
-    pg_snapshot = Map.put(pg_snapshot, :filter_txns?, true)
-    state = set_pg_snapshot(pg_snapshot, state)
+    state =
+      %{
+        xmin: xmin,
+        xmax: xmax,
+        xip_list: xip_list,
+        filter_txns?: true
+      }
+      |> set_pg_snapshot(state)
+
     handle_txns(state.buffer, %{state | buffer: []})
   end
 

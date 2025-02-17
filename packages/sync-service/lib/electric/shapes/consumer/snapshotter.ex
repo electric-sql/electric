@@ -149,19 +149,19 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               stack_id
             )
 
-            %{rows: [[pg_snapshot_str]]} =
+            %{rows: [[pg_snapshot]]} =
               query_span!(
                 conn,
                 "shape_snapshot.get_pg_snapshot",
                 shape_attrs,
-                "SELECT pg_current_snapshot()::text",
+                "SELECT pg_current_snapshot()",
                 [],
                 stack_id
               )
 
             GenServer.cast(
               parent,
-              {:pg_snapshot_known, shape_handle, parse_pg_snapshot_str(pg_snapshot_str)}
+              {:pg_snapshot_known, shape_handle, pg_snapshot}
             )
 
             # Enforce display settings *before* querying initial data to maintain consistent
@@ -204,15 +204,5 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
       "shape.root_table": shape.root_table,
       "shape.where": shape.where
     ]
-  end
-
-  defp parse_pg_snapshot_str(str) do
-    [xmin, xmax, xip_list_str] = String.split(str, ":")
-
-    [xmin, xmax | xip_list] =
-      [xmin, xmax | String.split(xip_list_str, ",", trim: true)]
-      |> Enum.map(&String.to_integer/1)
-
-    %{xmin: xmin, xmax: xmax, xip_list: xip_list}
   end
 end
