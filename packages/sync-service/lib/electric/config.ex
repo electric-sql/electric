@@ -31,30 +31,32 @@ defmodule Electric.Config do
   @build_env Mix.env()
 
   @defaults [
-    # Database
+    ## Database
     provided_database_id: "single_stack",
     db_pool_size: 20,
     replication_stream_id: "default",
     replication_slot_temporary?: false,
-    # HTTP API
+    ## HTTP API
+    # set enable_http_api: false to turn of the HTTP server totally
+    enable_http_api: true,
     cache_max_age: 60,
     cache_stale_age: 60 * 5,
     chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
     allow_shape_deletion?: false,
     service_port: 3000,
     listen_on_ipv6?: false,
-    # Storage
+    ## Storage
     storage_dir: "./persistent",
     storage: &Electric.Config.Defaults.storage/0,
     persistent_kv: &Electric.Config.Defaults.persistent_kv/0,
-    # Telemetry
+    ## Telemetry
     instance_id: nil,
     prometheus_port: nil,
     call_home_telemetry?: @build_env == :prod,
     telemetry_statsd_host: nil,
     telemetry_url: URI.new!("https://checkpoint.electric-sql.com"),
     system_metrics_poll_interval: :timer.seconds(5),
-    # Memory
+    ## Memory
     shape_hibernate_after: :timer.seconds(30)
   ]
 

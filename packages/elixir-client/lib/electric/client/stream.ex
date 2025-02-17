@@ -3,10 +3,7 @@ defmodule Electric.Client.Stream do
 
   alias Electric.Client.Fetch
   alias Electric.Client.Message
-  alias Electric.Client.Offset
   alias Electric.Client
-
-  require Electric.Client.Offset
 
   defstruct [
     :id,
@@ -18,7 +15,7 @@ defmodule Electric.Client.Stream do
     buffer: :queue.new(),
     up_to_date?: false,
     replica: :default,
-    offset: Offset.before_all(),
+    offset: Client.Offset.before_all(),
     shape_handle: nil,
     next_cursor: nil,
     state: :init,
@@ -91,7 +88,7 @@ defmodule Electric.Client.Stream do
           parser: nil | {module(), term()},
           buffer: :queue.queue(),
           up_to_date?: boolean(),
-          offset: Offset.t(),
+          offset: Client.offset(),
           replica: Client.replica(),
           shape_handle: nil | Client.shape_handle(),
           state: :init | :stream | :done,
@@ -154,6 +151,14 @@ defmodule Electric.Client.Stream do
     |> after_fetch()
   end
 
+  defp ensure_enum(body) do
+    case Enumerable.impl_for(body) do
+      nil -> List.wrap(body)
+      Enumerable.Map -> List.wrap(body)
+      _impl -> body
+    end
+  end
+
   defp handle_response(%Fetch.Response{status: status} = resp, stream)
        when status in 200..299 do
     shape_handle = shape_handle!(resp)
@@ -166,8 +171,8 @@ defmodule Electric.Client.Stream do
       |> Map.put(:offset, final_offset)
 
     resp.body
-    |> List.wrap()
-    |> Enum.flat_map(&Message.parse(&1, shape_handle, final_offset, value_mapper_fun))
+    |> ensure_enum()
+    |> Enum.flat_map(&Message.parse(&1, shape_handle, value_mapper_fun))
     |> Enum.map(&Map.put(&1, :request_timestamp, resp.request_timestamp))
     |> Enum.reduce_while(stream, &handle_msg/2)
     |> dispatch()
@@ -178,12 +183,11 @@ defmodule Electric.Client.Stream do
   defp handle_response({:error, %Fetch.Response{status: status} = resp}, stream)
        when status in [409] do
     %{value_mapper_fun: value_mapper_fun} = stream
-    offset = last_offset(resp, stream.offset)
     handle = shape_handle(resp)
 
     stream
     |> reset(handle)
-    |> buffer(Enum.flat_map(resp.body, &Message.parse(&1, handle, offset, value_mapper_fun)))
+    |> buffer(Enum.flat_map(resp.body, &Message.parse(&1, handle, value_mapper_fun)))
     |> dispatch()
   end
 
@@ -275,7 +279,7 @@ defmodule Electric.Client.Stream do
   defp reset(stream, shape_handle) do
     %{
       stream
-      | offset: Offset.before_all(),
+      | offset: Client.Offset.before_all(),
         shape_handle: shape_handle,
         up_to_date?: false,
         buffer: :queue.new(),
@@ -297,7 +301,11 @@ defmodule Electric.Client.Stream do
     shape_handle
   end
 
-  defp last_offset(%Fetch.Response{last_offset: %Offset{} = offset}, _offset) do
+  defp last_offset(%Fetch.Response{last_offset: nil}, offset) do
+    offset
+  end
+
+  defp last_offset(%Fetch.Response{last_offset: offset}, _offset) do
     offset
   end
 

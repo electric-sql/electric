@@ -189,6 +189,7 @@ defmodule Electric.Client do
                  )
 
   @type shape_handle :: String.t()
+  @type offset :: Electric.Client.Offset.t()
   @type cursor :: integer()
   @type replica :: :default | :full
   @type column :: %{
@@ -273,6 +274,31 @@ defmodule Electric.Client do
     end
   end
 
+  if Code.ensure_loaded?(Electric.Application) do
+    @doc """
+    Get a client instance that runs against an embedded instance of electric,
+    that is an electric app running as a dependency of the current application.
+    """
+    @spec embedded(Electric.Shapes.Api.options()) :: {:ok, t()} | {:error, term()}
+    def embedded(opts \\ []) do
+      api =
+        Electric.Application.api(Keyword.merge(opts, encoder: Electric.Shapes.Api.Encoder.Term))
+
+      Client.new(
+        base_url: "elixir://Electric.Client.Embedded",
+        fetch: {Electric.Client.Embedded, api: api}
+      )
+    end
+
+    @spec embedded!(Electric.Shapes.Api.options()) :: t() | no_return()
+    def embedded!(opts \\ []) do
+      case embedded(opts) do
+        {:ok, client} -> client
+        {:error, reason} -> raise ArgumentError, message: reason
+      end
+    end
+  end
+
   @doc """
   A shortcut to [`ShapeDefinition.new/2`](`Electric.Client.ShapeDefinition.new/2`).
 
@@ -288,6 +314,16 @@ defmodule Electric.Client do
   end
 
   if Code.ensure_loaded?(Ecto) do
+    defp validate_queryable!(queryable) when is_atom(queryable) do
+      Code.ensure_loaded!(queryable)
+
+      if function_exported?(queryable, :__schema__, 1) do
+        queryable
+      else
+        raise ArgumentError, message: "Expected Ecto struct or query, got #{inspect(queryable)}"
+      end
+    end
+
     @doc """
     Create a [`ShapeDefinition`](`Electric.Client.ShapeDefinition`) from an `Ecto` query.
 
@@ -409,15 +445,5 @@ defmodule Electric.Client do
   def delete_shape(%Client{} = client, %ShapeDefinition{} = shape) do
     request = request(client, method: :delete, shape: shape)
     Electric.Client.Fetch.request(client, request, [])
-  end
-
-  defp validate_queryable!(queryable) when is_atom(queryable) do
-    Code.ensure_loaded!(queryable)
-
-    if function_exported?(queryable, :__schema__, 1) do
-      queryable
-    else
-      raise ArgumentError, message: "Expected Ecto struct or query, got #{inspect(queryable)}"
-    end
   end
 end

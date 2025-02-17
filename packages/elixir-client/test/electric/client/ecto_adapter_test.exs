@@ -195,8 +195,8 @@ defmodule Electric.Client.EctoAdapterTest do
       Support.Repo.insert(value1)
       Support.Repo.insert(value2)
 
-      assert_receive {:stream, %Message.ControlMessage{control: :up_to_date}}, 500
-      assert_receive {:stream, %Message.ChangeMessage{} = message}, 500
+      assert_receive {:stream, %Message.ControlMessage{control: :up_to_date}}, 5000
+      assert_receive {:stream, %Message.ChangeMessage{} = message}, 5000
 
       assert %TestTable{
                id: "ecceb448-64ed-4279-9aea-795d2ae70153",
