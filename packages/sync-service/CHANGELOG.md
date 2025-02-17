@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.0-beta.16
+
+### Patch Changes
+
+- 7cb4ccb: Electric as a library: Support multiple stacks
+
 ## 1.0.0-beta.15
 
 ### Patch Changes
