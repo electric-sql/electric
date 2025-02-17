@@ -7,7 +7,7 @@ defmodule Electric.Shapes.Filter do
 
 
   The `Filter` module keeps track of what tables are referenced by the shapes and changes and delegates
-  the table specific logic to the `Filter.Table` module.
+  the table specific logic to the `Filter.WhereCondition` module.
   """
 
   alias Electric.Replication.Changes.DeletedRecord
@@ -17,9 +17,8 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Replication.Changes.TruncatedRelation
   alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Shapes.Filter
-  alias Electric.Shapes.Filter.Table
+  alias Electric.Shapes.Filter.WhereCondition
   alias Electric.Shapes.Shape
-  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -46,9 +45,9 @@ defmodule Electric.Shapes.Filter do
         Map.update(
           tables,
           shape.root_table,
-          Table.add_shape(Table.new(), {shape_id, shape}),
-          fn table ->
-            Table.add_shape(table, {shape_id, shape})
+          WhereCondition.add_shape(WhereCondition.new(), {shape_id, shape}),
+          fn condition ->
+            WhereCondition.add_shape(condition, {shape_id, shape})
           end
         )
     }
@@ -62,10 +61,10 @@ defmodule Electric.Shapes.Filter do
     %Filter{
       tables:
         tables
-        |> Enum.map(fn {table_name, table} ->
-          {table_name, Table.remove_shape(table, shape_id)}
+        |> Enum.map(fn {table_name, condition} ->
+          {table_name, WhereCondition.remove_shape(condition, shape_id)}
         end)
-        |> Enum.reject(fn {_table, table} -> Table.empty?(table) end)
+        |> Enum.reject(fn {_table, condition} -> WhereCondition.empty?(condition) end)
         |> Map.new()
     }
   end
@@ -138,16 +137,14 @@ defmodule Electric.Shapes.Filter do
       nil ->
         MapSet.new()
 
-      table ->
-        {schema, name} = table_name
-        OpenTelemetry.add_span_attributes(table: "#{schema}.#{name}")
-        Table.affected_shapes(table, record)
+      condition ->
+        WhereCondition.affected_shapes(condition, record)
     end
   end
 
   defp all_shapes(%Filter{} = filter) do
-    for {_table, table} <- filter.tables,
-        {shape_id, shape} <- Table.all_shapes(table),
+    for {_table, condition} <- filter.tables,
+        {shape_id, shape} <- WhereCondition.all_shapes(condition),
         into: %{} do
       {shape_id, shape}
     end
@@ -156,7 +153,7 @@ defmodule Electric.Shapes.Filter do
   defp all_shapes_for_table(%Filter{} = filter, table_name) do
     case Map.get(filter.tables, table_name) do
       nil -> %{}
-      table -> Table.all_shapes(table)
+      condition -> WhereCondition.all_shapes(condition)
     end
   end
 end

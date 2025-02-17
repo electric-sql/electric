@@ -1,10 +1,14 @@
-defmodule Electric.Shapes.Filter.Table do
+defmodule Electric.Shapes.Filter.WhereCondition do
   @moduledoc """
   Responsible for knowing which shapes are affected by a change to a specific table.
 
-  The `%Table{}` struct contains `indexes`, a map of indexes for shapes that have been optimised, and `other_shapes` for shapes
-  that have not been optimised. The logic for specific indexes is delegated to the `Filter.Index` module.
+  When `add_shape/3` is called, shapes are added to a tree of `%WhereCondition{}`s. Each node on the tree represents an optimised (indexed) condition in
+  the shape's where clause, with shapes that share an optimised condition being on the same branch.
 
+  The `%WhereCondition{}` struct contains `indexes`, a map of indexes for shapes that have been optimised, and `other_shapes` for shapes
+  that have not been optimised (or have no conditions left to be optimised since they've been optimised at another level of the tree).
+  The logic for specific indexes is delegated to the index's module. Each index may contain `%WhereCondition%{}`s
+  and thus a tree of optimised conditions is formed.
   """
 
   alias Electric.Replication.Eval.Expr
@@ -13,7 +17,7 @@ defmodule Electric.Shapes.Filter.Table do
   alias Electric.Replication.Eval.Parser.Func
   alias Electric.Replication.Eval.Parser.Ref
   alias Electric.Shapes.Filter.Index
-  alias Electric.Shapes.Filter.Table
+  alias Electric.Shapes.Filter.WhereCondition
   alias Electric.Shapes.WhereClause
   alias Electric.Telemetry.OpenTelemetry
 
@@ -21,30 +25,30 @@ defmodule Electric.Shapes.Filter.Table do
 
   defstruct indexes: %{}, other_shapes: %{}
 
-  def new(), do: %Table{}
+  def new(), do: %WhereCondition{}
 
-  def empty?(%Table{indexes: indexes, other_shapes: other_shapes}) do
+  def empty?(%WhereCondition{indexes: indexes, other_shapes: other_shapes}) do
     indexes == %{} && other_shapes == %{}
   end
 
-  def add_shape(%Table{} = table, {shape_id, shape} = shape_instance) do
+  def add_shape(%WhereCondition{} = condition, {shape_id, shape} = shape_instance) do
     case optimise_where(shape.where) do
       %{operation: "=", field: field, type: type, value: value, and_where: and_where} ->
         %{
-          table
+          condition
           | indexes:
               add_shape_to_indexes(
                 field,
                 type,
                 value,
                 shape_instance,
-                table.indexes,
+                condition.indexes,
                 and_where
               )
         }
 
       :not_optimised ->
-        %{table | other_shapes: Map.put(table.other_shapes, shape_id, shape)}
+        %{condition | other_shapes: Map.put(condition.other_shapes, shape_id, shape)}
     end
   end
 
@@ -94,11 +98,11 @@ defmodule Electric.Shapes.Filter.Table do
     %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
   end
 
-  def remove_shape(%Table{} = table, shape_id) do
-    %Table{
-      table
-      | indexes: remove_shape_from_indexes(table.indexes, shape_id),
-        other_shapes: Map.delete(table.other_shapes, shape_id)
+  def remove_shape(%WhereCondition{} = condition, shape_id) do
+    %WhereCondition{
+      condition
+      | indexes: remove_shape_from_indexes(condition.indexes, shape_id),
+        other_shapes: Map.delete(condition.other_shapes, shape_id)
     }
   end
 
@@ -109,42 +113,42 @@ defmodule Electric.Shapes.Filter.Table do
     |> Map.new()
   end
 
-  def affected_shapes(%Table{} = table, record) do
+  def affected_shapes(%WhereCondition{} = condition, record) do
     MapSet.union(
-      indexed_shapes_affected(table, record),
-      other_shapes_affected(table, record)
+      indexed_shapes_affected(condition, record),
+      other_shapes_affected(condition, record)
     )
   rescue
     error ->
       Logger.error("""
-      Unexpected error in Filter.Table.affected_shapes:
+      Unexpected error in Filter.WhereCondition.affected_shapes:
       #{Exception.format(:error, error, __STACKTRACE__)}
       """)
 
       # We can't tell which shapes are affected, the safest thing to do is return all shapes
-      table
+      condition
       |> all_shapes()
       |> MapSet.new(fn {shape_id, _shape} -> shape_id end)
   end
 
-  defp indexed_shapes_affected(table, record) do
+  defp indexed_shapes_affected(condition, record) do
     OpenTelemetry.with_span(
       "filter.filter_using_indexes",
-      [index_count: map_size(table.indexes)],
+      [index_count: map_size(condition.indexes)],
       fn ->
-        table.indexes
+        condition.indexes
         |> Enum.map(fn {field, index} -> Index.affected_shapes(index, field, record) end)
         |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
       end
     )
   end
 
-  defp other_shapes_affected(table, record) do
+  defp other_shapes_affected(condition, record) do
     OpenTelemetry.with_span(
       "filter.filter_other_shapes",
-      [shape_count: map_size(table.other_shapes)],
+      [shape_count: map_size(condition.other_shapes)],
       fn ->
-        for {shape_id, shape} <- table.other_shapes,
+        for {shape_id, shape} <- condition.other_shapes,
             WhereClause.includes_record?(shape.where, record),
             into: MapSet.new() do
           shape_id
@@ -153,7 +157,7 @@ defmodule Electric.Shapes.Filter.Table do
     )
   end
 
-  def all_shapes(%Table{indexes: indexes, other_shapes: other_shapes}) do
+  def all_shapes(%WhereCondition{indexes: indexes, other_shapes: other_shapes}) do
     for {_field, index} <- indexes, {shape_id, shape} <- Index.all_shapes(index), into: %{} do
       {shape_id, shape}
     end
