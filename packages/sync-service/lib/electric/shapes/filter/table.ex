@@ -19,9 +19,9 @@ defmodule Electric.Shapes.Filter.Table do
 
   require Logger
 
-  defstruct name: nil, indexes: %{}, other_shapes: %{}
+  defstruct indexes: %{}, other_shapes: %{}
 
-  def new({schema, table}), do: %Table{name: "#{schema}.#{table}"}
+  def new(), do: %Table{}
 
   def empty?(%Table{indexes: indexes, other_shapes: other_shapes}) do
     indexes == %{} && other_shapes == %{}
@@ -130,7 +130,7 @@ defmodule Electric.Shapes.Filter.Table do
   defp indexed_shapes_affected(table, record) do
     OpenTelemetry.with_span(
       "filter.filter_using_indexes",
-      [table: table.name, index_count: map_size(table.indexes)],
+      [index_count: map_size(table.indexes)],
       fn ->
         table.indexes
         |> Enum.map(fn {field, index} -> Index.affected_shapes(index, field, record) end)
@@ -142,7 +142,7 @@ defmodule Electric.Shapes.Filter.Table do
   defp other_shapes_affected(table, record) do
     OpenTelemetry.with_span(
       "filter.filter_other_shapes",
-      [table: table.name, shape_count: map_size(table.other_shapes)],
+      [shape_count: map_size(table.other_shapes)],
       fn ->
         for {shape_id, shape} <- table.other_shapes,
             WhereClause.includes_record?(shape.where, record),

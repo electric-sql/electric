@@ -19,6 +19,7 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Filter.Table
   alias Electric.Shapes.Shape
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -45,7 +46,7 @@ defmodule Electric.Shapes.Filter do
         Map.update(
           tables,
           shape.root_table,
-          Table.add_shape(Table.new(shape.root_table), {shape_id, shape}),
+          Table.add_shape(Table.new(), {shape_id, shape}),
           fn table ->
             Table.add_shape(table, {shape_id, shape})
           end
@@ -134,8 +135,13 @@ defmodule Electric.Shapes.Filter do
 
   defp shapes_affected_by_record(filter, table_name, record) do
     case Map.get(filter.tables, table_name) do
-      nil -> MapSet.new()
-      table -> Table.affected_shapes(table, record)
+      nil ->
+        MapSet.new()
+
+      table ->
+        {schema, name} = table_name
+        OpenTelemetry.add_span_attributes(table: "#{schema}.#{name}")
+        Table.affected_shapes(table, record)
     end
   end
 
