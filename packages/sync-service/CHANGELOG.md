@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.0.0-beta.17
+
+### Patch Changes
+
+- 329c428: Electric as a library: Telemetry config is now option parameters rather than application environemnt config
+- 8ce1353: Add embedded mode to Elixir client using the new Shapes API
+
 ## 1.0.0-beta.16
 
 ### Patch Changes
