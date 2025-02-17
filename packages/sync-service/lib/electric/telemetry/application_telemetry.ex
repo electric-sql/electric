@@ -116,11 +116,11 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
     ]
   end
 
-  defp statsd_reporter_child_spec(%{statsd_host: host, instance_id: instance_id}) do
+  defp statsd_reporter_child_spec(%{statsd_host: host} = opts) when host != nil do
     {TelemetryMetricsStatsd,
      host: host,
      formatter: :datadog,
-     global_tags: [instance_id: instance_id],
+     global_tags: [instance_id: opts.instance_id],
      metrics: statsd_metrics()}
   end
 
