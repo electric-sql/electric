@@ -15,6 +15,7 @@ defmodule Electric.Shapes.FilterTest do
 
   @inspector StubInspector.new([
                %{name: "id", type: "int8", pk_position: 0},
+               %{name: "number", type: "int8"},
                %{name: "an_array", array_type: "int8"}
              ])
 
@@ -315,6 +316,44 @@ defmodule Electric.Shapes.FilterTest do
         reductions(fn ->
           Filter.affected_shapes(filter, change("t1", %{"id" => "7"}))
         end)
+
+      assert reductions < @max_reductions
+    end
+
+    test "where clause in the form `field1 = const1 AND field2 = const2` is optimised for lots of const1 values" do
+      filter =
+        1..@shape_count
+        |> Enum.reduce(Filter.new(), fn i, filter ->
+          Filter.add_shape(
+            filter,
+            i,
+            Shape.new!("t1", where: "id = #{i} AND number = 11", inspector: @inspector)
+          )
+        end)
+
+      change = change("t1", %{"id" => "5", "number" => "11"})
+      assert Filter.affected_shapes(filter, change) == MapSet.new([5])
+
+      reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+
+      assert reductions < @max_reductions
+    end
+
+    test "where clause in the form `field1 = const1 AND field2 = const2` is optimised for lots of const2 values" do
+      filter =
+        1..@shape_count
+        |> Enum.reduce(Filter.new(), fn i, filter ->
+          Filter.add_shape(
+            filter,
+            i,
+            Shape.new!("t1", where: "id = 7 AND number = #{i}", inspector: @inspector)
+          )
+        end)
+
+      change = change("t1", %{"id" => "7", "number" => "9"})
+      assert Filter.affected_shapes(filter, change) == MapSet.new([9])
+
+      reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
 
       assert reductions < @max_reductions
     end

@@ -45,9 +45,9 @@ defmodule Electric.Shapes.Filter do
         Map.update(
           tables,
           shape.root_table,
-          WhereCondition.add_shape(WhereCondition.new(), {shape_id, shape}),
+          WhereCondition.add_shape(WhereCondition.new(), {shape_id, shape}, shape.where),
           fn condition ->
-            WhereCondition.add_shape(condition, {shape_id, shape})
+            WhereCondition.add_shape(condition, {shape_id, shape}, shape.where)
           end
         )
     }

@@ -11,7 +11,7 @@ defmodule Electric.Shapes.Filter.Index do
 
   alias Electric.Replication.Eval.Env
   alias Electric.Shapes.Filter.Index
-  alias Electric.Shapes.WhereClause
+  alias Electric.Shapes.Filter.WhereCondition
   alias Electric.Telemetry.OpenTelemetry
   require Logger
 
@@ -22,16 +22,16 @@ defmodule Electric.Shapes.Filter.Index do
   def empty?(%Index{values: values}), do: values == %{}
 
   def add_shape(%Index{} = index, value, {shape_id, shape}, and_where) do
-    shape_info = %{shape: shape, and_where: and_where}
-
     %{
       index
       | values:
           Map.update(
             index.values,
             value,
-            %{shape_id => shape_info},
-            &Map.put(&1, shape_id, shape_info)
+            WhereCondition.add_shape(WhereCondition.new(), {shape_id, shape}, and_where),
+            fn condition ->
+              WhereCondition.add_shape(condition, {shape_id, shape}, and_where)
+            end
           )
     }
   end
@@ -41,8 +41,10 @@ defmodule Electric.Shapes.Filter.Index do
       index
       | values:
           index.values
-          |> Map.new(fn {value, shapes} -> {value, Map.delete(shapes, shape_id)} end)
-          |> Enum.reject(fn {_value, shapes} -> shapes == %{} end)
+          |> Map.new(fn {value, condition} ->
+            {value, WhereCondition.remove_shape(condition, shape_id)}
+          end)
+          |> Enum.reject(fn {_table, condition} -> WhereCondition.empty?(condition) end)
           |> Map.new()
     }
   end
@@ -52,18 +54,9 @@ defmodule Electric.Shapes.Filter.Index do
       nil ->
         MapSet.new()
 
-      shapes ->
-        OpenTelemetry.with_span(
-          "filter.index.filter_matched_shapes",
-          [field: field, matched_shapes_count: map_size(shapes)],
-          fn ->
-            for {shape_id, shape} <- shapes,
-                WhereClause.includes_record?(shape.and_where, record),
-                into: MapSet.new() do
-              shape_id
-            end
-          end
-        )
+      condition ->
+        OpenTelemetry.add_span_attributes(field: field)
+        WhereCondition.affected_shapes(condition, record)
     end
   end
 
@@ -80,8 +73,8 @@ defmodule Electric.Shapes.Filter.Index do
   end
 
   def all_shapes(%Index{values: values}) do
-    for {_value, shapes} <- values,
-        {shape_id, %{shape: shape}} <- shapes,
+    for {_value, condition} <- values,
+        {shape_id, shape} <- WhereCondition.all_shapes(condition),
         into: %{} do
       {shape_id, shape}
     end

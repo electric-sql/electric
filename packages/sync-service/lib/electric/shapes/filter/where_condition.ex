@@ -31,8 +31,8 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     indexes == %{} && other_shapes == %{}
   end
 
-  def add_shape(%WhereCondition{} = condition, {shape_id, shape} = shape_instance) do
-    case optimise_where(shape.where) do
+  def add_shape(%WhereCondition{} = condition, {shape_id, shape} = shape_instance, where_clause) do
+    case optimise_where(where_clause) do
       %{operation: "=", field: field, type: type, value: value, and_where: and_where} ->
         %{
           condition
@@ -48,7 +48,11 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         }
 
       :not_optimised ->
-        %{condition | other_shapes: Map.put(condition.other_shapes, shape_id, shape)}
+        %{
+          condition
+          | other_shapes:
+              Map.put(condition.other_shapes, shape_id, %{shape: shape, where: where_clause})
+        }
     end
   end
 
@@ -148,8 +152,8 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       "filter.filter_other_shapes",
       [shape_count: map_size(condition.other_shapes)],
       fn ->
-        for {shape_id, shape} <- condition.other_shapes,
-            WhereClause.includes_record?(shape.where, record),
+        for {shape_id, %{where: where}} <- condition.other_shapes,
+            WhereClause.includes_record?(where, record),
             into: MapSet.new() do
           shape_id
         end
@@ -158,9 +162,16 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   end
 
   def all_shapes(%WhereCondition{indexes: indexes, other_shapes: other_shapes}) do
-    for {_field, index} <- indexes, {shape_id, shape} <- Index.all_shapes(index), into: %{} do
-      {shape_id, shape}
-    end
-    |> Map.merge(other_shapes)
+    Map.merge(
+      for {_field, index} <- indexes,
+          {shape_id, shape} <- Index.all_shapes(index),
+          into: %{} do
+        {shape_id, shape}
+      end,
+      for {shape_id, %{shape: shape}} <- other_shapes,
+          into: %{} do
+        {shape_id, shape}
+      end
+    )
   end
 end
