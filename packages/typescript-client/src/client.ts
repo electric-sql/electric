@@ -255,6 +255,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   lastSyncedAt(): number | undefined
   lastSynced(): number
   isConnected(): boolean
+  hasStarted(): boolean
 
   isUpToDate: boolean
   lastOffset: Offset
@@ -616,6 +617,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
   /** True during initial fetch. False afterwise.  */
   isLoading(): boolean {
     return !this.#isUpToDate
+  }
+
+  hasStarted(): boolean {
+    return this.#started
   }
 
   /** Await the next tick of the request loop */
