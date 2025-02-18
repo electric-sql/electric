@@ -33,36 +33,33 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
   def add_shape(%WhereCondition{} = condition, {shape_id, shape} = shape_instance, where_clause) do
     case optimise_where(where_clause) do
-      %{operation: "=", field: field, type: type, value: value, and_where: and_where} ->
-        %{
-          condition
-          | indexes:
-              add_shape_to_indexes(
-                field,
-                type,
-                value,
-                shape_instance,
-                condition.indexes,
-                and_where
-              )
-        }
-
       :not_optimised ->
         %{
           condition
           | other_shapes:
               Map.put(condition.other_shapes, shape_id, %{shape: shape, where: where_clause})
         }
+
+      optimisation ->
+        %{
+          condition
+          | indexes: add_shape_to_indexes(condition.indexes, shape_instance, optimisation)
+        }
     end
   end
 
-  defp add_shape_to_indexes(field, type, value, shape_instance, indexes, and_where) do
+  defp add_shape_to_indexes(indexes, shape_instance, optimisation) do
     Map.update(
       indexes,
-      field,
-      Index.add_shape(Index.new(type), value, shape_instance, and_where),
+      {optimisation.field, optimisation.operation},
+      Index.add_shape(
+        Index.new(optimisation.operation, optimisation.type),
+        optimisation.value,
+        shape_instance,
+        optimisation.and_where
+      ),
       fn index ->
-        Index.add_shape(index, value, shape_instance, and_where)
+        Index.add_shape(index, optimisation.value, shape_instance, optimisation.and_where)
       end
     )
   end
@@ -112,8 +109,8 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
   defp remove_shape_from_indexes(indexes, shape_id) do
     indexes
-    |> Map.new(fn {field, index} -> {field, Index.remove_shape(index, shape_id)} end)
-    |> Enum.reject(fn {_field, index} -> Index.empty?(index) end)
+    |> Map.new(fn {key, index} -> {key, Index.remove_shape(index, shape_id)} end)
+    |> Enum.reject(fn {_key, index} -> Index.empty?(index) end)
     |> Map.new()
   end
 
@@ -141,7 +138,9 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       [index_count: map_size(condition.indexes)],
       fn ->
         condition.indexes
-        |> Enum.map(fn {field, index} -> Index.affected_shapes(index, field, record) end)
+        |> Enum.map(fn {{field, _operation}, index} ->
+          Index.affected_shapes(index, field, record)
+        end)
         |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
       end
     )
@@ -163,7 +162,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
   def all_shapes(%WhereCondition{indexes: indexes, other_shapes: other_shapes}) do
     Map.merge(
-      for {_field, index} <- indexes,
+      for {_key, index} <- indexes,
           {shape_id, shape} <- Index.all_shapes(index),
           into: %{} do
         {shape_id, shape}
