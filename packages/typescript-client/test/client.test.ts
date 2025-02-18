@@ -720,6 +720,120 @@ describe(`Shape`, () => {
     expect(await resolveValue(mockParamFn())).toBe(`test-value`)
     expect(await resolveValue(mockAsyncParamFn())).toBe(`test-value`)
   })
+
+  it(`should support forceDisconnectAndRefresh() to force a sync`, async ({
+    issuesTableUrl,
+    insertIssues,
+    updateIssue,
+    aborter,
+  }) => {
+    // Create initial data
+    const [id] = await insertIssues({ title: `initial title` })
+
+    // Track fetch requests
+    const pendingRequests: Array<
+      [string | URL | Request, () => Promise<void>]
+    > = []
+
+    const resolveRequests = async () => {
+      await Promise.all(pendingRequests.map(([_, doFetch]) => doFetch()))
+      pendingRequests.length = 0 // Clear the array
+    }
+
+    const fetchClient = async (
+      input: string | URL | Request,
+      init?: RequestInit
+    ) => {
+      const signal = init?.signal
+      return new Promise<Response>((resolve, reject) => {
+        signal?.addEventListener(
+          `abort`,
+          () => {
+            reject(new Error(`AbortError`))
+          },
+          { once: true }
+        )
+        pendingRequests.push([
+          input,
+          async () => {
+            try {
+              const response = await fetch(input, init)
+              resolve(response)
+            } catch (e) {
+              reject(e)
+            }
+          },
+        ])
+      })
+    }
+
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      signal: aborter.signal,
+      fetchClient,
+    })
+
+    // Subscribe to start the stream
+    const shape = new Shape(shapeStream)
+
+    // Wait for initial fetch to start: offset: -1
+    await sleep(50)
+    expect(pendingRequests.length).toBe(1)
+    expect(pendingRequests[0][0].toString()).toContain(`offset=-1`)
+
+    // Complete initial fetch
+    await resolveRequests()
+
+    // Wait for second fetch to start: offset: 0_0
+    await sleep(50)
+    expect(pendingRequests.length).toBe(1)
+    expect(pendingRequests[0][0].toString()).toContain(`offset=0_0`)
+
+    // Complete second fetch
+    await resolveRequests()
+    await sleep(50)
+
+    // We should be in live mode
+    expect(pendingRequests.length).toBe(1)
+    expect(pendingRequests[0][0].toString()).toContain(`live=true`)
+
+    // Update data while stream is long polling
+    await updateIssue({ id, title: `updated title` })
+
+    // Start refresh
+    const refreshPromise = shapeStream.forceDisconnectAndRefresh()
+
+    // Verify the long polling request was aborted and a new request started
+    await sleep(50)
+    expect(pendingRequests.length).toBe(2) // Aborted long poll + refresh request
+    expect(pendingRequests[0][0].toString()).toContain(`live=true`) // The aborted long poll
+    expect(pendingRequests[1][0].toString()).not.toContain(`live=true`) // The refresh request
+
+    // Complete refresh request
+    // This will abort the long poll and start a new one
+    await resolveRequests()
+
+    // Wait for the refresh to complete, this resolves once the next request
+    // after calling forceDisconnectAndRefresh() has completed
+    await refreshPromise
+
+    // Verify we got the updated data
+    expect(shape.currentRows).toEqual([
+      {
+        id,
+        title: `updated title`,
+        priority: 10,
+      },
+    ])
+
+    // Verify we return to normal processing (long polling)
+    await sleep(50)
+    expect(pendingRequests.length).toBe(1) // New long poll
+    expect(pendingRequests[0][0].toString()).toContain(`live=true`)
+  })
 })
 
 function waitForFetch(stream: ShapeStream): Promise<void> {

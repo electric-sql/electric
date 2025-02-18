@@ -36,6 +36,7 @@ import {
   WHERE_QUERY_PARAM,
   TABLE_QUERY_PARAM,
   REPLICA_PARAM,
+  FORCE_DISCONNECT_AND_REFRESH,
 } from './constants'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
@@ -259,6 +260,8 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   lastOffset: Offset
   shapeHandle?: string
   error?: unknown
+
+  forceDisconnectAndRefresh(): Promise<void>
 }
 
 /**
@@ -323,6 +326,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #shapeHandle?: string
   #schema?: Schema
   #onError?: ShapeStreamErrorHandler
+  #requestAbortController?: AbortController
+  #isRefreshing = false
+  #tickPromise?: Promise<void>
+  #tickPromiseResolver?: () => void
+  #tickPromiseRejecter?: (reason?: unknown) => void
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -418,7 +426,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // Add Electric's internal parameters
         fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
 
-        if (this.#isUpToDate) {
+        if (this.#isUpToDate && !this.#isRefreshing) {
           fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
           fetchUrl.searchParams.set(
             LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -437,16 +445,44 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // sort query params in-place for stable URLs and improved cache hits
         fetchUrl.searchParams.sort()
 
+        // Create a new AbortController for this request
+        this.#requestAbortController = new AbortController()
+
+        // If user provided a signal, listen to it and pass on the reason for the abort
+        let abortListener: (() => void) | undefined
+        if (signal) {
+          abortListener = () => {
+            this.#requestAbortController?.abort(signal.reason)
+          }
+          signal.addEventListener(`abort`, abortListener, { once: true })
+          if (signal.aborted) {
+            // If the signal is already aborted, abort the request immediately
+            this.#requestAbortController?.abort(signal.reason)
+          }
+        }
+
         let response!: Response
         try {
           response = await this.#fetchClient(fetchUrl.toString(), {
-            signal,
+            signal: this.#requestAbortController.signal,
             headers: requestHeaders,
           })
           this.#connected = true
         } catch (e) {
+          // Handle abort error triggered by refresh
+          if (
+            (e instanceof FetchError || e instanceof FetchBackoffAbortError) &&
+            this.#requestAbortController.signal.aborted &&
+            this.#requestAbortController.signal.reason ===
+              FORCE_DISCONNECT_AND_REFRESH
+          ) {
+            // Loop back to the top of the while loop to start a new request
+            continue
+          }
+
           if (e instanceof FetchBackoffAbortError) break // interrupted
           if (!(e instanceof FetchError)) throw e // should never happen
+
           if (e.status == 409) {
             // Upon receiving a 409, we should start from scratch
             // with the newly provided shape handle
@@ -462,6 +498,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
             // so we exit the loop
             throw e
           }
+        } finally {
+          if (abortListener && signal) {
+            signal.removeEventListener(`abort`, abortListener)
+          }
+          this.#requestAbortController = undefined
         }
 
         const { headers, status } = response
@@ -505,6 +546,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
           await this.#publish(batch)
         }
+
+        this.#tickPromiseResolver?.()
       }
     } catch (err) {
       this.#error = err
@@ -532,6 +575,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       throw err
     } finally {
       this.#connected = false
+      this.#tickPromiseRejecter?.()
     }
   }
 
@@ -572,6 +616,40 @@ export class ShapeStream<T extends Row<unknown> = Row>
   /** True during initial fetch. False afterwise.  */
   isLoading(): boolean {
     return !this.#isUpToDate
+  }
+
+  /** Await the next tick of the request loop */
+  async #nextTick() {
+    if (this.#tickPromise) {
+      return this.#tickPromise
+    }
+    this.#tickPromise = new Promise((resolve, reject) => {
+      this.#tickPromiseResolver = resolve
+      this.#tickPromiseRejecter = reject
+    })
+    this.#tickPromise.finally(() => {
+      this.#tickPromise = undefined
+      this.#tickPromiseResolver = undefined
+      this.#tickPromiseRejecter = undefined
+    })
+    return this.#tickPromise
+  }
+
+  /**
+   * Refreshes the shape stream.
+   * This preemptively aborts any ongoing long poll and reconnects without
+   * long polling, ensuring that the stream receives an up to date message with the
+   * latest LSN from Postgres at that point in time.
+   */
+  async forceDisconnectAndRefresh(): Promise<void> {
+    this.#isRefreshing = true
+    if (this.#isUpToDate && !this.#requestAbortController?.signal.aborted) {
+      // If we are "up to date", any current request will be a "live" request
+      // and needs to be aborted
+      this.#requestAbortController?.abort(FORCE_DISCONNECT_AND_REFRESH)
+    }
+    await this.#nextTick()
+    this.#isRefreshing = false
   }
 
   async #publish(messages: Message<T>[]): Promise<void> {
