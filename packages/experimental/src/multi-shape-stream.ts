@@ -8,22 +8,16 @@ import type {
   ShapeStreamOptions,
 } from '@electric-sql/client'
 
-type InferShapeTypes<T> = {
-  [K in keyof T]: T[K] extends ShapeStreamOptions<infer R extends Row<unknown>>
-    ? R
-    : T[K] extends ShapeStream<infer R extends Row<unknown>>
-      ? R
-      : never
-}
-
 interface MultiShapeStreamOptions<
-  TShapes extends {
-    [K: string]: ShapeStreamOptions<Row<unknown>> | ShapeStream<Row<unknown>>
+  TShapeRows extends {
+    [K: string]: Row<unknown>
   } = {
-    [K: string]: ShapeStreamOptions<Row<unknown>> | ShapeStream<Row<unknown>>
+    [K: string]: Row<unknown>
   },
 > {
-  shapes: TShapes
+  shapes: {
+    [K in keyof TShapeRows]: ShapeStreamOptions<TShapeRows[K]> | ShapeStream<TShapeRows[K]>
+  }
   start?: boolean
   checkForUpdatesAfter?: number // milliseconds
 }
@@ -44,27 +38,27 @@ type MultiShapeMessage<T extends Row<unknown>, ShapeNames extends string> =
   | MultiShapeChangeMessage<T, ShapeNames>
   | MultiShapeControlMessage<ShapeNames>
 
-type MultiShapeMessages<
-  TShapes extends {
-    [K: string]: ShapeStreamOptions<Row<unknown>> | ShapeStream<Row<unknown>>
+export type MultiShapeMessages<
+TShapeRows extends {
+    [K: string]: Row<unknown>
   },
 > = {
-  [K in keyof TShapes & string]: MultiShapeMessage<
-    InferShapeTypes<TShapes>[K],
+  [K in keyof TShapeRows & string]: MultiShapeMessage<
+    TShapeRows[K],
     K
   >
-}
+}[keyof TShapeRows & string]
 
 interface MultiShapeStreamInterface<
-  TShapes extends {
-    [K: string]: ShapeStreamOptions<Row<unknown>> | ShapeStream<Row<unknown>>
+  TShapeRows extends {
+    [K: string]: Row<unknown>
   },
 > {
-  shapes: { [K in keyof TShapes]: ShapeStream<InferShapeTypes<TShapes>[K]> }
+  shapes: { [K in keyof TShapeRows]: ShapeStream<TShapeRows[K]> }
   checkForUpdatesAfter?: number
 
   subscribe(
-    callback: (messages: MultiShapeMessages<TShapes>[]) => MaybePromise<void>,
+    callback: (messages: MultiShapeMessages<TShapeRows>[]) => MaybePromise<void>,
     onError?: (error: FetchError | Error) => void
   ): () => void
   unsubscribeAll(): void
@@ -100,27 +94,27 @@ interface MultiShapeStreamInterface<
  */
 
 export class MultiShapeStream<
-  TShapes extends {
-    [K: string]: ShapeStreamOptions<Row<unknown>> | ShapeStream<Row<unknown>>
+  TShapeRows extends {
+    [K: string]: Row<unknown>
   },
-> implements MultiShapeStreamInterface<TShapes>
+> implements MultiShapeStreamInterface<TShapeRows>
 {
-  #shapes: { [K in keyof TShapes]: ShapeStream<InferShapeTypes<TShapes>[K]> }
+  #shapes: { [K in keyof TShapeRows]: ShapeStream<TShapeRows[K]> }
   #started = false
   checkForUpdatesAfter?: number
 
   #checkForUpdatesTimeout?: ReturnType<typeof setTimeout> | undefined
-  #shapesToSkipCheckForUpdates = new Set<keyof TShapes>()
+  #shapesToSkipCheckForUpdates = new Set<keyof TShapeRows>()
 
   readonly #subscribers = new Map<
     number,
     [
-      (messages: MultiShapeMessages<TShapes>[]) => MaybePromise<void>,
+      (messages: MultiShapeMessages<TShapeRows>[]) => MaybePromise<void>,
       ((error: Error) => void) | undefined,
     ]
   >()
 
-  constructor(options: MultiShapeStreamOptions<TShapes>) {
+  constructor(options: MultiShapeStreamOptions<TShapeRows>) {
     const {
       start = true, // By default we start the multi-shape stream
       checkForUpdatesAfter = 100, // Force a check for updates after 100ms
@@ -132,9 +126,12 @@ export class MultiShapeStream<
         key,
         shape instanceof ShapeStream
           ? shape
-          : new ShapeStream<InferShapeTypes<TShapes>[typeof key]>(shape as any),
+          : new ShapeStream<TShapeRows[typeof key]>({
+            ...shape,
+            start: false,
+          } as any),
       ])
-    ) as { [K in keyof TShapes]: ShapeStream<InferShapeTypes<TShapes>[K]> }
+    ) as { [K in keyof TShapeRows]: ShapeStream<TShapeRows[K]> }
     if (start) this.#start()
   }
 
@@ -154,16 +151,17 @@ export class MultiShapeStream<
               ({
                 ...message,
                 shape: key,
-              }) as MultiShapeMessages<TShapes>
+              }) as MultiShapeMessages<TShapeRows>
           )
           await this.#publish(multiShapeMessages)
         },
         (error) => this.#onError(error)
       )
     }
+    this.#started = true
   }
 
-  #scheduleCheckForUpdates(fromShape: keyof TShapes) {
+  #scheduleCheckForUpdates(fromShape: keyof TShapeRows) {
     this.#shapesToSkipCheckForUpdates.add(fromShape)
     this.#checkForUpdatesTimeout ??= setTimeout(() => {
       this.#checkForUpdates()
@@ -188,7 +186,7 @@ export class MultiShapeStream<
     })
   }
 
-  async #publish(messages: MultiShapeMessages<TShapes>[]): Promise<void> {
+  async #publish(messages: MultiShapeMessages<TShapeRows>[]): Promise<void> {
     await Promise.all(
       Array.from(this.#subscribers.values()).map(async ([callback, __]) => {
         try {
@@ -209,8 +207,8 @@ export class MultiShapeStream<
    */
   #shapeEntries() {
     return Object.entries(this.#shapes) as [
-      keyof TShapes & string,
-      ShapeStream<InferShapeTypes<TShapes>[string]>,
+      keyof TShapeRows & string,
+      ShapeStream<TShapeRows[string]>,
     ][]
   }
 
@@ -222,7 +220,7 @@ export class MultiShapeStream<
   }
 
   subscribe(
-    callback: (messages: MultiShapeMessages<TShapes>[]) => MaybePromise<void>,
+    callback: (messages: MultiShapeMessages<TShapeRows>[]) => MaybePromise<void>,
     onError?: (error: FetchError | Error) => void
   ) {
     const subscriptionId = Math.random()
