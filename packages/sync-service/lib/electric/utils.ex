@@ -532,9 +532,7 @@ defmodule Electric.Utils do
   def merge_sorted_files(paths, target_path, reader, sorter \\ &<=/2)
 
   def merge_sorted_files([path], target_path, _reader, _sorter) do
-    File.stream!(path)
-    |> Stream.into(File.stream!(target_path))
-    |> Stream.run()
+    File.copy!(path, target_path)
   end
 
   def merge_sorted_files(paths, target_path, reader, sorter) do
