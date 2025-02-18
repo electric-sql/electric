@@ -31,9 +31,13 @@ defmodule PgInterop.Postgrex.Extensions.PgSnapshotTest do
     assert xmin < xmax
 
     assert is_list(xip_list)
-    assert num_txns == length(xip_list)
     assert Enum.all?(xip_list, &is_integer/1)
     assert Enum.all?(xip_list, &(&1 > 0))
+
+    # Postgres transactions and XIDs are not scoped to any single database. So due to the
+    # concurrent nature of our unit tests, the list of active transactions may include some
+    # started by other tests running in parallel with this one.
+    assert num_txns <= length(xip_list)
 
     assert xmin in xip_list
     assert Enum.max(xip_list) < xmax
