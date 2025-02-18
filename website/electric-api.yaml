@@ -47,13 +47,6 @@ paths:
             using a `.` delimiter, such as `foo.issues`. If you don't provide
             a schema prefix, then the table is assumed to be in the `public.` schema.
         # Query parameters
-        - name: source_id
-          in: query
-          schema:
-            type: string
-          description: |-
-            The ID of the database to sync from.
-            This is required only if Electric manages several databases.
         - name: offset
           in: query
           schema:
