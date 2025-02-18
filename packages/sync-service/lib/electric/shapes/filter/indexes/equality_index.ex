@@ -11,7 +11,6 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.Filter.Indexes.EqualityIndex
   alias Electric.Shapes.Filter.WhereCondition
-  alias Electric.Telemetry.OpenTelemetry
   require Logger
 
   defstruct [:type, :values]
@@ -55,7 +54,6 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
           MapSet.new()
 
         condition ->
-          OpenTelemetry.add_span_attributes(field: field)
           WhereCondition.affected_shapes(condition, record)
       end
     end

@@ -5,9 +5,10 @@ defmodule Electric.Shapes.Filter.Index do
   Each type of operation that has been optimised such as `=` or `@>` will have it's own index module that implements the `Protocol` for this module.
   """
   alias Electric.Shapes.Filter.Index.Protocol
-  alias Electric.Shapes.Filter.Indexes.EqualityIndex
+  alias Electric.Shapes.Filter.Indexes
 
-  def new("=", type), do: EqualityIndex.new(type)
+  def new("=", type), do: Indexes.EqualityIndex.new(type)
+  def new("@>", type), do: Indexes.InclusionIndex.new(type)
 
   defdelegate empty?(index), to: Protocol
   defdelegate add_shape(index, value, shape_instance, and_where), to: Protocol

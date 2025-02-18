@@ -80,6 +80,22 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     %{operation: "=", field: field, type: type, value: value, and_where: nil}
   end
 
+  defp optimise_where(%Func{
+         name: ~s("@>"),
+         args: [%Ref{path: [field], type: type}, %Const{value: value}]
+       })
+       when is_list(value) do
+    %{operation: "@>", field: field, type: type, value: value, and_where: nil}
+  end
+
+  defp optimise_where(%Func{
+         name: ~s("<@"),
+         args: [%Const{value: value}, %Ref{path: [field], type: type}]
+       })
+       when is_list(value) do
+    %{operation: "@>", field: field, type: type, value: value, and_where: nil}
+  end
+
   defp optimise_where(%Func{name: "and", args: [arg1, arg2]}) do
     case {optimise_where(arg1), optimise_where(arg2)} do
       {%{operation: "=", and_where: nil} = params, _} ->
