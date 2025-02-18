@@ -1014,14 +1014,14 @@ importers:
         specifier: workspace:*
         version: link:../../packages/experimental
       '@electric-sql/pglite':
-        specifier: ^0.2.14
-        version: 0.2.14
-      '@electric-sql/pglite-react':
-        specifier: ^0.2.14
-        version: 0.2.14(@electric-sql/pglite@0.2.14)(react@19.0.0-rc.1)
-      '@electric-sql/pglite-sync':
         specifier: ^0.2.17
-        version: 0.2.17(@electric-sql/pglite@0.2.14)
+        version: 0.2.17
+      '@electric-sql/pglite-react':
+        specifier: ^0.2.17
+        version: 0.2.17(@electric-sql/pglite@0.2.17)(react@19.0.0-rc.1)
+      '@electric-sql/pglite-sync':
+        specifier: ^0.2.20
+        version: 0.2.20(@electric-sql/pglite@0.2.17)
       '@electric-sql/react':
         specifier: workspace:*
         version: link:../../packages/react-hooks
@@ -2203,17 +2203,8 @@ packages:
       search-insights:
         optional: true
 
-  '@electric-sql/client@0.9.1':
-    resolution: {integrity: sha512-Lpo+GjnXW7i0uyITlkSTDGPH/fVYYln1/HQkgZAf89F3i/QeAVKT7UlWa7la1G0dGNSQaZuOypFvqENnHHJUKg==}
-
   '@electric-sql/client@1.0.0-beta.3':
     resolution: {integrity: sha512-x3bzYlX+IRwBAILPxzu3ARkXzmrAQtVOuJCKCxlSqENuJa4zvLPF4f8vC6HMOiiJiHPAntJjfI3Hb0lrt2PTxA==}
-
-  '@electric-sql/pglite-react@0.2.14':
-    resolution: {integrity: sha512-QseE5Y2a7+9G1gj0Xffg3nKpKQ0KIN/6euofmRMMwTUWxK8eok6sVus2XtUY+Hy8TkzhoLa8boEOJ+xTU8/bZQ==}
-    peerDependencies:
-      '@electric-sql/pglite': ^0.2.14
-      react: ^18.0.0
 
   '@electric-sql/pglite-react@0.2.17':
     resolution: {integrity: sha512-TEdV1UAUO50gb/okYcVaiG2dQdox53K2E8jSEl0Wa/97x3Xi238ls7ZB7wgmoqNgy45f/tgYxyztml03EFClng==}
@@ -2229,18 +2220,10 @@ packages:
       '@electric-sql/pglite':
         optional: true
 
-  '@electric-sql/pglite-sync@0.2.17':
-    resolution: {integrity: sha512-lawbWkSKdCO+ETKQjseEefSgltwB5jXBzwSx0YMI2zmO+rf7gl5DP1hqEz5drqrzACS2mNRldah7p+0QcFEjLg==}
-    peerDependencies:
-      '@electric-sql/pglite': ^0.2.15
-
   '@electric-sql/pglite-sync@0.2.20':
     resolution: {integrity: sha512-FTIe3ux0PFt1ab/FFvABp2nJiab9nQF3Mav3H6PWFu8my/FLEzRmQafHi8t4AlxT/KcQyz+Z7bppgoJeVbfeoQ==}
     peerDependencies:
       '@electric-sql/pglite': ^0.2.17
-
-  '@electric-sql/pglite@0.2.14':
-    resolution: {integrity: sha512-ZMYZL/yFu5sCewYecdX4OjyOPcrI2OmQ6598e/tyke4Rpgeekd4+pINf9jjzJNJk1Kq5dtuB6buqZsBQf0sx8A==}
 
   '@electric-sql/pglite@0.2.17':
     resolution: {integrity: sha512-qEpKRT2oUaWDH6tjRxLHjdzMqRUGYDnGZlKrnL4dJ77JVMcP2Hpo3NYnOSPKdZdeec57B6QPprCUFg0picx5Pw==}
@@ -11188,18 +11171,9 @@ snapshots:
     transitivePeerDependencies:
       - '@algolia/client-search'
 
-  '@electric-sql/client@0.9.1':
-    optionalDependencies:
-      '@rollup/rollup-darwin-arm64': 4.24.4
-
   '@electric-sql/client@1.0.0-beta.3':
     optionalDependencies:
       '@rollup/rollup-darwin-arm64': 4.24.4
-
-  '@electric-sql/pglite-react@0.2.14(@electric-sql/pglite@0.2.14)(react@19.0.0-rc.1)':
-    dependencies:
-      '@electric-sql/pglite': 0.2.14
-      react: 19.0.0-rc.1
 
   '@electric-sql/pglite-react@0.2.17(@electric-sql/pglite@0.2.17)(react@18.3.1)':
     dependencies:
@@ -11210,6 +11184,11 @@ snapshots:
     dependencies:
       '@electric-sql/pglite': 0.2.17
       react: 19.0.0
+
+  '@electric-sql/pglite-react@0.2.17(@electric-sql/pglite@0.2.17)(react@19.0.0-rc.1)':
+    dependencies:
+      '@electric-sql/pglite': 0.2.17
+      react: 19.0.0-rc.1
 
   '@electric-sql/pglite-repl@0.2.17(@babel/runtime@7.26.0)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/theme-one-dark@6.1.2)(@electric-sql/pglite@0.2.17)(@lezer/common@1.2.3)(codemirror@6.0.1(@lezer/common@1.2.3))':
     dependencies:
@@ -11237,17 +11216,10 @@ snapshots:
       - '@lezer/common'
       - codemirror
 
-  '@electric-sql/pglite-sync@0.2.17(@electric-sql/pglite@0.2.14)':
-    dependencies:
-      '@electric-sql/client': 0.9.1
-      '@electric-sql/pglite': 0.2.14
-
   '@electric-sql/pglite-sync@0.2.20(@electric-sql/pglite@0.2.17)':
     dependencies:
       '@electric-sql/client': 1.0.0-beta.3
       '@electric-sql/pglite': 0.2.17
-
-  '@electric-sql/pglite@0.2.14': {}
 
   '@electric-sql/pglite@0.2.17': {}
 
