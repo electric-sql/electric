@@ -9,12 +9,18 @@ defmodule Electric.Postgres.Xid do
   defguardp uint32?(num) when num > 0 and num <= @uint32_max
 
   @doc """
-  In Postgres, any xid has ~2 billion values preceding it and ~2 billion values following it.
+  In Postgres, any 32-bit xid has ~2 billion values preceding it and ~2 billion values following it.
   Regular autovacuuming maintains this invariant. When we see a difference between two
   xids that is larger than 2^31, we know there's been at least one transaction ID wraparound.
   Given the invariant mentioned earlier, we assume there's been only one wraparound and so the xid
   whose value is larger precedes the other one (or, equivalently, the smaller xid belongs to a
   more recent transaction).
+
+  For 64-bit xids (Postgres type `xid8`), the regular integer comparison is used because those
+  xids include the epoch number that tracks the number of xid wraparounds that have happened.
+
+  If any one or both arguments are 32-bit xids, the comparison is performed modulo-2^32, the same way it's done in Postgres:
+  https://github.com/postgres/postgres/blob/302cf15759233e654512979286ce1a5c3b36625f/src/backend/access/transam/transam.c#L276-L293
 
   ## Tests
 
