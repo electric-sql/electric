@@ -274,6 +274,12 @@ defmodule Electric.Utils do
       iex> relation_to_sql({"public", "items-again"})
       ~S|public."items-again"|
 
+      iex> relation_to_sql({"public", "99red_balloons"})
+      ~S|public."99red_balloons"|
+
+      iex> relation_to_sql({"public", "when"})
+      ~S|public."when"|
+
       iex> relation_to_sql({"with spaces", ~S|and "quoted"!|})
       ~S|"with spaces"."and ""quoted""!"|
   """
@@ -296,14 +302,45 @@ defmodule Electric.Utils do
     end
   end
 
-  @safe_chars Enum.flat_map([?a..?z, [?_], ?0..?9], & &1)
+  # from https://www.postgresql.org/docs/current/sql-keywords-appendix.html
+  @reserved MapSet.new(~w(
+    all analyse analyze and any array as asc asymmetric authorization
+    binary both
+    case cast check collate collation column concurrently constraint
+      create cross current_catalog current_date current_role current_schema
+      current_time current_timestamp current_user
+    default deferrable desc distinct do
+    else end except
+    false fetch for foreign freeze from full
+    grant group
+    having
+    ilike in initially inner intersect into is isnull
+    join
+    lateral leading left like limit localtime localtimestamp
+    natural not notnull null
+    offset on only or order outer overlaps
+    placing primary
+    references returning right
+    select session_user similar some symmetric system_user
+    table tablesample then to trailing true
+    union unique user using
+    variadic verbose
+    when where window with
+  ))
 
-  defp needs_quoting?(<<c::8, _rest::binary>>) when c not in @safe_chars do
-    true
+  @safe_first_chars Enum.concat(?a..?z, [?_])
+  @safe_chars Enum.concat(@safe_first_chars, ?0..?9)
+
+  defp needs_quoting?(name) do
+    String.downcase(name) in @reserved || unsafe_name?(name)
   end
 
-  defp needs_quoting?(<<_::binary-1, rest::binary>>), do: needs_quoting?(rest)
-  defp needs_quoting?(<<>>), do: false
+  defp unsafe_name?(<<c::8, _::binary>>) when c not in @safe_first_chars, do: true
+  defp unsafe_name?(<<_::8, rest::binary>>), do: unsafe_char?(rest)
+
+  defp unsafe_char?(<<c::8, _rest::binary>>) when c not in @safe_chars, do: true
+  defp unsafe_char?(<<_::binary-1, rest::binary>>), do: unsafe_char?(rest)
+  defp unsafe_char?(<<>>), do: false
 
   def escape_quotes(text), do: :binary.replace(text, ~S|"|, ~S|""|, [:global])
 
