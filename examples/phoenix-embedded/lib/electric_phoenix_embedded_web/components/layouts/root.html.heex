@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en" class="[scrollbar-gutter:stable]">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content={get_csrf_token()} />
+    <.live_title default="Electric.PhoenixEmbedded" suffix=" · Phoenix Framework">
+      {assigns[:page_title]}
+    </.live_title>
+    <script>
+      window._csrf_token = "<%= get_csrf_token() %>"
+    </script>
+    <link phx-track-static rel="stylesheet" href={~p"/assets/main.css"} />
+  </head>
+  <body class="bg-white">
+    {@inner_content}
+    <script defer phx-track-static type="module" src={~p"/assets/main.js"}>
+    </script>
+  </body>
+</html>
