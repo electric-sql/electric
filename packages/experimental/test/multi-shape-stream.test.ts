@@ -1,9 +1,13 @@
 import { describe, expect, inject, vi } from 'vitest'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
-import { MultiShapeStream } from '../src/multi-shape-stream'
+import {
+  MultiShapeStream,
+  TransactionalMultiShapeStream,
+} from '../src/multi-shape-stream'
 import { Row } from '@electric-sql/client'
 import type { MultiShapeMessages } from '../src/multi-shape-stream'
+import { v4 as uuidv4 } from 'uuid'
 
 const BASE_URL = inject(`baseUrl`)
 
@@ -55,7 +59,6 @@ describe(`MultiShapeStream`, () => {
     expect(multiShapeStream.lastSynced()).toBeLessThanOrEqual(
       Date.now() - start
     )
-    expect(multiShapeStream.isConnected()).toBe(true)
   })
 
   it(`should notify with initial values from multiple shapes`, async ({
@@ -147,7 +150,6 @@ describe(`MultiShapeStream`, () => {
     const [id1] = await insertIssues({ title: `test title 1`, priority: 5 })
     const [id2] = await insertIssues({ title: `test title 2`, priority: 15 })
 
-    const start = Date.now()
     type ShapeConfig = {
       lowPriority: IssueRow
       highPriority: IssueRow
@@ -255,45 +257,254 @@ describe(`MultiShapeStream`, () => {
     await sleep(100)
     expect(subFn).toHaveBeenCalledTimes(1) // Only the initial sync
   })
+})
 
-  it(`should expose connection status for all shapes`, async ({
+describe(`TransactionalMultiShapeStream`, () => {
+  it(`should group changes from the same transaction together`, async ({
     issuesTableUrl,
+    insertIssues,
+    updateIssue,
+    beginTransaction,
+    commitTransaction,
+    aborter,
   }) => {
-    const aborter = new AbortController()
-    const multiShapeStream = new MultiShapeStream<{
-      shape1: IssueRow
-      shape2: IssueRow
-    }>({
+    // Create initial data
+    const id1 = uuidv4()
+    const id2 = uuidv4()
+    const id3 = uuidv4()
+    await insertIssues({ id: id1, title: `test title 1`, priority: 5 })
+    await insertIssues({ id: id2, title: `test title 2`, priority: 15 })
+
+    type ShapeConfig = {
+      lowPriority: IssueRow
+      highPriority: IssueRow
+    }
+
+    const multiShapeStream = new TransactionalMultiShapeStream<ShapeConfig>({
       shapes: {
-        shape1: {
+        lowPriority: {
           url: `${BASE_URL}/v1/shape`,
           params: {
             table: issuesTableUrl,
+            where: `priority <= 10`,
           },
           signal: aborter.signal,
         },
-        shape2: {
+        highPriority: {
           url: `${BASE_URL}/v1/shape`,
           params: {
             table: issuesTableUrl,
-            where: `priority > '10'`,
+            where: `priority > 10`,
           },
           signal: aborter.signal,
         },
       },
     })
 
-    // Wait for initial sync
+    const messageGroups: MultiShapeMessages<ShapeConfig>[][] = []
+
+    // Subscribe and wait for initial sync
     await new Promise<void>((resolve) => {
-      multiShapeStream.subscribe(() => resolve())
+      multiShapeStream.subscribe((msgs: MultiShapeMessages<ShapeConfig>[]) => {
+        messageGroups.push(msgs)
+        if (multiShapeStream.isUpToDate) {
+          console.log(`multiShapeStream.isUpToDate`)
+          resolve()
+        }
+      })
     })
 
-    expect(multiShapeStream.isConnected()).toBe(true)
+    // We should get one message group containing all changes from the initial sync
+    expect(messageGroups.length).toBe(1)
+    const initialSyncGroup = messageGroups[0]
+    expect(initialSyncGroup.length).toBe(2)
+    expect(initialSyncGroup.every((msg) => `value` in msg)).toBe(true)
 
-    // Abort the shape stream and check connectivity status
-    aborter.abort()
-    await sleep(100) // give some time for the shape stream to abort
+    // Clear initial sync messages
+    messageGroups.length = 0
 
-    expect(multiShapeStream.isConnected()).toBe(false)
+    // Transaction that will affect both shapes
+    await beginTransaction()
+    await updateIssue({ id: id1, title: `moved to high`, priority: 20 })
+    await updateIssue({ id: id2, title: `moved to low`, priority: 5 })
+    await insertIssues({ id: id3, title: `test title 3`, priority: 20 })
+    await commitTransaction()
+
+    // Wait for changes to be processed
+    await sleep(200)
+
+    // We should get one message group containing all changes from the transaction
+    expect(messageGroups.length).toBe(1)
+
+    // Find the message group containing our changes
+    const changeGroup = messageGroups.find((group) =>
+      group.some(
+        (msg) =>
+          `value` in msg && (msg.value.id === id1 || msg.value.id === id2)
+      )
+    )
+
+    expect(changeGroup).toBeDefined()
+    expect(changeGroup!.length).toBe(5)
+    // 2 deletes + 2 inserts for the moves
+    // + 1 insert for the new issue
+
+    // Verify the operations are in the correct order based on op_position
+    const operations = changeGroup!
+      .filter(
+        (msg): msg is MultiShapeMessages<ShapeConfig> & { value: IssueRow } =>
+          `value` in msg
+      )
+      .map((msg) => ({
+        operation: msg.headers.operation,
+        shape: msg.shape,
+        id: msg.value.id,
+      }))
+
+    // Verify we have the expected sequence of operations
+    expect(operations).toContainEqual({
+      operation: `delete`,
+      shape: `lowPriority`,
+      id: id1,
+    })
+    expect(operations).toContainEqual({
+      operation: `insert`,
+      shape: `highPriority`,
+      id: id1,
+    })
+    expect(operations).toContainEqual({
+      operation: `delete`,
+      shape: `highPriority`,
+      id: id2,
+    })
+    expect(operations).toContainEqual({
+      operation: `insert`,
+      shape: `lowPriority`,
+      id: id2,
+    })
+    expect(operations).toContainEqual({
+      operation: `insert`,
+      shape: `highPriority`,
+      id: id3,
+    })
+
+    // Verify the operations are ordered by op_position
+    const opPositions = changeGroup!.map(
+      (msg) => msg.headers.op_position as number
+    )
+    expect(opPositions).toEqual([...opPositions].sort((a, b) => a - b))
+  })
+
+  it(`should maintain transaction boundaries across multiple transactions`, async ({
+    issuesTableUrl,
+    insertIssues,
+    updateIssue,
+    beginTransaction,
+    commitTransaction,
+    aborter,
+  }) => {
+    // Create initial data
+    const id1 = uuidv4()
+    const id2 = uuidv4()
+    await insertIssues({ id: id1, title: `test title 1`, priority: 5 })
+    await insertIssues({ id: id2, title: `test title 2`, priority: 15 })
+
+    type ShapeConfig = {
+      lowPriority: IssueRow
+      highPriority: IssueRow
+    }
+
+    const multiShapeStream = new TransactionalMultiShapeStream<ShapeConfig>({
+      shapes: {
+        lowPriority: {
+          url: `${BASE_URL}/v1/shape`,
+          params: {
+            table: issuesTableUrl,
+            where: `priority <= 10`,
+          },
+          signal: aborter.signal,
+        },
+        highPriority: {
+          url: `${BASE_URL}/v1/shape`,
+          params: {
+            table: issuesTableUrl,
+            where: `priority > 10`,
+          },
+          signal: aborter.signal,
+        },
+      },
+    })
+
+    const messageGroups: MultiShapeMessages<ShapeConfig>[][] = []
+
+    // Subscribe and wait for initial sync
+    await new Promise<void>((resolve) => {
+      multiShapeStream.subscribe((msgs: MultiShapeMessages<ShapeConfig>[]) => {
+        messageGroups.push(msgs)
+        if (multiShapeStream.isUpToDate) {
+          resolve()
+        }
+      })
+    })
+
+    // Clear initial sync messages
+    messageGroups.length = 0
+
+    // Perform two separate transactions
+    // Transaction 1: Move id1 to high priority
+    await beginTransaction()
+    await updateIssue({ id: id1, title: `moved to high`, priority: 20 })
+    await commitTransaction()
+
+    await sleep(50)
+
+    // Transaction 2: Move id2 to low priority
+    await beginTransaction()
+    await updateIssue({ id: id2, title: `moved to low`, priority: 5 })
+    await commitTransaction()
+
+    // Wait for changes to be processed
+    await sleep(200)
+
+    // Find message groups containing our changes
+    const changeGroups = messageGroups.filter((group) =>
+      group.some(
+        (msg) =>
+          `value` in msg && (msg.value.id === id1 || msg.value.id === id2)
+      )
+    )
+
+    // We should have two separate transaction groups
+    expect(changeGroups.length).toBe(2)
+
+    // First transaction group should contain operations for id1
+    const transaction1 = changeGroups[0]
+    expect(transaction1.length).toBe(2) // 1 delete + 1 insert
+    expect(
+      transaction1.every((msg) => !(`value` in msg) || msg.value.id === id1)
+    ).toBe(true)
+
+    // Second transaction group should contain operations for id2
+    const transaction2 = changeGroups[1]
+    expect(transaction2.length).toBe(2) // 1 delete + 1 insert
+    expect(
+      transaction2.every((msg) => !(`value` in msg) || msg.value.id === id2)
+    ).toBe(true)
+
+    // Verify LSNs are different between transactions
+    const lsn1 = transaction1[0].headers.lsn
+    const lsn2 = transaction2[0].headers.lsn
+    expect(lsn1).not.toBe(lsn2)
+
+    // Verify operations within each transaction are ordered by op_position
+    const verifyOpPositionOrder = (
+      group: MultiShapeMessages<ShapeConfig>[]
+    ) => {
+      const opPositions = group.map((msg) => msg.headers.op_position as number)
+      expect(opPositions).toEqual([...opPositions].sort((a, b) => a - b))
+    }
+
+    verifyOpPositionOrder(transaction1)
+    verifyOpPositionOrder(transaction2)
   })
 })

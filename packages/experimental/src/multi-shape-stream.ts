@@ -95,6 +95,18 @@ export interface MultiShapeStreamInterface<
  *     },
  *   },
  * })
+ *
+ * multiShapeStream.subscribe((msgs) => {
+ *   console.log(msgs)
+ * })
+ *
+ * // or with ShapeStream instances
+ * const multiShapeStream = new MultiShapeStream({
+ *   shapes: {
+ *     shape1: new ShapeStream({ url: 'http://localhost:3000/v1/shape1' }),
+ *     shape2: new ShapeStream({ url: 'http://localhost:3000/v1/shape2' }),
+ *   },
+ * })
  * ```
  */
 
@@ -134,7 +146,7 @@ export class MultiShapeStream<
           : new ShapeStream<TShapeRows[typeof key]>({
               ...shape,
               start: false,
-            } as any),
+            }),
       ])
     ) as { [K in keyof TShapeRows]: ShapeStream<TShapeRows[K]> }
     if (start) this.#start()
@@ -300,6 +312,18 @@ export class MultiShapeStream<
  *     },
  *   },
  * })
+ *
+ * transactionalMultiShapeStream.subscribe((msgs) => {
+ *   console.log(msgs)
+ * })
+ *
+ * // or with ShapeStream instances
+ * const transactionalMultiShapeStream = new TransactionalMultiShapeStream({
+ *   shapes: {
+ *     shape1: new ShapeStream({ url: 'http://localhost:3000/v1/shape1' }),
+ *     shape2: new ShapeStream({ url: 'http://localhost:3000/v1/shape2' }),
+ *   },
+ * })
  * ```
  */
 
@@ -316,7 +340,7 @@ export class TransactionalMultiShapeStream<
   constructor(options: MultiShapeStreamOptions<TShapeRows>) {
     super(options)
     this.#completeLsns = Object.fromEntries(
-      Object.entries(options.shapes).map(([key]) => [key, Infinity])
+      Object.entries(options.shapes).map(([key]) => [key, -Infinity])
     ) as { [K in keyof TShapeRows]: number }
   }
 
@@ -329,9 +353,9 @@ export class TransactionalMultiShapeStream<
   ): Promise<void> {
     this.#accumulate(messages)
     const lowestCompleteLsn = this.#getLowestCompleteLsn()
-    const lsnsToPublish = [
-      ...this.#changeMessages.keys().filter((lsn) => lsn <= lowestCompleteLsn),
-    ]
+    const lsnsToPublish = [...this.#changeMessages.keys()].filter(
+      (lsn) => lsn <= lowestCompleteLsn
+    )
     const messagesToPublish = lsnsToPublish
       .sort((a, b) => a - b)
       .map((lsn) =>
@@ -342,7 +366,7 @@ export class TransactionalMultiShapeStream<
             typeof aHeaders.op_position !== `number` ||
             typeof bHeaders.op_position !== `number`
           ) {
-            throw new Error(`op_position is not a number`)
+            return 0 // op_position is not present on the snapshot message
           }
           return aHeaders.op_position - bHeaders.op_position
         })
@@ -352,7 +376,9 @@ export class TransactionalMultiShapeStream<
     lsnsToPublish.forEach((lsn) => {
       this.#changeMessages.delete(lsn)
     })
-    await super._publish(messagesToPublish)
+    if (messagesToPublish.length > 0) {
+      await super._publish(messagesToPublish)
+    }
   }
 
   #accumulate(messages: MultiShapeMessages<TShapeRows>[]) {
@@ -374,11 +400,10 @@ export class TransactionalMultiShapeStream<
           this.#completeLsns[shape] = Math.max(this.#completeLsns[shape], lsn)
         }
       } else if (isControlMessage(message)) {
-        if (
-          isUpToDate && // All shapes must be up to date
-          headers.control === `up-to-date` &&
-          typeof headers.global_last_seen_lsn === `number`
-        ) {
+        if (headers.control === `up-to-date`) {
+          if (typeof headers.global_last_seen_lsn !== `number`) {
+            throw new Error(`global_last_seen_lsn is not a number`)
+          }
           this.#completeLsns[shape] = Math.max(
             this.#completeLsns[shape],
             headers.global_last_seen_lsn

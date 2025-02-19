@@ -17,6 +17,8 @@ export type UpdateIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type DeleteIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type InsertIssuesFn = (...rows: GeneratedIssueRow[]) => Promise<string[]>
 export type ClearIssuesShapeFn = (handle?: string) => Promise<void>
+export type BeginTransactionFn = () => Promise<void>
+export type CommitTransactionFn = () => Promise<void>
 export type ClearShapeFn = (
   table: string,
   options?: { handle?: string }
@@ -87,6 +89,8 @@ export const testWithIssuesTable = testWithDbClient.extend<{
   deleteIssue: DeleteIssueFn
   insertIssues: InsertIssuesFn
   clearIssuesShape: ClearIssuesShapeFn
+  beginTransaction: BeginTransactionFn
+  commitTransaction: CommitTransactionFn
 }>({
   issuesTableSql: async ({ dbClient, task }, use) => {
     const tableName = `"issues for ${task.id}_${Math.random().toString(16)}"`
@@ -142,6 +146,14 @@ export const testWithIssuesTable = testWithDbClient.extend<{
         rows.flatMap((x) => [x.id ?? uuidv4(), x.title, x.priority ?? 10])
       )
       return rows_1.map((x) => x.id)
+    }),
+  beginTransaction: ({ dbClient }, use) =>
+    use(async () => {
+      await dbClient.query(`BEGIN`)
+    }),
+  commitTransaction: ({ dbClient }, use) =>
+    use(async () => {
+      await dbClient.query(`COMMIT`)
     }),
 
   clearIssuesShape: async ({ clearShape, issuesTableUrl }, use) => {

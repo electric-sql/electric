@@ -1,4 +1,4 @@
-import { assertType, describe, expectTypeOf, test } from 'vitest'
+import { describe, expectTypeOf, test } from 'vitest'
 import { Row, ShapeStream, ShapeStreamOptions } from '@electric-sql/client'
 import { MultiShapeStream } from '../src/multi-shape-stream'
 
