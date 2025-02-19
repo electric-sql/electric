@@ -161,10 +161,14 @@ defmodule Electric.Plug.ServeShapePlug do
         else: params[:live]
 
     replica =
-      if(is_nil(params[:replica]),
-        do: conn.query_params[:replica],
+      if is_nil(params[:replica]),
+        do: conn.query_params["replica"],
         else: to_string(params[:replica])
-      )
+
+    columns =
+      if is_nil(params[:columns]),
+        do: conn.query_params["columns"],
+        else: Enum.join(params[:columns], ",")
 
     Electric.Telemetry.OpenTelemetry.get_stack_span_attrs(
       get_in(conn.assigns, [:config, :stack_id])
@@ -174,7 +178,7 @@ defmodule Electric.Plug.ServeShapePlug do
       "shape.handle" => conn.query_params["handle"] || params[:handle] || request[:handle],
       "shape.where" => conn.query_params["where"] || params[:where],
       "shape.root_table" => conn.query_params["table"] || params[:table],
-      "shape.columns" => conn.query_params["columns"] || params[:columns],
+      "shape.columns" => columns,
       # # Very verbose info to add to spans - keep out unless we explicitly need it
       # "shape.definition" =>
       #   if(not is_nil(params[:shape_definition]),
