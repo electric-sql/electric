@@ -117,16 +117,15 @@ export const testWithIssuesTable = testWithDbClient.extend<{
   updateIssue: ({ issuesTableSql, dbClient }, use) =>
     use(({ id, title, priority }) => {
       if (priority) {
-        return dbClient.query(`UPDATE ${issuesTableSql} SET title = $2, priority = $3 WHERE id = $1`, [
-          id,
-          title,
-          priority,
-        ])
+        return dbClient.query(
+          `UPDATE ${issuesTableSql} SET title = $2, priority = $3 WHERE id = $1`,
+          [id, title, priority]
+        )
       } else {
-        return dbClient.query(`UPDATE ${issuesTableSql} SET title = $2 WHERE id = $1`, [
-          id,
-          title,
-        ])
+        return dbClient.query(
+          `UPDATE ${issuesTableSql} SET title = $2 WHERE id = $1`,
+          [id, title]
+        )
       }
     }),
   deleteIssue: ({ issuesTableSql, dbClient }, use) =>

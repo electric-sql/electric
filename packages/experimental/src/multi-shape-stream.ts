@@ -1,4 +1,8 @@
-import { ShapeStream } from '@electric-sql/client'
+import {
+  ShapeStream,
+  isChangeMessage,
+  isControlMessage,
+} from '@electric-sql/client'
 import type {
   ChangeMessage,
   ControlMessage,
@@ -16,7 +20,9 @@ interface MultiShapeStreamOptions<
   },
 > {
   shapes: {
-    [K in keyof TShapeRows]: ShapeStreamOptions<TShapeRows[K]> | ShapeStream<TShapeRows[K]>
+    [K in keyof TShapeRows]:
+      | ShapeStreamOptions<TShapeRows[K]>
+      | ShapeStream<TShapeRows[K]>
   }
   start?: boolean
   checkForUpdatesAfter?: number // milliseconds
@@ -39,17 +45,14 @@ type MultiShapeMessage<T extends Row<unknown>, ShapeNames extends string> =
   | MultiShapeControlMessage<ShapeNames>
 
 export type MultiShapeMessages<
-TShapeRows extends {
+  TShapeRows extends {
     [K: string]: Row<unknown>
   },
 > = {
-  [K in keyof TShapeRows & string]: MultiShapeMessage<
-    TShapeRows[K],
-    K
-  >
+  [K in keyof TShapeRows & string]: MultiShapeMessage<TShapeRows[K], K>
 }[keyof TShapeRows & string]
 
-interface MultiShapeStreamInterface<
+export interface MultiShapeStreamInterface<
   TShapeRows extends {
     [K: string]: Row<unknown>
   },
@@ -58,7 +61,9 @@ interface MultiShapeStreamInterface<
   checkForUpdatesAfter?: number
 
   subscribe(
-    callback: (messages: MultiShapeMessages<TShapeRows>[]) => MaybePromise<void>,
+    callback: (
+      messages: MultiShapeMessages<TShapeRows>[]
+    ) => MaybePromise<void>,
     onError?: (error: FetchError | Error) => void
   ): () => void
   unsubscribeAll(): void
@@ -127,9 +132,9 @@ export class MultiShapeStream<
         shape instanceof ShapeStream
           ? shape
           : new ShapeStream<TShapeRows[typeof key]>({
-            ...shape,
-            start: false,
-          } as any),
+              ...shape,
+              start: false,
+            } as any),
       ])
     ) as { [K in keyof TShapeRows]: ShapeStream<TShapeRows[K]> }
     if (start) this.#start()
@@ -153,7 +158,7 @@ export class MultiShapeStream<
                 shape: key,
               }) as MultiShapeMessages<TShapeRows>
           )
-          await this.#publish(multiShapeMessages)
+          await this._publish(multiShapeMessages)
         },
         (error) => this.#onError(error)
       )
@@ -186,7 +191,9 @@ export class MultiShapeStream<
     })
   }
 
-  async #publish(messages: MultiShapeMessages<TShapeRows>[]): Promise<void> {
+  protected async _publish(
+    messages: MultiShapeMessages<TShapeRows>[]
+  ): Promise<void> {
     await Promise.all(
       Array.from(this.#subscribers.values()).map(async ([callback, __]) => {
         try {
@@ -220,7 +227,9 @@ export class MultiShapeStream<
   }
 
   subscribe(
-    callback: (messages: MultiShapeMessages<TShapeRows>[]) => MaybePromise<void>,
+    callback: (
+      messages: MultiShapeMessages<TShapeRows>[]
+    ) => MaybePromise<void>,
     onError?: (error: FetchError | Error) => void
   ) {
     const subscriptionId = Math.random()
@@ -241,7 +250,9 @@ export class MultiShapeStream<
   lastSyncedAt(): number | undefined {
     // Min of all the lastSyncedAt values
     return Math.min(
-      ...this.#shapeEntries().map(([_, shape]) => shape.lastSyncedAt() ?? Infinity)
+      ...this.#shapeEntries().map(
+        ([_, shape]) => shape.lastSyncedAt() ?? Infinity
+      )
     )
   }
 
@@ -264,5 +275,116 @@ export class MultiShapeStream<
 
   get isUpToDate() {
     return this.#shapeEntries().every(([_, shape]) => shape.isUpToDate)
+  }
+}
+
+/**
+ * A transactional multi-shape stream is a multi-shape stream that emits the
+ * messages in transactional batches, ensuring that all shapes will receive
+ * at least an `up-to-date` message from Electric within the `checkForUpdatesAfter`
+ * interval.
+ * It uses the `lsn` metadata to infer transaction boundaries, and the `op_position`
+ * metadata to sort the messages within a transaction.
+ *
+ * @constructor
+ * @param {MultiShapeStreamOptions} options - configure the multi-shape stream
+ * @example
+ * ```ts
+ * const transactionalMultiShapeStream = new TransactionalMultiShapeStream({
+ *   shapes: {
+ *     shape1: {
+ *       url: 'http://localhost:3000/v1/shape1',
+ *     },
+ *     shape2: {
+ *       url: 'http://localhost:3000/v1/shape2',
+ *     },
+ *   },
+ * })
+ * ```
+ */
+
+export class TransactionalMultiShapeStream<
+  TShapeRows extends {
+    [K: string]: Row<unknown>
+  },
+> extends MultiShapeStream<TShapeRows> {
+  #changeMessages = new Map<number, MultiShapeMessage<Row<unknown>, string>[]>()
+  #completeLsns: {
+    [K in keyof TShapeRows]: number
+  }
+
+  constructor(options: MultiShapeStreamOptions<TShapeRows>) {
+    super(options)
+    this.#completeLsns = Object.fromEntries(
+      Object.entries(options.shapes).map(([key]) => [key, Infinity])
+    ) as { [K in keyof TShapeRows]: number }
+  }
+
+  #getLowestCompleteLsn() {
+    return Math.min(...Object.values(this.#completeLsns))
+  }
+
+  protected async _publish(
+    messages: MultiShapeMessages<TShapeRows>[]
+  ): Promise<void> {
+    this.#accumulate(messages)
+    const lowestCompleteLsn = this.#getLowestCompleteLsn()
+    const lsnsToPublish = [
+      ...this.#changeMessages.keys().filter((lsn) => lsn <= lowestCompleteLsn),
+    ]
+    const messagesToPublish = lsnsToPublish
+      .sort((a, b) => a - b)
+      .map((lsn) =>
+        this.#changeMessages.get(lsn)?.sort((a, b) => {
+          const { headers: aHeaders } = a
+          const { headers: bHeaders } = b
+          if (
+            typeof aHeaders.op_position !== `number` ||
+            typeof bHeaders.op_position !== `number`
+          ) {
+            throw new Error(`op_position is not a number`)
+          }
+          return aHeaders.op_position - bHeaders.op_position
+        })
+      )
+      .filter((messages) => messages !== undefined)
+      .flat() as MultiShapeMessages<TShapeRows>[]
+    lsnsToPublish.forEach((lsn) => {
+      this.#changeMessages.delete(lsn)
+    })
+    await super._publish(messagesToPublish)
+  }
+
+  #accumulate(messages: MultiShapeMessages<TShapeRows>[]) {
+    const isUpToDate = this.isUpToDate
+    messages.forEach((message) => {
+      const { shape, headers } = message
+      if (isChangeMessage(message)) {
+        // The snapshot message does not have an lsn, so we use 0
+        const lsn = typeof headers.lsn === `number` ? headers.lsn : 0
+        if (!this.#changeMessages.has(lsn)) {
+          this.#changeMessages.set(lsn, [])
+        }
+        this.#changeMessages.get(lsn)?.push(message)
+        if (
+          isUpToDate && // All shapes must be up to date
+          typeof headers.last === `boolean` &&
+          headers.last === true
+        ) {
+          this.#completeLsns[shape] = Math.max(this.#completeLsns[shape], lsn)
+        }
+      } else if (isControlMessage(message)) {
+        if (
+          isUpToDate && // All shapes must be up to date
+          headers.control === `up-to-date` &&
+          typeof headers.global_last_seen_lsn === `number`
+        ) {
+          this.#completeLsns[shape] = Math.max(
+            this.#completeLsns[shape],
+            headers.global_last_seen_lsn
+          )
+        }
+      }
+    })
   }
 }

@@ -108,15 +108,15 @@ describe(`MultiShapeStream`, () => {
     expect(messages.length).toBeGreaterThan(0)
     const changeMessages = messages.filter(
       (msg): msg is MultiShapeMessages<ShapeConfig> & { value: IssueRow } =>
-        'value' in msg
+        `value` in msg
     )
 
     // Find messages for each shape
     const lowPriorityMsg = changeMessages.find(
-      (msg) => msg.shape === 'lowPriority'
+      (msg) => msg.shape === `lowPriority`
     )
     const highPriorityMsg = changeMessages.find(
-      (msg) => msg.shape === 'highPriority'
+      (msg) => msg.shape === `highPriority`
     )
 
     expect(lowPriorityMsg?.value).toEqual({
@@ -186,9 +186,9 @@ describe(`MultiShapeStream`, () => {
     })
 
     // Update that moves an issue from low to high priority
-    await updateIssue({ id: id1, title: 'low priority', priority: 20 })
+    await updateIssue({ id: id1, title: `low priority`, priority: 20 })
     // Update that moves an issue from high to low priority
-    await updateIssue({ id: id2, title: 'high priority', priority: 5 })
+    await updateIssue({ id: id2, title: `high priority`, priority: 5 })
 
     await sleep(200) // some time for electric to catch up
 
@@ -197,33 +197,33 @@ describe(`MultiShapeStream`, () => {
       messages as MultiShapeMessages<ShapeConfig>[]
     ).filter(
       (msg): msg is MultiShapeMessages<ShapeConfig> & { value: IssueRow } =>
-        'value' in msg
+        `value` in msg
     )
 
     // Should have updates in both shapes
     const lowPriorityMsgs = changeMessages.filter(
-      (msg) => msg.shape === 'lowPriority'
+      (msg) => msg.shape === `lowPriority`
     )
     const highPriorityMsgs = changeMessages.filter(
-      (msg) => msg.shape === 'highPriority'
+      (msg) => msg.shape === `highPriority`
     )
 
     expect(lowPriorityMsgs.length).toBe(3)
     expect(highPriorityMsgs.length).toBe(3)
 
     expect(
-      lowPriorityMsgs.filter((msg) => msg.headers.operation === 'insert').length
+      lowPriorityMsgs.filter((msg) => msg.headers.operation === `insert`).length
     ).toBe(2)
     expect(
-      lowPriorityMsgs.filter((msg) => msg.headers.operation === 'delete').length
+      lowPriorityMsgs.filter((msg) => msg.headers.operation === `delete`).length
     ).toBe(1)
 
     expect(
-      highPriorityMsgs.filter((msg) => msg.headers.operation === 'insert')
+      highPriorityMsgs.filter((msg) => msg.headers.operation === `insert`)
         .length
     ).toBe(2)
     expect(
-      highPriorityMsgs.filter((msg) => msg.headers.operation === 'delete')
+      highPriorityMsgs.filter((msg) => msg.headers.operation === `delete`)
         .length
     ).toBe(1)
   })
@@ -256,7 +256,9 @@ describe(`MultiShapeStream`, () => {
     expect(subFn).toHaveBeenCalledTimes(1) // Only the initial sync
   })
 
-  it(`should expose connection status for all shapes`, async ({ issuesTableUrl }) => {
+  it(`should expose connection status for all shapes`, async ({
+    issuesTableUrl,
+  }) => {
     const aborter = new AbortController()
     const multiShapeStream = new MultiShapeStream<{
       shape1: IssueRow
