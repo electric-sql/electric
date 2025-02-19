@@ -125,8 +125,7 @@ defmodule Electric.ShapeCache.FileStorage.KeyIndex do
       key_index_item(item, json: {start_position + offset, json_size})
     end)
     |> Stream.map(&serialize_key_index_item/1)
-    |> Stream.into(File.stream!(output_path, [:append]))
-    |> Stream.run()
+    |> Utils.write_stream_to_file!(output_path, [:append])
   end
 
   defp serialize_key_index_item(

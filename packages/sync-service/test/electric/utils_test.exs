@@ -5,8 +5,7 @@ defmodule Electric.UtilsTest do
 
   defp make_sorted_test_file(path, keys) do
     Stream.map(keys, fn key -> <<key::32, :crypto.strong_rand_bytes(40)::binary>> end)
-    |> Stream.into(File.stream!(path))
-    |> Stream.run()
+    |> Utils.write_stream_to_file!(path)
   end
 
   describe "merge_sorted_files/4" do
@@ -50,8 +49,7 @@ defmodule Electric.UtilsTest do
           {<<Enum.random(0..0xFFFFFFFF)::32, :crypto.strong_rand_bytes(40)::binary>>,
            bytes + 4 + 40}
       end)
-      |> Stream.into(File.stream!(path))
-      |> Stream.run()
+      |> Utils.write_stream_to_file!(path)
 
       {:ok, %{path: path}}
     end
@@ -82,8 +80,7 @@ defmodule Electric.UtilsTest do
           {<<Enum.random(0..0xFFFFFFFF)::32, :crypto.strong_rand_bytes(18)::binary, ?\r, ?\n,
              :crypto.strong_rand_bytes(20)::binary>>, bytes + 4 + 40}
       end)
-      |> Stream.into(File.stream!(path))
-      |> Stream.run()
+      |> Utils.write_stream_to_file!(path)
 
       refute stream_sorted?(stream_test_file(path))
       assert :ok = Utils.external_merge_sort(path, &read_next_item_test_file/1, &<=/2, 1_000)
