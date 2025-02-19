@@ -120,7 +120,7 @@ defmodule Electric.ClientTest do
       {:ok, %Client{params: ^params} = client} =
         Client.new(base_url: "http://localhost:#{bypass.port}", params: params)
 
-      stream = Client.stream(client, "things", oneshot: true)
+      stream = Client.stream(client, "things", live: false)
 
       parent = self()
 
@@ -751,9 +751,9 @@ defmodule Electric.ClientTest do
     end
   end
 
-  defp bypass_response(ctx, responses) do
+  defp bypass_response(ctx, responses, opts \\ []) do
     %{table_name: table_name} = ctx
-    path = "/v1/shape"
+    path = Keyword.get(opts, :path, "/v1/shape")
     parent = self()
 
     Bypass.expect(
@@ -917,29 +917,56 @@ defmodule Electric.ClientTest do
                up_to_date(9999)
              ] = events
     end
+  end
 
-    test "oneshot: true should after the first request", ctx do
+  describe "custom endpoint" do
+    setup [:start_bypass, :bypass_client]
+
+    setup(ctx) do
+      path = "/shapes/special"
+
+      {:ok, client} =
+        Client.new(
+          endpoint: "http://localhost:#{ctx.bypass.port}#{path}",
+          fetch:
+            {Fetch.HTTP,
+             [
+               request: [
+                 connect_options: [timeout: 100, protocols: [:http1]],
+                 retry_delay: fn _n -> 50 end,
+                 retry_log_level: false,
+                 max_retries: 10
+               ]
+             ]}
+        )
+
+      [client: client, path: path]
+    end
+
+    test "can stream a shape without a client shape definition", ctx do
       body1 = [
         %{
           "headers" => %{"operation" => "insert"},
-          "offset" => "0_0",
-          "value" => %{"id" => "1111", "value" => "original 1111"}
-        },
-        %{
-          "headers" => %{"operation" => "insert"},
-          "offset" => "0_0",
-          "value" => %{"id" => "2222", "value" => "original 2222"}
-        },
-        %{
-          "headers" => %{"operation" => "insert"},
-          "offset" => "0_0",
-          "value" => %{"id" => "3333", "value" => "original 3333"}
-        },
-        %{
-          "headers" => %{"operation" => "update"},
-          "offset" => "1234_0",
-          "value" => %{"id" => "2222", "value" => "updated 2222"}
+          "offset" => "1_0",
+          "value" => %{"id" => "1111"}
         }
+      ]
+
+      body2 = [
+        %{
+          "headers" => %{"operation" => "insert"},
+          "offset" => "2_0",
+          "value" => %{"id" => "2222"}
+        }
+      ]
+
+      body3 = [
+        %{
+          "headers" => %{"operation" => "insert"},
+          "offset" => "3_0",
+          "value" => %{"id" => "3333"}
+        },
+        %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
       ]
 
       {:ok, responses} =
@@ -950,46 +977,158 @@ defmodule Electric.ClientTest do
                {"-1", nil} => [
                  &bypass_resp(&1, Jason.encode!(body1),
                    shape_handle: "my-shape",
-                   last_offset: "1234_0",
-                   schema: Jason.encode!(%{"id" => %{type: "text"}, "value" => %{type: "text"}})
+                   last_offset: "1_0",
+                   schema: Jason.encode!(%{"id" => %{type: "text"}})
                  )
                ],
-               {"1234_0", "my-shape"} => [
-                 fn _conn ->
-                   raise "unexpected second request"
-                 end
+               {"1_0", "my-shape"} => [
+                 &bypass_resp(&1, Jason.encode!(body2),
+                   shape_handle: "my-shape",
+                   last_offset: "2_0"
+                 )
+               ],
+               {"2_0", "my-shape"} => [
+                 &bypass_resp(&1, Jason.encode!(body3),
+                   shape_handle: "my-shape",
+                   last_offset: "3_0"
+                 )
                ]
              }
            end}
         )
 
-      bypass_response(ctx, responses)
+      bypass_response_endpoint(ctx, responses, path: ctx.path)
 
-      events = stream(ctx, oneshot: true) |> Enum.into([])
+      # create a stream without a shape definition
+      events = Client.stream(ctx.client, live: false) |> Enum.into([])
 
       assert [
                %ChangeMessage{
-                 value: %{"id" => "1111", "value" => "original 1111"},
+                 value: %{"id" => "1111"},
                  headers: %Headers{operation: :insert}
                },
                %ChangeMessage{
-                 value: %{"id" => "2222", "value" => "original 2222"},
+                 value: %{"id" => "2222"},
                  headers: %Headers{operation: :insert}
                },
                %ChangeMessage{
-                 value: %{"id" => "3333", "value" => "original 3333"},
+                 value: %{"id" => "3333"},
                  headers: %Headers{operation: :insert}
                },
-               %ChangeMessage{
-                 value: %{"id" => "2222", "value" => "updated 2222"},
-                 headers: %Headers{operation: :update}
-               },
+               up_to_date(9999),
                %ResumeMessage{
                  shape_handle: "my-shape",
-                 offset: "1234_0",
+                 offset: "3_0",
                  schema: %{id: %{type: "text"}}
                }
              ] = events
     end
+
+    test "can stream a shape from a url", ctx do
+      body1 = [
+        %{
+          "headers" => %{"operation" => "insert"},
+          "offset" => "1_0",
+          "value" => %{"id" => "1111"}
+        }
+      ]
+
+      body2 = [
+        %{
+          "headers" => %{"operation" => "insert"},
+          "offset" => "2_0",
+          "value" => %{"id" => "2222"}
+        }
+      ]
+
+      body3 = [
+        %{
+          "headers" => %{"operation" => "insert"},
+          "offset" => "3_0",
+          "value" => %{"id" => "3333"}
+        },
+        %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+      ]
+
+      {:ok, responses} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               {"-1", nil} => [
+                 &bypass_resp(&1, Jason.encode!(body1),
+                   shape_handle: "my-shape",
+                   last_offset: "1_0",
+                   schema: Jason.encode!(%{"id" => %{type: "text"}})
+                 )
+               ],
+               {"1_0", "my-shape"} => [
+                 &bypass_resp(&1, Jason.encode!(body2),
+                   shape_handle: "my-shape",
+                   last_offset: "2_0"
+                 )
+               ],
+               {"2_0", "my-shape"} => [
+                 &bypass_resp(&1, Jason.encode!(body3),
+                   shape_handle: "my-shape",
+                   last_offset: "3_0"
+                 )
+               ]
+             }
+           end}
+        )
+
+      bypass_response_endpoint(ctx, responses, path: ctx.path)
+
+      # create a stream without a shape definition
+      events =
+        Client.stream("http://localhost:#{ctx.bypass.port}#{ctx.path}", live: false)
+        |> Enum.into([])
+
+      assert [
+               %ChangeMessage{
+                 value: %{"id" => "1111"},
+                 headers: %Headers{operation: :insert}
+               },
+               %ChangeMessage{
+                 value: %{"id" => "2222"},
+                 headers: %Headers{operation: :insert}
+               },
+               %ChangeMessage{
+                 value: %{"id" => "3333"},
+                 headers: %Headers{operation: :insert}
+               },
+               up_to_date(9999),
+               %ResumeMessage{
+                 shape_handle: "my-shape",
+                 offset: "3_0",
+                 schema: %{id: %{type: "text"}}
+               }
+             ] = events
+    end
+  end
+
+  defp bypass_response_endpoint(ctx, responses, opts) do
+    path = Keyword.get(opts, :path, "/v1/shape")
+    parent = self()
+
+    Bypass.expect(
+      ctx.bypass,
+      fn %{
+           request_path: ^path,
+           query_params: %{"offset" => offset} = query_params
+         } = conn ->
+        shape_handle = Map.get(query_params, "handle", nil)
+
+        fun =
+          Agent.get_and_update(responses, fn resps ->
+            Map.get_and_update(resps, {offset, shape_handle}, fn [fun | rest] -> {fun, rest} end)
+          end)
+
+        send(parent, {:offset, offset})
+
+        fun.(conn)
+      end
+    )
   end
 end

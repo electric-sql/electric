@@ -3,7 +3,6 @@ defmodule Electric.Client.Fetch.Request do
 
   alias Electric.Client
   alias Electric.Client.Fetch
-  alias Electric.Client.ShapeDefinition
   alias Electric.Client.Util
 
   require Logger
@@ -13,7 +12,6 @@ defmodule Electric.Client.Fetch.Request do
     :endpoint,
     :shape_handle,
     :live,
-    :shape,
     :next_cursor,
     replica: :default,
     method: :get,
@@ -35,7 +33,6 @@ defmodule Electric.Client.Fetch.Request do
     replica: quote(do: Electric.Client.replica()),
     live: quote(do: boolean()),
     next_cursor: quote(do: Electric.Client.cursor()),
-    shape: quote(do: ShapeDefinition.t()),
     params: quote(do: params()),
     headers: quote(do: headers())
   ]
@@ -99,7 +96,6 @@ defmodule Electric.Client.Fetch.Request do
   @spec params(t()) :: params()
   def params(%__MODULE__{} = request) do
     %{
-      shape: shape,
       replica: replica,
       live: live?,
       shape_handle: shape_handle,
@@ -109,7 +105,6 @@ defmodule Electric.Client.Fetch.Request do
     } = request
 
     (params || %{})
-    |> Map.merge(ShapeDefinition.params(shape))
     |> Map.merge(%{"offset" => to_string(offset)})
     |> Util.map_put_if("replica", to_string(replica), replica != :default)
     |> Util.map_put_if("handle", shape_handle, is_binary(shape_handle))

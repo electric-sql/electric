@@ -108,7 +108,7 @@ defmodule Electric.Client.ShapeDefinition do
   end
 
   defp safe_url_name(name) do
-    if name =~ ~r/^[a-z0-9_]+$/ do
+    if name =~ ~r/^[a-z_][a-z0-9_]*$/ do
       name
     else
       quote_table_name(name)
@@ -151,10 +151,10 @@ defmodule Electric.Client.ShapeDefinition do
     table_name = url_table_name(shape)
     format = Keyword.get(opts, :format, :query)
 
-    %{"table" => table_name}
-    |> Util.map_put_if("where", where, is_binary(where))
+    %{table: table_name}
+    |> Util.map_put_if(:where, where, is_binary(where))
     |> Util.map_put_if(
-      "columns",
+      :columns,
       fn -> params_columns_list(columns, format) end,
       is_list(columns)
     )

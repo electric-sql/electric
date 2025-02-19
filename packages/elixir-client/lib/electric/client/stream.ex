@@ -44,18 +44,13 @@ defmodule Electric.Client.Stream do
       doc:
         "Instructs the server to send just the changed columns for an update (`:modified`) or the full row (`:full`)."
     ],
-    oneshot: [
-      type: :boolean,
-      default: false,
-      doc: "Only make a single request and then terminate the stream."
-    ],
     resume: [
       type: {:or, [nil, {:struct, Message.ResumeMessage}]},
       type_spec: quote(do: Message.ResumeMessage.t() | nil),
       doc: """
       Resume the stream from the given point. `Message.ResumeMessage` messages
       are appended to the change stream if you terminate it early using `live:
-      false` or `oneshot: true`
+      false`
       """
     ]
   ]
@@ -63,26 +58,22 @@ defmodule Electric.Client.Stream do
   @schema NimbleOptions.new!(
             @external_options ++
               [
-                client: [type: {:struct, Electric.Client}, required: true],
-                shape: [type: {:struct, Electric.Client.ShapeDefinition}, required: true]
+                client: [type: {:struct, Electric.Client}, required: true]
               ]
           )
 
   @opts_schema NimbleOptions.new!(
                  live: [type: :boolean, default: true],
-                 resume: [type: {:struct, Message.ResumeMessage}],
-                 oneshot: [type: :boolean, default: false]
+                 resume: [type: {:struct, Message.ResumeMessage}]
                )
 
   @type opts :: %{
           live: boolean(),
-          resume: nil | Message.ResumeMessage.t(),
-          oneshot: boolean()
+          resume: nil | Message.ResumeMessage.t()
         }
 
   @type t :: %__MODULE__{
           client: Client.t(),
-          shape: Client.ShapeDefinition.t(),
           schema: Client.schema(),
           value_mapper_fun: Client.ValueMapper.mapper_fun(),
           parser: nil | {module(), term()},
@@ -97,18 +88,21 @@ defmodule Electric.Client.Stream do
 
   alias __MODULE__, as: S
 
-  def new(%Client{} = client, %Client.ShapeDefinition{} = shape, opts \\ []) do
+  def new(%Client{} = client, opts) do
     opts
     |> Keyword.put(:client, client)
-    |> Keyword.put(:shape, shape)
     |> new()
   end
 
-  def new(attrs) do
+  def new(%Client{} = client) do
+    new(client, [])
+  end
+
+  def new(attrs) when is_list(attrs) do
     {core, opts} =
       attrs
       |> NimbleOptions.validate!(@schema)
-      |> Keyword.split([:client, :shape, :parser, :replica])
+      |> Keyword.split([:client, :parser, :replica])
 
     opts = NimbleOptions.validate!(Map.new(opts), @opts_schema)
 
@@ -222,16 +216,6 @@ defmodule Electric.Client.Stream do
     {:halt, %{stream | buffer: :queue.in(resume_message, stream.buffer), state: :done}}
   end
 
-  defp after_fetch({msgs, %{opts: %{oneshot: true}} = stream}) do
-    resume_message = %Message.ResumeMessage{
-      schema: stream.schema,
-      offset: stream.offset,
-      shape_handle: stream.shape_handle
-    }
-
-    {msgs, %{stream | buffer: :queue.in(resume_message, stream.buffer), state: :done}}
-  end
-
   defp after_fetch({msgs, stream}) do
     {msgs, stream}
   end
@@ -247,7 +231,7 @@ defmodule Electric.Client.Stream do
     %{
       id: id,
       client: client,
-      shape: shape,
+      # shape: shape,
       up_to_date?: up_to_date?,
       replica: replica,
       shape_handle: shape_handle,
@@ -261,8 +245,8 @@ defmodule Electric.Client.Stream do
       shape_handle: shape_handle,
       replica: replica,
       live: up_to_date?,
-      next_cursor: cursor,
-      shape: shape
+      next_cursor: cursor
+      # shape: shape
     )
   end
 
@@ -329,7 +313,7 @@ defmodule Electric.Client.Stream do
   defp generate_value_mapper(schema, stream) do
     # by default the parser is defined in the shape definition, but we can
     # override that in the stream config
-    {parser_module, parser_opts} = stream.parser || stream.shape.parser
+    {parser_module, parser_opts} = stream.parser || stream.client.parser
 
     value_mapper_fun = parser_module.for_schema(schema, parser_opts)
 
