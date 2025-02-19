@@ -1,8 +1,0 @@
-{
-  "name": "@core/electric-phoenix",
-  "private": true,
-  "version": "0.2.0",
-  "scripts": {
-    "publish:hex": "mix do deps.get, hex.publish --yes || true"
-  }
-}
