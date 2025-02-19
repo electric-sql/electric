@@ -1,7 +1,7 @@
 defmodule Electric.Client.MixProject do
   use Mix.Project
 
-  @electric_version "1.0.0-beta.11"
+  @electric_version "1.0.0-beta.16"
   @github_repo "https://github.com/electric-sql/electric"
 
   def project do
@@ -54,13 +54,14 @@ defmodule Electric.Client.MixProject do
   defp deps_for(:dev) do
     [
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:electric, path: "../sync-service", optional: true}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 
   defp deps_for(:prod) do
-    {:electric, @electric_version, optional: true}
+    [
+      {:electric, @electric_version, optional: true}
+    ]
   end
 
   defp deps_for(_), do: []
