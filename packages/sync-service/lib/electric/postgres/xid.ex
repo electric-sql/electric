@@ -2,6 +2,10 @@ defmodule Electric.Postgres.Xid do
   @uint32_max 0xFFFFFFFF
   @uint32_half_max 0x80000000
 
+  # A 64-bit XID with an arbitrary epoch that is equal to @uint32_half_max when truncated to 32
+  # bits.
+  @uint64_xid 0x1080000000
+
   @type anyxid :: pos_integer
   @type cmp_result :: :lt | :eq | :gt
 
@@ -27,12 +31,6 @@ defmodule Electric.Postgres.Xid do
   iex> compare(3, 3)
   :eq
 
-  iex> compare(#{@uint32_max}, #{@uint32_max})
-  :eq
-
-  iex> compare(1, #{@uint32_max})
-  :gt
-
   iex> compare(2, 1)
   :gt
 
@@ -42,6 +40,9 @@ defmodule Electric.Postgres.Xid do
   iex> compare(2, 3)
   :lt
 
+  iex> compare(#{@uint32_max}, #{@uint32_max})
+  :eq
+
   iex> compare(1, #{@uint32_half_max})
   :lt
 
@@ -49,6 +50,9 @@ defmodule Electric.Postgres.Xid do
   :lt
 
   iex> compare(1, #{@uint32_half_max + 2})
+  :gt
+
+  iex> compare(1, #{@uint32_max})
   :gt
 
   iex> compare(#{@uint32_max}, 1)
@@ -68,6 +72,31 @@ defmodule Electric.Postgres.Xid do
 
   iex> compare(#{@uint32_half_max - 2}, #{@uint32_max})
   :gt
+
+  Any of the two arguments can be 64-bit, the order doesn't matter:
+
+  iex> compare(1, #{@uint64_xid})
+  :lt
+
+  iex> compare(1, #{@uint64_xid + 1})
+  :lt
+
+  iex> compare(1, #{@uint64_xid + 2})
+  :gt
+
+  iex> compare(#{@uint64_xid}, 1)
+  :gt
+
+  iex> compare(#{@uint64_xid + 1}, 1)
+  :lt
+
+  # When both numbers are 64-bit, regular comparison rules apply:
+
+  iex> compare(#{@uint64_xid + 2}, #{@uint64_xid + 1})
+  :gt
+
+  iex> compare(#{@uint64_xid}, #{@uint64_xid + @uint32_half_max + 2})
+  :lt
   """
   @spec compare(anyxid, anyxid) :: cmp_result
 
