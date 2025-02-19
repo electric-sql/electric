@@ -13,7 +13,7 @@ defmodule Electric.Shapes.Api do
 
   @options [
     inspector: [type: :mod_arg, required: true],
-    pg_id: [type: :string],
+    pg_id: [type: {:or, [nil, :string]}],
     registry: [type: :atom, required: true],
     shape_cache: [type: :mod_arg, required: true],
     stack_events_registry: [type: :atom, required: true],
@@ -40,6 +40,7 @@ defmodule Electric.Shapes.Api do
     :pg_id,
     :registry,
     :persistent_kv,
+    :shape,
     :shape_cache,
     :stack_events_registry,
     :stack_id,
@@ -105,19 +106,18 @@ defmodule Electric.Shapes.Api do
   end
 
   defp validate_encoder!(%Api{} = api) do
-    Map.update!(api, :encoder, &Electric.Shapes.Api.Encoder.validate!/1)
+    Map.update!(api, :encoder, &Shapes.Api.Encoder.validate!/1)
+  end
+
+  def predefined_shape(%Api{} = api, shape_params) do
+    with opts = Keyword.merge(shape_params, inspector: api.inspector),
+         {:ok, shape} <- Shapes.Shape.new(opts) do
+      {:ok, %{api | shape: shape}}
+    end
   end
 
   @doc """
   Validate the parameters for the request.
-
-  Options:
-
-  - `seek: boolean()` - (default: true) once validated should we load the shape's
-    latest offset information.
-
-  - `load: boolean()` - (default: true) validate and optionallly create a shape
-    based on the handle and shape parameters.
   """
   @spec validate(t(), %{(atom() | binary()) => term()}) ::
           {:ok, Request.t()} | {:error, Response.t()}

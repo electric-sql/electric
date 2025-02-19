@@ -73,6 +73,7 @@ defmodule Electric.Shapes.Shape do
       do: Map.fetch!(table_info, relation || root_table).pk
 
   @shape_schema NimbleOptions.new!(
+                  relation: [type: {:tuple, [:string, :string]}, required: true],
                   where: [type: {:or, [:string, nil]}],
                   columns: [type: {:or, [{:list, :string}, nil]}],
                   replica: [
@@ -88,10 +89,18 @@ defmodule Electric.Shapes.Shape do
                     default: nil
                   ]
                 )
-  def new(table, opts) do
+  def new(table, opts) when is_binary(table) and is_list(opts) do
+    with {:ok, relation} <- Electric.Postgres.Identifiers.parse_relation(table) do
+      opts
+      |> Keyword.put(:relation, relation)
+      |> new()
+    end
+  end
+
+  def new(opts) when is_list(opts) or is_map(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @shape_schema),
          inspector <- Access.fetch!(opts, :inspector),
-         {:ok, relation} <- validate_table(table, inspector),
+         {:ok, relation} <- validate_relation(opts, inspector),
          %{relation: table, relation_id: relation_id} <- relation,
          {:ok, column_info, pk_cols} <- load_column_info(table, inspector),
          {:ok, selected_columns} <-
@@ -169,10 +178,11 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  defp validate_table(table, inspector) when is_binary(table) do
+  defp validate_relation(opts, inspector) do
+    relation = Keyword.fetch!(opts, :relation)
+
     # Parse identifier locally first to avoid hitting PG for invalid tables
-    with {:ok, _} <- Electric.Postgres.Identifiers.parse_relation(table),
-         {:ok, rel} <- Inspector.load_relation(table, inspector) do
+    with {:ok, rel} <- Inspector.load_relation(relation, inspector) do
       {:ok, rel}
     else
       {:error, err} ->
