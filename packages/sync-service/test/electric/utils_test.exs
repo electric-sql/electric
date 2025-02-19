@@ -17,8 +17,7 @@ defmodule Electric.UtilsTest do
           {<<Enum.random(0..0xFFFFFFFF)::32, :crypto.strong_rand_bytes(40)::binary>>,
            bytes + 4 + 40}
       end)
-      |> Stream.into(File.stream!(path))
-      |> Stream.run()
+      |> Utils.write_stream_to_file!(path)
 
       {:ok, %{path: path}}
     end
@@ -49,8 +48,7 @@ defmodule Electric.UtilsTest do
           {<<Enum.random(0..0xFFFFFFFF)::32, :crypto.strong_rand_bytes(18)::binary, ?\r, ?\n,
              :crypto.strong_rand_bytes(20)::binary>>, bytes + 4 + 40}
       end)
-      |> Stream.into(File.stream!(path))
-      |> Stream.run()
+      |> Utils.write_stream_to_file!(path)
 
       refute stream_sorted?(stream_test_file(path))
       assert :ok = Utils.external_merge_sort(path, &stream_test_file/1, &<=/2, 1_000)

@@ -515,8 +515,7 @@ defmodule Electric.Utils do
       chunk
       |> Enum.sort(sorter)
       |> Stream.map(fn {_, value} -> value end)
-      |> Stream.into(File.stream!(chunk_path))
-      |> Stream.run()
+      |> write_stream_to_file!(chunk_path)
 
       chunk_path
     end)
@@ -539,8 +538,7 @@ defmodule Electric.Utils do
     paths
     |> Enum.map(reader)
     |> merge_sorted_streams(sorter, fn {_, binary} -> binary end)
-    |> Stream.into(File.stream!(target_path))
-    |> Stream.run()
+    |> write_stream_to_file!(target_path)
   end
 
   defp chunk_by_size(stream, size) do
@@ -568,8 +566,7 @@ defmodule Electric.Utils do
     paths
     |> Enum.map(&File.stream!/1)
     |> Stream.concat()
-    |> Stream.into(File.stream!(into))
-    |> Stream.run()
+    |> write_stream_to_file!(into)
   end
 
   @doc """
@@ -588,5 +585,17 @@ defmodule Electric.Utils do
       fn acc -> {[], last_fun.(acc)} end,
       after_fun
     )
+  end
+
+  @doc """
+  Write the stream of binary data into the file at the given path.
+
+  By default, the file is expected to exist prior to the call. This can be overriden by passing
+  one or more file stream modes in a list as the 3rd argument.
+  """
+  @spec write_stream_to_file!(Enumerable.t(), Path.t(), [File.stream_mode()]) :: :ok
+  def write_stream_to_file!(stream, path, modes \\ []) do
+    Enum.into(stream, File.stream!(path, modes))
+    :ok
   end
 end
