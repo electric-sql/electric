@@ -11,7 +11,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   @snapshot_start_index 0
   @snapshot_end_index :end
-  @xmin_key :xmin
+  @pg_snapshot_key :pg_snapshot
 
   defstruct [
     :table_base_name,
@@ -85,16 +85,13 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   @impl Electric.ShapeCache.Storage
   def get_current_position(%MS{} = opts) do
-    {:ok, current_offset(opts), current_xmin(opts)}
+    {:ok, current_offset(opts), pg_snapshot(opts)}
   end
 
-  defp current_xmin(opts) do
-    case :ets.lookup(opts.snapshot_table, @xmin_key) do
-      [] ->
-        nil
-
-      [{@xmin_key, xmin}] ->
-        xmin
+  defp pg_snapshot(opts) do
+    case :ets.lookup(opts.snapshot_table, @pg_snapshot_key) do
+      [{@pg_snapshot_key, pg_snapshot}] -> pg_snapshot
+      [] -> nil
     end
   end
 
@@ -103,8 +100,8 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def set_snapshot_xmin(xmin, %MS{} = opts) do
-    :ets.insert(opts.snapshot_table, {@xmin_key, xmin})
+  def set_pg_snapshot(pg_snapshot, %MS{} = opts) do
+    :ets.insert(opts.snapshot_table, {@pg_snapshot_key, pg_snapshot})
     :ok
   end
 

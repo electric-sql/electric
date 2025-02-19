@@ -149,17 +149,20 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               stack_id
             )
 
-            %{rows: [[xmin]]} =
+            %{rows: [[pg_snapshot]]} =
               query_span!(
                 conn,
-                "shape_snapshot.get_snapshot_xmin",
+                "shape_snapshot.get_pg_snapshot",
                 shape_attrs,
-                "SELECT pg_snapshot_xmin(pg_current_snapshot())",
+                "SELECT pg_current_snapshot()",
                 [],
                 stack_id
               )
 
-            GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, xmin})
+            GenServer.cast(
+              parent,
+              {:pg_snapshot_known, shape_handle, pg_snapshot}
+            )
 
             # Enforce display settings *before* querying initial data to maintain consistent
             # formatting between snapshot and live log entries.

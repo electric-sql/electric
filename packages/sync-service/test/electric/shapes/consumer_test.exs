@@ -97,11 +97,11 @@ defmodule Electric.Shapes.ConsumerTest do
         Support.TestStorage.wrap(ctx.storage, %{
           @shape_handle1 => [
             {:mark_snapshot_as_started, []},
-            {:set_snapshot_xmin, [xmin1]}
+            {:set_pg_snapshot, [%{xmin: xmin1, xmax: xmin1 + 1, xip_list: [xmin1]}]}
           ],
           @shape_handle2 => [
             {:mark_snapshot_as_started, []},
-            {:set_snapshot_xmin, [xmin2]}
+            {:set_pg_snapshot, [%{xmin: xmin2, xmax: xmin2 + 1, xip_list: [xmin2]}]}
           ]
         })
 
@@ -669,7 +669,8 @@ defmodule Electric.Shapes.ConsumerTest do
           run_with_conn_fn: &run_with_conn_noop/2,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
-            GenServer.cast(parent, {:snapshot_xmin_known, shape_handle, 10})
+            pg_snapshot = {10, 11, [10]}
+            GenServer.cast(parent, {:pg_snapshot_known, shape_handle, pg_snapshot})
             Storage.make_new_snapshot!([], storage)
             GenServer.cast(parent, {:snapshot_started, shape_handle})
           end

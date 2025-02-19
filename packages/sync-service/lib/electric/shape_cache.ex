@@ -7,7 +7,6 @@ defmodule Electric.ShapeCacheBehaviour do
 
   @type shape_handle :: String.t()
   @type shape_def :: Shape.t()
-  @type xmin :: non_neg_integer()
 
   @callback get_shape(shape_def(), opts :: Access.t()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()} | nil
@@ -234,10 +233,7 @@ defmodule Electric.ShapeCache do
         {shape_state, state}
       else
         {:ok, shape_handle} = shape_status.add_shape(state.shape_status_state, shape)
-
-        {:ok, _pid, _snapshot_xmin, latest_offset} =
-          start_shape(shape_handle, shape, state, otel_ctx)
-
+        {:ok, latest_offset} = start_shape(shape_handle, shape, state, otel_ctx)
         {{shape_handle, latest_offset}, state}
       end
 
@@ -299,7 +295,7 @@ defmodule Electric.ShapeCache do
     |> state.shape_status.list_shapes()
     |> Enum.each(fn {shape_handle, shape} ->
       try do
-        {:ok, _pid, _snapshot_xmin, _latest_offset} = start_shape(shape_handle, shape, state)
+        {:ok, _latest_offset} = start_shape(shape_handle, shape, state)
 
         # recover publication filter state
         publication_manager.recover_shape(shape, publication_manager_opts)
@@ -315,7 +311,7 @@ defmodule Electric.ShapeCache do
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
-    with {:ok, pid} <-
+    with {:ok, _pid} <-
            Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
              state.consumer_supervisor,
              stack_id: state.stack_id,
@@ -334,10 +330,8 @@ defmodule Electric.ShapeCache do
              otel_ctx: otel_ctx
            ) do
       consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
-
-      {:ok, snapshot_xmin, latest_offset} = Shapes.Consumer.initial_state(consumer)
-
-      {:ok, pid, snapshot_xmin, latest_offset}
+      {:ok, latest_offset} = Shapes.Consumer.initial_state(consumer)
+      {:ok, latest_offset}
     end
   end
 

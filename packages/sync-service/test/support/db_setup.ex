@@ -43,7 +43,11 @@ defmodule Support.DbSetup do
       GenServer.stop(utility_pool)
     end)
 
-    updated_config = Keyword.put(base_config, :database, db_name)
+    updated_config =
+      base_config
+      |> Keyword.put(:database, db_name)
+      |> Keyword.merge(List.wrap(ctx[:connection_opt_overrides]))
+
     {:ok, pool} = start_db_pool(updated_config)
 
     {:ok, %{utility_pool: utility_pool, db_config: updated_config, pool: pool, db_conn: pool}}
@@ -128,7 +132,9 @@ defmodule Support.DbSetup do
       |> String.replace_trailing("==", "")
 
   defp start_db_pool(connection_opts) do
-    start_opts = Electric.Utils.deobfuscate_password(connection_opts) ++ @postgrex_start_opts
+    start_opts =
+      Keyword.merge(@postgrex_start_opts, Electric.Utils.deobfuscate_password(connection_opts))
+
     Postgrex.start_link(start_opts)
   end
 end
