@@ -18,6 +18,9 @@ defmodule Electric.PhoenixEmbeddedWeb.Router do
     plug :protect_from_forgery
   end
 
+  pipeline :electric do
+  end
+
   scope "/", Electric.PhoenixEmbeddedWeb do
     pipe_through :browser
 
@@ -31,7 +34,7 @@ defmodule Electric.PhoenixEmbeddedWeb.Router do
   end
 
   scope "/shapes" do
-    pipe_through :api
+    pipe_through :electric
 
     # Expose the "todos" table as a shape
     shape "/todos"

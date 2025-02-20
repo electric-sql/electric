@@ -11,7 +11,8 @@ connection_opts = [
 # Configure your database
 config :electric_phoenix_embedded,
        Electric.PhoenixEmbedded.Repo,
-       Keyword.merge(connection_opts,
+       Keyword.merge(
+         connection_opts,
          stacktrace: true,
          show_sensitive_data_on_connection_error: true,
          pool_size: 10
