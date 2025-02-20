@@ -39,7 +39,7 @@ config :electric_phoenix_embedded, Electric.PhoenixEmbeddedWeb.Endpoint,
       "development",
       "--watch",
       "--config",
-      "vite.config.js",
+      "vite.config.ts",
       cd: Path.expand("../assets", __DIR__)
     ]
   ]
