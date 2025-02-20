@@ -139,9 +139,15 @@ defmodule Electric.Shapes.Api do
 
   defp validate_params(api, params) do
     with {:ok, request_params} <- Api.Params.validate(api, params) do
-      request_for_params(api, request_params, %Response{
-        shape_definition: request_params.shape_definition
-      })
+      request_for_params(
+        api,
+        request_params,
+        %Response{
+          api: api,
+          params: request_params,
+          shape_definition: request_params.shape_definition
+        }
+      )
     end
   end
 
@@ -350,6 +356,43 @@ defmodule Electric.Shapes.Api do
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
       do_serve_shape_log(request)
     end)
+  end
+
+  def serve_shape_log(%Plug.Conn{} = conn, %Request{} = request) do
+    response =
+      case if_not_modified(conn, request) do
+        {:halt, response} ->
+          response
+
+        {:cont, request} ->
+          serve_shape_log(request)
+      end
+
+    conn
+    |> Plug.Conn.assign(:response, response)
+    |> Response.send(response)
+  end
+
+  def if_not_modified(conn, request) do
+    etag = etag(request)
+
+    if etag in if_none_match(conn) do
+      %{response: response} = Request.update_response(request, &%{&1 | status: 304, body: []})
+      {:halt, response}
+    else
+      {:cont, request}
+    end
+  end
+
+  defp etag(%{response: %{handle: handle, offset: offset}} = request) do
+    "#{handle}:#{request.params.offset}:#{offset}"
+  end
+
+  defp if_none_match(%Plug.Conn{} = conn) do
+    Plug.Conn.get_req_header(conn, "if-none-match")
+    |> Enum.flat_map(&String.split(&1, ","))
+    |> Enum.map(&String.trim/1)
+    |> Enum.map(&String.trim(&1, <<?">>))
   end
 
   defp validate_serve_usage!(request) do
