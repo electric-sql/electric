@@ -22,7 +22,9 @@ type ToDo = {
 }
 
 export default function Index() {
-  const csrfToken = window._csrf_token
+  const csrfToken = (document.head.querySelector(
+    "meta[name~=csrf-token][content]"
+  ) as HTMLMetaElement)!.content
   const { data: todos } = useShape<ToDo>({
     url: new URL(`/shapes/todos`, window.location.href).href,
     params: {
@@ -37,7 +39,7 @@ export default function Index() {
 
   const onTodoClicked = useCallback(async (todo: ToDo) => {
     console.log(`completed`)
-    await fetch(new URL(`/todos/${todo.id}`, window.location.href).href, {
+    await fetch(new URL(`/api/todos/${todo.id}`, window.location.href).href, {
       method: `PUT`,
       headers: {
         "content-type": `application/json`,
@@ -52,7 +54,7 @@ export default function Index() {
 
   const onTodoDeleted = useCallback(async (todo: ToDo) => {
     console.log(`deleted`)
-    await fetch(new URL(`/todos/${todo.id}`, window.location.href).href, {
+    await fetch(new URL(`/api/todos/${todo.id}`, window.location.href).href, {
       method: `DELETE`,
       headers: {
         "x-csrf-token": csrfToken,
@@ -114,7 +116,7 @@ export default function Index() {
             formElem.reset()
 
             const res = await fetch(
-              new URL(`/todos`, window.location.href).href,
+              new URL(`/api/todos`, window.location.href).href,
               {
                 method: `POST`,
                 headers: {

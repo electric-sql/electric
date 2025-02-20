@@ -7,9 +7,6 @@
     <.live_title default="Electric.PhoenixEmbedded" suffix=" · Phoenix Framework">
       {assigns[:page_title]}
     </.live_title>
-    <script>
-      window._csrf_token = "<%= get_csrf_token() %>"
-    </script>
     <link phx-track-static rel="stylesheet" href={~p"/assets/main.css"} />
   </head>
   <body class="bg-white">

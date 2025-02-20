@@ -4,7 +4,7 @@ defmodule Electric.PhoenixEmbeddedWeb.Router do
   import Electric.Phoenix.Router
 
   pipeline :browser do
-    plug :accepts, ["html", "json"]
+    plug :accepts, ["html"]
     plug :fetch_session
     plug :fetch_live_flash
     plug :put_root_layout, html: {Electric.PhoenixEmbeddedWeb.Layouts, :root}
@@ -14,12 +14,18 @@ defmodule Electric.PhoenixEmbeddedWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
+    plug :fetch_session
+    plug :protect_from_forgery
   end
 
   scope "/", Electric.PhoenixEmbeddedWeb do
     pipe_through :browser
 
     get "/", PageController, :home
+  end
+
+  scope "/api", Electric.PhoenixEmbeddedWeb do
+    pipe_through :api
 
     resources "/todos", TodoController, except: [:new, :edit, :show]
   end
