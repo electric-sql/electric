@@ -153,24 +153,40 @@ defmodule Electric.Plug.ServeShapePlug do
     params = Map.get(request, :params, %{}) |> bare_map()
     response = (Map.get(assigns, :response) || Map.get(request, :response) || %{}) |> bare_map()
     attrs = Map.get(response, :trace_attrs, %{})
-
-    shape_handle =
-      conn.query_params["handle"] || params[:handle] || request[:handle]
-
     maybe_up_to_date = Map.get(response, :up_to_date, false)
+
+    is_live_req =
+      if is_nil(params[:live]),
+        do: !is_nil(conn.query_params["live"]) && conn.query_params["live"] != "false",
+        else: params[:live]
+
+    replica =
+      if is_nil(params[:replica]),
+        do: conn.query_params["replica"],
+        else: to_string(params[:replica])
+
+    columns =
+      if is_nil(params[:columns]),
+        do: conn.query_params["columns"],
+        else: Enum.join(params[:columns], ",")
 
     Electric.Telemetry.OpenTelemetry.get_stack_span_attrs(
       get_in(conn.assigns, [:config, :stack_id])
     )
     |> Map.merge(Electric.Plug.Utils.common_open_telemetry_attrs(conn))
     |> Map.merge(%{
-      "shape.handle" => shape_handle,
-      "shape.where" => get_in(params, [:shape, :where]),
-      "shape.root_table" => get_in(params, [:shape, :root_table]),
-      "shape.definition" => get_in(params, [:shape]),
-      "shape.replica" => get_in(params, [:shape, :replica]),
-      "shape_req.is_live" => params[:live],
-      "shape_req.offset" => params[:offset],
+      "shape.handle" => conn.query_params["handle"] || params[:handle] || request[:handle],
+      "shape.where" => conn.query_params["where"] || params[:where],
+      "shape.root_table" => conn.query_params["table"] || params[:table],
+      "shape.columns" => columns,
+      # # Very verbose info to add to spans - keep out unless we explicitly need it
+      # "shape.definition" =>
+      #   if(not is_nil(params[:shape_definition]),
+      #     do: Electric.Shapes.Shape.to_json_safe(params[:shape_definition])
+      #   ),
+      "shape.replica" => replica,
+      "shape_req.is_live" => is_live_req,
+      "shape_req.offset" => conn.query_params["offset"],
       "shape_req.is_shape_rotated" => attrs[:ot_is_shape_rotated] || false,
       "shape_req.is_long_poll_timeout" => attrs[:ot_is_long_poll_timeout] || false,
       "shape_req.is_empty_response" => attrs[:ot_is_empty_response] || false,

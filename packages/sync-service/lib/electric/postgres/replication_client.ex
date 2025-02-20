@@ -283,7 +283,11 @@ defmodule Electric.Postgres.ReplicationClient do
         # individual storage write can timeout the entire batch.
         OpenTelemetry.with_span(
           "pg_txn.replication_client.transaction_received",
-          [num_changes: txn.num_changes, num_relations: MapSet.size(txn.affected_relations)],
+          [
+            num_changes: txn.num_changes,
+            num_relations: MapSet.size(txn.affected_relations),
+            xid: txn.xid
+          ],
           stack_id,
           fn -> apply(m, f, [txn | args]) end
         )
