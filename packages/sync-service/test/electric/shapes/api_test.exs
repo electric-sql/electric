@@ -829,6 +829,33 @@ defmodule Electric.Shapes.ApiTest do
 
       assert request.params.shape_definition == shape
     end
+
+    test "accepts simpler table and namespace options", ctx do
+      %{admin_shape: shape} = ctx
+
+      assert {:ok, api} =
+               Api.predefined_shape(ctx.api,
+                 table: "users",
+                 where: "value = 'admin'",
+                 replica: :full,
+                 columns: ["id", "value"],
+                 storage: %{compaction: :disabled}
+               )
+
+      assert api.shape == shape
+
+      assert {:ok, api} =
+               Api.predefined_shape(ctx.api,
+                 schema: "public",
+                 table: "users",
+                 where: "value = 'admin'",
+                 replica: :full,
+                 columns: ["id", "value"],
+                 storage: %{compaction: :disabled}
+               )
+
+      assert api.shape == shape
+    end
   end
 
   describe "stack not ready" do

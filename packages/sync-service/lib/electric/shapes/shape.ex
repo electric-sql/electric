@@ -72,23 +72,29 @@ defmodule Electric.Shapes.Shape do
       when is_nil(relation) or is_map_key(table_info, relation),
       do: Map.fetch!(table_info, relation || root_table).pk
 
-  @shape_schema NimbleOptions.new!(
-                  relation: [type: {:tuple, [:string, :string]}, required: true],
-                  where: [type: {:or, [:string, nil]}],
-                  columns: [type: {:or, [{:list, :string}, nil]}],
-                  replica: [
-                    type: {:custom, __MODULE__, :verify_replica, []},
-                    default: :default
-                  ],
-                  inspector: [
-                    type: :mod_arg,
-                    default: {Electric.Postgres.Inspector, Electric.DbPool}
-                  ],
-                  storage: [
-                    type: {:or, [:map, nil]},
-                    default: nil
-                  ]
-                )
+  @schema_options [
+    relation: [type: {:tuple, [:string, :string]}, required: true],
+    where: [type: {:or, [:string, nil]}],
+    columns: [type: {:or, [{:list, :string}, nil]}],
+    replica: [
+      type: {:custom, __MODULE__, :verify_replica, []},
+      default: :default
+    ],
+    inspector: [
+      type: :mod_arg,
+      default: {Electric.Postgres.Inspector, Electric.DbPool}
+    ],
+    storage: [
+      type: {:or, [:map, nil]},
+      default: nil
+    ]
+  ]
+  @shape_schema NimbleOptions.new!(@schema_options)
+
+  def schema_options do
+    @schema_options
+  end
+
   def new(table, opts) when is_binary(table) and is_list(opts) do
     with {:ok, relation} <- Electric.Postgres.Identifiers.parse_relation(table) do
       opts

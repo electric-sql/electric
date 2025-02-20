@@ -109,10 +109,52 @@ defmodule Electric.Shapes.Api do
     Map.update!(api, :encoder, &Shapes.Api.Encoder.validate!/1)
   end
 
+  shape_schema_options =
+    Keyword.merge(Keyword.drop(Shapes.Shape.schema_options(), [:inspector]),
+      table: [type: :string],
+      schema: [type: :string],
+      namespace: [type: :string]
+    )
+
+  shape_schema = NimbleOptions.new!(shape_schema_options)
+
+  @type shape_opts() :: [unquote(NimbleOptions.option_typespec(shape_schema))]
+
+  @doc """
+  Create a version of the given configured Api instance that is specific to the
+  given shape.
+
+  This allows you to provide a locked-down version of the API that ignores
+  shape-definition parameters such as `table`, `where` and `columns` and only
+  honours the shape-tailing parameters such as `offset` and `handle`.
+  """
+  @spec predefined_shape(t(), shape_opts()) :: {:ok, t()} | {:error, term()}
   def predefined_shape(%Api{} = api, shape_params) do
-    with opts = Keyword.merge(shape_params, inspector: api.inspector),
+    with {:ok, params} <- normalise_shape_params(shape_params),
+         opts = Keyword.merge(params, inspector: api.inspector),
          {:ok, shape} <- Shapes.Shape.new(opts) do
       {:ok, %{api | shape: shape}}
+    end
+  end
+
+  defp normalise_shape_params(params) do
+    case Keyword.fetch(params, :relation) do
+      {:ok, {n, t}} when is_binary(n) and is_binary(t) ->
+        {:ok, params}
+
+      :error ->
+        {table_params, shape_params} = Keyword.split(params, [:table, :namespace, :schema])
+
+        case {table_params[:table], table_params[:namespace] || table_params[:schema]} do
+          {nil, nil} ->
+            {:error, "No relation or table specified"}
+
+          {table, nil} when is_binary(table) ->
+            {:ok, Keyword.put(shape_params, :relation, {"public", table})}
+
+          {table, namespace} ->
+            {:ok, Keyword.put(shape_params, :relation, {namespace, table})}
+        end
     end
   end
 
