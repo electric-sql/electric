@@ -1,4 +1,3 @@
-import { toBase64 } from "lib0/buffer"
 import * as encoding from "lib0/encoding"
 import * as decoding from "lib0/decoding"
 import * as syncProtocol from "y-protocols/sync"
@@ -237,12 +236,15 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
 
     const encoder = encoding.createEncoder()
     syncProtocol.writeUpdate(encoder, update)
-    const op = toBase64(encoding.toUint8Array(encoder))
+    const op = encoding.toUint8Array(encoder)
     const room = this.roomName
 
-    return fetch(`/api/operation`, {
+    return fetch(`/api/operation?room=${room}`, {
       method: `POST`,
-      body: JSON.stringify({ room, op }),
+      headers: {
+        "Content-Type": `application/octet-stream`,
+      },
+      body: op.buffer,
     })
   }
 
@@ -252,17 +254,22 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
       encoder,
       awarenessProtocol.encodeAwarenessUpdate(this.awareness!, changedClients)
     )
-    const op = toBase64(encoding.toUint8Array(encoder))
 
-    if (this.connected) {
-      const room = this.roomName
-      const clientId = `${this.doc.clientID}`
-
-      return fetch(`/api/operation`, {
-        method: `POST`,
-        body: JSON.stringify({ clientId, room, op }),
-      })
+    if (!this.connected) {
+      return Promise.resolve()
     }
+
+    const op = encoding.toUint8Array(encoder)
+    const room = this.roomName
+    const clientId = `${this.doc.clientID}`
+
+    return fetch(`/api/operation?room=${room}&clientId=${clientId}`, {
+      method: `POST`,
+      headers: {
+        "Content-Type": `application/octet-stream`,
+      },
+      body: op.buffer,
+    })
   }
 
   private setupShapeStream() {
@@ -310,6 +317,10 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
             const encoder = encoding.createEncoder()
             encoding.writeVarUint(encoder, messageSync)
             syncProtocol.readSyncMessage(decoder, encoder, this.doc, this)
+
+            if (decoder.pos !== decoder.arr.length) {
+              throw new Error(`Unexpected end of message`)
+            }
           } else if (
             isControlMessage(message) &&
             message.headers.control === `up-to-date`

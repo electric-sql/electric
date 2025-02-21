@@ -4,6 +4,9 @@ import { neon } from "@neondatabase/serverless"
 
 // hybrid implementation for connection pool and serverless with neon
 
+// TODO: remove entries from awareness vector
+// TODO: cleanup operations log for compaction
+
 const connectionString =
   process.env.NEON_DATABASE_URL ||
   process.env.DATABASE_URL ||
@@ -30,39 +33,48 @@ export async function POST(request: Request) {
   }
 }
 
-async function saveOperation(room: string, op: string) {
-  const q = `INSERT INTO ydoc_operations (room, op) VALUES ($1, decode($2, 'base64'))`
+async function saveOperation(room: string, op: Uint8Array) {
+  const q = `INSERT INTO ydoc_operations (room, op) VALUES ($1, $2)`
   const params = [room, op]
   await runQuery(q, params)
 }
 
 async function saveAwarenessOperation(
   room: string,
-  op: string,
+  op: Uint8Array,
   clientId: string
 ) {
-  const q = `INSERT INTO ydoc_awareness (room, clientId, op) VALUES ($1, $2, decode($3, 'base64'))
+  const q = `INSERT INTO ydoc_awareness (room, clientId, op) VALUES ($1, $2, $3)
        ON CONFLICT (clientId, room)
-       DO UPDATE SET op = decode($3, 'base64'), updated = now()`
+       DO UPDATE SET op = $3, updated = now()`
   const params = [room, clientId, op]
   await runQuery(q, params)
 }
 
 async function getRequestParams(
   request: Request
-): Promise<{ room: string; op: string; clientId?: string }> {
-  const { room, op, clientId } = await request.json()
+): Promise<{ room: string; op: Uint8Array; clientId?: string }> {
+  const url = new URL(request.url)
+  const room = url.searchParams.get(`room`)
+  const clientId = url.searchParams.get(`clientId`)
+
   if (!room) {
-    throw new Error(`'room' is required`)
-  }
-  if (!op) {
-    throw new Error(`'op' is required`)
+    throw new Error(`'room' query parameter is required`)
   }
 
-  return { room, op, clientId }
+  const op = new Uint8Array(await request.arrayBuffer())
+  if (op.length === 0) {
+    throw new Error(`Operation data is required`)
+  }
+
+  return {
+    room,
+    op,
+    clientId: clientId ?? undefined,
+  }
 }
 
-async function runQuery(q: string, params: string[]) {
+async function runQuery(q: string, params: (string | Uint8Array)[]) {
   if (pool) {
     await pool.query(q, params)
   } else if (sql) {
