@@ -44,7 +44,7 @@ Include `:electric` into your dependencies:
     # mix.exs
     defp deps do
       [
-      {:electric, ">= 1.0.0-beta-1"}
+      {:electric, ">= 1.0.0-beta.18"}
       ]
     end
 
