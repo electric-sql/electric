@@ -19,7 +19,8 @@ defmodule Electric.Postgres.ConfigurationTest do
       """
       CREATE TABLE items (
         id UUID PRIMARY KEY,
-        value TEXT NOT NULL
+        value TEXT NOT NULL,
+        value_c VARCHAR(255)
       )
       """,
       []
@@ -289,6 +290,32 @@ defmodule Electric.Postgres.ConfigurationTest do
                  ],
                  pg_version
                )
+    end
+
+    test "fails with invalid where clause error when unsupported clause provided",
+         %{pool: conn, publication_name: publication, pg_version: pg_version} do
+      error =
+        assert_raise Postgrex.Error, fn ->
+          Configuration.configure_tables_for_replication!(
+            conn,
+            %{
+              {"public", "items"} => %RelationFilter{
+                relation: {"public", "items"},
+                where_clauses: [%Eval.Expr{query: "(value_c in ('a','b'))"}]
+              }
+            },
+            pg_version,
+            publication
+          )
+        end
+
+      assert %Postgrex.Error{
+               postgres: %{
+                 code: :feature_not_supported,
+                 detail:
+                   "Only columns, constants, built-in operators, built-in data types, built-in collations, and immutable built-in functions are allowed."
+               }
+             } = error
     end
 
     test "fails when a publication doesn't exist", %{pool: conn, pg_version: pg_version} do
