@@ -54,13 +54,11 @@ export function createFetchWithBackoff(
     let delay = initialDelay
     let attempt = 0
 
-    /* eslint-disable no-constant-condition -- we re-fetch the shape log
-     * continuously until we get a non-ok response. For recoverable errors,
-     * we retry the fetch with exponential backoff. Users can pass in an
-     * AbortController to abort the fetching an any point.
-     * */
-    while (true) {
-      /* eslint-enable no-constant-condition */
+    /* We re-fetch the shape log continuously until we get a non-ok response.
+     * For recoverable errors, we retry the fetch with exponential backoff.
+     * Users can pass in an AbortController to abort the fetching at any point.
+     */
+    const run = async (): Promise<Response> => {
       try {
         const result = await fetchClient(...args)
         if (result.ok) return result
@@ -79,19 +77,27 @@ export function createFetchWithBackoff(
           throw e
         } else {
           // Exponentially backoff on errors.
-          // Wait for the current delay duration
-          await new Promise((resolve) => setTimeout(resolve, delay))
-
+          // Capture current delay before increasing it
+          const currentDelay = delay
           // Increase the delay for the next attempt
           delay = Math.min(delay * multiplier, maxDelay)
 
           if (debug) {
             attempt++
-            console.log(`Retry attempt #${attempt} after ${delay}ms`)
+            console.log(`Retry attempt #${attempt} after ${currentDelay}ms`)
           }
+
+          // Return a new promise that will resolve with the next run after the delay
+          return new Promise((resolve, reject) => {
+            setTimeout(() => {
+              run().then(resolve).catch(reject)
+            }, currentDelay)
+          })
         }
       }
     }
+
+    return run()
   }
 }
 
