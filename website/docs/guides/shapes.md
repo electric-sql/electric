@@ -31,7 +31,7 @@ A shape is a way of defining a subset of that data that you'd like to sync into 
 <figure>
   <img :src="SyncShapeSVG"
       alt="Illustration of syncing a shape"
-      style="max-width: 576px;"
+      style="width: 100%; max-width: 576px;"
   />
 </figure>
 
