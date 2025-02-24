@@ -85,8 +85,15 @@ defmodule Electric.Shapes.Shape do
       default: {Electric.Postgres.Inspector, Electric.DbPool}
     ],
     storage: [
-      type: {:or, [:map, nil]},
-      default: nil
+      type: {
+        :or,
+        [
+          nil,
+          map: [compaction: [type: {:in, [:enabled, :disabled]}, default: :enabled]]
+        ]
+      },
+      default: nil,
+      type_spec: quote(do: nil | Electric.Shapes.Shape.storage_config())
     ]
   ]
   @shape_schema NimbleOptions.new!(@schema_options)
