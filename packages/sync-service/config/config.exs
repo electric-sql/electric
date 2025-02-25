@@ -5,3 +5,6 @@ import Config
 config :sentry,
   enable_source_code_context: true,
   root_source_code_paths: [File.cwd!()]
+
+config :electric,
+  start_in_library_mode: false

@@ -633,4 +633,25 @@ defmodule Electric.Utils do
       after_fun
     )
   end
+
+  @doc """
+  Allows for optional `use`  clauses based on the existence of a module.
+
+    if Code.ensure_loaded?(Module) do
+      use Module
+    end
+
+  Doesn't work because the `use` macro is evaluated before the `if`.
+
+  See: https://github.com/elixir-lang/elixir/issues/8970
+  """
+  defmacro use_if_exists(module, use_opts \\ []) do
+    module = Macro.expand(module, __ENV__)
+
+    if Code.ensure_loaded?(module) do
+      quote do
+        use unquote(module), unquote(use_opts)
+      end
+    end
+  end
 end

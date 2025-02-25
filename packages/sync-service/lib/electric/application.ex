@@ -1,50 +1,39 @@
 defmodule Electric.Application do
+  alias Electric.StackSupervisor
   use Application
 
-  require Config
+  # require Config
 
-  @doc """
-  This callback starts the entire application, but is configured to run only when
-  this app is started on it's own, not as a library. As such, this should be the only
-  place that actually reads from `Application.get_env/2`, because it's the only context
-  where the `config/runtime.exs` is executed.
-  """
   @impl true
   def start(_type, _args) do
+    children =
+      if Application.get_env(:electric, :start_in_library_mode, true) do
+        children_library()
+      else
+        children_application()
+      end
+
+    Supervisor.start_link(children, strategy: :one_for_one, name: Electric.Supervisor)
+  end
+
+  def children_library do
+    [
+      {Registry, name: Registry.StackEvents, keys: :duplicate}
+    ]
+  end
+
+  # This is only called if :start_in_library_mode is false, which is basically
+  # only for our own Docker image, using the files in `./config`.
+  #
+  # This should be the only place that actually reads from
+  # `Application.get_env/2`, because it's the only context where the
+  # `config/runtime.exs` is executed
+  def children_application do
     :erlang.system_flag(:backtrace_depth, 50)
 
     Electric.Config.ensure_instance_id()
-    Electric.Telemetry.Sentry.add_logger_handler()
 
-    # We have "instance id" identifier as the node ID, however that's generated every runtime,
-    # so isn't stable across restarts. Our storages however scope themselves based on this stack ID
-    # so we're just hardcoding it here.
-    stack_id = Electric.Config.get_env(:provided_database_id)
-
-    storage = Electric.Config.get_env(:storage)
-
-    {kv_module, kv_fun, kv_params} =
-      Electric.Config.get_env(:persistent_kv)
-
-    persistent_kv = apply(kv_module, kv_fun, [kv_params])
-
-    router_opts = api_plug_opts()
-
-    replication_stream_id = Electric.Config.get_env(:replication_stream_id)
-    publication_name = "electric_publication_#{replication_stream_id}"
-    slot_name = "electric_slot_#{replication_stream_id}"
-
-    api_server =
-      if Electric.Config.get_env(:enable_http_api) do
-        [
-          {Bandit,
-           plug: {Electric.Plug.Router, router_opts},
-           port: Electric.Config.get_env(:service_port),
-           thousand_island_options: http_listener_options()}
-        ]
-      else
-        []
-      end
+    if Electric.telemetry_enabled?(), do: Electric.Telemetry.Sentry.add_logger_handler()
 
     # The root application supervisor starts the core global processes, including the HTTP
     # server and the database connection manager. The latter is responsible for establishing
@@ -56,33 +45,15 @@ defmodule Electric.Application do
     # and individual shape consumer process trees.
     #
     # See the moduledoc in `Electric.Connection.Supervisor` for more info.
-    children =
-      Enum.concat([
-        [
-          {Registry, name: Registry.StackEvents, keys: :duplicate},
-          {
-            Electric.StackSupervisor,
-            stack_id: stack_id,
-            stack_events_registry: Registry.StackEvents,
-            connection_opts: Electric.Config.fetch_env!(:connection_opts),
-            persistent_kv: persistent_kv,
-            replication_opts: [
-              publication_name: publication_name,
-              slot_name: slot_name,
-              slot_temporary?: Electric.Config.get_env(:replication_slot_temporary?)
-            ],
-            pool_opts: [pool_size: Electric.Config.get_env(:db_pool_size)],
-            storage: storage,
-            chunk_bytes_threshold: Electric.Config.get_env(:chunk_bytes_threshold),
-            name: Electric.StackSupervisor
-          },
-          {Electric.Telemetry.ApplicationTelemetry, []}
-        ],
-        api_server,
-        prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
-      ])
-
-    Supervisor.start_link(children, strategy: :one_for_one, name: Electric.Supervisor)
+    Enum.concat([
+      children_library(),
+      [
+        {Electric.StackSupervisor, configuration()}
+      ],
+      application_telemetry(),
+      api_server(),
+      prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
+    ])
   end
 
   @doc """
@@ -90,36 +61,108 @@ defmodule Electric.Application do
   """
   def api(opts \\ []) do
     opts
-    |> configuration_opts()
+    |> api_configuration()
     |> Electric.Shapes.Api.configure!()
   end
 
+  @doc false
   def api_plug_opts(opts \\ []) do
     opts
-    |> configuration_opts()
+    |> api_configuration()
     |> Electric.Shapes.Api.plug_opts()
   end
 
-  defp configuration_opts(opts) do
-    Enum.reduce(
-      [
-        Electric.StackSupervisor.build_shared_opts(
-          stack_id: Electric.Config.get_env(:provided_database_id),
-          stack_events_registry: Registry.StackEvents,
-          storage: Electric.Config.get_env(:storage),
-          persistent_kv: Electric.Config.get_env(:persistent_kv)
-        ),
-        [
-          long_poll_timeout: 20_000,
-          max_age: Electric.Config.get_env(:cache_max_age),
-          stale_age: Electric.Config.get_env(:cache_stale_age),
-          allow_shape_deletion: Electric.Config.get_env(:allow_shape_deletion?)
-        ],
-        opts
+  @doc false
+  # Gets a complete configuration for the `StackSupervisor` based on the passed opts
+  # plus the application configuration and the defaults.
+  def configuration(opts \\ []) do
+    replication_stream_id = get_env(opts, :replication_stream_id)
+
+    publication_name =
+      Keyword.get(opts, :publication_name, "electric_publication_#{replication_stream_id}")
+
+    slot_name = Keyword.get(opts, :slot_name, "electric_slot_#{replication_stream_id}")
+
+    Keyword.merge(
+      core_configuration(opts),
+      connection_opts: get_env!(opts, :connection_opts),
+      replication_opts: [
+        publication_name: publication_name,
+        slot_name: slot_name,
+        slot_temporary?: get_env(opts, :replication_slot_temporary?)
       ],
-      [],
-      &Keyword.merge(&2, &1)
+      pool_opts: [pool_size: get_env(opts, :db_pool_size)],
+      chunk_bytes_threshold: get_env(opts, :chunk_bytes_threshold)
     )
+  end
+
+  # Gets the API-side configuration based on the same opts + application config
+  # used for `configuration/1`
+  defp api_configuration(opts) do
+    Keyword.merge(
+      Electric.StackSupervisor.build_shared_opts(core_configuration(opts)),
+      long_poll_timeout: get_env(opts, :long_poll_timeout),
+      max_age: get_env(opts, :cache_max_age),
+      stale_age: get_env(opts, :cache_stale_age),
+      allow_shape_deletion: get_env(opts, :allow_shape_deletion?)
+    )
+  end
+
+  defp core_configuration(opts) do
+    # We have "instance id" identifier as the node ID, however that's generated every runtime,
+    # so isn't stable across restarts. Our storages however scope themselves based on this stack ID
+    # so we're just hardcoding it here.
+    stack_id = get_env(opts, :stack_id, :provided_database_id)
+
+    # Use this lazy-eval technique rather than just rely on the Electric.Config.Defaults
+    # system so that a `storage_dir` passed in opts can configure the root path
+    # for both the file storage and persistent kv. This means we can allow the
+    # user to easily set the root path for the electric data without having to
+    # get into the nitty-gritty of full storage and persistent kv
+    # configuration.
+    {kv_module, kv_fun, kv_params} =
+      get_env_lazy(opts, :persistent_kv, fn ->
+        Electric.Config.Defaults.persistent_kv(Keyword.take(opts, [:storage_dir]))
+      end)
+
+    persistent_kv = apply(kv_module, kv_fun, [kv_params])
+
+    storage =
+      get_env_lazy(opts, :storage, fn ->
+        Electric.Config.Defaults.storage(Keyword.take(opts, [:storage_dir]))
+      end)
+
+    [
+      stack_id: stack_id,
+      stack_events_registry: Registry.StackEvents,
+      persistent_kv: persistent_kv,
+      storage: storage
+    ]
+  end
+
+  defp get_env(opts, key) do
+    get_env(opts, key, key)
+  end
+
+  defp get_env(opts, overrides_key, config_key) do
+    Keyword.get_lazy(opts, overrides_key, fn -> Electric.Config.get_env(config_key) end)
+  end
+
+  defp get_env!(opts, key) do
+    get_env(opts, key) ||
+      raise ArgumentError, message: "Electric configuration missing required #{inspect(key)}"
+  end
+
+  defp get_env_lazy(opts, key, fun) do
+    Keyword.get_lazy(opts, key, fun)
+  end
+
+  defp application_telemetry do
+    if Electric.telemetry_enabled?() do
+      [{Electric.Telemetry.ApplicationTelemetry, []}]
+    else
+      []
+    end
   end
 
   defp prometheus_endpoint(nil), do: []
@@ -133,6 +176,21 @@ defmodule Electric.Application do
         thousand_island_options: http_listener_options()
       }
     ]
+  end
+
+  defp api_server do
+    if Electric.Config.get_env(:enable_http_api) do
+      router_opts = api_plug_opts()
+
+      [
+        {Bandit,
+         plug: {Electric.Plug.Router, router_opts},
+         port: Electric.Config.get_env(:service_port),
+         thousand_island_options: http_listener_options()}
+      ]
+    else
+      []
+    end
   end
 
   defp http_listener_options do

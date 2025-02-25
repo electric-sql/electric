@@ -1,6 +1,9 @@
 defmodule Electric.Plug.Router do
   use Plug.Router, copy_opts_to_assign: :config
-  use Sentry.PlugCapture
+
+  require Electric.Utils
+
+  Electric.Utils.use_if_exists(Sentry.PlugCapture)
 
   alias Electric.Plug.Utils.CORSHeaderPlug
   alias Electric.Plug.Utils.PassAssignToOptsPlug
@@ -16,7 +19,11 @@ defmodule Electric.Plug.Router do
   plug Electric.Plug.TraceContextPlug
   plug Plug.Telemetry, event_prefix: [:electric, :routing]
   plug Plug.Logger
-  plug Sentry.PlugContext
+
+  if Code.ensure_loaded?(Sentry.PlugCapture) do
+    plug Sentry.PlugContext
+  end
+
   plug :put_cors_headers
   plug :dispatch
 

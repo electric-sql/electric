@@ -15,7 +15,7 @@ defmodule Electric.PhoenixEmbeddedWeb.TodoController do
     with {:ok, %Todo{} = todo} <- Todos.create_todo(todo_params) do
       conn
       |> put_status(:created)
-      |> put_resp_header("location", ~p"/todos/#{todo}")
+      |> put_resp_header("location", ~p"/api/todos/#{todo}")
       |> put_resp_content_type("application/json")
       |> render(:show, todo: todo)
     end

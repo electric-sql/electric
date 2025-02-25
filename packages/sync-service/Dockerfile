@@ -9,13 +9,15 @@ FROM ${BUILDER_IMAGE} AS builder
 LABEL maintainer="info@electric-sql.com"
 
 RUN apt-get update -y && \
-    apt-get install -y build-essential git curl && \
-    apt-get clean && \
-    rm -f /var/lib/apt/lists/*_*
+  apt-get install -y build-essential git curl && \
+  apt-get clean && \
+  rm -f /var/lib/apt/lists/*_*
 
 RUN mix local.hex --force && mix local.rebar --force
 
-ENV MIX_ENV=prod
+ARG MIX_ENV=prod \
+  MIX_TARGET=application
+ARG ELECTRIC_VERSION
 
 WORKDIR /app
 
@@ -30,7 +32,6 @@ COPY lib /app/lib/
 COPY package.json /app/
 COPY config/*.exs /app/config/
 
-ARG ELECTRIC_VERSION
 
 RUN mix compile
 RUN mix sentry.package_source_code
@@ -39,29 +40,33 @@ RUN mix release
 FROM ${RUNNER_IMAGE} AS runner_setup
 
 RUN apt-get update -y && \
-    apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates curl && \
-    apt-get clean && \
-    rm -f /var/lib/apt/lists/*_*
+  apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates curl && \
+  apt-get clean && \
+  rm -f /var/lib/apt/lists/*_*
 
 # Set the locale
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
 
-ENV LANG=en_US.UTF-8
-ENV LANGUAGE=en_US:en
-ENV LC_ALL=en_US.UTF-8
+ENV LANG=en_US.UTF-8 \
+  LANGUAGE=en_US:en \
+  LC_ALL=en_US.UTF-8 \
+  MIX_ENV=prod \
+  MIX_TARGET=application
 
 WORKDIR "/app"
+
 RUN chown nobody /app
 
 FROM runner_setup AS runner
 
 ARG RELEASE_NAME=electric
-## Vaxine configuration via environment variables
-COPY --from=builder /app/_build/prod/rel/${RELEASE_NAME} ./
-RUN mv /app/bin/${RELEASE_NAME} /app/bin/entrypoint
 
+COPY --from=builder /app/_build/prod/rel/${RELEASE_NAME} ./
+
+RUN mv /app/bin/${RELEASE_NAME} /app/bin/entrypoint
 
 HEALTHCHECK --start-period=10s CMD curl --fail http://localhost:${ELECTRIC_PORT-3000}/v1/health || exit 1
 
 ENTRYPOINT ["/app/bin/entrypoint"]
+
 CMD ["start"]

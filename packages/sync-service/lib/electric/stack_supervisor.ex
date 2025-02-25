@@ -115,11 +115,15 @@ defmodule Electric.StackSupervisor do
                  ]
                )
 
+  def opts_schema do
+    @opts_schema
+  end
+
   def start_link(opts) do
     opts = obfuscate_password(opts)
 
     with {:ok, config} <- NimbleOptions.validate(Map.new(opts), @opts_schema) do
-      Supervisor.start_link(__MODULE__, config, Keyword.take(opts, [:name]))
+      Supervisor.start_link(__MODULE__, config, name: Keyword.get(opts, :name, __MODULE__))
     end
   end
 
@@ -278,14 +282,19 @@ defmodule Electric.StackSupervisor do
     registry_partitions =
       Keyword.get(config.tweaks, :registry_partitions, System.schedulers_online())
 
-    children = [
-      {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
-      {Registry,
-       name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
-      {Electric.Postgres.Inspector.EtsInspector, stack_id: stack_id, pool: db_pool},
-      {Electric.Connection.Supervisor, new_connection_manager_opts},
-      {Electric.Telemetry.StackTelemetry, stack_id: stack_id, storage: config.storage}
-    ]
+    children =
+      [
+        {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
+        {Registry,
+         name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
+        {Electric.Postgres.Inspector.EtsInspector, stack_id: stack_id, pool: db_pool},
+        {Electric.Connection.Supervisor, new_connection_manager_opts}
+      ] ++
+        if Electric.telemetry_enabled?(),
+          do: [
+            {Electric.Telemetry.StackTelemetry, stack_id: stack_id, storage: config.storage}
+          ],
+          else: []
 
     # Store the telemetry span attributes in the persistent term for this stack
     telemetry_span_attrs = Access.get(config, :telemetry_span_attrs, %{})

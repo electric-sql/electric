@@ -4,5 +4,9 @@ defmodule Electric.Plug.UtilityRouter do
   plug :match
   plug :dispatch
 
-  get "/metrics", do: resp(conn, 200, TelemetryMetricsPrometheus.Core.scrape())
+  if Electric.telemetry_enabled?() do
+    get "/metrics", do: resp(conn, 200, TelemetryMetricsPrometheus.Core.scrape())
+  else
+    get "/metrics", do: resp(conn, 200, "[]")
+  end
 end
