@@ -1,5 +1,16 @@
 # @core/sync-service
 
+## 1.0.0-beta.19
+
+### Patch Changes
+
+- 49dd88f: fix: Fix file corruption when doing external sort during compaction
+- f92d4b3: Fallback to replicating whole relations if publication row filtering cannot support given where clauses.
+- c444072: Allow multiple conditions in a where clause to be optimised (not just one)
+- d22e363: Fix transaction ID comparison logic to use correct modulo-2^32 arithmetic.
+- c444072: Optimise where clauses that have a condition in the form 'array_field @> array_const'
+- 8a4b0d5: Ensure shape properties are added to OTEL spans in shape requests.
+
 ## 1.0.0-beta.18
 
 ### Patch Changes
