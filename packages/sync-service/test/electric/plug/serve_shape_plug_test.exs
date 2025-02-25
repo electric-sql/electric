@@ -262,7 +262,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
 
       assert Plug.Conn.get_resp_header(conn, "etag") == [
-               "#{@test_shape_handle}:-1:#{@first_offset}"
+               ~s|"#{@test_shape_handle}:-1:#{@first_offset}"|
              ]
 
       assert Plug.Conn.get_resp_header(conn, "electric-handle") == [@test_shape_handle]
@@ -386,7 +386,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
 
       assert Plug.Conn.get_resp_header(conn, "etag") == [
-               "#{@test_shape_handle}:#{@start_offset_50}:#{next_next_offset}"
+               ~s|"#{@test_shape_handle}:#{@start_offset_50}:#{next_next_offset}"|
              ]
 
       assert Plug.Conn.get_resp_header(conn, "electric-handle") == [@test_shape_handle]
@@ -767,7 +767,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
 
       assert Plug.Conn.get_resp_header(conn, "etag") == [
-               "#{test_shape_handle}:-1:#{next_offset}"
+               ~s|"#{test_shape_handle}:-1:#{next_offset}"|
              ]
 
       assert Plug.Conn.get_resp_header(conn, "electric-handle") == [test_shape_handle]

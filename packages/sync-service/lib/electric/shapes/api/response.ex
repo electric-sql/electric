@@ -1,4 +1,5 @@
 defmodule Electric.Shapes.Api.Response do
+  alias Electric.Plug.Utils
   alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
@@ -9,8 +10,10 @@ defmodule Electric.Shapes.Api.Response do
     :handle,
     :offset,
     :shape_definition,
+    api: %Api{},
     chunked: false,
     up_to_date: false,
+    params: %Api.Params{},
     status: 200,
     trace_attrs: %{},
     body: []
@@ -19,10 +22,12 @@ defmodule Electric.Shapes.Api.Response do
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
 
   @type t() :: %__MODULE__{
+          api: Api.t(),
           handle: nil | shape_handle(),
           offset: nil | Electric.Replication.LogOffset.t(),
           shape_definition: nil | Shape.t(),
           chunked: boolean(),
+          params: Api.Params.t(),
           up_to_date: boolean(),
           status: pos_integer(),
           trace_attrs: %{optional(atom()) => term()},
@@ -35,6 +40,7 @@ defmodule Electric.Shapes.Api.Response do
         "Please ensure the shape definition is correct or omit " <>
         "the shape handle from the request to obtain a new one."
   }
+  @before_all_offset Electric.Replication.LogOffset.before_all()
 
   def shape_definition_mismatch(request) do
     error(request, @shape_definition_mismatch)
@@ -96,8 +102,11 @@ defmodule Electric.Shapes.Api.Response do
 
   defp put_resp_headers(conn, response) do
     conn
+    |> put_cache_headers(response)
+    |> put_etag_headers(response)
     |> put_location_header(response)
     |> put_shape_handle_header(response)
+    |> put_schema_header(response)
     |> put_up_to_date_header(response)
     |> put_offset_header(response)
   end
@@ -118,7 +127,7 @@ defmodule Electric.Shapes.Api.Response do
     )
   end
 
-  defp put_location_header(conn, %__MODULE__{} = _response) do
+  defp put_location_header(conn, _response) do
     conn
   end
 
@@ -126,8 +135,66 @@ defmodule Electric.Shapes.Api.Response do
     conn
   end
 
-  defp put_shape_handle_header(conn, response) do
+  defp put_shape_handle_header(conn, %__MODULE__{} = response) do
     Plug.Conn.put_resp_header(conn, "electric-handle", response.handle)
+  end
+
+  defp put_schema_header(conn, %__MODULE__{params: %{live: false}} = response) do
+    Plug.Conn.put_resp_header(
+      conn,
+      "electric-schema",
+      response |> Api.schema() |> Jason.encode!()
+    )
+  end
+
+  defp put_schema_header(conn, _response) do
+    conn
+  end
+
+  defp put_cache_headers(conn, %__MODULE__{} = response) do
+    case response do
+      # If the offset is -1, set a 1 week max-age, 1 hour s-maxage (shared cache)
+      # and 1 month stale-while-revalidate We want private caches to cache the
+      # initial offset for a long time but for shared caches to frequently
+      # revalidate so they're serving a fairly fresh copy of the initials shape
+      # log.
+      %{params: %{offset: @before_all_offset}} ->
+        conn
+        |> Plug.Conn.put_resp_header(
+          "cache-control",
+          "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746"
+        )
+
+      # For live requests we want short cache lifetimes and to update the live cursor
+      %{params: %{live: true}, api: api} ->
+        conn
+        |> Plug.Conn.put_resp_header(
+          "cache-control",
+          "public, max-age=5, stale-while-revalidate=5"
+        )
+        |> Plug.Conn.put_resp_header(
+          "electric-cursor",
+          api.long_poll_timeout
+          |> Utils.get_next_interval_timestamp(conn.query_params["cursor"])
+          |> Integer.to_string()
+        )
+
+      %{params: %{live: false}, api: api} ->
+        conn
+        |> Plug.Conn.put_resp_header(
+          "cache-control",
+          "public, max-age=#{api.max_age}, stale-while-revalidate=#{api.stale_age}"
+        )
+    end
+  end
+
+  defp put_etag_headers(conn, %{handle: nil}) do
+    conn
+  end
+
+  defp put_etag_headers(conn, %__MODULE__{} = response) do
+    # etag values should be in double quotes: https://www.rfc-editor.org/rfc/rfc7232#section-2.3
+    Plug.Conn.put_resp_header(conn, "etag", etag(response))
   end
 
   defp put_up_to_date_header(conn, %__MODULE__{up_to_date: true}) do
@@ -179,5 +246,15 @@ defmodule Electric.Shapes.Api.Response do
       end)
 
     Plug.Conn.assign(conn, :streaming_bytes_sent, bytes_sent)
+  end
+
+  def etag(%__MODULE__{handle: handle, offset: offset, params: params} = _response, opts \\ []) do
+    etag = "#{handle}:#{params.offset}:#{offset}"
+
+    if Keyword.get(opts, :quote, true) do
+      ~s|"#{etag}"|
+    else
+      etag
+    end
   end
 end

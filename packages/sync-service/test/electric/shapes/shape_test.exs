@@ -290,19 +290,19 @@ defmodule Electric.Shapes.ShapeTest do
     end
 
     test "errors on empty table name", %{inspector: inspector} do
-      {:error, {:table, ["Invalid zero-length delimited identifier"]}} =
-        Shape.new("", inspector: inspector)
+      assert {:error, {:table, ["Invalid zero-length delimited identifier"]}} =
+               Shape.new("", inspector: inspector)
     end
 
     test "errors when the table doesn't exist", %{inspector: inspector} do
-      {:error,
-       {
-         :table,
-         [
-           ~S|Table "nonexistent" does not exist. If the table name contains capitals or special characters you must quote it.|
-         ]
-       }} =
-        Shape.new("nonexistent", inspector: inspector)
+      assert {:error,
+              {
+                :table,
+                [
+                  ~S|Table "public"."nonexistent" does not exist. If the table name contains capitals or special characters you must quote it.|
+                ]
+              }} =
+               Shape.new("nonexistent", inspector: inspector)
     end
 
     @tag with_sql: [
