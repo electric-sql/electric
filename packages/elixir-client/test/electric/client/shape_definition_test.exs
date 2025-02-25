@@ -16,11 +16,15 @@ defmodule Electric.Client.ShapeDefinitionTest do
     end
   end
 
-  describe "table_name/1" do
+  describe "url_table_name/1" do
     test "quotes the name if it contains characters other than [0-9a-z_-]" do
       assert ~s|my_table29| = ShapeDefinition.url_table_name(ShapeDefinition.new!("my_table29"))
+      assert ~s|m| = ShapeDefinition.url_table_name(ShapeDefinition.new!("m"))
       assert ~s|"my table"| = ShapeDefinition.url_table_name(ShapeDefinition.new!("my table"))
       assert ~s|"MyTable"| = ShapeDefinition.url_table_name(ShapeDefinition.new!("MyTable"))
+
+      assert ~s|"99redballoons"| =
+               ShapeDefinition.url_table_name(ShapeDefinition.new!("99redballoons"))
 
       assert ~s|"My""Table"""| =
                ShapeDefinition.url_table_name(ShapeDefinition.new!(~s|My"Table"|))
@@ -44,13 +48,13 @@ defmodule Electric.Client.ShapeDefinitionTest do
       assert {:ok, shape} = ShapeDefinition.new("my_table", columns: ["id", "size", "cost"])
 
       assert ShapeDefinition.params(shape, format: :query) == %{
-               "columns" => "id,size,cost",
-               "table" => "my_table"
+               columns: "id,size,cost",
+               table: "my_table"
              }
 
       assert ShapeDefinition.params(shape) == %{
-               "columns" => "id,size,cost",
-               "table" => "my_table"
+               columns: "id,size,cost",
+               table: "my_table"
              }
     end
 
@@ -58,8 +62,8 @@ defmodule Electric.Client.ShapeDefinitionTest do
       assert {:ok, shape} = ShapeDefinition.new("my_table", columns: ["id", "size", "cost"])
 
       assert ShapeDefinition.params(shape, format: :json) == %{
-               "columns" => ["id", "size", "cost"],
-               "table" => "my_table"
+               columns: ["id", "size", "cost"],
+               table: "my_table"
              }
     end
   end

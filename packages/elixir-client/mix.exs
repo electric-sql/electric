@@ -36,28 +36,16 @@ defmodule Electric.Client.MixProject do
       {:gen_stage, "~> 1.2", optional: true},
       {:jason, "~> 1.4"},
       {:nimble_options, "~> 1.1"},
-      {:req, "~> 0.5"}
-    ] ++ deps_for(Mix.env())
-  end
-
-  defp deps_for(:test) do
-    [
+      {:req, "~> 0.5"},
       {:bypass, "~> 2.1", only: [:test]},
-      {:postgrex, "~> 0.19", only: [:test]},
+      {:postgrex, "~> 0.19", only: [:dev, :test]},
       {:postgresql_uri, "~> 0.1", only: [:test]},
       {:uuid, "~> 1.1", only: [:test]},
-      {:electric, path: "../sync-service", only: [:test]}
-    ]
-  end
-
-  defp deps_for(:dev) do
-    [
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:electric, path: "../sync-service", optional: true, only: [:dev, :test]}
     ]
   end
-
-  defp deps_for(_), do: []
 
   defp docs do
     version = version("main")

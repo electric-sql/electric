@@ -1,7 +1,6 @@
 if Code.ensure_loaded?(Electric.Shapes.Api) do
   defmodule Electric.Client.Embedded do
     alias Electric.Client.Fetch
-    alias Electric.Client.ShapeDefinition
     alias Electric.Shapes.Api
 
     @behaviour Electric.Client.Fetch
@@ -41,16 +40,16 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
       }
     end
 
-    defp request_to_params(%Fetch.Request{shape: %ShapeDefinition{} = shape} = request) do
-      %{
-        table: Electric.Utils.relation_to_sql({shape.namespace || "public", shape.table}),
-        offset: to_string(request.offset),
-        handle: request.shape_handle,
-        live: request.live,
-        where: shape.where,
-        columns: shape.columns,
-        replica: request.replica
-      }
+    defp request_to_params(%Fetch.Request{} = request) do
+      Map.merge(
+        request.params,
+        %{
+          offset: to_string(request.offset),
+          handle: request.shape_handle,
+          live: request.live,
+          replica: request.replica
+        }
+      )
     end
 
     defp convert_offset(nil) do
