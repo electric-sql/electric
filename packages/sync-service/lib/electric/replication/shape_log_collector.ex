@@ -214,11 +214,12 @@ defmodule Electric.Replication.ShapeLogCollector do
     # state = %{state | last_processed_lsn: state.last_seen_lsn}
     Logger.debug("Updating last processed lsn to #{state.last_seen_lsn}")
 
-    PersistentKV.set(
-      state.persistent_kv,
-      "#{state.stack_id}:last_processed_lsn",
-      state.last_seen_lsn
-    )
+    :ok =
+      PersistentKV.set(
+        state.persistent_kv,
+        "#{state.stack_id}:last_processed_lsn",
+        state.last_seen_lsn
+      )
 
     state
   end

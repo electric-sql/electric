@@ -15,7 +15,7 @@ defmodule Electric.PersistentKV.Filesystem do
       path = join(fs, key)
 
       case File.read(path) do
-        {:ok, data} -> {:ok, data}
+        {:ok, data} -> {:ok, :erlang.binary_to_term(data)}
         {:error, :enoent} -> {:error, :not_found}
         error -> error
       end
@@ -39,7 +39,7 @@ defmodule Electric.PersistentKV.Filesystem do
           "." <> (:crypto.strong_rand_bytes(10) |> Base.encode32(case: :lower, padding: false))
         )
 
-      with :ok <- File.write(tmp_file, data, [:binary]) do
+      with :ok <- File.write(tmp_file, :erlang.term_to_binary(data), [:binary]) do
         File.rename(tmp_file, final_path)
       end
     end
