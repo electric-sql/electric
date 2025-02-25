@@ -135,85 +135,120 @@ defmodule Electric.Shapes.FilterTest do
 
       assert Filter.affected_shapes(filter, truncation) == MapSet.new(["s1", "s2", "s3", "s4"])
     end
-  end
 
-  test "shape with no where clause is affected by all changes for the same table" do
-    shape = Shape.new!("t1", inspector: @inspector)
-    filter = Filter.new() |> Filter.add_shape("s", shape)
+    test "shape with no where clause is affected by all changes for the same table" do
+      shape = Shape.new!("t1", inspector: @inspector)
+      filter = Filter.new() |> Filter.add_shape("s", shape)
 
-    assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
-    assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new(["s"])
-    assert Filter.affected_shapes(filter, change("t2", %{"id" => "8"})) == MapSet.new([])
-  end
+      assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
+      assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new(["s"])
+      assert Filter.affected_shapes(filter, change("t2", %{"id" => "8"})) == MapSet.new([])
+    end
 
-  test "shape with a where clause is affected by changes that match that where clause" do
-    shape = Shape.new!("t1", where: "id = 7", inspector: @inspector)
-    filter = Filter.new() |> Filter.add_shape("s", shape)
+    test "shape with a where clause is affected by changes that match that where clause" do
+      shape = Shape.new!("t1", where: "id = 7", inspector: @inspector)
+      filter = Filter.new() |> Filter.add_shape("s", shape)
 
-    assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
-    assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new([])
-    assert Filter.affected_shapes(filter, change("t2", %{"id" => "8"})) == MapSet.new([])
-  end
+      assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new(["s"])
+      assert Filter.affected_shapes(filter, change("t1", %{"id" => "8"})) == MapSet.new([])
+      assert Filter.affected_shapes(filter, change("t2", %{"id" => "8"})) == MapSet.new([])
+    end
 
-  test "invalid record value logs an error and says all shapes for the table are affected" do
-    filter =
-      Filter.new()
-      |> Filter.add_shape("shape1", Shape.new!("table", inspector: @inspector))
-      |> Filter.add_shape("shape2", Shape.new!("table", where: "id = 7", inspector: @inspector))
-      |> Filter.add_shape("shape3", Shape.new!("table", where: "id = 8", inspector: @inspector))
-      |> Filter.add_shape("shape4", Shape.new!("table", where: "id > 9", inspector: @inspector))
-      |> Filter.add_shape("shape5", Shape.new!("another_table", inspector: @inspector))
+    test "invalid record value logs an error and says all shapes for the table are affected" do
+      filter =
+        Filter.new()
+        |> Filter.add_shape("shape1", Shape.new!("table", inspector: @inspector))
+        |> Filter.add_shape("shape2", Shape.new!("table", where: "id = 7", inspector: @inspector))
+        |> Filter.add_shape("shape3", Shape.new!("table", where: "id = 8", inspector: @inspector))
+        |> Filter.add_shape("shape4", Shape.new!("table", where: "id > 9", inspector: @inspector))
+        |> Filter.add_shape("shape5", Shape.new!("another_table", inspector: @inspector))
 
-    log =
-      capture_log(fn ->
-        assert Filter.affected_shapes(filter, change("table", %{"id" => "invalid_value"})) ==
-                 MapSet.new(["shape1", "shape2", "shape3", "shape4"])
-      end)
+      log =
+        capture_log(fn ->
+          assert Filter.affected_shapes(filter, change("table", %{"id" => "invalid_value"})) ==
+                   MapSet.new(["shape1", "shape2", "shape3", "shape4"])
+        end)
 
-    assert log =~ ~s(Could not parse value for field "id" of type :int8)
-  end
+      assert log =~ ~s(Could not parse value for field "id" of type :int8)
+    end
 
-  test "supports `array_field @> const_array`" do
-    shape_count = Enum.random(0..50)
-    change_array_size = Enum.random(0..10)
-    array_value_population = 5
+    test "supports `array_field @> const_array`" do
+      shape_count = Enum.random(0..50)
+      change_array_size = Enum.random(0..10)
+      array_value_population = 5
 
-    change_array =
-      Stream.repeatedly(fn -> Enum.random(1..array_value_population) end)
-      |> Enum.take(change_array_size)
-
-    shape_arrays =
-      Stream.repeatedly(fn ->
-        shape_array_size = Enum.random(0..3)
-
+      change_array =
         Stream.repeatedly(fn -> Enum.random(1..array_value_population) end)
-        |> Enum.take(shape_array_size)
-      end)
-      |> Enum.take(shape_count)
+        |> Enum.take(change_array_size)
 
-    filter =
-      shape_arrays
-      |> Enum.reduce(Filter.new(), fn shape_array, filter ->
-        Filter.add_shape(
-          filter,
-          shape_array,
-          Shape.new!("t1",
-            where: "an_array @> '{#{Enum.join(shape_array, ",")}}'",
-            inspector: @inspector
+      shape_arrays =
+        Stream.repeatedly(fn ->
+          shape_array_size = Enum.random(0..3)
+
+          Stream.repeatedly(fn -> Enum.random(1..array_value_population) end)
+          |> Enum.take(shape_array_size)
+        end)
+        |> Enum.take(shape_count)
+
+      filter =
+        shape_arrays
+        |> Enum.reduce(Filter.new(), fn shape_array, filter ->
+          Filter.add_shape(
+            filter,
+            shape_array,
+            Shape.new!("t1",
+              where: "an_array @> '{#{Enum.join(shape_array, ",")}}'",
+              inspector: @inspector
+            )
           )
-        )
-      end)
+        end)
 
-    change = change("t1", %{"an_array" => "{#{change_array |> Enum.join(", ")}}"})
+      change = change("t1", %{"an_array" => "{#{change_array |> Enum.join(", ")}}"})
 
-    expected_affected_shapes =
-      shape_arrays
-      |> Enum.filter(fn shape_array ->
-        shape_array |> MapSet.new() |> MapSet.subset?(MapSet.new(change_array))
-      end)
-      |> MapSet.new()
+      expected_affected_shapes =
+        shape_arrays
+        |> Enum.filter(fn shape_array ->
+          shape_array |> MapSet.new() |> MapSet.subset?(MapSet.new(change_array))
+        end)
+        |> MapSet.new()
 
-    assert Filter.affected_shapes(filter, change) == expected_affected_shapes
+      assert Filter.affected_shapes(filter, change) == expected_affected_shapes
+    end
+
+    for test <- [
+          %{where: "id = 7", record: %{"id" => "7"}, affected: true},
+          %{where: "id = 7", record: %{"id" => "8"}, affected: false},
+          %{where: "id = 7", record: %{"id" => nil}, affected: false},
+          %{where: "7 = id", record: %{"id" => "7"}, affected: true},
+          %{where: "7 = id", record: %{"id" => "8"}, affected: false},
+          %{where: "7 = id", record: %{"id" => nil}, affected: false},
+          %{where: "id = 7 AND id > 1", record: %{"id" => "7"}, affected: true},
+          %{where: "id = 7 AND id > 1", record: %{"id" => "8"}, affected: false},
+          %{where: "id = 7 AND id > 8", record: %{"id" => "7"}, affected: false},
+          %{where: "id > 1 AND id = 7", record: %{"id" => "7"}, affected: true},
+          %{where: "id > 1 AND id = 7", record: %{"id" => "8"}, affected: false},
+          %{where: "id > 8 AND id = 7", record: %{"id" => "7"}, affected: false},
+          %{where: "an_array = '{1}'", record: %{"an_array" => "{1}"}, affected: true},
+          %{where: "an_array = '{1}'", record: %{"an_array" => "{2}"}, affected: false},
+          %{where: "an_array = '{1}'", record: %{"an_array" => "{1,2}"}, affected: false},
+          %{where: "an_array @> '{1}'", record: %{"an_array" => "{1,2}"}, affected: true},
+          %{where: "an_array @> '{1,3}'", record: %{"an_array" => "{1,2}"}, affected: false},
+          %{where: "an_array @> '{1,3}'", record: %{"an_array" => "{1,3}"}, affected: true},
+          %{where: "an_array @> '{}'", record: %{"an_array" => "{1,3}"}, affected: true},
+          %{where: "an_array @> '{}'", record: %{"an_array" => "{}"}, affected: true}
+        ] do
+      test "where: #{test.where}, record: #{inspect(test.record)}" do
+        %{where: where, record: record, affected: affected} = unquote(Macro.escape(test))
+
+        shape = Shape.new!("the_table", where: where, inspector: @inspector)
+
+        transaction = change("the_table", record)
+
+        assert Filter.new()
+               |> Filter.add_shape("the-shape", shape)
+               |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"]) == affected
+      end
+    end
   end
 
   test "Filter.remove_shape/2" do
@@ -241,41 +276,6 @@ defmodule Electric.Shapes.FilterTest do
 
       filter_with_shape_added
     end)
-  end
-
-  for test <- [
-        %{where: "id = 7", record: %{"id" => "7"}, affected: true},
-        %{where: "id = 7", record: %{"id" => "8"}, affected: false},
-        %{where: "id = 7", record: %{"id" => nil}, affected: false},
-        %{where: "7 = id", record: %{"id" => "7"}, affected: true},
-        %{where: "7 = id", record: %{"id" => "8"}, affected: false},
-        %{where: "7 = id", record: %{"id" => nil}, affected: false},
-        %{where: "id = 7 AND id > 1", record: %{"id" => "7"}, affected: true},
-        %{where: "id = 7 AND id > 1", record: %{"id" => "8"}, affected: false},
-        %{where: "id = 7 AND id > 8", record: %{"id" => "7"}, affected: false},
-        %{where: "id > 1 AND id = 7", record: %{"id" => "7"}, affected: true},
-        %{where: "id > 1 AND id = 7", record: %{"id" => "8"}, affected: false},
-        %{where: "id > 8 AND id = 7", record: %{"id" => "7"}, affected: false},
-        %{where: "an_array = '{1}'", record: %{"an_array" => "{1}"}, affected: true},
-        %{where: "an_array = '{1}'", record: %{"an_array" => "{2}"}, affected: false},
-        %{where: "an_array = '{1}'", record: %{"an_array" => "{1,2}"}, affected: false},
-        %{where: "an_array @> '{1}'", record: %{"an_array" => "{1,2}"}, affected: true},
-        %{where: "an_array @> '{1,3}'", record: %{"an_array" => "{1,2}"}, affected: false},
-        %{where: "an_array @> '{1,3}'", record: %{"an_array" => "{1,3}"}, affected: true},
-        %{where: "an_array @> '{}'", record: %{"an_array" => "{1,3}"}, affected: true},
-        %{where: "an_array @> '{}'", record: %{"an_array" => "{}"}, affected: true}
-      ] do
-    test "where: #{test.where}, record: #{inspect(test.record)}" do
-      %{where: where, record: record, affected: affected} = unquote(Macro.escape(test))
-
-      shape = Shape.new!("the_table", where: where, inspector: @inspector)
-
-      transaction = change("the_table", record)
-
-      assert Filter.new()
-             |> Filter.add_shape("the-shape", shape)
-             |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"]) == affected
-    end
   end
 
   describe "optimisations" do
