@@ -12,7 +12,7 @@ defmodule Electric.Client.Authenticator.MockAuthenticator do
   @header "electric-mock-auth"
 
   def authenticate_request(request, config) do
-    put_request_params(request, shape_hash(request.shape, config))
+    put_request_params(request, shape_hash(request.params, config))
   end
 
   def authenticate_shape(shape, config) do
@@ -21,8 +21,8 @@ defmodule Electric.Client.Authenticator.MockAuthenticator do
     |> auth_headers()
   end
 
-  defp shape_hash(shape, config) do
-    auth_hash([:namespace, :table, :columns, :where], shape, config)
+  defp shape_hash(params, config) do
+    auth_hash([:table, :columns, :where], params, config)
   end
 
   defp put_request_params(request, hash) do
@@ -33,9 +33,9 @@ defmodule Electric.Client.Authenticator.MockAuthenticator do
     Map.put(base, @header, hash)
   end
 
-  defp auth_hash(keys, struct, config) do
+  defp auth_hash(keys, params, config) do
     keys
-    |> Enum.map(&Map.fetch!(struct, &1))
+    |> Enum.map(&Map.get(params, &1, nil))
     |> Enum.map(&to_string/1)
     |> Enum.concat(List.wrap(config[:salt]))
     |> Enum.join(@joiner)
