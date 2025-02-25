@@ -187,12 +187,19 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
       end
     end
 
-    def all_shapes(%InclusionIndex{}) do
-      # for {_value, condition} <- values,
-      #     {shape_id, shape} <- WhereCondition.all_shapes(condition),
-      #     into: %{} do
-      #   {shape_id, shape}
-      # end
+    def all_shapes(%InclusionIndex{value_tree: value_tree}), do: all_shapes_in_tree(value_tree)
+
+    defp all_shapes_in_tree(node) do
+      Map.merge(all_shapes_in_node(node), all_shapes_in_children(node))
+    end
+
+    defp all_shapes_in_node(%{condition: condition}), do: WhereCondition.all_shapes(condition)
+    defp all_shapes_in_node(_), do: %{}
+
+    defp all_shapes_in_children(node) do
+      Enum.reduce(node.keys, %{}, fn key, shapes ->
+        Map.merge(shapes, all_shapes_in_tree(node[key]))
+      end)
     end
 
     # Union two sets, treating `nil` as an empty set.

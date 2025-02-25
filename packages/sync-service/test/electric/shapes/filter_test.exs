@@ -92,14 +92,19 @@ defmodule Electric.Shapes.FilterTest do
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id > 7", inspector: @inspector))
         |> Filter.add_shape("s4", Shape.new!("t1", where: "id > 8", inspector: @inspector))
-        |> Filter.add_shape("s5", Shape.new!("t2", where: "id = 1", inspector: @inspector))
-        |> Filter.add_shape("s6", Shape.new!("t2", where: "id = 2", inspector: @inspector))
-        |> Filter.add_shape("s7", Shape.new!("t2", where: "id > 7", inspector: @inspector))
-        |> Filter.add_shape("s8", Shape.new!("t2", where: "id > 8", inspector: @inspector))
+        |> Filter.add_shape(
+          "s5",
+          Shape.new!("t1", where: "an_array @> '{1,2}'", inspector: @inspector)
+        )
+        |> Filter.add_shape("s6", Shape.new!("t2", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape("s7", Shape.new!("t2", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape("s8", Shape.new!("t2", where: "id > 7", inspector: @inspector))
+        |> Filter.add_shape("s9", Shape.new!("t2", where: "id > 8", inspector: @inspector))
 
       relation = %Relation{schema: "public", table: "t1"}
 
-      assert Filter.affected_shapes(filter, relation) == MapSet.new(["s1", "s2", "s3", "s4"])
+      assert Filter.affected_shapes(filter, relation) ==
+               MapSet.new(["s1", "s2", "s3", "s4", "s5"])
     end
 
     test "returns shapes affected by relation rename" do
