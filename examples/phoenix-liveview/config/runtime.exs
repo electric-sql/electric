@@ -101,4 +101,23 @@ if config_env() == :prod do
     base_url:
       System.get_env("ELECTRIC_URL") || raise("ELECTRIC_URL environment variable not set"),
     params: System.get_env("ELECTRIC_CLIENT_PARAMS", "{}") |> :json.decode()
+
+  config :sentry,
+    environment_name: config_env(),
+    client: Electric.Telemetry.SentryReqHTTPClient
+
+  connection_opts = Electric.Config.parse_postgresql_uri!(database_url)
+
+  config :electric,
+    connection_opts: Electric.Utils.obfuscate_password(connection_opts),
+    # enable the http api so that the client tests against a real endpoint can
+    # run against our embedded electric instance.
+    enable_http_api: false,
+    service_port: port,
+    allow_shape_deletion?: false,
+    # use a non-default replication stream id so we can run the client
+    # tests at the same time as an active electric instance
+    replication_stream_id: "liveview_example",
+    storage_dir:
+      Path.join(System.tmp_dir!(), "electric/liveview_example#{System.monotonic_time()}")
 end

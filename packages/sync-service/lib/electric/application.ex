@@ -28,21 +28,7 @@ defmodule Electric.Application do
 
     persistent_kv = apply(kv_module, kv_fun, [kv_params])
 
-    router_opts =
-      Electric.Shapes.Api.plug_opts(
-        [
-          long_poll_timeout: 20_000,
-          max_age: Electric.Config.get_env(:cache_max_age),
-          stale_age: Electric.Config.get_env(:cache_stale_age),
-          allow_shape_deletion: Electric.Config.get_env(:allow_shape_deletion?)
-        ] ++
-          Electric.StackSupervisor.build_shared_opts(
-            stack_id: stack_id,
-            stack_events_registry: Registry.StackEvents,
-            storage: storage,
-            persistent_kv: persistent_kv
-          )
-      )
+    router_opts = api_plug_opts()
 
     replication_stream_id = Electric.Config.get_env(:replication_stream_id)
     publication_name = "electric_publication_#{replication_stream_id}"
@@ -112,29 +98,38 @@ defmodule Electric.Application do
   @doc """
   Returns a configured Electric.Shapes.Api instance
   """
-  def api(overrides \\ []) do
-    config =
-      Enum.reduce(
-        [
-          Electric.StackSupervisor.build_shared_opts(
-            stack_id: Electric.Config.get_env(:provided_database_id),
-            stack_events_registry: Registry.StackEvents,
-            storage: Electric.Config.get_env(:storage),
-            persistent_kv: Electric.Config.get_env(:persistent_kv)
-          ),
-          [
-            long_poll_timeout: 20_000,
-            max_age: Electric.Config.get_env(:cache_max_age),
-            stale_age: Electric.Config.get_env(:cache_stale_age),
-            allow_shape_deletion: Electric.Config.get_env(:allow_shape_deletion?)
-          ],
-          overrides
-        ],
-        [],
-        &Keyword.merge(&2, &1)
-      )
+  def api(opts \\ []) do
+    opts
+    |> configuration_opts()
+    |> Electric.Shapes.Api.configure!()
+  end
 
-    Electric.Shapes.Api.configure!(config)
+  def api_plug_opts(opts \\ []) do
+    opts
+    |> configuration_opts()
+    |> Electric.Shapes.Api.plug_opts()
+  end
+
+  defp configuration_opts(opts) do
+    Enum.reduce(
+      [
+        Electric.StackSupervisor.build_shared_opts(
+          stack_id: Electric.Config.get_env(:provided_database_id),
+          stack_events_registry: Registry.StackEvents,
+          storage: Electric.Config.get_env(:storage),
+          persistent_kv: Electric.Config.get_env(:persistent_kv)
+        ),
+        [
+          long_poll_timeout: 20_000,
+          max_age: Electric.Config.get_env(:cache_max_age),
+          stale_age: Electric.Config.get_env(:cache_stale_age),
+          allow_shape_deletion: Electric.Config.get_env(:allow_shape_deletion?)
+        ],
+        opts
+      ],
+      [],
+      &Keyword.merge(&2, &1)
+    )
   end
 
   defp prometheus_endpoint(nil), do: []

@@ -7,6 +7,8 @@ defmodule Electric.PhoenixExample.Application do
 
   @impl true
   def start(_type, _args) do
+    electric_config = Electric.Application.api_config()
+
     children = [
       Electric.PhoenixExampleWeb.Telemetry,
       Electric.PhoenixExample.Repo,
@@ -16,7 +18,7 @@ defmodule Electric.PhoenixExample.Application do
       # Start a worker by calling: Electric.PhoenixExample.Worker.start_link(arg)
       # {Electric.PhoenixExample.Worker, arg},
       # Start to serve requests, typically the last entry
-      Electric.PhoenixExampleWeb.Endpoint
+      {Electric.PhoenixExampleWeb.Endpoint, electric: electric_config}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
