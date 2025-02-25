@@ -7,13 +7,15 @@ defmodule Electric.Config.Defaults do
   # functions are used instead.
 
   @doc false
-  def storage do
-    {Electric.ShapeCache.FileStorage, storage_dir: storage_dir("shapes")}
+  def storage(opts \\ []) do
+    storage_dir = Keyword.get_lazy(opts, :storage_dir, fn -> storage_dir("shapes") end)
+    {Electric.ShapeCache.FileStorage, storage_dir: storage_dir}
   end
 
   @doc false
-  def persistent_kv do
-    {Electric.PersistentKV.Filesystem, :new!, root: storage_dir("state")}
+  def persistent_kv(opts \\ []) do
+    storage_dir = Keyword.get_lazy(opts, :storage_dir, fn -> storage_dir("state") end)
+    {Electric.PersistentKV.Filesystem, :new!, root: storage_dir}
   end
 
   defp storage_dir(sub_dir) do
@@ -37,8 +39,9 @@ defmodule Electric.Config do
     replication_stream_id: "default",
     replication_slot_temporary?: false,
     ## HTTP API
-    # set enable_http_api: false to turn of the HTTP server totally
+    # set enable_http_api: false to turn off the HTTP server totally
     enable_http_api: true,
+    long_poll_timeout: 20_000,
     cache_max_age: 60,
     cache_stale_age: 60 * 5,
     chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
