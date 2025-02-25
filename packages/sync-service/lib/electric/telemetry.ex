@@ -26,7 +26,6 @@ defmodule Electric.Telemetry do
     defp include_wity_telemetry(env, module, block, else_block) do
       modules = List.wrap(module) |> Enum.map(&Macro.expand(&1, env))
       available? = Enum.all?(modules, &Code.ensure_loaded?/1)
-      dbg({modules, available?})
 
       if available? do
         quote(do: unquote(block))

@@ -4,6 +4,7 @@ ARG DEBIAN_VERSION=bookworm-20241223-slim
 
 ARG BUILDER_IMAGE="hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}"
 ARG RUNNER_IMAGE="debian:${DEBIAN_VERSION}"
+ARG MIX_TARGET=application
 
 FROM ${BUILDER_IMAGE} AS builder
 LABEL maintainer="info@electric-sql.com"
@@ -15,9 +16,9 @@ RUN apt-get update -y && \
 
 RUN mix local.hex --force && mix local.rebar --force
 
-ARG MIX_ENV=prod \
-  MIX_TARGET=application
+ARG MIX_ENV=prod
 ARG ELECTRIC_VERSION
+ARG MIX_TARGET
 
 WORKDIR /app
 
@@ -36,6 +37,8 @@ COPY config/*.exs /app/config/
 RUN mix compile
 RUN mix sentry.package_source_code
 RUN mix release
+
+RUN ls -l /app/_build
 
 FROM ${RUNNER_IMAGE} AS runner_setup
 
@@ -59,9 +62,11 @@ RUN chown nobody /app
 
 FROM runner_setup AS runner
 
+ARG MIX_TARGET
 ARG RELEASE_NAME=electric
 
-COPY --from=builder /app/_build/prod/rel/${RELEASE_NAME} ./
+
+COPY --from=builder "/app/_build/${MIX_TARGET}_prod/rel/${RELEASE_NAME}" ./
 
 RUN mv /app/bin/${RELEASE_NAME} /app/bin/entrypoint
 

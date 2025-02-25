@@ -32,7 +32,6 @@ defmodule Electric.Application do
     Electric.Config.ensure_instance_id()
 
     if Code.ensure_loaded?(Electric.Telemetry.Sentry) do
-      dbg(Electric.Telemetry.Sentry)
       Electric.Telemetry.Sentry.add_logger_handler()
     end
 
@@ -51,7 +50,7 @@ defmodule Electric.Application do
       [
         {Electric.StackSupervisor, configuration()}
       ],
-      application_telemetry() |> dbg,
+      application_telemetry(),
       api_server(),
       prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
     ])
