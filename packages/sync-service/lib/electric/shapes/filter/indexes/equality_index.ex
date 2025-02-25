@@ -21,31 +21,20 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
     def empty?(%EqualityIndex{values: values}), do: values == %{}
 
     def add_shape(%EqualityIndex{} = index, value, {shape_id, shape}, and_where) do
-      %{
-        index
-        | values:
-            Map.update(
-              index.values,
-              value,
-              WhereCondition.add_shape(WhereCondition.new(), {shape_id, shape}, and_where),
-              fn condition ->
-                WhereCondition.add_shape(condition, {shape_id, shape}, and_where)
-              end
-            )
-      }
+      index.values
+      |> Map.put_new(value, WhereCondition.new())
+      |> Map.update!(value, &WhereCondition.add_shape(&1, {shape_id, shape}, and_where))
+      |> then(&%{index | values: &1})
     end
 
     def remove_shape(%EqualityIndex{} = index, shape_id) do
-      %{
-        index
-        | values:
-            index.values
-            |> Map.new(fn {value, condition} ->
-              {value, WhereCondition.remove_shape(condition, shape_id)}
-            end)
-            |> Enum.reject(fn {_table, condition} -> WhereCondition.empty?(condition) end)
-            |> Map.new()
-      }
+      index.values
+      |> Enum.map(fn {value, condition} ->
+        {value, WhereCondition.remove_shape(condition, shape_id)}
+      end)
+      |> Enum.reject(fn {_table, condition} -> WhereCondition.empty?(condition) end)
+      |> Map.new()
+      |> then(&%{index | values: &1})
     end
 
     def affected_shapes(%EqualityIndex{values: values, type: type}, field, record) do
