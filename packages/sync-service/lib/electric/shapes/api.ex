@@ -13,7 +13,7 @@ defmodule Electric.Shapes.Api do
 
   @options [
     inspector: [type: :mod_arg, required: true],
-    pg_id: [type: :string],
+    pg_id: [type: {:or, [nil, :string]}],
     registry: [type: :atom, required: true],
     shape_cache: [type: :mod_arg, required: true],
     stack_events_registry: [type: :atom, required: true],
@@ -40,6 +40,7 @@ defmodule Electric.Shapes.Api do
     :pg_id,
     :registry,
     :persistent_kv,
+    :shape,
     :shape_cache,
     :stack_events_registry,
     :stack_id,
@@ -105,19 +106,60 @@ defmodule Electric.Shapes.Api do
   end
 
   defp validate_encoder!(%Api{} = api) do
-    Map.update!(api, :encoder, &Electric.Shapes.Api.Encoder.validate!/1)
+    Map.update!(api, :encoder, &Shapes.Api.Encoder.validate!/1)
+  end
+
+  shape_schema_options =
+    Keyword.merge(Keyword.drop(Shapes.Shape.schema_options(), [:inspector]),
+      table: [type: :string],
+      schema: [type: :string],
+      namespace: [type: :string]
+    )
+
+  shape_schema = NimbleOptions.new!(shape_schema_options)
+
+  @type shape_opts() :: [unquote(NimbleOptions.option_typespec(shape_schema))]
+
+  @doc """
+  Create a version of the given configured Api instance that is specific to the
+  given shape.
+
+  This allows you to provide a locked-down version of the API that ignores
+  shape-definition parameters such as `table`, `where` and `columns` and only
+  honours the shape-tailing parameters such as `offset` and `handle`.
+  """
+  @spec predefined_shape(t(), shape_opts()) :: {:ok, t()} | {:error, term()}
+  def predefined_shape(%Api{} = api, shape_params) do
+    with {:ok, params} <- normalise_shape_params(shape_params),
+         opts = Keyword.merge(params, inspector: api.inspector),
+         {:ok, shape} <- Shapes.Shape.new(opts) do
+      {:ok, %{api | shape: shape}}
+    end
+  end
+
+  defp normalise_shape_params(params) do
+    case Keyword.fetch(params, :relation) do
+      {:ok, {n, t}} when is_binary(n) and is_binary(t) ->
+        {:ok, params}
+
+      :error ->
+        {table_params, shape_params} = Keyword.split(params, [:table, :namespace, :schema])
+
+        case {table_params[:table], table_params[:namespace] || table_params[:schema]} do
+          {nil, nil} ->
+            {:error, "No relation or table specified"}
+
+          {table, nil} when is_binary(table) ->
+            {:ok, Keyword.put(shape_params, :relation, {"public", table})}
+
+          {table, namespace} ->
+            {:ok, Keyword.put(shape_params, :relation, {namespace, table})}
+        end
+    end
   end
 
   @doc """
   Validate the parameters for the request.
-
-  Options:
-
-  - `seek: boolean()` - (default: true) once validated should we load the shape's
-    latest offset information.
-
-  - `load: boolean()` - (default: true) validate and optionallly create a shape
-    based on the handle and shape parameters.
   """
   @spec validate(t(), %{(atom() | binary()) => term()}) ::
           {:ok, Request.t()} | {:error, Response.t()}
@@ -139,9 +181,15 @@ defmodule Electric.Shapes.Api do
 
   defp validate_params(api, params) do
     with {:ok, request_params} <- Api.Params.validate(api, params) do
-      request_for_params(api, request_params, %Response{
-        shape_definition: request_params.shape_definition
-      })
+      request_for_params(
+        api,
+        request_params,
+        %Response{
+          api: api,
+          params: request_params,
+          shape_definition: request_params.shape_definition
+        }
+      )
     end
   end
 
@@ -350,6 +398,39 @@ defmodule Electric.Shapes.Api do
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
       do_serve_shape_log(request)
     end)
+  end
+
+  def serve_shape_log(%Plug.Conn{} = conn, %Request{} = request) do
+    response =
+      case if_not_modified(conn, request) do
+        {:halt, response} ->
+          response
+
+        {:cont, request} ->
+          serve_shape_log(request)
+      end
+
+    conn
+    |> Plug.Conn.assign(:response, response)
+    |> Response.send(response)
+  end
+
+  def if_not_modified(conn, request) do
+    etag = Response.etag(request.response, quote: false)
+
+    if etag in if_none_match(conn) do
+      %{response: response} = Request.update_response(request, &%{&1 | status: 304, body: []})
+      {:halt, response}
+    else
+      {:cont, request}
+    end
+  end
+
+  defp if_none_match(%Plug.Conn{} = conn) do
+    Plug.Conn.get_req_header(conn, "if-none-match")
+    |> Enum.flat_map(&String.split(&1, ","))
+    |> Enum.map(&String.trim/1)
+    |> Enum.map(&String.trim(&1, <<?">>))
   end
 
   defp validate_serve_usage!(request) do

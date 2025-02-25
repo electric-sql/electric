@@ -72,26 +72,52 @@ defmodule Electric.Shapes.Shape do
       when is_nil(relation) or is_map_key(table_info, relation),
       do: Map.fetch!(table_info, relation || root_table).pk
 
-  @shape_schema NimbleOptions.new!(
-                  where: [type: {:or, [:string, nil]}],
-                  columns: [type: {:or, [{:list, :string}, nil]}],
-                  replica: [
-                    type: {:custom, __MODULE__, :verify_replica, []},
-                    default: :default
-                  ],
-                  inspector: [
-                    type: :mod_arg,
-                    default: {Electric.Postgres.Inspector, Electric.DbPool}
-                  ],
-                  storage: [
-                    type: {:or, [:map, nil]},
-                    default: nil
-                  ]
-                )
-  def new(table, opts) do
+  @schema_options [
+    relation: [type: {:tuple, [:string, :string]}, required: true],
+    where: [type: {:or, [:string, nil]}],
+    columns: [type: {:or, [{:list, :string}, nil]}],
+    replica: [
+      type: {:custom, __MODULE__, :verify_replica, []},
+      default: :default
+    ],
+    inspector: [
+      type: :mod_arg,
+      default: {Electric.Postgres.Inspector, Electric.DbPool}
+    ],
+    storage: [
+      type: {
+        :or,
+        [
+          nil,
+          map: [compaction: [type: {:in, [:enabled, :disabled]}, default: :enabled]]
+        ]
+      },
+      default: nil,
+      type_spec: quote(do: nil | Electric.Shapes.Shape.storage_config())
+    ]
+  ]
+  @shape_schema NimbleOptions.new!(@schema_options)
+
+  def schema_options do
+    @schema_options
+  end
+
+  def new(table, opts) when is_binary(table) and is_list(opts) do
+    case Electric.Postgres.Identifiers.parse_relation(table) do
+      {:ok, relation} ->
+        opts
+        |> Keyword.put(:relation, relation)
+        |> new()
+
+      {:error, reason} ->
+        {:error, {:table, [reason]}}
+    end
+  end
+
+  def new(opts) when is_list(opts) or is_map(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @shape_schema),
          inspector <- Access.fetch!(opts, :inspector),
-         {:ok, relation} <- validate_table(table, inspector),
+         {:ok, relation} <- validate_relation(opts, inspector),
          %{relation: table, relation_id: relation_id} <- relation,
          {:ok, column_info, pk_cols} <- load_column_info(table, inspector),
          {:ok, selected_columns} <-
@@ -169,19 +195,20 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  defp validate_table(table, inspector) when is_binary(table) do
+  defp validate_relation(opts, inspector) do
+    relation = Keyword.fetch!(opts, :relation)
+
     # Parse identifier locally first to avoid hitting PG for invalid tables
-    with {:ok, _} <- Electric.Postgres.Identifiers.parse_relation(table),
-         {:ok, rel} <- Inspector.load_relation(table, inspector) do
+    with {:ok, rel} <- Inspector.load_relation(relation, inspector) do
       {:ok, rel}
     else
       {:error, err} ->
         case Regex.run(~r/.+ relation "(?<name>.+)" does not exist/, err, capture: :all_names) do
-          [table_name] ->
+          [_table_name] ->
             {:error,
              {:table,
               [
-                ~s|Table "#{table_name}" does not exist. If the table name contains capitals or special characters you must quote it.|
+                ~s|Table #{Electric.Utils.inspect_relation(relation)} does not exist. If the table name contains capitals or special characters you must quote it.|
               ]}}
 
           _ ->

@@ -95,7 +95,7 @@ defmodule Electric.Plug.RouterTest do
       assert %{
                "errors" => %{
                  "table" => [
-                   ~s|Table "nonexistent" does not exist. If the table name contains capitals or special characters you must quote it.|
+                   ~s|Table "public"."nonexistent" does not exist. If the table name contains capitals or special characters you must quote it.|
                  ]
                }
              } = Jason.decode!(conn.resp_body)

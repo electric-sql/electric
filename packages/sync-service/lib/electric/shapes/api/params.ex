@@ -56,11 +56,11 @@ defmodule Electric.Shapes.Api.Params do
   def validate(%Electric.Shapes.Api{} = api, params) do
     params
     |> cast_params()
-    |> validate_required([:table, :offset])
+    |> validate_required([:offset])
     |> cast_offset()
     |> validate_handle_with_offset()
     |> validate_live_with_offset()
-    |> cast_root_table(inspector: api.inspector)
+    |> cast_root_table(api)
     |> apply_action(:validate)
     |> convert_error(api)
   end
@@ -77,7 +77,7 @@ defmodule Electric.Shapes.Api.Params do
       %{changes: %{table: _table}} = changeset ->
         changeset
         |> validate_required([:table])
-        |> cast_root_table(inspector: api.inspector)
+        |> cast_root_table(api)
         |> apply_action(:validate)
         |> convert_error(api)
 
@@ -151,7 +151,21 @@ defmodule Electric.Shapes.Api.Params do
 
   def cast_root_table(%Ecto.Changeset{valid?: false} = changeset, _), do: changeset
 
-  def cast_root_table(%Ecto.Changeset{} = changeset, opts) do
+  def cast_root_table(%Ecto.Changeset{} = changeset, %Api{shape: nil} = api) do
+    changeset
+    |> validate_required([:table])
+    |> define_shape(api)
+  end
+
+  def cast_root_table(%Ecto.Changeset{} = changeset, %Api{shape: %Shape{} = shape}) do
+    put_change(changeset, :shape_definition, shape)
+  end
+
+  defp define_shape(%Ecto.Changeset{valid?: false} = changeset, _api) do
+    changeset
+  end
+
+  defp define_shape(%Ecto.Changeset{} = changeset, api) do
     table = fetch_change!(changeset, :table)
     where = fetch_field!(changeset, :where)
     columns = get_change(changeset, :columns, nil)
@@ -160,16 +174,14 @@ defmodule Electric.Shapes.Api.Params do
 
     case Shape.new(
            table,
-           opts ++
-             [
-               where: where,
-               columns: columns,
-               replica: replica,
-               storage: %{compaction: if(compaction_enabled?, do: :enabled, else: :disabled)}
-             ]
+           where: where,
+           columns: columns,
+           replica: replica,
+           inspector: api.inspector,
+           storage: %{compaction: if(compaction_enabled?, do: :enabled, else: :disabled)}
          ) do
-      {:ok, result} ->
-        put_change(changeset, :shape_definition, result)
+      {:ok, shape} ->
+        put_change(changeset, :shape_definition, shape)
 
       {:error, {field, reasons}} ->
         Enum.reduce(List.wrap(reasons), changeset, fn
