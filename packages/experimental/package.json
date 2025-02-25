@@ -6,10 +6,8 @@
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"
   },
-  "dependencies": {
-    "@electric-sql/client": "workspace:*"
-  },
   "devDependencies": {
+    "@electric-sql/client": "workspace:*",
     "@types/pg": "^8.11.6",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
@@ -26,6 +24,14 @@
     "typescript": "^5.5.2",
     "uuid": "^10.0.0",
     "vitest": "^2.0.2"
+  },
+  "peerDependencies": {
+    "@electric-sql/client": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@electric-sql/client": {
+      "optional": false
+    }
   },
   "exports": {
     "./package.json": "./package.json",
