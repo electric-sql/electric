@@ -2,10 +2,11 @@ defmodule Electric.Telemetry do
   require Logger
 
   # We need to test first if we're in the telemetry-enabled target
-  # Mix.target() == Electric.MixProject.telemetry_target()
-  @telemetry_enabled? true
+  @telemetry_enabled? Mix.target() == Electric.MixProject.telemetry_target()
 
-  Logger.info("Compiling electric with telemetry_enabled: #{@telemetry_enabled?}")
+  Logger.info(
+    "Compiling electric with telemetry #{if(@telemetry_enabled?, do: "ON", else: "OFF")}"
+  )
 
   defmacro __using__(_opts) do
     quote do
