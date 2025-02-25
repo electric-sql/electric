@@ -1,4 +1,6 @@
-if Electric.telemetry_enabled?() do
+use Electric.Telemetry
+
+with_telemetry Telemetry.Metrics do
   defmodule Electric.Telemetry.CallHomeReporter do
     @moduledoc """
     Reporter that collects runtime telemetry information and sends it to a configured
@@ -7,7 +9,9 @@ if Electric.telemetry_enabled?() do
     """
 
     use GenServer
+
     require Logger
+
     alias Telemetry.Metrics
 
     @type metric :: Telemetry.Metrics.t()

@@ -1,4 +1,6 @@
-if Electric.telemetry_enabled?() do
+use Electric.Telemetry
+
+with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
   defmodule Electric.Telemetry.StackTelemetry do
     @moduledoc """
     Collects and exports stack level telemetry such as database and shape metrics.

@@ -1,4 +1,6 @@
-if Electric.telemetry_enabled?() do
+use Electric.Telemetry
+
+with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
   # if Application.compile_env(:electric, :telemetry, false) do
   defmodule Electric.Telemetry.ApplicationTelemetry do
     @moduledoc """

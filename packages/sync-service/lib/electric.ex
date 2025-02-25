@@ -133,11 +133,4 @@ defmodule Electric do
   def version do
     @current_vsn
   end
-
-  @telemetry_enabled? Mix.target() == Electric.MixProject.telemetry_target()
-
-  @spec telemetry_enabled?() :: boolean()
-  def telemetry_enabled? do
-    @telemetry_enabled?
-  end
 end

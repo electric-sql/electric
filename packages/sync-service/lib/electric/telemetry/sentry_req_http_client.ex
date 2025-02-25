@@ -1,4 +1,6 @@
-if Electric.telemetry_enabled?() do
+use Electric.Telemetry
+
+with_telemetry Sentry.HTTPClient do
   defmodule Electric.Telemetry.SentryReqHTTPClient do
     @moduledoc """
     A custom Sentry HTTP client implementation using Req.

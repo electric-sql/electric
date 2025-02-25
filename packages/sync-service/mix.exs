@@ -3,6 +3,7 @@ defmodule Electric.MixProject do
 
   @github_repo "https://github.com/electric-sql/electric"
 
+  dbg(Mix.target())
   # Telemetry deps are marked as `target: :application` to prevent their
   # inclusion in applications including `:electric` as a dependency.
   #
@@ -108,7 +109,7 @@ defmodule Electric.MixProject do
         {:tz, "~> 0.27"}
       ],
       dev_and_test_deps(),
-      telemetry_deps()
+      telemetry_deps() |> dbg
     ])
   end
 

@@ -1,8 +1,6 @@
 defmodule Electric.Application do
-  alias Electric.StackSupervisor
   use Application
-
-  # require Config
+  use Electric.Telemetry
 
   @impl true
   def start(_type, _args) do
@@ -33,7 +31,10 @@ defmodule Electric.Application do
 
     Electric.Config.ensure_instance_id()
 
-    if Electric.telemetry_enabled?(), do: Electric.Telemetry.Sentry.add_logger_handler()
+    if Code.ensure_loaded?(Electric.Telemetry.Sentry) do
+      dbg(Electric.Telemetry.Sentry)
+      Electric.Telemetry.Sentry.add_logger_handler()
+    end
 
     # The root application supervisor starts the core global processes, including the HTTP
     # server and the database connection manager. The latter is responsible for establishing
@@ -50,7 +51,7 @@ defmodule Electric.Application do
       [
         {Electric.StackSupervisor, configuration()}
       ],
-      application_telemetry(),
+      application_telemetry() |> dbg,
       api_server(),
       prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
     ])
@@ -149,8 +150,9 @@ defmodule Electric.Application do
   end
 
   defp get_env!(opts, key) do
-    get_env(opts, key) ||
-      raise ArgumentError, message: "Electric configuration missing required #{inspect(key)}"
+    Keyword.get_lazy(opts, key, fn ->
+      Electric.Config.fetch_env!(key)
+    end)
   end
 
   defp get_env_lazy(opts, key, fun) do
@@ -158,7 +160,7 @@ defmodule Electric.Application do
   end
 
   defp application_telemetry do
-    if Electric.telemetry_enabled?() do
+    if Code.ensure_loaded?(Electric.Telemetry.ApplicationTelemetry) do
       [{Electric.Telemetry.ApplicationTelemetry, []}]
     else
       []
