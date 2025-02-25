@@ -2,7 +2,7 @@ defmodule Electric.ProcessRegistry do
   @spec child_spec([Registry.start_option()]) :: Supervisor.child_spec()
   def child_spec(options) do
     %{
-      id: __MODULE__,
+      id: registry_name(Keyword.fetch!(options, :stack_id)),
       start: {__MODULE__, :start_link, [options]},
       type: :supervisor
     }

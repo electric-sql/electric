@@ -23,6 +23,7 @@ if config_env() == :test do
     client: Electric.Telemetry.SentryReqHTTPClient
 
   config :electric,
+    start_in_library_mode: false,
     connection_opts: Electric.Utils.obfuscate_password(connection_opts),
     # enable the http api so that the client tests against a real endpoint can
     # run against our embedded electric instance.
