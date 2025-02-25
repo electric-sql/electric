@@ -64,7 +64,7 @@ defmodule Electric.Replication.PublicationManagerTest do
         configure_tables_for_replication_fn: configure_tables_fn
       })
 
-    %{opts: publication_manager_opts}
+    %{opts: publication_manager_opts, ctx: ctx}
   end
 
   describe "add_shape/2" do
@@ -219,6 +219,55 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert :ok == PublicationManager.add_shape(shape3, opts)
 
       refute_receive {:filters, _}, 500
+    end
+
+    test "should fallback to relation-only filtering if we cannot do row filtering", %{
+      ctx: ctx,
+      opts: opts
+    } do
+      GenServer.stop(opts[:server])
+
+      test_id = self()
+
+      configure_tables_fn = fn _, filters, _, _ ->
+        if filters |> Map.values() |> Enum.any?(&(&1.where_clauses != nil)) do
+          send(test_id, {:got_filters, :with_where_clauses})
+          raise %Postgrex.Error{postgres: %{code: :feature_not_supported}}
+        end
+
+        send(test_id, {:got_filters, :without_where_clauses})
+      end
+
+      %{publication_manager: {_, publication_manager_opts}} =
+        with_publication_manager(%{
+          module: ctx.module,
+          test: ctx.test,
+          stack_id: ctx.stack_id,
+          update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
+          publication_name: "pub_#{ctx.stack_id}",
+          pool: :no_pool,
+          pg_version: 150_001,
+          configure_tables_for_replication_fn: configure_tables_fn
+        })
+
+      shape1 = generate_shape({"public", "items"}, @where_clause_1)
+      shape2 = generate_shape({"public", "items"}, @where_clause_2)
+      shape3 = generate_shape({"public", "items_other"}, @where_clause_2)
+
+      # should fall back to relation-only filtering
+      assert :ok == PublicationManager.add_shape(shape1, publication_manager_opts)
+      assert_receive {:got_filters, :with_where_clauses}
+      assert_receive {:got_filters, :without_where_clauses}
+      refute_receive {:got_filters, _}, 50
+
+      # should remain in relation-only filtering mode after that, which
+      # only updates the publication if the tracked relations change
+      assert :ok == PublicationManager.add_shape(shape2, publication_manager_opts)
+      refute_receive {:got_filters, _}, 50
+
+      assert :ok == PublicationManager.add_shape(shape3, publication_manager_opts)
+      assert_receive {:got_filters, :without_where_clauses}
+      refute_receive {:got_filters, _}, 50
     end
   end
 

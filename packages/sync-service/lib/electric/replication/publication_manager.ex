@@ -16,6 +16,7 @@ defmodule Electric.Replication.PublicationManager do
     :relation_filter_counters,
     :prepared_relation_filters,
     :committed_relation_filters,
+    :row_filtering_enabled,
     :update_debounce_timeout,
     :scheduled_updated_ref,
     :retries,
@@ -30,6 +31,7 @@ defmodule Electric.Replication.PublicationManager do
            relation_filter_counters: %{Electric.relation() => map()},
            prepared_relation_filters: %{Electric.relation() => __MODULE__.RelationFilter.t()},
            committed_relation_filters: %{Electric.relation() => __MODULE__.RelationFilter.t()},
+           row_filtering_enabled: boolean(),
            update_debounce_timeout: timeout(),
            scheduled_updated_ref: nil | reference(),
            waiters: list(GenServer.from()),
@@ -42,6 +44,9 @@ defmodule Electric.Replication.PublicationManager do
 
   defmodule RelationFilter do
     defstruct [:relation, :where_clauses, :selected_columns]
+
+    def relation_only(%__MODULE__{relation: relation} = _filter),
+      do: %__MODULE__{relation: relation}
 
     @type t :: %__MODULE__{
             relation: Electric.relation(),
@@ -149,6 +154,7 @@ defmodule Electric.Replication.PublicationManager do
       relation_filter_counters: %{},
       prepared_relation_filters: %{},
       committed_relation_filters: %{},
+      row_filtering_enabled: true,
       scheduled_updated_ref: nil,
       retries: 0,
       waiters: [],
@@ -204,7 +210,7 @@ defmodule Electric.Replication.PublicationManager do
     state = %{state | scheduled_updated_ref: nil, retries: 0}
 
     case update_publication(state) do
-      :ok ->
+      {:ok, state} ->
         state = reply_to_waiters(:ok, state)
         {:noreply, %{state | committed_relation_filters: relation_filters}}
 
@@ -229,24 +235,58 @@ defmodule Electric.Replication.PublicationManager do
   defp schedule_update_publication(_timeout, %__MODULE__{scheduled_updated_ref: _} = state),
     do: state
 
-  @spec update_publication(state()) :: :ok | {:error, term()}
+  @spec update_publication(state()) :: {:ok, state()} | {:error, term()}
   defp update_publication(
          %__MODULE__{
            committed_relation_filters: committed_filters,
            prepared_relation_filters: current_filters
-         } = _state
+         } = state
        )
        when current_filters == committed_filters,
-       do: :ok
+       do: {:ok, state}
 
   defp update_publication(
          %__MODULE__{
-           prepared_relation_filters: relation_filters,
+           committed_relation_filters: committed_filters,
+           prepared_relation_filters: current_filters,
+           row_filtering_enabled: false,
            publication_name: publication_name,
            db_pool: db_pool,
            pg_version: pg_version,
            configure_tables_for_replication_fn: configure_tables_for_replication_fn
-         } = _state
+         } = state
+       ) do
+    # If row filtering is disabled, we only care about changes in actual relations
+    # included in the publication
+    if Map.keys(current_filters) == Map.keys(committed_filters) do
+      {:ok, state}
+    else
+      try do
+        configure_tables_for_replication_fn.(
+          db_pool,
+          Map.new(current_filters, fn {rel, filter} ->
+            {rel, RelationFilter.relation_only(filter)}
+          end),
+          pg_version,
+          publication_name
+        )
+
+        {:ok, state}
+      rescue
+        err -> {:error, err}
+      end
+    end
+  end
+
+  defp update_publication(
+         %__MODULE__{
+           prepared_relation_filters: relation_filters,
+           row_filtering_enabled: true,
+           publication_name: publication_name,
+           db_pool: db_pool,
+           pg_version: pg_version,
+           configure_tables_for_replication_fn: configure_tables_for_replication_fn
+         } = state
        ) do
     configure_tables_for_replication_fn.(
       db_pool,
@@ -255,9 +295,28 @@ defmodule Electric.Replication.PublicationManager do
       publication_name
     )
 
-    :ok
+    {:ok, state}
   rescue
-    err -> {:error, err}
+    # if we are unable to do row filtering for whatever reason, fall back to doing only
+    # relation-based filtering - this is a fallback for unsupported where clauses that we
+    # do not detect when composing relation filters
+    err ->
+      case err do
+        %Postgrex.Error{postgres: %{code: :feature_not_supported}} ->
+          Logger.warning(
+            "Row filtering is not supported, falling back to relation-based filtering"
+          )
+
+          update_publication(%__MODULE__{
+            state
+            | # disable row filtering and reset committed filters
+              row_filtering_enabled: false,
+              committed_relation_filters: %{}
+          })
+
+        _ ->
+          {:error, err}
+      end
   end
 
   defp get_pg_version(%{pg_version: pg_version} = state) when not is_nil(pg_version), do: state
