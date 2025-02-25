@@ -195,6 +195,15 @@ defmodule Electric.Shapes.FilterTest do
         end)
         |> Enum.take(shape_count)
 
+      where_clause = fn shape_array ->
+        # Randomly choose between `@>` and `<@` to test both forms
+        if Enum.random(0..1) == 0 do
+          "an_array @> '{#{Enum.join(shape_array, ",")}}'"
+        else
+          "'{#{Enum.join(shape_array, ",")}}' <@ an_array"
+        end
+      end
+
       filter =
         shape_arrays
         |> Enum.reduce(Filter.new(), fn shape_array, filter ->
@@ -202,7 +211,7 @@ defmodule Electric.Shapes.FilterTest do
             filter,
             shape_array,
             Shape.new!("t1",
-              where: "an_array @> '{#{Enum.join(shape_array, ",")}}'",
+              where: where_clause.(shape_array),
               inspector: @inspector
             )
           )
