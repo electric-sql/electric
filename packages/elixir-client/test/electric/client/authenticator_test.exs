@@ -16,34 +16,36 @@ defmodule Electric.Client.AuthenticatorTest do
     end
 
     test "puts a hash into the params", ctx do
+      client = Client.for_shape(ctx.client, Client.shape!("my_table"))
+
       request1 =
-        Client.request(ctx.client,
+        Client.request(client,
           offset: Client.Offset.new(1234, 1),
           shape_id: "my-shape",
           live: true,
-          next_cursor: 123_948,
-          shape: Client.shape!("my_table")
+          next_cursor: 123_948
         )
 
       assert %{authenticated: false} = request1
 
-      authenticated_request1 = Client.authenticate_request(ctx.client, request1)
+      authenticated_request1 = Client.authenticate_request(client, request1)
 
       assert %{authenticated: true, headers: %{"electric-mock-auth" => hash1}} =
                authenticated_request1
 
+      client = Client.for_shape(ctx.client, Client.shape!("my_table", where: "something = true"))
+
       request2 =
-        Client.request(ctx.client,
+        Client.request(client,
           offset: Client.Offset.new(1235, 1),
           shape_id: "my-shape",
           live: true,
-          next_cursor: 123_948,
-          shape: Client.shape!("my_table", where: "something = true")
+          next_cursor: 123_948
         )
 
       assert %{authenticated: false} = request2
 
-      authenticated_request2 = Client.authenticate_request(ctx.client, request2)
+      authenticated_request2 = Client.authenticate_request(client, request2)
 
       assert %{authenticated: true, headers: %{"electric-mock-auth" => hash2}} =
                authenticated_request2
