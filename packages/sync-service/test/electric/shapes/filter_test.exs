@@ -416,8 +416,8 @@ defmodule Electric.Shapes.FilterTest do
       # The optimisation for `@>` is less performant than the other optimisations,
       # however it performs well with lots of shapes. While it can't do
       # `@shape_count` shapes in < `@max_reductions` reductions, it can do
-      # `@shape_count * 4` shapes in < `@max_reductions * 4` reductions.
-      multiplier = 4
+      # `@shape_count * 5` shapes in < `@max_reductions * 5` reductions.
+      multiplier = 5
       shape_count = @shape_count * multiplier
       max_reductions = @max_reductions * multiplier
 
