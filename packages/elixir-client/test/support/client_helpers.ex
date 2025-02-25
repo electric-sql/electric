@@ -15,6 +15,4 @@ defmodule Support.ClientHelpers do
       }
     )
   end
-
-  defmacro up_to_date0(), do: quote(do: up_to_date(0))
 end

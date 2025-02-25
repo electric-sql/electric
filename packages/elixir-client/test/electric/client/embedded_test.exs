@@ -72,7 +72,7 @@ defmodule Electric.Client.EmbeddedTest do
                headers: %{operation: :insert, relation: ["public", ^table]},
                value: %{"id" => ^id3}
              },
-             up_to_date0()
+             up_to_date()
            ] = msgs
 
     # 1 timestamp for the snapshot, 1 for the up-to-date response
@@ -108,9 +108,9 @@ defmodule Electric.Client.EmbeddedTest do
       )
 
     assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
-    assert_receive {:stream, 1, up_to_date0()}
+    assert_receive {:stream, 1, up_to_date()}
     assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
-    assert_receive {:stream, 2, up_to_date0()}
+    assert_receive {:stream, 2, up_to_date()}
 
     {:ok, id2} = insert_item(ctx)
     {:ok, id3} = insert_item(ctx)
@@ -141,7 +141,7 @@ defmodule Electric.Client.EmbeddedTest do
       )
 
     assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
-    assert_receive {:stream, 1, up_to_date0()}
+    assert_receive {:stream, 1, up_to_date()}
 
     :ok = update_item(ctx, id1, value: 999)
 
@@ -179,7 +179,7 @@ defmodule Electric.Client.EmbeddedTest do
                headers: %{operation: :insert, relation: ["public", ^table]},
                value: %{"id" => ^id3}
              },
-             up_to_date0()
+             up_to_date()
            ] = msgs
 
     # 1 timestamp for the snapshot, 1 for the up-to-date response
