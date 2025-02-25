@@ -18,10 +18,6 @@ if config_env() == :test do
 
   config :electric_client, Support.Repo, url: database_url
 
-  config :sentry,
-    environment_name: config_env(),
-    client: Electric.Telemetry.SentryReqHTTPClient
-
   config :electric,
     connection_opts: Electric.Utils.obfuscate_password(connection_opts),
     # enable the http api so that the client tests against a real endpoint can
