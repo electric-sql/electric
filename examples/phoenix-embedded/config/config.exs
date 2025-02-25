@@ -34,12 +34,7 @@ config :logger, :console,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
-config :sentry,
-  environment_name: config_env(),
-  client: Electric.Telemetry.SentryReqHTTPClient
-
 config :electric,
-  enable_http_api: false,
   replication_stream_id: "phoenix_embedded"
 
 # Import environment specific config. This must remain at the bottom

@@ -21,8 +21,25 @@ end
 
 **2\. Configure Electric**
 
-Configure Electric to connect to your Postgres database and run in embedded
-mode without its own HTTP server implementation:
+Add Electric to your application:
+
+```elixir
+# application.ex
+
+def start(_type, _opts) do
+  children = [
+    MyApp.Repo,
+    {Electric.Phoenix, repo: MyApp.Repo}
+    # For phoenix applications, we add the electric config to our endpoint configuration
+    {MyAppWeb.Endpoint, electric: Electric.Phoenix.plug_opts()}
+    # For Plug apps, we add it in our Plug config
+    {Bandit,
+      plug: {MyApp.Router, electric: Electric.Phoenix.plug_opts()},
+      port: 3000}
+
+  ]
+end
+```
 
 ```elixir
 # config/dev.exs

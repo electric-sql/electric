@@ -7,8 +7,6 @@ defmodule Electric.PhoenixEmbedded.Application do
 
   @impl true
   def start(_type, _args) do
-    electric_config = Electric.Application.api_plug_opts()
-
     children = [
       Electric.PhoenixEmbeddedWeb.Telemetry,
       Electric.PhoenixEmbedded.Repo,
@@ -18,7 +16,8 @@ defmodule Electric.PhoenixEmbedded.Application do
       # Start a worker by calling: Electric.PhoenixEmbedded.Worker.start_link(arg)
       # {Electric.PhoenixEmbedded.Worker, arg},
       # Start to serve requests, typically the last entry
-      {Electric.PhoenixEmbeddedWeb.Endpoint, electric: electric_config}
+      {Electric.PhoenixEmbeddedWeb.Endpoint, electric: Electric.Phoenix.plug_opts()},
+      {Electric.Phoenix, repo: Electric.PhoenixEmbedded.Repo}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

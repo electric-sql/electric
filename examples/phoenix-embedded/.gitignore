@@ -35,3 +35,4 @@ electric_phoenix_embedded-*.tar
 npm-debug.log
 /assets/node_modules/
 
+/persistent

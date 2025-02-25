@@ -1,22 +1,16 @@
 import Config
 
-connection_opts = [
-  username: "postgres",
-  password: "password",
-  hostname: "localhost",
-  database: "electric",
-  port: 54321
-]
-
 # Configure your database
 config :electric_phoenix_embedded,
        Electric.PhoenixEmbedded.Repo,
-       Keyword.merge(
-         connection_opts,
-         stacktrace: true,
-         show_sensitive_data_on_connection_error: true,
-         pool_size: 10
-       )
+       username: "postgres",
+       password: "password",
+       hostname: "localhost",
+       database: "electric",
+       port: 54321,
+       stacktrace: true,
+       show_sensitive_data_on_connection_error: true,
+       pool_size: 10
 
 # For development, we disable any cache and enable
 # debugging and code reloading.
@@ -95,7 +89,3 @@ config :phoenix_live_view,
   debug_heex_annotations: true,
   # Enable helpful, but potentially expensive runtime checks
   enable_expensive_runtime_checks: true
-
-config :electric,
-  connection_opts: connection_opts,
-  storage_dir: Path.join(System.tmp_dir!(), "electric/phoenix_embedded#{System.monotonic_time()}")
