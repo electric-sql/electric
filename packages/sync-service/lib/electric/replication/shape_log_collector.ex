@@ -134,7 +134,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     drop_transaction(txn, state)
   end
 
-  # If we've already processed a transaction, then drop it withotu processing
+  # If we've already processed a transaction, then drop it without processing
   defp handle_transaction(txn, _from, %{last_seen_lsn: last_seen_lsn} = state)
        when txn.lsn <= last_seen_lsn do
     Logger.debug(fn ->
