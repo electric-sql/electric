@@ -197,6 +197,20 @@ defmodule Electric.Postgres.ReplicationClient do
   @impl true
   @spec handle_data(binary(), State.t()) ::
           {:noreply, State.t()} | {:noreply, list(binary()), State.t()}
+
+  def handle_data(
+        <<@repl_msg_x_log_data, _wal_start::64, wal_end::64, _clock::64, _rest::binary>>,
+        %State{applied_wal: applied_wal} = state
+      )
+      # metadata messages like relation changes come in with wal_end = 0
+      when wal_end > 0 and wal_end <= applied_wal do
+    Logger.debug(fn ->
+      "Ignoring stale replication message: wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)})"
+    end)
+
+    {:noreply, [encode_standby_status_update(state)], state}
+  end
+
   def handle_data(
         <<@repl_msg_x_log_data, _wal_start::64, wal_end::64, _clock::64, rest::binary>>,
         %State{stack_id: stack_id} = state
@@ -329,6 +343,8 @@ defmodule Electric.Postgres.ReplicationClient do
   @epoch DateTime.to_unix(~U[2000-01-01 00:00:00Z], :microsecond)
   defp current_time(), do: System.os_time(:microsecond) - @epoch
 
-  defp update_applied_wal(state, wal) when wal >= state.applied_wal,
+  defp update_applied_wal(state, wal) when is_number(wal) and wal >= state.applied_wal,
     do: %State{state | applied_wal: wal}
+
+  defp update_applied_wal(state, wal) when is_number(wal), do: state
 end
