@@ -5,18 +5,11 @@ defmodule Electric.Plug.ServeShapePlug do
   # The halt/1 function is redefined further down below
   import Plug.Conn, except: [halt: 1]
 
-  alias Electric.Plug.Utils
   alias Electric.Shapes.Api
-  alias Electric.Replication.LogOffset
   alias Electric.Telemetry.OpenTelemetry
   alias Plug.Conn
 
   require Logger
-
-  defguardp is_live_request(conn) when conn.assigns.request.params.live
-
-  # Aliasing for pattern matching
-  @before_all_offset LogOffset.before_all()
 
   plug :fetch_query_params
 
@@ -25,10 +18,6 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :put_resp_content_type, "application/json"
 
   plug :validate_request
-  plug :put_schema_header
-  plug :put_resp_cache_headers
-  plug :generate_etag
-  plug :validate_and_put_etag
   plug :serve_shape_log
 
   # end_telemetry_span needs to always be the last plug here.
@@ -54,98 +43,8 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  # Only adds schema header when not in live mode
-  defp put_schema_header(conn, _) when not is_live_request(conn) do
-    %{assigns: %{request: request}} = conn
-    schema = Api.schema(request) |> Jason.encode!()
-    put_resp_header(conn, "electric-schema", schema)
-  end
-
-  defp put_schema_header(conn, _), do: conn
-
-  defp generate_etag(%Conn{} = conn, _) do
-    %{assigns: %{request: request}} = conn
-
-    %{
-      handle: active_shape_handle,
-      offset: chunk_end_offset
-    } = request.response
-
-    conn
-    |> assign(
-      :etag,
-      "#{active_shape_handle}:#{request.params.offset}:#{chunk_end_offset}"
-    )
-  end
-
-  defp validate_and_put_etag(%Conn{} = conn, _) do
-    %{assigns: %{request: request}} = conn
-
-    if_none_match =
-      get_req_header(conn, "if-none-match")
-      |> Enum.flat_map(&String.split(&1, ","))
-      |> Enum.map(&String.trim/1)
-      |> Enum.map(&String.trim(&1, <<?">>))
-
-    cond do
-      conn.assigns.etag in if_none_match ->
-        conn
-        |> send_resp(304, "")
-        |> halt()
-
-      not request.params.live ->
-        put_resp_header(conn, "etag", conn.assigns.etag)
-
-      true ->
-        conn
-    end
-  end
-
-  defp put_resp_cache_headers(%Conn{} = conn, _) do
-    %{assigns: %{request: request}} = conn
-
-    case request do
-      # If the offset is -1, set a 1 week max-age, 1 hour s-maxage (shared cache)
-      # and 1 month stale-while-revalidate We want private caches to cache the
-      # initial offset for a long time but for shared caches to frequently
-      # revalidate so they're serving a fairly fresh copy of the initials shape
-      # log.
-      %{params: %{offset: @before_all_offset}} ->
-        conn
-        |> put_resp_header(
-          "cache-control",
-          "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746"
-        )
-
-      # For live requests we want short cache lifetimes and to update the live cursor
-      %{params: %{live: true}, api: api} ->
-        conn
-        |> put_resp_header(
-          "cache-control",
-          "public, max-age=5, stale-while-revalidate=5"
-        )
-        |> put_resp_header(
-          "electric-cursor",
-          api.long_poll_timeout
-          |> Utils.get_next_interval_timestamp(conn.query_params["cursor"])
-          |> Integer.to_string()
-        )
-
-      %{params: %{live: false}, api: api} ->
-        conn
-        |> put_resp_header(
-          "cache-control",
-          "public, max-age=#{api.max_age}, stale-while-revalidate=#{api.stale_age}"
-        )
-    end
-  end
-
   defp serve_shape_log(%Conn{assigns: %{request: request}} = conn, _) do
-    response = Api.serve_shape_log(request)
-
-    conn
-    |> assign(:response, response)
-    |> Api.Response.send(response)
+    Api.serve_shape_log(conn, request)
   end
 
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do

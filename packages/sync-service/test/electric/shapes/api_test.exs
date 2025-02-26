@@ -778,6 +778,86 @@ defmodule Electric.Shapes.ApiTest do
     end
   end
 
+  describe "Pre-defined shape API" do
+    setup [:with_stack_id_from_test, :ready_stack, :configure_request]
+
+    setup(ctx) do
+      admin_shape =
+        Shape.new!("public.users",
+          where: "value = 'admin'",
+          columns: ["id", "value"],
+          replica: :full,
+          inspector: {__MODULE__, []},
+          storage: %{compaction: :disabled}
+        )
+
+      {:ok, api} =
+        Api.predefined_shape(ctx.api,
+          relation: {"public", "users"},
+          where: "value = 'admin'",
+          replica: :full,
+          columns: ["id", "value"],
+          storage: %{compaction: :disabled}
+        )
+
+      [admin_shape: admin_shape, api: api]
+    end
+
+    test "ignores shape_definition parameters", ctx do
+      %{admin_shape: shape} = ctx
+
+      next_offset = LogOffset.increment(@first_offset)
+
+      Mock.ShapeCache
+      |> expect(:get_or_create_shape_handle, fn ^shape, _opts ->
+        {@test_shape_handle, @test_offset}
+      end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn new_shape_handle, opts -> {new_shape_handle, opts} end)
+      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
+        next_offset
+      end)
+
+      assert {:ok, request} =
+               Api.validate(ctx.api, %{
+                 table: ".invalid_shape",
+                 where: "something = false",
+                 columns: "this,that",
+                 offset: "-1"
+               })
+
+      assert request.params.shape_definition == shape
+    end
+
+    test "accepts simpler table and namespace options", ctx do
+      %{admin_shape: shape} = ctx
+
+      assert {:ok, api} =
+               Api.predefined_shape(ctx.api,
+                 table: "users",
+                 where: "value = 'admin'",
+                 replica: :full,
+                 columns: ["id", "value"],
+                 storage: %{compaction: :disabled}
+               )
+
+      assert api.shape == shape
+
+      assert {:ok, api} =
+               Api.predefined_shape(ctx.api,
+                 schema: "public",
+                 table: "users",
+                 where: "value = 'admin'",
+                 replica: :full,
+                 columns: ["id", "value"],
+                 storage: %{compaction: :disabled}
+               )
+
+      assert api.shape == shape
+    end
+  end
+
   describe "stack not ready" do
     setup [:with_stack_id_from_test, :configure_request]
 
