@@ -5,8 +5,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   """
   use GenStage
 
-  alias Electric.PersistentKV
-  alias Electric.Postgres
+  alias Electric.Replication.PersistentReplicationState
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.{Relation, Transaction}
@@ -61,11 +60,18 @@ defmodule Electric.Replication.ShapeLogCollector do
     Logger.metadata(stack_id: opts.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
+    persistent_replication_data_opts = [
+      stack_id: opts.stack_id,
+      persistent_kv: opts.persistent_kv
+    ]
+
     state =
       Map.merge(opts, %{
         producer: nil,
         subscriptions: {0, MapSet.new()},
-        last_seen_lsn: get_last_processed_lsn(opts)
+        persistent_replication_data_opts: persistent_replication_data_opts,
+        last_seen_lsn:
+          PersistentReplicationState.get_last_processed_lsn(persistent_replication_data_opts)
       })
 
     # start in demand: :accumulate mode so that the ShapeCache is able to start
@@ -95,7 +101,14 @@ defmodule Electric.Replication.ShapeLogCollector do
   # client.
   def handle_demand(_demand, %{producer: producer} = state) do
     GenServer.reply(producer, :ok)
-    {:noreply, [], update_last_processed_lsn(%{state | producer: nil})}
+
+    :ok =
+      PersistentReplicationState.set_last_processed_lsn(
+        state.last_seen_lsn,
+        state.persistent_replication_data_opts
+      )
+
+    {:noreply, [], %{state | producer: nil}}
   end
 
   def handle_cancel({:cancel, _}, from, state) do
@@ -183,9 +196,17 @@ defmodule Electric.Replication.ShapeLogCollector do
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
 
     state =
-      state
-      |> put_last_seen_lsn(txn.lsn)
-      |> update_last_processed_lsn()
+      if txn.lsn > state.last_seen_lsn do
+        :ok =
+          PersistentReplicationState.set_last_processed_lsn(
+            txn.lsn,
+            state.persistent_replication_data_opts
+          )
+
+        put_last_seen_lsn(state, txn.lsn)
+      else
+        state
+      end
 
     {:reply, :ok, [], state}
   end
@@ -215,27 +236,5 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   defp put_last_seen_lsn(%{last_seen_lsn: last_seen_lsn} = state, lsn) do
     %{state | last_seen_lsn: max(last_seen_lsn, lsn)}
-  end
-
-  defp update_last_processed_lsn(state) do
-    # state = %{state | last_processed_lsn: state.last_seen_lsn}
-    Logger.debug("Updating last processed lsn to #{state.last_seen_lsn}")
-
-    :ok =
-      PersistentKV.set(
-        state.persistent_kv,
-        "#{state.stack_id}:last_processed_lsn",
-        Postgres.Lsn.to_integer(state.last_seen_lsn)
-      )
-
-    state
-  end
-
-  defp get_last_processed_lsn(%{persistent_kv: persistent_kv, stack_id: stack_id} = _opts) do
-    case PersistentKV.get(persistent_kv, "#{stack_id}:last_processed_lsn") do
-      {:ok, last_seen_lsn} -> last_seen_lsn
-      {:error, :not_found} -> 0
-    end
-    |> Postgres.Lsn.from_integer()
   end
 end
