@@ -65,7 +65,7 @@ defmodule Electric.Postgres.ReplicationClient do
             txn_collector: Collector.t(),
             step: Electric.Postgres.ReplicationClient.step(),
             display_settings: [String.t()],
-            applied_wal: non_neg_integer
+            applied_wal: non_neg_integer()
           }
 
     @opts_schema NimbleOptions.new!(
