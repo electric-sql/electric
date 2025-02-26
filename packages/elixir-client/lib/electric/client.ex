@@ -154,7 +154,8 @@ defmodule Electric.Client do
     :fetch,
     :authenticator,
     :pool,
-    :params
+    :params,
+    :parser
   ]
 
   @api_endpoint_path "/v1/shape"
@@ -170,22 +171,27 @@ defmodule Electric.Client do
                        "The full URL of the shape API endpoint. E.g. for local development this would be `http://localhost:3000/v1/shape`. Use this if you need a non-standard API path."
                    ],
                    params: [
-                     type: {:map, {:or, [:atom, :string]}, :any},
+                     type: {:map, :atom, :any},
                      default: %{},
                      doc:
                        "Additional query parameters to include in every request to the Electric backend."
                    ],
-                   fetch: [type: :mod_arg, default: {Client.Fetch.HTTP, []}, doc: false],
+                   parser: [
+                     type: :mod_arg,
+                     default: {Electric.Client.ValueMapper, []},
+                     doc: """
+                     A `{module, args}` tuple specifying the `Electric.Client.ValueMapper`
+                     implementation to use for mapping values from the sync stream into Elixir
+                     terms.
+                     """
+                   ],
                    authenticator: [
                      type: :mod_arg,
                      default: {Client.Authenticator.Unauthenticated, []},
                      doc: false
                    ],
-                   pool: [
-                     type: :mod_arg,
-                     default: {Electric.Client.Fetch.Pool, []},
-                     doc: false
-                   ]
+                   fetch: [type: :mod_arg, default: {Client.Fetch.HTTP, []}, doc: false],
+                   pool: [type: :mod_arg, default: {Electric.Client.Fetch.Pool, []}, doc: false]
                  )
 
   @type shape_handle :: String.t()
@@ -365,6 +371,78 @@ defmodule Electric.Client do
   end
 
   @doc """
+  Get a stream of update messages.
+
+  This accepts a variety of arguments:
+
+  ### Examples:
+
+  - Using a custom endpoint that returns a pre-defined shape.
+
+    If you have used `Electric.Phoenix` to mount a pre-defined shape into your
+    Phoenix application, then by creating a client with the `endpoint` set to the
+    URL of this route you can stream data directly from this client:
+
+        {:ok, client} = Electric.Client.new(endpoint: "http://localhost:4000/shapes/todo")
+        stream = Electric.Client.stream(client)
+
+    Equivalently you can just pass the URL as the argument to stream:
+
+        stream = Electric.Client.stream("http://localhost:4000/shapes/todo")
+
+  - Using a simple table name to define a shape:
+
+        {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
+        stream = Electric.Client.stream(client, "todos")
+
+  - Using a full shape definition:
+
+        {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
+        {:ok, shape} = Electric.Client.shape("todos", where: "completed = false")
+        stream = Electric.Client.stream(client, shape)
+
+  - Or with an `Ecto` query or `Ecto.Schema` struct:
+
+        {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
+        stream = Electric.Client.stream(client, from(t in MyApp.Todos.Todo, where: t.completed == false))
+
+  If you want to pass options to your stream, then pass them as the second
+  argument or use `stream/3`.
+  """
+  def stream(client, opts \\ [])
+
+  @spec stream(t(), stream_options()) :: Enumerable.t(message())
+  def stream(%Client{} = client, opts) when is_list(opts) do
+    Client.Stream.new(client, opts)
+  end
+
+  @spec stream(t(), ShapeDefinition.t()) :: Enumerable.t(message())
+  def stream(%Client{} = client, %ShapeDefinition{} = shape) do
+    stream(client, shape, [])
+  end
+
+  if Code.ensure_loaded?(Ecto) do
+    @spec stream(t(), String.t() | Ecto.Queryable.t()) :: Enumerable.t(message())
+  else
+    @spec stream(t(), String.t()) :: Enumerable.t(message())
+  end
+
+  def stream(%Client{} = client, table_or_queryable) do
+    stream(client, table_or_queryable, [])
+  end
+
+  @spec stream(String.t(), String.t()) :: Enumerable.t(message())
+  def stream(url, opts) when is_binary(url) do
+    case new(endpoint: url) do
+      {:ok, client} ->
+        stream(client, opts)
+
+      {:error, reason} ->
+        raise ArgumentError, message: "Invalid client endpoint #{inspect(url)}: #{reason}"
+    end
+  end
+
+  @doc """
   Use the `client` to return a stream of update messages for the given `shape`.
 
   `shape` can be a table name, e.g. `"my_table"`, a full `ShapeDefinition`
@@ -376,7 +454,6 @@ defmodule Electric.Client do
   #{NimbleOptions.docs(Client.Stream.options_schema())}
   """
   @spec stream(t(), shape(), stream_options()) :: Enumerable.t(message())
-  def stream(client, shape_or_query, opts \\ [])
 
   if Code.ensure_loaded?(Ecto) do
     def stream(%Client{} = client, queryable, opts) when is_atom(queryable) do
@@ -396,7 +473,18 @@ defmodule Electric.Client do
   end
 
   def stream(%Client{} = client, %ShapeDefinition{} = shape, opts) do
-    Client.Stream.new(client, shape, opts)
+    client
+    |> for_shape(shape)
+    |> stream(opts)
+  end
+
+  @doc false
+  def for_shape(%Client{} = client, %ShapeDefinition{} = shape) do
+    shape_params = ShapeDefinition.params(shape)
+
+    client
+    |> Map.update!(:params, &Map.merge(&1, shape_params))
+    |> Map.put(:parser, shape.parser)
   end
 
   @doc """

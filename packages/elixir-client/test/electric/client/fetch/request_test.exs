@@ -10,13 +10,14 @@ defmodule Electric.Client.Fetch.RequestTest do
 
   describe "url/1" do
     test "generates valid urls" do
+      client = Client.for_shape(client!(), Client.shape!("my_table"))
+
       request =
-        Client.request(client!(),
+        Client.request(client,
           offset: Client.Offset.new(1234, 1),
           shape_handle: "my-shape",
           live: true,
-          next_cursor: 123_948,
-          shape: Client.shape!("my_table")
+          next_cursor: 123_948
         )
 
       url = Request.url(request)
@@ -32,7 +33,7 @@ defmodule Electric.Client.Fetch.RequestTest do
       params = URI.decode_query(query)
 
       # should have sorted parameters
-      assert query == "cursor=123948&handle=my-shape&live=true&offset=1234_1&table=my_table"
+      assert query == "table=my_table&cursor=123948&handle=my-shape&live=true&offset=1234_1"
 
       assert %{
                "table" => "my_table",
@@ -44,13 +45,14 @@ defmodule Electric.Client.Fetch.RequestTest do
     end
 
     test "wraps table names in quotes" do
+      client = Client.for_shape(client!(), Client.shape!("my table", namespace: "Wobbly"))
+
       request =
-        Client.request(client!(),
+        Client.request(client,
           offset: Client.Offset.new(1234, 1),
           shape_handle: "my-shape",
           live: true,
-          next_cursor: 123_948,
-          shape: Client.shape!("my table", namespace: "Wobbly")
+          next_cursor: 123_948
         )
 
       url = Request.url(request)
@@ -123,14 +125,14 @@ defmodule Electric.Client.Fetch.RequestTest do
 
     test "includes column list in parameters" do
       columns = ["id", "value", "description"]
+      client = Client.for_shape(client!(), Client.shape!("my_table", columns: columns))
 
       request =
-        Client.request(client!(),
+        Client.request(client,
           offset: Client.Offset.new(1234, 1),
           shape_handle: "my-shape",
           live: true,
-          next_cursor: 123_948,
-          shape: Client.shape!("my_table", columns: columns)
+          next_cursor: 123_948
         )
 
       url = Request.url(request)
