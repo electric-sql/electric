@@ -44,6 +44,10 @@ export default defineConfig({
       type: 'image/svg+xml',
       href: '/img/brand/favicon.svg'
     }],
+    ['link', {
+      rel: 'prerender',
+      href: 'https://airtable.com/embed/appDitPIpjlAxK7CL/pagrWjq3qw5Fp68Wa/form'
+    }],
     ['script', {
       defer: 'defer',
       'data-domain': 'electric-sql.com',
