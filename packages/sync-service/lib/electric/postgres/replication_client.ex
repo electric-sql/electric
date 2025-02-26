@@ -77,8 +77,7 @@ defmodule Electric.Postgres.ReplicationClient do
                    try_creating_publication?: [required: true, type: :boolean],
                    start_streaming?: [type: :boolean, default: true],
                    slot_name: [required: true, type: :string],
-                   slot_temporary?: [type: :boolean, default: false],
-                   applied_wal: [type: :non_neg_integer, default: 0]
+                   slot_temporary?: [type: :boolean, default: false]
                  )
 
     @spec new(Access.t()) :: t()
@@ -254,11 +253,6 @@ defmodule Electric.Postgres.ReplicationClient do
 
         {:noreply, %State{state | txn_collector: txn_collector}}
 
-      {%Transaction{} = txn, %Collector{} = txn_collector}
-      when txn.last_log_offset.tx_offset <= state.applied_wal ->
-        state = %State{state | txn_collector: txn_collector}
-        {:noreply, [encode_standby_status_update(state)], state}
-
       {%Transaction{} = txn, %Collector{} = txn_collector} ->
         state = %State{state | txn_collector: txn_collector}
 
@@ -303,7 +297,7 @@ defmodule Electric.Postgres.ReplicationClient do
             # new transaction into the shape log store. So, when the applied function
             # returns, we can safely advance the replication slot past the transaction's commit
             # LSN.
-            state = update_applied_wal(state, txn.last_log_offset.tx_offset)
+            state = update_applied_wal(state, Electric.Postgres.Lsn.to_integer(txn.lsn))
             {:noreply, [encode_standby_status_update(state)], state}
 
           other ->

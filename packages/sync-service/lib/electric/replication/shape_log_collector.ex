@@ -61,17 +61,11 @@ defmodule Electric.Replication.ShapeLogCollector do
     Logger.metadata(stack_id: opts.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
-    last_seen_lsn =
-      case PersistentKV.get(opts.persistent_kv, "#{opts.stack_id}:last_processed_lsn") do
-        {:ok, last_seen_lsn} -> last_seen_lsn
-        {:error, :not_found} -> 0
-      end
-
     state =
       Map.merge(opts, %{
         producer: nil,
         subscriptions: {0, MapSet.new()},
-        last_seen_lsn: last_seen_lsn
+        last_seen_lsn: get_last_processed_lsn(opts)
       })
 
     # start in demand: :accumulate mode so that the ShapeCache is able to start
@@ -137,15 +131,17 @@ defmodule Electric.Replication.ShapeLogCollector do
   # will prompt the `GenServer.reply/2` call.
   defp handle_transaction(txn, _from, %{subscriptions: {0, _}} = state) do
     Logger.debug(fn -> "Dropping transaction #{txn.xid}: no active consumers" end)
+    drop_transaction(txn, state)
+  end
 
-    OpenTelemetry.add_span_attributes("txn.is_dropped": true)
+  # If we've already processed a transaction, then drop it withotu processing
+  defp handle_transaction(txn, _from, %{last_seen_lsn: last_seen_lsn} = state)
+       when txn.lsn <= last_seen_lsn do
+    Logger.debug(fn ->
+      "Dropping transaction #{txn.xid}: transaction LSN #{txn.lsn} smaller than last processed #{last_seen_lsn}"
+    end)
 
-    state =
-      state
-      |> put_last_seen_lsn(txn.lsn)
-      |> update_last_processed_lsn()
-
-    {:reply, :ok, [], state}
+    drop_transaction(txn, state)
   end
 
   defp handle_transaction(txn, from, state) do
@@ -183,6 +179,17 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:noreply, [rel], %{state | producer: from}}
   end
 
+  defp drop_transaction(txn, state) do
+    OpenTelemetry.add_span_attributes("txn.is_dropped": true)
+
+    state =
+      state
+      |> put_last_seen_lsn(txn.lsn)
+      |> update_last_processed_lsn()
+
+    {:reply, :ok, [], state}
+  end
+
   defp remove_subscription(from, %{subscriptions: {count, set}} = state) do
     subscriptions =
       if MapSet.member?(set, from) do
@@ -206,8 +213,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     state
   end
 
-  defp put_last_seen_lsn(state, lsn) do
-    %{state | last_seen_lsn: max(state.last_seen_lsn, Postgres.Lsn.to_integer(lsn))}
+  defp put_last_seen_lsn(%{last_seen_lsn: last_seen_lsn} = state, lsn) do
+    %{state | last_seen_lsn: max(last_seen_lsn, lsn)}
   end
 
   defp update_last_processed_lsn(state) do
@@ -218,9 +225,17 @@ defmodule Electric.Replication.ShapeLogCollector do
       PersistentKV.set(
         state.persistent_kv,
         "#{state.stack_id}:last_processed_lsn",
-        state.last_seen_lsn
+        Postgres.Lsn.to_integer(state.last_seen_lsn)
       )
 
     state
+  end
+
+  defp get_last_processed_lsn(%{persistent_kv: persistent_kv, stack_id: stack_id} = _opts) do
+    case PersistentKV.get(persistent_kv, "#{stack_id}:last_processed_lsn") do
+      {:ok, last_seen_lsn} -> last_seen_lsn
+      {:error, :not_found} -> 0
+    end
+    |> Postgres.Lsn.from_integer()
   end
 end

@@ -106,6 +106,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       xmin = 100
       xid = 150
       lsn = Lsn.from_string("0/10")
+      next_lsn = Lsn.increment(lsn, 1)
       last_log_offset = LogOffset.new(lsn, 0)
 
       Mock.Inspector
@@ -133,7 +134,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert xids == [xmin]
 
       txn2 =
-        %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
+        %Transaction{xid: xid, lsn: next_lsn, last_log_offset: last_log_offset}
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "2", "name" => "bar"}
@@ -144,6 +145,51 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       xids = Support.TransactionConsumer.assert_consume(ctx.consumers, [txn2])
 
       assert xids == [xid]
+    end
+
+    test "drops transactions if already processed", ctx do
+      xid = 150
+      prev_lsn = Lsn.from_string("0/10")
+      lsn = Lsn.increment(prev_lsn, 1)
+
+      Mock.Inspector
+      |> stub(:load_relation, fn
+        {"public", "test_table"}, _ ->
+          {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+      end)
+      |> stub(:load_column_info, fn {"public", "test_table"}, _ ->
+        {:ok, [%{pk_position: 0, name: "id"}]}
+      end)
+      |> allow(self(), ctx.server)
+
+      txn =
+        %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "2", "name" => "foo"}
+        })
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+
+      Support.TransactionConsumer.assert_consume(ctx.consumers, [txn])
+
+      txn2 =
+        %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "3", "name" => "foo"}
+        })
+
+      txn3 =
+        %Transaction{xid: xid - 1, lsn: prev_lsn, last_log_offset: LogOffset.new(prev_lsn, 0)}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "4", "name" => "foo"}
+        })
+
+      assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.server)
+      assert :ok = ShapeLogCollector.store_transaction(txn3, ctx.server)
+      Support.TransactionConsumer.refute_consume(ctx.consumers)
     end
   end
 

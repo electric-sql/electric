@@ -278,7 +278,6 @@ defmodule Electric.Connection.Manager do
     opts =
       state
       |> Map.take([:stack_id, :replication_opts, :connection_opts])
-      |> put_in([:replication_opts, :applied_wal], get_last_processed_lsn(state))
       |> Map.to_list()
 
     Logger.debug("Starting replication client for stack #{state.stack_id}")
@@ -812,18 +811,5 @@ defmodule Electric.Connection.Manager do
     end
 
     :ok
-  end
-
-  defp get_last_processed_lsn(%State{persistent_kv: persistent_kv, stack_id: stack_id}) do
-    case Electric.PersistentKV.get(
-           persistent_kv,
-           "#{stack_id}:last_processed_lsn"
-         ) do
-      {:ok, up_to_date_lsn} ->
-        up_to_date_lsn
-
-      {:error, :not_found} ->
-        0
-    end
   end
 end

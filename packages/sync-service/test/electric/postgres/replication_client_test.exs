@@ -146,46 +146,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
       refute_receive _
     end
 
-    test "does not replay transaction if restarted with applied LSN", %{db_conn: conn} = ctx do
-      {:ok, pid} = start_client(ctx)
-
-      insert_item(conn, "test value")
-      assert %NewRecord{record: %{"value" => "test value"}} = receive_tx_change()
-
-      insert_item(conn, "return: not ok but stored")
-
-      assert %NewRecord{
-               record: %{"value" => "return: not ok but stored"},
-               log_offset: last_log_offset
-             } =
-               receive_tx_change()
-
-      # Verify that raising in the transaction callback crashes the connection process
-      monitor = Process.monitor(pid)
-      Process.unlink(pid)
-
-      interrupt_val = "interrupt #{inspect(pid)}"
-      insert_item(conn, interrupt_val)
-
-      assert_receive {
-        :DOWN,
-        ^monitor,
-        :process,
-        ^pid,
-        {%RuntimeError{message: "Interrupting transaction processing abnormally"}, _stacktrace}
-      }
-
-      refute_received _
-
-      # Now, when we restart the connection process with the applied wal set at
-      # the last processed transaction, we should ignore the replayed transaction
-      start_client(put_in(ctx, [:replication_opts, :applied_wal], last_log_offset.tx_offset))
-
-      assert %NewRecord{record: %{"value" => ^interrupt_val}} = receive_tx_change()
-
-      refute_receive _
-    end
-
     # Regression test for https://github.com/electric-sql/electric/issues/1548
     test "fares well when multiple concurrent transactions are writing to WAL",
          %{db_conn: conn} = ctx do

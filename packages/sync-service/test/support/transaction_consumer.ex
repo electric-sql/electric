@@ -31,6 +31,12 @@ defmodule Support.TransactionConsumer do
     |> List.flatten()
   end
 
+  def refute_consume(consumers, timeout \\ 100) do
+    for consumer <- consumers, into: MapSet.new() do
+      refute_receive {Support.TransactionConsumer, ^consumer, _}, timeout
+    end
+  end
+
   def init(opts) do
     {:ok, producer} = Keyword.fetch(opts, :producer)
     {:ok, parent} = Keyword.fetch(opts, :parent)
