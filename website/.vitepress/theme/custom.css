@@ -188,6 +188,9 @@ a.no-visual:hover {
   color: inherit;
 }
 
+span.no-visual {
+  color: var(--vp-c-text-1);
+}
 @media (max-width: 959px) {
   :root, .dark {
     --vp-code-font-size: 0.875em;
@@ -602,6 +605,33 @@ iframe {
   margin-left: -40px;
   margin-top: 10px;
 }
+.VPHomeHero .actions .action:first-child,
+.VPHomeHero .actions .action:last-child {
+  position: relative;
+  visibility: visible;
+}
+.VPHomeHero .actions .action:nth-child(2),
+.VPHomeHero .actions .action:nth-child(4) {
+  position: absolute;
+  visibility: hidden;
+}
+.VPHomeHero .actions .action:nth-child(4) {
+  .vpi-social-github {
+    margin-right: 0;
+  }
+}
+@media (max-width: 639px) {
+  .VPHomeHero .actions .action:first-child,
+  .VPHomeHero .actions .action:last-child {
+    position: absolute;
+    visibility: hidden;
+  }
+  .VPHomeHero .actions .action:nth-child(2),
+  .VPHomeHero .actions .action:nth-child(4) {
+    position: relative;
+    visibility: visible;
+  }
+}
 @media (max-width: 959px) {
   .VPHomeHero .image .image-container {
     height: calc(190px + 15vw) !important;
@@ -609,6 +639,12 @@ iframe {
   }
   .VPHomeHero .VPImage.image-src {
     margin-left: 0px;
+  }
+}
+@media (max-width: 359px) {
+  .VPHomeHero .actions .action:nth-child(4) {
+    position: absolute;
+    visibility: hidden;
   }
 }
 @media (min-width: 960px) {
