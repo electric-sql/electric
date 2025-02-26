@@ -32,6 +32,7 @@ export type ControlMessage = {
 export type ChangeMessage<T extends Row<unknown> = Row> = {
   key: string
   value: T
+  old_value?: T // Only provided for updates if `replica` is `full`
   headers: Header & { operation: Operation }
 }
 
