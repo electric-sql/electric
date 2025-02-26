@@ -116,10 +116,20 @@ defmodule Electric.StackSupervisor do
                  ]
                )
 
+  def opts_schema do
+    @opts_schema
+  end
+
   def start_link(opts) do
+    opts = obfuscate_password(opts)
+
     with {:ok, config} <- NimbleOptions.validate(Map.new(opts), @opts_schema) do
       Supervisor.start_link(__MODULE__, config, Keyword.take(opts, [:name]))
     end
+  end
+
+  defp obfuscate_password(opts) when is_list(opts) do
+    Keyword.update(opts, :connection_opts, [], &Electric.Utils.obfuscate_password/1)
   end
 
   def subscribe_to_stack_events(registry, stack_id, ref \\ make_ref()) do
@@ -190,9 +200,9 @@ defmodule Electric.StackSupervisor do
   def storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}} = opts) do
     {mod,
      arg
-     |> Keyword.put(:stack_id, stack_id)
-     |> Keyword.put(
-       :chunk_bytes_threshold,
+     |> put_in([:stack_id], stack_id)
+     |> put_in(
+       [:chunk_bytes_threshold],
        opts[:chunk_bytes_threshold] || LogChunker.default_chunk_size_threshold()
      )
      |> mod.shared_opts()}
@@ -273,15 +283,24 @@ defmodule Electric.StackSupervisor do
     registry_partitions =
       Keyword.get(config.tweaks, :registry_partitions, System.schedulers_online())
 
-    children = [
-      {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
-      {Registry,
-       name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
-      {Electric.Postgres.Inspector.EtsInspector, stack_id: stack_id, pool: db_pool},
-      {Electric.Connection.Supervisor, new_connection_manager_opts},
-      {Electric.Telemetry.StackTelemetry,
-       config.telemetry_opts ++ [stack_id: stack_id, storage: config.storage]}
-    ]
+    telemetry_children =
+      if Code.ensure_loaded?(Electric.Telemetry.StackTelemetry) do
+        [
+          {Electric.Telemetry.StackTelemetry,
+           config.telemetry_opts ++ [stack_id: stack_id, storage: config.storage]}
+        ]
+      else
+        []
+      end
+
+    children =
+      [
+        {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
+        {Registry,
+         name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
+        {Electric.Postgres.Inspector.EtsInspector, stack_id: stack_id, pool: db_pool},
+        {Electric.Connection.Supervisor, new_connection_manager_opts}
+      ] ++ telemetry_children
 
     # Store the telemetry span attributes in the persistent term for this stack
     telemetry_span_attrs = Access.get(config, :telemetry_span_attrs, %{})
