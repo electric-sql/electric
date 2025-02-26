@@ -7,12 +7,18 @@ import { FetchError } from '@electric-sql/client'
 
 const SHAPE_HANDLE_QUERY_PARAM = `handle`
 
-export type IssueRow = { id: string; title: string; priority?: string }
-export type GeneratedIssueRow = { id?: string; title: string }
+export type IssueRow = { id: string; title: string; priority?: number }
+export type GeneratedIssueRow = {
+  id?: string
+  title: string
+  priority?: number
+}
 export type UpdateIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type DeleteIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type InsertIssuesFn = (...rows: GeneratedIssueRow[]) => Promise<string[]>
 export type ClearIssuesShapeFn = (handle?: string) => Promise<void>
+export type BeginTransactionFn = () => Promise<void>
+export type CommitTransactionFn = () => Promise<void>
 export type ClearShapeFn = (
   table: string,
   options?: { handle?: string }
@@ -56,13 +62,19 @@ export const testWithDbClient = test.extend<{
         }
 
         const resp = await fetch(url.toString(), { method: `DELETE` })
+
         if (!resp.ok) {
-          console.error(
-            await FetchError.fromResponse(resp, `DELETE ${url.toString()}`)
-          )
-          throw new Error(
-            `Could not delete shape ${table} with ID ${options.handle}`
-          )
+          // if we've been passed a shape handle then we should expect this delete call to succeed.
+          if (resp.status === 404) {
+            // the shape wasn't found, so maybe it wasn't created in the first place
+          } else {
+            console.error(
+              await FetchError.fromResponse(resp, `DELETE ${url.toString()}`)
+            )
+            throw new Error(
+              `Could not delete shape ${table} with ID ${options.handle}`
+            )
+          }
         }
       }
     )
@@ -77,6 +89,8 @@ export const testWithIssuesTable = testWithDbClient.extend<{
   deleteIssue: DeleteIssueFn
   insertIssues: InsertIssuesFn
   clearIssuesShape: ClearIssuesShapeFn
+  beginTransaction: BeginTransactionFn
+  commitTransaction: CommitTransactionFn
 }>({
   issuesTableSql: async ({ dbClient, task }, use) => {
     const tableName = `"issues for ${task.id}_${Math.random().toString(16)}"`
@@ -105,12 +119,19 @@ export const testWithIssuesTable = testWithDbClient.extend<{
   issuesTableKey: ({ issuesTableSql, pgSchema }, use) =>
     use(`"${pgSchema}".${issuesTableSql}`),
   updateIssue: ({ issuesTableSql, dbClient }, use) =>
-    use(({ id, title }) =>
-      dbClient.query(`UPDATE ${issuesTableSql} SET title = $2 WHERE id = $1`, [
-        id,
-        title,
-      ])
-    ),
+    use(({ id, title, priority }) => {
+      if (priority) {
+        return dbClient.query(
+          `UPDATE ${issuesTableSql} SET title = $2, priority = $3 WHERE id = $1`,
+          [id, title, priority]
+        )
+      } else {
+        return dbClient.query(
+          `UPDATE ${issuesTableSql} SET title = $2 WHERE id = $1`,
+          [id, title]
+        )
+      }
+    }),
   deleteIssue: ({ issuesTableSql, dbClient }, use) =>
     use(({ id }) =>
       dbClient.query(`DELETE FROM ${issuesTableSql} WHERE id = $1`, [id])
@@ -122,9 +143,17 @@ export const testWithIssuesTable = testWithDbClient.extend<{
       )
       const { rows: rows_1 } = await dbClient.query(
         `INSERT INTO ${issuesTableSql} (id, title, priority) VALUES ${placeholders} RETURNING id`,
-        rows.flatMap((x) => [x.id ?? uuidv4(), x.title, 10])
+        rows.flatMap((x) => [x.id ?? uuidv4(), x.title, x.priority ?? 10])
       )
       return rows_1.map((x) => x.id)
+    }),
+  beginTransaction: ({ dbClient }, use) =>
+    use(async () => {
+      await dbClient.query(`BEGIN`)
+    }),
+  commitTransaction: ({ dbClient }, use) =>
+    use(async () => {
+      await dbClient.query(`COMMIT`)
     }),
 
   clearIssuesShape: async ({ clearShape, issuesTableUrl }, use) => {

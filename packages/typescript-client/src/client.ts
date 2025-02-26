@@ -255,6 +255,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   lastSyncedAt(): number | undefined
   lastSynced(): number
   isConnected(): boolean
+  hasStarted(): boolean
 
   isUpToDate: boolean
   lastOffset: Offset
@@ -426,8 +427,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // Add Electric's internal parameters
         fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
 
-        if (this.#isUpToDate && !this.#isRefreshing) {
-          fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
+        if (this.#isUpToDate) {
+          if (!this.#isRefreshing) {
+            fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
+          }
           fetchUrl.searchParams.set(
             LIVE_CACHE_BUSTER_QUERY_PARAM,
             this.#liveCacheBuster
@@ -616,6 +619,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
   /** True during initial fetch. False afterwise.  */
   isLoading(): boolean {
     return !this.#isUpToDate
+  }
+
+  hasStarted(): boolean {
+    return this.#started
   }
 
   /** Await the next tick of the request loop */
