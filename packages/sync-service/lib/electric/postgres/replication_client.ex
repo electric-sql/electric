@@ -166,7 +166,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
   @impl true
   def handle_connect(state) do
-    %{state | step: :connected}
+    %State{state | step: :connected}
     |> ConnectionSetup.start()
   end
 
@@ -239,7 +239,7 @@ defmodule Electric.Postgres.ReplicationClient do
     |> Collector.handle_message(state.txn_collector)
     |> case do
       %Collector{} = txn_collector ->
-        {:noreply, %{state | txn_collector: txn_collector}}
+        {:noreply, %State{state | txn_collector: txn_collector}}
 
       {%Relation{} = rel, %Collector{} = txn_collector} ->
         {m, f, args} = state.relation_received
@@ -251,10 +251,10 @@ defmodule Electric.Postgres.ReplicationClient do
           fn -> apply(m, f, [rel | args]) end
         )
 
-        {:noreply, %{state | txn_collector: txn_collector}}
+        {:noreply, %State{state | txn_collector: txn_collector}}
 
       {%Transaction{} = txn, %Collector{} = txn_collector} ->
-        state = %{state | txn_collector: txn_collector}
+        state = %State{state | txn_collector: txn_collector}
 
         {m, f, args} = state.transaction_received
 
@@ -330,5 +330,5 @@ defmodule Electric.Postgres.ReplicationClient do
   defp current_time(), do: System.os_time(:microsecond) - @epoch
 
   defp update_applied_wal(state, wal) when wal >= state.applied_wal,
-    do: %{state | applied_wal: wal}
+    do: %State{state | applied_wal: wal}
 end
