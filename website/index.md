@@ -13,11 +13,21 @@ hero:
     src: /img/home/zap-with-halo.svg
   actions:
     - theme: brand
+      text: Sign-up to Cloud
+      link: /product/cloud/sign-up
+    - theme: brand
+      text: Sign-up
+      link: /product/cloud/sign-up
+    - theme: alt
       text: Quickstart
       link: /docs/quickstart
     - theme: alt
+      text: "​"
+      target: '_blank'
+      link: https://github.com/electric-sql/electric
+    - theme: alt
       text: >-
-        Star on GitHub
+        GitHub
       target: '_blank'
       link: https://github.com/electric-sql/electric
 features:

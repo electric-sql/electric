@@ -47,13 +47,14 @@
   }
   .VPFooter p.footer-nav {
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     justify-content: center;
+    margin-bottom: 0.9rem;
   }
   .VPFooter .footer-nav-inner {
     flex-direction: row;
     align-items: center;
-    margin: 0.2rem 0;
+    margin: 0.3rem 0 0.7rem;
   }
   @media (max-width: 449px) {
     .VPFooter p.footer-nav {
@@ -61,18 +62,37 @@
     }
   }
   .VPFooter p.footer-nav a {
-    margin: 0.3rem;
+    margin: 0.3rem 0.5rem 0.5rem 0.5rem;
   }
   .VPFooter p.footer-nav .vpi-social-github,
-  .VPFooter p.footer-nav .vpi-social-discord {
+  .VPFooter p.footer-nav .vpi-social-discord,
+  .VPFooter p.footer-nav .vpi-social-pglite,
+  .VPFooter p.footer-nav .vpi-social-bluesky {
     display: inline-block;
     width: 1.24rem;
     height: 1.24rem;
     position: relative;
   }
+  @media (max-width: 438px) {
+    .VPFooter p.footer-nav .vpi-social-github,
+    .VPFooter p.footer-nav .vpi-social-discord,
+    .VPFooter p.footer-nav .vpi-social-pglite,
+    .VPFooter p.footer-nav .vpi-social-bluesky {
+      color: var(--vp-c-text-1);
+    }
+  }
   .VPFooter p.footer-nav .vpi-social-github,
-  .VPFooter p.footer-nav .vpi-social-discord {
+  .VPFooter p.footer-nav .vpi-social-discord,
+  .VPFooter p.footer-nav .vpi-social-pglite,
+  .VPFooter p.footer-nav .vpi-social-bluesky {
     margin: 2px 4px -5px 0;
+  }
+
+  .vpi-social-bluesky {
+    --icon: url('https://api.iconify.design/simple-icons/bluesky.svg');
+  }
+  .vpi-social-discord {
+    --icon: url('https://api.iconify.design/simple-icons/discord.svg');
   }
 
   .VPFooter .footer-logo {
@@ -87,6 +107,16 @@
     text-decoration: none !important;
     color: var(--vp-c-indigo-1);
   }
+
+  .footer-nav-inner a .social-name {
+    color: var(--vp-c-text-1);
+    margin-left: 0.2rem;
+  }
+  @media (max-width: 438px) {
+    .footer-nav-inner a .social-name {
+      display: none;
+    }
+  }
 </style>
 
 <template>
@@ -97,22 +127,42 @@
       </p>
       <p class="footer-nav message">
         <span class="footer-nav-inner">
-          <a href="/about/community">
-            About</a>
-          <a href="/about/contact">
-            Contact</a>
-          <a href="/docs/intro">
-            Docs</a>&nbsp;
+          <span class="no-wrap">
+            <a href="/about/community">
+              About</a>
+            <a href="/about/contact">
+              Contact</a>
+            <a href="/about/legal/terms">
+              Legal</a>
+            <a href="/docs/intro">
+              Docs</a>
+          </span>
+          <span class="no-wrap">
+            <a href="/demos">
+              Demos</a>
+            <a href="/blog">
+              Blog</a>
+            <a href="/product/cloud/sign-up">
+              Sign up</a>
+          </span>
         </span>
         <span class="footer-nav-inner">
-          <a href="/about/legal/terms">
-            Legal</a>&nbsp;
-          <a href="https://pglite.dev">
-            PGlite ↗</a>&nbsp;
-          <a href="https://github.com/electric-sql/electric">
-            <span class="vpi-social-github"></span></a>
-          <a href="https://discord.electric-sql.com">
-            <span class="vpi-social-discord"></span></a>
+          <span class="no-wrap">
+            <a href="https://pglite.dev">
+              <span class="vpi-social-pglite"></span>
+              <span class="social-name">PGlite</span></a>
+            <a href="https://github.com/electric-sql">
+              <span class="vpi-social-github"></span>
+              <span class="social-name">GitHub</span></a>
+          </span>
+          <span class="no-wrap">
+            <a href="https://bsky.app/profile/electric-sql.com">
+              <span class="vpi-social-bluesky"></span>
+              <span class="social-name">Bluesky</span></a>
+            <a href="https://discord.electric-sql.com">
+              <span class="vpi-social-discord"></span>
+              <span class="social-name">Discord</span></a>
+          </span>
         </span>
       </p>
       <p class="copyright">

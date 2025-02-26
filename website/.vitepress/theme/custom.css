@@ -188,6 +188,9 @@ a.no-visual:hover {
   color: inherit;
 }
 
+span.no-visual {
+  color: var(--vp-c-text-1);
+}
 @media (max-width: 959px) {
   :root, .dark {
     --vp-code-font-size: 0.875em;
@@ -308,15 +311,40 @@ a.no-visual:hover {
   padding-top: 1px;
 }
 
+.VPNavBarTitle .logo {
+  margin-top: -1px;
+}
+
+@media (min-width: 768px) {
+  .VPNavBarMenu .nav-item.VPNavBarCTA {
+    display: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .nav-item.VPNavBarCTA {
+    display: none;
+  }
+  .VPNavScreenMenu .nav-item.VPNavBarCTA {
+    display: flex;
+    text-align: center;
+    margin: auto;
+    width: 100%;
+    justify-content: center;
+
+    border-bottom: 1px solid var(--vp-c-divider);
+    padding: 12px 0 11px;
+  }
+}
 .VPNavScreenMenuLink {
   text-align: center;
 }
 @media (min-width: 768px) {
   .VPNavBarSearch {
-    position: absolute;
+    flex-grow: 0;
+    padding-left: 12px;
   }
   .VPNavBarSocialLinks {
-    margin-right: 96px !important;
     justify-content: center;
   }
   .VPNavBarSocialLinks::after {
@@ -338,6 +366,11 @@ a.no-visual:hover {
     margin-right: 10px !important;
   }
 }
+@media (min-width: 960px) {
+  .VPNavBarCTA {
+    padding: 0 10px 0 12px;
+  }
+}
 @media (min-width: 960px) and (max-width: 1040px) {
   .VPNavBarMenuLink {
     padding: 0 10px !important;
@@ -352,6 +385,17 @@ a.no-visual:hover {
   }
   .VPSocialLink {
     width: 29px !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .VPSocialLinks.VPNavBarSocialLinks.social-links {
+    display: none !important;
+  }
+}
+@media (min-width: 960px) {
+  .VPSocialLinks.VPNavBarSocialLinks.social-links {
+    display: flex !important;
   }
 }
 
@@ -371,19 +415,20 @@ a.no-visual:hover {
     margin-right: 4px;
   }
 }
-@media (max-width: 959px) {
+@media (max-width: 1149px) {
   .DocSearch-Button .DocSearch-Button-Placeholder {
     visibility: hidden;
     width: 4px;
     padding: 0 2px;
   }
 }
-@media (min-width: 960px) {
-  .VPNavBarSocialLinks {
-    margin-right: 150px !important;
-  }
-}
 @media (min-width: 768px) {
+  .VPNavBarSocialLinks {
+    order: 2;
+  }
+  .VPNavBarCTA {
+    order: 4;
+  }
   .VPNavBarExtra {
     display: none !important;
   }
@@ -560,6 +605,33 @@ iframe {
   margin-left: -40px;
   margin-top: 10px;
 }
+.VPHomeHero .actions .action:first-child,
+.VPHomeHero .actions .action:last-child {
+  position: relative;
+  visibility: visible;
+}
+.VPHomeHero .actions .action:nth-child(2),
+.VPHomeHero .actions .action:nth-child(4) {
+  position: absolute;
+  visibility: hidden;
+}
+.VPHomeHero .actions .action:nth-child(4) {
+  .vpi-social-github {
+    margin-right: 0;
+  }
+}
+@media (max-width: 639px) {
+  .VPHomeHero .actions .action:first-child,
+  .VPHomeHero .actions .action:last-child {
+    position: absolute;
+    visibility: hidden;
+  }
+  .VPHomeHero .actions .action:nth-child(2),
+  .VPHomeHero .actions .action:nth-child(4) {
+    position: relative;
+    visibility: visible;
+  }
+}
 @media (max-width: 959px) {
   .VPHomeHero .image .image-container {
     height: calc(190px + 15vw) !important;
@@ -567,6 +639,12 @@ iframe {
   }
   .VPHomeHero .VPImage.image-src {
     margin-left: 0px;
+  }
+}
+@media (max-width: 359px) {
+  .VPHomeHero .actions .action:nth-child(4) {
+    position: absolute;
+    visibility: hidden;
   }
 }
 @media (min-width: 960px) {
@@ -797,4 +875,69 @@ ul.demo-actions li .VPButton {
 }
 .demo-embed figcaption {
   margin: 14px 0 14px auto;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* Primary CTA button styling */
+.primary-cta-button {
+  background-color: #7c40ff; /* Match your brand purple color */
+  color: white !important;
+  padding: 0.5rem 1.2rem;
+  border-radius: 6px;
+  font-weight: 500;
+  margin-left: 1rem;
+  transition: background-color 0.2s;
+  order: 4; /* Ensure it appears after search */
+}
+
+.primary-cta-button:hover {
+  background-color: #6930d9; /* Darker shade for hover */
+  text-decoration: none;
+}
+
+/* Adjust the layout to place it after the search */
+.VPNavBarSearch {
+  order: 3;
+}
+
+.VPNavBarExtra {
+  order: 2;
+}
+
+.VPNavBarHamburger {
+  order: 5;
+}
+
+/* For mobile mode styling */
+@media (max-width: 768px) {
+  .VPNavScreen .primary-cta-button {
+    margin: 1rem 0 0 0;
+    display: block;
+    text-align: center;
+    padding: 0.8rem;
+    width: 100%;
+    border-radius: 0;
+    background-color: #7c40ff;
+  }
+
+  /* Add a divider above the button in mobile view */
+  .VPNavScreen .primary-cta-button::before {
+    content: '';
+    display: block;
+    height: 1px;
+    background-color: rgba(255, 255, 255, 0.1);
+    margin-bottom: 1rem;
+  }
 }

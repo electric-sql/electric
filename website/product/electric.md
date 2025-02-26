@@ -43,7 +43,7 @@ onMounted(async () => {
 
 <img src="/img/icons/electric.svg" class="product-icon" />
 
-# Electric <Badge type="info" text="BETA" />
+# Electric <Badge type="warning" text="beta" />
 
 Sync little subsets of your Postgres data into
 local apps and services.
