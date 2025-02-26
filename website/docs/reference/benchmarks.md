@@ -22,9 +22,7 @@ import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 
 # Benchmarks
 
-We run benchmarks for both the [Electric sync engine](#electric) directly, and the [Electric Cloud](#cloud), which hosts the sync engine behind a CDN.
-
-[PGlite](#pglite) publishes its own benchmarks.
+We run benchmarks for [cloud](#cloud), [core Electric](#electric) and [PGlite](#pglite).
 
 ## Understanding the benchmarks
 
@@ -49,6 +47,18 @@ We are in the process of open sourcing our [electric-sql/benchmarking-fleet](htt
 ### Continuous integration
 
 We are working to set up benchmarks to run on every release (patch, minor and major). When this is done, we will document how to see the release benchmarks and how to track improvements and/or regression in performance.
+
+## Cloud
+
+Electric is designed to run behind a CDN, using the CDN's [request collapsing](/docs/api/http#request-collapsing) capability to scale out data delivery to lots of concurrent users.
+
+The graph below shows the latency and compute resource of a single Electric server using this technique to handle between 100k and 1 million concurrent users, with a write workload of 960 transactions per minute:
+
+<figure>
+  <ScalabilityChart />
+</figure>
+
+These statistics were generated using our [client load benchmarking](https://github.com/electric-sql/client-load-benchmarking) suite that allows for measuring (a) client latencies and (b) sync service resource use for any combination of concurrent connected clients and database workload.
 
 ## Electric
 
@@ -225,18 +235,6 @@ The top graph shows throughput for Postgres 14. You can see throughput is the ro
 The bottom graph shows throughput for Postgres 15. Postgres 15 has the ability to filter the replication stream based on a where clause,
 so we use this to filter out writes that don't affect any shapes. So for writes that affect shapes, we get the same  140k row changes per second per shape as Postgres 14,
 but for writes that don't affect shapes, we get 1400k row changes per second per shape.
-
-## Cloud
-
-Electric is designed to run behind a CDN, using the CDN's [request collapsing](/docs/api/http#request-collapsing) capability to scale out data delivery to lots of concurrent users.
-
-The graph below shows the latency and compute resource of a single Electric server using this technique to handle between 100k and 1 million concurrent users, with a write workload of 960 transactions per minute:
-
-<figure>
-  <ScalabilityChart />
-</figure>
-
-These statistics were generated using our [client load benchmarking](https://github.com/electric-sql/client-load-benchmarking) suite that allows for measuring (a) client latencies and (b) sync service resource use for any combination of concurrent connected clients and database workload.
 
 ## PGlite
 

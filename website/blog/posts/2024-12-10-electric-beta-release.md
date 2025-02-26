@@ -93,7 +93,7 @@ So many real-time sync systems demo well but break under real load.
 
 Electric has been [engineered from the ground up](/docs/api/http) to handle high-throughput workloads, like [Trigger.dev](https://trigger.dev/launchweek/0/realtime), with low latency and flat resource use. You can stream real-time data to **millions of concurrent users** from a single commodity Postgres.
 
-The chart below is from our cloud [benchmarks](/docs/reference/benchmarks), testing Electric's memory usage and latency with a single Electric service scaling real-time sync from 100k to 1 million concurrent clients under a sustained load of 960 writes/minute. Both memory usage and latency are essentially <em>flat</em>:
+The chart below is from our [cloud benchmarks](/docs/reference/benchmarks#cloud), testing Electric's memory usage and latency with a single Electric service scaling real-time sync from 100k to 1 million concurrent clients under a sustained load of 960 writes/minute. Both memory usage and latency are essentially <em>flat</em>:
 
 <figure>
   <ScalabilityChart />
