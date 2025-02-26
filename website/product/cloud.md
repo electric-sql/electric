@@ -31,7 +31,7 @@ onMounted(async () => {
 
 <img src="/img/icons/ddn.svg" class="product-icon" />
 
-# Cloud <Badge type="info" text="PRIVATE BETA" />
+# Cloud <Badge type="warning" text="private beta" />
 
 Hosted Electric sync that's blazing fast
 and scales to millions of users
@@ -52,15 +52,11 @@ Electric Cloud is a hosted Electric service. It provisions, runs and operates th
 
 Electric [syncs data over HTTP](/docs/api/http). This allows it to integrate with CDN infrastructure. Electric Cloud leverages this to provide a global Data Delivery Network
 
-This allows you to scale out real-time data to millions of concurrent users from a single commodity Postgres. With blazing fast load times, minimal latency and low resource use.
+This allows you to scale out real-time data to [millions of concurrent users](/docs/reference/benchmarks#cloud) from a single commodity Postgres. With fast load times, low latency and consistent, low resource use.
 
-<!-- graphs, evidence, benchmarks -->
+## Available now
 
-## More information
-
-Electric Cloud is currently in <Badge type="info" text="PRIVATE ALPHA" />.
-
-If you're interested in using it, you can sign up to the waitlist. We'll be in touch when we can onboard you.
+Electric Cloud is available now in <Badge type="warning" text="private beta" />.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta">

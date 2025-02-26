@@ -9,26 +9,24 @@ outline: deep
 
 # Sign-up
 
-[Electric Cloud](../cloud) is currently in <Badge type="info" text="PRIVATE BETA" />.
+[Electric Cloud](../cloud) is available now in <Badge type="warning" text="private beta" />.
 
-If you're interested in early-access to the Electric Cloud, you can sign up to the waitlist.
-
-## Sign-up for early access
-
-Submit the form below and we'll be in touch when we can onboard you.
+Sign-up for hosted Electric sync that's blazing fast and [scales to millions of users](/docs/reference/benchmarks#cloud).
 
 <figure>
   <iframe class="airtable-embed"
       src="https://airtable.com/embed/appDitPIpjlAxK7CL/pagrWjq3qw5Fp68Wa/form"
       onmousewheel=""
       width="100%" height="865"
-      style="background: transparent; border: 1px solid #ccc; filter: invert(95%);">
+      style="background: transparent; border: 0px solid #eee; filter: grayscale(91%) invert(91%); margin: 0px -48px 48px; width: calc(100% + 96px)">
   </iframe>
 </figure>
 
-## Next steps
+### Next steps
 
-In the meantime, you may like to [#say-hello on Discord](https://discord.electric-sql.com) and check out our guides on installation and self-hosted deployment.
+See the [onboarding](./onboarding.md) and [usage](./usage.md) pages for more context on the process and next steps.
+
+You may also like to [#say-hello on Discord](https://discord.electric-sql.com) and check out our guides on installation and self-hosted deployment.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action hidden-xs">

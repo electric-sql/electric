@@ -9,10 +9,7 @@ outline: [2, 3]
 
 # Onboarding
 
-Onboarding instructions for the Electric Cloud <Badge type="info" text="PRIVATE BETA" />.
-
-> [!Warning] Invitation only
-> These instructions are only for teams that have been invited to the Electric Cloud private BETA. To get access, please [sign-up](./sign-up) to the waitlist.
+Onboarding instructions for the [Electric Cloud](../cloud).
 
 ## Onboarding to the Electric Cloud
 
@@ -60,4 +57,4 @@ Higher levels of support are available and negotiable. All the way up to dedicat
 
 We're super excited to meet many of you and start learning together on how to build kickass sync-based apps & backend services!
 
-Make sure you're [signed up to the waitlist](./sign-up) and then follow the instructions in your invitation email.
+Make sure you're [signed up](./sign-up) and then follow the instructions in your invitation email.

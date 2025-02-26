@@ -13,14 +13,11 @@ import AccessCredsPNG from '/static/img/docs/cloud/access-creds.png?url'
 
 # Usage
 
-Usage instructions for the Electric Cloud <Badge type="info" text="PRIVATE BETA" />.
-
-> [!Warning] Invitation only
-> These instructions are only for teams that have been invited to the Electric Cloud private BETA. To get access, please [sign-up](./sign-up) to the waitlist.
+Usage instructions for the [Electric Cloud](../cloud).
 
 ## Using the Electric Cloud
 
-Once onboarded, you will be given a source ID and secret for each Postgres database you've connected to Electric:
+Once [onboarded](./onboarding), you will be given a source ID and secret for each Postgres database you've connected to Electric:
 
 <figure>
   <img :src="AccessCredsPNG" />
