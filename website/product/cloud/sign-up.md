@@ -11,7 +11,7 @@ outline: deep
 
 [Electric Cloud](../cloud) is available now in <Badge type="warning" text="private beta" />.
 
-Sign-up for hosted Electric sync that's blazing fast and [scales to millions of users](/docs/reference/benchmarks#cloud).
+Sign-up for hosted Electric sync that's blazing fast and [scales to millions of users](../cloud).
 
 <figure>
   <iframe class="airtable-embed"
