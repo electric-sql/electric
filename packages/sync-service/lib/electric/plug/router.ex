@@ -1,6 +1,10 @@
 defmodule Electric.Plug.Router do
   use Plug.Router, copy_opts_to_assign: :config
-  use Sentry.PlugCapture
+  use Electric.Telemetry
+
+  with_telemetry Sentry.PlugCapture do
+    use Sentry.PlugCapture
+  end
 
   alias Electric.Plug.Utils.CORSHeaderPlug
   alias Electric.Plug.Utils.PassAssignToOptsPlug
@@ -16,7 +20,11 @@ defmodule Electric.Plug.Router do
   plug Electric.Plug.TraceContextPlug
   plug Plug.Telemetry, event_prefix: [:electric, :routing]
   plug Plug.Logger
-  plug Sentry.PlugContext
+
+  with_telemetry Sentry.PlugCapture do
+    plug Sentry.PlugContext
+  end
+
   plug :put_cors_headers
   plug :dispatch
 
