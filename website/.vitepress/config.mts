@@ -94,7 +94,8 @@ export default defineConfig({
       { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/'},
       { text: 'Demos', link: '/demos', activeMatch: '/demos'},
       { text: 'Blog', link: '/blog', activeMatch: '/blog'},
-      { text: 'About', link: '/about/community', activeMatch: '/about/'}
+      { text: 'About', link: '/about/community', activeMatch: '/about/'},
+      { component: 'NavSignupButton' }
     ],
     search: {
       provider: 'local'

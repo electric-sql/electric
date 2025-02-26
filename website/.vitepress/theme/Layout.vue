@@ -5,6 +5,7 @@ import { useSidebar } from 'vitepress/theme'
 import DefaultTheme from 'vitepress/theme-without-fonts'
 
 import BlogPostHeader from '../../src/components/BlogPostHeader.vue'
+import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import SiteFooter from '../../src/components/SiteFooter.vue'
 import UseCaseHeader from '../../src/components/UseCaseHeader.vue'
 
@@ -19,6 +20,9 @@ const { hasSidebar } = useSidebar()
 
 <template>
   <Layout>
+    <template #nav-bar-content-after>
+      <NavSignupButton />
+    </template>
     <template #home-features-before>
       <div class="vp-doc">
         <div class="container">
