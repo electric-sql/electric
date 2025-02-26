@@ -25,7 +25,7 @@ interface MultiShapeStreamOptions<
       | ShapeStream<TShapeRows[K]>
   }
   start?: boolean
-  checkForUpdatesAfter?: number // milliseconds
+  checkForUpdatesAfterMs?: number // milliseconds
 }
 
 interface MultiShapeChangeMessage<
@@ -58,7 +58,7 @@ export interface MultiShapeStreamInterface<
   },
 > {
   shapes: { [K in keyof TShapeRows]: ShapeStream<TShapeRows[K]> }
-  checkForUpdatesAfter?: number
+  checkForUpdatesAfterMs?: number
 
   subscribe(
     callback: (
@@ -79,7 +79,7 @@ export interface MultiShapeStreamInterface<
 /**
  * A multi-shape stream is a stream that can subscribe to multiple shapes.
  * It ensures that all shapes will receive at least an `up-to-date` message from
- * Electric within the `checkForUpdatesAfter` interval.
+ * Electric within the `checkForUpdatesAfterMs` interval.
  *
  * @constructor
  * @param {MultiShapeStreamOptions} options - configure the multi-shape stream
@@ -118,7 +118,7 @@ export class MultiShapeStream<
 {
   #shapes: { [K in keyof TShapeRows]: ShapeStream<TShapeRows[K]> }
   #started = false
-  checkForUpdatesAfter?: number
+  checkForUpdatesAfterMs?: number
 
   #checkForUpdatesTimeout?: ReturnType<typeof setTimeout> | undefined
 
@@ -139,10 +139,10 @@ export class MultiShapeStream<
   constructor(options: MultiShapeStreamOptions<TShapeRows>) {
     const {
       start = true, // By default we start the multi-shape stream
-      checkForUpdatesAfter = 100, // Force a check for updates after 100ms
+      checkForUpdatesAfterMs = 100, // Force a check for updates after 100ms
       shapes,
     } = options
-    this.checkForUpdatesAfter = checkForUpdatesAfter
+    this.checkForUpdatesAfterMs = checkForUpdatesAfterMs
     this.#shapes = Object.fromEntries(
       Object.entries(shapes).map(([key, shape]) => [
         key,
@@ -195,7 +195,7 @@ export class MultiShapeStream<
             if (maxDataLsn > lastMaxDataLsn) {
               this.#lastDataLsns[key] = maxDataLsn
             }
-            // There is new data, so we need to schedule a check for updates on 
+            // There is new data, so we need to schedule a check for updates on
             // other shapes
             this.#scheduleCheckForUpdates()
           }
@@ -220,7 +220,7 @@ export class MultiShapeStream<
     this.#checkForUpdatesTimeout ??= setTimeout(() => {
       this.#checkForUpdates()
       this.#checkForUpdatesTimeout = undefined
-    }, this.checkForUpdatesAfter)
+    }, this.checkForUpdatesAfterMs)
   }
 
   async #checkForUpdates() {
@@ -335,7 +335,7 @@ export class MultiShapeStream<
 /**
  * A transactional multi-shape stream is a multi-shape stream that emits the
  * messages in transactional batches, ensuring that all shapes will receive
- * at least an `up-to-date` message from Electric within the `checkForUpdatesAfter`
+ * at least an `up-to-date` message from Electric within the `checkForUpdatesAfterMs`
  * interval.
  * It uses the `lsn` metadata to infer transaction boundaries, and the `op_position`
  * metadata to sort the messages within a transaction.
