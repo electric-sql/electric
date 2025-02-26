@@ -618,6 +618,57 @@ defmodule Electric.Plug.RouterTest do
       assert [_] = Jason.decode!(conn.resp_body)
     end
 
+    @tag with_sql: [
+           "CREATE TABLE wide_table (id BIGINT PRIMARY KEY, value1 TEXT NOT NULL, value2 TEXT NOT NULL, value3 TEXT NOT NULL)",
+           "INSERT INTO wide_table VALUES (1, 'test value 1', 'test value 1', 'test value 1')"
+         ]
+    test "GET receives old rows in updates when replica=full", %{opts: opts, db_conn: db_conn} do
+      conn =
+        conn("GET", "/v1/shape?table=wide_table&offset=-1&replica=full") |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      shape_handle = get_resp_shape_handle(conn)
+      json_body = Jason.decode!(conn.resp_body)
+
+      assert [
+               %{
+                 "value" => %{"id" => _, "value1" => _, "value2" => _, "value3" => _},
+                 "key" => key
+               }
+             ] = json_body
+
+      # Old value cannot be present on the snapshot
+      refute match?(%{"old_value" => _}, json_body)
+
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape?table=wide_table&offset=0_0&handle=#{shape_handle}&live&replica=full"
+          )
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "UPDATE wide_table SET value2 = 'test value 2' WHERE id = 1", [])
+
+      assert %{status: 200} = conn = Task.await(task)
+
+      # No extra keys should be present, so this is a pin
+      value = %{
+        "id" => "1",
+        "value2" => "test value 2",
+        "value1" => "test value 1",
+        "value3" => "test value 1"
+      }
+
+      old_value = %{
+        "value2" => "test value 1"
+      }
+
+      assert [%{"key" => ^key, "value" => ^value, "old_value" => ^old_value}, @up_to_date] =
+               Jason.decode!(conn.resp_body)
+    end
+
     @tag additional_fields: "num INTEGER NOT NULL"
     @tag with_sql: [
            "INSERT INTO serial_ids (id, num) VALUES (1, 1), (2, 10)"
