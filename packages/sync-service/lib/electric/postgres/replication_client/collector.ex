@@ -177,4 +177,6 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     # This gives us headroom for splitting any operation into 2.
     %{state | transaction: Transaction.prepend_change(txn, change), tx_op_index: tx_op_index + 2}
   end
+
+  defguard is_collecting(collector) when not is_nil(collector.transaction)
 end

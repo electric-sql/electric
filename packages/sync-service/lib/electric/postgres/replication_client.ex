@@ -4,6 +4,7 @@ defmodule Electric.Postgres.ReplicationClient do
   """
   use Postgrex.ReplicationConnection
 
+  require Electric.Postgres.ReplicationClient.Collector
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.LogicalReplication.Decoder
   alias Electric.Postgres.Lsn
@@ -215,6 +216,12 @@ defmodule Electric.Postgres.ReplicationClient do
     end)
 
     case reply do
+      1 when Collector.is_collecting(state.txn_collector) ->
+        {:noreply, [encode_standby_status_update(state)], state}
+
+      # if we are not collecting any transactions, advance the replication slot
+      # with keepalives to avoid it getting filled with irrelevant changes, like
+      # heartbeats from the database provider
       1 ->
         state = update_applied_wal(state, wal_end)
         {:noreply, [encode_standby_status_update(state)], state}
