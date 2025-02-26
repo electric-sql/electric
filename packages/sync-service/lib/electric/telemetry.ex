@@ -1,12 +1,8 @@
 defmodule Electric.Telemetry do
   require Logger
 
-  # We need to test first if we're in the telemetry-enabled target
-  @telemetry_enabled? Mix.env() == :test || Mix.target() == Electric.MixProject.telemetry_target()
-
-  Logger.info(
-    "Compiling electric with telemetry #{if(@telemetry_enabled?, do: "ON", else: "OFF")}"
-  )
+  @enabled Mix.env() == :test || Mix.target() == Electric.MixProject.telemetry_target()
+  @log_level Application.compile_env(:electric, [Electric.Telemetry, :log_level], false)
 
   defmacro __using__(_opts) do
     quote do
@@ -14,33 +10,31 @@ defmodule Electric.Telemetry do
     end
   end
 
-  defmacro with_telemetry(module, do: block, else: else_block) do
-    include_wity_telemetry(__ENV__, module, block, else_block)
+  # uses the availability of the given dependencies to optionally compile
+  # the provided block when MIX_TARGET is `:application`.
+  defmacro with_telemetry(dependencies, do: block, else: else_block) do
+    include_with_telemetry(__CALLER__, __ENV__, dependencies, block, else_block)
   end
 
-  defmacro with_telemetry(module, do: block) do
-    include_wity_telemetry(__ENV__, module, block, nil)
+  defmacro with_telemetry(dependencies, do: block) do
+    include_with_telemetry(__CALLER__, __ENV__, dependencies, block, nil)
   end
 
-  if @telemetry_enabled? do
-    defp include_wity_telemetry(env, module, block, else_block) do
-      modules = List.wrap(module) |> Enum.map(&Macro.expand(&1, env))
-      available? = Enum.all?(modules, &Code.ensure_loaded?/1)
+  defp include_with_telemetry(caller, env, dependencies, block, else_block) do
+    modules = List.wrap(dependencies) |> Enum.map(&Macro.expand(&1, env))
+    available? = Enum.all?(modules, &Code.ensure_loaded?/1)
 
-      if available? do
-        quote(do: unquote(block))
-      else
-        if else_block, do: quote(do: unquote(else_block))
-      end
-    end
-  else
-    defp include_wity_telemetry(_env, _module, _block, else_block) do
+    if @enabled && available? do
+      if @log_level,
+        do:
+          Logger.log(
+            @log_level,
+            "Enabling telemetry in #{caller.module || Path.relative_to(caller.file, Path.expand("..", __DIR__))}"
+          )
+
+      quote(do: unquote(block))
+    else
       if else_block, do: quote(do: unquote(else_block))
     end
-  end
-
-  @spec enabled?() :: boolean()
-  def enabled? do
-    @telemetry_enabled?
   end
 end
