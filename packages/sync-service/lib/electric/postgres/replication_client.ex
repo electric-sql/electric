@@ -77,7 +77,8 @@ defmodule Electric.Postgres.ReplicationClient do
                    try_creating_publication?: [required: true, type: :boolean],
                    start_streaming?: [type: :boolean, default: true],
                    slot_name: [required: true, type: :string],
-                   slot_temporary?: [type: :boolean, default: false]
+                   slot_temporary?: [type: :boolean, default: false],
+                   applied_wal: [type: :non_neg_integer, default: 0]
                  )
 
     @spec new(Access.t()) :: t()
@@ -197,20 +198,6 @@ defmodule Electric.Postgres.ReplicationClient do
   @impl true
   @spec handle_data(binary(), State.t()) ::
           {:noreply, State.t()} | {:noreply, list(binary()), State.t()}
-
-  def handle_data(
-        <<@repl_msg_x_log_data, _wal_start::64, wal_end::64, _clock::64, _rest::binary>>,
-        %State{applied_wal: applied_wal} = state
-      )
-      # metadata messages like relation changes come in with wal_end = 0
-      when wal_end > 0 and wal_end <= applied_wal do
-    Logger.debug(fn ->
-      "Ignoring stale replication message: wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)})"
-    end)
-
-    {:noreply, [encode_standby_status_update(state)], state}
-  end
-
   def handle_data(
         <<@repl_msg_x_log_data, _wal_start::64, wal_end::64, _clock::64, rest::binary>>,
         %State{stack_id: stack_id} = state
@@ -238,7 +225,7 @@ defmodule Electric.Postgres.ReplicationClient do
     end
   end
 
-  defp process_x_log_data(data, wal_end, %State{stack_id: stack_id} = state) do
+  defp process_x_log_data(data, _wal_end, %State{stack_id: stack_id} = state) do
     OpenTelemetry.timed_fun("decode_message_duration", fn -> decode_message(data) end)
     # # Useful for debugging:
     # |> tap(fn %struct{} = msg ->
@@ -266,6 +253,11 @@ defmodule Electric.Postgres.ReplicationClient do
         )
 
         {:noreply, %State{state | txn_collector: txn_collector}}
+
+      {%Transaction{} = txn, %Collector{} = txn_collector}
+      when txn.last_log_offset.tx_offset <= state.applied_wal ->
+        state = %State{state | txn_collector: txn_collector}
+        {:noreply, [encode_standby_status_update(state)], state}
 
       {%Transaction{} = txn, %Collector{} = txn_collector} ->
         state = %State{state | txn_collector: txn_collector}
@@ -311,7 +303,7 @@ defmodule Electric.Postgres.ReplicationClient do
             # new transaction into the shape log store. So, when the applied function
             # returns, we can safely advance the replication slot past the transaction's commit
             # LSN.
-            state = update_applied_wal(state, wal_end)
+            state = update_applied_wal(state, txn.last_log_offset.tx_offset)
             {:noreply, [encode_standby_status_update(state)], state}
 
           other ->
