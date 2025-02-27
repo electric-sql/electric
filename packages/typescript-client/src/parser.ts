@@ -104,7 +104,12 @@ export class MessageParser<T extends Row<unknown>> {
       // is needed because there could be a column named `value`
       // and the value associated to that column will be a string or null.
       // But `typeof null === 'object'` so we need to make an explicit check.
-      if (key === `value` && typeof value === `object` && value !== null) {
+      // We also parse the `old_value`, which appears on updates when `replica=full`.
+      if (
+        (key === `value` || key === `old_value`) &&
+        typeof value === `object` &&
+        value !== null
+      ) {
         // Parse the row values
         const row = value as Record<string, Value<GetExtensions<T>>>
         Object.keys(row).forEach((key) => {
