@@ -92,7 +92,7 @@ defmodule Electric.Application do
       ],
       pool_opts: [pool_size: get_env(opts, :db_pool_size)],
       chunk_bytes_threshold: get_env(opts, :chunk_bytes_threshold),
-      telemetry_opts: telemetry_opts()
+      telemetry_opts: telemetry_opts(opts)
     )
   end
 
