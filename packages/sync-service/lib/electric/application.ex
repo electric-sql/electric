@@ -203,7 +203,7 @@ defmodule Electric.Application do
     end
   end
 
-  defp telemetry_opts do
+  defp telemetry_opts(opts \\ []) do
     [
       instance_id: Electric.instance_id(),
       system_metrics_poll_interval: Electric.Config.get_env(:system_metrics_poll_interval),
