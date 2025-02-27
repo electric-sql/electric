@@ -122,7 +122,8 @@ export interface ShapeStreamOptions<T = never> {
      * changed columns in an update.
      *
      * If it's `full` Electric will send the entire row with both changed and
-     * unchanged values.
+     * unchanged values. `old_value` will also be present on update messages,
+     * containing the previous value for changed columns.
      *
      * Setting `replica` to `full` will obviously result in higher bandwidth
      * usage and so is not recommended.
@@ -273,6 +274,7 @@ A `ShapeStream` consumes and emits a stream of messages. These messages can eith
 export type ChangeMessage<T extends Row<unknown> = Row> = {
   key: string
   value: T
+  old_value?: Partial<T> // Only provided for updates if `replica` is `full`
   headers: Header & { operation: `insert` | `update` | `delete` }
   offset: Offset
 }
@@ -329,7 +331,7 @@ By default Electric sends the modified columns in an update message, not the com
 - an `update` operation contains the primary key column(s) and the changed columns
 - a `delete` operation contains just the primary key column(s)
 
-If you'd like to recieve the full row value for updates and deletes, you can set the `replica` option of your `ShapeStream` to `full`:
+If you'd like to receive the full row value for updates and deletes, you can set the `replica` option of your `ShapeStream` to `full`:
 
 ```tsx
 import { ShapeStream } from "@electric-sql/client"
@@ -342,6 +344,12 @@ const stream = new ShapeStream({
   }
 })
 ```
+
+When using `replica=full`, the returned rows will include:
+
+- on `insert` the new value in `msg.value`
+- on `update` the new value in `msg.value` and the previous value in `msg.old_value` for any changed columns - the full previous state can be reconstructed by combining the two
+- on `delete` the full previous value in `msg.value`
 
 This is less efficient and will use more bandwidth for the same shape (especially for tables with large static column values). Note also that shapes with different `replica` settings are distinct, even for the same table and where clause combination.
 
