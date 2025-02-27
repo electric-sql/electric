@@ -40,6 +40,10 @@ if Code.ensure_loaded?(Ecto) do
     end
 
     @doc false
+    def where(%{wheres: []} = _query) do
+      nil
+    end
+
     def where(query) do
       %{from: %{source: {table_name, struct}}} = query
 

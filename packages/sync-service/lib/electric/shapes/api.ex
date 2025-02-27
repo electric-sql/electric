@@ -210,6 +210,21 @@ defmodule Electric.Shapes.Api do
     %Response{status: 202, body: []}
   end
 
+  def delete_shape(%Request{handle: nil} = request) do
+    Response.error(request, "Shape not found", status: 404)
+  end
+
+  @spec delete_shape(Plug.Conn.t()) :: Plug.Conn.t()
+  def delete_shape(%Plug.Conn{} = conn, %Request{} = request) do
+    response = delete_shape(request)
+    Response.send(conn, response)
+  end
+
+  @spec options(Plug.Conn.t()) :: Plug.Conn.t()
+  def options(%Plug.Conn{} = conn) do
+    Api.Options.call(conn)
+  end
+
   defp seek(%Request{} = request) do
     request
     |> listen_for_new_changes()

@@ -65,7 +65,7 @@ defmodule Electric.Plug.UtilsTest do
         Plug.Test.conn(:get, "/")
         |> Plug.Conn.assign(:config,
           stack_id: ctx.stack_id,
-          stack_events_registry: Registry.StackEvents,
+          stack_events_registry: Electric.stack_events_registry(),
           stack_ready_timeout: 100
         )
 
@@ -78,7 +78,7 @@ defmodule Electric.Plug.UtilsTest do
         Plug.Test.conn(:get, "/")
         |> Plug.Conn.assign(:config,
           stack_id: ctx.stack_id,
-          stack_events_registry: Registry.StackEvents,
+          stack_events_registry: Electric.stack_events_registry(),
           stack_ready_timeout: 100
         )
 
@@ -93,7 +93,7 @@ defmodule Electric.Plug.UtilsTest do
           Plug.Test.conn(:get, "/")
           |> Plug.Conn.assign(:config,
             stack_id: ctx.stack_id,
-            stack_events_registry: Registry.StackEvents,
+            stack_events_registry: Electric.stack_events_registry(),
             stack_ready_timeout: 1000
           )
           |> Electric.Plug.Utils.hold_conn_until_stack_ready([])
@@ -101,7 +101,7 @@ defmodule Electric.Plug.UtilsTest do
 
       Process.sleep(100)
 
-      Electric.StackSupervisor.dispatch_stack_event(Registry.StackEvents, ctx.stack_id, :ready)
+      Electric.StackSupervisor.dispatch_stack_event(ctx.stack_id, :ready)
 
       conn = Task.await(conn_task)
       refute conn.halted

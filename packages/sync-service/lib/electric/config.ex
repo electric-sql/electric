@@ -75,7 +75,7 @@ defmodule Electric.Config do
   # the instance id needs to be consistent across calls, so we do need to have
   # a value in the config, even if it's not configured by the user.
   def ensure_instance_id do
-    case get_env(:instance_id, nil) do
+    case get_env_with_default(:instance_id, nil) do
       nil ->
         instance_id = generate_instance_id()
 
@@ -93,14 +93,22 @@ defmodule Electric.Config do
 
   @spec get_env(Application.key()) :: Application.value()
   def get_env(key) do
-    get_env(key, default(key))
+    get_env_with_default(key, default(key))
   end
 
-  defp get_env(key, nil) do
+  def get_env_lazy(key, fun) when is_function(fun, 0) do
+    case Application.fetch_env(:electric, key) do
+      {:ok, nil} -> fun.()
+      {:ok, value} -> value
+      :error -> fun.()
+    end
+  end
+
+  defp get_env_with_default(key, nil) do
     Application.get_env(:electric, key, nil)
   end
 
-  defp get_env(key, default) do
+  defp get_env_with_default(key, default) do
     # handle the case where the config value was set in runtime.exs but to
     # `nil` because of a missing env var. This allows us to just use `nil`
     # as the default config values in runtime.exs so avoiding hard-coding

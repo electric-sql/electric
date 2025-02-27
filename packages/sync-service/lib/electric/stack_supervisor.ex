@@ -132,10 +132,18 @@ defmodule Electric.StackSupervisor do
     Keyword.update(opts, :connection_opts, [], &Electric.Utils.obfuscate_password/1)
   end
 
-  def subscribe_to_stack_events(registry, stack_id, ref \\ make_ref()) do
+  def subscribe_to_stack_events(
+        registry \\ Electric.stack_events_registry(),
+        stack_id,
+        ref \\ make_ref()
+      )
+
+  def subscribe_to_stack_events(registry, stack_id, ref) do
     {:ok, _pid} = Registry.register(registry, {:stack_status, stack_id}, ref)
     ref
   end
+
+  def dispatch_stack_event(registry \\ Electric.stack_events_registry(), stack_id, event)
 
   # noop if there's no registry running
   def dispatch_stack_event(nil, _stack_id, _event) do

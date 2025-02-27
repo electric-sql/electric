@@ -8,6 +8,8 @@ defmodule Electric.Shapes.Shape do
   alias Electric.Replication.Changes
   alias Electric.Shapes.WhereClause
 
+  @default_replica :default
+
   @enforce_keys [:root_table, :root_table_id]
   defstruct [
     :root_table,
@@ -16,7 +18,7 @@ defmodule Electric.Shapes.Shape do
     :where,
     :selected_columns,
     storage: %{compaction: :disabled},
-    replica: :default
+    replica: @default_replica
   ]
 
   @type replica() :: :full | :default
@@ -101,6 +103,8 @@ defmodule Electric.Shapes.Shape do
   def schema_options do
     @schema_options
   end
+
+  def default_replica_mode, do: @default_replica
 
   def new(table, opts) when is_binary(table) and is_list(opts) do
     case Electric.Postgres.Identifiers.parse_relation(table) do

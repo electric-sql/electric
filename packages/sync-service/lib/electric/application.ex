@@ -15,7 +15,7 @@ defmodule Electric.Application do
 
   def children_library do
     [
-      {Registry, name: Registry.StackEvents, keys: :duplicate}
+      {Registry, name: Electric.stack_events_registry(), keys: :duplicate}
     ]
   end
 
@@ -48,7 +48,7 @@ defmodule Electric.Application do
         {Electric.StackSupervisor, Keyword.put(configuration(), :name, Electric.StackSupervisor)}
       ],
       application_telemetry(),
-      api_server(),
+      api_server_children(),
       prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
     ])
   end
@@ -90,7 +90,7 @@ defmodule Electric.Application do
         slot_name: slot_name,
         slot_temporary?: get_env(opts, :replication_slot_temporary?)
       ],
-      pool_opts: [pool_size: get_env(opts, :db_pool_size)],
+      pool_opts: get_env_with_default(opts, :pool_opts, pool_size: get_env(opts, :db_pool_size)),
       chunk_bytes_threshold: get_env(opts, :chunk_bytes_threshold),
       telemetry_opts: telemetry_opts(opts)
     )
@@ -121,12 +121,17 @@ defmodule Electric.Application do
     # user to easily set the root path for the electric data without having to
     # get into the nitty-gritty of full storage and persistent kv
     # configuration.
-    {kv_module, kv_fun, kv_params} =
-      get_env_lazy(opts, :persistent_kv, fn ->
-        Electric.Config.Defaults.persistent_kv(Keyword.take(opts, [:storage_dir]))
-      end)
 
-    persistent_kv = apply(kv_module, kv_fun, [kv_params])
+    persistent_kv =
+      case get_env_lazy(opts, :persistent_kv, fn ->
+             Electric.Config.Defaults.persistent_kv(Keyword.take(opts, [:storage_dir]))
+           end) do
+        {kv_module, kv_fun, kv_params} ->
+          apply(kv_module, kv_fun, [kv_params])
+
+        %_{} = persistent_kv ->
+          persistent_kv
+      end
 
     storage =
       get_env_lazy(opts, :storage, fn ->
@@ -135,7 +140,7 @@ defmodule Electric.Application do
 
     [
       stack_id: stack_id,
-      stack_events_registry: Registry.StackEvents,
+      stack_events_registry: Electric.stack_events_registry(),
       persistent_kv: persistent_kv,
       storage: storage
     ]
@@ -156,7 +161,13 @@ defmodule Electric.Application do
   end
 
   defp get_env_lazy(opts, key, fun) do
-    Keyword.get_lazy(opts, key, fun)
+    Keyword.get_lazy(opts, key, fn ->
+      Electric.Config.get_env_lazy(key, fun)
+    end)
+  end
+
+  defp get_env_with_default(opts, key, default) do
+    Keyword.get(opts, key, default)
   end
 
   defp application_telemetry do
@@ -175,32 +186,65 @@ defmodule Electric.Application do
         Bandit,
         plug: {Electric.Plug.UtilityRouter, []},
         port: port,
-        thousand_island_options: http_listener_options()
+        thousand_island_options: bandit_options([])
       }
     ]
   end
 
-  defp api_server do
-    if Electric.Config.get_env(:enable_http_api) do
-      router_opts = api_plug_opts()
+  @doc false
+  def api_server do
+    api_server(Bandit, [])
+  end
 
-      [
-        {Bandit,
-         plug: {Electric.Plug.Router, router_opts},
-         port: Electric.Config.get_env(:service_port),
-         thousand_island_options: http_listener_options()}
-      ]
+  @doc false
+  def api_server(opts) when is_list(opts) do
+    api_server(Bandit, opts)
+  end
+
+  @doc false
+  def api_server(server, opts \\ [])
+
+  def api_server(Bandit, opts) do
+    router_opts = api_plug_opts(opts)
+
+    [
+      {Bandit,
+       plug: {Electric.Plug.Router, router_opts},
+       port: get_env(opts, :service_port),
+       thousand_island_options: bandit_options(opts)}
+    ]
+  end
+
+  def api_server(Plug.Cowboy, opts) do
+    router_opts = api_plug_opts(opts)
+
+    [
+      {Plug.Cowboy,
+       scheme: :http, plug: {Electric.Plug.Router, router_opts}, options: cowboy_options(opts)}
+    ]
+  end
+
+  defp api_server_children do
+    if Electric.Config.get_env(:enable_http_api) do
+      api_server()
     else
       []
     end
   end
 
-  defp http_listener_options do
-    if Electric.Config.get_env(:listen_on_ipv6?) do
+  defp bandit_options(opts) do
+    if get_env(opts, :listen_on_ipv6?) do
       [transport_options: [:inet6]]
     else
       []
     end
+  end
+
+  defp cowboy_options(opts) do
+    Enum.concat([
+      if(get_env(opts, :listen_on_ipv6?), do: [:inet6], else: []),
+      [port: get_env(opts, :service_port)]
+    ])
   end
 
   defp telemetry_opts(opts \\ []) do

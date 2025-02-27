@@ -185,9 +185,9 @@ defmodule Support.ComponentSetup do
 
     storage = {FileStorage, stack_id: stack_id, storage_dir: ctx.tmp_dir}
 
-    stack_events_registry = Registry.StackEvents
+    stack_events_registry = Electric.stack_events_registry()
 
-    ref = Electric.StackSupervisor.subscribe_to_stack_events(stack_events_registry, stack_id)
+    ref = Electric.StackSupervisor.subscribe_to_stack_events(stack_id)
     publication_name = "electric_test_pub_#{:erlang.phash2(stack_id)}"
 
     stack_supervisor =

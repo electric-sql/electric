@@ -431,7 +431,7 @@ defmodule Electric.Client do
     stream(client, table_or_queryable, [])
   end
 
-  @spec stream(String.t(), String.t()) :: Enumerable.t(message())
+  @spec stream(String.t(), stream_options()) :: Enumerable.t(message())
   def stream(url, opts) when is_binary(url) do
     case new(endpoint: url) do
       {:ok, client} ->
@@ -483,8 +483,13 @@ defmodule Electric.Client do
     shape_params = ShapeDefinition.params(shape)
 
     client
-    |> Map.update!(:params, &Map.merge(&1, shape_params))
+    |> merge_params(shape_params)
     |> Map.put(:parser, shape.parser)
+  end
+
+  @doc false
+  def merge_params(%Client{} = client, params) do
+    Map.update!(client, :params, &Map.merge(&1, Map.new(params)))
   end
 
   @doc """

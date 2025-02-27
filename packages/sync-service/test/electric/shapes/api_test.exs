@@ -50,7 +50,7 @@ defmodule Electric.Shapes.ApiTest do
     Api.plug_opts(
       stack_id: ctx.stack_id,
       pg_id: @test_pg_id,
-      stack_events_registry: Registry.StackEvents,
+      stack_events_registry: Electric.stack_events_registry(),
       stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
       shape_cache: {Mock.ShapeCache, []},
       storage: {Mock.Storage, []},
@@ -883,7 +883,7 @@ defmodule Electric.Shapes.ApiTest do
       # Wait for the task process to subscribe to stack events
       wait_until_subscribed(ctx.stack_id, 50, 4)
 
-      Electric.StackSupervisor.dispatch_stack_event(Registry.StackEvents, ctx.stack_id, :ready)
+      Electric.StackSupervisor.dispatch_stack_event(ctx.stack_id, :ready)
 
       {:error, response} = Task.await(task)
 
@@ -896,7 +896,7 @@ defmodule Electric.Shapes.ApiTest do
   end
 
   defp wait_until_subscribed(stack_id, sleep, num_attempts) do
-    if Registry.lookup(Registry.StackEvents, {:stack_status, stack_id}) != [] do
+    if Registry.lookup(Electric.stack_events_registry(), {:stack_status, stack_id}) != [] do
       :ok
     else
       Process.sleep(sleep)

@@ -2,10 +2,6 @@ import Config
 
 config :logger, level: :warning
 
-config :sentry,
-  environment_name: config_env(),
-  client: Electric.Telemetry.SentryReqHTTPClient
-
 if config_env() == :test do
   port = 3333
   default_database_url = "postgresql://postgres:password@localhost:54321/electric?sslmode=disable"
