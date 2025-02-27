@@ -32,18 +32,18 @@ defmodule Electric.Client.MixProject do
 
   defp deps do
     [
+      {:electric, ">= 1.0.0-beta.19", optional: true},
       {:ecto_sql, "~> 3.12", optional: true},
       {:gen_stage, "~> 1.2", optional: true},
       {:jason, "~> 1.4"},
       {:nimble_options, "~> 1.1"},
       {:req, "~> 0.5"},
       {:bypass, "~> 2.1", only: [:test]},
-      {:postgrex, "~> 0.19", only: [:dev, :test]},
+      {:postgrex, "~> 0.19", only: [:dev, :test], override: true},
       {:postgresql_uri, "~> 0.1", only: [:test]},
       {:uuid, "~> 1.1", only: [:test]},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:electric, path: "../sync-service", only: [:dev, :test], optional: true}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 
