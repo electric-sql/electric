@@ -26,7 +26,7 @@ defmodule Electric.Client.Fetch.Request do
 
   fields = [
     stream_id: quote(do: term()),
-    method: quote(do: :get | :head | :delete),
+    method: quote(do: :get | :head | :delete | :options),
     endpoint: quote(do: URI.t()),
     offset: quote(do: Electric.Client.offset()),
     shape_handle: quote(do: Electric.Client.shape_handle() | nil),

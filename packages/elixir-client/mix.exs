@@ -43,7 +43,7 @@ defmodule Electric.Client.MixProject do
       {:uuid, "~> 1.1", only: [:test]},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:electric, path: "../sync-service", optional: true, only: [:dev, :test]}
+      {:electric, path: "../sync-service", only: [:dev, :test], optional: true}
     ]
   end
 

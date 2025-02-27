@@ -56,7 +56,16 @@ defmodule Electric.Client.ShapeDefinition do
   @type option :: unquote(NimbleOptions.option_typespec(@schema))
   @type options :: [option()]
 
-  @spec new(String.t(), options()) :: {:ok, t()} | {:error, term()}
+  @spec new(String.t() | keyword()) :: {:ok, t()} | {:error, term()}
+  def new(table_name) when is_binary(table_name) do
+    new(table_name, [])
+  end
+
+  def new(opts) when is_list(opts) do
+    {table, opts} = Keyword.pop(opts, :table, nil)
+    new(table, opts)
+  end
+
   @doc """
   Create a `ShapeDefinition` for the given `table_name`.
 
@@ -64,7 +73,8 @@ defmodule Electric.Client.ShapeDefinition do
 
   #{NimbleOptions.docs(@schema)}
   """
-  def new(table_name, opts \\ []) do
+  @spec new(String.t(), options()) :: {:ok, t()} | {:error, term()}
+  def new(table_name, opts) when is_binary(table_name) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
       {:ok,
        %__MODULE__{
@@ -85,6 +95,8 @@ defmodule Electric.Client.ShapeDefinition do
     end
   end
 
+  def public_keys, do: @public_keys
+
   @doc """
   Return a string representation of the shape's table, quoted for use in API URLs.
 
@@ -99,16 +111,20 @@ defmodule Electric.Client.ShapeDefinition do
 
   """
   @spec url_table_name(t()) :: String.t()
-  def url_table_name(%__MODULE__{namespace: nil, table: name}) do
-    safe_url_name(name)
+  def url_table_name(%__MODULE__{namespace: nil, table: table}) do
+    safe_url_name(table)
   end
 
-  def url_table_name(%__MODULE__{namespace: namespace, table: name}) do
-    IO.iodata_to_binary([safe_url_name(namespace), ".", safe_url_name(name)])
+  def url_table_name(%__MODULE__{namespace: namespace, table: table}) do
+    url_table_name(namespace, table)
+  end
+
+  def url_table_name(namespace, table) do
+    IO.iodata_to_binary([safe_url_name(namespace), ".", safe_url_name(table)])
   end
 
   defp safe_url_name(name) do
-    if name =~ ~r/^[a-z_][a-z0-9_]*$/ do
+    if name =~ ~r/^[a-z_][a-z0-9_]+$/ do
       name
     else
       quote_table_name(name)
