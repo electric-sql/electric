@@ -82,15 +82,6 @@ defmodule Electric.Application do
 
     slot_name = Keyword.get(opts, :slot_name, "electric_slot_#{replication_stream_id}")
 
-    telemetry_opts = [
-      instance_id: Electric.instance_id(),
-      system_metrics_poll_interval: Electric.Config.get_env(:system_metrics_poll_interval),
-      statsd_host: Electric.Config.get_env(:telemetry_statsd_host),
-      prometheus?: not is_nil(Electric.Config.get_env(:prometheus_port)),
-      call_home_telemetry?: Electric.Config.get_env(:call_home_telemetry?),
-      otel_metrics?: not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
-    ]
-
     Keyword.merge(
       core_configuration(opts),
       connection_opts: get_env!(opts, :connection_opts),
@@ -101,7 +92,7 @@ defmodule Electric.Application do
       ],
       pool_opts: [pool_size: get_env(opts, :db_pool_size)],
       chunk_bytes_threshold: get_env(opts, :chunk_bytes_threshold),
-      telemetry_opts: telemetry_opts
+      telemetry_opts: telemetry_opts(opts)
     )
   end
 
@@ -170,7 +161,7 @@ defmodule Electric.Application do
 
   defp application_telemetry do
     if Code.ensure_loaded?(Electric.Telemetry.ApplicationTelemetry) do
-      [{Electric.Telemetry.ApplicationTelemetry, []}]
+      [{Electric.Telemetry.ApplicationTelemetry, telemetry_opts()}]
     else
       []
     end
@@ -210,5 +201,16 @@ defmodule Electric.Application do
     else
       []
     end
+  end
+
+  defp telemetry_opts(opts \\ []) do
+    [
+      instance_id: Electric.instance_id(),
+      system_metrics_poll_interval: get_env(opts, :system_metrics_poll_interval),
+      statsd_host: get_env(opts, :telemetry_statsd_host),
+      prometheus?: not is_nil(get_env(opts, :prometheus_port)),
+      call_home_telemetry?: get_env(opts, :call_home_telemetry?),
+      otel_metrics?: not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
+    ]
   end
 end
