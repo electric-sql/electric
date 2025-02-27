@@ -69,7 +69,8 @@ export interface PostgresParams {
    * changed columns in an update.
    *
    * If it's `full` Electric will send the entire row with both changed and
-   * unchanged values.
+   * unchanged values. `old_value` will also be present on update messages,
+   * containing the previous value for changed columns.
    *
    * Setting `replica` to `full` will result in higher bandwidth
    * usage and so is not generally recommended.
