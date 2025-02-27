@@ -124,7 +124,7 @@ defmodule Electric.Client.ShapeDefinition do
   end
 
   defp safe_url_name(name) do
-    if name =~ ~r/^[a-z_][a-z0-9_]+$/ do
+    if name =~ ~r/^[a-z_][a-z0-9_]*$/ do
       name
     else
       quote_table_name(name)
