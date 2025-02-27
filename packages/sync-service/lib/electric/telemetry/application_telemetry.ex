@@ -164,6 +164,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         last_value("system.cpu.core_count"),
         last_value("system.cpu.utilization.total"),
         last_value("vm.memory.processes_used", unit: :byte),
+        last_value("vm.memory.processes_by_type", tags: [:process_type], unit: :byte),
         last_value("vm.memory.binary", unit: :byte),
         last_value("vm.memory.ets", unit: :byte),
         last_value("vm.system_counts.process_count"),
@@ -204,6 +205,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         # Our custom measurements:
         {__MODULE__, :uptime_event, []},
         {__MODULE__, :cpu_utilization, []},
+        {__MODULE__, :memory_by_process_type, []},
         {__MODULE__, :get_system_load_average, []},
         {__MODULE__, :get_system_memory_usage, []}
       ]
@@ -213,6 +215,14 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
       :telemetry.execute([:vm, :uptime], %{
         total: :erlang.monotonic_time() - :erlang.system_info(:start_time)
       })
+    end
+
+    def memory_by_process_type do
+      for %{type: type, memory: memory} <- Debug.Process.top_memory_by_type(10) do
+        :telemetry.execute([:vm, :memory], %{processes_by_type: memory}, %{
+          process_type: to_string(type)
+        })
+      end
     end
 
     def cpu_utilization do
