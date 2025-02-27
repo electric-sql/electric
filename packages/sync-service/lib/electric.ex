@@ -133,4 +133,8 @@ defmodule Electric do
   def version do
     @current_vsn
   end
+
+  def stack_events_registry do
+    Electric.StackEventsRegistry
+  end
 end

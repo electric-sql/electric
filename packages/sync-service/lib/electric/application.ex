@@ -15,7 +15,7 @@ defmodule Electric.Application do
 
   def children_library do
     [
-      {Registry, name: Registry.StackEvents, keys: :duplicate}
+      {Registry, name: Electric.stack_events_registry(), keys: :duplicate}
     ]
   end
 
@@ -135,7 +135,7 @@ defmodule Electric.Application do
 
     [
       stack_id: stack_id,
-      stack_events_registry: Registry.StackEvents,
+      stack_events_registry: Electric.stack_events_registry(),
       persistent_kv: persistent_kv,
       storage: storage
     ]
