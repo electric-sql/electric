@@ -139,6 +139,7 @@ defmodule Electric.LogItemsTest do
                  {LogOffset.first(),
                   %{
                     value: %{"pk" => "10", "hello" => "world", "test" => "new"},
+                    old_value: %{"test" => "me"},
                     key: "my_key",
                     headers: %{
                       relation: ["public", "test"],
