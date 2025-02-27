@@ -537,16 +537,11 @@ defmodule Electric.Shapes.Api do
   end
 
   defp get_global_last_seen_lsn(%Request{} = request) do
-    case Electric.PersistentKV.get(
-           request.api.persistent_kv,
-           "#{request.api.stack_id}:last_processed_lsn"
-         ) do
-      {:ok, up_to_date_lsn} ->
-        up_to_date_lsn
-
-      {:error, :not_found} ->
-        0
-    end
+    Electric.Replication.PersistentReplicationState.get_last_processed_lsn(
+      persistent_kv: request.api.persistent_kv,
+      stack_id: request.api.stack_id
+    )
+    |> Electric.Postgres.Lsn.to_integer()
   end
 
   defp update_attrs(%Request{} = request, attrs) do

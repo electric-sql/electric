@@ -4,6 +4,7 @@ defmodule Electric.Postgres.ReplicationClient do
   """
   use Postgrex.ReplicationConnection
 
+  require Electric.Postgres.ReplicationClient.Collector
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.LogicalReplication.Decoder
   alias Electric.Postgres.Lsn
@@ -65,7 +66,7 @@ defmodule Electric.Postgres.ReplicationClient do
             txn_collector: Collector.t(),
             step: Electric.Postgres.ReplicationClient.step(),
             display_settings: [String.t()],
-            applied_wal: non_neg_integer
+            applied_wal: non_neg_integer()
           }
 
     @opts_schema NimbleOptions.new!(
@@ -166,7 +167,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
   @impl true
   def handle_connect(state) do
-    %{state | step: :connected}
+    %State{state | step: :connected}
     |> ConnectionSetup.start()
   end
 
@@ -215,6 +216,12 @@ defmodule Electric.Postgres.ReplicationClient do
     end)
 
     case reply do
+      1 when Collector.is_collecting(state.txn_collector) ->
+        {:noreply, [encode_standby_status_update(state)], state}
+
+      # if we are not collecting any transactions, advance the replication slot
+      # with keepalives to avoid it getting filled with irrelevant changes, like
+      # heartbeats from the database provider
       1 ->
         state = update_applied_wal(state, wal_end)
         {:noreply, [encode_standby_status_update(state)], state}
@@ -224,7 +231,7 @@ defmodule Electric.Postgres.ReplicationClient do
     end
   end
 
-  defp process_x_log_data(data, wal_end, %State{stack_id: stack_id} = state) do
+  defp process_x_log_data(data, _wal_end, %State{stack_id: stack_id} = state) do
     OpenTelemetry.timed_fun("decode_message_duration", fn -> decode_message(data) end)
     # # Useful for debugging:
     # |> tap(fn %struct{} = msg ->
@@ -239,7 +246,7 @@ defmodule Electric.Postgres.ReplicationClient do
     |> Collector.handle_message(state.txn_collector)
     |> case do
       %Collector{} = txn_collector ->
-        {:noreply, %{state | txn_collector: txn_collector}}
+        {:noreply, %State{state | txn_collector: txn_collector}}
 
       {%Relation{} = rel, %Collector{} = txn_collector} ->
         {m, f, args} = state.relation_received
@@ -251,10 +258,10 @@ defmodule Electric.Postgres.ReplicationClient do
           fn -> apply(m, f, [rel | args]) end
         )
 
-        {:noreply, %{state | txn_collector: txn_collector}}
+        {:noreply, %State{state | txn_collector: txn_collector}}
 
       {%Transaction{} = txn, %Collector{} = txn_collector} ->
-        state = %{state | txn_collector: txn_collector}
+        state = %State{state | txn_collector: txn_collector}
 
         {m, f, args} = state.transaction_received
 
@@ -297,7 +304,7 @@ defmodule Electric.Postgres.ReplicationClient do
             # new transaction into the shape log store. So, when the applied function
             # returns, we can safely advance the replication slot past the transaction's commit
             # LSN.
-            state = update_applied_wal(state, wal_end)
+            state = update_applied_wal(state, Electric.Postgres.Lsn.to_integer(txn.lsn))
             {:noreply, [encode_standby_status_update(state)], state}
 
           other ->
@@ -329,6 +336,8 @@ defmodule Electric.Postgres.ReplicationClient do
   @epoch DateTime.to_unix(~U[2000-01-01 00:00:00Z], :microsecond)
   defp current_time(), do: System.os_time(:microsecond) - @epoch
 
-  defp update_applied_wal(state, wal) when wal >= state.applied_wal,
-    do: %{state | applied_wal: wal}
+  defp update_applied_wal(state, wal) when is_number(wal) and wal >= state.applied_wal,
+    do: %State{state | applied_wal: wal}
+
+  defp update_applied_wal(state, wal) when is_number(wal), do: state
 end

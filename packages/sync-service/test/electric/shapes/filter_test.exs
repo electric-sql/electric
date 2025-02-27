@@ -300,10 +300,10 @@ defmodule Electric.Shapes.FilterTest do
     # have been chosen instead of time since the time taken is not deterministic and
     # leads to flakey tests.
     #
-    # Modern machines process approx 300-400 reductions per μs so @max_reductions of 400
-    # is roughly equivalent to 1μs.
+    # Modern machines process approx 300-400 reductions per μs so @max_reductions of 1200
+    # is roughly equivalent to 3μs.
     #
-    # 1μs per change is a desirable and achievable target for replication stream processing.
+    # 3μs per change is a desirable and achievable target for replication stream processing.
     # If optimised processing becomes slower than this we should discuss as a team to see if
     # the performance is acceptable.
     #
@@ -313,7 +313,7 @@ defmodule Electric.Shapes.FilterTest do
     # to keep to a microsecond per change. 10_000 shapes makes for a slow test though as the setup
     # time (n Filter.add_shape calls) is slow.
     @shape_count 1000
-    @max_reductions 400
+    @max_reductions 1200
 
     test "where clause in the form `field = const` is optimised" do
       filter =

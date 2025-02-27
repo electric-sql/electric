@@ -170,9 +170,12 @@ defmodule Electric.Shapes.ConsumerTest do
       xmin = snapshot_xmin(@shape_handle1, ctx)
       last_log_offset = log_offset(@shape_handle1, ctx)
       lsn = lsn(@shape_handle1, ctx)
+      next_lsn = Lsn.increment(lsn, 1)
+      next_log_offset = LogOffset.new(next_lsn, 0)
 
       Mock.ShapeStatus
-      |> expect(:set_latest_offset, 2, fn _, @shape_handle1, ^last_log_offset -> :ok end)
+      |> expect(:set_latest_offset, fn _, @shape_handle1, ^last_log_offset -> :ok end)
+      |> expect(:set_latest_offset, fn _, @shape_handle1, ^next_log_offset -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
 
       ref = make_ref()
@@ -197,10 +200,10 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
 
-      txn2 = %{txn | xid: xid}
+      txn2 = %{txn | xid: xid, lsn: next_lsn, last_log_offset: next_log_offset}
 
       assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.producer)
-      assert_receive {^ref, :new_changes, ^last_log_offset}, @receive_timeout
+      assert_receive {^ref, :new_changes, ^next_log_offset}, @receive_timeout
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
     end
@@ -731,7 +734,8 @@ defmodule Electric.Shapes.ConsumerTest do
       # If we encounter & store the same transaction, log stream should be stable
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
 
-      assert_receive {Shapes.Consumer, ^ref, 11}
+      # We should not re-process the same transaction
+      refute_receive {Shapes.Consumer, ^ref, 11}
 
       assert [^op1, ^op2] =
                Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)

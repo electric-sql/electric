@@ -312,16 +312,24 @@ defmodule Electric.Connection.Manager do
     case start_connection_pool(state.connection_opts, state.pool_opts) do
       {:ok, pool_pid} ->
         state = mark_connection_succeeded(state)
-        # Checking the timeline continuity to see if we need to purge all shapes persisted so far.
-        check_result =
+        # Checking the timeline continuity to see if we need to purge all shapes persisted so far
+        # and reset any replication related persistent state
+        timeline_changed? =
           Electric.Timeline.check(
             {state.pg_system_identifier, state.pg_timeline_id},
             state.timeline_opts
-          )
+          ) == :timeline_changed
 
         shape_cache_opts =
           state.shape_cache_opts
-          |> Keyword.put(:purge_all_shapes?, check_result == :timeline_changed)
+          |> Keyword.put(:purge_all_shapes?, timeline_changed?)
+
+        if timeline_changed? do
+          Electric.Replication.PersistentReplicationState.reset(
+            stack_id: state.stack_id,
+            persistent_kv: state.persistent_kv
+          )
+        end
 
         {:ok, shapes_sup_pid} =
           Electric.Connection.Supervisor.start_shapes_supervisor(
