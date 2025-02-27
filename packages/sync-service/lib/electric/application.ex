@@ -206,10 +206,10 @@ defmodule Electric.Application do
   defp telemetry_opts(opts \\ []) do
     [
       instance_id: Electric.instance_id(),
-      system_metrics_poll_interval: Electric.Config.get_env(:system_metrics_poll_interval),
-      statsd_host: Electric.Config.get_env(:telemetry_statsd_host),
-      prometheus?: not is_nil(Electric.Config.get_env(:prometheus_port)),
-      call_home_telemetry?: Electric.Config.get_env(:call_home_telemetry?),
+      system_metrics_poll_interval: get_env(opts, :system_metrics_poll_interval),
+      statsd_host: get_env(opts, :telemetry_statsd_host),
+      prometheus?: not is_nil(get_env(opts, :prometheus_port)),
+      call_home_telemetry?: get_env(opts, :call_home_telemetry?),
       otel_metrics?: not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
     ]
   end
