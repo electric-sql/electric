@@ -15,9 +15,21 @@ defmodule Electric.PersistentKV.Filesystem do
       path = join(fs, key)
 
       case File.read(path) do
-        {:ok, data} -> {:ok, :erlang.binary_to_term(data)}
-        {:error, :enoent} -> {:error, :not_found}
-        error -> error
+        {:ok, data} ->
+          try do
+            {:ok, :erlang.binary_to_term(data)}
+          rescue
+            ArgumentError ->
+              # This was before we added `term_to_binary` to the filesystem.
+              # We can treat data as a plain string
+              {:ok, data}
+          end
+
+        {:error, :enoent} ->
+          {:error, :not_found}
+
+        error ->
+          error
       end
     end
 
