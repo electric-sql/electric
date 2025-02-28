@@ -70,7 +70,7 @@ paths:
             in the stream.
 
             Note that when `offset` is not `-1` then you must also provide
-            a `shape_handle`.
+            the shape's `handle`.
         - name: live
           in: query
           schema:
@@ -380,24 +380,21 @@ paths:
               schema:
                 type: string
               description: Relative path for syncing the latest version of the requested shape.
+            electric-handle:
+              schema:
+                type: string
+              description: Handle of the new shape that must be used in client requests from now on.
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  message:
-                    type: string
-                    description: Error message
-                  shape_handle:
-                    type: string
-                    description: The latest shape handle the client should sync.
-                  offset:
-                    type: string
-                    description: The offset from where to sync the given shape_handle.
+                  headers:
+                    type: object
+                    description: Cache control headers
                 example:
-                  message: "The shape associated with this shape_handle and offset was not found. Resync to fetch the latest shape"
-                  shape_handle: "2494_84241"
-                  offset: "-1"
+                  headers:
+                    control: "must-refetch"
         "429":
           description:
             Too many requests. The server is busy with other requests, potentially
