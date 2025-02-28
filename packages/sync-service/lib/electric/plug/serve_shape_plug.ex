@@ -170,7 +170,9 @@ defmodule Electric.Plug.ServeShapePlug do
     |> fetch_query_params()
     |> assign(:error_str, error_str)
 
-    # |> end_telemetry_span()
+    # No end_telemetry_span() call here because by this point that stack of plugs has been
+    # unwound to the point where the `conn` struct did not yet have any span-related properties
+    # assigned to it.
 
     conn
   end
