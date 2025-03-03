@@ -157,7 +157,20 @@ defmodule Electric.ShapeCache do
 
       true ->
         server = Electric.Shapes.Consumer.name(stack_id, shape_handle)
-        GenServer.call(server, :await_snapshot_start, 15_000)
+
+        try do
+          GenServer.call(server, :await_snapshot_start, 15_000)
+        catch
+          :exit, {:timeout, {GenServer, :call, _}} ->
+            Logger.error("Failed to await snapshot start for shape #{shape_handle}: timeout")
+            {:error, %RuntimeError{message: "Timed out while waiting for snapshot to start"}}
+
+          :exit, {:noproc, _} ->
+            # The fact that we got the shape handle means we know the shape exists, and the process should
+            # exist too. We can get here if registry didn't propagate registration across partitions yet, so
+            # we'll just retry.
+            await_snapshot_start(shape_handle, opts)
+        end
     end
   end
 
