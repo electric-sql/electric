@@ -1,0 +1,82 @@
+set dotenv-load := true
+
+[private]
+default:
+  just --list
+
+# Login to Antithesis docker registry. If you don't have `op` cli tool installed, get the JSON from 1Password and feed it to `docker login` as shown below.
+[group('Utility')]
+login:
+  op item get "Antithesis - GAR Key" --field notesPlain --format json | jq .value -r | docker login -u _json_key https://us-central1-docker.pkg.dev --password-stdin
+
+# Load the Antithesis credentials from 1Password and save them to the `.env` file. Use this before running commands in `Remote` group.
+[group('Utility')]
+save_antithesis_creds:
+  echo "ANTITHESIS_USER=$(op item get iq2xyfp2ndvy5od63sesp6y3ie --field username --format json | jq .value -r)" > .env
+  echo "ANTITHESIS_PASSWORD=$(op item get iq2xyfp2ndvy5od63sesp6y3ie --field password --format json | jq .value -r)" >> .env
+
+# Build the docker images.
+build:
+  docker compose -f config/docker-compose.yaml build
+
+# Publish the docker images to the Antithesis docker registry.
+publish: build
+  docker compose -f config/docker-compose.yaml push
+
+# Validate the test locally - runs all parts of the test in docker compose.
+validate test_name: build _cleanup_validation && _cleanup_validation
+  #!/usr/bin/env bash
+  set -euo pipefail
+  docker compose -f config/docker-compose.yaml up -d
+  gum spin --spinner dot --title "Waiting until stack is ready" -- sleep 10
+  for test in first_* singleton_driver_* parallel_driver_* serial_driver_* anytime_* eventually_* finally_*; do
+    docker compose -f config/docker-compose.yaml exec stable_client /bin/bash -c "find /opt/antithesis/test/v1/{{test_name}} -name \"$test\" -type f | while read file; do echo \"\$(tput bold)Running \$file\$(tput sgr0)\" && \$file; done"
+  done
+
+_cleanup_validation:
+  docker compose -f config/docker-compose.yaml down
+
+_check_creds:
+  if [ -z "$ANTITHESIS_USER" ] || [ -z "$ANTITHESIS_PASSWORD" ]; then \
+    just save_antithesis_creds; \
+  fi
+
+current_git_email := `git config user.email`
+
+# Start a test run in Antithesis cloud. The duration is in minutes. Reports are sent to the current git email.
+[group('Remote')]
+start_test duration="20": _check_creds publish
+  #!/usr/bin/env bash
+  set -euo pipefail
+  current_sha=$(git rev-parse HEAD | head -c 8)
+  used_images=$(yq '[.services[].image] | join(";")' -r ./config/docker-compose.yaml)
+  request_body=$(jq -n \
+      --arg description "Test (started at $(date -Iseconds), by $USER, sha $current_sha)" \
+      --arg duration "{{duration}}" \
+      --arg config_image "antithesis-config:latest" \
+      --arg images "$used_images" \
+      --arg recipients "{{current_git_email}}" \
+      '{params: {"antithesis.description": $description, "antithesis.duration": $duration, "antithesis.config_image": $config_image, "antithesis.images": $images, "antithesis.report.recipients": $recipients}}')
+
+  echo $request_body
+  curl --fail -i -u"$ANTITHESIS_USER:$ANTITHESIS_PASSWORD" \
+  -X POST https://electricsql.antithesis.com/api/v1/launch/electric_sql \
+  -d "$request_body"
+
+# Prepare a debugging session in Antithesis cloud. Link to the session is sent to the current git email.
+[group('Remote')]
+debug session_id input_hash vtime: _check_creds
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  request_body=$(jq -n \
+      --arg session_id "{{session_id}}" \
+      --arg input_hash "{{input_hash}}" \
+      --arg vtime "{{vtime}}" \
+      --arg recipients "{{current_git_email}}" \
+      '{params: {"antithesis.debugging.session_id": $session_id, "antithesis.debugging.input_hash": $input_hash, "antithesis.debugging.vtime": $vtime, "antithesis.report.recipients": $recipients}}')
+
+  echo $request_body
+  curl --fail -i -u"$ANTITHESIS_USER:$ANTITHESIS_PASSWORD" \
+  -X POST https://electricsql.antithesis.com/api/v1/launch/debugging \
+  -d "$request_body"

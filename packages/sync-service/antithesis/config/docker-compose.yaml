@@ -1,0 +1,49 @@
+name: "antithesis"
+
+services:
+  postgres:
+    image: docker.io/postgres:16-alpine
+    environment:
+      POSTGRES_DB: electric
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - 54323:5432
+    volumes:
+      - ./postgres.conf:/etc/postgresql/postgresql.conf:ro
+    tmpfs:
+      - /var/lib/postgresql/data
+      - /tmp
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+
+  electric:
+    image: us-central1-docker.pkg.dev/molten-verve-216720/electricsql-repository/electric-local:latest
+    platform: linux/amd64
+    build: 
+      dockerfile: Dockerfile
+      context: ../../
+    environment:
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/electric?sslmode=disable
+      ELECTRIC_USAGE_REPORTING: false
+      ELECTRIC_INSECURE: true
+      ELECTRIC_LOG_LEVEL: debug
+    ports:
+      - 3000:3000
+    depends_on:
+      - postgres
+
+  # only the service with name "stable_client" will be exmept from the antithesis faults
+  stable_client:
+    image: us-central1-docker.pkg.dev/molten-verve-216720/electricsql-repository/testing-python-client:latest
+    platform: linux/amd64
+    build: 
+      dockerfile: Dockerfile.python
+      context: ../
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - postgres
+      - electric
