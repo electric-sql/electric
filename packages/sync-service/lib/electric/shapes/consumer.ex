@@ -366,22 +366,24 @@ defmodule Electric.Shapes.Consumer do
           actual_num_changes: num_changes
         })
 
+        shape_status.set_latest_offset(shape_status_state, shape_handle, last_log_offset)
+
+        notify_listeners(registry, :new_changes, shape_handle, last_log_offset)
+
+        lag = calculate_replication_lag(txn)
+        OpenTelemetry.add_span_attributes(replication_lag: lag)
+
         :telemetry.execute(
           [:electric, :storage, :transaction_stored],
           %{
             duration: System.monotonic_time() - timestamp,
             bytes: new_log_state.current_txn_bytes,
             count: 1,
-            operations: num_changes
+            operations: num_changes,
+            replication_lag: lag
           },
           Map.new(shape_attrs(state.shape_handle, state.shape))
         )
-
-        shape_status.set_latest_offset(shape_status_state, shape_handle, last_log_offset)
-
-        notify_listeners(registry, :new_changes, shape_handle, last_log_offset)
-
-        report_replication_lag(txn)
 
         {:cont, notify(txn, %{state | log_state: new_log_state})}
 
@@ -543,14 +545,12 @@ defmodule Electric.Shapes.Consumer do
     ]
   end
 
-  defp report_replication_lag(%Transaction{commit_timestamp: commit_timestamp}) do
+  defp calculate_replication_lag(%Transaction{commit_timestamp: commit_timestamp}) do
     # Compute time elapsed since commit
     # since we are comparing PG's clock with our own
     # there may be a slight skew so we make sure not to report negative lag.
     # Since the lag is only useful when it becomes significant, a slight skew doesn't matter.
     now = DateTime.utc_now()
-    lag = Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
-
-    OpenTelemetry.add_span_attributes(replication_lag: lag)
+    Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
   end
 end

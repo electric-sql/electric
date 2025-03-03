@@ -269,6 +269,7 @@ defmodule Electric.Postgres.ReplicationClient do
           [:electric, :postgres, :replication, :transaction_received],
           %{
             monotonic_time: System.monotonic_time(),
+            receive_lag: DateTime.diff(DateTime.utc_now(), txn.commit_timestamp, :millisecond),
             bytes: byte_size(data),
             count: 1,
             operations: txn.num_changes
