@@ -65,7 +65,6 @@ defmodule Electric.LogItems do
       {change.log_offset,
        %{
          key: change.key,
-         value: update_values(change, pk_cols, replica),
          headers: %{
            operation: :update,
            txids: List.wrap(txids),
@@ -73,7 +72,8 @@ defmodule Electric.LogItems do
            lsn: change.log_offset.tx_offset,
            op_position: change.log_offset.op_offset
          }
-       }}
+       }
+       |> Map.merge(put_update_values(change, pk_cols, replica))}
     ]
   end
 
@@ -114,12 +114,26 @@ defmodule Electric.LogItems do
   defp take_pks_or_all(record, [], :default), do: record
   defp take_pks_or_all(record, pks, :default), do: Map.take(record, pks)
 
-  defp update_values(%{record: record, changed_columns: changed_columns}, pk_cols, :default) do
-    Map.take(record, Enum.concat(pk_cols, changed_columns))
+  defp put_update_values(%{record: record, changed_columns: changed_columns}, pk_cols, :default) do
+    %{value: Map.take(record, Enum.concat(pk_cols, changed_columns))}
   end
 
-  defp update_values(%{record: record}, _pk_cols, :full) do
-    record
+  defp put_update_values(
+         %{record: record, old_record: old_record, changed_columns: changed_columns},
+         _pk_cols,
+         :full
+       ) do
+    %{value: record, old_value: Map.take(old_record, MapSet.to_list(changed_columns))}
+  end
+
+  def merge_updates(u1, u2) when is_map_key(u1, "old_value") or is_map_key(u2, "old_value") do
+    %{
+      "key" => u1["key"],
+      "headers" => Map.take(u1["headers"], ["operation", "relation"]),
+      "value" => Map.merge(u1["value"], u2["value"]),
+      # When merging old values, we give preference to the older u1
+      "old_value" => Map.merge(u2["old_value"] || %{}, u1["old_value"] || %{})
+    }
   end
 
   def merge_updates(u1, u2) do

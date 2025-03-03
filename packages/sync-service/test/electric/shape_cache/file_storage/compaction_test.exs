@@ -78,6 +78,51 @@ defmodule Electric.ShapeCache.FileStorage.CompactionTest do
              |> length == 4
     end
 
+    test "compacts a log file with replica mode full", %{tmp_dir: tmp_dir} do
+      log_file_path = Path.join(tmp_dir, "log_file")
+
+      log_stream =
+        [
+          ins(offset: {1, 1}, rec: [id: "key1", value: "value1"]),
+          upd(offset: {2, 1}, rec: [id: "key1", value: {"value1", "value2"}]),
+          ins(offset: {3, 1}, rec: [id: "key2", value: "value3"]),
+          upd(offset: {4, 1}, rec: [id: "key1", value: {"value2", "value new 1"}]),
+          upd(offset: {5, 1}, rec: [id: "key1", value: {"value new 1", "value new 2"}]),
+          upd(offset: {6, 1}, rec: [id: "key1", value: {"value new 2", "value new 3"}]),
+          upd(offset: {7, 1}, rec: [id: "key1", value: {"value new 3", "value new 4"}]),
+          upd(offset: {8, 1}, rec: [id: "key1", value: {"value new 4", "value new 5"}]),
+          del(offset: {9, 1}, rec: [id: "key2", value: "value"])
+        ]
+        |> TestUtils.changes_to_log_items(replica: :full)
+
+      paths = LogFile.write_log_file(log_stream, log_file_path)
+
+      assert LogFile.read_chunk(paths, %LogOffset{tx_offset: 0, op_offset: 0})
+             |> Enum.to_list()
+             |> length == 9
+
+      assert {log_file_path, chunk_index_path, key_index_path} =
+               Compaction.compact_in_place(paths, 1_000_000)
+
+      assert File.exists?(log_file_path)
+      assert File.exists?(chunk_index_path)
+      assert File.exists?(key_index_path)
+
+      assert [
+               %{"headers" => %{"operation" => "insert"}},
+               %{"headers" => %{"operation" => "insert"}},
+               %{
+                 "headers" => %{"operation" => "update"},
+                 "value" => %{"id" => "key1", "value" => "value new 5"},
+                 "old_value" => %{"value" => "value1"}
+               },
+               %{"headers" => %{"operation" => "delete"}}
+             ] =
+               LogFile.read_chunk(paths, %LogOffset{tx_offset: 0, op_offset: 0})
+               |> Enum.to_list()
+               |> Enum.map(&Jason.decode!/1)
+    end
+
     test "compacts a large enough log file full of updates (failing property)", %{
       tmp_dir: tmp_dir
     } do
