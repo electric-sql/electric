@@ -1,5 +1,21 @@
 # @core/sync-service
 
+## 1.0.0-beta.20
+
+### Patch Changes
+
+- 74e54e1: feat: add receive/replication lag to exposed metrics
+- bd2d997: Make configuration easier and more accessible to external applications
+- bbcc719: Drop transactions that have already been processed rather than reapplying them.
+- 5da8f25: Only include telemetry in docker build
+- dcd8a9f: feat: add `old_value` to updates under replica mode `full`
+- 7600746: Add option to send memory metrics per process type
+- 2f5b7d4: fix: ensure smooth upgrade for filesystem KV format change
+- 0a95da1: Allow for accessing via an api that serves only a pre-configured shape, move all http logic into api
+- 9554498: Improve public APIs of Elixir client and core electric
+- 126317f: fix: ensure we correctly set globally processed lsn
+- 059a69a: Improve quoting logic in relation_to_sql/1 to handle reserved words and tables starting with a number
+
 ## 1.0.0-beta.19
 
 ### Patch Changes

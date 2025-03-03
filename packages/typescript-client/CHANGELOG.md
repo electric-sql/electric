@@ -1,5 +1,12 @@
 # @electric-sql/client
 
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- 6616b81: Correctly set the cache busting url param when using `forceDisconnectAndRefresh`
+- dcd8a9f: feat: add `old_value` to updates under replica mode `full`
+
 ## 1.0.0-beta.3
 
 ### Minor Changes

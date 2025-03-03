@@ -1,5 +1,14 @@
 # @electric-sql/experimental
 
+## 0.1.2-beta.3
+
+### Patch Changes
+
+- 6616b81: New experimental MultiShapeStream and TransactionalMultiShapeStream APIs that combine multiple shapes streams into a single stream. Note: these two APIs are experimental and are likely to change in a future version of the package.
+- Updated dependencies [6616b81]
+- Updated dependencies [dcd8a9f]
+  - @electric-sql/client@1.0.0-beta.4
+
 ## 0.1.2-beta.2
 
 ### Patch Changes
