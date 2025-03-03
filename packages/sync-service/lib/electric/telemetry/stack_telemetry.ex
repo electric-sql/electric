@@ -70,7 +70,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
       {OtelMetricExporter,
        name: :"stack_otel_telemetry_#{opts.stack_id}",
        metrics: otel_metrics(opts),
-       export_period: :timer.seconds(30),
+       export_period: opts.otel_export_period,
        resource: %{stack_id: opts.stack_id}}
     end
 

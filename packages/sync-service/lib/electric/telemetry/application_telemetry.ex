@@ -39,7 +39,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
       # and add its default measurements to the list of our custom ones. This allows for all
       # periodic measurements to be defined in one place.
       {:telemetry_poller,
-       measurements: periodic_measurements(),
+       measurements: periodic_measurements(opts),
        period: opts.system_metrics_poll_interval,
        init_delay: :timer.seconds(5)}
     end
@@ -58,8 +58,8 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
       |> Enum.reject(&is_nil/1)
     end
 
-    defp otel_reporter_child_spec(%{otel_metrics?: true}) do
-      {OtelMetricExporter, metrics: otel_metrics(), export_period: :timer.seconds(30)}
+    defp otel_reporter_child_spec(%{otel_metrics?: true} = opts) do
+      {OtelMetricExporter, metrics: otel_metrics(opts), export_period: opts.otel_export_period}
     end
 
     defp otel_reporter_child_spec(_), do: nil
@@ -159,7 +159,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
       |> Enum.map(&%{&1 | tags: [:instance_id | &1.tags]})
     end
 
-    defp prometheus_metrics() do
+    defp prometheus_metrics do
       [
         last_value("system.cpu.core_count"),
         last_value("system.cpu.utilization.total"),
@@ -187,15 +187,25 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         )
     end
 
-    defp otel_metrics() do
+    defp otel_metrics(opts) do
       [
         last_value("system.load_percent.avg1"),
         last_value("system.load_percent.avg5"),
         last_value("system.load_percent.avg15")
-      ] ++ prometheus_metrics()
+      ] ++
+        prometheus_metrics() ++
+        memory_by_process_type_metrics(opts)
     end
 
-    defp periodic_measurements() do
+    defp memory_by_process_type_metrics(%{otel_per_process_metrics?: true}) do
+      [
+        last_value("vm.memory.processes_by_type", tags: [:process_type], unit: :byte)
+      ]
+    end
+
+    defp memory_by_process_type_metrics(_), do: []
+
+    defp periodic_measurements(opts) do
       [
         # Default measurements included with the telemetry_poller application:
         :memory,
@@ -205,7 +215,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         # Our custom measurements:
         {__MODULE__, :uptime_event, []},
         {__MODULE__, :cpu_utilization, []},
-        {__MODULE__, :memory_by_process_type, []},
+        {__MODULE__, :memory_by_process_type, [opts]},
         {__MODULE__, :get_system_load_average, []},
         {__MODULE__, :get_system_memory_usage, []}
       ]
@@ -217,8 +227,8 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
       })
     end
 
-    def memory_by_process_type do
-      for %{type: type, memory: memory} <- Debug.Process.top_memory_by_type(10) do
+    def memory_by_process_type(%{top_process_count: process_count}) do
+      for %{type: type, memory: memory} <- Debug.Process.top_memory_by_type(process_count) do
         :telemetry.execute([:vm, :memory], %{processes_by_type: memory}, %{
           process_type: to_string(type)
         })
