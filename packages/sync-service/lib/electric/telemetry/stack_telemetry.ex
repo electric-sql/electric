@@ -238,6 +238,14 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
         distribution("electric.storage.make_new_snapshot.stop.duration",
           unit: {:native, :millisecond},
           keep: for_stack
+        ),
+        distribution("electric.postgres.replication.transaction_received.receive_lag",
+          unit: :millisecond,
+          keep: for_stack
+        ),
+        distribution("electric.storage.transaction_stored.replication_lag",
+          unit: :millisecond,
+          keep: for_stack
         )
       ] ++ prometheus_metrics(opts)
     end
