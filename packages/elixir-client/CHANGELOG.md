@@ -1,5 +1,12 @@
 # @core/elixir-client
 
+## 0.3.0-beta.4
+
+### Patch Changes
+
+- 27481c9: Remove requirement for a shape definition from Electric.Client.stream, so we now support endpoints that return a pre-configured stream. Also remove `oneshot` configuration flag as it no longer makes sense
+- 9554498: Improve public APIs of Elixir client and core electric
+
 ## 0.3.0-beta.3
 
 ### Patch Changes
