@@ -254,7 +254,10 @@ defmodule Electric.Application do
       statsd_host: get_env(opts, :telemetry_statsd_host),
       prometheus?: not is_nil(get_env(opts, :prometheus_port)),
       call_home_telemetry?: get_env(opts, :call_home_telemetry?),
-      otel_metrics?: not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
+      otel_metrics?: not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint)),
+      otel_export_period: get_env(opts, :otel_export_period),
+      otel_per_process_metrics?: get_env(opts, :otel_per_process_metrics?),
+      top_process_count: get_env(opts, :telemetry_top_process_count)
     ]
   end
 end

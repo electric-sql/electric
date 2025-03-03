@@ -59,6 +59,9 @@ defmodule Electric.Config do
     telemetry_statsd_host: nil,
     telemetry_url: URI.new!("https://checkpoint.electric-sql.com"),
     system_metrics_poll_interval: :timer.seconds(5),
+    otel_export_period: :timer.seconds(30),
+    otel_per_process_metrics?: false,
+    telemetry_top_process_count: 5,
     ## Memory
     shape_hibernate_after: :timer.seconds(30)
   ]

@@ -214,6 +214,13 @@ system_metrics_poll_interval =
     nil
   )
 
+otel_export_period =
+  env!(
+    "ELECTRIC_OTEL_EXPORT_PERIOD",
+    &Electric.Config.parse_human_readable_time!/1,
+    nil
+  )
+
 # The provided database id is relevant if you had used v0.8 and want to keep the storage
 # instead of having hanging files. We use a provided value as stack id, but nothing else.
 provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, nil)
@@ -229,6 +236,9 @@ config :electric,
   call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
   telemetry_url: call_home_telemetry_url,
   system_metrics_poll_interval: system_metrics_poll_interval,
+  otel_export_period: otel_export_period,
+  otel_per_process_metrics?: env!("ELECTRIC_OTEL_PER_PROCESS_METRICS", :boolean, nil),
+  telemetry_top_process_count: env!("ELECTRIC_TELEMETRY_TOP_PROCESS_COUNT", :integer, nil),
   telemetry_statsd_host: statsd_host,
   prometheus_port: prometheus_port,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, nil),
