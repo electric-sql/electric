@@ -126,6 +126,16 @@ defmodule Electric.LogItems do
     %{value: record, old_value: Map.take(old_record, MapSet.to_list(changed_columns))}
   end
 
+  def merge_updates(u1, u2) when is_map_key(u1, "old_value") or is_map_key(u2, "old_value") do
+    %{
+      "key" => u1["key"],
+      "headers" => Map.take(u1["headers"], ["operation", "relation"]),
+      "value" => Map.merge(u1["value"], u2["value"]),
+      # When merging old values, we give preference to the older u1
+      "old_value" => Map.merge(u2["old_value"] || %{}, u1["old_value"] || %{})
+    }
+  end
+
   def merge_updates(u1, u2) do
     %{
       "key" => u1["key"],
