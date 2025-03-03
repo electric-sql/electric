@@ -545,7 +545,8 @@ defmodule Electric.ShapeCache.FileStorage do
     )
   end
 
-  defp open_snapshot_chunk(opts, chunk_num, attempts_left \\ 100)
+  # Attempts enough for a 5s wait
+  defp open_snapshot_chunk(opts, chunk_num, attempts_left \\ 250)
   defp open_snapshot_chunk(_, _, 0), do: raise(IO.StreamError, reason: :enoent)
 
   defp open_snapshot_chunk(opts, chunk_num, attempts_left) do

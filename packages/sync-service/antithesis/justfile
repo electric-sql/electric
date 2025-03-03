@@ -1,0 +1,48 @@
+[private]
+default:
+  just --list
+
+# Login to Antithesis docker registry. If you don't have `op` cli tool installed, get the JSON from 1Password and feed it to `docker login` as shown below.
+[group('Utility')]
+login:
+  op item get "Antithesis - GAR Key" --field notesPlain --format json | jq .value -r | docker login -u _json_key https://us-central1-docker.pkg.dev --password-stdin
+
+# Build the docker images.
+build:
+  docker compose -f config/docker-compose.yaml build
+
+# Publish the docker images to the Antithesis docker registry.
+publish: build
+  docker compose -f config/docker-compose.yaml push
+
+# Start a test run in Antithesis cloud. The duration is in minutes.
+start_test duration="20": publish
+  #!/usr/bin/env bash
+  set -euo pipefail
+  current_sha=$(git rev-parse HEAD | head -c 8)
+  used_images=$(yq '[.services[].image] | join(";")' -r ./config/docker-compose.yaml)
+  request_body=$(jq -n \
+      --arg description "Test (started at $(date -Iseconds), by $USER, sha $current_sha)" \
+      --arg duration "{{duration}}" \
+      --arg config_image "antithesis-config:latest" \
+      --arg images "$used_images" \
+      --arg recipients "$REPORT_RECIPIENTS" \
+      '{params: {"antithesis.description": $description, "antithesis.duration": $duration, "antithesis.config_image": $config_image, "antithesis.images": $images, "antithesis.report.recipients": $recipients}}')
+
+  echo $request_body
+  curl --fail -i -u"$ANTITHESIS_USER:$ANTITHESIS_PASSWORD" \
+  -X POST https://electricsql.antithesis.com/api/v1/launch/electric_sql \
+  -d "$request_body"
+
+# Validate the test locally - runs all parts of the test in docker compose.
+validate test_name: build _cleanup_validation && _cleanup_validation
+  #!/usr/bin/env bash
+  set -euo pipefail
+  docker compose -f config/docker-compose.yaml up -d
+  gum spin --spinner dot --title "Waiting until stack is ready" -- sleep 10
+  for test in first_* singleton_driver_* parallel_driver_* serial_driver_* anytime_* eventually_* finally_*; do
+    docker compose -f config/docker-compose.yaml exec stable_client /bin/bash -c "find /opt/antithesis/test/v1/{{test_name}} -name \"$test\" -type f | while read file; do echo \"\$(tput bold)Running \$file\$(tput sgr0)\" && \$file; done"
+  done
+
+_cleanup_validation:
+  docker compose -f config/docker-compose.yaml down

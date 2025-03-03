@@ -1,0 +1,8 @@
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends httpie curl postgresql-client
+
+COPY test /opt/antithesis/test
+
+RUN find /opt/antithesis/test -name "*.py" -type f -print0 | xargs -0 -n1 uv sync --script
+
+CMD [ "sleep", "infinity" ]

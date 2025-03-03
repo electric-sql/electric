@@ -153,6 +153,7 @@ defmodule Electric.Postgres.Configuration do
       if not correct_identity? do
         Logger.info("Altering identity of #{table} to FULL")
         Postgrex.query!(conn, "ALTER TABLE #{table} REPLICA IDENTITY FULL", [])
+        Logger.debug("Altered identity of #{table} to FULL")
       end
     end
   end
