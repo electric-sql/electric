@@ -298,7 +298,7 @@ const stream = new ShapeStream<CustomRow>({
   },
   parser: {
     // Parse timestamp columns into JavaScript Date objects
-    timestampz: (date: string) => new Date(date)
+    timestamptz: (date: string) => new Date(date)
   }
 })
 

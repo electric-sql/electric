@@ -46,7 +46,7 @@ describe(`client`, () => {
           table: ``,
         },
         parser: {
-          timestampz: (date: string) => {
+          timestamptz: (date: string) => {
             return new Date(date)
           },
         },
@@ -124,7 +124,7 @@ describe(`client`, () => {
           table: ``,
         },
         parser: {
-          timestampz: (date: string) => {
+          timestamptz: (date: string) => {
             return new Date(date)
           },
         },
