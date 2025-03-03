@@ -1,5 +1,5 @@
 defmodule Electric.Shapes.Api.Options do
-  @allowed_headers ["if-none-match"]
+  @allowed_headers ["if-none-match", "traceparent"]
 
   def call(%Plug.Conn{} = conn) do
     conn
