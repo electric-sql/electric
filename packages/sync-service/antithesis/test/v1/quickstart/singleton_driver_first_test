@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -ex
+
+ROW_COUNT=10
+DB_URL="postgresql://postgres:password@postgres:5432/electric?sslmode=disable"
+
+psql $DB_URL -c "CREATE TABLE public.users ( id uuid PRIMARY KEY, name text NOT NULL, email text NOT NULL);"
+psql $DB_URL -c "INSERT INTO users SELECT gen_random_uuid(), name, name || '@corporate.domain'  FROM (SELECT gen_random_uuid()::text name FROM generate_series(1, $ROW_COUNT)) _ ;"
+
+http GET :3000/v1/shape table=="users" offset==-1

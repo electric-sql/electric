@@ -1,0 +1,5 @@
+#!/bin/bash
+docker compose -f ./config/docker-compose.yml up -d
+sleep 4
+docker compose -f ./config/docker-compose.yml exec electric /opt/antithesis/test/v1/quickstart/singleton_driver_first_test
+docker compose -f ./config/docker-compose.yml down

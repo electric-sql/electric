@@ -1,0 +1,6 @@
+#!/bin/bash
+set -ex
+
+docker build -t electric-antithesis .
+
+docker build -t antithesis-config ./config
