@@ -25,22 +25,24 @@ defmodule Electric.Replication.Eval.ParserTest do
 
     test "should correctly parse type casts on constants" do
       assert {:error, "At location 0: unknown cast from type int4 to type bool"} =
-               Parser.parse_and_validate_expression("1::boolean", %{}, Env.empty())
+               Parser.parse_and_validate_expression("1::boolean", env: Env.empty())
     end
 
     test "should fail on references that don't exist" do
       assert {:error, "At location 0: unknown reference test"} =
-               Parser.parse_and_validate_expression(~S|"test"|, %{})
+               Parser.parse_and_validate_expression(~S|"test"|)
     end
 
     test "should fail helpfully on references that might exist" do
       assert {:error, "At location 0: unknown reference test - did you mean `this.test`?"} =
-               Parser.parse_and_validate_expression(~S|"test"|, %{["this", "test"] => :bool})
+               Parser.parse_and_validate_expression(~S|"test"|,
+                 refs: %{["this", "test"] => :bool}
+               )
     end
 
     test "should correctly parse a known reference" do
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|"test"|, %{["test"] => :bool})
+               Parser.parse_and_validate_expression(~S|"test"|, refs: %{["test"] => :bool})
 
       assert %Ref{path: ["test"], type: :bool} = result
     end
@@ -49,8 +51,8 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
                  ~S|foo::text|,
-                 %{["foo"] => {:enum, "foo_enum"}},
-                 Env.empty()
+                 refs: %{["foo"] => {:enum, "foo_enum"}},
+                 env: Env.empty()
                )
 
       assert %Ref{path: ["foo"], type: :text} = result
@@ -58,7 +60,9 @@ defmodule Electric.Replication.Eval.ParserTest do
 
     test "should correctly parse a boolean function" do
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|"test" OR true|, %{["test"] => :bool})
+               Parser.parse_and_validate_expression(~S|"test" OR true|,
+                 refs: %{["test"] => :bool}
+               )
 
       assert %Func{name: "or", args: [%Ref{path: ["test"], type: :bool}, %Const{value: true}]} =
                result
@@ -70,8 +74,8 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
                  ~S|"test"::integer|,
-                 %{["test"] => :bool},
-                 env
+                 refs: %{["test"] => :bool},
+                 env: env
                )
 
       assert %Func{name: "bool_to_int4", args: [%Ref{path: ["test"], type: :bool}]} = result
@@ -81,7 +85,11 @@ defmodule Electric.Replication.Eval.ParserTest do
       env = Env.empty(explicit_casts: @int_to_bool_casts)
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|true::integer|, %{["test"] => :bool}, env)
+               Parser.parse_and_validate_expression(
+                 ~S|true::integer|,
+                 refs: %{["test"] => :bool},
+                 env: env
+               )
 
       assert %Const{type: :int4, value: 1} = result
     end
@@ -92,8 +100,7 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
                  ~S|true::integer::bool::integer::bool::integer|,
-                 %{},
-                 env
+                 env: env
                )
 
       assert %Const{type: :int4, value: 1} = result
@@ -110,7 +117,10 @@ defmodule Electric.Replication.Eval.ParserTest do
         )
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|- "test"|, %{["test"] => :int4}, env)
+               Parser.parse_and_validate_expression(~S|- "test"|,
+                 refs: %{["test"] => :int4},
+                 env: env
+               )
 
       assert %Func{name: "-", args: [%Ref{path: ["test"], type: :int4}]} = result
     end
@@ -128,8 +138,8 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
                  ~S|"test" + "test"|,
-                 %{["test"] => :int4},
-                 env
+                 refs: %{["test"] => :int4},
+                 env: env
                )
 
       assert %Func{
@@ -149,7 +159,11 @@ defmodule Electric.Replication.Eval.ParserTest do
         )
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|"test" + '4'|, %{["test"] => :int4}, env)
+               Parser.parse_and_validate_expression(
+                 ~S|"test" + '4'|,
+                 refs: %{["test"] => :int4},
+                 env: env
+               )
 
       assert %Func{
                name: "+",
@@ -175,7 +189,11 @@ defmodule Electric.Replication.Eval.ParserTest do
         )
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|"test" + '4'|, %{["test"] => :int4}, env)
+               Parser.parse_and_validate_expression(
+                 ~S|"test" + '4'|,
+                 refs: %{["test"] => :int4},
+                 env: env
+               )
 
       assert %Func{
                name: "float8",
@@ -185,9 +203,11 @@ defmodule Electric.Replication.Eval.ParserTest do
 
     test "should fail on a function with aggregation" do
       assert {:error, "At location 0: aggregation is not supported in this context"} =
-               Parser.parse_and_validate_expression(~S|ceil(DISTINCT "test")|, %{
-                 ["test"] => :int4
-               })
+               Parser.parse_and_validate_expression(~S|ceil(DISTINCT "test")|,
+                 refs: %{
+                   ["test"] => :int4
+                 }
+               )
     end
 
     test "should correctly parse a function call" do
@@ -201,7 +221,11 @@ defmodule Electric.Replication.Eval.ParserTest do
         )
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|ceil("test")|, %{["test"] => :int4}, env)
+               Parser.parse_and_validate_expression(
+                 ~S|ceil("test")|,
+                 refs: %{["test"] => :int4},
+                 env: env
+               )
 
       assert %Func{name: "-", args: [%Ref{path: ["test"], type: :int4}]} = result
     end
@@ -224,7 +248,10 @@ defmodule Electric.Replication.Eval.ParserTest do
         )
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|1 + 1|, %{["test"] => :int4}, env)
+               Parser.parse_and_validate_expression(~S|1 + 1|,
+                 refs: %{["test"] => :int4},
+                 env: env
+               )
 
       assert %Const{value: 2, type: :int4} = result
     end
@@ -248,8 +275,8 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
                  ~S|time '20:00:00' + date '2024-01-01'|,
-                 %{["test"] => :int4},
-                 env
+                 refs: %{["test"] => :int4},
+                 env: env
                )
 
       assert %Const{value: ~N[2024-01-01 20:00:00], type: :timestamp} = result
@@ -267,7 +294,7 @@ defmodule Electric.Replication.Eval.ParserTest do
             {~S|NULL IS NOT DISTINCT FROM NULL|, true}
           ] do
         assert {{:ok, %Expr{eval: result}}, ^expr} =
-                 {Parser.parse_and_validate_expression(expr, %{}, env), expr}
+                 {Parser.parse_and_validate_expression(expr, env: env), expr}
 
         assert {%Const{value: ^expected, type: :bool}, ^expr} = {result, expr}
       end
@@ -285,7 +312,7 @@ defmodule Electric.Replication.Eval.ParserTest do
             {~S|NULL IS NOT UNKNOWN|, false}
           ] do
         assert {{:ok, %Expr{eval: result}}, ^expr} =
-                 {Parser.parse_and_validate_expression(expr, %{}, env), expr}
+                 {Parser.parse_and_validate_expression(expr, env: env), expr}
 
         assert {%Const{value: ^expected, type: :bool}, ^expr} = {result, expr}
       end
@@ -297,8 +324,7 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
                  ~S|'hello' NOT LIKE 'hell\%' AND 'hello' LIKE 'h%o' |,
-                 %{},
-                 env
+                 env: env
                )
 
       assert %Const{value: true, type: :bool} = result
@@ -328,7 +354,7 @@ defmodule Electric.Replication.Eval.ParserTest do
              false}
           ] do
         assert {:ok, %Expr{eval: result}} =
-                 Parser.parse_and_validate_expression(expr, %{}, env)
+                 Parser.parse_and_validate_expression(expr, env: env)
 
         assert %Const{value: ^expected, type: :bool} = result
       end
@@ -338,16 +364,14 @@ defmodule Electric.Replication.Eval.ParserTest do
       env = Env.new()
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|1::boolean|, %{}, env)
+               Parser.parse_and_validate_expression(~S|1::boolean|, env: env)
 
       assert %Const{value: true, type: :bool} = result
     end
 
     test "should work with IN clauses" do
-      env = Env.new()
-
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|1 IN (1, 2, 3)|, %{}, env)
+               Parser.parse_and_validate_expression(~S|1 IN (1, 2, 3)|)
 
       assert %Const{value: true, type: :bool} = result
     end
@@ -358,8 +382,7 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
                  ~S|'test' NOT IN ('hello', 'world')|,
-                 %{},
-                 env
+                 env: env
                )
 
       assert %Const{value: true, type: :bool} = result
@@ -372,8 +395,7 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
                  ~S|'test' IN ('hello', NULL)|,
-                 %{},
-                 env
+                 env: env
                )
 
       assert %Const{value: nil, type: :bool} = result
@@ -385,8 +407,8 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:error, "At location 5: subqueries are not supported"} =
                Parser.parse_and_validate_expression(
                  ~S|test IN (SELECT val FROM tester)|,
-                 %{["test"] => :int4},
-                 env
+                 refs: %{["test"] => :int4},
+                 env: env
                )
     end
 
@@ -396,8 +418,7 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
                  ~S|date '2024-01-01' < interval '1 month 1 hour' + date '2023-12-01'|,
-                 %{},
-                 env
+                 env: env
                )
 
       assert %Const{value: true, type: :bool} = result
@@ -409,8 +430,7 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
                  ~S|timestamp '2001-02-16 20:38:40' at time zone 'America/Denver' = '2001-02-17 03:38:40+00'|,
-                 %{},
-                 env
+                 env: env
                )
 
       assert %Const{value: true, type: :bool} = result
@@ -418,8 +438,7 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
                  ~S|timestamp with time zone '2001-02-16 20:38:40+03' at time zone 'America/Denver' = '2001-02-16 10:38:40'|,
-                 %{},
-                 env
+                 env: env
                )
 
       assert %Const{value: true, type: :bool} = result
@@ -429,17 +448,17 @@ defmodule Electric.Replication.Eval.ParserTest do
       env = Env.new()
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|null IS NULL|, %{}, env)
+               Parser.parse_and_validate_expression(~S|null IS NULL|, env: env)
 
       assert %Const{value: true, type: :bool} = result
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|false IS NOT NULL|, %{}, env)
+               Parser.parse_and_validate_expression(~S|false IS NOT NULL|, env: env)
 
       assert %Const{value: true, type: :bool} = result
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|(1 = NULL) IS NULL|, %{}, env)
+               Parser.parse_and_validate_expression(~S|(1 = NULL) IS NULL|, env: env)
 
       assert %Const{value: true, type: :bool} = result
     end
@@ -448,27 +467,27 @@ defmodule Electric.Replication.Eval.ParserTest do
       env = Env.new()
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|'true' IS TRUE|, %{}, env)
+               Parser.parse_and_validate_expression(~S|'true' IS TRUE|, env: env)
 
       assert %Const{value: true, type: :bool} = result
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|false IS NOT TRUE|, %{}, env)
+               Parser.parse_and_validate_expression(~S|false IS NOT TRUE|, env: env)
 
       assert %Const{value: true, type: :bool} = result
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|null IS NOT FALSE|, %{}, env)
+               Parser.parse_and_validate_expression(~S|null IS NOT FALSE|, env: env)
 
       assert %Const{value: true, type: :bool} = result
 
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|null IS FALSE|, %{}, env)
+               Parser.parse_and_validate_expression(~S|null IS FALSE|, env: env)
 
       assert %Const{value: false, type: :bool} = result
 
       assert {:error, "At location 2: argument of IS TRUE must be bool, not int4"} =
-               Parser.parse_and_validate_expression(~S|1 IS TRUE|, %{}, env)
+               Parser.parse_and_validate_expression(~S|1 IS TRUE|, env: env)
     end
 
     test "should parse array constants" do
@@ -484,7 +503,7 @@ defmodule Electric.Replication.Eval.ParserTest do
 
       assert %Const{value: [[1, 2], [3, 4]], type: {:array, :int4}} = result
 
-      assert {:error, _} =
+      assert {:error, "At location 0: ARRAY types int4[] and int4 cannot be matched"} =
                Parser.parse_and_validate_expression(~S|ARRAY[1, ARRAY['3', 2 + 2]]|)
     end
 
@@ -556,13 +575,22 @@ defmodule Electric.Replication.Eval.ParserTest do
 
   describe "parse_and_validate_expression/3 default env" do
     test "can compare integers" do
-      assert {:ok, _} = Parser.parse_and_validate_expression(~S|id != 1|, %{["id"] => :int8})
-      assert {:ok, _} = Parser.parse_and_validate_expression(~S|id <> 1|, %{["id"] => :int8})
-      assert {:ok, _} = Parser.parse_and_validate_expression(~S|id > 1|, %{["id"] => :int8})
-      assert {:ok, _} = Parser.parse_and_validate_expression(~S|id < 1|, %{["id"] => :int8})
-      assert {:ok, _} = Parser.parse_and_validate_expression(~S|id >= 1|, %{["id"] => :int8})
-      assert {:ok, _} = Parser.parse_and_validate_expression(~S|id <= 1|, %{["id"] => :int8})
-      assert {:ok, _} = Parser.parse_and_validate_expression(~S|id = 1|, %{["id"] => :int8})
+      assert {:ok, _} =
+               Parser.parse_and_validate_expression(~S|id != 1|, refs: %{["id"] => :int8})
+
+      assert {:ok, _} =
+               Parser.parse_and_validate_expression(~S|id <> 1|, refs: %{["id"] => :int8})
+
+      assert {:ok, _} = Parser.parse_and_validate_expression(~S|id > 1|, refs: %{["id"] => :int8})
+      assert {:ok, _} = Parser.parse_and_validate_expression(~S|id < 1|, refs: %{["id"] => :int8})
+
+      assert {:ok, _} =
+               Parser.parse_and_validate_expression(~S|id >= 1|, refs: %{["id"] => :int8})
+
+      assert {:ok, _} =
+               Parser.parse_and_validate_expression(~S|id <= 1|, refs: %{["id"] => :int8})
+
+      assert {:ok, _} = Parser.parse_and_validate_expression(~S|id = 1|, refs: %{["id"] => :int8})
     end
 
     test "implements common array operators: @>, <@, &&, ||" do
@@ -602,10 +630,60 @@ defmodule Electric.Replication.Eval.ParserTest do
                Parser.parse_and_validate_expression(~S|'{1,2,3}'::int[] @> '{2,1,2}'::bigint[]|)
 
       assert {:error, "At location 17: Could not select an operator overload"} =
-               Parser.parse_and_validate_expression(~S|'{1,2,3}'::int[] @> '{2,1,2}'::text|)
+               Parser.parse_and_validate_expression(~S|'{1,2,3}'::int[] @> '{2,1,2}'::text[]|)
 
       assert {:error, "At location 17: Could not select an operator overload"} =
                Parser.parse_and_validate_expression(~S/'{1,2,3}'::int[] || '{2,1,2}'::text[]/)
+    end
+  end
+
+  describe "parse_and_validate_expression/3 with parameters" do
+    test "uses parameters and save a parsed value" do
+      assert {:ok, %Expr{eval: result, query: query}} =
+               Parser.parse_and_validate_expression(~S|'{1,2}'::int[] @> $1|,
+                 params: %{"1" => "{2}"},
+                 refs: %{
+                   ["id"] => {:array, :int8}
+                 }
+               )
+
+      assert query == ~S|'{1,2}'::int[] @> '{2}'::int4[]|
+
+      assert %Const{value: true, type: :bool} = result
+
+      assert {:ok, %Expr{eval: result, query: query}} =
+               Parser.parse_and_validate_expression(~S|1 > $1|,
+                 params: %{"1" => "0"},
+                 refs: %{
+                   ["id"] => {:array, :int8}
+                 }
+               )
+
+      assert %Const{value: true, type: :bool} = result
+      assert query == ~S|1 > '0'::int4|
+    end
+
+    test "fails if parameters can't resolve to same type" do
+      assert {:error, "At location 16: invalid syntax for type int4: test"} =
+               Parser.parse_and_validate_expression(~S"$1 > 5 AND $1 + 'test' > 10",
+                 params: %{"1" => "1"}
+               )
+    end
+
+    test "fails if one of parameters is not provided" do
+      assert {:error, "At location 0: parameter $1 was not provided"} =
+               Parser.parse_and_validate_expression(~S"$1 > 5")
+    end
+
+    test "fails if query misses a parameter position" do
+      assert {:error,
+              "At location 0: expression is missing $1 - parameters should be numbered sequentially"} =
+               Parser.parse_and_validate_expression(~S"$2 > 5", params: %{"2" => "2"})
+    end
+
+    test "fails if an unused parameter is provided" do
+      assert {:error, "At location 0: parameter value for $2 was not used"} =
+               Parser.parse_and_validate_expression(~S"$1 > 5", params: %{"1" => "1", "2" => "2"})
     end
   end
 end

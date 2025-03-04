@@ -1,5 +1,7 @@
 defmodule Electric.Replication.Eval.Runner do
   require Logger
+  alias Electric.Replication.Eval.Parser.Array
+  alias Electric.Replication.Eval.Walker
   alias Electric.Utils
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.Eval.Env
@@ -44,37 +46,31 @@ defmodule Electric.Replication.Eval.Runner do
   """
   @spec execute(Expr.t(), map()) :: {:ok, term()} | {:error, {%Func{}, [term()]}}
   def execute(%Expr{} = tree, ref_values) do
-    {:ok, do_execute(tree.eval, ref_values)}
+    Walker.fold(tree.eval, &do_execute/3, ref_values)
   catch
     {:could_not_compute, func} -> {:error, func}
   end
 
-  defp do_execute(%Const{value: value}, _), do: value
-  defp do_execute(%Ref{path: path}, refs), do: Map.fetch!(refs, path)
+  defp do_execute(%Const{value: value}, _, _), do: {:ok, value}
+  defp do_execute(%Ref{path: path}, _, refs), do: {:ok, Map.fetch!(refs, path)}
+  defp do_execute(%Array{}, %{elements: elements}, _), do: {:ok, elements}
 
-  defp do_execute(%Func{variadic_arg: vararg_position} = func, refs) do
-    {args, has_nils?} =
-      Enum.map_reduce(Enum.with_index(func.args), false, fn
-        {val, ^vararg_position}, has_nils? ->
-          Enum.map_reduce(val, has_nils?, fn val, has_nils? ->
-            case do_execute(val, refs) do
-              nil -> {nil, true}
-              val -> {val, has_nils?}
-            end
-          end)
+  defp do_execute(%Func{strict?: false} = func, %{args: args}, _) do
+    # For a non-strict function, we don't care about nil values in the arguments
+    {:ok, try_apply(func, args)}
+  end
 
-        {val, _}, has_nils? ->
-          case do_execute(val, refs) do
-            nil -> {nil, true}
-            val -> {val, has_nils?}
-          end
-      end)
+  defp do_execute(%Func{strict?: true, variadic_arg: vararg_position} = func, %{args: args}, _) do
+    has_nils? =
+      case vararg_position do
+        nil -> Enum.any?(args, &is_nil/1)
+        pos -> Enum.any?(Enum.at(args, pos), &is_nil/1) or Enum.any?(args, &is_nil/1)
+      end
 
-    # Strict functions don't get applied to nils, so if it's strict and any of the arguments is nil
-    if not func.strict? or not has_nils? do
-      try_apply(func, args)
+    if has_nils? do
+      {:ok, nil}
     else
-      nil
+      {:ok, try_apply(func, args)}
     end
   end
 

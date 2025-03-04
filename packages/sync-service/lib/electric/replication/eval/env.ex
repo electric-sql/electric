@@ -48,8 +48,9 @@ defmodule Electric.Replication.Eval.Env do
 
   @type cast_key :: {from :: basic_type(), to :: basic_type()}
   @type cast_function :: {module :: module(), function :: atom()}
+  @type implicit_cast_function :: cast_function() | :as_is
   @type cast_registry :: %{required(cast_key()) => cast_function()}
-  @type implicit_cast_registry :: %{required(cast_key()) => cast_function() | :as_is}
+  @type implicit_cast_registry :: %{required(cast_key()) => implicit_cast_function()}
 
   @type type_info :: %{
           category: atom(),
@@ -203,6 +204,71 @@ defmodule Electric.Replication.Eval.Env do
   """
   def is_preferred?(%__MODULE__{known_basic_types: types}, type),
     do: get_in(types, [type, :preferred?]) || false
+
+  @doc """
+  Find an appropriate cast function for the given types in this environment.
+  """
+  @spec find_cast_function(t(), pg_type(), pg_type()) ::
+          {:ok, implicit_cast_function()} | {:ok, :array_cast, implicit_cast_function()} | :error
+  def find_cast_function(%__MODULE__{} = env, from_type, to_type) do
+    with :error <- Map.fetch(env.implicit_casts, {from_type, to_type}) do
+      case {from_type, to_type} do
+        {:unknown, _} ->
+          {:ok, {Function, :identity}}
+
+        {_, :unknown} ->
+          {:ok, {Function, :identity}}
+
+        {{:array, t1}, {:array, t2}} ->
+          case find_cast_function(env, t1, t2) do
+            {:ok, :as_is} -> {:ok, :as_is}
+            {:ok, impl} -> {:ok, :array_cast, impl}
+            :error -> :error
+          end
+
+        {:text, to_type} ->
+          find_cast_in_function(env, to_type)
+
+        {from_type, :text} ->
+          find_cast_out_function(env, from_type)
+
+        {from_type, to_type} ->
+          find_explicit_cast(env, from_type, to_type)
+      end
+    end
+  end
+
+  defp find_cast_in_function(env, {:array, to_type}) do
+    with {:ok, [%{args: [:text], implementation: impl}]} <-
+           Map.fetch(env.funcs, {"#{to_type}", 1}) do
+      {:ok, &PgInterop.Array.parse(&1, impl)}
+    end
+  end
+
+  defp find_cast_in_function(_env, {:enum, _to_type}) do
+    # we can't convert arbitrary strings to enums until we know
+    # the DDL for the enum
+    :error
+  end
+
+  defp find_cast_in_function(env, to_type) do
+    case Map.fetch(env.funcs, {"#{to_type}", 1}) do
+      {:ok, [%{args: [:text], implementation: impl}]} -> {:ok, impl}
+      _ -> :error
+    end
+  end
+
+  defp find_cast_out_function(_env, {:enum, _enum_type}), do: {:ok, :as_is}
+
+  defp find_cast_out_function(env, from_type) do
+    case Map.fetch(env.funcs, {"#{from_type}out", 1}) do
+      {:ok, [%{args: [^from_type], implementation: impl}]} -> {:ok, impl}
+      _ -> :error
+    end
+  end
+
+  defp find_explicit_cast(env, from_type, to_type),
+    do: Map.fetch(env.explicit_casts, {from_type, to_type})
 
   # This function implements logic from https://github.com/postgres/postgres/blob/e8c334c47abb6c8f648cb50241c2cd65c9e4e6dc/src/backend/parser/parse_coerce.c#L556
   def get_unified_coercion_targets(%__MODULE__{} = env, inputs, targets, return_type \\ nil) do
