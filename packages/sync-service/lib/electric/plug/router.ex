@@ -25,6 +25,7 @@ defmodule Electric.Plug.Router do
     plug Sentry.PlugContext
   end
 
+  plug :authenticate
   plug :put_cors_headers
   plug :dispatch
 
@@ -46,6 +47,31 @@ defmodule Electric.Plug.Router do
 
   def server_header(conn, version),
     do: conn |> Plug.Conn.put_resp_header("electric-server", "ElectricSQL/#{version}")
+
+  # OPTIONS requests should not be authenticated
+  def authenticate(%Plug.Conn{method: "OPTIONS"} = conn, _opts), do: conn
+
+  def authenticate(%Plug.Conn{request_path: "/v1/shape"} = conn, _opts) do
+    api_secret = conn.assigns.config[:secret]
+
+    if is_nil(api_secret) do
+      # We're in insecure mode, so we don't need to authenticate
+      conn
+    else
+      case Plug.Conn.get_req_header(conn, "electric-secret") do
+        [^api_secret] ->
+          conn
+
+        _ ->
+          conn
+          |> send_resp(401, Jason.encode!(%{message: "Unauthorized - Invalid API secret"}))
+          |> halt()
+      end
+    end
+  end
+
+  # For unmatched routes, just pass through
+  def authenticate(conn, _opts), do: conn
 
   def put_cors_headers(%Plug.Conn{path_info: ["v1", "shape" | _]} = conn, _opts),
     do: CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD", "DELETE", "OPTIONS"]})

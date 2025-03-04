@@ -239,6 +239,23 @@ otel_export_period =
 # instead of having hanging files. We use a provided value as stack id, but nothing else.
 provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, nil)
 
+# Handle authentication configuration
+insecure = env!("ELECTRIC_INSECURE", :boolean, false)
+secret = env!("ELECTRIC_SECRET", :string, nil)
+
+if config_env() != :test do
+  cond do
+    insecure && secret != nil ->
+      raise "Cannot set both ELECTRIC_SECRET and ELECTRIC_INSECURE=true"
+
+    !insecure && secret == nil ->
+      raise "Must set ELECTRIC_SECRET unless ELECTRIC_INSECURE=true. Setting ELECTRIC_INSECURE=true risks exposing your database, only use insecure mode if you know what you are doing."
+
+    true ->
+      :ok
+  end
+end
+
 config :electric,
   provided_database_id: provided_database_id,
   allow_shape_deletion?: enable_integration_testing?,
@@ -264,4 +281,5 @@ config :electric,
   storage: storage,
   profile_where_clauses?: env!("ELECTRIC_PROFILE_WHERE_CLAUSES", :boolean, false),
   persistent_kv: persistent_kv,
-  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, nil)
+  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, nil),
+  secret: secret
