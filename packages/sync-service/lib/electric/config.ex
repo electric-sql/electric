@@ -402,4 +402,23 @@ defmodule Electric.Config do
       {:error, message} -> raise Dotenvy.Error, message: message
     end
   end
+
+  def validate_security_config!(secret, insecure) do
+    cond do
+      insecure && secret != nil ->
+        raise "Cannot set both ELECTRIC_SECRET and ELECTRIC_INSECURE=true"
+
+      !insecure && secret == nil ->
+        raise "Must set ELECTRIC_SECRET unless ELECTRIC_INSECURE=true. Setting ELECTRIC_INSECURE=true risks exposing your database, only use insecure mode if you know what you are doing."
+
+      true ->
+        if insecure do
+          Logger.warning(
+            "Running in insecure mode, this risks exposing your database, only use insecure mode if you know what you are doing."
+          )
+        end
+
+        :ok
+    end
+  end
 end
