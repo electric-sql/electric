@@ -244,16 +244,7 @@ insecure = env!("ELECTRIC_INSECURE", :boolean, false)
 secret = env!("ELECTRIC_SECRET", :string, nil)
 
 if config_env() != :test do
-  cond do
-    insecure && secret != nil ->
-      raise "Cannot set both ELECTRIC_SECRET and ELECTRIC_INSECURE=true"
-
-    !insecure && secret == nil ->
-      raise "Must set ELECTRIC_SECRET unless ELECTRIC_INSECURE=true. Setting ELECTRIC_INSECURE=true risks exposing your database, only use insecure mode if you know what you are doing."
-
-    true ->
-      :ok
-  end
+  Electric.Config.validate_security_config!(secret, insecure)
 end
 
 config :electric,
