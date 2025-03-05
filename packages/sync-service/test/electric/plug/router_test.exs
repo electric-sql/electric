@@ -1263,6 +1263,27 @@ defmodule Electric.Plug.RouterTest do
 
     setup(ctx, do: %{opts: Router.init(build_router_opts(ctx))})
 
+    setup(ctx,
+      do: %{
+        api_opts:
+          Electric.Shapes.Api.plug_opts(
+            stack_id: ctx.stack_id,
+            pg_id: "12345",
+            stack_events_registry: Electric.stack_events_registry(),
+            stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
+            shape_cache: {Mock.ShapeCache, []},
+            storage: {Mock.Storage, []},
+            inspector: {__MODULE__, []},
+            registry: Registry.ServeShapePlugTest,
+            long_poll_timeout: 20_000,
+            max_age: 60,
+            stale_age: 300,
+            persistent_kv: ctx.persistent_kv,
+            allow_shape_deletion: true
+          )
+      }
+    )
+
     test "allows access to / without secret", %{secret: secret} do
       assert %{status: 200} = Router.call(conn("GET", "/"), secret: secret)
     end
@@ -1284,23 +1305,7 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 204} = Router.call(conn("OPTIONS", "/v1/shape"), secret: secret)
     end
 
-    test "requires secret for /v1/shape", ctx = %{secret: secret} do
-      opts =
-        Electric.Shapes.Api.plug_opts(
-          stack_id: ctx.stack_id,
-          pg_id: "12345",
-          stack_events_registry: Electric.stack_events_registry(),
-          stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
-          shape_cache: {Mock.ShapeCache, []},
-          storage: {Mock.Storage, []},
-          inspector: {__MODULE__, []},
-          registry: Registry.ServeShapePlugTest,
-          long_poll_timeout: 20_000,
-          max_age: 60,
-          stale_age: 300,
-          persistent_kv: ctx.persistent_kv
-        )
-
+    test "requires secret for /v1/shape", %{secret: secret, api_opts: api_opts} do
       # No secret provided
       assert %{status: 401} = Router.call(conn("GET", "/v1/shape"), secret: secret)
 
@@ -1316,27 +1321,10 @@ defmodule Electric.Plug.RouterTest do
         conn("GET", "/v1/shape")
         |> Plug.Conn.put_req_header("electric-secret", secret)
 
-      assert %{status: 400} = Router.call(conn, Keyword.merge([secret: secret], opts))
+      assert %{status: 400} = Router.call(conn, Keyword.merge([secret: secret], api_opts))
     end
 
-    test "requires secret for /v1/shape deletion", ctx = %{secret: secret} do
-      opts =
-        Electric.Shapes.Api.plug_opts(
-          stack_id: ctx.stack_id,
-          pg_id: "12345",
-          stack_events_registry: Electric.stack_events_registry(),
-          stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
-          shape_cache: {Mock.ShapeCache, []},
-          storage: {Mock.Storage, []},
-          inspector: {__MODULE__, []},
-          registry: Registry.ServeShapePlugTest,
-          long_poll_timeout: 20_000,
-          max_age: 60,
-          stale_age: 300,
-          persistent_kv: ctx.persistent_kv,
-          allow_shape_deletion: true
-        )
-
+    test "requires secret for /v1/shape deletion", %{secret: secret, api_opts: api_opts} do
       # No secret provided
       assert %{status: 401} = Router.call(conn("DELETE", "/v1/shape"), secret: secret)
 
@@ -1352,7 +1340,7 @@ defmodule Electric.Plug.RouterTest do
         conn("DELETE", "/v1/shape")
         |> Plug.Conn.put_req_header("electric-secret", secret)
 
-      assert %{status: 400} = Router.call(conn, Keyword.merge([secret: secret], opts))
+      assert %{status: 400} = Router.call(conn, Keyword.merge([secret: secret], api_opts))
       # Note: Returns 400 because shape params are required, but authentication passed
     end
   end
