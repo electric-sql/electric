@@ -88,6 +88,31 @@ Suffix for the logical replication publication and slot name.
 
 ## Electric
 
+### ELECTRIC_SECRET
+
+<EnvVarConfig
+    name="ELECTRIC_SECRET"
+    example="1U6ItbhoQb4kGUU5wXBLbxvNf">
+
+Secret for shape requests to the [HTTP API](/docs/api/http).
+
+</EnvVarConfig>
+
+### ELECTRIC_INSECURE
+
+<EnvVarConfig
+    name="ELECTRIC_INSECURE"
+    defaultValue="false"
+    example="true">
+
+When set to `true`, runs Electric in insecure mode and does not require an `ELECTRIC_SECRET`.
+Use with caution.
+API requests are unprotected and may risk exposing your database.
+Good for development environments.
+If used in production, make sure to lock down access to Electric.
+
+</EnvVarConfig>
+
 ### ELECTRIC_INSTANCE_ID
 
 <EnvVarConfig
@@ -118,7 +143,7 @@ Name of the electric service. Used as a resource identifier and namespace.
     example="true">
 
 Expose some unsafe operations that faciliate integration testing.
-Do not enable this production.
+Do not enable this in production.
 
 </EnvVarConfig>
 
