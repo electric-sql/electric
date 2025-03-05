@@ -113,8 +113,7 @@ describe(`Shape`, () => {
     await deleteIssue({ id: id3, title: `other title2` })
     // Test an update too because we're sending patches that should be correctly merged in
     await updateIssue({ id: id2, title: `new title` })
-    await sleep(200) // some time for electric to catch up
-    await hasNotified
+    await vi.waitUntil(() => hasNotified)
 
     const expectedValue2 = [
       ...expectedValue1,
@@ -125,7 +124,7 @@ describe(`Shape`, () => {
       },
     ]
 
-    expect(shape.currentRows).toEqual(expectedValue2)
+    await vi.waitFor(() => expect(shape.currentRows).toEqual(expectedValue2))
     expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(intermediate)
     expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - intermediate)
@@ -169,7 +168,6 @@ describe(`Shape`, () => {
         // new shape data should have just second issue and not first
         await deleteIssue({ id: id1, title: `foo1` })
         await insertIssues({ id: id2, title: `foo2` })
-        await sleep(100)
         await clearIssuesShape(shapeStream.shapeHandle)
 
         rotationTime = Date.now()
@@ -294,9 +292,7 @@ describe(`Shape`, () => {
 
     // Abort the shape stream and check connectivity status
     aborter.abort()
-    await sleep(100) // give some time for the shape stream to abort
-
-    expect(shapeStream.isConnected()).false
+    await vi.waitFor(() => expect(shapeStream.isConnected()).false)
   })
 
   it(`should set isConnected to false on fetch error and back on true when fetch succeeds again`, async ({
@@ -332,19 +328,14 @@ describe(`Shape`, () => {
 
     const unsubscribe = shapeStream.subscribe(() => unsubscribe())
 
-    await sleep(100) // give some time for the initial fetch to complete
-    expect(shapeStream.isConnected()).true
+    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
 
     // Now make fetch fail and check the status
     fetchShouldFail = true
-    await sleep(20) // give some time for the request to be aborted
-
-    expect(shapeStream.isConnected()).false
+    await vi.waitFor(() => expect(shapeStream.isConnected()).false)
 
     fetchShouldFail = false
-    await sleep(200)
-
-    expect(shapeStream.isConnected()).true
+    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
   })
 
   it(`should not throw error if an error handler is provided`, async ({
@@ -462,7 +453,6 @@ describe(`Shape`, () => {
     })
     const mockErrorHandler = vi.fn().mockImplementation(async (error) => {
       if (error instanceof FetchError && error.status === 401) {
-        await sleep(200)
         authChanged()
         return {
           headers: {
@@ -499,8 +489,8 @@ describe(`Shape`, () => {
     expect(shapeStream.isConnected()).toBe(false)
 
     await authChangePromise
-    await sleep(200) // give some time for the error handler to modify the authorization header
-    expect(shapeStream.isConnected()).toBe(true)
+    // give some time for the error handler to modify the authorization header
+    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
   })
 
   it(`should stop fetching and report an error if response is missing required headers`, async ({
@@ -526,17 +516,18 @@ describe(`Shape`, () => {
     })
 
     const unsub = shapeStream.subscribe(() => unsub())
-    await sleep(10) // give sometime for fetch to fail
-
     expect(shapeStream.isConnected()).false
 
-    const expectedErrorMessage = new MissingHeadersError(url, [
-      `electric-handle`,
-      `electric-schema`,
-    ]).message
+    await vi.waitFor(() => {
+      const expectedErrorMessage = new MissingHeadersError(url, [
+        `electric-handle`,
+        `electric-schema`,
+      ]).message
+      expect(error1!.message).equals(expectedErrorMessage)
+      expect((shapeStream.error as Error).message).equals(expectedErrorMessage)
+    })
 
-    expect(error1!.message).equals(expectedErrorMessage)
-    expect((shapeStream.error as Error).message).equals(expectedErrorMessage)
+    expect(shapeStream.isConnected()).false
 
     // Also check that electric-cursor is a required header for responses to live queries
     const shapeStreamLive = new ShapeStream({
@@ -556,17 +547,19 @@ describe(`Shape`, () => {
     })
 
     const unsubLive = shapeStreamLive.subscribe(() => unsubLive())
-    await sleep(10) // give some time for the initial fetch to complete
     expect(shapeStreamLive.isConnected()).false
 
-    const expectedErrorMessageLive = new MissingHeadersError(url, [
-      `electric-handle`,
-      `electric-cursor`,
-    ]).message
-    expect(error2!.message).equals(expectedErrorMessageLive)
-    expect((shapeStreamLive.error as Error).message).equals(
-      expectedErrorMessageLive
-    )
+    await vi.waitFor(() => {
+      const expectedErrorMessageLive = new MissingHeadersError(url, [
+        `electric-handle`,
+        `electric-cursor`,
+      ]).message
+      expect(error2!.message).equals(expectedErrorMessageLive)
+      expect((shapeStreamLive.error as Error).message).equals(
+        expectedErrorMessageLive
+      )
+    })
+    expect(shapeStreamLive.isConnected()).false
   })
 
   it(`should set isConnected to false after fetch if not subscribed`, async ({
@@ -581,11 +574,10 @@ describe(`Shape`, () => {
     })
 
     await waitForFetch(shapeStream)
-    await sleep(50)
 
     // We should no longer be connected because
     // the initial fetch finished and we've not subscribed to changes
-    expect(shapeStream.isConnected()).false
+    await vi.waitFor(() => expect(shapeStream.isConnected()).false)
   })
 
   it(`should expose isLoading status`, async ({ issuesTableUrl }) => {
@@ -644,16 +636,17 @@ describe(`Shape`, () => {
       },
       signal: aborter.signal,
     })
+
+    let unsub: () => void = () => {}
     try {
-      await new Promise((resolve) => {
-        shapeStream.subscribe(resolve)
+      const lastMsgs: Message<Row>[] = []
+      unsub = shapeStream.subscribe((msgs) => {
+        lastMsgs.push(...msgs)
       })
 
-      await sleep(200)
-      await updateIssue({ id: id, title: `updated title` })
-
-      const msgs: Message<Row>[] = await new Promise((resolve) => {
-        shapeStream.subscribe(resolve)
+      await vi.waitFor(() => {
+        const msg = lastMsgs.shift()
+        expect(msg?.headers.control).toEqual(`up-to-date`)
       })
 
       const expectedValue = {
@@ -663,11 +656,15 @@ describe(`Shape`, () => {
         // unchanged `priority` column
         priority: 10,
       }
-
-      const changeMsg: ChangeMessage<Row> = msgs[0] as ChangeMessage<Row>
-      expect(changeMsg.headers.operation).toEqual(`update`)
-      expect(changeMsg.value).toEqual(expectedValue)
+      await updateIssue({ id: id, title: `updated title` })
+      await vi.waitFor(() => {
+        const msg = lastMsgs.shift()
+        const changeMsg: ChangeMessage<Row> = msg as ChangeMessage<Row>
+        expect(changeMsg.headers.operation).toEqual(`update`)
+        expect(changeMsg.value).toEqual(expectedValue)
+      })
     } finally {
+      unsub()
       // the normal cleanup doesn't work because our shape definition is
       // changed by the updates: 'full' param
       await clearIssuesShape(shapeStream.shapeHandle)
@@ -780,24 +777,21 @@ describe(`Shape`, () => {
     const shape = new Shape(shapeStream)
 
     // Wait for initial fetch to start: offset: -1
-    await sleep(50)
-    expect(pendingRequests.length).toBe(1)
+    await vi.waitFor(() => expect(pendingRequests.length).toBe(1))
     expect(pendingRequests[0][0].toString()).toContain(`offset=-1`)
 
     // Complete initial fetch
     await resolveRequests()
 
     // Wait for second fetch to start: offset: 0_0
-    await sleep(50)
-    expect(pendingRequests.length).toBe(1)
+    await vi.waitFor(() => expect(pendingRequests.length).toBe(1))
     expect(pendingRequests[0][0].toString()).toContain(`offset=0_0`)
 
     // Complete second fetch
     await resolveRequests()
-    await sleep(50)
 
     // We should be in live mode
-    expect(pendingRequests.length).toBe(1)
+    await vi.waitFor(() => expect(pendingRequests.length).toBe(1))
     expect(pendingRequests[0][0].toString()).toContain(`live=true`)
 
     // Update data while stream is long polling
@@ -807,7 +801,7 @@ describe(`Shape`, () => {
     const refreshPromise = shapeStream.forceDisconnectAndRefresh()
 
     // Verify the long polling request was aborted and a new request started
-    await sleep(50)
+    await vi.waitFor(() => expect(pendingRequests.length).toBe(2))
     expect(pendingRequests.length).toBe(2) // Aborted long poll + refresh request
     expect(pendingRequests[0][0].toString()).toContain(`live=true`) // The aborted long poll
     expect(pendingRequests[1][0].toString()).not.toContain(`live=true`) // The refresh request
@@ -830,8 +824,7 @@ describe(`Shape`, () => {
     ])
 
     // Verify we return to normal processing (long polling)
-    await sleep(50)
-    expect(pendingRequests.length).toBe(1) // New long poll
+    await vi.waitFor(() => expect(pendingRequests.length).toBe(1)) // New long poll
     expect(pendingRequests[0][0].toString()).toContain(`live=true`)
   })
 })

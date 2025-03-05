@@ -167,8 +167,6 @@ describe(`useShape`, () => {
     expect(result.current.lastSyncedAt).toBeUndefined()
     const now = Date.now()
 
-    await sleep(150)
-
     await waitFor(() => expect(result.current.lastSyncedAt).toBeDefined())
 
     expect(result.current.lastSyncedAt).toBeGreaterThanOrEqual(now)
@@ -193,7 +191,6 @@ describe(`useShape`, () => {
     )
 
     await waitFor(() => expect(result.current.data).not.toEqual([]))
-    await sleep(100) // TODO: remove later, just testing if this improves flakes
 
     // Add an item.
     const [id2] = await insertIssues({ title: `other row` })
@@ -255,6 +252,11 @@ describe(`useShape`, () => {
     const [id] = await insertIssues({ title: `test row` })
     await insertIssues({ title: `test row2` })
 
+    const selector = (result: UseShapeResult<{ title: string }>) => {
+      result.data = result.data.filter((row) => row?.title !== `test row2`)
+      return result
+    }
+
     const { result } = renderHook(() =>
       useShape({
         url: `${BASE_URL}/v1/shape`,
@@ -263,10 +265,7 @@ describe(`useShape`, () => {
         },
         signal: aborter.signal,
         subscribe: true,
-        selector: (result) => {
-          result.data = result.data.filter((row) => row?.title !== `test row2`)
-          return result
-        },
+        selector,
       })
     )
 
@@ -363,11 +362,7 @@ describe(`useShape`, () => {
     })
 
     // And wait until it's definitely seen
-    await waitFor(async () => {
-      return parallelWaiterStream.isUpToDate || (await sleep(50))
-    })
-
-    await sleep(50)
+    await waitFor(() => parallelWaiterStream.isUpToDate)
 
     expect(result.current.data.length).toEqual(1)
   })

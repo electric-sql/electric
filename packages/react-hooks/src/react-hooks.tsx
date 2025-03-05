@@ -139,6 +139,21 @@ function parseShapeData<T extends Row<unknown>>(
   }
 }
 
+function shapeResultChanged<T extends Row<unknown>>(
+  oldRes: UseShapeResult<T> | undefined,
+  newRes: UseShapeResult<T>
+): boolean {
+  return (
+    !oldRes ||
+    oldRes.isLoading !== newRes.isLoading ||
+    oldRes.lastSyncedAt !== newRes.lastSyncedAt ||
+    oldRes.isError !== newRes.isError ||
+    oldRes.error !== newRes.error ||
+    oldRes.shape.lastOffset !== newRes.shape.lastOffset ||
+    oldRes.shape.handle !== newRes.shape.handle
+  )
+}
+
 function identity<T>(arg: T): T {
   return arg
 }
@@ -161,13 +176,28 @@ export function useShape<
   const shape = getShape<SourceData>(shapeStream)
 
   const useShapeData = React.useMemo(() => {
-    let latestShapeData = parseShapeData(shape)
-    const getSnapshot = () => latestShapeData
-    const subscribe = (onStoreChange: () => void) =>
-      shapeSubscribe(shape, () => {
+    let latestShapeData: UseShapeResult<SourceData> | undefined
+
+    const getSnapshot = () => {
+      latestShapeData ??= parseShapeData(shape)
+      return latestShapeData
+    }
+
+    const subscribe = (onStoreChange: () => void) => {
+      // check if shape has changed between the initial snapshot
+      // and subscribing, as there are no guarantees that the
+      // two will occur synchronously with each other
+      const newShapeData = parseShapeData(shape)
+      if (shapeResultChanged(latestShapeData, newShapeData)) {
+        latestShapeData = newShapeData
+        onStoreChange()
+      }
+
+      return shapeSubscribe(shape, () => {
         latestShapeData = parseShapeData(shape)
         onStoreChange()
       })
+    }
 
     return () => {
       return useSyncExternalStoreWithSelector(
