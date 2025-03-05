@@ -61,9 +61,9 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
     defp otel_reporter_child_spec(_), do: nil
 
-    defp call_home_reporter_child_spec(%{call_home_telemetry?: true}) do
+    defp call_home_reporter_child_spec(%{call_home_telemetry?: true} = opts) do
       {Electric.Telemetry.CallHomeReporter,
-       static_info: static_info(),
+       static_info: static_info(opts),
        metrics: call_home_metrics(),
        first_report_in: {2, :minute},
        reporting_period: {30, :minute}}
@@ -71,7 +71,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
     defp call_home_reporter_child_spec(_), do: nil
 
-    def static_info() do
+    defp static_info(opts) do
       {total_mem, _, _} = :memsup.get_memory_data()
       processors = :erlang.system_info(:logical_processors)
       {os_family, os_name} = :os.type()
@@ -84,7 +84,8 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
           arch: to_string(arch),
           cores: processors,
           ram: total_mem,
-          electric_instance_id: Electric.instance_id()
+          electric_instance_id: Electric.instance_id(),
+          electric_installation_id: Map.fetch!(opts, :installation_id)
         }
       }
     end

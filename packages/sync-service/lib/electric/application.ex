@@ -42,12 +42,12 @@ defmodule Electric.Application do
     # and individual shape consumer process trees.
     #
     # See the moduledoc in `Electric.Connection.Supervisor` for more info.
+    config = configuration()
+
     Enum.concat([
       children_library(),
-      [
-        {Electric.StackSupervisor, Keyword.put(configuration(), :name, Electric.StackSupervisor)}
-      ],
-      application_telemetry(),
+      [{Electric.StackSupervisor, Keyword.put(config, :name, Electric.StackSupervisor)}],
+      application_telemetry(config),
       api_server_children(),
       prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
     ])
@@ -73,7 +73,10 @@ defmodule Electric.Application do
   # Gets a complete configuration for the `StackSupervisor` based on the passed opts
   # plus the application configuration and the defaults.
   def configuration(opts \\ []) do
-    Electric.Config.ensure_instance_id()
+    instance_id = Electric.Config.ensure_instance_id()
+
+    core_config = core_configuration(opts)
+    installation_id = Electric.Config.ensure_installation_id(core_config, instance_id)
 
     replication_stream_id = get_env(opts, :replication_stream_id)
 
@@ -83,7 +86,7 @@ defmodule Electric.Application do
     slot_name = Keyword.get(opts, :slot_name, "electric_slot_#{replication_stream_id}")
 
     Keyword.merge(
-      core_configuration(opts),
+      core_config,
       connection_opts: get_env!(opts, :connection_opts),
       replication_opts: [
         publication_name: publication_name,
@@ -92,7 +95,8 @@ defmodule Electric.Application do
       ],
       pool_opts: get_env_with_default(opts, :pool_opts, pool_size: get_env(opts, :db_pool_size)),
       chunk_bytes_threshold: get_env(opts, :chunk_bytes_threshold),
-      telemetry_opts: telemetry_opts(opts)
+      telemetry_opts:
+        telemetry_opts([instance_id: instance_id, installation_id: installation_id] ++ opts)
     )
   end
 
@@ -170,9 +174,9 @@ defmodule Electric.Application do
     Keyword.get(opts, key, default)
   end
 
-  defp application_telemetry do
+  defp application_telemetry(config) do
     if Code.ensure_loaded?(Electric.Telemetry.ApplicationTelemetry) do
-      [{Electric.Telemetry.ApplicationTelemetry, telemetry_opts()}]
+      [{Electric.Telemetry.ApplicationTelemetry, Keyword.fetch!(config, :telemetry_opts)}]
     else
       []
     end
@@ -247,9 +251,10 @@ defmodule Electric.Application do
     ])
   end
 
-  defp telemetry_opts(opts \\ []) do
+  defp telemetry_opts(opts) do
     [
-      instance_id: Electric.instance_id(),
+      instance_id: Keyword.fetch!(opts, :instance_id),
+      installation_id: Keyword.fetch!(opts, :installation_id),
       system_metrics_poll_interval: get_env(opts, :system_metrics_poll_interval),
       statsd_host: get_env(opts, :telemetry_statsd_host),
       prometheus?: not is_nil(get_env(opts, :prometheus_port)),
