@@ -112,7 +112,11 @@
 [endmacro]
 
 [macro setup_electric]
-  [invoke setup_electric_with_env "DATABASE_URL=$database_url"]
+  [invoke setup_electric_with_env "DATABASE_URL=$database_url ELECTRIC_INSECURE=true"]
+[endmacro]
+
+[macro setup_secure_electric secret]
+  [invoke setup_electric_with_env "DATABASE_URL=$database_url ELECTRIC_SECRET=$secret"]
 [endmacro]
 
 [macro setup_electric_with_pooler]
@@ -120,7 +124,7 @@
 [endmacro]
 
 [macro setup_multi_tenant_electric]
-  [invoke setup_electric_with_env ""]
+  [invoke setup_electric_with_env "ELECTRIC_INSECURE=true"]
 [endmacro]
 
 [macro setup_electric_with_env env]
@@ -139,7 +143,7 @@
 [endmacro]
 
 [macro setup_electric_shell_with_tenant shell_name port]
-  [invoke setup_electric_shell $shell_name $port "DATABASE_URL=$database_url"]
+  [invoke setup_electric_shell $shell_name $port "DATABASE_URL=$database_url ELECTRIC_INSECURE=true"]
 [endmacro]
 
 [macro add_tenant tenant_id electric_port]
