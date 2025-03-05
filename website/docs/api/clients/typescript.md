@@ -142,6 +142,12 @@ export interface ShapeStreamOptions<T = never> {
   shapeId?: string
 
   /**
+   * Secret to provide with every shape request.
+   * This is required unless Electric is running in insecure mode or you're using a proxy server.
+   */
+  secret?: string
+
+  /**
    * HTTP headers to attach to requests made by the client.
    * Can be used for adding authentication headers.
    */
@@ -226,6 +232,24 @@ const stream = new ShapeStream({
   }
 })
 ```
+
+#### API Secret
+
+By default, Electric runs in secure mode and must be configured with an API secret.
+This secret is required for all requests to the shape API.
+You can configure the `ShapeStream` with a secret by passing the `secret` option:
+
+```typescript
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  params: {
+    table: 'items',
+  },
+  secret: 'your_api_secret'
+})
+```
+
+Under the hood, the `secret` option is added to the request headers as `electric-secret: your_api_secret`.
 
 #### Dynamic Options
 
