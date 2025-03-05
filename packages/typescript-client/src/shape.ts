@@ -183,7 +183,6 @@ export class Shape<T extends Row<unknown> = Row> {
   }
 
   #updateShapeStatus(status: ShapeStatus): boolean {
-    console.log(`update`, this.#status, status)
     const stateChanged = this.#status !== status
     this.#status = status
     return stateChanged && status === `up-to-date`
