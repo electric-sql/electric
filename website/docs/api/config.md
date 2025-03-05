@@ -92,6 +92,7 @@ Suffix for the logical replication publication and slot name.
 
 <EnvVarConfig
     name="ELECTRIC_SECRET"
+    optional="true"
     example="1U6ItbhoQb4kGUU5wXBLbxvNf">
 
 Secret for shape requests to the [HTTP API](/docs/api/http).
