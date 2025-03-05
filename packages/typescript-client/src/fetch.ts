@@ -264,10 +264,8 @@ class PrefetchQueue {
     const aborter = new AbortController()
 
     try {
-      const request = this.#fetchClient(url, {
-        ...(args[1] ?? {}),
-        signal: chainAborter(aborter, args[1]?.signal),
-      })
+      const { signal, cleanup } = chainAborter(aborter, args[1]?.signal)
+      const request = this.#fetchClient(url, { ...(args[1] ?? {}), signal })
       this.#prefetchQueue.set(url, [request, aborter])
       request
         .then((response) => {
@@ -286,6 +284,7 @@ class PrefetchQueue {
           return this.#prefetch(nextUrl, args[1])
         })
         .catch(() => {})
+        .finally(cleanup)
     } catch (_) {
       // ignore prefetch errors
     }
@@ -324,12 +323,31 @@ function getNextChunkUrl(url: string, res: Response): string | void {
 function chainAborter(
   aborter: AbortController,
   sourceSignal?: AbortSignal | null
-): AbortSignal {
-  if (!sourceSignal) return aborter.signal
-  if (sourceSignal.aborted) aborter.abort()
-  else
-    sourceSignal.addEventListener(`abort`, () => aborter.abort(), {
+): {
+  signal: AbortSignal
+  cleanup: () => void
+} {
+  let cleanup = noop
+  if (!sourceSignal) {
+    // no-op, nothing to chain to
+  } else if (sourceSignal.aborted) {
+    // source signal is already aborted, abort immediately
+    aborter.abort()
+  } else {
+    // chain to source signal abort event, and add callback to unlink
+    // the aborter to avoid memory leaks
+    const abortParent = () => aborter.abort()
+    sourceSignal.addEventListener(`abort`, abortParent, {
       once: true,
+      signal: aborter.signal,
     })
-  return aborter.signal
+    cleanup = () => sourceSignal.removeEventListener(`abort`, abortParent)
+  }
+
+  return {
+    signal: aborter.signal,
+    cleanup,
+  }
 }
+
+function noop() {}
