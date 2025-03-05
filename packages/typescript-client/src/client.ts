@@ -202,6 +202,12 @@ export interface ShapeStreamOptions<T = never> {
   handle?: string
 
   /**
+   * Secret to provide with every shape request.
+   * This is required unless Electric is running in insecure mode or you're using a proxy server.
+   */
+  secret?: string
+
+  /**
    * HTTP headers to attach to requests made by the client.
    * Values can be strings or functions (sync or async) that return strings.
    * Function values are resolved in parallel when needed, making this useful
@@ -336,6 +342,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
+    if (options.secret !== undefined) {
+      this.options.headers = {
+        ...this.options.headers,
+        'electric-secret': options.secret,
+      }
+    }
     validateOptions(this.options)
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
