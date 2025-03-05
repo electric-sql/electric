@@ -361,7 +361,17 @@ defmodule Electric.Shapes.Api do
     if LogOffset.compare(offset, last_offset) != :lt or
          last_offset == LogOffset.last_before_real_offsets() do
       ref = make_ref()
-      Registry.register(registry, handle, ref)
+      parent = self()
+
+      # Register for notifications using a separate task as the calling process
+      # might be reused across mutiple connections
+      Task.start_link(fn ->
+        Registry.register(registry, handle, ref)
+
+        receive do
+          msg when elem(msg, 0) == ref -> send(parent, msg)
+        end
+      end)
 
       Logger.debug("Client #{inspect(self())} is registered for changes to #{handle}")
 
