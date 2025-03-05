@@ -990,7 +990,7 @@ defmodule Electric.Plug.RouterTest do
          } do
       # Make the next request but forget to include the where clause
       conn =
-        conn("GET", "/v1/shape?table=items&unrelated=foo", %{offset: "0_0", handle: "nonexistent"})
+        conn("GET", "/v1/shape?table=items", %{offset: "0_0", handle: "nonexistent"})
         |> Router.call(opts)
 
       assert %{status: 409} = conn
@@ -998,7 +998,7 @@ defmodule Electric.Plug.RouterTest do
       new_shape_handle = get_resp_header(conn, "electric-handle")
 
       assert get_resp_header(conn, "location") ==
-               "/v1/shape?handle=#{new_shape_handle}&offset=-1&table=items&unrelated=foo"
+               "/v1/shape?table=public.items&handle=#{new_shape_handle}&offset=-1"
     end
 
     test "GET receives 409 when shape handle is not found but there is another shape matching the definition",
