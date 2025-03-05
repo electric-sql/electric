@@ -23,7 +23,7 @@ services:
   electric:
     image: electricsql/electric:latest
     environment:
-      ELECTRIC_INSECURE: true
+      ELECTRIC_INSECURE: ${ELECTRIC_INSECURE:-true}
       ELECTRIC_OTLP_ENDPOINT: http://otel:4318/
       ELECTRIC_PROMETHEUS_PORT: ${ELECTRIC_PROMETHEUS_PORT:-4000}
       DATABASE_URL: postgresql://postgres:password@postgres:5432/electric
