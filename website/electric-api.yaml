@@ -387,14 +387,29 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  headers:
-                    type: object
-                    description: Cache control headers
+                type: array
+                description: Array of message objects
+                items:
+                  type: object
+                  description: Message object
+                  properties:
+                    headers:
+                      type: object
+                      description: |-
+                        Metadata describing the control message.
+
+                        The `control` message returned will be a `must-refetch` message,
+                        which a client should detect and throw away any local data and
+                        re-sync from scratch using the new shape handle available in the
+                        `electric-handle` header of the response.
+                      properties:
+                        control:
+                          type: "string"
+                          enum:
+                            - must-refetch
                 example:
-                  headers:
-                    control: "must-refetch"
+                  - headers:
+                      control: must-refetch
         "429":
           description:
             Too many requests. The server is busy with other requests, potentially
