@@ -10,6 +10,59 @@ import { resolveValue } from '../src'
 const BASE_URL = inject(`baseUrl`)
 
 describe(`Shape`, () => {
+  it(`should pass secret as a header to the server`, async ({
+    issuesTableUrl,
+  }) => {
+    const secret = `test-secret`
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      secret,
+    })
+    expect(shapeStream.options.headers).toEqual({
+      [`electric-secret`]: secret,
+    })
+  })
+
+  it(`should extend headers with secret`, async ({ issuesTableUrl }) => {
+    const secret = `test-secret`
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      headers: {
+        [`X-Custom-Header`]: `test-value`,
+      },
+      secret,
+    })
+    expect(shapeStream.options.headers).toEqual({
+      [`X-Custom-Header`]: `test-value`,
+      [`electric-secret`]: secret,
+    })
+  })
+
+  it(`should override electric-secret header with the provided secret`, async ({
+    issuesTableUrl,
+  }) => {
+    const secret = `test-secret`
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      headers: {
+        [`electric-secret`]: `wrong-secret`,
+      },
+      secret,
+    })
+    expect(shapeStream.options.headers).toEqual({
+      [`electric-secret`]: secret,
+    })
+  })
+
   it(`should sync an empty shape`, async ({ issuesTableUrl }) => {
     const start = Date.now()
     const shapeStream = new ShapeStream({
