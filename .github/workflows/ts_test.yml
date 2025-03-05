@@ -120,7 +120,7 @@ jobs:
         with:
           run: |
             mix start_dev
-            mix run --no-halt &
+            ELECTRIC_INSECURE=true mix run --no-halt &
 
           wait-on: |
             http-get://localhost:3000/v1/health?database_id=${{ env.ELECTRIC_DATABASE_ID }}
