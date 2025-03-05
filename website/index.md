@@ -4,11 +4,11 @@ title: 'ElectricSQL'
 titleTemplate: 'Postgres sync engine'
 description: 'Sync little subsets of your Postgres data into local apps and services.'
 hero:
-  name: "Why fetch when"
-  text: "you can sync?"
+  name: "Realtime sync"
+  text: "for Postgres"
   tagline: >-
-    Swap out your queries, data fetching and caching for
-    bulletproof&nbsp;sync<span class="hidden-xs"> that just works</span>.
+    Sync is the best way of building modern&nbsp;apps.
+    Electric&nbsp;solves sync so&nbsp;that&nbsp;you don't have to.
   image:
     src: /img/home/zap-with-halo.svg
   actions:
