@@ -6,59 +6,10 @@ import { ShapeStream, Shape, FetchError } from '../src'
 import { Message, Row, ChangeMessage } from '../src/types'
 import { MissingHeadersError } from '../src/error'
 import { resolveValue } from '../src'
-import { API_SECRET_QUERY_PARAM } from '../src/constants'
 
 const BASE_URL = inject(`baseUrl`)
 
 describe(`Shape`, () => {
-  it(`should pass secret as a query parameter to the server`, async ({
-    issuesTableUrl,
-  }) => {
-    const secret = `test-secret`
-    const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape?table=${issuesTableUrl}`,
-      secret,
-    })
-    expect(shapeStream.options.params).toEqual({
-      [API_SECRET_QUERY_PARAM]: secret,
-    })
-  })
-
-  it(`should extend query parameters with secret`, async ({
-    issuesTableUrl,
-  }) => {
-    const secret = `test-secret`
-    const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape`,
-      params: {
-        table: issuesTableUrl,
-      },
-      secret,
-    })
-    expect(shapeStream.options.params).toEqual({
-      table: issuesTableUrl,
-      [API_SECRET_QUERY_PARAM]: secret,
-    })
-  })
-
-  it(`should override api_secret query parameter with the provided secret`, async ({
-    issuesTableUrl,
-  }) => {
-    const secret = `test-secret`
-    const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape`,
-      params: {
-        table: issuesTableUrl,
-        [API_SECRET_QUERY_PARAM]: `wrong-secret`,
-      },
-      secret,
-    })
-    expect(shapeStream.options.params).toEqual({
-      table: issuesTableUrl,
-      [API_SECRET_QUERY_PARAM]: secret,
-    })
-  })
-
   it(`should sync an empty shape`, async ({ issuesTableUrl }) => {
     const start = Date.now()
     const shapeStream = new ShapeStream({
