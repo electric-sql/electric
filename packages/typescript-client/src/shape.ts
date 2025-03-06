@@ -9,6 +9,8 @@ export type ShapeChangedCallback<T extends Row<unknown> = Row> = (data: {
   rows: T[]
 }) => void
 
+type ShapeStatus = `syncing` | `up-to-date`
+
 /**
  * A Shape is an object that subscribes to a shape log,
  * keeps a materialised shape `.rows` in memory and
@@ -50,8 +52,7 @@ export class Shape<T extends Row<unknown> = Row> {
 
   readonly #data: ShapeData<T> = new Map()
   readonly #subscribers = new Map<number, ShapeChangedCallback<T>>()
-
-  #hasNotifiedSubscribersUpToDate: boolean = false
+  #status: ShapeStatus = `syncing`
   #error: FetchError | false = false
 
   constructor(stream: ShapeStreamInterface<T>) {
@@ -63,7 +64,7 @@ export class Shape<T extends Row<unknown> = Row> {
   }
 
   get isUpToDate(): boolean {
-    return this.stream.isUpToDate
+    return this.#status === `up-to-date`
   }
 
   get lastOffset(): Offset {
@@ -143,16 +144,11 @@ export class Shape<T extends Row<unknown> = Row> {
   }
 
   #process(messages: Message<T>[]): void {
-    let dataMayHaveChanged = false
-    let isUpToDate = false
-    let newlyUpToDate = false
+    let shouldNotify = false
 
     messages.forEach((message) => {
       if (isChangeMessage(message)) {
-        dataMayHaveChanged = [`insert`, `update`, `delete`].includes(
-          message.headers.operation
-        )
-
+        shouldNotify = this.#updateShapeStatus(`syncing`)
         switch (message.headers.operation) {
           case `insert`:
             this.#data.set(message.key, message.value)
@@ -172,28 +168,24 @@ export class Shape<T extends Row<unknown> = Row> {
       if (isControlMessage(message)) {
         switch (message.headers.control) {
           case `up-to-date`:
-            isUpToDate = true
-            if (!this.#hasNotifiedSubscribersUpToDate) {
-              newlyUpToDate = true
-            }
+            shouldNotify = this.#updateShapeStatus(`up-to-date`)
             break
           case `must-refetch`:
             this.#data.clear()
             this.#error = false
-            this.#hasNotifiedSubscribersUpToDate = false
-            isUpToDate = false
-            newlyUpToDate = false
+            shouldNotify = this.#updateShapeStatus(`syncing`)
             break
         }
       }
     })
 
-    // Always notify subscribers when the Shape first is up to date.
-    // FIXME this would be cleaner with a simple state machine.
-    if (newlyUpToDate || (isUpToDate && dataMayHaveChanged)) {
-      this.#hasNotifiedSubscribersUpToDate = true
-      this.#notify()
-    }
+    if (shouldNotify) this.#notify()
+  }
+
+  #updateShapeStatus(status: ShapeStatus): boolean {
+    const stateChanged = this.#status !== status
+    this.#status = status
+    return stateChanged && status === `up-to-date`
   }
 
   #handleError(e: Error): void {
