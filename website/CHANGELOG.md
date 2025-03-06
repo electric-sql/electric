@@ -1,5 +1,11 @@
 # @electric-sql/docs
 
+## 0.0.2-beta.3
+
+### Patch Changes
+
+- f6a3265: Fix OpenAPI spec 409 response schema
+
 ## 0.0.2-beta.2
 
 ### Patch Changes

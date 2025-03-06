@@ -1,5 +1,12 @@
 # @electric-sql/client
 
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- 91774d3: Cleanup `AbortSignal` chained listeners to avoid memory leaks.
+- 19a7ab3: Simplify `Shape` subscriber notification mechanism
+
 ## 1.0.0-beta.4
 
 ### Patch Changes

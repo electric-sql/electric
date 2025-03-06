@@ -1,5 +1,14 @@
 # @electric-sql/react
 
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- 19a7ab3: Ensure `useSyncExternalStore` always has latest shape data snapshot.
+- Updated dependencies [91774d3]
+- Updated dependencies [19a7ab3]
+  - @electric-sql/client@1.0.0-beta.5
+
 ## 1.0.0-beta.5
 
 ### Patch Changes
