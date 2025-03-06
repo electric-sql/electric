@@ -6,11 +6,25 @@ import { ShapeStream, Shape, FetchError } from '../src'
 import { Message, Row, ChangeMessage } from '../src/types'
 import { MissingHeadersError } from '../src/error'
 import { resolveValue } from '../src'
+import { API_SECRET_QUERY_PARAM } from '../src/constants'
 
 const BASE_URL = inject(`baseUrl`)
 
 describe(`Shape`, () => {
-  it(`should pass secret as a header to the server`, async ({
+  it(`should pass secret as a query parameter to the server`, async ({
+    issuesTableUrl,
+  }) => {
+    const secret = `test-secret`
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape?table=${issuesTableUrl}`,
+      secret,
+    })
+    expect(shapeStream.options.params).toEqual({
+      [API_SECRET_QUERY_PARAM]: secret,
+    })
+  })
+
+  it(`should extend query parameters with secret`, async ({
     issuesTableUrl,
   }) => {
     const secret = `test-secret`
@@ -21,30 +35,13 @@ describe(`Shape`, () => {
       },
       secret,
     })
-    expect(shapeStream.options.headers).toEqual({
-      [`electric-secret`]: secret,
+    expect(shapeStream.options.params).toEqual({
+      table: issuesTableUrl,
+      [API_SECRET_QUERY_PARAM]: secret,
     })
   })
 
-  it(`should extend headers with secret`, async ({ issuesTableUrl }) => {
-    const secret = `test-secret`
-    const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape`,
-      params: {
-        table: issuesTableUrl,
-      },
-      headers: {
-        [`X-Custom-Header`]: `test-value`,
-      },
-      secret,
-    })
-    expect(shapeStream.options.headers).toEqual({
-      [`X-Custom-Header`]: `test-value`,
-      [`electric-secret`]: secret,
-    })
-  })
-
-  it(`should override electric-secret header with the provided secret`, async ({
+  it(`should override api_secret query parameter with the provided secret`, async ({
     issuesTableUrl,
   }) => {
     const secret = `test-secret`
@@ -52,14 +49,13 @@ describe(`Shape`, () => {
       url: `${BASE_URL}/v1/shape`,
       params: {
         table: issuesTableUrl,
-      },
-      headers: {
-        [`electric-secret`]: `wrong-secret`,
+        [API_SECRET_QUERY_PARAM]: `wrong-secret`,
       },
       secret,
     })
-    expect(shapeStream.options.headers).toEqual({
-      [`electric-secret`]: secret,
+    expect(shapeStream.options.params).toEqual({
+      table: issuesTableUrl,
+      [API_SECRET_QUERY_PARAM]: secret,
     })
   })
 

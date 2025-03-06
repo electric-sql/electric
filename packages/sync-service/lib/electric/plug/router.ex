@@ -58,8 +58,10 @@ defmodule Electric.Plug.Router do
       # We're in insecure mode, so we don't need to authenticate
       conn
     else
-      case Plug.Conn.get_req_header(conn, "electric-secret") do
-        [^api_secret] ->
+      conn = conn |> fetch_query_params()
+
+      case conn.query_params["api_secret"] do
+        ^api_secret ->
           conn
 
         _ ->

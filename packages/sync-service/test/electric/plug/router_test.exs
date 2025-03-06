@@ -1310,18 +1310,15 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 401} = Router.call(conn("GET", "/v1/shape"), secret: secret)
 
       # Wrong secret
-      conn =
-        conn("GET", "/v1/shape")
-        |> Plug.Conn.put_req_header("electric-secret", "wrong_secret")
-
-      assert %{status: 401} = Router.call(conn, secret: secret)
+      assert %{status: 401} =
+               Router.call(conn("GET", "/v1/shape?api_secret=wrong_secret"), secret: secret)
 
       # Correct secret
-      conn =
-        conn("GET", "/v1/shape")
-        |> Plug.Conn.put_req_header("electric-secret", secret)
-
-      assert %{status: 400} = Router.call(conn, Keyword.merge([secret: secret], api_opts))
+      assert %{status: 400} =
+               Router.call(
+                 conn("GET", "/v1/shape?api_secret=#{secret}"),
+                 Keyword.merge([secret: secret], api_opts)
+               )
     end
 
     test "requires secret for /v1/shape deletion", %{secret: secret, api_opts: api_opts} do
@@ -1329,18 +1326,16 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 401} = Router.call(conn("DELETE", "/v1/shape"), secret: secret)
 
       # Wrong secret
-      conn =
-        conn("DELETE", "/v1/shape")
-        |> Plug.Conn.put_req_header("electric-secret", "wrong_secret")
-
-      assert %{status: 401} = Router.call(conn, secret: secret)
+      assert %{status: 401} =
+               Router.call(conn("DELETE", "/v1/shape?api_secret=wrong_secret"), secret: secret)
 
       # Correct secret
-      conn =
-        conn("DELETE", "/v1/shape")
-        |> Plug.Conn.put_req_header("electric-secret", secret)
+      assert %{status: 400} =
+               Router.call(
+                 conn("DELETE", "/v1/shape?api_secret=#{secret}"),
+                 Keyword.merge([secret: secret], api_opts)
+               )
 
-      assert %{status: 400} = Router.call(conn, Keyword.merge([secret: secret], api_opts))
       # Note: Returns 400 because shape params are required, but authentication passed
     end
   end
