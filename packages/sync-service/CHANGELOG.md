@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.0.0-beta.21
+
+### Patch Changes
+
+- f6a3265: Carry over full original shape query in 409 redirects.
+- 108144e: fix: allow `traceparent` headers for OTel
+- 07a767f: Add telemetry to time various parts of the WAL processing
+
 ## 1.0.0-beta.20
 
 ### Patch Changes
