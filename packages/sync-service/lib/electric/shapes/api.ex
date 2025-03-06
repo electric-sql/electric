@@ -362,7 +362,6 @@ defmodule Electric.Shapes.Api do
          last_offset == LogOffset.last_before_real_offsets() do
       ref = make_ref()
       Registry.register(registry, handle, ref)
-
       Logger.debug("Client #{inspect(self())} is registered for changes to #{handle}")
 
       %{request | new_changes_pid: self(), new_changes_ref: ref}
@@ -411,7 +410,9 @@ defmodule Electric.Shapes.Api do
     validate_serve_usage!(request)
 
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
-      do_serve_shape_log(request)
+      response = do_serve_shape_log(request)
+      clean_up_change_listener(request)
+      response
     end)
   end
 
@@ -424,6 +425,8 @@ defmodule Electric.Shapes.Api do
         {:cont, request} ->
           serve_shape_log(request)
       end
+
+    clean_up_change_listener(request)
 
     conn
     |> Plug.Conn.assign(:response, response)
@@ -540,6 +543,15 @@ defmodule Electric.Shapes.Api do
         |> empty_response()
     end
   end
+
+  defp clean_up_change_listener(%Request{handle: shape_handle} = request)
+       when not is_nil(shape_handle) do
+    %{api: %{registry: registry}} = request
+    Registry.unregister(registry, shape_handle)
+    request
+  end
+
+  defp clean_up_change_listener(%Request{} = request), do: request
 
   defp empty_response(%Request{} = request) do
     %{response: response} = update_attrs(request, %{ot_is_empty_response: true})

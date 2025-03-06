@@ -658,7 +658,11 @@ defmodule Electric.Shapes.ApiTest do
                      }
                    )
 
-          Api.serve_shape_log(request)
+          response = Api.serve_shape_log(request)
+
+          # Ensure registered listener is cleaned up
+          assert [] == Registry.lookup(@registry, @test_shape_handle)
+          response
         end)
 
       assert_receive :got_log_stream, @receive_timeout
