@@ -1,7 +1,7 @@
 import { parse } from 'cache-control-parser'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
-import { assert, describe, expect, inject, vi } from 'vitest'
+import { describe, expect, inject, vi } from 'vitest'
 import { FetchError, Shape, ShapeStream, ShapeStreamOptions } from '../src'
 import { Message } from '../src/types'
 import {
@@ -181,7 +181,7 @@ describe(`HTTP Sync`, () => {
     expect(values).toMatchObject([{ title: `foo + ${uuid}` }])
   })
 
-  mit(
+  mit.only(
     `should parse incoming data`,
     async ({ dbClient, aborter, tableSql, tableUrl }) => {
       // Create a table with data we want to be parsed
@@ -317,42 +317,40 @@ describe(`HTTP Sync`, () => {
         numChangesExpected: 2,
       })
 
-      await vi.waitFor(() =>
-        assert(client.isUpToDate && !client.lastOffset.startsWith(`0_`))
-      )
-
-      const updatedData = await client.rows
-
-      expect(updatedData).toMatchObject([
-        {
-          txt: `changed`,
-          i2: 1,
-          i4: 20,
-          i8: BigInt(30),
-          f8: 40.5,
-          b: false,
-          json: { bar: `foo` },
-          jsonb: { bar: `foo` },
-          ints: [BigInt(4), BigInt(5), BigInt(6)],
-          ints2: [
-            [BigInt(4), BigInt(5), BigInt(6)],
-            [BigInt(7), BigInt(8), BigInt(9)],
-          ],
-          int4s: [4, 5, 6],
-          bools: [false, true, false],
-          moods: [`sad`, `happy`],
-          moods2: [
-            [`sad`, `happy`],
-            [`happy`, `ok`],
-          ],
-          complexes: [`(2.2,3.3)`, `(4.4,5.5)`],
-          posints: [`6`, `10`, `3`],
-          jsons: [{}],
-          txts: [`new`, `values`],
-          value: { a: 6 },
-          doubles: [Infinity, NaN, -Infinity],
-        },
-      ])
+      await vi.waitFor(async () => {
+        expect(client.isUpToDate && !client.lastOffset.startsWith(`0_`)).true
+        const updatedData = await client.rows
+        expect(updatedData).toMatchObject([
+          {
+            txt: `changed`,
+            i2: 1,
+            i4: 20,
+            i8: BigInt(30),
+            f8: 40.5,
+            b: false,
+            json: { bar: `foo` },
+            jsonb: { bar: `foo` },
+            ints: [BigInt(4), BigInt(5), BigInt(6)],
+            ints2: [
+              [BigInt(4), BigInt(5), BigInt(6)],
+              [BigInt(7), BigInt(8), BigInt(9)],
+            ],
+            int4s: [4, 5, 6],
+            bools: [false, true, false],
+            moods: [`sad`, `happy`],
+            moods2: [
+              [`sad`, `happy`],
+              [`happy`, `ok`],
+            ],
+            complexes: [`(2.2,3.3)`, `(4.4,5.5)`],
+            posints: [`6`, `10`, `3`],
+            jsons: [{}],
+            txts: [`new`, `values`],
+            value: { a: 6 },
+            doubles: [Infinity, NaN, -Infinity],
+          },
+        ])
+      })
     }
   )
 
