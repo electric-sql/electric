@@ -406,7 +406,7 @@ defmodule Electric.Config do
   def validate_security_config!(secret, insecure) do
     cond do
       insecure && secret != nil ->
-        raise "Cannot set both ELECTRIC_SECRET and ELECTRIC_INSECURE=true"
+        raise "You cannot set both ELECTRIC_SECRET and ELECTRIC_INSECURE=true"
 
       !insecure && secret == nil ->
         raise "You must set ELECTRIC_SECRET unless ELECTRIC_INSECURE=true. Setting ELECTRIC_INSECURE=true risks exposing your database, only use insecure mode in development or you've otherwise secured the Electric API"
