@@ -2,4 +2,4 @@
 "@core/sync-service": patch
 ---
 
-Listen to new changes through separate, ephemeral task.
+Ensure request-scoped new changes listener is clenaed up when request ends.
