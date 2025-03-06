@@ -19,6 +19,7 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Filter.WhereCondition
   alias Electric.Shapes.Shape
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -75,7 +76,9 @@ defmodule Electric.Shapes.Filter do
   """
   @spec affected_shapes(Filter.t(), Transaction.t() | Relation.t()) :: MapSet.t(shape_id())
   def affected_shapes(%Filter{} = filter, change) do
-    shapes_affected_by_change(filter, change)
+    OpenTelemetry.timed_fun("filter.affected_shapes.duration_µs", fn ->
+      shapes_affected_by_change(filter, change)
+    end)
   rescue
     error ->
       Logger.error("""
