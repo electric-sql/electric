@@ -181,7 +181,7 @@ describe(`HTTP Sync`, () => {
     expect(values).toMatchObject([{ title: `foo + ${uuid}` }])
   })
 
-  mit.only(
+  mit(
     `should parse incoming data`,
     async ({ dbClient, aborter, tableSql, tableUrl }) => {
       // Create a table with data we want to be parsed
