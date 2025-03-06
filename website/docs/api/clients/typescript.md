@@ -249,7 +249,7 @@ const stream = new ShapeStream({
 })
 ```
 
-Under the hood, the `secret` option is added to the request headers as `electric-secret: your_api_secret`.
+Under the hood, the `secret` option is added as a query parameter `api_secret=your_api_secret`.
 
 #### Dynamic Options
 
