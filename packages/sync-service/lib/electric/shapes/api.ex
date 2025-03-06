@@ -410,7 +410,9 @@ defmodule Electric.Shapes.Api do
     validate_serve_usage!(request)
 
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
-      do_serve_shape_log(request)
+      response = do_serve_shape_log(request)
+      clean_up_change_listener(request)
+      response
     end)
   end
 
