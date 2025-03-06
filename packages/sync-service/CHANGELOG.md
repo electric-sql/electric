@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.0-beta.22
+
+### Patch Changes
+
+- 9ed2ca3: Ensure request-scoped new changes listener is clenaed up when request ends.
+
 ## 1.0.0-beta.21
 
 ### Patch Changes
