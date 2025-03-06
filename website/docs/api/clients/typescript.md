@@ -142,12 +142,6 @@ export interface ShapeStreamOptions<T = never> {
   shapeId?: string
 
   /**
-   * Secret to provide with every shape request.
-   * This is required unless Electric is running in insecure mode or you're using a proxy server.
-   */
-  secret?: string
-
-  /**
    * HTTP headers to attach to requests made by the client.
    * Can be used for adding authentication headers.
    */
@@ -229,40 +223,6 @@ const stream = new ShapeStream({
   params: {
     table: 'users',
     customParam: 'value'
-  }
-})
-```
-
-#### API Secret
-
-> [!Warning] Do not expose secrets in client code
-> Setting the `secret` option directly in client code is not recommended for production use as it exposes your API secret to users. Instead, use an [authorizing proxy](/docs/guides/auth#proxy-auth) that adds the secret server-side when forwarding requests to Electric.
-
-By default, Electric runs in secure mode and must be configured with an API secret.
-This secret is required for all requests to the shape API.
-
-For development, you can configure the `ShapeStream` with a secret:
-
-```typescript
-const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
-  params: {
-    table: 'items',
-  },
-  secret: 'your_api_secret' // Only use during development
-})
-```
-
-For production deployments, the recommended approach is to use an [authorizing proxy](/docs/guides/auth#proxy-auth) that validates client requests and adds the secret server-side:
-
-```typescript
-const stream = new ShapeStream({
-  url: 'https://your-api.example.com/proxy/v1/shape', // Points to your proxy
-  params: {
-    table: 'items'
-  },
-  headers: {
-    'Authorization': 'Bearer your-auth-token' // Your proxy validates this
   }
 })
 ```

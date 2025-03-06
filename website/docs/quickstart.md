@@ -31,10 +31,13 @@ Then download and run this [docker-compose.yaml](https://github.com/electric-sql
 
 ```sh
 curl -O https://electric-sql.com/docker-compose.yaml
-ELECTRIC_SECRET=mySecret docker compose up
+ELECTRIC_INSECURE=true docker compose up
 ```
 
 You can now start using Electric!
+
+> [!Warning] Do not use insecure mode in production
+> Only use insecure mode in development or if you've otherwise secured the Electric API.
 
 ## HTTP API
 
@@ -51,7 +54,6 @@ curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1&api_secret=mySecret'
 - `/v1/shape` is a standard prefix with the API version and the shape sync endpoint path
 - `foo` is the name of the [`table`](/docs/guides/shapes#table) of the shape (and is required); if you wanted to sync data from the `items` table, you would change the path to `/v1/shape?table=items`
 - `offset=-1` means we're asking for the *entire* Shape as we don't have any of the data cached locally yet. If we had previously fetched the shape and wanted to see if there were any updates, we'd set the offset to the last offset we'd already seen.
-- `api_secret=mySecret` is the secret API key for shape requests to the Electric instance. We configured this with the `ELECTRIC_SECRET` environment variable when we started the Electric instance.
 :::
 
 You should get a response like this:
@@ -170,8 +172,7 @@ function Component() {
     url: `http://localhost:3000/v1/shape`,
     params: {
       table: `foo`
-    },
-    secret: `mySecret` // Only use during development
+    }
   })
 
   return (
@@ -181,9 +182,6 @@ function Component() {
 
 export default Component
 ```
-
-> [!Warning] Do not expose secrets in client code
-> This example uses the `secret` option for simplicity during development. For production deployments, you should not expose your API secret in client code. Instead, use an [authorizing proxy](/docs/guides/auth#proxy-auth) that adds the secret server-side when forwarding requests to Electric.
 
 Finally run the dev server to see it all in action!
 
