@@ -31,7 +31,7 @@ Then download and run this [docker-compose.yaml](https://github.com/electric-sql
 
 ```sh
 curl -O https://electric-sql.com/docker-compose.yaml
-docker compose up
+ELECTRIC_SECRET=mySecret docker compose up
 ```
 
 You can now start using Electric!
@@ -43,7 +43,7 @@ First let's try the low-level [HTTP API](/docs/api/http).
 In a new terminal, use `curl` to request a [Shape](/docs/guides/shapes) containing all rows in the `foo` table:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
+curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1&api_secret=mySecret'
 ```
 
 ::: info A bit of explanation about the URL structure.
@@ -51,6 +51,7 @@ curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
 - `/v1/shape` is a standard prefix with the API version and the shape sync endpoint path
 - `foo` is the name of the [`table`](/docs/guides/shapes#table) of the shape (and is required); if you wanted to sync data from the `items` table, you would change the path to `/v1/shape?table=items`
 - `offset=-1` means we're asking for the *entire* Shape as we don't have any of the data cached locally yet. If we had previously fetched the shape and wanted to see if there were any updates, we'd set the offset to the last offset we'd already seen.
+- `api_secret=mySecret` is the secret API key for shape requests to the Electric instance. We configured this with the `ELECTRIC_SECRET` environment variable when we started the Electric instance.
 :::
 
 You should get a response like this:
@@ -106,7 +107,7 @@ INSERT INTO foo (name, value) VALUES
 Exit your Postgres client (e.g.: with `psql` enter `\q`) and try the `curl` request again:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
+curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1&api_secret=mySecret'
 ```
 
 Success! You should see the data you just put into Postgres in the shape response:
@@ -169,7 +170,8 @@ function Component() {
     url: `http://localhost:3000/v1/shape`,
     params: {
       table: `foo`
-    }
+    },
+    secret: `mySecret` // Only use during development
   })
 
   return (
@@ -179,6 +181,9 @@ function Component() {
 
 export default Component
 ```
+
+> [!Warning] Do not expose secrets in client code
+> This example uses the `secret` option for simplicity during development. For production deployments, you should not expose your API secret in client code. Instead, use an [authorizing proxy](/docs/guides/auth#proxy-auth) that adds the secret server-side when forwarding requests to Electric.
 
 Finally run the dev server to see it all in action!
 

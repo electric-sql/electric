@@ -235,9 +235,13 @@ const stream = new ShapeStream({
 
 #### API Secret
 
+> [!Warning] Do not expose secrets in client code
+> Setting the `secret` option directly in client code is not recommended for production use as it exposes your API secret to users. Instead, use an [authorizing proxy](/docs/guides/auth#proxy-auth) that adds the secret server-side when forwarding requests to Electric.
+
 By default, Electric runs in secure mode and must be configured with an API secret.
 This secret is required for all requests to the shape API.
-You can configure the `ShapeStream` with a secret by passing the `secret` option:
+
+For development, you can configure the `ShapeStream` with a secret:
 
 ```typescript
 const stream = new ShapeStream({
@@ -245,11 +249,23 @@ const stream = new ShapeStream({
   params: {
     table: 'items',
   },
-  secret: 'your_api_secret'
+  secret: 'your_api_secret' // Only use during development
 })
 ```
 
-Under the hood, the `secret` option is added as a query parameter `api_secret=your_api_secret`.
+For production deployments, the recommended approach is to use an [authorizing proxy](/docs/guides/auth#proxy-auth) that validates client requests and adds the secret server-side:
+
+```typescript
+const stream = new ShapeStream({
+  url: 'https://your-api.example.com/proxy/v1/shape', // Points to your proxy
+  params: {
+    table: 'items'
+  },
+  headers: {
+    'Authorization': 'Bearer your-auth-token' // Your proxy validates this
+  }
+})
+```
 
 #### Dynamic Options
 
