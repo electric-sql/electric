@@ -23,10 +23,11 @@ export function forEachMessage<T extends Row<unknown>>(
     nthDataMessage: number
   ) => Promise<void> | void
 ) {
+  let unsub = () => {}
   return new Promise<void>((resolve, reject) => {
     let messageIdx = 0
 
-    stream.subscribe(async (messages) => {
+    unsub = stream.subscribe(async (messages) => {
       for (const message of messages) {
         try {
           await handler(
@@ -44,5 +45,5 @@ export function forEachMessage<T extends Row<unknown>>(
         }
       }
     }, reject)
-  })
+  }).finally(unsub)
 }
