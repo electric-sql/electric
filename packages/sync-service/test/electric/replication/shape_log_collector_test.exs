@@ -149,8 +149,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     test "drops transactions if already processed", ctx do
       xid = 150
-      prev_lsn = Lsn.from_string("0/10")
-      lsn = Lsn.increment(prev_lsn, 1)
+      prev_lsn = Lsn.from_string("1667/FFFFFCC8")
+      lsn = Lsn.from_string("166A/91FDFDE8")
 
       Mock.Inspector
       |> stub(:load_relation, fn
@@ -177,14 +177,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "3", "name" => "foo"}
+          record: %{"id" => "2", "name" => "foo"}
         })
 
       txn3 =
         %Transaction{xid: xid - 1, lsn: prev_lsn, last_log_offset: LogOffset.new(prev_lsn, 0)}
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "4", "name" => "foo"}
+          record: %{"id" => "2", "name" => "foo"}
         })
 
       assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.server)

@@ -32,7 +32,7 @@ defmodule Support.TransactionConsumer do
   end
 
   def refute_consume(consumers, timeout \\ 100) do
-    for consumer <- consumers, into: MapSet.new() do
+    for consumer <- consumers do
       refute_receive {Support.TransactionConsumer, ^consumer, _}, timeout
     end
   end

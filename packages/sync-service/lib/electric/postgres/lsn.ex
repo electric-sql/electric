@@ -136,6 +136,40 @@ defmodule Electric.Postgres.Lsn do
   def compare(%Lsn{offset: o1}, %Lsn{offset: o2}) when o1 > o2, do: :gt
   def compare(%Lsn{offset: o1}, %Lsn{offset: o2}) when o1 == o2, do: :eq
 
+  @doc """
+  Determine if the first Lsn is larger than the second.
+
+  ## Examples
+
+    iex> lsn1 = %Lsn{segment: 2, offset: 10}
+    iex> lsn2 = %Lsn{segment: 1, offset: 50}
+    iex> is_larger(lsn1, lsn2)
+    true
+
+    iex> lsn1 = %Lsn{segment: 3, offset: 5}
+    iex> lsn2 = %Lsn{segment: 3, offset: 4}
+    iex> is_larger(lsn1, lsn2)
+    true
+
+    iex> lsn1 = Lsn.from_string("166A/91FDFDE8")
+    iex> lsn2 = Lsn.from_string("1667/FFFFFCC8")
+    iex> is_larger(lsn1, lsn2)
+    true
+
+    iex> lsn1 = %{segment: 2, offset: 100}
+    iex> lsn2 = %{segment: 2, offset: 200}
+    iex> is_larger(lsn1, lsn2)
+    false
+
+    iex> lsn1 = %{segment: 1, offset: 30}
+    iex> lsn2 = %{segment: 1, offset: 30}
+    iex> is_larger(lsn1, lsn2)
+    false
+  """
+  defguard is_larger(lsn1, lsn2)
+           when lsn1.segment > lsn2.segment or
+                  (lsn1.segment == lsn2.segment and lsn1.offset > lsn2.offset)
+
   @max_offset 0xFFFFFFFF
 
   @doc """

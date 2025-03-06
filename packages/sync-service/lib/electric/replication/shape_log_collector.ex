@@ -5,6 +5,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   """
   use GenStage
 
+  require Electric.Postgres.Lsn
+  alias Electric.Postgres.Lsn
   alias Electric.Replication.PersistentReplicationState
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
@@ -151,7 +153,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   # If we've already processed a transaction, then drop it without processing
   defp handle_transaction(txn, _from, %{last_seen_lsn: last_seen_lsn} = state)
-       when txn.lsn <= last_seen_lsn do
+       when not Electric.Postgres.Lsn.is_larger(txn.lsn, last_seen_lsn) do
     Logger.debug(fn ->
       "Dropping transaction #{txn.xid}: transaction LSN #{txn.lsn} smaller than last processed #{last_seen_lsn}"
     end)
@@ -236,7 +238,9 @@ defmodule Electric.Replication.ShapeLogCollector do
     state
   end
 
-  defp put_last_seen_lsn(%{last_seen_lsn: last_seen_lsn} = state, lsn) do
-    %{state | last_seen_lsn: max(last_seen_lsn, lsn)}
-  end
+  defp put_last_seen_lsn(%{last_seen_lsn: last_seen_lsn} = state, lsn)
+       when Lsn.is_larger(lsn, last_seen_lsn),
+       do: %{state | last_seen_lsn: lsn}
+
+  defp put_last_seen_lsn(state, _lsn), do: state
 end
