@@ -125,7 +125,9 @@ defmodule Electric.Replication.ShapeLogCollector do
     Logger.info("Received transaction #{xid} from Postgres at #{lsn}")
     Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
 
-    handle_transaction(txn, from, state)
+    OpenTelemetry.timed_fun("shape_log_collector.handle_transaction.duration_µs", fn ->
+      handle_transaction(txn, from, state)
+    end)
   end
 
   def handle_call({:relation_msg, %Relation{} = rel, trace_context}, from, state) do
