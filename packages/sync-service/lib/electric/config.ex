@@ -409,7 +409,7 @@ defmodule Electric.Config do
         raise "Cannot set both ELECTRIC_SECRET and ELECTRIC_INSECURE=true"
 
       !insecure && secret == nil ->
-        raise "Must set ELECTRIC_SECRET unless ELECTRIC_INSECURE=true. Setting ELECTRIC_INSECURE=true risks exposing your database, only use insecure mode if you know what you are doing."
+        raise "You must set ELECTRIC_SECRET unless ELECTRIC_INSECURE=true. Setting ELECTRIC_INSECURE=true risks exposing your database, only use insecure mode in development or you've otherwise secured the Electric API"
 
       true ->
         if insecure do
