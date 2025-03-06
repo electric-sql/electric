@@ -424,6 +424,8 @@ defmodule Electric.Shapes.Api do
           serve_shape_log(request)
       end
 
+    clean_up_change_listener(request)
+
     conn
     |> Plug.Conn.assign(:response, response)
     |> Response.send(response)
@@ -516,32 +518,28 @@ defmodule Electric.Shapes.Api do
 
     Logger.debug("Client #{inspect(self())} is waiting for changes to #{shape_handle}")
 
-    response =
-      receive do
-        {^ref, :new_changes, latest_log_offset} ->
-          # Stream new log since currently "held" offset
-          %{request | last_offset: latest_log_offset, chunk_end_offset: latest_log_offset}
-          |> Request.update_response(&%{&1 | offset: latest_log_offset})
-          |> determine_up_to_date()
-          |> do_serve_shape_log()
+    receive do
+      {^ref, :new_changes, latest_log_offset} ->
+        # Stream new log since currently "held" offset
+        %{request | last_offset: latest_log_offset, chunk_end_offset: latest_log_offset}
+        |> Request.update_response(&%{&1 | offset: latest_log_offset})
+        |> determine_up_to_date()
+        |> do_serve_shape_log()
 
-        {^ref, :shape_rotation} ->
-          # We may want to notify the client better that the shape handle had
-          # changed, but just closing the response and letting the client handle
-          # it on reconnection is good enough.
-          request
-          |> update_attrs(%{ot_is_shape_rotated: true})
-          |> empty_response()
-      after
-        # If we timeout, return an empty body and 204 as there's no response body.
-        long_poll_timeout ->
-          request
-          |> update_attrs(%{ot_is_long_poll_timeout: true})
-          |> empty_response()
-      end
-
-    clean_up_change_listener(request)
-    response
+      {^ref, :shape_rotation} ->
+        # We may want to notify the client better that the shape handle had
+        # changed, but just closing the response and letting the client handle
+        # it on reconnection is good enough.
+        request
+        |> update_attrs(%{ot_is_shape_rotated: true})
+        |> empty_response()
+    after
+      # If we timeout, return an empty body and 204 as there's no response body.
+      long_poll_timeout ->
+        request
+        |> update_attrs(%{ot_is_long_poll_timeout: true})
+        |> empty_response()
+    end
   end
 
   defp clean_up_change_listener(%Request{new_changes_ref: ref} = request)
