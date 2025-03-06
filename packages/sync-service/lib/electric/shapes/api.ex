@@ -520,8 +520,8 @@ defmodule Electric.Shapes.Api do
     receive do
       {^ref, :new_changes, latest_log_offset} ->
         # Stream new log since currently "held" offset
-        %{request | last_offset: latest_log_offset, chunk_end_offset: latest_log_offset}
-        |> Request.update_response(&%{&1 | offset: latest_log_offset})
+        %{request | last_offset: latest_log_offset}
+        |> determine_log_chunk_offset()
         |> determine_up_to_date()
         |> do_serve_shape_log()
 
