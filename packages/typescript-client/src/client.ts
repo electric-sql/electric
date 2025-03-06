@@ -37,6 +37,7 @@ import {
   TABLE_QUERY_PARAM,
   REPLICA_PARAM,
   FORCE_DISCONNECT_AND_REFRESH,
+  API_SECRET_QUERY_PARAM,
 } from './constants'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
@@ -343,9 +344,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
     if (options.secret !== undefined) {
-      this.options.headers = {
-        ...this.options.headers,
-        'electric-secret': options.secret,
+      this.options.params = {
+        ...this.options.params,
+        [API_SECRET_QUERY_PARAM]: options.secret,
       }
     }
     validateOptions(this.options)
