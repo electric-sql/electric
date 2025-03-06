@@ -471,6 +471,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
         send(test_pid, :got_log_stream)
         []
       end)
+      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
+        nil
+      end)
       |> expect(:get_log_stream, fn @test_offset, ^next_offset, @test_opts ->
         [Jason.encode!("test result")]
       end)

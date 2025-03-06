@@ -4,7 +4,11 @@ import { v4 as uuidv4 } from 'uuid'
 import { assert, describe, expect, inject, vi } from 'vitest'
 import { FetchError, Shape, ShapeStream } from '../src'
 import { Message } from '../src/types'
-import { isChangeMessage, isUpToDateMessage } from '../src/helpers'
+import {
+  isChangeMessage,
+  isControlMessage,
+  isUpToDateMessage,
+} from '../src/helpers'
 import {
   IssueRow,
   testWithIssuesTable as it,
@@ -605,11 +609,34 @@ describe(`HTTP Sync`, () => {
     )
     const handle = baseRes.headers.get(`electric-handle`)
     // Fill it up in separate transactions
-    for (const i of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+    const numTransactions = 9
+    for (const i of Array.from({ length: numTransactions }, (_, i) => i + 1)) {
       await insertIssues({ title: `foo${i}` })
     }
-    // Then wait for them to flow through the system
-    await sleep(100)
+
+    // Get initial data
+    const checkAborter = new AbortController()
+    const issueStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+        // arbitrary where clause for separate shape so
+        // that we do not pollute the etag check
+        where: `1 = 1`,
+      },
+      subscribe: true,
+      signal: checkAborter.signal,
+    })
+    // And wait until it's definitely seen
+    let numIssuesSeen = 0
+    await h.forEachMessage(issueStream, checkAborter, (res, msg) => {
+      if (isChangeMessage(msg) && msg.headers.operation === `insert`) {
+        numIssuesSeen++
+      }
+      if (numIssuesSeen == numTransactions && isUpToDateMessage(msg)) {
+        res()
+      }
+    })
 
     const res = await fetch(
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=0_0&handle=${handle}`,
@@ -753,90 +780,77 @@ describe(`HTTP Sync`, () => {
   it(`should chunk a large log with reasonably sized chunks`, async ({
     insertIssues,
     issuesTableUrl,
-    aborter,
   }) => {
-    // Add an initial row
-    await insertIssues({ id: uuidv4(), title: `foo` })
-
-    // Get initial data
-    const issueStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape`,
-      params: {
-        table: issuesTableUrl,
-      },
-      subscribe: true,
-      signal: aborter.signal,
-    })
-
-    await h.forEachMessage(issueStream, aborter, (res, msg) => {
-      if (isUpToDateMessage(msg)) {
-        res()
-        aborter.abort()
-      }
-    })
-
     const getTitleWithSize = (byteSize: number) =>
       Array.from({ length: byteSize }, () =>
         // generate random ASCII code
         String.fromCharCode(Math.floor(32 + Math.random() * (126 - 32)))
       ).join(``)
 
-    // add a bunch of rows with very large titles to force chunking
-    await insertIssues(
-      ...Array.from({ length: 35 }, () => ({
-        id: uuidv4(),
-        title: getTitleWithSize(1e3),
-      }))
-    )
-
-    // And wait until it's definitely seen
-    await vi.waitFor(async () => {
-      await sleep(50)
-      return issueStream.isUpToDate
-    })
+    // adds a bunch of rows with very large titles to force chunking
+    const insertDataSize = (byteSize: number) =>
+      insertIssues(
+        ...Array.from({ length: Math.ceil(byteSize / 1e3) }, () => ({
+          id: uuidv4(),
+          title: getTitleWithSize(1e3),
+        }))
+      )
 
     const responseSizes: number[] = []
 
     const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
       const res = await fetch(...args)
       if (res.status === 200) {
-        const resBlob = await res.clone().blob()
-        responseSizes.push(resBlob.size)
+        const body = (await res.clone().json()) as Message[]
+        if (body.length == 1 && isControlMessage(body[0])) {
+          // do not include up-to-date responses
+        } else {
+          const resBlob = await res.clone().blob()
+          responseSizes.push(resBlob.size)
+        }
       }
       return res
     }
 
-    const newAborter = new AbortController()
-    const newIssueStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape`,
-      params: {
-        table: issuesTableUrl,
-      },
-      subscribe: false,
-      signal: newAborter.signal,
-      offset: issueStream.lastOffset,
-      handle: issueStream.shapeHandle,
-      fetchClient: fetchWrapper,
-    })
+    // check it twice to ensure chunking occurs on both initial snapshot
+    // and subsequent operations
+    let issueStream: ShapeStream | undefined
+    for (let i = 0; i < 2; i++) {
+      await insertDataSize(35000)
+      const chunkAborter = new AbortController()
+      issueStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        subscribe: true,
+        offset: issueStream?.lastOffset,
+        handle: issueStream?.shapeHandle,
+        fetchClient: fetchWrapper,
+        signal: chunkAborter.signal,
+      })
 
-    await h.forEachMessage(newIssueStream, newAborter, (res, msg) => {
-      if (isUpToDateMessage(msg)) {
-        res()
-      }
-    })
+      let seenInsert = false
+      await h.forEachMessage(issueStream, chunkAborter, (res, msg) => {
+        seenInsert ||= isChangeMessage(msg)
+        if (seenInsert && isUpToDateMessage(msg)) {
+          res()
+        }
+      })
 
-    // should have received at least 2 responses/chunks
-    const numChunks = responseSizes.length
-    expect(numChunks).greaterThanOrEqual(2)
-    for (let i = 0; i < numChunks; i++) {
-      const responseSize = responseSizes[i]
-      const isLastResponse = i === numChunks - 1
-      if (!isLastResponse) {
-        // expect chunks to be close to 10 kB +- some kB
-        expect(responseSize).closeTo(10 * 1e3, 1e3)
-      } else {
-        // expect last response to be ~ 10 kB or less
-        expect(responseSize).toBeLessThan(11 * 1e3)
+      // should have received at least 2 responses/chunks
+      const numChunks = responseSizes.length
+      expect(numChunks).greaterThanOrEqual(2)
+      while (responseSizes.length > 0) {
+        const responseSize = responseSizes.shift()
+        const isLastResponse = responseSizes.length === 0
+        if (!isLastResponse) {
+          // expect chunks to be close to 10 kB +- some kB
+          expect(responseSize).closeTo(10 * 1e3, 1e3)
+        } else {
+          // expect last response to be ~ 10 kB or less
+          expect(responseSize).toBeLessThan(11 * 1e3)
+        }
       }
     }
   })
