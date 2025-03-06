@@ -544,14 +544,10 @@ defmodule Electric.Shapes.Api do
     end
   end
 
-  defp clean_up_change_listener(%Request{new_changes_ref: ref} = request)
-       when is_reference(ref) do
-    %{
-      handle: shape_handle,
-      api: %{registry: registry}
-    } = request
-
-    Registry.unregister_match(registry, shape_handle, ref)
+  defp clean_up_change_listener(%Request{handle: shape_handle} = request)
+       when not is_nil(shape_handle) do
+    %{api: %{registry: registry}} = request
+    Registry.unregister(registry, shape_handle)
     request
   end
 
