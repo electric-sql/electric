@@ -1,6 +1,12 @@
-import { ShapeStreamInterface } from '../../src/client'
+import {
+  ShapeStream,
+  ShapeStreamInterface,
+  ShapeStreamOptions,
+} from '../../src/client'
 import { Client, ClientConfig } from 'pg'
 import { Message, Row } from '../../src/types'
+import { isChangeMessage } from '../..//src'
+import { isUpToDateMessage } from '../../src/helpers'
 
 export function makePgClient(overrides: ClientConfig = {}) {
   return new Client({
@@ -46,4 +52,44 @@ export function forEachMessage<T extends Row<unknown>>(
       }
     }, reject)
   }).finally(unsub)
+}
+
+export async function waitForTransaction({
+  baseUrl,
+  table,
+  numChangesExpected,
+  shapeStreamOptions,
+}: {
+  baseUrl: string
+  table: string
+  numChangesExpected?: number
+  shapeStreamOptions?: Partial<ShapeStreamOptions>
+}): Promise<Pick<ShapeStreamOptions, `offset` | `handle`>> {
+  const aborter = new AbortController()
+  const issueStream = new ShapeStream({
+    ...(shapeStreamOptions ?? {}),
+    url: `${baseUrl}/v1/shape`,
+    params: {
+      ...(shapeStreamOptions?.params ?? {}),
+      table,
+    },
+    signal: aborter.signal,
+    subscribe: true,
+  })
+
+  numChangesExpected ??= 1
+  let numChangesSeen = 0
+  await forEachMessage(issueStream, aborter, (res, msg) => {
+    if (isChangeMessage(msg)) {
+      numChangesSeen++
+    }
+
+    if (numChangesSeen >= numChangesExpected && isUpToDateMessage(msg)) {
+      res()
+    }
+  })
+  return {
+    offset: issueStream.lastOffset,
+    handle: issueStream.shapeHandle,
+  }
 }

@@ -2,9 +2,10 @@
 import { v4 as uuidv4 } from 'uuid'
 import { Client, QueryResult } from 'pg'
 import { inject, test } from 'vitest'
-import { makePgClient } from './test-helpers'
+import { makePgClient, waitForTransaction } from './test-helpers'
 import { FetchError } from '../../src/error'
 import { SHAPE_HANDLE_QUERY_PARAM } from '../../src/constants'
+import { ShapeStreamOptions } from 'packages/typescript-client/src'
 
 export type IssueRow = { id: string; title: string; priority?: string }
 export type GeneratedIssueRow = { id?: string; title: string }
@@ -16,6 +17,10 @@ export type ClearShapeFn = (
   table: string,
   options?: { handle?: string }
 ) => Promise<void>
+export type WaitForIssuesFn = (opts: {
+  numChangesExpected?: number
+  shapeStreamOptions?: Partial<ShapeStreamOptions>
+}) => Promise<Pick<ShapeStreamOptions, `offset` | `handle`>>
 
 export const testWithDbClient = test.extend<{
   dbClient: Client
@@ -82,6 +87,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
   deleteIssue: DeleteIssueFn
   insertIssues: InsertIssuesFn
   clearIssuesShape: ClearIssuesShapeFn
+  waitForIssues: WaitForIssuesFn
 }>({
   issuesTableSql: async ({ dbClient, task }, use) => {
     const tableName = `"issues for ${task.id}_${Math.random().toString(16)}"`
@@ -135,6 +141,23 @@ export const testWithIssuesTable = testWithDbClient.extend<{
   clearIssuesShape: async ({ clearShape, issuesTableUrl }, use) => {
     use((handle?: string) => clearShape(issuesTableUrl, { handle }))
   },
+
+  waitForIssues: ({ issuesTableUrl, baseUrl }, use) =>
+    use(
+      ({
+        numChangesExpected,
+        shapeStreamOptions,
+      }: {
+        numChangesExpected?: number
+        shapeStreamOptions?: Partial<ShapeStreamOptions>
+      }) =>
+        waitForTransaction({
+          baseUrl,
+          table: issuesTableUrl,
+          shapeStreamOptions,
+          numChangesExpected,
+        })
+    ),
 })
 
 export const testWithMultitypeTable = testWithDbClient.extend<{

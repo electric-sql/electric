@@ -2,7 +2,7 @@ import { parse } from 'cache-control-parser'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { v4 as uuidv4 } from 'uuid'
 import { assert, describe, expect, inject, vi } from 'vitest'
-import { FetchError, Shape, ShapeStream } from '../src'
+import { FetchError, Shape, ShapeStream, ShapeStreamOptions } from '../src'
 import { Message } from '../src/types'
 import {
   isChangeMessage,
@@ -311,9 +311,16 @@ describe(`HTTP Sync`, () => {
         ]
       )
 
+      await h.waitForTransaction({
+        baseUrl: BASE_URL,
+        table: tableUrl,
+        numChangesExpected: 2,
+      })
+
       await vi.waitFor(() =>
         assert(client.isUpToDate && !client.lastOffset.startsWith(`0_`))
       )
+
       const updatedData = await client.rows
 
       expect(updatedData).toMatchObject([
@@ -399,6 +406,7 @@ describe(`HTTP Sync`, () => {
     aborter,
     issuesTableUrl,
     insertIssues,
+    waitForIssues,
   }) => {
     // With initial data
     await insertIssues({ id: uuidv4(), title: `original insert` })
@@ -432,7 +440,10 @@ describe(`HTTP Sync`, () => {
         // ensure fetch has not been called again while
         // waiting for processing
         await insertIssues({ title: `foo1` })
-        await sleep(100)
+
+        // independent stream should be able to see this item,
+        // but the stream we have is waiting
+        await waitForIssues({ numChangesExpected: 1 })
         expect(fetchWrapper).toHaveBeenCalledTimes(numFetchCalls)
       } else if (nth === 1) {
         expect(fetchWrapper.mock.calls.length).greaterThan(numFetchCalls)
@@ -502,47 +513,39 @@ describe(`HTTP Sync`, () => {
     aborter,
     issuesTableUrl,
     insertIssues,
+    waitForIssues,
   }) => {
     // initialize storage for the cases where persisted shape streams are tested
     await insertIssues({ title: `foo1` }, { title: `foo2` }, { title: `foo3` })
-    await sleep(50)
 
-    const issueStream = new ShapeStream<IssueRow>({
-      url: `${BASE_URL}/v1/shape`,
-      params: {
-        table: issuesTableUrl,
-      },
-      subscribe: false,
-      signal: aborter.signal,
-    })
+    const streamState = await waitForIssues({ numChangesExpected: 3 })
 
-    await h.forEachMessage(issueStream, aborter, (res, msg) => {
-      if (isUpToDateMessage(msg)) {
-        res()
-      }
-    })
-
+    const numIssuesToAdd = 9
     await insertIssues(
-      ...Array.from({ length: 9 }, (_, i) => ({ title: `foo${i + 5}` }))
+      ...Array.from({ length: numIssuesToAdd }, (_, i) => ({
+        title: `foo${i + 5}`,
+      }))
     )
 
     // And wait until it's definitely seen
-    await sleep(100)
+    await waitForIssues({
+      shapeStreamOptions: streamState,
+      numChangesExpected: numIssuesToAdd,
+    })
 
     let catchupOpsCount = 0
-    const newAborter = new AbortController()
     const newIssueStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
         table: issuesTableUrl,
       },
-      subscribe: false,
-      signal: newAborter.signal,
-      offset: issueStream.lastOffset,
-      handle: issueStream.shapeHandle,
+      subscribe: true,
+      signal: aborter.signal,
+      offset: streamState.offset,
+      handle: streamState.handle,
     })
 
-    await h.forEachMessage(newIssueStream, newAborter, (res, msg, nth) => {
+    await h.forEachMessage(newIssueStream, aborter, (res, msg, nth) => {
       if (isUpToDateMessage(msg)) {
         res()
       } else {
@@ -556,6 +559,7 @@ describe(`HTTP Sync`, () => {
   it(`should return correct caching headers`, async ({
     issuesTableUrl,
     insertIssues,
+    waitForIssues,
   }) => {
     const res = await fetch(
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
@@ -583,7 +587,9 @@ describe(`HTTP Sync`, () => {
       { title: `foo8` }
     )
     // Wait for server to get all the messages.
-    await sleep(40)
+    await waitForIssues({
+      numChangesExpected: 5,
+    })
 
     const res2 = await fetch(
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`
@@ -601,7 +607,11 @@ describe(`HTTP Sync`, () => {
     expect(etagHeader).not.toEqual(etag3Header)
   })
 
-  it(`should revalidate etags`, async ({ issuesTableUrl, insertIssues }) => {
+  it(`should revalidate etags`, async ({
+    issuesTableUrl,
+    insertIssues,
+    waitForIssues,
+  }) => {
     // Start the shape
     const baseRes = await fetch(
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
@@ -614,29 +624,8 @@ describe(`HTTP Sync`, () => {
       await insertIssues({ title: `foo${i}` })
     }
 
-    // Get initial data
-    const checkAborter = new AbortController()
-    const issueStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape`,
-      params: {
-        table: issuesTableUrl,
-        // arbitrary where clause for separate shape so
-        // that we do not pollute the etag check
-        where: `1 = 1`,
-      },
-      subscribe: true,
-      signal: checkAborter.signal,
-    })
     // And wait until it's definitely seen
-    let numIssuesSeen = 0
-    await h.forEachMessage(issueStream, checkAborter, (res, msg) => {
-      if (isChangeMessage(msg) && msg.headers.operation === `insert`) {
-        numIssuesSeen++
-      }
-      if (numIssuesSeen == numTransactions && isUpToDateMessage(msg)) {
-        res()
-      }
-    })
+    await waitForIssues({ numChangesExpected: numTransactions })
 
     const res = await fetch(
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=0_0&handle=${handle}`,
@@ -779,7 +768,7 @@ describe(`HTTP Sync`, () => {
 
   it(`should chunk a large log with reasonably sized chunks`, async ({
     insertIssues,
-    issuesTableUrl,
+    waitForIssues,
   }) => {
     const getTitleWithSize = (byteSize: number) =>
       Array.from({ length: byteSize }, () =>
@@ -814,28 +803,14 @@ describe(`HTTP Sync`, () => {
 
     // check it twice to ensure chunking occurs on both initial snapshot
     // and subsequent operations
-    let issueStream: ShapeStream | undefined
+    let streamState: Partial<ShapeStreamOptions> = {}
     for (let i = 0; i < 2; i++) {
       await insertDataSize(35000)
-      const chunkAborter = new AbortController()
-      issueStream = new ShapeStream({
-        url: `${BASE_URL}/v1/shape`,
-        params: {
-          table: issuesTableUrl,
+      streamState = await waitForIssues({
+        shapeStreamOptions: {
+          ...streamState,
+          fetchClient: fetchWrapper,
         },
-        subscribe: true,
-        offset: issueStream?.lastOffset,
-        handle: issueStream?.shapeHandle,
-        fetchClient: fetchWrapper,
-        signal: chunkAborter.signal,
-      })
-
-      let seenInsert = false
-      await h.forEachMessage(issueStream, chunkAborter, (res, msg) => {
-        seenInsert ||= isChangeMessage(msg)
-        if (seenInsert && isUpToDateMessage(msg)) {
-          res()
-        }
       })
 
       // should have received at least 2 responses/chunks
@@ -859,19 +834,9 @@ describe(`HTTP Sync`, () => {
     expect,
     issuesTableUrl,
     aborter,
+    waitForIssues,
   }) => {
-    const issueStream = new ShapeStream<IssueRow>({
-      url: `${BASE_URL}/v1/shape`,
-      params: {
-        table: issuesTableUrl,
-      },
-      subscribe: true,
-      signal: aborter.signal,
-    })
-
-    await h.forEachMessage(issueStream, aborter, (res, msg) => {
-      if (isUpToDateMessage(msg)) res()
-    })
+    const streamState = await waitForIssues({ numChangesExpected: 0 })
 
     let error: Error
     const invalidIssueStream = new ShapeStream<IssueRow>({
@@ -880,7 +845,8 @@ describe(`HTTP Sync`, () => {
         table: issuesTableUrl,
         where: `1=1`,
       },
-      handle: issueStream.shapeHandle,
+      signal: aborter.signal,
+      handle: streamState.handle,
       onError: (err) => {
         error = err
       },

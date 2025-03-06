@@ -72,6 +72,7 @@ describe(`Shape`, () => {
     insertIssues,
     deleteIssue,
     updateIssue,
+    waitForIssues,
     aborter,
   }) => {
     const [id] = await insertIssues({ title: `test title` })
@@ -113,6 +114,7 @@ describe(`Shape`, () => {
     await deleteIssue({ id: id3, title: `other title2` })
     // Test an update too because we're sending patches that should be correctly merged in
     await updateIssue({ id: id2, title: `new title` })
+    await waitForIssues({ numChangesExpected: 5 })
     await vi.waitUntil(() => hasNotified)
 
     const expectedValue2 = [
@@ -620,9 +622,9 @@ describe(`Shape`, () => {
   })
 
   it(`should honour replica: full`, async ({
+    issuesTableUrl,
     insertIssues,
     updateIssue,
-    issuesTableUrl,
     clearIssuesShape,
     aborter,
   }) => {
@@ -657,12 +659,17 @@ describe(`Shape`, () => {
         priority: 10,
       }
       await updateIssue({ id: id, title: `updated title` })
-      await vi.waitFor(() => {
-        const msg = lastMsgs.shift()
-        const changeMsg: ChangeMessage<Row> = msg as ChangeMessage<Row>
-        expect(changeMsg.headers.operation).toEqual(`update`)
-        expect(changeMsg.value).toEqual(expectedValue)
-      })
+
+      await vi.waitFor(
+        () => {
+          const msg = lastMsgs.shift()
+          if (!msg) throw new Error(`Update message not yet received`)
+          const changeMsg: ChangeMessage<Row> = msg as ChangeMessage<Row>
+          expect(changeMsg.headers.operation).toEqual(`update`)
+          expect(changeMsg.value).toEqual(expectedValue)
+        },
+        { timeout: 2000 }
+      )
     } finally {
       unsub()
       // the normal cleanup doesn't work because our shape definition is
@@ -722,6 +729,7 @@ describe(`Shape`, () => {
     issuesTableUrl,
     insertIssues,
     updateIssue,
+    waitForIssues,
     aborter,
   }) => {
     // Create initial data
@@ -794,8 +802,15 @@ describe(`Shape`, () => {
     await vi.waitFor(() => expect(pendingRequests.length).toBe(1))
     expect(pendingRequests[0][0].toString()).toContain(`live=true`)
 
-    // Update data while stream is long polling
+    // Update data while stream is long polling and ensure it has been processed
     await updateIssue({ id, title: `updated title` })
+    await waitForIssues({
+      numChangesExpected: 1,
+      shapeStreamOptions: {
+        offset: shapeStream.lastOffset,
+        handle: shapeStream.shapeHandle,
+      },
+    })
 
     // Start refresh
     const refreshPromise = shapeStream.forceDisconnectAndRefresh()
