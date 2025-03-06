@@ -46,7 +46,7 @@ First let's try the low-level [HTTP API](/docs/api/http).
 In a new terminal, use `curl` to request a [Shape](/docs/guides/shapes) containing all rows in the `foo` table:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1&api_secret=mySecret'
+curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
 ```
 
 ::: info A bit of explanation about the URL structure.
@@ -109,7 +109,7 @@ INSERT INTO foo (name, value) VALUES
 Exit your Postgres client (e.g.: with `psql` enter `\q`) and try the `curl` request again:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1&api_secret=mySecret'
+curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
 ```
 
 Success! You should see the data you just put into Postgres in the shape response:
