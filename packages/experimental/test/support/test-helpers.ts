@@ -1,6 +1,10 @@
 import { Client, ClientConfig } from 'pg'
 import {
+  isChangeMessage,
+  isControlMessage,
+  ShapeStream,
   ShapeStreamInterface,
+  ShapeStreamOptions,
   type Message,
   type Row,
 } from '@electric-sql/client'
@@ -48,4 +52,48 @@ export function forEachMessage<T extends Row<unknown>>(
       }
     }, reject)
   })
+}
+
+export async function waitForTransaction({
+  baseUrl,
+  table,
+  numChangesExpected,
+  shapeStreamOptions,
+}: {
+  baseUrl: string
+  table: string
+  numChangesExpected?: number
+  shapeStreamOptions?: Partial<ShapeStreamOptions>
+}): Promise<Pick<ShapeStreamOptions, `offset` | `handle`>> {
+  const aborter = new AbortController()
+  const issueStream = new ShapeStream({
+    ...(shapeStreamOptions ?? {}),
+    url: `${baseUrl}/v1/shape`,
+    params: {
+      ...(shapeStreamOptions?.params ?? {}),
+      table,
+    },
+    signal: aborter.signal,
+    subscribe: true,
+  })
+
+  numChangesExpected ??= 1
+  let numChangesSeen = 0
+  await forEachMessage(issueStream, aborter, (res, msg) => {
+    if (isChangeMessage(msg)) {
+      numChangesSeen++
+    }
+
+    if (
+      numChangesSeen >= numChangesExpected &&
+      isControlMessage(msg) &&
+      msg.headers.control === `up-to-date`
+    ) {
+      res()
+    }
+  })
+  return {
+    offset: issueStream.lastOffset,
+    handle: issueStream.shapeHandle,
+  }
 }
