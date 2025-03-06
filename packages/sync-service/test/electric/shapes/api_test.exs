@@ -1,5 +1,6 @@
 defmodule Electric.Shapes.ApiTest do
   use ExUnit.Case, async: true
+  use Plug.Test
 
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
@@ -60,7 +61,8 @@ defmodule Electric.Shapes.ApiTest do
       max_age: max_age(ctx),
       stale_age: stale_age(ctx),
       allow_shape_deletion: true,
-      encoder: Electric.Shapes.Api.Encoder.Term,
+      send_cache_headers?: send_cache_headers?(ctx),
+      encoder: api_encoder(ctx),
       persistent_kv: ctx.persistent_kv
     )
   end
@@ -75,6 +77,8 @@ defmodule Electric.Shapes.ApiTest do
   defp max_age(ctx), do: Access.get(ctx, :max_age, 60)
   defp stale_age(ctx), do: Access.get(ctx, :stale_age, 300)
   defp long_poll_timeout(ctx), do: Access.get(ctx, :long_poll_timeout, 20_000)
+  defp send_cache_headers?(ctx), do: Access.get(ctx, :send_cache_headers?, true)
+  defp api_encoder(ctx), do: Access.get(ctx, :api_encoder, Electric.Shapes.Api.Encoder.Term)
 
   setup :verify_on_exit!
 
@@ -404,6 +408,46 @@ defmodule Electric.Shapes.ApiTest do
                  "offset" => "#{next_offset}"
                }
              ]
+    end
+
+    @tag send_cache_headers?: false
+    @tag api_encoder: Electric.Shapes.Api.Encoder.JSON
+    test "doesn't send cache headers when configured", ctx do
+      test_shape_handle = "test-shape-without-deltas"
+      next_offset = LogOffset.increment(@first_offset)
+
+      Mock.ShapeCache
+      |> expect(:get_or_create_shape_handle, fn %{root_table: {"public", "users"}, replica: :full},
+                                                _opts ->
+        {test_shape_handle, @test_offset}
+      end)
+      |> stub(:has_shape?, fn ^test_shape_handle, _opts -> true end)
+      |> expect(:await_snapshot_start, fn ^test_shape_handle, _ -> :started end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn ^test_shape_handle, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
+        next_offset
+      end)
+      |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
+        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+      end)
+
+      assert {:ok, request} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "-1",
+                   replica: "full"
+                 }
+               )
+
+      assert response = Api.serve_shape_log(conn(:get, "/"), request)
+      assert response.status == 200
+
+      assert ["max-age=0, private, must-revalidate"] =
+               Plug.Conn.get_resp_header(response, "cache-control")
     end
   end
 
