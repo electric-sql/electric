@@ -361,18 +361,7 @@ defmodule Electric.Shapes.Api do
     if LogOffset.compare(offset, last_offset) != :lt or
          last_offset == LogOffset.last_before_real_offsets() do
       ref = make_ref()
-      parent = self()
-
-      # Register for notifications using a separate task as the calling process
-      # might be reused across mutiple connections
-      Task.start_link(fn ->
-        Registry.register(registry, handle, ref)
-
-        receive do
-          msg when elem(msg, 0) == ref -> send(parent, msg)
-        end
-      end)
-
+      Registry.register(registry, handle, ref)
       Logger.debug("Client #{inspect(self())} is registered for changes to #{handle}")
 
       %{request | new_changes_pid: self(), new_changes_ref: ref}
@@ -527,29 +516,46 @@ defmodule Electric.Shapes.Api do
 
     Logger.debug("Client #{inspect(self())} is waiting for changes to #{shape_handle}")
 
-    receive do
-      {^ref, :new_changes, latest_log_offset} ->
-        # Stream new log since currently "held" offset
-        %{request | last_offset: latest_log_offset, chunk_end_offset: latest_log_offset}
-        |> Request.update_response(&%{&1 | offset: latest_log_offset})
-        |> determine_up_to_date()
-        |> do_serve_shape_log()
+    response =
+      receive do
+        {^ref, :new_changes, latest_log_offset} ->
+          # Stream new log since currently "held" offset
+          %{request | last_offset: latest_log_offset, chunk_end_offset: latest_log_offset}
+          |> Request.update_response(&%{&1 | offset: latest_log_offset})
+          |> determine_up_to_date()
+          |> do_serve_shape_log()
 
-      {^ref, :shape_rotation} ->
-        # We may want to notify the client better that the shape handle had
-        # changed, but just closing the response and letting the client handle
-        # it on reconnection is good enough.
-        request
-        |> update_attrs(%{ot_is_shape_rotated: true})
-        |> empty_response()
-    after
-      # If we timeout, return an empty body and 204 as there's no response body.
-      long_poll_timeout ->
-        request
-        |> update_attrs(%{ot_is_long_poll_timeout: true})
-        |> empty_response()
-    end
+        {^ref, :shape_rotation} ->
+          # We may want to notify the client better that the shape handle had
+          # changed, but just closing the response and letting the client handle
+          # it on reconnection is good enough.
+          request
+          |> update_attrs(%{ot_is_shape_rotated: true})
+          |> empty_response()
+      after
+        # If we timeout, return an empty body and 204 as there's no response body.
+        long_poll_timeout ->
+          request
+          |> update_attrs(%{ot_is_long_poll_timeout: true})
+          |> empty_response()
+      end
+
+    clean_up_change_listener(request)
+    response
   end
+
+  defp clean_up_change_listener(%Request{new_changes_ref: ref} = request)
+       when is_reference(ref) do
+    %{
+      handle: shape_handle,
+      api: %{registry: registry}
+    } = request
+
+    Registry.unregister_match(registry, shape_handle, ref)
+    request
+  end
+
+  defp clean_up_change_listener(%Request{} = request), do: request
 
   defp empty_response(%Request{} = request) do
     %{response: response} = update_attrs(request, %{ot_is_empty_response: true})
