@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.0.0-beta.23
+
+### Patch Changes
+
+- 9401491: Return chunked repsonses to live requesters if new changes large enough.
+- b48973b: Fix incorrect LSN comparisons leading to dropped transactions.
+
 ## 1.0.0-beta.22
 
 ### Patch Changes
