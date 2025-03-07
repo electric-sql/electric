@@ -200,7 +200,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
 
     state =
-      if Lsn.is_larger(state.last_seen_lsn, txn.lsn) do
+      if Lsn.is_larger(txn.lsn, state.last_seen_lsn) do
         :ok =
           PersistentReplicationState.set_last_processed_lsn(
             txn.lsn,
