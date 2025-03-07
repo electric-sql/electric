@@ -518,6 +518,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Plug.Conn.get_resp_header(conn, "electric-offset") == [next_offset_str]
       assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
       assert Plug.Conn.get_resp_header(conn, "electric-schema") == []
+
+      expected_cursor =
+        Electric.Plug.Utils.get_next_interval_timestamp(long_poll_timeout(ctx), nil)
+        |> to_string()
+
+      assert {"electric-cursor", expected_cursor} in conn.resp_headers
     end
 
     test "handles shape rotation", ctx do

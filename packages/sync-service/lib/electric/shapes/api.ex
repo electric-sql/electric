@@ -28,6 +28,7 @@ defmodule Electric.Shapes.Api do
     max_age: [type: :integer],
     stack_ready_timeout: [type: :integer],
     stale_age: [type: :integer],
+    send_cache_headers?: [type: :boolean],
     encoder: [type: :atom]
   ]
   @schema NimbleOptions.new!(@options)
@@ -48,8 +49,9 @@ defmodule Electric.Shapes.Api do
     allow_shape_deletion: false,
     long_poll_timeout: 20_000,
     max_age: 60,
-    stack_ready_timeout: 100,
+    stack_ready_timeout: 5_000,
     stale_age: 300,
+    send_cache_headers?: true,
     encoder: Electric.Shapes.Api.Encoder.JSON,
     configured: false
   ]
@@ -595,7 +597,7 @@ defmodule Electric.Shapes.Api do
 
   @spec stack_id(Api.t() | Request.t()) :: String.t()
   def stack_id(%Api{stack_id: stack_id}), do: stack_id
-  def stack_id(%Request{api: %{stack_id: stack_id}}), do: stack_id
+  def stack_id(%{api: %{stack_id: stack_id}}), do: stack_id
 
   defp encode_log(%Request{api: api}, stream) do
     encode(api, :log, stream)

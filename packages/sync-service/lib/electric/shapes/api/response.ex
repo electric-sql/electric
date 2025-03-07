@@ -103,6 +103,7 @@ defmodule Electric.Shapes.Api.Response do
   defp put_resp_headers(conn, response) do
     conn
     |> put_cache_headers(response)
+    |> put_cursor_headers(response)
     |> put_etag_headers(response)
     |> put_location_header(response)
     |> put_shape_handle_header(response)
@@ -152,7 +153,7 @@ defmodule Electric.Shapes.Api.Response do
     conn
   end
 
-  defp put_cache_headers(conn, %__MODULE__{} = response) do
+  defp put_cache_headers(conn, %__MODULE__{api: api} = response) do
     case response do
       # If the offset is -1, set a 1 week max-age, 1 hour s-maxage (shared cache)
       # and 1 month stale-while-revalidate We want private caches to cache the
@@ -161,18 +162,44 @@ defmodule Electric.Shapes.Api.Response do
       # log.
       %{params: %{offset: @before_all_offset}} ->
         conn
-        |> Plug.Conn.put_resp_header(
+        |> put_cache_header(
           "cache-control",
-          "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746"
+          "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746",
+          api
         )
 
       # For live requests we want short cache lifetimes and to update the live cursor
       %{params: %{live: true}, api: api} ->
         conn
-        |> Plug.Conn.put_resp_header(
+        |> put_cache_header(
           "cache-control",
-          "public, max-age=5, stale-while-revalidate=5"
+          "public, max-age=5, stale-while-revalidate=5",
+          api
         )
+
+      %{params: %{live: false}, api: api} ->
+        conn
+        |> put_cache_header(
+          "cache-control",
+          "public, max-age=#{api.max_age}, stale-while-revalidate=#{api.stale_age}",
+          api
+        )
+    end
+  end
+
+  defp put_cache_header(conn, header, value, %{send_cache_headers?: true}) do
+    Plug.Conn.put_resp_header(conn, header, value)
+  end
+
+  defp put_cache_header(conn, _header, _value, %{send_cache_headers?: false}) do
+    conn
+  end
+
+  defp put_cursor_headers(conn, %__MODULE__{} = response) do
+    case response do
+      # For live requests we want short cache lifetimes and to update the live cursor
+      %{params: %{live: true}, api: api} ->
+        conn
         |> Plug.Conn.put_resp_header(
           "electric-cursor",
           api.long_poll_timeout
@@ -180,12 +207,8 @@ defmodule Electric.Shapes.Api.Response do
           |> Integer.to_string()
         )
 
-      %{params: %{live: false}, api: api} ->
+      _response ->
         conn
-        |> Plug.Conn.put_resp_header(
-          "cache-control",
-          "public, max-age=#{api.max_age}, stale-while-revalidate=#{api.stale_age}"
-        )
     end
   end
 
@@ -214,8 +237,8 @@ defmodule Electric.Shapes.Api.Response do
     Plug.Conn.put_resp_header(conn, "electric-offset", "#{offset}")
   end
 
-  defp send_stream(%Plug.Conn{} = conn, %__MODULE__{body: stream, status: status}) do
-    stack_id = Api.stack_id(conn.assigns.request)
+  defp send_stream(%Plug.Conn{} = conn, %__MODULE__{body: stream, status: status} = response) do
+    stack_id = Api.stack_id(response)
     conn = Plug.Conn.send_chunked(conn, status)
 
     {conn, bytes_sent} =

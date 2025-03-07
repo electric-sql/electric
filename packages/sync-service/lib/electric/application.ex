@@ -104,7 +104,9 @@ defmodule Electric.Application do
       long_poll_timeout: get_env(opts, :long_poll_timeout),
       max_age: get_env(opts, :cache_max_age),
       stale_age: get_env(opts, :cache_stale_age),
-      allow_shape_deletion: get_env(opts, :allow_shape_deletion?)
+      allow_shape_deletion: get_env(opts, :allow_shape_deletion?),
+      stack_ready_timeout: get_env(opts, :stack_ready_timeout),
+      send_cache_headers?: get_env(opts, :send_cache_headers?)
     )
     |> Keyword.merge(Keyword.take(opts, [:encoder]))
   end
