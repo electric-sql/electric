@@ -48,6 +48,7 @@ defmodule Electric.Shapes.Api.Params do
     field(:columns, ColumnList)
     field(:shape_definition, :string)
     field(:replica, Ecto.Enum, values: [:default, :full], default: :default)
+    field(:params, {:map, :string}, default: %{})
     field(@tmp_compaction_flag, :boolean, default: false)
   end
 
@@ -170,11 +171,13 @@ defmodule Electric.Shapes.Api.Params do
     where = fetch_field!(changeset, :where)
     columns = get_change(changeset, :columns, nil)
     replica = fetch_field!(changeset, :replica)
+    params = fetch_field!(changeset, :params)
     compaction_enabled? = fetch_field!(changeset, @tmp_compaction_flag)
 
     case Shape.new(
            table,
            where: where,
+           params: params,
            columns: columns,
            replica: replica,
            inspector: api.inspector,

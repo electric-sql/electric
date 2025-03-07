@@ -165,6 +165,34 @@ defmodule Electric.Plug.RouterTest do
     end
 
     @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'terrible')"
+         ]
+    test "GET with parameters avoids SQL-injection-like behaviour", %{opts: opts} do
+      # Given this sql injection "request"
+      value = ~S|'nonexistent' OR TRUE|
+
+      # Requesting without escaping leads to all rows shown despie
+      conn =
+        conn("GET", "/v1/shape?table=items&offset=-1", %{where: "value = #{value}"})
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      # Unfortunately, returns rows
+      refute Jason.decode!(conn.resp_body) == []
+
+      # Requesting with param makes it work
+      conn =
+        conn("GET", "/v1/shape?table=items&offset=-1", %{
+          where: "value = $1",
+          params: %{1 => value}
+        })
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      assert Jason.decode!(conn.resp_body) == []
+    end
+
+    @tag with_sql: [
            "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
          ]
     test "DELETE forces the shape handle to be different on reconnect and new snapshot to be created",

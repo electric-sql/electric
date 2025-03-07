@@ -70,6 +70,38 @@ defmodule Electric.Shapes.QueryingTest do
            ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
   end
 
+  test "respects the where clauses with params", %{db_conn: conn} do
+    Postgrex.query!(
+      conn,
+      """
+      CREATE TABLE items (
+        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+        value INTEGER,
+        test INTEGER[]
+      )
+      """,
+      []
+    )
+
+    Postgrex.query!(
+      conn,
+      "INSERT INTO items (value, test) VALUES (1, '{1,2,3}'), (2, '{4,5,6}'), (3, '{7,8,9}'), (4, '{10,11,12}'), (5, '{12,14,15}')",
+      []
+    )
+
+    shape =
+      Shape.new!("items",
+        where: "test @> $1",
+        inspector: {DirectInspector, conn},
+        params: %{"1" => "{12}"}
+      )
+
+    assert [
+             %{key: ~S["public"."items"/"4"], value: %{value: "4"}},
+             %{key: ~S["public"."items"/"5"], value: %{value: "5"}}
+           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+  end
+
   test "allows column names to have special characters", %{db_conn: conn} do
     Postgrex.query!(
       conn,
