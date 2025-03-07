@@ -153,7 +153,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   # If we've already processed a transaction, then drop it without processing
   defp handle_transaction(txn, _from, %{last_seen_lsn: last_seen_lsn} = state)
-       when not Electric.Postgres.Lsn.is_larger(txn.lsn, last_seen_lsn) do
+       when not Lsn.is_larger(txn.lsn, last_seen_lsn) do
     Logger.debug(fn ->
       "Dropping transaction #{txn.xid}: transaction LSN #{txn.lsn} smaller than last processed #{last_seen_lsn}"
     end)
@@ -200,7 +200,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
 
     state =
-      if txn.lsn > state.last_seen_lsn do
+      if Lsn.is_larger(txn.lsn, state.last_seen_lsn) do
         :ok =
           PersistentReplicationState.set_last_processed_lsn(
             txn.lsn,
