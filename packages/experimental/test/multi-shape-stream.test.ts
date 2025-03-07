@@ -145,10 +145,12 @@ describe(`MultiShapeStream`, () => {
     issuesTableUrl,
     insertIssues,
     updateIssue,
+    waitForIssues,
     aborter,
   }) => {
     const [id1] = await insertIssues({ title: `test title 1`, priority: 5 })
     const [id2] = await insertIssues({ title: `test title 2`, priority: 15 })
+    const streamState = await waitForIssues({ numChangesExpected: 2 })
 
     type ShapeConfig = {
       lowPriority: IssueRow
@@ -192,26 +194,33 @@ describe(`MultiShapeStream`, () => {
     // Update that moves an issue from high to low priority
     await updateIssue({ id: id2, title: `high priority`, priority: 5 })
 
-    await sleep(200) // some time for electric to catch up
+    // some time for electric to catch up
+    await waitForIssues({
+      numChangesExpected: 2,
+      shapeStreamOptions: streamState,
+    })
 
     // Verify we got update messages for both shapes
-    const changeMessages = (
-      messages as MultiShapeMessages<ShapeConfig>[]
-    ).filter(
-      (msg): msg is MultiShapeMessages<ShapeConfig> & { value: IssueRow } =>
-        `value` in msg
-    )
+    const [lowPriorityMsgs, highPriorityMsgs] = await vi.waitFor(() => {
+      const changeMessages = (
+        messages as MultiShapeMessages<ShapeConfig>[]
+      ).filter(
+        (msg): msg is MultiShapeMessages<ShapeConfig> & { value: IssueRow } =>
+          `value` in msg
+      )
 
-    // Should have updates in both shapes
-    const lowPriorityMsgs = changeMessages.filter(
-      (msg) => msg.shape === `lowPriority`
-    )
-    const highPriorityMsgs = changeMessages.filter(
-      (msg) => msg.shape === `highPriority`
-    )
+      // Should have updates in both shapes
+      const lowPriorityMsgs = changeMessages.filter(
+        (msg) => msg.shape === `lowPriority`
+      )
+      const highPriorityMsgs = changeMessages.filter(
+        (msg) => msg.shape === `highPriority`
+      )
 
-    expect(lowPriorityMsgs.length).toBe(3)
-    expect(highPriorityMsgs.length).toBe(3)
+      expect(lowPriorityMsgs.length).toBe(3)
+      expect(highPriorityMsgs.length).toBe(3)
+      return [lowPriorityMsgs, highPriorityMsgs]
+    })
 
     expect(
       lowPriorityMsgs.filter((msg) => msg.headers.operation === `insert`).length
@@ -230,7 +239,11 @@ describe(`MultiShapeStream`, () => {
     ).toBe(1)
   })
 
-  it(`should support unsubscribe`, async ({ issuesTableUrl }) => {
+  it(`should support unsubscribe`, async ({
+    issuesTableUrl,
+    insertIssues,
+    waitForIssues,
+  }) => {
     const multiShapeStream = new MultiShapeStream<{
       shape1: IssueRow
     }>({
@@ -248,12 +261,15 @@ describe(`MultiShapeStream`, () => {
     const unsubscribeFn = multiShapeStream.subscribe(subFn)
 
     // Wait for initial sync
-    await sleep(100)
+    // await sleep(100)
+    await vi.waitFor(() => expect(subFn).toHaveBeenCalledTimes(1))
 
     unsubscribeFn()
     multiShapeStream.unsubscribeAll()
 
     // Make a change and verify callback isn't called
+    await insertIssues({ title: `test title 1`, priority: 5 })
+    await waitForIssues({ numChangesExpected: 1 })
     await sleep(100)
     expect(subFn).toHaveBeenCalledTimes(1) // Only the initial sync
   })
@@ -264,6 +280,7 @@ describe(`TransactionalMultiShapeStream`, () => {
     issuesTableUrl,
     insertIssues,
     updateIssue,
+    waitForIssues,
     beginTransaction,
     commitTransaction,
     aborter,
@@ -274,6 +291,7 @@ describe(`TransactionalMultiShapeStream`, () => {
     const id3 = uuidv4()
     await insertIssues({ id: id1, title: `test title 1`, priority: 5 })
     await insertIssues({ id: id2, title: `test title 2`, priority: 15 })
+    const streamState = await waitForIssues({ numChangesExpected: 2 })
 
     type ShapeConfig = {
       lowPriority: IssueRow
@@ -331,10 +349,13 @@ describe(`TransactionalMultiShapeStream`, () => {
     await commitTransaction()
 
     // Wait for changes to be processed
-    await sleep(200)
+    await waitForIssues({
+      numChangesExpected: 3,
+      shapeStreamOptions: streamState,
+    })
 
     // We should get one message group containing all changes from the transaction
-    expect(messageGroups.length).toBe(1)
+    await vi.waitFor(() => expect(messageGroups.length).toBe(1))
 
     // Find the message group containing our changes
     const changeGroup = messageGroups.find((group) =>
@@ -399,6 +420,7 @@ describe(`TransactionalMultiShapeStream`, () => {
     issuesTableUrl,
     insertIssues,
     updateIssue,
+    waitForIssues,
     beginTransaction,
     commitTransaction,
     aborter,
@@ -408,6 +430,7 @@ describe(`TransactionalMultiShapeStream`, () => {
     const id2 = uuidv4()
     await insertIssues({ id: id1, title: `test title 1`, priority: 5 })
     await insertIssues({ id: id2, title: `test title 2`, priority: 15 })
+    const streamState = await waitForIssues({ numChangesExpected: 2 })
 
     type ShapeConfig = {
       lowPriority: IssueRow
@@ -464,18 +487,25 @@ describe(`TransactionalMultiShapeStream`, () => {
     await commitTransaction()
 
     // Wait for changes to be processed
+    await waitForIssues({
+      numChangesExpected: 2,
+      shapeStreamOptions: streamState,
+    })
     await sleep(200)
 
     // Find message groups containing our changes
-    const changeGroups = messageGroups.filter((group) =>
-      group.some(
-        (msg) =>
-          `value` in msg && (msg.value.id === id1 || msg.value.id === id2)
+    const changeGroups = await vi.waitFor(() => {
+      const changeGroups = messageGroups.filter((group) =>
+        group.some(
+          (msg) =>
+            `value` in msg && (msg.value.id === id1 || msg.value.id === id2)
+        )
       )
-    )
 
-    // We should have two separate transaction groups
-    expect(changeGroups.length).toBe(2)
+      // We should have two separate transaction groups
+      expect(changeGroups.length).toBe(2)
+      return changeGroups
+    })
 
     // First transaction group should contain operations for id1
     const transaction1 = changeGroups[0]
