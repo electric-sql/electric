@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.0-beta.24
+
+### Patch Changes
+
+- ac9af08: Add configuration flag to disable HTTP cache headers
+
 ## 1.0.0-beta.23
 
 ### Patch Changes
