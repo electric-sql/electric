@@ -3,6 +3,39 @@ defmodule Electric.UtilsTest do
   use ExUnit.Case, async: true
   doctest Utils, import: true
 
+  defp make_sorted_test_file(path, keys) do
+    Stream.map(keys, fn key -> <<key::32, :crypto.strong_rand_bytes(40)::binary>> end)
+    |> Stream.into(File.stream!(path))
+    |> Stream.run()
+  end
+
+  describe "merge_sorted_files/4" do
+    @describetag :tmp_dir
+
+    test "should merge sorted files using the reader", %{tmp_dir: dir} do
+      path1 = Path.join(dir, "test1.bin")
+      path2 = Path.join(dir, "test2.bin")
+      make_sorted_test_file(path1, [1, 3, 5])
+      make_sorted_test_file(path2, [2, 4, 6])
+
+      Utils.merge_sorted_files(
+        [path1, path2],
+        Path.join(dir, "test3.bin"),
+        &read_next_item_test_file(&1, true)
+      )
+
+      # Ensure we're opening each file at most once
+      assert_received {:line_read, fd1}
+      assert_received {:line_read, fd2}
+      assert_received {:line_read, ^fd1}
+      assert_received {:line_read, ^fd2}
+      assert_received {:line_read, ^fd1}
+      assert_received {:line_read, ^fd2}
+
+      assert stream_sorted?(stream_test_file(Path.join(dir, "test3.bin")))
+    end
+  end
+
   describe "external_merge_sort/4" do
     @describetag :tmp_dir
 
@@ -26,14 +59,14 @@ defmodule Electric.UtilsTest do
     @tag file_size: 1_000
     test "sorts a file", %{path: path} do
       refute stream_sorted?(stream_test_file(path))
-      assert :ok = Utils.external_merge_sort(path, &stream_test_file/1, &<=/2)
+      assert :ok = Utils.external_merge_sort(path, &read_next_item_test_file/1, &<=/2)
       assert stream_sorted?(stream_test_file(path))
     end
 
     @tag file_size: 10_000
     test "sorts a large file externally", %{path: path} do
       refute stream_sorted?(stream_test_file(path))
-      assert :ok = Utils.external_merge_sort(path, &stream_test_file/1, &<=/2, 1_000)
+      assert :ok = Utils.external_merge_sort(path, &read_next_item_test_file/1, &<=/2, 1_000)
       assert stream_sorted?(stream_test_file(path))
     end
 
@@ -53,7 +86,7 @@ defmodule Electric.UtilsTest do
       |> Stream.run()
 
       refute stream_sorted?(stream_test_file(path))
-      assert :ok = Utils.external_merge_sort(path, &stream_test_file/1, &<=/2, 1_000)
+      assert :ok = Utils.external_merge_sort(path, &read_next_item_test_file/1, &<=/2, 1_000)
       assert stream_sorted?(stream_test_file(path))
 
       for {_, line} <- stream_test_file(path) do
@@ -62,20 +95,20 @@ defmodule Electric.UtilsTest do
     end
   end
 
-  defp stream_test_file(path) do
-    Stream.resource(
-      fn -> File.open!(path) end,
-      fn file ->
-        case IO.binread(file, 44) do
-          <<key::32, data::binary>> ->
-            {[{key, <<key::32, data::binary>>}], file}
+  defp read_next_item_test_file(file_descriptor, notify? \\ false) do
+    if notify?, do: send(self(), {:line_read, file_descriptor})
 
-          :eof ->
-            {:halt, file}
-        end
-      end,
-      &File.close/1
-    )
+    case IO.binread(file_descriptor, 44) do
+      <<key::32, data::binary>> ->
+        {key, <<key::32, data::binary>>}
+
+      :eof ->
+        :halt
+    end
+  end
+
+  defp stream_test_file(path) do
+    Utils.stream_file_items(path, &read_next_item_test_file/1)
   end
 
   defp stream_sorted?(stream, mapper \\ & &1, comparator \\ &<=/2) do

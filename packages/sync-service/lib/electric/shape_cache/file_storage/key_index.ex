@@ -91,27 +91,21 @@ defmodule Electric.ShapeCache.FileStorage.KeyIndex do
     Utils.external_merge_sort(path, &stream_for_sorting/1, &<=/2)
   end
 
-  @spec stream_for_sorting(path :: String.t()) ::
-          Enumerable.t(Utils.sortable_binary({binary(), non_neg_integer(), non_neg_integer()}))
-  defp stream_for_sorting(path) do
-    Stream.resource(
-      fn -> File.open!(path, [:read, :raw, :read_ahead]) end,
-      fn file ->
-        with <<key_size::32>> <- IO.binread(file, 4),
-             <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
-             <<tx_offset::64, op_offset::64, op_type::8, json_start_position::64, json_size::64>> <-
-               IO.binread(file, 17 + 8 + 8) do
-          full_line =
-            <<key_size::32, key::binary, tx_offset::64, op_offset::64, op_type::8,
-              json_start_position::64, json_size::64>>
+  @spec stream_for_sorting(file :: :file.io_device()) ::
+          Utils.sortable_binary({binary(), non_neg_integer(), non_neg_integer()}) | :halt
+  defp stream_for_sorting(file) do
+    with <<key_size::32>> <- IO.binread(file, 4),
+         <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
+         <<tx_offset::64, op_offset::64, op_type::8, json_start_position::64, json_size::64>> <-
+           IO.binread(file, 17 + 8 + 8) do
+      full_line =
+        <<key_size::32, key::binary, tx_offset::64, op_offset::64, op_type::8,
+          json_start_position::64, json_size::64>>
 
-          {[{{key, tx_offset, op_offset}, full_line}], file}
-        else
-          :eof -> {:halt, file}
-        end
-      end,
-      &File.close/1
-    )
+      {{key, tx_offset, op_offset}, full_line}
+    else
+      :eof -> :halt
+    end
   end
 
   @doc """
