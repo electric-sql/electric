@@ -35,9 +35,6 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
     end
 
     defp telemetry_poller_child_spec(opts) do
-      # The telemetry_poller application starts its own poller by default but we disable that
-      # and add its default measurements to the list of our custom ones. This allows for all
-      # periodic measurements to be defined in one place.
       {:telemetry_poller,
        measurements: periodic_measurements(opts),
        period: opts.system_metrics_poll_interval,
@@ -64,9 +61,9 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
     defp otel_reporter_child_spec(_), do: nil
 
-    defp call_home_reporter_child_spec(%{call_home_telemetry?: true}) do
+    defp call_home_reporter_child_spec(%{call_home_telemetry?: true} = opts) do
       {Electric.Telemetry.CallHomeReporter,
-       static_info: static_info(),
+       static_info: static_info(opts),
        metrics: call_home_metrics(),
        first_report_in: {2, :minute},
        reporting_period: {30, :minute}}
@@ -74,7 +71,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
     defp call_home_reporter_child_spec(_), do: nil
 
-    def static_info() do
+    defp static_info(opts) do
       {total_mem, _, _} = :memsup.get_memory_data()
       processors = :erlang.system_info(:logical_processors)
       {os_family, os_name} = :os.type()
@@ -87,7 +84,8 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
           arch: to_string(arch),
           cores: processors,
           ram: total_mem,
-          electric_instance_id: Electric.instance_id()
+          electric_instance_id: Electric.instance_id(),
+          electric_installation_id: Map.fetch!(opts, :installation_id)
         }
       }
     end
@@ -207,7 +205,12 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
     defp periodic_measurements(opts) do
       [
-        # Default measurements included with the telemetry_poller application:
+        # Measurements included with the telemetry_poller application.
+        #
+        # By default, The telemetry_poller application starts its own poller but we disable that
+        # and add its default measurements to the list of our custom ones.
+        #
+        # This allows for all periodic measurements to be defined in one place.
         :memory,
         :total_run_queue_lengths,
         :system_counts,

@@ -68,6 +68,8 @@ defmodule Electric.Config do
     shape_hibernate_after: :timer.seconds(30)
   ]
 
+  @installation_id_key "electric_installation_id"
+
   def default(key) do
     case Keyword.fetch!(@defaults, key) do
       fun when is_function(fun, 0) -> fun.()
@@ -87,13 +89,39 @@ defmodule Electric.Config do
         Logger.info("Setting electric instance_id: #{instance_id}")
         Application.put_env(:electric, :instance_id, instance_id)
 
+        instance_id
+
       id when is_binary(id) ->
-        :ok
+        id
     end
   end
 
   defp generate_instance_id do
     Electric.Utils.uuid4()
+  end
+
+  @spec ensure_installation_id(keyword, binary) :: :ok
+  # the installation id is persisted to disk to remain the same between restarts of the sync service
+  def ensure_installation_id(config, instance_id)
+      when is_list(config) and is_binary(instance_id) do
+    kv = Keyword.fetch!(config, :persistent_kv)
+
+    case Electric.PersistentKV.get(kv, @installation_id_key) do
+      {:ok, id} when is_binary(id) ->
+        id
+
+      {:error, :not_found} ->
+        :ok = Electric.PersistentKV.set(kv, @installation_id_key, instance_id)
+        instance_id
+    end
+  end
+
+  @spec installation_id!(term) :: binary | no_return
+  def installation_id!(kv) do
+    case Electric.PersistentKV.get(kv, @installation_id_key) do
+      {:ok, id} when is_binary(id) -> id
+      {:error, :not_found} -> raise "Electric's installation_id not set"
+    end
   end
 
   @spec get_env(Application.key()) :: Application.value()

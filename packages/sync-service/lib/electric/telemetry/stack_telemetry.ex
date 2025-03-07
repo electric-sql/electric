@@ -43,9 +43,6 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
     end
 
     defp telemetry_poller_child_spec(opts) do
-      # The telemetry_poller application starts its own poller by default but we disable that
-      # and add its default measurements to the list of our custom ones. This allows for all
-      # periodic measurements to be defined in one place.
       {:telemetry_poller,
        measurements: periodic_measurements(opts),
        period: opts.system_metrics_poll_interval,
@@ -101,6 +98,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
           cores: processors,
           ram: total_mem,
           electric_instance_id: Electric.instance_id(),
+          electric_installation_id: Map.fetch!(opts, :installation_id),
           stack_id: opts.stack_id
         }
       }

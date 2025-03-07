@@ -41,7 +41,8 @@ if !is_nil(sentry_dsn) do
     dsn: sentry_dsn
 end
 
-# Disable the default telemetry_poller process since we start our own in `Electric.Telemetry`.
+# Disable the default telemetry_poller process since we start our own in
+# `Electric.Telemetry.{ApplicationTelemetry, StackTelemetry}`.
 config :telemetry_poller, default: false
 
 service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
