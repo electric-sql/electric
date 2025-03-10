@@ -61,16 +61,18 @@ export default $config({
       },
     })
 
-    const testOutput = command.local.runOutput({
-      command: `pnpm test:browser`,
-      dir: `../../`,
-      environment: {
-        BASE_URL: $dev ? `http://localhost:5173` : service.url,
-
-        // chain test to the service itself
-        SERVICE_NAME: service.service,
-      },
-    })
+    const testOutput = $resolve([
+      service.url,
+      service.nodes.taskDefinition.arn,
+    ]).apply(([url, ..._rest]) =>
+      command.local.runOutput({
+        command: `pnpm test:browser`,
+        dir: `../../`,
+        environment: {
+          BASE_URL: $dev ? `http://localhost:5173` : url,
+        },
+      })
+    )
 
     return {
       website: testOutput.apply(() => service.url),
