@@ -133,6 +133,8 @@ cache_max_age = env!("ELECTRIC_CACHE_MAX_AGE", :integer, nil)
 cache_stale_age = env!("ELECTRIC_CACHE_STALE_AGE", :integer, nil)
 statsd_host = env!("ELECTRIC_STATSD_HOST", :string?, nil)
 
+chunk_bytes_threshold = env!("ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD", :integer, nil)
+
 storage_dir = env!("ELECTRIC_STORAGE_DIR", :string, "./persistent")
 
 shape_path = Path.join(storage_dir, "./shapes")
@@ -155,8 +157,6 @@ persistent_kv =
     end,
     nil
   )
-
-chunk_bytes_threshold = env!("ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD", :integer, nil)
 
 storage =
   env!(
@@ -247,6 +247,7 @@ config :electric,
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, nil),
   service_port: env!("ELECTRIC_PORT", :integer, nil),
   shape_hibernate_after: shape_hibernate_after,
+  storage_dir: storage_dir,
   storage: storage,
   profile_where_clauses?: env!("ELECTRIC_PROFILE_WHERE_CLAUSES", :boolean, false),
   persistent_kv: persistent_kv,
