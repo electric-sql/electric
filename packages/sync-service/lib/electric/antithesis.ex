@@ -6,6 +6,10 @@ defmodule Electric.Antithesis do
       dir
       |> Path.join("sdk.jsonl")
       |> File.write!(@ready_signal)
+
+      IO.puts("Readiness signal written to #{dir}")
+    else
+      _ -> IO.puts("ANTITHESIS_OUTPUT_DIR not set, skipping readiness signal")
     end
   end
 end
