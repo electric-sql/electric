@@ -11,3 +11,7 @@ publish() {
 publish electric-antithesis
 
 publish antithesis-config
+
+docker pull postgres:16-alpine
+docker tag postgres:16-alpine us-central1-docker.pkg.dev/molten-verve-216720/electricsql-repository/postgres-electric
+docker push us-central1-docker.pkg.dev/molten-verve-216720/electricsql-repository/postgres-electric

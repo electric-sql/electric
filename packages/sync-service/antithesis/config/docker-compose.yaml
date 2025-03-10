@@ -2,7 +2,7 @@ name: "antithesis"
 
 services:
   postgres:
-    image: docker.io/postgres:16-alpine
+    image: postgres-electric:latest
     environment:
       POSTGRES_DB: electric
       POSTGRES_USER: postgres
