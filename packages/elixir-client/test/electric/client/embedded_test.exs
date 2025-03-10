@@ -111,9 +111,14 @@ defmodule Electric.Client.EmbeddedTest do
     assert_receive {:stream, 1, up_to_date()}
     assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
     assert_receive {:stream, 2, up_to_date()}
+    refute_receive _
 
-    {:ok, id2} = insert_item(ctx)
-    {:ok, id3} = insert_item(ctx)
+    {:ok, {id2, id3}} =
+      with_transaction(ctx, fn ctx ->
+        {:ok, id2} = insert_item(ctx)
+        {:ok, id3} = insert_item(ctx)
+        {id2, id3}
+      end)
 
     assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id2}}}, 5000
     assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id3}}}, 5000
@@ -122,6 +127,8 @@ defmodule Electric.Client.EmbeddedTest do
     assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id2}}}, 5000
     assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id3}}}, 5000
     assert_receive {:stream, 2, up_to_date()}
+
+    refute_receive _
   end
 
   test "sends full rows with replica: :full", ctx do
@@ -142,6 +149,7 @@ defmodule Electric.Client.EmbeddedTest do
 
     assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
     assert_receive {:stream, 1, up_to_date()}
+    refute_receive _
 
     :ok = update_item(ctx, id1, value: 999)
 
@@ -152,6 +160,7 @@ defmodule Electric.Client.EmbeddedTest do
                    500
 
     assert_receive {:stream, 1, up_to_date()}
+    refute_receive _
   end
 
   test "supports shapes with where clauses and column lists", ctx do
