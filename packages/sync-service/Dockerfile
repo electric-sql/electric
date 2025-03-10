@@ -66,6 +66,13 @@ ARG MIX_TARGET
 ARG RELEASE_NAME=electric
 
 
+# Install test dependencies
+RUN apt-get update && apt-get install -y httpie postgresql-client
+
+# Copy test files
+COPY antithesis/test /opt/antithesis/test
+
+
 COPY --from=builder "/app/_build/${MIX_TARGET}_prod/rel/${RELEASE_NAME}" ./
 
 RUN mv /app/bin/${RELEASE_NAME} /app/bin/entrypoint
