@@ -1,6 +1,8 @@
 #!/bin/bash
 set -ex
 
-docker build -t electric-antithesis .
+cd ..
+docker build --platform linux/amd64 -t electric-antithesis .
+cd -
 
-docker build -t antithesis-config ./config
+docker build --platform linux/amd64 -t antithesis-config ./config
