@@ -66,6 +66,9 @@ export default $config({
       dir: `../../`,
       environment: {
         BASE_URL: $dev ? `http://localhost:5173` : service.url,
+
+        // chain test to the service itself
+        SERVICE_NAME: service.service,
       },
     })
 
