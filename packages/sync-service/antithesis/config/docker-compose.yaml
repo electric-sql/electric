@@ -2,7 +2,7 @@ name: "antithesis"
 
 services:
   postgres:
-    image: postgres-electric:2
+    image: postgres-electric:6
     environment:
       POSTGRES_DB: electric
       POSTGRES_USER: postgres
@@ -20,7 +20,7 @@ services:
       - config_file=/etc/postgresql/postgresql.conf
 
   electric:
-    image: electric-antithesis:2
+    image: electric-antithesis:6
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/electric?sslmode=disable
       ELECTRIC_USAGE_REPORTING: false
