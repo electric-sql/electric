@@ -117,27 +117,20 @@ defmodule Electric.ShapeCache.FileStorage.ActionFile do
     )
   end
 
-  @spec stream_for_sorting(String.t()) ::
-          Enumerable.t(Utils.sortable_binary({non_neg_integer(), non_neg_integer()}))
-  defp stream_for_sorting(action_file_path) do
-    Stream.resource(
-      fn -> File.open!(action_file_path, [:read, :raw, :read_ahead]) end,
-      fn file ->
-        case IO.binread(file, 17) do
-          :eof ->
-            {:halt, file}
+  @spec stream_for_sorting(file :: :file.io_device()) ::
+          Utils.sortable_binary({binary(), non_neg_integer(), non_neg_integer()}) | :halt
+  defp stream_for_sorting(file) do
+    case IO.binread(file, 17) do
+      :eof ->
+        :halt
 
-          <<tx_offset::64, op_offset::64, ?c::8>> = line ->
-            <<count::16>> = IO.binread(file, 2)
+      <<tx_offset::64, op_offset::64, ?c::8>> = line ->
+        <<count::16>> = IO.binread(file, 2)
 
-            {[{{tx_offset, op_offset}, line <> <<count::16>> <> IO.binread(file, count * 16)}],
-             file}
+        {{tx_offset, op_offset}, line <> <<count::16>> <> IO.binread(file, count * 16)}
 
-          <<tx_offset::64, op_offset::64, _::8>> = line ->
-            {[{{tx_offset, op_offset}, line}], file}
-        end
-      end,
-      &File.close/1
-    )
+      <<tx_offset::64, op_offset::64, _::8>> = line ->
+        {{tx_offset, op_offset}, line}
+    end
   end
 end

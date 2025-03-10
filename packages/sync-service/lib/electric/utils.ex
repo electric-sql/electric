@@ -512,6 +512,7 @@ defmodule Electric.Utils do
   end
 
   @type sortable_binary(key) :: {key :: key, data :: binary()}
+  @type item_reader_fn(elem) :: (file :: :file.io_device() -> sortable_binary(elem) | :halt)
 
   @doc """
   Performs external merge sort on a file.
@@ -529,7 +530,7 @@ defmodule Electric.Utils do
   """
   @spec external_merge_sort(
           path :: String.t(),
-          reader :: (path :: String.t() -> Enumerable.t(sortable_binary(elem))),
+          reader :: item_reader_fn(elem),
           sorter :: (elem, elem -> boolean())
         ) :: :ok
         when elem: var
@@ -548,7 +549,7 @@ defmodule Electric.Utils do
 
   defp split_into_sorted_chunks(path, reader, sorter, tmp_dir, chunk_size) do
     path
-    |> reader.()
+    |> stream_file_items(reader)
     |> chunk_by_size(chunk_size)
     |> Stream.with_index()
     |> Stream.map(fn {chunk, idx} ->
@@ -565,23 +566,93 @@ defmodule Electric.Utils do
     |> Enum.to_list()
   end
 
+  @spec stream_file_items(
+          path :: String.t(),
+          reader :: item_reader_fn(elem)
+        ) :: Enumerable.t(sortable_binary(elem))
+        when elem: var
+  def stream_file_items(path, item_reader) when is_function(item_reader, 1) do
+    Stream.resource(
+      fn ->
+        File.open!(path, [:read, :raw])
+      end,
+      fn file ->
+        case item_reader.(file) do
+          :halt -> {:halt, file}
+          value -> {[value], file}
+        end
+      end,
+      &File.close/1
+    )
+  end
+
   @doc """
   Merge a list of sorted files into a single file.
 
-  Uses a reader function that takes a path to a file and returns a stream of tuples `{key, binary}`,
+  Uses a reader function that takes a file descriptor and returns next `{key, binary}` tuple,
   where `binary` will be written to the file as sorted by `key`.
   """
+  @spec merge_sorted_files(
+          paths :: [String.t()],
+          target_path :: String.t(),
+          reader :: item_reader_fn(elem),
+          sorter :: (elem, elem -> boolean()) | module()
+        ) :: :ok
+        when elem: var
   def merge_sorted_files(paths, target_path, reader, sorter \\ &<=/2)
 
   def merge_sorted_files([path], target_path, _reader, _sorter) do
     File.copy!(path, target_path)
+    :ok
   end
 
   def merge_sorted_files(paths, target_path, reader, sorter) do
-    paths
-    |> Enum.map(reader)
-    |> merge_sorted_streams(sorter, fn {_, binary} -> binary end)
-    |> Stream.into(File.stream!(target_path))
+    Stream.resource(
+      fn ->
+        {halted, values_and_files} =
+          paths
+          |> Enum.map(&File.open!(&1, [:read, :raw]))
+          |> Enum.map(&{reader.(&1), &1})
+          |> Enum.split_with(&match?({:halt, _}, &1))
+
+        halted_files = Enum.map(halted, fn {:halt, file} -> file end)
+        target_file = File.open!(target_path, [:write, :raw])
+
+        {values_and_files, halted_files, target_file}
+      end,
+      fn
+        {{_, []}, _} = acc ->
+          {:halt, acc}
+
+        # When only a single unhalted file left, we can just copy over the rest, as it's definitely sorted.
+        {[{{_comparison_val, unwritten_binary}, file}], _halted, target} = acc ->
+          IO.binwrite(target, unwritten_binary)
+          File.copy!(file, target)
+          {:halt, acc}
+
+        {values_and_files, halted, target} ->
+          {{_, contents} = full_val, file} =
+            Enum.min_by(values_and_files, fn {{value, _}, _} -> value end, sorter)
+
+          IO.binwrite(target, contents)
+
+          case reader.(file) do
+            :halt ->
+              # No more items in that file, move to halted and delete from `values_and_files`
+              {[], {List.keydelete(values_and_files, full_val, 0), [file | halted], target}}
+
+            value ->
+              # Got a new item, replace the old one in `values_and_files` and continue
+              {[],
+               {List.keyreplace(values_and_files, full_val, 0, {value, file}), halted, target}}
+          end
+      end,
+      fn {values_and_files, halted_files, target} ->
+        Enum.each(values_and_files, fn {_, file} -> File.close(file) end)
+        Enum.each(halted_files, &File.close/1)
+        File.close(target)
+      end
+    )
     |> Stream.run()
   end
 
