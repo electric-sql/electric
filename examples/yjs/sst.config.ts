@@ -56,8 +56,15 @@ export default $config({
       },
     })
 
+    const testOutput = command.local.runOutput({
+      command: `pnpm test:browser`,
+      environment: {
+        BASE_URL: service.url
+      }
+    })
+
     return {
-      website: service.url,
+      website: testOutput.apply(() => service.url),
     }
   },
 })

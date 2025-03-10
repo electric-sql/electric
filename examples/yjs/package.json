@@ -14,7 +14,8 @@
     "start": "next start",
     "lint": "eslint . --ext js,ts,tsx --report-unused-disable-directives --max-warnings 0",
     "stylecheck": "eslint . --quiet",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:browser": "playwright test ./e2e/"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.3",
@@ -40,13 +41,15 @@
     "@eslint/eslintrc": "^3.3.0",
     "@eslint/js": "^9.22.0",
     "@next/eslint-plugin-next": "^15.2.1",
+    "@playwright/test": "^1.51.0",
     "@types/pg": "^8.11.11",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react-swc": "^3.7.0",
     "dotenv": "^16.4.7",
     "eslint": "^9.22.0",
     "globals": "^15.13.0",
+    "playwright": "^1.51.0",
     "typescript": "^5.8.2",
     "vite": "^6.2.1",
     "vitest": "^3.0.8"
