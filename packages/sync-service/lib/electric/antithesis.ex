@@ -5,7 +5,7 @@ defmodule Electric.Antithesis do
     with dir when dir != nil <- System.get_env("ANTITHESIS_OUTPUT_DIR") do
       dir
       |> Path.join("sdk.jsonl")
-      |> File.write!(@ready_signal)
+      |> File.write!(@ready_signal <> "\n", [:append])
 
       IO.puts("Readiness signal written to #{dir}")
     else
