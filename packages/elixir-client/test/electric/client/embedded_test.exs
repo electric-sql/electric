@@ -113,7 +113,6 @@ defmodule Electric.Client.EmbeddedTest do
     assert_receive {:stream, 2, up_to_date()}
     refute_receive _
 
-
     {:ok, {id2, id3}} =
       with_transaction(ctx, fn ctx ->
         {:ok, id2} = insert_item(ctx)
