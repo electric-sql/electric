@@ -69,10 +69,9 @@ defmodule Electric.Application do
     |> Electric.Shapes.Api.plug_opts()
   end
 
-  @doc false
   # Gets a complete configuration for the `StackSupervisor` based on the passed opts
   # plus the application configuration and the defaults.
-  def configuration(opts \\ []) do
+  defp configuration(opts \\ []) do
     instance_id = Electric.Config.ensure_instance_id()
 
     core_config = core_configuration(opts)

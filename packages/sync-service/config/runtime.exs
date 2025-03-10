@@ -133,6 +133,8 @@ cache_max_age = env!("ELECTRIC_CACHE_MAX_AGE", :integer, nil)
 cache_stale_age = env!("ELECTRIC_CACHE_STALE_AGE", :integer, nil)
 statsd_host = env!("ELECTRIC_STATSD_HOST", :string?, nil)
 
+chunk_bytes_threshold = env!("ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD", :integer, nil)
+
 storage_dir = env!("ELECTRIC_STORAGE_DIR", :string, "./persistent")
 
 shape_path = Path.join(storage_dir, "./shapes")
@@ -155,8 +157,6 @@ persistent_kv =
     end,
     nil
   )
-
-chunk_bytes_threshold = env!("ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD", :integer, nil)
 
 storage =
   env!(
