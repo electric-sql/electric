@@ -2,7 +2,7 @@ name: "antithesis"
 
 services:
   postgres:
-    image: postgres-electric:latest
+    image: postgres-electric:2
     environment:
       POSTGRES_DB: electric
       POSTGRES_USER: postgres
@@ -20,13 +20,11 @@ services:
       - config_file=/etc/postgresql/postgresql.conf
 
   electric:
-    image: electric-antithesis:latest
+    image: electric-antithesis:2
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/electric?sslmode=disable
       ELECTRIC_USAGE_REPORTING: false
     ports:
       - 3000:3000
-    build:
-      context: ../packages/sync-service/
     depends_on:
       - postgres
