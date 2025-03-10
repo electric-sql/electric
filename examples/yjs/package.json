@@ -15,7 +15,7 @@
     "lint": "eslint . --ext js,ts,tsx --report-unused-disable-directives --max-warnings 0",
     "stylecheck": "eslint . --quiet",
     "typecheck": "tsc --noEmit",
-    "test:browser": "playwright test ./e2e/"
+    "test:browser": "playwright install && playwright test ./e2e/"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.3",
