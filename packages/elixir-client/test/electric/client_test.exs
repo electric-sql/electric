@@ -117,6 +117,10 @@ defmodule Electric.ClientTest do
 
       bypass = Bypass.open()
 
+      on_exit(fn ->
+        Bypass.down(bypass)
+      end)
+
       {:ok, %Client{params: ^params} = client} =
         Client.new(base_url: "http://localhost:#{bypass.port}", params: params)
 
@@ -293,9 +297,14 @@ defmodule Electric.ClientTest do
       assert_receive {:stream, 1, up_to_date()}
       assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
       assert_receive {:stream, 2, up_to_date()}
+      refute_receive _
 
-      {:ok, id2} = insert_item(ctx)
-      {:ok, id3} = insert_item(ctx)
+      {:ok, {id2, id3}} =
+        with_transaction(ctx, fn ctx ->
+          {:ok, id2} = insert_item(ctx)
+          {:ok, id3} = insert_item(ctx)
+          {id2, id3}
+        end)
 
       assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id2}}}, 5000
       assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id3}}}, 5000
@@ -304,6 +313,7 @@ defmodule Electric.ClientTest do
       assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id2}}}, 5000
       assert_receive {:stream, 2, %ChangeMessage{value: %{"id" => ^id3}}}, 5000
       assert_receive {:stream, 2, up_to_date()}
+      refute_receive _
     end
 
     test "sends full rows with replica: :full", ctx do
@@ -324,6 +334,7 @@ defmodule Electric.ClientTest do
 
       assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
       assert_receive {:stream, 1, up_to_date()}
+      refute_receive _
 
       :ok = update_item(ctx, id1, value: 999)
 
@@ -334,6 +345,7 @@ defmodule Electric.ClientTest do
                      500
 
       assert_receive {:stream, 1, up_to_date()}
+      refute_receive _
     end
   end
 
@@ -377,7 +389,7 @@ defmodule Electric.ClientTest do
     # think this is an issue with bypass. for very fast responses
     # the Req.request() function occasionally fails to return
     # this sleep seems to solve that
-    Process.sleep(2)
+    Process.sleep(5)
 
     conn
     |> Plug.Conn.put_resp_content_type("application/json")

@@ -47,6 +47,10 @@ defmodule Support.DbSetup do
     %{utility_pool: utility_pool, pool: pool, db_conn: pool, tablename: tablename}
   end
 
+  def with_transaction(%{db_conn: db} = ctx, func) do
+    Postgrex.transaction(db, fn conn -> func.(%{ctx | db_conn: conn}) end)
+  end
+
   def insert_item(%{db_conn: db, tablename: tablename}, opts \\ []) do
     insert_item(db, tablename, opts)
   end
