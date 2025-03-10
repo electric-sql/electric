@@ -1,11 +1,12 @@
 defmodule Electric.ShapeCache.FileStorage.LogFile do
   @moduledoc false
-  alias Electric.ShapeCache.FileStorage.KeyIndex
   alias Electric.LogItems
+  alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.FileStorage.ActionFile
   alias Electric.ShapeCache.FileStorage.ChunkIndex
-  alias Electric.Replication.LogOffset
+  alias Electric.ShapeCache.FileStorage.KeyIndex
   alias Electric.ShapeCache.LogChunker
+  alias Electric.Utils
 
   # 16 bytes offset + 4 bytes key size + 1 byte op type + 1 byte processed flag + 8 bytes json size = 30 bytes
   @line_overhead 16 + 4 + 1 + 1 + 8
@@ -90,7 +91,7 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
 
     ActionFile.stream(action_file_path)
     |> Stream.transform(
-      fn -> File.open!(log_file_path, [:read, :raw, :read_ahead]) end,
+      fn -> Utils.open_file_for_reading!(log_file_path) end,
       fn
         {_, :skip}, file ->
           _ = read_line(file)
@@ -241,7 +242,7 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
 
   defp stream_jsons(log_file_path, start_position, end_position, exclusive_min_offset) do
     # We can read ahead entire chunk into memory since chunk sizes are expected to be ~10MB by default,
-    file = File.open!(log_file_path, [:read, :raw])
+    file = Utils.open_file_for_reading!(log_file_path)
 
     try do
       with {:ok, data} <- :file.pread(file, start_position, end_position - start_position) do

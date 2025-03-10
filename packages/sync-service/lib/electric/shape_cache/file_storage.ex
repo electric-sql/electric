@@ -1,12 +1,15 @@
 defmodule Electric.ShapeCache.FileStorage do
   use Retry
-  require Logger
 
+  import Electric.Replication.LogOffset, only: :macros
+
+  alias __MODULE__, as: FS
+  alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.LogChunker
   alias Electric.Telemetry.OpenTelemetry
-  alias Electric.Replication.LogOffset
-  import Electric.Replication.LogOffset, only: :macros
-  alias __MODULE__, as: FS
+  alias Electric.Utils
+
+  require Logger
 
   # If the storage format changes, increase `@version` to prevent
   # the incompatable older versions being read
@@ -331,7 +334,8 @@ defmodule Electric.ShapeCache.FileStorage do
       stack_id: opts.stack_id
     )
 
-    File.open!(snapshot_chunk_path(opts, chunk_number), [:write, :raw])
+    snapshot_chunk_path(opts, chunk_number)
+    |> Utils.open_file_for_writing!()
   end
 
   def snapshot_chunk_path(opts, chunk_number)

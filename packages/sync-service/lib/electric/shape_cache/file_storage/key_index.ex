@@ -24,7 +24,7 @@ defmodule Electric.ShapeCache.FileStorage.KeyIndex do
       stream,
       # We're using delayed writes to avoid interfering with writing the log. Write size here is 64KB or 1s delay
       # It's used here because we're writing a line per log line, so this reduces disk contention
-      fn -> {File.open!(path, [:write, :raw, {:delayed_write, 64 * 1024, 1000}]), 0} end,
+      fn -> {Utils.open_file_for_writing!(path, [{:delayed_write, 64 * 1024, 1000}]), 0} end,
       fn {log_offset, key_size, key, op_type, _, json_size, _} = line, {file, write_position} ->
         IO.binwrite(
           file,
@@ -54,7 +54,7 @@ defmodule Electric.ShapeCache.FileStorage.KeyIndex do
   @spec stream(path :: String.t()) :: Enumerable.t(key_index_item())
   def stream(path) do
     Stream.resource(
-      fn -> File.open!(path, [:read, :raw, :read_ahead]) end,
+      fn -> Utils.open_file_for_reading!(path) end,
       fn file ->
         with <<key_size::32>> <- IO.binread(file, 4),
              <<key::binary-size(key_size)>> <- IO.binread(file, key_size),

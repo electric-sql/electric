@@ -573,7 +573,7 @@ defmodule Electric.Utils do
   def stream_file_items(path, item_reader) when is_function(item_reader, 1) do
     Stream.resource(
       fn ->
-        File.open!(path, [:read, :raw])
+        open_file_for_reading!(path)
       end,
       fn file ->
         case item_reader.(file) do
@@ -610,12 +610,12 @@ defmodule Electric.Utils do
       fn ->
         {halted, values_and_files} =
           paths
-          |> Enum.map(&File.open!(&1, [:read, :raw]))
+          |> Enum.map(&open_file_for_reading!/1)
           |> Enum.map(&{reader.(&1), &1})
           |> Enum.split_with(&match?({:halt, _}, &1))
 
         halted_files = Enum.map(halted, fn {:halt, file} -> file end)
-        target_file = File.open!(target_path, [:write, :raw])
+        target_file = open_file_for_writing!(target_path)
 
         {values_and_files, halted_files, target_file}
       end,
@@ -711,5 +711,22 @@ defmodule Electric.Utils do
   def write_stream_to_file!(stream, path, modes \\ []) do
     Enum.into(stream, File.stream!(path, modes))
     :ok
+  end
+
+  @doc """
+  Open the file in raw mode with buffering.
+  """
+  @spec open_file_for_reading!(Path.t()) :: File.file_descriptor()
+  def open_file_for_reading!(path) do
+    File.open!(path, [:raw, :read, :read_ahead])
+  end
+
+  @doc """
+  Open the file in raw mode but no buffering, to avoid the edge case when an error while
+  closing the file leaves it open. See the docs for `:file.close/1`.
+  """
+  @spec open_file_for_writing!(Path.t(), [File.mode()]) :: File.file_descriptor()
+  def open_file_for_writing!(path, extra_modes \\ []) do
+    File.open!(path, [:raw, :write] ++ extra_modes)
   end
 end

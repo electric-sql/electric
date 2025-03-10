@@ -30,7 +30,7 @@ defmodule Electric.ShapeCache.FileStorage.ChunkIndex do
     Utils.stream_add_side_effect(
       stream,
       # agg is {file, write_position, byte_count, last_seen_offset}
-      fn -> {File.open!(path, [:write, :raw]), 0, 0, nil} end,
+      fn -> {Utils.open_file_for_writing!(path), 0, 0, nil} end,
       fn {offset, _, _, _, _, json_size, _} = line,
          {file, write_position, byte_count, last_seen_offset} ->
         # Start the chunk if there's no last offset
@@ -73,7 +73,7 @@ defmodule Electric.ShapeCache.FileStorage.ChunkIndex do
            {start_position :: non_neg_integer, end_position :: non_neg_integer}}
           | :error
   def fetch_chunk(chunk_file_path, %LogOffset{} = exclusive_min_offset) do
-    file = File.open!(chunk_file_path, [:read, :raw])
+    file = Utils.open_file_for_reading!(chunk_file_path)
     {:ok, size} = :file.position(file, :eof)
 
     try do
