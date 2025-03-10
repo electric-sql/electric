@@ -1,0 +1,13 @@
+#!/bin/bash
+set -ex
+
+TENANT_NAME=electricsql
+
+publish() {
+  docker tag $1 us-central1-docker.pkg.dev/molten-verve-216720/$TENANT_NAME-repository/$1
+  docker push us-central1-docker.pkg.dev/molten-verve-216720/$TENANT_NAME-repository/$1
+}
+
+publish electric-antithesis
+
+publish antithesis-config
