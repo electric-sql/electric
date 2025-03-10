@@ -72,7 +72,7 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
           json
         ]
     end)
-    |> Electric.Utils.write_stream_to_file!(log_file_path)
+    |> Enum.into(File.stream!(log_file_path))
 
     {log_file_path, log_file_path <> ".chunk_index", log_file_path <> ".key_index"}
   end
