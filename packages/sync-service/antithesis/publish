@@ -3,11 +3,10 @@ set -ex
 
 TENANT_NAME=electricsql
 REPO=us-central1-docker.pkg.dev/molten-verve-216720/$TENANT_NAME-repository
-VERSION=6
 
 publish() {
-  docker tag $1 $REPO/$1:$VERSION
-  docker push $REPO/$1:$VERSION
+  docker tag $1 $REPO/$1
+  docker push $REPO/$1
 }
 
 publish electric-antithesis
@@ -15,5 +14,5 @@ publish electric-antithesis
 publish antithesis-config
 
 docker pull postgres:16-alpine
-docker tag postgres:16-alpine $REPO/postgres-electric:$VERSION
-docker push $REPO/postgres-electric:$VERSION
+docker tag postgres:16-alpine $REPO/postgres-electric
+docker push $REPO/postgres-electric
