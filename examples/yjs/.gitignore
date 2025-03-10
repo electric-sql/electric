@@ -9,5 +9,8 @@ dist
 /out/
 next-env.d.ts
 
-# playwright
+# Playwright
 test-results
+/playwright-report/
+/blob-report/
+/playwright/.cache/

@@ -60,8 +60,8 @@ export default $config({
       command: `pnpm test:browser`,
       dir: `../../`,
       environment: {
-        BASE_URL: service.url
-      }
+        BASE_URL: $dev ? `http://localhost:5173` : service.url,
+      },
     })
 
     return {
