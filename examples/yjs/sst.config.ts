@@ -43,8 +43,8 @@ export default $config({
       },
       transform: {
         service: {
-          waitForSteadyState: true
-        }
+          waitForSteadyState: true,
+        },
       },
       environment: {
         ELECTRIC_URL: process.env.ELECTRIC_API!,
