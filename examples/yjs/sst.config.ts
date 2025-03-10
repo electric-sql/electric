@@ -41,6 +41,11 @@ export default $config({
           dns: sst.cloudflare.dns(),
         },
       },
+      transform: {
+        service: {
+          waitForSteadyState: true
+        }
+      },
       environment: {
         ELECTRIC_URL: process.env.ELECTRIC_API!,
         DATABASE_URL: pooledDatabaseUri,
