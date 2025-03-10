@@ -3,15 +3,14 @@ defmodule Electric.UtilsTest do
   use ExUnit.Case, async: true
   doctest Utils, import: true
 
+  @moduletag :tmp_dir
+
   defp make_sorted_test_file(path, keys) do
     Stream.map(keys, fn key -> <<key::32, :crypto.strong_rand_bytes(40)::binary>> end)
-    |> Stream.into(File.stream!(path))
-    |> Stream.run()
+    |> Enum.into(File.stream!(path))
   end
 
   describe "merge_sorted_files/4" do
-    @describetag :tmp_dir
-
     test "should merge sorted files using the reader", %{tmp_dir: dir} do
       path1 = Path.join(dir, "test1.bin")
       path2 = Path.join(dir, "test2.bin")
@@ -37,23 +36,8 @@ defmodule Electric.UtilsTest do
   end
 
   describe "external_merge_sort/4" do
-    @describetag :tmp_dir
-
     setup %{tmp_dir: tmp_dir, file_size: size} do
-      path = Path.join(tmp_dir, "test.txt")
-
-      Stream.unfold(0, fn
-        bytes when bytes >= size ->
-          nil
-
-        bytes ->
-          {<<Enum.random(0..0xFFFFFFFF)::32, :crypto.strong_rand_bytes(40)::binary>>,
-           bytes + 4 + 40}
-      end)
-      |> Stream.into(File.stream!(path))
-      |> Stream.run()
-
-      {:ok, %{path: path}}
+      %{path: tmp_file_with_random_contents(tmp_dir, "test.txt", size)}
     end
 
     @tag file_size: 1_000
@@ -82,8 +66,7 @@ defmodule Electric.UtilsTest do
           {<<Enum.random(0..0xFFFFFFFF)::32, :crypto.strong_rand_bytes(18)::binary, ?\r, ?\n,
              :crypto.strong_rand_bytes(20)::binary>>, bytes + 4 + 40}
       end)
-      |> Stream.into(File.stream!(path))
-      |> Stream.run()
+      |> Enum.into(File.stream!(path))
 
       refute stream_sorted?(stream_test_file(path))
       assert :ok = Utils.external_merge_sort(path, &read_next_item_test_file/1, &<=/2, 1_000)
@@ -92,6 +75,35 @@ defmodule Electric.UtilsTest do
       for {_, line} <- stream_test_file(path) do
         assert <<_::32, _::binary-size(18), ?\r, ?\n, _::binary-size(20)>> = line
       end
+    end
+  end
+
+  describe "concat_files/3" do
+    @num_subtests 10
+
+    test "concats files verbatim", %{tmp_dir: tmp_dir} do
+      counts = [3, 5, 7]
+      sizes = [1000, 10_000, 100_000]
+      output_path = Path.join(tmp_dir, "output.txt")
+
+      Stream.repeatedly(fn -> Enum.random(counts) end)
+      |> Stream.with_index()
+      |> Stream.take(@num_subtests)
+      |> Enum.each(fn {count, i} ->
+        paths =
+          Enum.map(1..count, fn j ->
+            filename = "test_#{i}_#{j}.txt"
+            size = Enum.random(sizes)
+            tmp_file_with_random_contents(tmp_dir, filename, size)
+          end)
+
+        :ok = Utils.concat_files(paths, output_path)
+
+        concatenated_contents =
+          Enum.reduce(paths, "", fn path, bin -> bin <> File.read!(path) end)
+
+        assert concatenated_contents == File.read!(output_path)
+      end)
     end
   end
 
@@ -122,5 +134,21 @@ defmodule Electric.UtilsTest do
       end
     end)
     |> elem(0)
+  end
+
+  defp tmp_file_with_random_contents(tmp_dir, filename, size) do
+    path = Path.join(tmp_dir, filename)
+
+    Stream.unfold(0, fn
+      bytes when bytes >= size ->
+        nil
+
+      bytes ->
+        {<<Enum.random(0..0xFFFFFFFF)::32, :crypto.strong_rand_bytes(40)::binary>>,
+         bytes + 4 + 40}
+    end)
+    |> Enum.into(File.stream!(path))
+
+    path
   end
 end

@@ -42,8 +42,7 @@ defmodule Electric.ShapeCache.FileStorage.ActionFile do
         updates -> updates_to_actions(updates)
       end)
     end)
-    |> Stream.into(File.stream!(action_file_path))
-    |> Stream.run()
+    |> Enum.into(File.stream!(action_file_path))
 
     Utils.external_merge_sort(action_file_path, &stream_for_sorting/1)
   end

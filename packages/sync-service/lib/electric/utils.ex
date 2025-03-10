@@ -514,19 +514,32 @@ defmodule Electric.Utils do
   @type sortable_binary(key) :: {key :: key, data :: binary()}
   @type item_reader_fn(elem) :: (file :: :file.io_device() -> sortable_binary(elem) | :halt)
 
+  # Default chunk size to use when externally sorting a file.
+  # 50 MB
+  @external_sort_chunk_size 50 * 1024 * 1024
+
   @doc """
   Performs external merge sort on a file.
 
   ## Parameters
-    * `path` - Path to the file to sort
+
+    * `path` - Path to the file to sort.
+
     * `reader` - Function that takes a file path and returns a stream of records. Records should be
       in the form of `{key, binary}`, where `binary` will be written to the file sorted by `key`.
-    * `sorter` - Function that compares two keys, should return true if first argument is less than or equal to second
-    * `chunk_size` - Byte size of each chunk (i.e. how much is sorted in memory at once). Uses 50 MB by default.
+
+    * `sorter` - Function that compares two keys, should return true if first argument is less
+      than or equal to second.
+
+    * `chunk_size` - Byte size of each chunk (i.e. how much is sorted in memory at once). Uses
+      #{@external_sort_chunk_size} bytes by default.
 
   The function will:
-  1. Split the input file into sorted temporary chunks
-  2. Merge the sorted chunks back into the original file
+
+    1. Split the input file into sorted temporary chunks
+
+    2. Merge the sorted chunks back into the original file
+
   """
   @spec external_merge_sort(
           path :: String.t(),
@@ -534,7 +547,7 @@ defmodule Electric.Utils do
           sorter :: (elem, elem -> boolean())
         ) :: :ok
         when elem: var
-  def external_merge_sort(path, reader, sorter \\ &<=/2, chunk_size \\ 50 * 1024 * 1024) do
+  def external_merge_sort(path, reader, sorter \\ &<=/2, chunk_size \\ @external_sort_chunk_size) do
     tmp_dir = Path.join(System.tmp_dir!(), "external_sort_#{:erlang.system_time()}")
     File.mkdir_p!(tmp_dir)
 
@@ -558,8 +571,7 @@ defmodule Electric.Utils do
       chunk
       |> Enum.sort(sorter)
       |> Stream.map(fn {_, value} -> value end)
-      |> Stream.into(File.stream!(chunk_path))
-      |> Stream.run()
+      |> Enum.into(File.stream!(chunk_path))
 
       chunk_path
     end)
@@ -676,13 +688,16 @@ defmodule Electric.Utils do
     )
   end
 
-  def concat_files(paths, into) do
-    # `:file.copy` is not optimized to use a syscall, so basic stream forming is good enough
-    paths
-    |> Enum.map(&File.stream!/1)
-    |> Stream.concat()
-    |> Stream.into(File.stream!(into))
-    |> Stream.run()
+  @doc """
+  `File.copy!()` uses `:file.copy()` under the hood. The latter reads the contents from the source
+  file and writes them into the destination file in chunks of 65536 bytes.
+  """
+
+  @spec concat_files([Path.t()], Path.t()) :: :ok
+  def concat_files(source_paths, dst_path) do
+    File.open!(dst_path, [:raw, :write], fn dst_io_device ->
+      Enum.each(source_paths, &File.copy!(&1, dst_io_device))
+    end)
   end
 
   @doc """
