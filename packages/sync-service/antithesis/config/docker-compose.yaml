@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
-      - 54321:5432
+      - 54323:5432
     volumes:
       - ./postgres.conf:/etc/postgresql/postgresql.conf:ro
     tmpfs:
