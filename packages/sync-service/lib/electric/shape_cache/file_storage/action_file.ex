@@ -57,7 +57,7 @@ defmodule Electric.ShapeCache.FileStorage.ActionFile do
           )
   def stream(action_file_path) do
     Stream.resource(
-      fn -> Utils.open_file_for_reading!(action_file_path) end,
+      fn -> File.open!(action_file_path, [:read, :raw, :read_ahead]) end,
       fn file ->
         case IO.binread(file, 17) do
           :eof ->
