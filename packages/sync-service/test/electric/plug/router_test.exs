@@ -1153,6 +1153,58 @@ defmodule Electric.Plug.RouterTest do
 
       assert allowed_methods == MapSet.new(["GET", "HEAD", "OPTIONS", "DELETE"])
     end
+
+    @tag slow: true
+    test "GET with a concurrent transaction doesn't crash irrecoverably", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      # Start a transaction that has a lock on `items`.
+      %{pid: child} =
+        Task.async(fn ->
+          Postgrex.transaction(db_conn, fn tx_conn ->
+            Postgrex.query!(
+              tx_conn,
+              "INSERT INTO items VALUES (gen_random_uuid(), 'test value')",
+              []
+            )
+
+            receive do
+              :continue -> :ok
+            end
+          end)
+        end)
+
+      # This can't alter the publication, so crashes
+      assert %{status: 500, resp_body: body} =
+               conn("GET", "/v1/shape?table=items&offset=-1")
+               |> Router.call(opts)
+
+      assert %{"message" => "Unable to retrieve shape log" <> _} = Jason.decode!(body)
+
+      # Now we can continue
+      send(child, :continue)
+
+      # This should work now
+      assert %{status: 200, resp_body: body} =
+               conn("GET", "/v1/shape?table=items&offset=-1")
+               |> Router.call(opts)
+
+      assert [_] = Jason.decode!(body)
+
+      # And the identity should be correctly set too
+      assert %{rows: [["f"]]} =
+               Postgrex.query!(
+                 db_conn,
+                 """
+                 SELECT relreplident
+                 FROM pg_class
+                 JOIN pg_namespace ON relnamespace = pg_namespace.oid
+                 WHERE relname = $2 AND nspname = $1
+                 """,
+                 ["public", "items"]
+               )
+    end
   end
 
   describe "404" do
