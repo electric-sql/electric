@@ -524,7 +524,16 @@ defmodule Electric.Connection.Manager do
     # See https://github.com/electric-sql/electric/issues/1554
     Postgrex.start_link(
       pool_opts ++
-        [backoff_type: :exp, max_restarts: 3, max_seconds: 5] ++
+        [
+          backoff_type: :exp,
+          max_restarts: 3,
+          max_seconds: 5,
+          # Assume the manager connection might be pooled, so use unnamed prepared
+          # statements to avoid issues with the pooler
+          #
+          # See https://hexdocs.pm/postgrex/0.19.3/readme.html#pgbouncer
+          prepare: :unnamed
+        ] ++
         Electric.Utils.deobfuscate_password(connection_opts)
     )
   end
