@@ -98,7 +98,7 @@ defmodule Electric.Replication.PublicationManager do
   def add_shape(shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
 
-    case GenServer.call(server, {:add_shape, shape}) do
+    case GenServer.call(server, {:add_shape, shape}, 30_000) do
       :ok -> :ok
       {:error, err} -> raise err
     end
