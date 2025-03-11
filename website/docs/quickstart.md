@@ -31,13 +31,10 @@ Then download and run this [docker-compose.yaml](https://github.com/electric-sql
 
 ```sh
 curl -O https://electric-sql.com/docker-compose.yaml
-ELECTRIC_INSECURE=true docker compose up
+docker compose up
 ```
 
 You can now start using Electric!
-
-> [!Warning] Do not use insecure mode in production
-> Only use insecure mode in development or if you've otherwise secured the Electric API.
 
 ## HTTP API
 
