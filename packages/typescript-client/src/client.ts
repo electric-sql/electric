@@ -362,21 +362,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       createFetchWithChunkBuffer(fetchWithBackoffClient)
     )
 
-    if (
-      typeof document === `object` &&
-      typeof document.hidden === `boolean` &&
-      typeof document.addEventListener === `function`
-    ) {
-      this.#visibilityHandler = () => {
-        if (document.hidden) {
-          this.pause()
-        } else {
-          this.resume()
-        }
-      }
-
-      document.addEventListener(`visibilitychange`, this.#visibilityHandler)
-    }
+    this.#subscribeToVisibilityChanges()
   }
 
   get shapeHandle() {
@@ -660,6 +646,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#started
   }
 
+  isPaused(): boolean {
+    return this.#paused
+  }
+
   /** Await the next tick of the request loop */
   async #nextTick() {
     if (this.#tickPromise) {
@@ -714,6 +704,30 @@ export class ShapeStream<T extends Row<unknown> = Row>
     })
   }
 
+  #subscribeToVisibilityChanges() {
+    if (
+      typeof document === `object` &&
+      typeof document.hidden === `boolean` &&
+      typeof document.addEventListener === `function`
+    ) {
+      this.#visibilityHandler = () => {
+        if (document.hidden) {
+          this.pause()
+        } else {
+          this.resume()
+        }
+      }
+
+      document.addEventListener(`visibilitychange`, this.#visibilityHandler)
+    }
+  }
+
+  #unsubscribeFromVisibilityChanges() {
+    if (this.#visibilityHandler) {
+      document.removeEventListener(`visibilitychange`, this.#visibilityHandler)
+    }
+  }
+
   /**
    * Resets the state of the stream, optionally with a provided
    * shape handle
@@ -725,12 +739,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#isUpToDate = false
     this.#connected = false
     this.#schema = undefined
-  }
-
-  unsubscribeFromVisibilityChange() {
-    if (this.#visibilityHandler) {
-      document.removeEventListener(`visibilitychange`, this.#visibilityHandler)
-    }
   }
 }
 
