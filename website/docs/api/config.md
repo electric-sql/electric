@@ -96,7 +96,7 @@ Suffix for the logical replication publication and slot name.
     example="1U6ItbhoQb4kGUU5wXBLbxvNf">
 
 Secret for shape requests to the [HTTP API](/docs/api/http). This is required unless `ELECTRIC_INSECURE` is set to `true`.
-By default, the Electric API is public and all shape requests must include the secret.
+By default, the Electric API is public and authorises all shape requests against this secret.
 More details are available in the [security guide](/docs/guides/security).
 
 </EnvVarConfig>
