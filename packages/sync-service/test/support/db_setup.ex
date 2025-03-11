@@ -9,8 +9,9 @@ defmodule Support.DbSetup do
   ]
 
   def with_unique_db(ctx) do
-    base_config = Application.fetch_env!(:electric, :replication_connection_opts)
-    {:ok, utility_pool} = start_db_pool(base_config)
+    replication_config = Application.fetch_env!(:electric, :replication_connection_opts)
+    query_config = Application.fetch_env!(:electric, :query_connection_opts)
+    {:ok, utility_pool} = start_db_pool(replication_config)
     Process.unlink(utility_pool)
 
     full_db_name = to_string(ctx.test)
@@ -21,8 +22,7 @@ defmodule Support.DbSetup do
     db_name = "#{db_name_hash} ~ #{String.slice(full_db_name, 0..50)}"
 
     escaped_db_name = :binary.replace(db_name, ~s'"', ~s'""', [:global])
-
-    Postgrex.query!(utility_pool, "DROP DATABASE IF EXISTS \"#{escaped_db_name}\"", [])
+    drop_database(utility_pool, escaped_db_name)
     Postgrex.query!(utility_pool, "CREATE DATABASE \"#{escaped_db_name}\"", [])
 
     Enum.each(database_settings(ctx), fn setting ->
@@ -31,26 +31,57 @@ defmodule Support.DbSetup do
 
     on_exit(fn ->
       Process.link(utility_pool)
-
-      # Make multiple 100ms-spaced attempts to drop the DB because sometimes the replication stream takes some time to stop
-      Enum.reduce_while(1..3, :ok, fn _, _ ->
-        case Postgrex.query(utility_pool, "DROP DATABASE \"#{escaped_db_name}\"", []) do
-          {:ok, _} -> {:halt, :ok}
-          {:error, %{postgres: %{code: :object_in_use}}} -> {:cont, Process.sleep(100)}
-        end
-      end)
-
+      drop_database(utility_pool, escaped_db_name)
       GenServer.stop(utility_pool)
     end)
 
-    updated_config =
-      base_config
+    updated_replication_config =
+      replication_config
       |> Keyword.put(:database, db_name)
       |> Keyword.merge(List.wrap(ctx[:connection_opt_overrides]))
 
-    {:ok, pool} = start_db_pool(updated_config)
+    updated_query_config =
+      query_config
+      |> Keyword.put(:database, db_name)
+      |> Keyword.merge(List.wrap(ctx[:connection_opt_overrides]))
 
-    {:ok, %{utility_pool: utility_pool, db_config: updated_config, pool: pool, db_conn: pool}}
+    {:ok, pool} = start_db_pool(updated_query_config)
+
+    {:ok,
+     %{
+       utility_pool: utility_pool,
+       db_config: updated_replication_config,
+       pooled_db_config: updated_query_config,
+       pool: pool,
+       db_conn: pool
+     }}
+  end
+
+  defp drop_database(pool, escaped_db_name) do
+    DBConnection.run(
+      pool,
+      fn conn ->
+        # Terminate any active connections to the database except the current one
+        Postgrex.query!(conn, "
+          SELECT pg_terminate_backend(pid)
+          FROM pg_stat_activity
+          WHERE datname = $1
+          AND pid <> pg_backend_pid();
+        ", [escaped_db_name])
+
+        # Make multiple 100ms-spaced attempts to drop the DB because sometimes the replication stream takes some time to stop
+        Enum.reduce_while(1..20, :ok, fn _, _ ->
+          case Postgrex.query(conn, "DROP DATABASE IF EXISTS \"#{escaped_db_name}\"", []) do
+            {:ok, _} ->
+              {:halt, :ok}
+
+            {:error, %{postgres: %{code: :object_in_use}}} ->
+              {:cont, Process.sleep(100)}
+          end
+        end)
+      end,
+      timeout: 20000
+    )
   end
 
   def with_publication(ctx) do
