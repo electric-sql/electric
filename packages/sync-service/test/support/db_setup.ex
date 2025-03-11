@@ -45,7 +45,7 @@ defmodule Support.DbSetup do
       |> Keyword.put(:database, db_name)
       |> Keyword.merge(List.wrap(ctx[:connection_opt_overrides]))
 
-    {:ok, pool} = start_db_pool(updated_query_config)
+    {:ok, pool} = start_db_pool(updated_replication_config)
 
     {:ok,
      %{
