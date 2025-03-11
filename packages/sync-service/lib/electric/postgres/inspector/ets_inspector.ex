@@ -33,7 +33,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   def load_relation(table, opts) do
     case relation_from_ets(table, opts) do
       :not_found ->
-        GenServer.call(opts[:server], {:load_relation, table})
+        GenServer.call(opts[:server], {:load_relation, table}, 30_000)
 
       rel ->
         {:ok, rel}
