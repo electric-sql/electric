@@ -37,6 +37,7 @@ import {
   TABLE_QUERY_PARAM,
   REPLICA_PARAM,
   FORCE_DISCONNECT_AND_REFRESH,
+  PAUSE_POLLING,
 } from './constants'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
@@ -320,6 +321,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   >()
 
   #started = false
+  #paused = false
   #lastOffset: Offset
   #liveCacheBuster: string // Seconds since our Electric Epoch 😎
   #lastSyncedAt?: number // unix time
@@ -333,6 +335,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #tickPromise?: Promise<void>
   #tickPromiseResolver?: () => void
   #tickPromiseRejecter?: (reason?: unknown) => void
+  #visibilityHandler?: () => void
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -358,6 +361,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#fetchClient = createFetchWithResponseHeadersCheck(
       createFetchWithChunkBuffer(fetchWithBackoffClient)
     )
+
+    if (document) {
+      this.#visibilityHandler = () => {
+        if (document.hidden) {
+          this.pause()
+        } else {
+          this.resume()
+        }
+      }
+
+      document.addEventListener(`visibilitychange`, this.#visibilityHandler)
+    }
   }
 
   get shapeHandle() {
@@ -376,183 +391,184 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#lastOffset
   }
 
-  async #start() {
-    if (this.#started) throw new Error(`Cannot start stream twice`)
+  async #start(): Promise<void> {
     this.#started = true
 
     try {
-      while (
-        (!this.options.signal?.aborted && !this.#isUpToDate) ||
-        this.options.subscribe
-      ) {
-        const { url, signal } = this.options
-
-        // Resolve headers and params in parallel
-        const [requestHeaders, params] = await Promise.all([
-          resolveHeaders(this.options.headers),
-          this.options.params
-            ? toInternalParams(this.options.params)
-            : undefined,
-        ])
-
-        // Validate params after resolution
-        if (params) {
-          validateParams(params)
-        }
-
-        const fetchUrl = new URL(url)
-
-        // Add PostgreSQL-specific parameters
-        if (params) {
-          if (params.table)
-            fetchUrl.searchParams.set(TABLE_QUERY_PARAM, params.table)
-          if (params.where)
-            fetchUrl.searchParams.set(WHERE_QUERY_PARAM, params.where)
-          if (params.columns)
-            fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, params.columns)
-          if (params.replica)
-            fetchUrl.searchParams.set(REPLICA_PARAM, params.replica)
-
-          // Add any remaining custom parameters
-          const customParams = { ...params }
-          delete customParams.table
-          delete customParams.where
-          delete customParams.columns
-          delete customParams.replica
-
-          for (const [key, value] of Object.entries(customParams)) {
-            fetchUrl.searchParams.set(key, value as string)
-          }
-        }
-
-        // Add Electric's internal parameters
-        fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
-
-        if (this.#isUpToDate) {
-          if (!this.#isRefreshing) {
-            fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
-          }
-          fetchUrl.searchParams.set(
-            LIVE_CACHE_BUSTER_QUERY_PARAM,
-            this.#liveCacheBuster
-          )
-        }
-
-        if (this.#shapeHandle) {
-          // This should probably be a header for better cache breaking?
-          fetchUrl.searchParams.set(
-            SHAPE_HANDLE_QUERY_PARAM,
-            this.#shapeHandle!
-          )
-        }
-
-        // sort query params in-place for stable URLs and improved cache hits
-        fetchUrl.searchParams.sort()
-
-        // Create a new AbortController for this request
-        this.#requestAbortController = new AbortController()
-
-        // If user provided a signal, listen to it and pass on the reason for the abort
-        let abortListener: (() => void) | undefined
-        if (signal) {
-          abortListener = () => {
-            this.#requestAbortController?.abort(signal.reason)
-          }
-          signal.addEventListener(`abort`, abortListener, { once: true })
-          if (signal.aborted) {
-            // If the signal is already aborted, abort the request immediately
-            this.#requestAbortController?.abort(signal.reason)
-          }
-        }
-
-        let response!: Response
-        try {
-          response = await this.#fetchClient(fetchUrl.toString(), {
-            signal: this.#requestAbortController.signal,
-            headers: requestHeaders,
-          })
-          this.#connected = true
-        } catch (e) {
-          // Handle abort error triggered by refresh
-          if (
-            (e instanceof FetchError || e instanceof FetchBackoffAbortError) &&
-            this.#requestAbortController.signal.aborted &&
-            this.#requestAbortController.signal.reason ===
-              FORCE_DISCONNECT_AND_REFRESH
-          ) {
-            // Loop back to the top of the while loop to start a new request
-            continue
-          }
-
-          if (e instanceof FetchBackoffAbortError) break // interrupted
-          if (!(e instanceof FetchError)) throw e // should never happen
-
-          if (e.status == 409) {
-            // Upon receiving a 409, we should start from scratch
-            // with the newly provided shape handle
-            const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
-            this.#reset(newShapeHandle)
-            await this.#publish(e.json as Message<T>[])
-            continue
-          } else if (e.status >= 400 && e.status < 500) {
-            // Notify subscribers
-            this.#sendErrorToSubscribers(e)
-
-            // 400 errors are not actionable without additional user input,
-            // so we exit the loop
-            throw e
-          }
-        } finally {
-          if (abortListener && signal) {
-            signal.removeEventListener(`abort`, abortListener)
-          }
-          this.#requestAbortController = undefined
-        }
-
-        const { headers, status } = response
-        const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
-        if (shapeHandle) {
-          this.#shapeHandle = shapeHandle
-        }
-
-        const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
-        if (lastOffset) {
-          this.#lastOffset = lastOffset as Offset
-        }
-
-        const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
-        if (liveCacheBuster) {
-          this.#liveCacheBuster = liveCacheBuster
-        }
-
-        const getSchema = (): Schema => {
-          const schemaHeader = headers.get(SHAPE_SCHEMA_HEADER)
-          return schemaHeader ? JSON.parse(schemaHeader) : {}
-        }
-        this.#schema = this.#schema ?? getSchema()
-
-        const messages = status === 204 ? `[]` : await response.text()
-
-        if (status === 204) {
-          // There's no content so we are live and up to date
-          this.#lastSyncedAt = Date.now()
-        }
-
-        const batch = this.#messageParser.parse(messages, this.#schema)
-
-        // Update isUpToDate
-        if (batch.length > 0) {
-          const lastMessage = batch[batch.length - 1]
-          if (isUpToDateMessage(lastMessage)) {
-            this.#lastSyncedAt = Date.now()
-            this.#isUpToDate = true
-          }
-
-          await this.#publish(batch)
-        }
-
-        this.#tickPromiseResolver?.()
+      if (this.#paused) {
+        return
       }
+
+      if (
+        !this.options.subscribe &&
+        (this.options.signal?.aborted || this.#isUpToDate)
+      ) {
+        return
+      }
+
+      const { url, signal } = this.options
+
+      // Resolve headers and params in parallel
+      const [requestHeaders, params] = await Promise.all([
+        resolveHeaders(this.options.headers),
+        this.options.params ? toInternalParams(this.options.params) : undefined,
+      ])
+
+      // Validate params after resolution
+      if (params) {
+        validateParams(params)
+      }
+
+      const fetchUrl = new URL(url)
+
+      // Add PostgreSQL-specific parameters
+      if (params) {
+        if (params.table)
+          fetchUrl.searchParams.set(TABLE_QUERY_PARAM, params.table)
+        if (params.where)
+          fetchUrl.searchParams.set(WHERE_QUERY_PARAM, params.where)
+        if (params.columns)
+          fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, params.columns)
+        if (params.replica)
+          fetchUrl.searchParams.set(REPLICA_PARAM, params.replica)
+
+        // Add any remaining custom parameters
+        const customParams = { ...params }
+        delete customParams.table
+        delete customParams.where
+        delete customParams.columns
+        delete customParams.replica
+
+        for (const [key, value] of Object.entries(customParams)) {
+          fetchUrl.searchParams.set(key, value as string)
+        }
+      }
+
+      // Add Electric's internal parameters
+      fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
+
+      if (this.#isUpToDate) {
+        if (!this.#isRefreshing) {
+          fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
+        }
+        fetchUrl.searchParams.set(
+          LIVE_CACHE_BUSTER_QUERY_PARAM,
+          this.#liveCacheBuster
+        )
+      }
+
+      if (this.#shapeHandle) {
+        // This should probably be a header for better cache breaking?
+        fetchUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, this.#shapeHandle!)
+      }
+
+      // sort query params in-place for stable URLs and improved cache hits
+      fetchUrl.searchParams.sort()
+
+      // Create a new AbortController for this request
+      this.#requestAbortController = new AbortController()
+
+      // If user provided a signal, listen to it and pass on the reason for the abort
+      let abortListener: (() => void) | undefined
+      if (signal) {
+        abortListener = () => {
+          this.#requestAbortController?.abort(signal.reason)
+        }
+        signal.addEventListener(`abort`, abortListener, { once: true })
+        if (signal.aborted) {
+          // If the signal is already aborted, abort the request immediately
+          this.#requestAbortController?.abort(signal.reason)
+        }
+      }
+
+      let response!: Response
+      try {
+        response = await this.#fetchClient(fetchUrl.toString(), {
+          signal: this.#requestAbortController.signal,
+          headers: requestHeaders,
+        })
+        this.#connected = true
+      } catch (e) {
+        // Handle abort error triggered by refresh
+        if (
+          (e instanceof FetchError || e instanceof FetchBackoffAbortError) &&
+          this.#requestAbortController.signal.aborted &&
+          this.#requestAbortController.signal.reason ===
+            FORCE_DISCONNECT_AND_REFRESH
+        ) {
+          // Loop back to the top of the while loop to start a new request
+          return this.#start()
+        }
+
+        if (e instanceof FetchBackoffAbortError) return // interrupted
+        if (!(e instanceof FetchError)) throw e // should never happen
+
+        if (e.status == 409) {
+          // Upon receiving a 409, we should start from scratch
+          // with the newly provided shape handle
+          const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
+          this.#reset(newShapeHandle)
+          await this.#publish(e.json as Message<T>[])
+          return this.#start()
+        } else if (e.status >= 400 && e.status < 500) {
+          // Notify subscribers
+          this.#sendErrorToSubscribers(e)
+
+          // 400 errors are not actionable without additional user input,
+          // so we exit the loop
+          throw e
+        }
+      } finally {
+        if (abortListener && signal) {
+          signal.removeEventListener(`abort`, abortListener)
+        }
+        this.#requestAbortController = undefined
+      }
+
+      const { headers, status } = response
+      const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
+      if (shapeHandle) {
+        this.#shapeHandle = shapeHandle
+      }
+
+      const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
+      if (lastOffset) {
+        this.#lastOffset = lastOffset as Offset
+      }
+
+      const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
+      if (liveCacheBuster) {
+        this.#liveCacheBuster = liveCacheBuster
+      }
+
+      const getSchema = (): Schema => {
+        const schemaHeader = headers.get(SHAPE_SCHEMA_HEADER)
+        return schemaHeader ? JSON.parse(schemaHeader) : {}
+      }
+      this.#schema = this.#schema ?? getSchema()
+
+      const messages = status === 204 ? `[]` : await response.text()
+
+      if (status === 204) {
+        // There's no content so we are live and up to date
+        this.#lastSyncedAt = Date.now()
+      }
+
+      const batch = this.#messageParser.parse(messages, this.#schema)
+
+      // Update isUpToDate
+      if (batch.length > 0) {
+        const lastMessage = batch[batch.length - 1]
+        if (isUpToDateMessage(lastMessage)) {
+          this.#lastSyncedAt = Date.now()
+          this.#isUpToDate = true
+        }
+
+        await this.#publish(batch)
+      }
+
+      this.#tickPromiseResolver?.()
+      return this.#start()
     } catch (err) {
       this.#error = err
       if (this.#onError) {
@@ -580,6 +596,20 @@ export class ShapeStream<T extends Row<unknown> = Row>
     } finally {
       this.#connected = false
       this.#tickPromiseRejecter?.()
+    }
+  }
+
+  pause() {
+    if (this.#started && !this.#paused) {
+      this.#paused = true
+      this.#requestAbortController?.abort(PAUSE_POLLING)
+    }
+  }
+
+  resume() {
+    if (this.#started && this.#paused) {
+      this.#paused = false
+      this.#start()
     }
   }
 
@@ -691,6 +721,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#isUpToDate = false
     this.#connected = false
     this.#schema = undefined
+  }
+
+  unsubscribeFromVisibilityChange() {
+    if (this.#visibilityHandler && document) {
+      document.removeEventListener(`visibilitychange`, this.#visibilityHandler)
+    }
   }
 }
 
