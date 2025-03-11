@@ -92,10 +92,11 @@ Suffix for the logical replication publication and slot name.
 
 <EnvVarConfig
     name="ELECTRIC_SECRET"
-    optional="true"
     example="1U6ItbhoQb4kGUU5wXBLbxvNf">
 
-Secret for shape requests to the [HTTP API](/docs/api/http).
+Secret for shape requests to the [HTTP API](/docs/api/http). This is required unless `ELECTRIC_INSECURE` is set to `true`.
+By default, the Electric API is public and all shape requests must include the secret.
+More details are available in the [security guide](/docs/guides/security).
 
 </EnvVarConfig>
 
@@ -110,7 +111,7 @@ When set to `true`, runs Electric in insecure mode and does not require an `ELEC
 Use with caution.
 API requests are unprotected and may risk exposing your database.
 Good for development environments.
-If used in production, make sure to lock down access to Electric.
+If used in production, make sure to [lock down access](/docs/guides/security#network-security) to Electric.
 
 </EnvVarConfig>
 
