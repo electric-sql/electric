@@ -84,10 +84,14 @@ defmodule Electric.Application do
 
     slot_name = Keyword.get(opts, :slot_name, "electric_slot_#{replication_stream_id}")
 
+    replication_connection_opts = get_env!(opts, :replication_connection_opts)
+
     Keyword.merge(
       core_config,
-      connection_opts: get_env!(opts, :connection_opts),
+      connection_opts:
+        get_env_with_default(opts, :query_connection_opts, replication_connection_opts),
       replication_opts: [
+        connection_opts: replication_connection_opts,
         publication_name: publication_name,
         slot_name: slot_name,
         slot_temporary?: get_env(opts, :replication_slot_temporary?)

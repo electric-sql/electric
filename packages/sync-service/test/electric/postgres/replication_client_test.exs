@@ -40,6 +40,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
     test "creates an empty publication on startup if requested",
          %{db_conn: conn, dummy_pid: dummy_pid} = ctx do
       replication_opts = [
+        connection_opts: ctx.db_config,
         stack_id: ctx.stack_id,
         publication_name: @publication_name,
         try_creating_publication?: true,
@@ -347,6 +348,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   defp with_replication_opts(ctx) do
     %{
       replication_opts: [
+        connection_opts: ctx.db_config,
         stack_id: ctx.stack_id,
         publication_name: @publication_name,
         try_creating_publication?: false,
@@ -435,7 +437,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
     {:ok, _pid} =
       ReplicationClient.start_link(
         stack_id: ctx.stack_id,
-        connection_opts: ctx.db_config,
         replication_opts: ctx.replication_opts
       )
   end

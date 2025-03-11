@@ -50,6 +50,11 @@ defmodule Electric.StackSupervisor do
                    type: :keyword_list,
                    required: true,
                    keys: [
+                     connection_opts: [
+                       type: :keyword_list,
+                       required: true,
+                       keys: Electric.connection_opts_schema()
+                     ],
                      publication_name: [type: :string, required: true],
                      slot_name: [type: :string, required: true],
                      slot_temporary?: [type: :boolean, default: false],
@@ -129,7 +134,11 @@ defmodule Electric.StackSupervisor do
   end
 
   defp obfuscate_password(opts) when is_list(opts) do
-    Keyword.update(opts, :connection_opts, [], &Electric.Utils.obfuscate_password/1)
+    opts
+    |> Keyword.update(:connection_opts, [], &Electric.Utils.obfuscate_password/1)
+    |> Keyword.update(:replication_opts, [], fn repl_opts ->
+      Keyword.update(repl_opts, :connection_opts, [], &Electric.Utils.obfuscate_password/1)
+    end)
   end
 
   def subscribe_to_stack_events(

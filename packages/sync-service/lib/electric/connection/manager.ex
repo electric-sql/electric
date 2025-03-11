@@ -63,7 +63,6 @@ defmodule Electric.Connection.Manager do
       :stack_events_registry,
       :tweaks,
       :persistent_kv,
-      :ipv6_enabled,
       awaiting_active: [],
       drop_slot_requested: false,
       monitoring_started?: false
@@ -166,12 +165,12 @@ defmodule Electric.Connection.Manager do
     connection_opts =
       opts
       |> Keyword.fetch!(:connection_opts)
-      |> update_ssl_opts()
-      |> update_tcp_opts()
+      |> update_connection_opts()
 
     replication_opts =
       opts
       |> Keyword.fetch!(:replication_opts)
+      |> Keyword.update!(:connection_opts, &update_connection_opts/1)
       |> Keyword.put(:start_streaming?, false)
       |> Keyword.put(:connection_manager, self())
 
@@ -191,8 +190,7 @@ defmodule Electric.Connection.Manager do
         stack_id: Keyword.fetch!(opts, :stack_id),
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
         tweaks: Keyword.fetch!(opts, :tweaks),
-        persistent_kv: Keyword.fetch!(opts, :persistent_kv),
-        ipv6_enabled: connection_opts[:ipv6]
+        persistent_kv: Keyword.fetch!(opts, :persistent_kv)
       }
 
     # Try to acquire the connection lock on the replication slot
@@ -277,15 +275,20 @@ defmodule Electric.Connection.Manager do
   def handle_continue(:start_replication_client, %State{replication_client_pid: nil} = state) do
     opts =
       state
-      |> Map.take([:stack_id, :replication_opts, :connection_opts])
+      |> Map.take([:stack_id, :replication_opts])
       |> Map.to_list()
 
     Logger.debug("Starting replication client for stack #{state.stack_id}")
 
     case start_replication_client(opts) do
-      {:ok, pid, connection_opts} ->
+      {:ok, pid, replication_opts} ->
         state = mark_connection_succeeded(state)
-        state = %State{state | replication_client_pid: pid, connection_opts: connection_opts}
+
+        state = %State{
+          state
+          | replication_client_pid: pid,
+            replication_opts: replication_opts
+        }
 
         if is_nil(state.pool_pid) do
           # This is the case where Connection.Manager starts connections from the initial state.
@@ -484,8 +487,9 @@ defmodule Electric.Connection.Manager do
         {:ok, pid, opts[:connection_opts]}
 
       error ->
-        with {:ok, opts} <- maybe_fallback_to_no_ssl(error, opts) do
-          start_lock_connection(opts)
+        with {:ok, connection_opts} <- maybe_fallback_to_no_ssl(error, opts[:connection_opts]) do
+          Keyword.put(opts, :connection_opts, connection_opts)
+          |> start_lock_connection()
         end
     end
   end
@@ -493,11 +497,20 @@ defmodule Electric.Connection.Manager do
   defp start_replication_client(opts) do
     case Electric.Postgres.ReplicationClient.start_link(opts) do
       {:ok, pid} ->
-        {:ok, pid, opts[:connection_opts]}
+        {:ok, pid, opts[:replication_opts]}
 
       error ->
-        with {:ok, opts} <- maybe_fallback_to_no_ssl(error, opts) do
-          start_replication_client(opts)
+        with {:ok, connection_opts} <-
+               maybe_fallback_to_no_ssl(
+                 error,
+                 get_in(opts, [:replication_opts, :connection_opts])
+               ) do
+          Keyword.update!(
+            opts,
+            :replication_opts,
+            &Keyword.put(&1, :connection_opts, connection_opts)
+          )
+          |> start_replication_client()
         end
     end
   end
@@ -516,11 +529,34 @@ defmodule Electric.Connection.Manager do
     )
   end
 
+  defp maybe_fallback_to_ipv4(
+         %DBConnection.ConnectionError{message: message, severity: :error} = error,
+         connection_opts
+       ) do
+    # If network is unreachable, IPv6 is not enabled on the machine
+    # If domain cannot be resolved, assume there is no AAAA record for it
+    # Fall back to IPv4 for these cases
+    if connection_opts[:ipv6] and
+         String.starts_with?(message, "tcp connect (") and
+         (String.ends_with?(message, "): non-existing domain - :nxdomain") or
+            String.ends_with?(message, "): network is unreachable - :enetunreach")) do
+      Logger.warning(
+        "Database connection failed to find valid IPv6 address for #{connection_opts[:hostname]} - falling back to IPv4"
+      )
+
+      {:ok, connection_opts |> Keyword.put(:ipv6, false) |> update_tcp_opts()}
+    else
+      {:error, error}
+    end
+  end
+
+  defp maybe_fallback_to_ipv4(error, _connection_opts), do: {:error, error}
+
   defp maybe_fallback_to_no_ssl(
          {:error, %Postgrex.Error{message: "ssl not available"}} = error,
-         opts
+         connection_opts
        ) do
-    sslmode = get_in(opts, [:connection_opts, :sslmode])
+    sslmode = connection_opts[:sslmode]
 
     if sslmode == :require do
       error
@@ -533,12 +569,11 @@ defmodule Electric.Connection.Manager do
         )
       end
 
-      opts = Keyword.update!(opts, :connection_opts, &Keyword.put(&1, :ssl, false))
-      {:ok, opts}
+      {:ok, Keyword.put(connection_opts, :ssl, false)}
     end
   end
 
-  defp maybe_fallback_to_no_ssl(error, _opts), do: error
+  defp maybe_fallback_to_no_ssl(error, _connection_opts), do: error
 
   defp handle_connection_error(
          {:shutdown, {:failed_to_start_child, Electric.Postgres.ReplicationClient, error}},
@@ -549,36 +584,45 @@ defmodule Electric.Connection.Manager do
   end
 
   defp handle_connection_error(
-         %DBConnection.ConnectionError{message: message, severity: :error} = error,
-         %State{connection_opts: connection_opts, ipv6_enabled: true} = state,
-         mode
+         error,
+         %State{replication_opts: replication_opts} = state,
+         "replication" = mode
        ) do
-    # If network is unreachable, IPv6 is not enabled on the machine
-    # If domain cannot be resolved, assume there is no AAAA record for it
-    # Fall back to IPv4 for these cases
-    if String.starts_with?(message, "tcp connect (") and
-         (String.ends_with?(message, "): non-existing domain - :nxdomain") or
-            String.ends_with?(message, "): network is unreachable - :enetunreach")) do
-      Logger.warning(
-        "Database connection in #{mode} mode failed to find valid IPv6 address for #{connection_opts[:hostname]} - falling back to IPv4"
-      )
+    case maybe_fallback_to_ipv4(error, replication_opts[:connection_opts]) do
+      {:ok, connection_opts} ->
+        # disable IPv6 and retry immediately
+        state = %State{
+          state
+          | replication_opts: Keyword.put(replication_opts, :connection_opts, connection_opts)
+        }
 
-      # disable IPv6 and retry immediately
-      state = %State{
-        state
-        | ipv6_enabled: false,
-          connection_opts: connection_opts |> Keyword.put(:ipv6, false) |> update_tcp_opts()
-      }
+        step = current_connection_step(state)
+        handle_continue(step, state)
 
-      step = current_connection_step(state)
-      handle_continue(step, state)
-    else
-      fail_on_error_or_reconnect(error, state, mode)
+      {:error, error} ->
+        fail_on_error_or_reconnect(error, state, mode)
     end
   end
 
-  defp handle_connection_error(error, state, mode) do
-    fail_on_error_or_reconnect(error, state, mode)
+  defp handle_connection_error(
+         error,
+         %State{connection_opts: connection_opts} = state,
+         mode
+       ) do
+    case maybe_fallback_to_ipv4(error, connection_opts) do
+      {:ok, connection_opts} ->
+        # disable IPv6 and retry immediately
+        state = %State{
+          state
+          | connection_opts: connection_opts
+        }
+
+        step = current_connection_step(state)
+        handle_continue(step, state)
+
+      {:error, error} ->
+        fail_on_error_or_reconnect(error, state, mode)
+    end
   end
 
   # This separate function is needed for `handle_connection_error()` not to get stuck in a
@@ -759,6 +803,9 @@ defmodule Electric.Connection.Manager do
 
     Keyword.put(connection_opts, :socket_options, tcp_opts)
   end
+
+  defp update_connection_opts(connection_opts),
+    do: connection_opts |> update_ssl_opts() |> update_tcp_opts()
 
   defp lookup_log_collector_pid(shapes_supervisor) do
     {Electric.Replication.ShapeLogCollector, log_collector_pid, :worker, _modules} =
