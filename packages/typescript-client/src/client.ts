@@ -37,7 +37,7 @@ import {
   TABLE_QUERY_PARAM,
   REPLICA_PARAM,
   FORCE_DISCONNECT_AND_REFRESH,
-  PAUSE_POLLING,
+  PAUSE_STREAM,
 } from './constants'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
@@ -542,7 +542,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (e instanceof FetchBackoffAbortError) {
         if (
           this.#requestAbortController.signal.aborted &&
-          this.#requestAbortController.signal.reason === PAUSE_POLLING
+          this.#requestAbortController.signal.reason === PAUSE_STREAM
         ) {
           this.#state = `paused`
         }
@@ -621,7 +621,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   pause() {
     if (this.#started && this.#state === `active`) {
       this.#state = `pause-requested`
-      this.#requestAbortController?.abort(PAUSE_POLLING)
+      this.#requestAbortController?.abort(PAUSE_STREAM)
     }
   }
 
