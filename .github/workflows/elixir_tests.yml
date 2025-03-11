@@ -82,7 +82,7 @@ jobs:
         run: mix compile --force --all-warnings --warnings-as-errors
 
       - name: Run tests
-        run: mix test
+        run: mix test --include slow
 
   formatting:
     name: Check formatting

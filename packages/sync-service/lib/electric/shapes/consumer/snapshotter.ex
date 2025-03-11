@@ -85,6 +85,14 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                       consumer,
                       {:snapshot_failed, shape_handle, error, __STACKTRACE__}
                     )
+                catch
+                  :exit, {:timeout, {GenServer, :call, _}} ->
+                    GenServer.cast(
+                      consumer,
+                      {:snapshot_failed, shape_handle,
+                       %RuntimeError{message: "Timed out while waiting for a table lock"},
+                       __STACKTRACE__}
+                    )
                 end
               end
             )
