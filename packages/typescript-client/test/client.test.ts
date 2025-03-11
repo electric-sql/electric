@@ -387,7 +387,7 @@ describe(`Shape`, () => {
         todo: `fail`,
       },
       fetchClient: async (input, _init) => {
-        const url = new URL(input)
+        const url = new URL(input as string | URL)
         if (url.searchParams.get(`todo`) === `fail`) {
           return new Response(undefined, {
             status: 401,
