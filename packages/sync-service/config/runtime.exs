@@ -50,7 +50,11 @@ instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
 version = Electric.version()
 
 config :opentelemetry,
-  resource_detectors: [:otel_resource_env_var, :otel_resource_app_env],
+  resource_detectors: [
+    :otel_resource_env_var,
+    :otel_resource_app_env,
+    Electric.Telemetry.OpenTelemetry.ResourceDetector
+  ],
   resource: %{service: %{name: service_name, version: version}, instance: %{id: instance_id}}
 
 otlp_endpoint = env!("ELECTRIC_OTLP_ENDPOINT", :string, nil)
