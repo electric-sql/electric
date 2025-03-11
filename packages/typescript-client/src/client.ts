@@ -362,7 +362,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       createFetchWithChunkBuffer(fetchWithBackoffClient)
     )
 
-    if (document) {
+    if (
+      typeof document === `object` &&
+      typeof document.hidden === `boolean` &&
+      typeof document.addEventListener === `function`
+    ) {
       this.#visibilityHandler = () => {
         if (document.hidden) {
           this.pause()
@@ -724,7 +728,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   unsubscribeFromVisibilityChange() {
-    if (this.#visibilityHandler && document) {
+    if (this.#visibilityHandler) {
       document.removeEventListener(`visibilitychange`, this.#visibilityHandler)
     }
   }
