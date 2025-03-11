@@ -327,7 +327,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   >()
 
   #started = false
-  #paused = false
+  #state = `active` as `active` | `pause-requested` | `paused`
   #lastOffset: Offset
   #liveCacheBuster: string // Seconds since our Electric Epoch 😎
   #lastSyncedAt?: number // unix time
@@ -427,7 +427,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   // TODO: when we pause, #start will return so we may need to restart by calling start
   async #requestShape(): Promise<void> {
-    if (this.#paused) {
+    if (this.#state === `pause-requested`) {
+      this.#state = `paused`
       return
     }
 
@@ -437,6 +438,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     ) {
       return
     }
+
+    const resumingFromPause = this.#state === `paused`
+    this.#state = `active`
 
     const { url, signal } = this.options
 
@@ -480,7 +484,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
 
     if (this.#isUpToDate) {
-      if (!this.#isRefreshing) {
+      // If we are resuming from a paused state, we don't want to perform a live request
+      // because it could be a long poll that holds for 20sec
+      // and during all that time `isConnected` will be false
+      if (!this.#isRefreshing && !resumingFromPause) {
         fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
       }
       fetchUrl.searchParams.set(
@@ -604,15 +611,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   pause() {
-    if (this.#started && !this.#paused) {
-      this.#paused = true
+    if (this.#started && this.#state === `active`) {
+      this.#state = `pause-requested`
       this.#requestAbortController?.abort(PAUSE_POLLING)
     }
   }
 
   resume() {
-    if (this.#started && this.#paused) {
-      this.#paused = false
+    if (this.#started && this.#state === `paused`) {
       this.#start()
     }
   }
@@ -661,7 +667,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   isPaused(): boolean {
-    return this.#paused
+    return this.#state === `paused`
   }
 
   /** Await the next tick of the request loop */
