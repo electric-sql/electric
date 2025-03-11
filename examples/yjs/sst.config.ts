@@ -61,10 +61,7 @@ export default $config({
       },
     })
 
-    const testOutput = $resolve([
-      service.url,
-      service.nodes.taskDefinition.arn,
-    ]).apply(([url, ..._rest]) =>
+    service.url.apply((url) =>
       command.local.runOutput({
         command: `pnpm test:browser`,
         dir: `../../`,
@@ -75,7 +72,7 @@ export default $config({
     )
 
     return {
-      website: testOutput.apply(() => service.url),
+      website: service.url,
     }
   },
 })
