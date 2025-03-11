@@ -39,6 +39,16 @@ jobs:
           --health-retries 5
         ports:
           - 54321:5432
+
+      pgbouncer:
+        image: edoburu/pgbouncer:latest
+        ports:
+          - "64321:6432"
+        volumes:
+        - ./dev/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+        - ./dev/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+        options: >-
+          --entrypoint "pgbouncer /etc/pgbouncer/pgbouncer.ini"
     steps:
       - uses: actions/checkout@v4
 
