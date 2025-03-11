@@ -22,7 +22,7 @@ defmodule Support.DbSetup do
     db_name = "#{db_name_hash} ~ #{String.slice(full_db_name, 0..50)}"
 
     escaped_db_name = :binary.replace(db_name, ~s'"', ~s'""', [:global])
-    drop_database(utility_pool, escaped_db_name)
+    Postgrex.query!(utility_pool, "DROP DATABASE IF EXISTS \"#{escaped_db_name}\"", [])
     Postgrex.query!(utility_pool, "CREATE DATABASE \"#{escaped_db_name}\"", [])
 
     Enum.each(database_settings(ctx), fn setting ->

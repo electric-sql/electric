@@ -155,7 +155,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       num_txn = 2
       num_ops = 8
       max_sleep = 20
-      receive_timeout = (num_txn + num_ops) * max_sleep * 2
+      receive_timeout = max((num_txn + num_ops) * max_sleep * 2, 1000)
 
       # Insert `num_txn` transactions, each in a separate process. Every transaction has
       # `num_ops` INSERTs with a random delay between each operation.
