@@ -231,6 +231,12 @@ export interface ShapeStreamOptions<T = never> {
    */
   subscribe?: boolean
 
+  /**
+   * Automatically pause the stream when the page is hidden and resume when the page is visible.
+   * This is enabled by default.
+   */
+  autoPause?: boolean
+
   signal?: AbortSignal
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
@@ -362,7 +368,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       createFetchWithChunkBuffer(fetchWithBackoffClient)
     )
 
-    this.#subscribeToVisibilityChanges()
+    const autoPause = this.options.autoPause ?? true
+    if (autoPause) {
+      this.#subscribeToVisibilityChanges()
+    }
   }
 
   get shapeHandle() {
