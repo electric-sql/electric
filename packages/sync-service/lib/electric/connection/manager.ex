@@ -605,7 +605,7 @@ defmodule Electric.Connection.Manager do
   end
 
   defp handle_connection_error(
-         error,
+         %DBConnection.ConnectionError{severity: :error} = error,
          %State{connection_opts: connection_opts} = state,
          mode
        ) do
