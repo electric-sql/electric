@@ -593,7 +593,7 @@ defmodule Electric.Connection.Manager do
   end
 
   defp handle_connection_error(
-         error,
+         %DBConnection.ConnectionError{severity: :error} = error,
          %State{replication_opts: replication_opts} = state,
          "replication" = mode
        ) do
@@ -632,6 +632,10 @@ defmodule Electric.Connection.Manager do
       {:error, error} ->
         fail_on_error_or_reconnect(error, state, mode)
     end
+  end
+
+  defp handle_connection_error(error, state, mode) do
+    fail_on_error_or_reconnect(error, state, mode)
   end
 
   # This separate function is needed for `handle_connection_error()` not to get stuck in a
