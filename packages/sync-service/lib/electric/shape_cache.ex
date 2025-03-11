@@ -148,7 +148,7 @@ defmodule Electric.ShapeCache do
 
       true ->
         server = Electric.Shapes.Consumer.name(stack_id, shape_handle)
-        GenServer.call(server, :await_snapshot_start)
+        GenServer.call(server, :await_snapshot_start, 15_000)
     end
   end
 

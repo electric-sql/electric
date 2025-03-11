@@ -507,7 +507,7 @@ defmodule Electric.Shapes.Api do
 
         Response.error(
           request,
-          "Unable retrieve shape log: #{Exception.format(:error, error, [])}",
+          "Unable to retrieve shape log: #{Exception.format(:error, error, [])}",
           status: 500
         )
     end

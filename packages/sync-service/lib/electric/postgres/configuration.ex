@@ -30,11 +30,16 @@ defmodule Electric.Postgres.Configuration do
         ) ::
           {:ok, [:ok]}
   def configure_tables_for_replication!(pool, relation_filters, pg_version, publication_name) do
-    configure_tables_for_replication_internal!(
+    Postgrex.transaction(
       pool,
-      relation_filters,
-      pg_version,
-      publication_name
+      fn conn ->
+        configure_tables_for_replication_internal!(
+          conn,
+          relation_filters,
+          pg_version,
+          publication_name
+        )
+      end
     )
   end
 
@@ -58,84 +63,81 @@ defmodule Electric.Postgres.Configuration do
   end
 
   defp configure_tables_for_replication_internal!(
-         pool,
+         conn,
          relation_filters,
          pg_version,
          publication_name
        )
        when pg_version < @pg_15 do
-    Postgrex.transaction(pool, fn conn ->
-      publication = Utils.quote_name(publication_name)
+    publication = Utils.quote_name(publication_name)
 
-      relation_filters = filter_for_existing_relations(conn, relation_filters)
+    relation_filters = filter_for_existing_relations(conn, relation_filters)
 
-      prev_published_tables =
-        get_publication_tables(conn, publication_name)
-        |> Enum.map(&Utils.relation_to_sql/1)
-        |> MapSet.new()
+    prev_published_tables =
+      get_publication_tables(conn, publication_name)
+      |> Enum.map(&Utils.relation_to_sql/1)
+      |> MapSet.new()
 
-      new_published_tables =
-        relation_filters
-        |> Map.keys()
-        |> Enum.map(&Utils.relation_to_sql/1)
-        |> MapSet.new()
+    new_published_tables =
+      relation_filters
+      |> Map.keys()
+      |> Enum.map(&Utils.relation_to_sql/1)
+      |> MapSet.new()
 
-      alter_ops =
-        Enum.concat(
-          MapSet.difference(new_published_tables, prev_published_tables)
-          |> Enum.map(&{&1, "ADD"}),
-          MapSet.difference(prev_published_tables, new_published_tables)
-          |> Enum.map(&{&1, "DROP"})
-        )
+    alter_ops =
+      Enum.concat(
+        MapSet.difference(new_published_tables, prev_published_tables)
+        |> Enum.map(&{&1, "ADD"}),
+        MapSet.difference(prev_published_tables, new_published_tables)
+        |> Enum.map(&{&1, "DROP"})
+      )
 
-      for {table, op} <- alter_ops do
-        Postgrex.query!(conn, "SAVEPOINT before_publication", [])
+    for {table, op} <- alter_ops do
+      Postgrex.query!(conn, "SAVEPOINT before_publication", [])
 
-        # PG 14 and below do not support filters on tables of publications
-        case Postgrex.query(conn, "ALTER PUBLICATION #{publication} #{op} TABLE #{table}", []) do
-          {:ok, _} ->
-            Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
-            :ok
+      # PG 14 and below do not support filters on tables of publications
+      case Postgrex.query(conn, "ALTER PUBLICATION #{publication} #{op} TABLE #{table}", []) do
+        {:ok, _} ->
+          Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
+          :ok
 
-          # Duplicate object error is raised if we're trying to add a table to the publication when it's already there.
-          {:error, %{postgres: %{code: :duplicate_object}}} ->
-            Postgrex.query!(conn, "ROLLBACK TO SAVEPOINT before_publication", [])
-            Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
-            :ok
+        # Duplicate object error is raised if we're trying to add a table to the publication when it's already there.
+        {:error, %{postgres: %{code: :duplicate_object}}} ->
+          Postgrex.query!(conn, "ROLLBACK TO SAVEPOINT before_publication", [])
+          Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
+          :ok
 
-          {:error, reason} ->
-            raise reason
-        end
+        {:error, reason} ->
+          raise reason
       end
+    end
 
-      set_replica_identity!(conn, relation_filters)
-    end)
+    set_replica_identity!(conn, relation_filters)
+    [:ok]
   end
 
   defp configure_tables_for_replication_internal!(
-         pool,
+         conn,
          relation_filters,
          _pg_version,
          publication_name
        ) do
-    Postgrex.transaction(pool, fn conn ->
-      # Ensure that all tables are present in the publication
-      relation_filters = filter_for_existing_relations(conn, relation_filters)
+    # Ensure that all tables are present in the publication
+    relation_filters = filter_for_existing_relations(conn, relation_filters)
 
-      # Update the entire publication with the new filters
-      Postgrex.query!(
-        conn,
-        make_alter_publication_query(publication_name, relation_filters),
-        []
-      )
+    # Update the entire publication with the new filters
+    Postgrex.query!(
+      conn,
+      make_alter_publication_query(publication_name, relation_filters),
+      []
+    )
 
-      # `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
-      # but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
-      # deadlock if the order is reversed.
-      set_replica_identity!(conn, relation_filters)
+    # `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
+    # but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
+    # deadlock if the order is reversed.
+    set_replica_identity!(conn, relation_filters)
 
-      [:ok]
-    end)
+    [:ok]
   end
 
   defp set_replica_identity!(conn, relation_filters) do
