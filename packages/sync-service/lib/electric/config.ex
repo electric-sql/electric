@@ -149,6 +149,12 @@ defmodule Electric.Config do
     Application.fetch_env!(:electric, key)
   end
 
+  def persistent_kv do
+    with {m, f, a} <- get_env(:persistent_kv) do
+      apply(m, f, [a])
+    end
+  end
+
   @doc ~S"""
   Parse a PostgreSQL URI into a keyword list.
 
