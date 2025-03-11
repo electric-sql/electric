@@ -10,9 +10,13 @@
 [macro setup_pg_with_name shell_name initdb_args config_opts]
   [shell $shell_name]
     -$fail_pattern
+
+    # Create network for given contianer to be able to attach pooler
+    !docker network ls | grep ${pg_container_name}-network || docker network create ${pg_container_name}-network
   
     !docker run \
       --name $pg_container_name \
+      --network ${pg_container_name}-network \
       -e POSTGRES_DB=electric \
       -e POSTGRES_USER=postgres \
       -e POSTGRES_PASSWORD=password \
@@ -40,11 +44,11 @@
 
     !docker run \
       --name "${pg_container_name}-pooler" \
+      --network ${pg_container_name}-network \
       -e PGBOUNCER_AUTH_TYPE=trust \
       -e PGBOUNCER_DATABASE=* \
       -e PGBOUNCER_POOL_MODE=transaction \
-      -e POSTGRESQL_HOST=host.docker.internal \
-      -e POSTGRESQL_PORT=$pg_host_port \
+      -e POSTGRESQL_HOST=$pg_container_name \
       -e POSTGRESQL_DATABASE=electric \
       -e POSTGRESQL_USERNAME=postgres \
       -e POSTGRESQL_PASSWORD=password \
