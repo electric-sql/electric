@@ -78,6 +78,7 @@ defmodule Electric.Shapes.Shape do
     relation: [type: {:tuple, [:string, :string]}, required: true],
     where: [type: {:or, [:string, nil]}],
     columns: [type: {:or, [{:list, :string}, nil]}],
+    params: [type: {:map, :string, :string}, default: %{}],
     replica: [
       type: {:custom, __MODULE__, :verify_replica, []},
       default: :default
@@ -127,7 +128,7 @@ defmodule Electric.Shapes.Shape do
          {:ok, selected_columns} <-
            validate_selected_columns(column_info, pk_cols, Access.get(opts, :columns)),
          refs = Inspector.columns_to_expr(column_info),
-         {:ok, where} <- maybe_parse_where_clause(Access.get(opts, :where), refs) do
+         {:ok, where} <- maybe_parse_where_clause(Access.get(opts, :where), opts[:params], refs) do
       {:ok,
        %__MODULE__{
          root_table: table,
@@ -141,10 +142,10 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  defp maybe_parse_where_clause(nil, _), do: {:ok, nil}
+  defp maybe_parse_where_clause(nil, _, _), do: {:ok, nil}
 
-  defp maybe_parse_where_clause(where, info) do
-    case Parser.parse_and_validate_expression(where, info) do
+  defp maybe_parse_where_clause(where, params, refs) do
+    case Parser.parse_and_validate_expression(where, params: params, refs: refs) do
       {:ok, expr} -> {:ok, expr}
       {:error, reason} -> {:error, {:where, reason}}
     end
@@ -385,7 +386,7 @@ defmodule Electric.Shapes.Shape do
 
     {:ok, %{columns: column_info}} = Map.fetch(table_info, {schema, name})
     refs = Inspector.columns_to_expr(column_info)
-    {:ok, where} = maybe_parse_where_clause(where, refs)
+    {:ok, where} = maybe_parse_where_clause(where, Map.get(data, "params", %{}), refs)
 
     %__MODULE__{
       root_table: {schema, name},

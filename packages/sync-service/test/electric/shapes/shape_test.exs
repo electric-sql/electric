@@ -6,10 +6,12 @@ defmodule Electric.Shapes.ShapeTest do
   alias Electric.Replication.Changes
   alias Electric.Shapes.Shape
 
-  @where Parser.parse_and_validate_expression!("value ILIKE '%matches%'", %{["value"] => :text})
-  @where_array Parser.parse_and_validate_expression!("data && '{1,2}'", %{
-                 ["data"] => {:array, :int4}
-               })
+  @where Parser.parse_and_validate_expression!("value ILIKE '%matches%'",
+           refs: %{["value"] => :text}
+         )
+  @where_array Parser.parse_and_validate_expression!("data && '{1,2}'",
+                 refs: %{["data"] => {:array, :int4}}
+               )
   @relation_id 1
 
   describe "convert_change/2" do
