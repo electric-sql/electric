@@ -41,14 +41,17 @@ jobs:
           - 54321:5432
 
       pgbouncer:
-        image: edoburu/pgbouncer:latest
+        image: bitnami/pgbouncer:latest
+        env:
+          PGBOUNCER_AUTH_TYPE: trust
+          PGBOUNCER_DATABASE: "*"
+          PGBOUNCER_POOL_MODE: transaction
+          POSTGRESQL_HOST: postgres
+          POSTGRESQL_DATABASE: electric
+          POSTGRESQL_USERNAME: postgres
+          POSTGRESQL_PASSWORD: password
         ports:
-          - "64321:6432"
-        volumes:
-        - ./dev/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
-        - ./dev/userlist.txt:/etc/pgbouncer/userlist.txt:ro
-        options: >-
-          --entrypoint "pgbouncer /etc/pgbouncer/pgbouncer.ini"
+          - 64321:6432
     steps:
       - uses: actions/checkout@v4
 

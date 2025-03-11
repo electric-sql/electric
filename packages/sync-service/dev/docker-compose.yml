@@ -39,15 +39,19 @@ services:
       - -c
       - config_file=/etc/postgresql.conf
   pgbouncer:
-    image: edoburu/pgbouncer:latest
+    image: bitnami/pgbouncer:latest
+    environment:
+      PGBOUNCER_AUTH_TYPE: trust
+      PGBOUNCER_DATABASE: "*"
+      PGBOUNCER_POOL_MODE: transaction
+      POSTGRESQL_HOST: postgres
+      POSTGRESQL_DATABASE: electric
+      POSTGRESQL_USERNAME: postgres
+      POSTGRESQL_PASSWORD: password
     ports:
       - "64321:6432"
     depends_on:
       - postgres
-    volumes:
-    - ./pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
-    - ./userlist.txt:/etc/pgbouncer/userlist.txt:ro
-    command: ["pgbouncer", "/etc/pgbouncer/pgbouncer.ini"]
   nginx:
     image: nginx:latest
     ports:
