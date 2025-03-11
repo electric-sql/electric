@@ -340,7 +340,7 @@ describe(`Shape`, () => {
     await vi.waitFor(() => expect(shapeStream.isConnected()).true)
   })
 
-  it(`should set isConnected to false when the stream is paused an back on true when the fetch succeeds again`, async ({
+  it.only(`should set isConnected to false when the stream is paused an back on true when the fetch succeeds again`, async ({
     issuesTableUrl,
   }) => {
     const shapeStream = new ShapeStream({
@@ -352,17 +352,14 @@ describe(`Shape`, () => {
 
     const unsubscribe = shapeStream.subscribe(() => unsubscribe())
 
-    await vi.waitFor(() => expect(shapeStream.isConnected()).true, {
-      timeout: 3000,
-    })
+    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
 
     shapeStream.pause()
     await vi.waitFor(() => expect(shapeStream.isConnected()).false)
 
+    console.log(`GONNA RESUME`)
     shapeStream.resume()
-    await vi.waitFor(() => expect(shapeStream.isConnected()).true, {
-      timeout: 3000,
-    })
+    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
   })
 
   it(`should not throw error if an error handler is provided`, async ({

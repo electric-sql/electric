@@ -539,7 +539,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
         return this.#requestShape()
       }
 
-      if (e instanceof FetchBackoffAbortError) return // interrupted
+      if (e instanceof FetchBackoffAbortError) {
+        if (
+          this.#requestAbortController.signal.aborted &&
+          this.#requestAbortController.signal.reason === PAUSE_POLLING
+        ) {
+          this.#state = `paused`
+        }
+        return // interrupted
+      }
       if (!(e instanceof FetchError)) throw e // should never happen
 
       if (e.status == 409) {
