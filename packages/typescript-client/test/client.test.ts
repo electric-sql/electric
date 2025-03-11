@@ -340,7 +340,7 @@ describe(`Shape`, () => {
     await vi.waitFor(() => expect(shapeStream.isConnected()).true)
   })
 
-  it.only(`should set isConnected to false when the stream is paused an back on true when the fetch succeeds again`, async ({
+  it(`should set isConnected to false when the stream is paused an back on true when the fetch succeeds again`, async ({
     issuesTableUrl,
   }) => {
     const shapeStream = new ShapeStream({
