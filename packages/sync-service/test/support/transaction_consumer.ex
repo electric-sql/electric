@@ -9,9 +9,9 @@ defmodule Support.TransactionConsumer do
     GenStage.start_link(__MODULE__, opts)
   end
 
-  def assert_consume(consumers, evts) do
+  def assert_consume(consumers, evts, timeout \\ 100) do
     for consumer <- consumers, into: MapSet.new() do
-      assert_receive {Support.TransactionConsumer, ^consumer, received_evts}
+      assert_receive {Support.TransactionConsumer, ^consumer, received_evts}, timeout
 
       evts
       |> Enum.zip(received_evts)
