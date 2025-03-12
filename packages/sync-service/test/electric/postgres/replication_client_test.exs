@@ -19,6 +19,11 @@ defmodule Electric.Postgres.ReplicationClientTest do
   @publication_name "test_electric_publication"
   @slot_name "test_electric_slot"
 
+  # Larger than average timeout for assertions that require
+  # seeing changes back from the database, as it can be especially
+  # slow on CI/Docker etc
+  @assert_receive_db_timeout 1000
+
   setup do
     # Spawn a dummy process to serve as the black hole for the messages that
     # ReplicationClient normally sends to Connection.Manager.
@@ -124,16 +129,20 @@ defmodule Electric.Postgres.ReplicationClientTest do
       monitor = Process.monitor(pid)
       Process.unlink(pid)
 
+      on_exit(fn -> Process.alive?(pid) && Process.exit(pid, :kill) end)
+
       interrupt_val = "interrupt #{inspect(pid)}"
       insert_item(conn, interrupt_val)
 
       assert_receive {
-        :DOWN,
-        ^monitor,
-        :process,
-        ^pid,
-        {%RuntimeError{message: "Interrupting transaction processing abnormally"}, _stacktrace}
-      }
+                       :DOWN,
+                       ^monitor,
+                       :process,
+                       ^pid,
+                       {%RuntimeError{message: "Interrupting transaction processing abnormally"},
+                        _stacktrace}
+                     },
+                     @assert_receive_db_timeout
 
       refute_received _
 
@@ -155,7 +164,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       num_txn = 2
       num_ops = 8
       max_sleep = 20
-      receive_timeout = max((num_txn + num_ops) * max_sleep * 2, 1000)
+      receive_timeout = max((num_txn + num_ops) * max_sleep * 2, @assert_receive_db_timeout)
 
       # Insert `num_txn` transactions, each in a separate process. Every transaction has
       # `num_ops` INSERTs with a random delay between each operation.
@@ -427,7 +436,9 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   defp receive_tx_change do
-    assert_receive {:from_replication, %Transaction{changes: [change]}}
+    assert_receive {:from_replication, %Transaction{changes: [change]}},
+                   @assert_receive_db_timeout
+
     change
   end
 

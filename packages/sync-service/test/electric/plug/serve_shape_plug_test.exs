@@ -807,7 +807,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         end)
 
       # Wait for the task process to subscribe to stack events
-      wait_until_subscribed(ctx.stack_id, 50, 4)
+      wait_until_subscribed(ctx.stack_id, 50, 8)
 
       Electric.StackSupervisor.dispatch_stack_event(ctx.stack_id, :ready)
 
