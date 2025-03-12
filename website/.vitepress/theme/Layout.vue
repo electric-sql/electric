@@ -23,24 +23,6 @@ const { hasSidebar } = useSidebar()
     <template #nav-bar-content-after>
       <NavSignupButton />
     </template>
-    <template #home-features-before>
-      <div class="vp-doc">
-        <div class="container">
-          <div class="features-content">
-            <HomeFeaturesBefore />
-          </div>
-        </div>
-      </div>
-    </template>
-    <template #home-features-after>
-      <div class="vp-doc">
-        <div class="container">
-          <div class="features-content">
-            <HomeFeaturesAfter />
-          </div>
-        </div>
-      </div>
-    </template>
     <template #doc-before>
       <div class="vp-doc" v-if="frontmatter.case">
         <UseCaseHeader />

@@ -1,0 +1,86 @@
+<script setup>
+  import { onMounted, useTemplateRef } from 'vue'
+  import reloadRepoCards from '../../../../src/lib/repo-card'
+  import Section from '../Section.vue'
+
+  const actions = [
+    {
+      href: 'https://discord.electric-sql.com',
+      text: 'Join the Discord',
+      theme: 'brand'
+    },
+    {
+      href: 'https://github.com/electric-sql/electric',
+      text: 'Star on GitHub'
+    }
+  ]
+
+  const cards = useTemplateRef('cards')
+
+  onMounted(() => {
+    if (typeof window !== 'undefined' && document.querySelector) {
+      reloadRepoCards(cards.value)
+    }
+  })
+</script>
+
+<style scoped>
+  .community-widgets {
+    padding: 40px 0;
+    display: flex;
+    flex-direction: row;
+    gap: 40px;
+  }
+  .discord,
+  .github {
+    flex: 1 1 0px;
+  }
+  .github {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .repo {
+    width: 100%;
+  }
+  .repo img {
+    width: 100%;
+    max-width: 440px;
+  }
+</style>
+
+<template>
+  <Section :actions="actions">
+    <template #title>
+      Fully open source
+    </template>
+    <template #tagline>
+      With a thriving
+      <a href="https://discord.electric-sql.com">
+        open source community</a>
+      and over 600,000 downloads a week.
+    </template>
+    <div class="community-widgets">
+      <div class="discord">
+        <iframe src="https://discord.com/widget?id=933657521581858818&theme=dark"
+            width="350"
+            height="350"
+            sandbox="allow-popups allow-same-origin allow-popups-to-escape-sandbox allow-scripts"
+            style="width: 100%">
+        </iframe>
+      </div>
+      <div class="github" ref="cards">
+        <div class="repo">
+          <a href="https://github.com/electric-sql/electric" class="no-visual">
+            <div class="repo-card" data-repo="electric-sql/electric"></div>
+          </a>
+        </div>
+        <div class="repo">
+          <a href="https://github.com/electric-sql/pglite" class="no-visual">
+            <div class="repo-card" data-repo="electric-sql/pglite"></div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </Section>
+</template>
