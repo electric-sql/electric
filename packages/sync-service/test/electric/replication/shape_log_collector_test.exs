@@ -147,9 +147,9 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert xids == [xid]
     end
 
+    @transaction_timeout 5
+    @num_comparisons 10
     test "drops transactions if already processed", ctx do
-      @transaction_timeout 5
-      @num_comparisons 10
       Mock.Inspector
       |> stub(:load_relation, fn
         {"public", "test_table"}, _ ->
