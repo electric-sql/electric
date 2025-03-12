@@ -357,9 +357,89 @@ describe(`Shape`, () => {
     shapeStream.pause()
     await vi.waitFor(() => expect(shapeStream.isConnected()).false)
 
-    console.log(`GONNA RESUME`)
     shapeStream.resume()
     await vi.waitFor(() => expect(shapeStream.isConnected()).true)
+  })
+
+  it(`should support pausing the stream and resuming it`, async ({
+    issuesTableUrl,
+    insertIssues,
+  }) => {
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+    })
+    const shape = new Shape(shapeStream)
+
+    function makePromise<T>() {
+      let resolve: (value: T) => void = () => {}
+
+      const promise = new Promise<T>((res) => {
+        resolve = res
+      })
+
+      return {
+        promise,
+        resolve,
+      }
+    }
+
+    const promises = [makePromise<Row[]>(), makePromise<Row[]>()]
+    let i = 0
+
+    shape.subscribe(({ rows }) => {
+      const prom = promises[i]
+      if (prom) {
+        prom.resolve(rows)
+      }
+      i++
+    })
+
+    // Insert an issue
+    const [id] = await insertIssues({ title: `test title` })
+
+    const expectedValue = [
+      {
+        id: id,
+        title: `test title`,
+        priority: 10,
+      },
+    ]
+
+    // Wait for the update to arrive
+    const value = await promises[0].promise
+
+    expect(value).toEqual(expectedValue)
+
+    shapeStream.pause()
+    await vi.waitFor(() => expect(shapeStream.isConnected()).false)
+
+    // Now that the stream is paused, insert another issue
+    const [id2] = await insertIssues({ title: `other title` })
+
+    // The update should not arrive while paused
+    const timeout = new Promise((resolve) =>
+      setTimeout(() => resolve(`timeout`), 100)
+    )
+    await expect(Promise.race([promises[1].promise, timeout])).resolves.toBe(
+      `timeout`
+    )
+
+    // Resume the stream
+    shapeStream.resume()
+
+    // Now the update should arrive
+    const value2 = await promises[1].promise
+    expect(value2).toEqual([
+      ...expectedValue,
+      {
+        id: id2,
+        title: `other title`,
+        priority: 10,
+      },
+    ])
   })
 
   it(`should not throw error if an error handler is provided`, async ({
