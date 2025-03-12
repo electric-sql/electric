@@ -1,0 +1,24 @@
+# This workflow triggers an upgrade of the Electric version used by Electric Cloud.
+
+name: Upgrade Electric Cloud
+
+on:
+  push:
+    tags:
+      - 'cloud'
+
+jobs:
+  notify-cloud:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Electric upgrade in Stratovolt repo
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.CLOUD_REPO_TRIGGER_TOKEN }}
+          repository: electric-sql/stratovolt
+          event-type: upgrade-electric
+          client-payload: |
+            {
+              "electric_sha": "${{ steps.vars.outputs.sha }}",
+              "cloud_stage": "staging"
+            }
