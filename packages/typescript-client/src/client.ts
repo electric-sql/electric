@@ -415,7 +415,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
   }
 
-  // TODO: when we pause, #start will return so we may need to restart by calling start
   async #requestShape(): Promise<void> {
     if (this.#state === `pause-requested`) {
       this.#state = `paused`
@@ -608,14 +607,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#requestShape()
   }
 
-  pause() {
+  #pause() {
     if (this.#started && this.#state === `active`) {
       this.#state = `pause-requested`
       this.#requestAbortController?.abort(PAUSE_STREAM)
     }
   }
 
-  resume() {
+  #resume() {
     if (this.#started && this.#state === `paused`) {
       this.#start()
     }
@@ -730,9 +729,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     ) {
       const visibilityHandler = () => {
         if (document.hidden) {
-          this.pause()
+          this.#pause()
         } else {
-          this.resume()
+          this.#resume()
         }
       }
 

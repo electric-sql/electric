@@ -9,6 +9,39 @@ import { resolveValue } from '../src'
 
 const BASE_URL = inject(`baseUrl`)
 
+/**
+ * Mocks the browser's visibility API
+ * and returns `pause` and `resume` functions
+ * that simulate visibility changes which should trigger pausing and resuming the shape stream.
+ */
+function mockVisibilityApi() {
+  const doc = {
+    hidden: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }
+
+  global.document = doc as unknown as Document
+
+  const invokeHandlers = () => {
+    const visibilityHandlers = doc.addEventListener.mock.calls.map(
+      ([_, handler]) => handler
+    )
+    visibilityHandlers.forEach((handler) => handler())
+  }
+
+  return {
+    pause: () => {
+      doc.hidden = true
+      invokeHandlers()
+    },
+    resume: () => {
+      doc.hidden = false
+      invokeHandlers()
+    },
+  }
+}
+
 describe(`Shape`, () => {
   it(`should sync an empty shape`, async ({ issuesTableUrl }) => {
     const start = Date.now()
@@ -343,6 +376,8 @@ describe(`Shape`, () => {
   it(`should set isConnected to false when the stream is paused an back on true when the fetch succeeds again`, async ({
     issuesTableUrl,
   }) => {
+    const { pause, resume } = mockVisibilityApi()
+
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
@@ -354,10 +389,10 @@ describe(`Shape`, () => {
 
     await vi.waitFor(() => expect(shapeStream.isConnected()).true)
 
-    shapeStream.pause()
+    pause()
     await vi.waitFor(() => expect(shapeStream.isConnected()).false)
 
-    shapeStream.resume()
+    resume()
     await vi.waitFor(() => expect(shapeStream.isConnected()).true)
   })
 
@@ -365,6 +400,7 @@ describe(`Shape`, () => {
     issuesTableUrl,
     insertIssues,
   }) => {
+    const { pause, resume } = mockVisibilityApi()
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
@@ -413,7 +449,7 @@ describe(`Shape`, () => {
 
     expect(value).toEqual(expectedValue)
 
-    shapeStream.pause()
+    pause()
     await vi.waitFor(() => expect(shapeStream.isConnected()).false)
 
     // Now that the stream is paused, insert another issue
@@ -428,7 +464,7 @@ describe(`Shape`, () => {
     )
 
     // Resume the stream
-    shapeStream.resume()
+    resume()
 
     // Now the update should arrive
     const value2 = await promises[1].promise
