@@ -335,7 +335,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #tickPromise?: Promise<void>
   #tickPromiseResolver?: () => void
   #tickPromiseRejecter?: (reason?: unknown) => void
-  #visibilityHandler?: () => void
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -729,7 +728,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       typeof document.hidden === `boolean` &&
       typeof document.addEventListener === `function`
     ) {
-      this.#visibilityHandler = () => {
+      const visibilityHandler = () => {
         if (document.hidden) {
           this.pause()
         } else {
@@ -737,13 +736,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
       }
 
-      document.addEventListener(`visibilitychange`, this.#visibilityHandler)
-    }
-  }
-
-  #unsubscribeFromVisibilityChanges() {
-    if (this.#visibilityHandler) {
-      document.removeEventListener(`visibilitychange`, this.#visibilityHandler)
+      document.addEventListener(`visibilitychange`, visibilityHandler)
     }
   }
 
