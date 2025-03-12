@@ -22,22 +22,29 @@ const itemShape = () => ({
 })
 
 async function createItem(newId: string) {
-  const itemsStream = getShapeStream<Item>(itemShape())
+  try{
+    const itemsStream = getShapeStream<Item>(itemShape())
 
-  // Match the insert
-  const findUpdatePromise = matchStream({
-    stream: itemsStream,
-    operations: [`insert`],
-    matchFn: ({ message }) => message.value.id === newId,
-  })
-
-  // Insert item
-  const fetchPromise = fetch(itemsUrl, {
-    method: `POST`,
-    body: JSON.stringify({ id: newId }),
-  })
-
-  return await Promise.all([findUpdatePromise, fetchPromise])
+    // Match the insert
+    const findUpdatePromise = matchStream({
+      stream: itemsStream,
+      operations: [`insert`],
+      matchFn: ({ message }) => message.value.id === newId,
+    })
+  
+    // Insert item
+    const fetchPromise = fetch(itemsUrl, {
+      method: `POST`,
+      body: JSON.stringify({ id: newId }),
+    })
+  
+    const [updateResult, fetchResult] = await Promise.all([findUpdatePromise, fetchPromise])
+    return { updateResult, fetchResult }
+  } catch (error) {
+    console.log("Error creating item: ", error)
+    throw error
+  }
+  
 }
 
 async function clearItems(numItems: number) {
@@ -94,13 +101,16 @@ export const Example = () => {
   // possible duplicates as there's a potential race condition where
   // useShape updates from the stream slightly before the action has finished.
   const itemsMap = new Map<string, Item>()
-  if (!isClearing) {
-    items.concat(submissions).forEach((item) => {
-      itemsMap.set(item.id, { ...itemsMap.get(item.id), ...item })
-    })
-  } else {
-    submissions.forEach((item) => itemsMap.set(item.id, item))
-  }
+  const allItems = isClearing ? submissions : items.concat(submissions)
+  allItems.forEach(item => itemsMap.set(item.id, item))
+
+  // if (!isClearing) {
+  //   items.concat(submissions).forEach((item) => {
+  //     itemsMap.set(item.id, { ...itemsMap.get(item.id), ...item })
+  //   })
+  // } else {
+  //   submissions.forEach((item) => itemsMap.set(item.id, item))
+  // }
 
   return (
     <div>
