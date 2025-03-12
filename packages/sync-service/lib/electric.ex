@@ -68,7 +68,9 @@ defmodule Electric do
 
   ### Database
 
-  - `connection_opts` - **Required**
+  - `replication_connection_opts` - **Required**
+     #{NimbleOptions.docs(opts_schema, nest_level: 1)}.
+  - `query_connection_opts` - Optional separate connection string that can use a pooler for non-replication queries (default: nil)
      #{NimbleOptions.docs(opts_schema, nest_level: 1)}.
   - `db_pool_size` - How many connections Electric opens as a pool for handling shape queries (default: `#{default.(:db_pool_size)}`)
   - `replication_stream_id` - Suffix for the logical replication publication and slot name (default: `#{default.(:replication_stream_id)}`)

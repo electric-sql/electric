@@ -39,6 +39,19 @@ jobs:
           --health-retries 5
         ports:
           - 54321:5432
+
+      pgbouncer:
+        image: bitnami/pgbouncer:latest
+        env:
+          PGBOUNCER_AUTH_TYPE: trust
+          PGBOUNCER_DATABASE: "*"
+          PGBOUNCER_POOL_MODE: transaction
+          POSTGRESQL_HOST: postgres
+          POSTGRESQL_DATABASE: electric
+          POSTGRESQL_USERNAME: postgres
+          POSTGRESQL_PASSWORD: password
+        ports:
+          - 64321:6432
     steps:
       - uses: actions/checkout@v4
 

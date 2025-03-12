@@ -923,8 +923,6 @@ defmodule Electric.ShapeCacheTest do
 
     defp restart_shape_cache(context) do
       stop_shape_cache(context)
-      # Wait 1 millisecond to ensure shape handles are not generated the same
-      Process.sleep(1)
 
       with_shape_cache(Map.put(context, :inspector, @stub_inspector),
         create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->

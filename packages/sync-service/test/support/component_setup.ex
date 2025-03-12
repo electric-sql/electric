@@ -197,8 +197,9 @@ defmodule Support.ComponentSetup do
          stack_events_registry: stack_events_registry,
          persistent_kv: kv,
          storage: storage,
-         connection_opts: ctx.db_config,
+         connection_opts: ctx.pooled_db_config,
          replication_opts: [
+           connection_opts: ctx.db_config,
            slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
            publication_name: publication_name,
            try_creating_publication?: true,

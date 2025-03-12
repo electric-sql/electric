@@ -64,7 +64,7 @@ reuse that configuration if you want:
     config :my_app, Repo, database_config
 
     config :electric,
-      connection_opts: Electric.Utils.obfuscate_password(database_config)
+      replication_connection_opts: Electric.Utils.obfuscate_password(database_config)
 
 Or if you're getting your db connection from an environment variable, then you
 can use
@@ -74,7 +74,7 @@ can use
     {:ok, database_config} = Electric.Config.parse_postgresql_uri(System.fetch_env!("DATABASE_URL"))
 
     config :electric,
-      connection_opts: Electric.Utils.obfuscate_password(database_config)
+      replication_connection_opts: Electric.Utils.obfuscate_password(database_config)
 
 The Electric app will startup along with the rest of your Elixir app.
 

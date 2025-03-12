@@ -108,11 +108,11 @@ defmodule Electric.Postgres.ReplicationClient do
         # TODO: the name is not necessary
         name: name(config.stack_id),
         auto_reconnect: false
-      ] ++ Electric.Utils.deobfuscate_password(config.connection_opts)
+      ] ++ Electric.Utils.deobfuscate_password(config.replication_opts[:connection_opts])
 
     Postgrex.ReplicationConnection.start_link(
       __MODULE__,
-      config.replication_opts,
+      Keyword.delete(config.replication_opts, :connection_opts),
       start_opts
     )
   end
