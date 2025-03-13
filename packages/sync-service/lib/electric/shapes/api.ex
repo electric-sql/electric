@@ -230,6 +230,7 @@ defmodule Electric.Shapes.Api do
   defp seek(%Request{} = request) do
     request
     |> listen_for_new_changes()
+    |> determine_global_last_seen_lsn()
     |> determine_log_chunk_offset()
     |> determine_up_to_date()
   end
@@ -372,6 +373,10 @@ defmodule Electric.Shapes.Api do
     end
   end
 
+  defp determine_global_last_seen_lsn(%Request{} = request) do
+    %Request{request | global_last_seen_lsn: get_global_last_seen_lsn(request)}
+  end
+
   # If chunk offsets are available, use those instead of the latest available
   # offset to optimize for cache hits and response sizes
   defp determine_log_chunk_offset(%Request{} = request) do
@@ -472,6 +477,7 @@ defmodule Electric.Shapes.Api do
     %{
       handle: shape_handle,
       chunk_end_offset: chunk_end_offset,
+      global_last_seen_lsn: global_last_seen_lsn,
       params: %{offset: offset, live: live?},
       api: api,
       response: response
@@ -484,8 +490,6 @@ defmodule Electric.Shapes.Api do
           |> update_attrs(%{ot_is_immediate_response: false})
           |> hold_until_change()
         else
-          global_last_seen_lsn = get_global_last_seen_lsn(request)
-
           up_to_date_lsn =
             if live? do
               # In live mode, if we've gotten an actual update and are here and not in `empty_response`,
@@ -526,6 +530,7 @@ defmodule Electric.Shapes.Api do
       {^ref, :new_changes, latest_log_offset} ->
         # Stream new log since currently "held" offset
         %{request | last_offset: latest_log_offset}
+        |> determine_global_last_seen_lsn()
         |> determine_log_chunk_offset()
         |> determine_up_to_date()
         |> do_serve_shape_log()
@@ -536,12 +541,14 @@ defmodule Electric.Shapes.Api do
         # it on reconnection is good enough.
         request
         |> update_attrs(%{ot_is_shape_rotated: true})
+        |> determine_global_last_seen_lsn()
         |> empty_response()
     after
       # If we timeout, return an empty body and 204 as there's no response body.
       long_poll_timeout ->
         request
         |> update_attrs(%{ot_is_long_poll_timeout: true})
+        |> determine_global_last_seen_lsn()
         |> empty_response()
     end
   end
@@ -556,12 +563,13 @@ defmodule Electric.Shapes.Api do
   defp clean_up_change_listener(%Request{} = request), do: request
 
   defp empty_response(%Request{} = request) do
-    %{response: response} = update_attrs(request, %{ot_is_empty_response: true})
+    %{response: response, global_last_seen_lsn: global_last_seen_lsn} =
+      update_attrs(request, %{ot_is_empty_response: true})
 
     %{
       response
       | status: 204,
-        body: encode_log(request, [up_to_date_ctl(get_global_last_seen_lsn(request))])
+        body: encode_log(request, [up_to_date_ctl(global_last_seen_lsn)])
     }
   end
 
