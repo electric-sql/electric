@@ -104,7 +104,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                      operation: "insert",
                      txids: [1],
                      relation: ["public", "test_table"],
-                     lsn: 1000,
+                     lsn: "1000",
                      op_position: 0
                    }
                  }

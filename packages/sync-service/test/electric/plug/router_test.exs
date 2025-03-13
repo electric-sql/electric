@@ -801,8 +801,8 @@ defmodule Electric.Plug.RouterTest do
 
       # Verify that both ops share the same tx offset and differ in their op offset by a known
       # amount.
-      op1_log_offset = LogOffset.new(op1_lsn, op1_op_position)
-      op2_log_offset = LogOffset.new(op2_lsn, op2_op_position)
+      op1_log_offset = LogOffset.new(String.to_integer(op1_lsn), op1_op_position)
+      op2_log_offset = LogOffset.new(String.to_integer(op2_lsn), op2_op_position)
 
       assert op2_log_offset == last_log_offset
 
@@ -888,8 +888,8 @@ defmodule Electric.Plug.RouterTest do
 
       # Verify that both ops share the same tx offset and differ in their op offset by a known
       # amount.
-      op1_log_offset = LogOffset.new(op1_lsn, op1_op_position)
-      op2_log_offset = LogOffset.new(op2_lsn, op2_op_position)
+      op1_log_offset = LogOffset.new(String.to_integer(op1_lsn), op1_op_position)
+      op2_log_offset = LogOffset.new(String.to_integer(op2_lsn), op2_op_position)
 
       assert op2_log_offset == last_log_offset
 

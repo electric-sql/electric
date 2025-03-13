@@ -588,7 +588,7 @@ defmodule Electric.Shapes.Api do
   end
 
   defp up_to_date_ctl(up_to_date_lsn) do
-    %{headers: %{control: "up-to-date", global_last_seen_lsn: up_to_date_lsn}}
+    %{headers: %{control: "up-to-date", global_last_seen_lsn: to_string(up_to_date_lsn)}}
   end
 
   defp with_span(%Request{} = request, name, attributes \\ [], fun) do

@@ -326,7 +326,6 @@ describe(`TransactionalMultiShapeStream`, () => {
       multiShapeStream.subscribe((msgs: MultiShapeMessages<ShapeConfig>[]) => {
         messageGroups.push(msgs)
         if (multiShapeStream.isUpToDate) {
-          console.log(`multiShapeStream.isUpToDate`)
           resolve()
         }
       })
