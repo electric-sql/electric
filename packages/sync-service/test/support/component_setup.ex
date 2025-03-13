@@ -232,12 +232,17 @@ defmodule Support.ComponentSetup do
     }
   end
 
+  def secure_mode(_ctx) do
+    %{secret: "test_secret_#{:erlang.unique_integer()}"}
+  end
+
   def build_router_opts(ctx, overrides \\ []) do
     [
       long_poll_timeout: 4_000,
       max_age: 60,
       stale_age: 300,
-      allow_shape_deletion: true
+      allow_shape_deletion: true,
+      secret: ctx[:secret]
     ]
     |> Keyword.merge(
       Electric.StackSupervisor.build_shared_opts(

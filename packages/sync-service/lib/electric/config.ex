@@ -402,4 +402,24 @@ defmodule Electric.Config do
       {:error, message} -> raise Dotenvy.Error, message: message
     end
   end
+
+  def validate_security_config!(secret, insecure) do
+    cond do
+      insecure && secret != nil ->
+        raise "You cannot set both ELECTRIC_SECRET and ELECTRIC_INSECURE=true"
+
+      !insecure && secret == nil ->
+        raise "You must set ELECTRIC_SECRET unless ELECTRIC_INSECURE=true. Setting ELECTRIC_INSECURE=true risks exposing your database, only use insecure mode in development or you've otherwise secured the Electric API"
+
+      true ->
+        if insecure do
+          Logger.warning("""
+          Electric is running in insecure mode — this risks exposing your database — only use insecure mode in development or if you've otherwise secured the Electric API.
+          Starting from v1, Electric will default to secure mode and require a secret to be set (using the `ELECTRIC_SECRET=yourSecret` env var) or the insecure mode to be enabled explicitly (using the `ELECTRIC_INSECURE=true` env var).
+          """)
+        end
+
+        :ok
+    end
+  end
 end
