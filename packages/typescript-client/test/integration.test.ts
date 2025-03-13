@@ -878,24 +878,12 @@ describe(`HTTP Sync`, () => {
     await insertIssues({ id: rowId, title: `foo1` })
 
     const statusCodesReceived: number[] = []
-    let numRequests = 0
 
+    let fetchPausePromise = Promise.resolve()
     const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
-      // before any subsequent requests after the initial one, ensure
-      // that the existing shape is deleted and some more data is inserted
-      if (numRequests === 2) {
-        await insertIssues({ id: rowId2, title: `foo2` })
-        await waitForIssues({ numChangesExpected: 2 })
-        await clearIssuesShape(issueStream.shapeHandle)
-      }
-
+      await fetchPausePromise
       const response = await fetch(...args)
-
-      if (response.status < 500) {
-        numRequests++
-        statusCodesReceived.push(response.status)
-      }
-
+      if (response.status < 500) statusCodesReceived.push(response.status)
       return response
     }
 
@@ -923,6 +911,14 @@ describe(`HTTP Sync`, () => {
           expect(statusCodesReceived).toHaveLength(2)
           expect(statusCodesReceived[0]).toBe(200)
           expect(statusCodesReceived[1]).toBe(200)
+
+          // before any subsequent requests after the initial one, ensure
+          // that the existing shape is deleted and some more data is inserted
+          fetchPausePromise = Promise.resolve().then(async () => {
+            await insertIssues({ id: rowId2, title: `foo2` })
+            await waitForIssues({ numChangesExpected: 2 })
+            await clearIssuesShape(issueStream.shapeHandle)
+          })
         } else if (upToDateReachedCount === 2) {
           // the next up to date message should have had
           // a 409 interleaved before it that instructed the
