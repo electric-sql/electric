@@ -8,7 +8,6 @@ log_segment=$(printf "%08X" $(( (RANDOM << 17) | (RANDOM << 2) | (RANDOM % 4) ))
 log_offset=$(printf "%08X" $(( (RANDOM << 17) | (RANDOM << 2) | (RANDOM % 4) )))
 
 # Combine into WAL format
-ELECTRIC_PG_START_WAL=00000001FFFFFFFF000000FF
 wal_pos=${ELECTRIC_PG_START_WAL:-$(printf "%08X%s%s" $timeline_id $log_segment $log_offset)}
 
 # Stop PostgreSQL to run pg_resetwal
