@@ -7,8 +7,9 @@ import Config
 # Run `mix help test` for more information.
 config :electric_phoenix_example, Electric.PhoenixExample.Repo,
   username: "postgres",
-  password: "postgres",
+  password: "password",
   hostname: "localhost",
+  port: 54321,
   database: "electric_phoenix_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
@@ -29,3 +30,7 @@ config :phoenix, :plug_init_mode, :runtime
 # Enable helpful, but potentially expensive runtime checks
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
+
+config :phoenix_sync,
+  mode: :embedded,
+  repo: Electric.PhoenixExample.Repo
