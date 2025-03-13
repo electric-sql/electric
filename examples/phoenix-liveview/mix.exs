@@ -56,7 +56,19 @@ defmodule Electric.PhoenixExample.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.1.1"},
       {:bandit, "~> 1.5"},
-      {:phoenix_sync, "~> 0.3.1"},
+      {:phoenix_sync, "~> 0.3"}
+    ] ++ deps_for_env(Mix.env())
+  end
+
+  defp deps_for_env(:test) do
+    # use local electric for tests
+    [
+      {:electric, path: "../../packages/sync-service", only: [:test], override: true}
+    ]
+  end
+
+  defp deps_for_env(_) do
+    [
       {:electric, ">= 1.0.0-beta.20"}
     ]
   end
