@@ -376,7 +376,7 @@ export class ElectricProvider extends ObservableV2<ObservableProvider> {
           this.lastSyncedStateVector = Y.encodeStateVector(this.doc)
           this.persistence?.set(
             `last_synced_state_vector`,
-            this.lastSyncedStateVector
+            this.lastSyncedStateVector.buffer as ArrayBuffer
           )
 
           this.connected = false
