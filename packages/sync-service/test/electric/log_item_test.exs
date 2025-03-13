@@ -23,7 +23,7 @@ defmodule Electric.LogItemsTest do
                       relation: ["public", "test"],
                       operation: :insert,
                       txids: [1],
-                      lsn: 0,
+                      lsn: "0",
                       op_position: 0
                     }
                   }}
@@ -40,7 +40,7 @@ defmodule Electric.LogItemsTest do
                       relation: ["public", "test"],
                       operation: :insert,
                       txids: [1],
-                      lsn: 0,
+                      lsn: "0",
                       op_position: 0
                     }
                   }}
@@ -65,7 +65,7 @@ defmodule Electric.LogItemsTest do
                       relation: ["public", "test"],
                       operation: :delete,
                       txids: [1],
-                      lsn: 0,
+                      lsn: "0",
                       op_position: 0
                     }
                   }}
@@ -90,7 +90,7 @@ defmodule Electric.LogItemsTest do
                       relation: ["public", "test"],
                       operation: :delete,
                       txids: [1],
-                      lsn: 0,
+                      lsn: "0",
                       op_position: 0
                     }
                   }}
@@ -117,7 +117,7 @@ defmodule Electric.LogItemsTest do
                       relation: ["public", "test"],
                       operation: :update,
                       txids: [1],
-                      lsn: 0,
+                      lsn: "0",
                       op_position: 0
                     }
                   }}
@@ -145,7 +145,7 @@ defmodule Electric.LogItemsTest do
                       relation: ["public", "test"],
                       operation: :update,
                       txids: [1],
-                      lsn: 0,
+                      lsn: "0",
                       op_position: 0
                     }
                   }}
@@ -171,7 +171,7 @@ defmodule Electric.LogItemsTest do
                       relation: ["public", "test"],
                       operation: :delete,
                       txids: [1],
-                      lsn: 0,
+                      lsn: "0",
                       op_position: 0
                     }
                   }}
@@ -200,7 +200,7 @@ defmodule Electric.LogItemsTest do
                       operation: :delete,
                       txids: [1],
                       key_change_to: "new_key",
-                      lsn: 0,
+                      lsn: "0",
                       op_position: 0
                     }
                   }},
@@ -213,7 +213,7 @@ defmodule Electric.LogItemsTest do
                       operation: :insert,
                       txids: [1],
                       key_change_from: "old_key",
-                      lsn: 0,
+                      lsn: "0",
                       op_position: 1
                     }
                   }}
@@ -242,7 +242,7 @@ defmodule Electric.LogItemsTest do
                       operation: :delete,
                       txids: [1],
                       key_change_to: "new_key",
-                      lsn: 0,
+                      lsn: "0",
                       op_position: 0
                     }
                   }},
@@ -255,7 +255,7 @@ defmodule Electric.LogItemsTest do
                       operation: :insert,
                       txids: [1],
                       key_change_from: "old_key",
-                      lsn: 0,
+                      lsn: "0",
                       op_position: 1
                     }
                   }}

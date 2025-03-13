@@ -730,7 +730,7 @@ defmodule Electric.Shapes.ApiTest do
                %{
                  headers: %{
                    control: "up-to-date",
-                   global_last_seen_lsn: next_offset.tx_offset
+                   global_last_seen_lsn: to_string(next_offset.tx_offset)
                  }
                }
              ]
