@@ -3,7 +3,7 @@ import "./Example.css"
 
 type Item = { id: string }
 
-const baseUrl = import.meta.env.ELECTRIC_URL ?? `http://localhost:3000`
+const baseUrl = import.meta.env.VITE_ELECTRIC_URL ?? `http://localhost:3000`
 
 export const Example = () => {
   const { data: items } = useShape<Item>({

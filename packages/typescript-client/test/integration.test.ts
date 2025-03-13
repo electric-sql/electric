@@ -64,7 +64,7 @@ describe(`HTTP Sync`, () => {
   }) => {
     const urlsRequested: URL[] = []
     const fetchWrapper = (...args: Parameters<typeof fetch>) => {
-      const url = new URL(args[0])
+      const url = new URL(args[0] as string | URL)
       urlsRequested.push(url)
       return fetch(...args)
     }
