@@ -4,8 +4,7 @@ hero:
   name: 'Sync'
   text: 'solved'
   tagline: >-
-    Sync makes apps awesome.
-    <br />Used to be hard. Electric makes easy.
+    Sync makes apps awesome.<br />Electric solves sync.
   actions:
     - theme: brand
       text: Sign-up to Cloud
@@ -37,7 +36,7 @@ import {
   OpenSourceSection,
   ScalesToSection,
   SolvesSyncSection,
-  SyncsIntoSection,
+  SyncAwesomeSection,
   UsedBySection,
   WorksWithSection
 } from './src/components/home'
@@ -56,7 +55,7 @@ onMounted(() => {
 })
 </script>
 
-<SyncsIntoSection />
+<SyncAwesomeSection />
 <SolvesSyncSection />
 <WorksWithSection />
 <ScalesToSection />

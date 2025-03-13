@@ -19,23 +19,28 @@
     <template #title>
       With your existing stack
     </template>
-    <template #tagline>
-      Works with
-      <a href="/docs/guides/deployment#_1-running-postgres">
-        any standard Postgres</a>,
-      <a href="/docs/guides/deployment#data-model-compatibility">
-        any data model</a>,
-      <a href="/docs/integrations">
-        any web framework</a>
-      that speaks
-      <a href="/docs/guides/client-development">
-        HTTP and JSON</a>.
-      Syncs into anything, from a
-      <a href="/docs/api/clients/typescript#how-to-use">
-        JS object</a>
-      to a
-      <a href="/product/pglite">
-        local database</a>.
+    <template #override-tagline>
+      <p>
+        Electric is a Postgres sync engine.
+        It works with
+        <a href="/docs/guides/deployment#_1-running-postgres">
+          any Postgres</a>,
+        <a href="/docs/guides/deployment#data-model-compatibility">
+          any data model</a> and
+        <a href="/docs/integrations">
+          any web framework</a>
+        that speaks
+        <a href="/docs/guides/client-development">
+          HTTP and JSON</a>.
+      </p>
+      <p>
+        Electric syncs data out of Postgres into ... anything you like, from a
+        <a href="/docs/integrations/react">
+          Javascript state variable</a>
+        to a
+        <a href="/product/pglite">
+          local SQL database</a>.
+      </p>
     </template>
     <ul>
       <li>
@@ -49,8 +54,7 @@
       </li>
     </ul>
     <template #outline>
-      So you can add realtime sync to your existing stack,
-      platform and framework of choice.
+      So you can adopt sync incrementally, one route at a time, into greenfield and brownfield applications, using your existing/preferred stack.
     </template>
     <template #outbody>
       ... Supabase, Neon, Phoenix, Next.js, TanStack, React ...
