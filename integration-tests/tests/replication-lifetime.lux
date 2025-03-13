@@ -1,0 +1,125 @@
+[doc Verify Electric replicates data throughout a DB's WAL lifetime]
+
+[include _macros.luxinc]
+
+[global pg_container_name=replication-lifetime__pg]
+[global num_items_per_batch=10]
+
+[macro setup_pg_with_lsn lsn_pos]
+  [shell pg-$lsn_pos]
+    -$fail_pattern
+  
+    !docker run \
+      --name $pg_container_name \
+      -e POSTGRES_DB=electric \
+      -e POSTGRES_USER=postgres \
+      -e POSTGRES_PASSWORD=password \
+      -e ELECTRIC_PG_START_WAL="00000001$lsn_pos" \
+      -p $pg_host_port:5432 \
+      -v $(realpath ../scripts/reset_wal.sh):/docker-entrypoint-initdb.d/initdb-reset_wal.sh \
+      postgres:14-alpine \
+        -c wal_level=logical
+
+    ??PostgreSQL init process complete; ready for start up.
+    ??database system is ready to accept connections
+  
+    # Reset the failure pattern to avoid false failures when Electric tries to create an already
+    # existing publication or replication slot.
+    -
+[endmacro]
+
+
+[macro validate_data_replication table_name]
+  ## Start the sync service.
+  [invoke setup_electric]
+
+  [shell electric]
+    ??[info] Starting replication from postgres
+
+  ## Add some data
+  [invoke start_psql]
+  [shell psql]
+    """!
+    CREATE TABLE $table_name (
+      id UUID PRIMARY KEY,
+      val TEXT
+    );
+    """
+    ??CREATE TABLE
+
+    """!
+    INSERT INTO
+      $table_name (id, val)
+    SELECT
+      gen_random_uuid(),
+      '#' || generate_series || ' initial val'
+    FROM
+      generate_series(1, $num_items_per_batch);
+    """
+    ??INSERT 0 $num_items_per_batch
+    
+  # Initialize a shape and collect the offset
+  [shell client]
+    # strip ANSI codes from response for easier matching
+    !curl -i -X GET "http://localhost:3000/v1/shape?table=$table_name&offset=-1" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
+    ??HTTP/1.1 200 OK
+    ?electric-handle: ([\d-]+)
+    [local handle=$1]
+    ?electric-offset: ([\w\d_]+)
+    [local offset=$1]
+    [loop i 1..$num_items_per_batch]
+        ??"val":"#$i initial val"
+    [endloop]
+
+  # Add some more data
+  [shell psql]
+    """!
+    INSERT INTO
+      $table_name (id, val)
+    SELECT
+      gen_random_uuid(),
+      '#' || generate_series || ' new val'
+    FROM
+      generate_series(1, $num_items_per_batch);
+    """
+    ??INSERT 0 $num_items_per_batch
+    !\q
+    ??$PS1
+
+  [shell electric]
+    ??[info] Received transaction
+    [sleep 1]
+
+  # Client should be able to continue same shape
+  [shell client]
+    !curl -i -X GET "http://localhost:3000/v1/shape?table=$table_name&handle=$handle&offset=$offset"
+    ??HTTP/1.1 200 OK
+    [loop i 1..$num_items_per_batch]
+        ??"val":"#$i new val"
+    [endloop]
+    ??$PS1
+
+  ## Terminate electric
+  [shell electric]
+    !System.halt()
+    ??$PS1
+[endmacro]
+
+###
+
+## PG with WAL set at absolute beginning
+[invoke setup_pg_with_lsn "0000000000000000"]
+[invoke validate_data_replication "items_wal_start"]
+[invoke teardown_container $pg_container_name]
+
+## PG with WAL set close to middle of 64-bit LSN range
+[invoke setup_pg_with_lsn "7FFFFFFF000000FF"]
+[invoke validate_data_replication "items_wal_mid"]
+[invoke teardown_container $pg_container_name]
+
+## PG with WAL close to end of 64-bit LSN range
+[invoke setup_pg_with_lsn "FFFFFFFF000000FF"]
+[invoke validate_data_replication "items_wal_end"]
+  
+[cleanup]
+  [invoke teardown]

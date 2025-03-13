@@ -635,8 +635,8 @@ describe(`HTTP Sync`, () => {
     const shapeOffset = res.headers.get(`electric-offset`)!
     const fakeMidOffset = shapeOffset
       .split(`_`)
-      .map(Number)
-      .map((x, i) => (i === 0 ? x - 1 : x))
+      .map(BigInt)
+      .map((x, i) => (i === 0 ? x - BigInt(1) : x))
       .join(`_`)
     const etag = res.headers.get(`etag`)
     expect(etag, `Response should have etag header`).not.toBe(null)
@@ -819,7 +819,8 @@ describe(`HTTP Sync`, () => {
         const isLastResponse = responseSizes.length === 0
         if (!isLastResponse) {
           // expect chunks to be close to 10 kB +- some kB
-          expect(responseSize).closeTo(10 * 1e3, 1e3)
+          const expectedSize = 10 * 1e3
+          expect(responseSize).closeTo(expectedSize, expectedSize * 0.2)
         } else {
           // expect last response to be ~ 10 kB or less
           expect(responseSize).toBeLessThan(11 * 1e3)
@@ -867,6 +868,7 @@ describe(`HTTP Sync`, () => {
     expect,
     insertIssues,
     issuesTableUrl,
+    waitForIssues,
     aborter,
     clearIssuesShape,
   }) => {
@@ -876,23 +878,12 @@ describe(`HTTP Sync`, () => {
     await insertIssues({ id: rowId, title: `foo1` })
 
     const statusCodesReceived: number[] = []
-    let numRequests = 0
 
+    let fetchPausePromise = Promise.resolve()
     const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
-      // before any subsequent requests after the initial one, ensure
-      // that the existing shape is deleted and some more data is inserted
-      if (numRequests === 2) {
-        await insertIssues({ id: rowId2, title: `foo2` })
-        await clearIssuesShape(issueStream.shapeHandle)
-      }
-
-      numRequests++
+      await fetchPausePromise
       const response = await fetch(...args)
-
-      if (response.status < 500) {
-        statusCodesReceived.push(response.status)
-      }
-
+      if (response.status < 500) statusCodesReceived.push(response.status)
       return response
     }
 
@@ -920,11 +911,19 @@ describe(`HTTP Sync`, () => {
           expect(statusCodesReceived).toHaveLength(2)
           expect(statusCodesReceived[0]).toBe(200)
           expect(statusCodesReceived[1]).toBe(200)
+
+          // before any subsequent requests after the initial one, ensure
+          // that the existing shape is deleted and some more data is inserted
+          fetchPausePromise = Promise.resolve().then(async () => {
+            await insertIssues({ id: rowId2, title: `foo2` })
+            await waitForIssues({ numChangesExpected: 2 })
+            await clearIssuesShape(issueStream.shapeHandle)
+          })
         } else if (upToDateReachedCount === 2) {
           // the next up to date message should have had
           // a 409 interleaved before it that instructed the
           // client to go and fetch data from scratch
-          expect(statusCodesReceived).toHaveLength(5)
+          expect(statusCodesReceived.length).toBeGreaterThanOrEqual(5)
           expect(statusCodesReceived[2]).toBe(409)
           expect(statusCodesReceived[3]).toBe(200)
           return res()

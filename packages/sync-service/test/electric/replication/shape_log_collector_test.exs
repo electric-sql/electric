@@ -147,11 +147,9 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert xids == [xid]
     end
 
+    @transaction_timeout 5
+    @num_comparisons 10
     test "drops transactions if already processed", ctx do
-      xid = 150
-      prev_lsn = Lsn.from_string("1667/FFFFFCC8")
-      lsn = Lsn.from_string("166A/91FDFDE8")
-
       Mock.Inspector
       |> stub(:load_relation, fn
         {"public", "test_table"}, _ ->
@@ -162,34 +160,47 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       end)
       |> allow(self(), ctx.server)
 
-      txn =
-        %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
-        |> Transaction.prepend_change(%Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "2", "name" => "foo"}
-        })
+      change = %Changes.NewRecord{
+        relation: {"public", "test_table"},
+        record: %{"id" => "2", "name" => "foo"}
+      }
 
-      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+      1..@num_comparisons
+      |> Enum.reduce({1, 0, 1, 0}, fn _, {xid, prev_xid, lsn_int, prev_lsn_int} ->
+        # advance xid and lsn randomly along their potential values to simulate
+        # trnasactions coming in at different points in the DBs lifetime
+        xid = xid + (:rand.uniform(2 ** 32 - xid) - 1)
+        prev_xid = xid - (:rand.uniform(xid - prev_xid) + 1)
+        lsn_int = lsn_int + (:rand.uniform(2 ** 64 - lsn_int) - 1)
+        prev_lsn_int = lsn_int - (:rand.uniform(lsn_int - prev_lsn_int) + 1)
+        lsn = Lsn.from_integer(lsn_int)
+        prev_lsn = Lsn.from_integer(prev_lsn_int)
 
-      Support.TransactionConsumer.assert_consume(ctx.consumers, [txn])
+        txn =
+          %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
+          |> Transaction.prepend_change(change)
 
-      txn2 =
-        %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
-        |> Transaction.prepend_change(%Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "2", "name" => "foo"}
-        })
+        assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
 
-      txn3 =
-        %Transaction{xid: xid - 1, lsn: prev_lsn, last_log_offset: LogOffset.new(prev_lsn, 0)}
-        |> Transaction.prepend_change(%Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "2", "name" => "foo"}
-        })
+        Support.TransactionConsumer.assert_consume(ctx.consumers, [txn], @transaction_timeout)
 
-      assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.server)
-      assert :ok = ShapeLogCollector.store_transaction(txn3, ctx.server)
-      Support.TransactionConsumer.refute_consume(ctx.consumers)
+        txn2 =
+          %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
+          |> Transaction.prepend_change(change)
+
+        txn3 =
+          %Transaction{
+            xid: prev_xid,
+            lsn: prev_lsn,
+            last_log_offset: LogOffset.new(prev_lsn, 0)
+          }
+          |> Transaction.prepend_change(change)
+
+        assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.server)
+        assert :ok = ShapeLogCollector.store_transaction(txn3, ctx.server)
+        Support.TransactionConsumer.refute_consume(ctx.consumers, @transaction_timeout * 2)
+        {xid, prev_xid, lsn_int, prev_lsn_int}
+      end)
     end
   end
 

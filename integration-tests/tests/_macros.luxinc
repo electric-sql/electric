@@ -22,6 +22,7 @@
       -e POSTGRES_PASSWORD=password \
       -e POSTGRES_INITDB_ARGS=${initdb_args} \
       -p $pg_host_port:5432 \
+      -v $(realpath ../scripts/reset_wal.sh):/docker-entrypoint-initdb.d/initdb-reset_wal.sh \
       postgres:14-alpine \
         -c wal_level=logical ${config_opts}
 

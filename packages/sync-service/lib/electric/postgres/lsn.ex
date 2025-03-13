@@ -156,6 +156,11 @@ defmodule Electric.Postgres.Lsn do
     iex> is_larger(lsn1, lsn2)
     true
 
+    iex> lsn1 = Lsn.from_string("FFFFFFFB/91FDFDE8")
+    iex> lsn2 = Lsn.from_string("FFFFFFFA/FFFFFCC8")
+    iex> is_larger(lsn1, lsn2)
+    true
+
     iex> lsn1 = %{segment: 2, offset: 100}
     iex> lsn2 = %{segment: 2, offset: 200}
     iex> is_larger(lsn1, lsn2)
