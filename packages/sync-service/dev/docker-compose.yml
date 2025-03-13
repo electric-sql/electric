@@ -32,7 +32,7 @@ services:
     volumes:
       - ./postgres2.conf:/etc/postgresql.conf:ro
       - ./init.sql:/docker-entrypoint-initdb.d/00_shared_init.sql:ro
-      - ./reset-wal.sh:/docker-entrypoint-initdb.d/initdb-reset_wal.sh:x
+      - ./reset_wal.sh:/docker-entrypoint-initdb.d/initdb-reset_wal.sh:x
     tmpfs:
       - /var/lib/postgresql/data
       - /tmp
