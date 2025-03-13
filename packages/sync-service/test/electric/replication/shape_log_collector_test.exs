@@ -165,47 +165,42 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         record: %{"id" => "2", "name" => "foo"}
       }
 
-      Stream.unfold({0, 1, 0, 1, 0}, fn {runs, xid, prev_xid, lsn_int, prev_lsn_int} ->
-        if runs == @num_comparisons do
-          nil
-        else
-          # advance xid and lsn randomly along their potential values to simulate
-          # trnasactions coming in at different points in the DBs lifetime
-          xid = xid + (:rand.uniform(2 ** 32 - xid) - 1)
-          prev_xid = xid - (:rand.uniform(xid - prev_xid) + 1)
-          lsn_int = lsn_int + (:rand.uniform(2 ** 64 - lsn_int) - 1)
-          prev_lsn_int = lsn_int - (:rand.uniform(lsn_int - prev_lsn_int) + 1)
-          lsn = Lsn.from_integer(lsn_int)
-          prev_lsn = Lsn.from_integer(prev_lsn_int)
-          runs = runs + 1
+      1..@num_comparisons
+      |> Enum.reduce({1, 0, 1, 0}, fn _, {xid, prev_xid, lsn_int, prev_lsn_int} ->
+        # advance xid and lsn randomly along their potential values to simulate
+        # trnasactions coming in at different points in the DBs lifetime
+        xid = xid + (:rand.uniform(2 ** 32 - xid) - 1)
+        prev_xid = xid - (:rand.uniform(xid - prev_xid) + 1)
+        lsn_int = lsn_int + (:rand.uniform(2 ** 64 - lsn_int) - 1)
+        prev_lsn_int = lsn_int - (:rand.uniform(lsn_int - prev_lsn_int) + 1)
+        lsn = Lsn.from_integer(lsn_int)
+        prev_lsn = Lsn.from_integer(prev_lsn_int)
 
-          txn =
-            %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
-            |> Transaction.prepend_change(change)
+        txn =
+          %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
+          |> Transaction.prepend_change(change)
 
-          assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+        assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
 
-          Support.TransactionConsumer.assert_consume(ctx.consumers, [txn], @transaction_timeout)
+        Support.TransactionConsumer.assert_consume(ctx.consumers, [txn], @transaction_timeout)
 
-          txn2 =
-            %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
-            |> Transaction.prepend_change(change)
+        txn2 =
+          %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
+          |> Transaction.prepend_change(change)
 
-          txn3 =
-            %Transaction{
-              xid: prev_xid,
-              lsn: prev_lsn,
-              last_log_offset: LogOffset.new(prev_lsn, 0)
-            }
-            |> Transaction.prepend_change(change)
+        txn3 =
+          %Transaction{
+            xid: prev_xid,
+            lsn: prev_lsn,
+            last_log_offset: LogOffset.new(prev_lsn, 0)
+          }
+          |> Transaction.prepend_change(change)
 
-          assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.server)
-          assert :ok = ShapeLogCollector.store_transaction(txn3, ctx.server)
-          Support.TransactionConsumer.refute_consume(ctx.consumers, @transaction_timeout * 2)
-          {nil, {runs, xid, prev_xid, lsn_int, prev_lsn_int}}
-        end
+        assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.server)
+        assert :ok = ShapeLogCollector.store_transaction(txn3, ctx.server)
+        Support.TransactionConsumer.refute_consume(ctx.consumers, @transaction_timeout * 2)
+        {xid, prev_xid, lsn_int, prev_lsn_int}
       end)
-      |> Stream.run()
     end
   end
 
