@@ -66,7 +66,7 @@
             width="350"
             height="350"
             sandbox="allow-popups allow-same-origin allow-popups-to-escape-sandbox allow-scripts"
-            style="width: 100%">
+            style="width: 100%; border: 1px solid rgba(48, 54, 61, 0.5)">
         </iframe>
       </div>
       <div class="github" ref="cards">

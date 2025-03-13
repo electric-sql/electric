@@ -17,12 +17,10 @@
 <template>
   <Section :actions="actions">
     <template #title>
-      Just works
+      Electric solves sync
     </template>
     <template #tagline>
-      Electric solves the hard problems of
-      <a href="/how/it-works">
-        resilient sync</a>,
+      Sync used to be hard. Electric makes it easy. Solving the core concerns of
       <a href="/docs/guides/shapes">
         partial&nbsp;replication</a>,
       <a href="/docs/api/http#caching">
@@ -33,7 +31,7 @@
     </template>
     ... diagramme ...
     <template #outline>
-      So you can build awesome apps, without rolling your own sync engine.
+      So you can build awesome, next-gen software. Without rolling your own sync.
     </template>
   </Section>
 </template>

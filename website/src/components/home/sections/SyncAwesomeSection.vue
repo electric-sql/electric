@@ -24,15 +24,18 @@
 <template>
   <Section :actions="actions">
     <template #title>
-      Adopt sync, one route at a time
+      Sync makes apps awesome
     </template>
     <template #tagline>
-      Sync out of Postgres into anything you like. Without changing your stack, data or code.
+      Sync is the magic ingredient behind fast, modern software. From apps like Figma and Linear to AI agents running on live, local data.
     </template>
     <ul class="sync-targets">
       <li :key="target" v-for="target in syncTargets">
         {{ target }}
       </li>
     </ul>
+    <!--template #outline>
+      Live local data makes apps go brrr 🚀
+    </template-->
   </Section>
 </template>
