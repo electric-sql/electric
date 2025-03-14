@@ -21,20 +21,18 @@
     </template>
     <template #override-tagline>
       <p>
-        Electric is a Postgres sync engine.
-        It works with
+        Electric works with
         <a href="/docs/guides/deployment#_1-running-postgres">
           any Postgres</a>,
         <a href="/docs/guides/deployment#data-model-compatibility">
-          any data model</a> and
+          any data model</a>,
         <a href="/docs/integrations">
           any web framework</a>
         that speaks
         <a href="/docs/guides/client-development">
-          HTTP and JSON</a>.
-      </p>
-      <p>
-        Electric syncs data out of Postgres into ... anything you like, from a
+          HTTP and JSON</a>
+        &mdash;
+        and syncs data out of Postgres into anything you like, from a
         <a href="/docs/integrations/react">
           Javascript state variable</a>
         to a
@@ -54,7 +52,7 @@
       </li>
     </ul>
     <template #outline>
-      So you can adopt sync incrementally, one route at a time, into greenfield and brownfield applications, using your existing/preferred stack.
+      So you can adopt sync incrementally, one route at a time, into both greenfield and brownfield applications, using your preferred / existing stack.
     </template>
     <template #outbody>
       ... Supabase, Neon, Phoenix, Next.js, TanStack, React ...

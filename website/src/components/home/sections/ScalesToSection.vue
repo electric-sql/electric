@@ -28,12 +28,11 @@
           existing CDNs</a>
         to scale high-throughput data delivery to
         <a href="/docs/reference/benchmarks">
-          millions of concurrent&nbsp;users</a>
-        from a single commodity Postgres.
-        The chart below shows latency and memory-use stay low and flat as we
+          millions of users</a>.
+        The chart below shows latency and memory-use stay low and flat as we scale
         <a href="/docs/reference/benchmarks#cloud">
-          scale an 80Gb/s workload</a>
-        out to a million concurrent users.
+          an 80Gb/s workload</a>
+        to a million concurrent users from a single commodity Postgres.
       </p>
     </template>
     <figure>

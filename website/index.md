@@ -34,6 +34,7 @@ import {
   BackedBySection,
   NoSilosStrap,
   OpenSourceSection,
+  PGliteStrap,
   ScalesToSection,
   SolvesSyncSection,
   SyncAwesomeSection,
@@ -59,7 +60,11 @@ onMounted(() => {
 <SolvesSyncSection />
 <WorksWithSection />
 <ScalesToSection />
+
 <NoSilosStrap />
+
 <UsedBySection />
 <BackedBySection />
 <OpenSourceSection />
+
+<PGliteStrap />

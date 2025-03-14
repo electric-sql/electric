@@ -6,8 +6,11 @@
 
   const expandedActions = actions !== undefined
     ? actions.map(action => {
-      const target = action.target || '_self'
-      const theme = action.theme || 'alt'
+      const defaultTarget = action.href.startsWith('http') ? '_blank' : '_self'
+      const defaultTheme = 'alt'
+
+      const target = action.target || defaultTarget
+      const theme = action.theme || defaultTheme
 
       const key = `${action.href}-${action.text}`
 
