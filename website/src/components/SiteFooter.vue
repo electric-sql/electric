@@ -4,7 +4,7 @@
     z-index: var(--vp-z-index-footer);
     border-top: 1px solid var(--vp-sidebar-bg-color);
     padding: 80px 24px 32px !important;
-    background-color: black;
+/*    background-color: black;*/
     margin-bottom: 0.5rem;
     display: block;
   }

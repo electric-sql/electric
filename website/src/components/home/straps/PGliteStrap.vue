@@ -16,8 +16,8 @@
 
 <style scoped>
   .pglite-strap {
-    margin: 40px -400px;
-    padding: 80px 400px;
+    margin: 50px -400px 60px;
+    padding: 90px 400px 80px;
 
     background: black;
 
@@ -31,7 +31,7 @@
   }
 
   .logo {
-    flex-basis: 55%;
+    flex-basis: 54%;
     text-align: center;
     order: 2;
     display: flex;
@@ -39,11 +39,13 @@
     margin-bottom: 30px;
   }
   .logo img {
-    max-width: 200px;
+    max-width: calc(100px + 6vw);
+    margin-right: 10%;
   }
 
   .body {
-    flex-basis: 45%;
+    flex-basis: 46%;
+    max-width: 550px;
   }
 
   @media (max-width: 959px) {
@@ -57,6 +59,7 @@
     }
     .logo img {
       max-width: calc(70px + 8vw);
+      margin-right: 0;
     }
   }
 </style>
@@ -72,7 +75,8 @@
         Embeddable Postgres
       </h1>
       <p>
-        Electric also develops PGlite, a lightweight WASM Postgres with real-time, reactive bindings.
+        Electric also develops PGlite, a lightweight WASM Postgres with
+        <span class="no-wrap">real-time</span>, reactive&nbsp;bindings.
       </p>
       <Actions :actions="actions" />
     </div>
