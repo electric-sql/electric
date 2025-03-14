@@ -15,15 +15,10 @@ defmodule Electric.Shapes.ApiTest do
   @test_shape %Shape{
     root_table: {"public", "users"},
     root_table_id: :erlang.phash2({"public", "users"}),
-    table_info: %{
-      {"public", "users"} => %{
-        columns: [
-          %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0, array_dimensions: 0},
-          %{name: "value", type: "text", type_id: {28, 1}, pk_position: nil, array_dimensions: 0}
-        ],
-        pk: ["id"]
-      }
-    }
+    root_column_count: 2,
+    root_pk: ["id"],
+    selected_columns: ["id", "value"],
+    flags: %{selects_all_columns: true}
   }
   @registry __MODULE__.Registry
   @test_shape_handle "test-shape-handle"
@@ -38,7 +33,11 @@ defmodule Electric.Shapes.ApiTest do
   @receive_timeout 1000
 
   def load_column_info({"public", "users"}, _) do
-    {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
+    {:ok,
+     [
+       %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0, array_dimensions: 0},
+       %{name: "value", type: "text", type_id: {28, 1}, pk_position: nil, array_dimensions: 0}
+     ]}
   end
 
   def load_column_info(_, _),

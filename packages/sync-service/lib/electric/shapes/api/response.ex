@@ -54,6 +54,7 @@ defmodule Electric.Shapes.Api.Response do
       args
       |> Keyword.put_new(:status, 400)
       |> Keyword.put(:body, error_body(api, message, args))
+      |> Keyword.put(:api, api)
 
     struct(__MODULE__, opts)
   end
@@ -64,6 +65,7 @@ defmodule Electric.Shapes.Api.Response do
       |> Keyword.put_new(:status, 400)
       |> Keyword.put(:body, error_body(request, message, args))
       |> Keyword.put(:shape_definition, request.params.shape_definition)
+      |> Keyword.put(:api, request.api)
 
     struct(__MODULE__, opts)
   end

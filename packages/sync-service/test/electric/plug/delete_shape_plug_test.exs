@@ -17,18 +17,16 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   @test_shape %Shape{
     root_table: {"public", "users"},
     root_table_id: :erlang.phash2({"public", "users"}),
-    table_info: %{
-      {"public", "users"} => %{
-        columns: [%{name: "id", type: "int8", pk_position: 0, type_id: {20, -1}}],
-        pk: ["id"]
-      }
-    }
+    root_pk: ["id"],
+    root_column_count: 1,
+    selected_columns: ["id"],
+    flags: %{selects_all_columns: true}
   }
   @test_shape_handle "test-shape-handle"
   @test_pg_id "12345"
 
   def load_column_info({"public", "users"}, _),
-    do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
+    do: {:ok, [%{name: "id", type: "int8", pk_position: 0, type_id: {20, -1}}]}
 
   def load_relation(tbl, _),
     do: Support.StubInspector.load_relation(tbl, nil)

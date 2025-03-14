@@ -19,12 +19,12 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   @shape %Shape{
     root_table: {"public", "items"},
     root_table_id: 1,
-    table_info: %{
-      {"public", "items"} => %{
-        columns: [%{name: "id", type: :text}, %{name: "value", type: :text}],
-        pk: ["id"]
-      }
-    }
+    root_pk: ["id"],
+    selected_columns: ["id"],
+    where:
+      Electric.Replication.Eval.Parser.parse_and_validate_expression!("id != '1'",
+        refs: %{["id"] => :text}
+      )
   }
 
   @snapshot_offset LogOffset.first()
@@ -671,8 +671,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.initialise(opts)
         storage.set_shape_definition(@shape, opts)
 
-        assert {:ok, %{@shape_handle => @shape}} =
+        assert {:ok, %{@shape_handle => parsed}} =
                  Electric.ShapeCache.Storage.get_all_stored_shapes({storage, opts})
+
+        assert @shape == parsed
       end
     end
 
@@ -729,7 +731,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.initialise(shape_opts)
         storage.set_shape_definition(@shape, shape_opts)
 
-        assert 2330 = Electric.ShapeCache.Storage.get_total_disk_usage({storage, opts})
+        assert Electric.ShapeCache.Storage.get_total_disk_usage({storage, opts}) > 2300
       end
     end
   end

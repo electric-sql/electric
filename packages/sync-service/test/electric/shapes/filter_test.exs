@@ -124,6 +124,47 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.affected_shapes(filter, rename) == MapSet.new(["s2"])
     end
 
+    test "returns shapes affected by column addition" do
+      s1 = Shape.new!("t1", inspector: @inspector)
+      s2 = Shape.new!("t1", inspector: @inspector, columns: ["id", "number"])
+
+      filter =
+        Filter.new()
+        |> Filter.add_shape("s1", s1)
+        |> Filter.add_shape("s2", s2)
+
+      rename = %Relation{
+        schema: "public",
+        table: "t1",
+        id: s1.root_table_id,
+        columns: ["id", "number", "an_array", "new one"]
+      }
+
+      assert Filter.affected_shapes(filter, rename) == MapSet.new(["s1"])
+    end
+
+    test "returns shapes affected by column change" do
+      s1 = Shape.new!("t1", inspector: @inspector)
+      s2 = Shape.new!("t1", inspector: @inspector, columns: ["id", "number"])
+      s3 = Shape.new!("t1", inspector: @inspector, columns: ["id", "an_array"])
+
+      filter =
+        Filter.new()
+        |> Filter.add_shape("s1", s1)
+        |> Filter.add_shape("s2", s2)
+        |> Filter.add_shape("s3", s3)
+
+      rename = %Relation{
+        schema: "public",
+        table: "t1",
+        id: s1.root_table_id,
+        columns: ["id", "number", "an_array"],
+        affected_columns: ["number"]
+      }
+
+      assert Filter.affected_shapes(filter, rename) == MapSet.new(["s1", "s2"])
+    end
+
     test "returns shapes affected by truncation" do
       filter =
         Filter.new()

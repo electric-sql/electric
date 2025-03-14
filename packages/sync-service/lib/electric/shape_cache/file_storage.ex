@@ -167,7 +167,7 @@ defmodule Electric.ShapeCache.FileStorage do
 
           with {:ok, shape_def_encoded} <- File.read(shape_def_path),
                {:ok, shape_def_json} <- Jason.decode(shape_def_encoded),
-               shape = Electric.Shapes.Shape.from_json_safe!(shape_def_json) do
+               {:ok, shape} <- Electric.Shapes.Shape.from_json_safe(shape_def_json) do
             Map.put(acc, shape_handle, shape)
           else
             # if the shape definition file cannot be read/decoded, just ignore it

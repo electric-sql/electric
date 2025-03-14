@@ -485,30 +485,36 @@ defmodule Electric.Shapes.ConsumerTest do
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
 
+      Mock.PublicationManager
+      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
+      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
+
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
 
-      assert_receive {:DOWN, ^ref1, :process, _, _}
+      assert_receive {:DOWN, ^ref1, :process, _, :normal}
       refute_receive {:DOWN, ^ref2, :process, _, _}
     end
 
     test "cleans shapes affected by a relation change", ctx do
+      ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
+      ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
+
       {orig_schema, orig_table} = @shape1.root_table
 
-      rel = %Relation{
+      rel_before = %Relation{
         id: @shape1.root_table_id,
         schema: orig_schema,
         table: orig_table,
-        columns: [
-          # specify different columns
-          %{name: "id", type_oid: {999, 1}}
-        ]
+        columns: [%{name: "id", type_oid: {1, 1}}]
       }
 
-      ref1 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
+      assert :ok = ShapeLogCollector.handle_relation_msg(rel_before, ctx.producer)
 
-      ref2 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
+      refute_receive {:DOWN, _, :process, _, _}
+
+      rel_changed = %Relation{rel_before | columns: [%{name: "id", type_oid: {999, 1}}]}
 
       # also cleans up inspector cache and shape status cache
       Mock.Inspector
@@ -532,9 +538,9 @@ defmodule Electric.Shapes.ConsumerTest do
       |> expect(:remove_shape, 0, fn ^shape2, _ -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
 
-      assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_relation_msg(rel_changed, ctx.producer)
 
-      assert_receive {:DOWN, ^ref1, :process, _, _}
+      assert_receive {:DOWN, ^ref1, :process, _, :normal}
       refute_receive {:DOWN, ^ref2, :process, _, _}
     end
 
