@@ -1,4 +1,5 @@
 export { default as BackedBySection } from './BackedBySection.vue'
+export { default as LatestNewsSection } from './LatestNewsSection.vue'
 export { default as OpenSourceSection } from './OpenSourceSection.vue'
 export { default as ScalesToSection } from './ScalesToSection.vue'
 export { default as SolvesSyncSection } from './SolvesSyncSection.vue'
