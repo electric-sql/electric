@@ -32,6 +32,7 @@ import { onMounted } from 'vue'
 
 import {
   BackedBySection,
+  GetStartedStrap,
   LatestNewsSection,
   NoSilosStrap,
   OpenSourceSection,
@@ -61,13 +62,10 @@ onMounted(() => {
 <SolvesSyncSection />
 <WorksWithSection />
 <ScalesToSection />
-
 <NoSilosStrap />
-
 <UsedBySection />
 <BackedBySection />
 <OpenSourceSection />
-
 <PGliteStrap />
-
 <LatestNewsSection />
+<GetStartedStrap />

@@ -35,6 +35,7 @@
 <style scoped>
   .cta-actions {
     justify-content: left;
+    margin-top: 24px;
   }
 </style>
 
