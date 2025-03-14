@@ -600,6 +600,25 @@ iframe {
   color-scheme: auto;
 }
 
+.VPHome {
+  margin-bottom: 0 !important;
+}
+
+@media (max-width: 639px) {
+  .VPHomeHero h1.name,
+  .VPHomeHero p.text {
+    font-size: 42px !important;
+    line-height: 52px !important;
+  }
+}
+@media (max-width: 499px) {
+  .VPHomeHero h1.name,
+  .VPHomeHero p.text {
+    font-size: 36px !important;
+    line-height: 45px !important;
+  }
+}
+
 .VPHomeHero .VPImage.image-src {
   max-width: min(calc(250px + 25vw), 560px);
   margin-left: -40px;
@@ -832,7 +851,7 @@ ul.benefits {
   position: relative;
   padding: 18px 24px;
   background: var(--vp-c-bg-soft);
-  z-index: 100;
+  /* z-index: 100; */
   margin-top: -2rem;
 }
 

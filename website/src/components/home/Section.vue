@@ -8,6 +8,12 @@
   .page-section {
     padding: 40px 0;
   }
+  .page-section:first-child {
+    padding-top: 60px;
+  }
+  .section-body {
+    margin: 24px 0;
+  }
 </style>
 
 <template>

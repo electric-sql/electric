@@ -11,6 +11,9 @@
 
     background: var(--vp-sidebar-bg-color);
   }
+  .cta-strap:last-child {
+    margin-bottom: 0px;
+  }
 </style>
 
 <template>
