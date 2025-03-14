@@ -29,6 +29,8 @@
         to scale high-throughput data delivery to
         <a href="/docs/reference/benchmarks">
           millions of users</a>.
+      </p>
+      <p>
         The chart below shows latency and memory-use stay low and flat as we scale
         <a href="/docs/reference/benchmarks#cloud">
           an 80Gb/s workload</a>
