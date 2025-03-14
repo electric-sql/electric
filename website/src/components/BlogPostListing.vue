@@ -6,13 +6,12 @@
 
 <style scoped>
   .post {
-    margin: 12px 0;
-
     border-radius: 12px;
     background-color: var(--vp-c-bg-soft);
+    border: 1px solid #2a2c34;
   }
   .post:hover {
-    border-color: var(--ddn-color);
+/*    border-color: var(--ddn-color);*/
   }
 
   .post a {
