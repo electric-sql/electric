@@ -1,5 +1,6 @@
 <script setup>
   import Section from '../Section.vue'
+  import SyncTarget from '../SyncTarget.vue'
 
   const actions = [
     {
@@ -13,11 +14,51 @@
     }
   ]
 
-  const syncTargets = [
-    'apps',
-    'dashboards',
-    'workers',
-    'agents'
+  const syncTargets = [{
+      slug: 'app',
+      name: 'Apps',
+      description: `
+        Make apps
+        <span class="no-wrap">
+          super fast</span>
+        <span class="no-wrap">
+          and collaborative</span>
+      `,
+      href: '/use-cases/data-sync'
+    },
+    {
+      slug: 'dashboard',
+      name: 'Dashboards',
+      description: `
+        Keep dashboards live
+        <span class="no-wrap">
+          and real-time</span>
+      `,
+      href: '/use-cases/cache-invalidation'
+    },
+    {
+      slug: 'worker',
+      name: 'Workers',
+      description: `
+        Sync data into
+        <span class="no-wrap-1117">
+          workers
+          <span class="no-wrap">
+            at the edge</span>
+        </span>
+      `,
+      href: '/use-cases/local-first-software'
+    },
+    {
+      slug: 'agent',
+      name: 'Agents',
+      description: `
+        Run AI agents on
+        <span class="no-wrap">
+          live local data</span>
+      `,
+      href: '/use-cases/local-ai'
+    }
   ]
 </script>
 
@@ -27,15 +68,36 @@
       Sync makes apps awesome
     </template>
     <template #tagline>
-      Sync is the magic ingredient behind fast, modern software. From apps like Figma and Linear to AI agents running on live, local data.
+      Sync is the magic ingredient behind fast, modern software. From apps like Figma and Linear to AI agents running on live local data.
     </template>
-    <ul class="sync-targets">
-      <li :key="target" v-for="target in syncTargets">
-        {{ target }}
-      </li>
-    </ul>
-    <!--template #outline>
-      Live local data makes apps go brrr 🚀
-    </template-->
+    <div class="sync-targets">
+      <SyncTarget v-for="target in syncTargets"
+          :key="target.name"
+          :target="target"
+      />
+    </div>
   </Section>
 </template>
+
+<style scoped>
+  .sync-targets {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 32px;
+    margin: 32px 0px 40px;
+    overflow: hidden;
+  }
+  @media (max-width: 959px) {
+    .sync-targets {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+</style>
+
+<style>
+  @media (min-width: 959px) and (max-width: 1117px) {
+    .no-wrap-1117 {
+      white-space: nowrap;
+    }
+  }
+</style>

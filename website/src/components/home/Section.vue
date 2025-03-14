@@ -11,8 +11,17 @@
   .page-section:first-child {
     padding-top: 60px;
   }
+  .section-head {
+    max-width: 725px;
+  }
   .section-body {
     margin: 24px 0;
+  }
+</style>
+
+<style>
+  .page-section p a {
+    white-space: nowrap;
   }
 </style>
 
