@@ -438,69 +438,17 @@ defmodule Electric.Shapes.ShapeTest do
 
   describe "JSON" do
     test "should serialize shape with complex columns" do
-      shape = %Electric.Shapes.Shape{
+      shape = %Shape{
         root_table: {"public", "foo"},
         root_table_id: 1,
-        table_info: %{
-          {"public", "foo"} => %{
-            columns: [
-              %{
-                name: "second",
-                type: :text,
-                formatted_type: "text",
-                type_mod: -1,
-                type_kind: :base,
-                pk_position: 1,
-                type_id: {25, -1},
-                array_dimensions: 0,
-                not_null: true,
-                array_type: nil
-              },
-              %{
-                name: "first",
-                type: :text,
-                formatted_type: "text",
-                type_mod: -1,
-                type_kind: :base,
-                pk_position: 0,
-                type_id: {25, -1},
-                array_dimensions: 0,
-                not_null: true,
-                array_type: nil
-              },
-              %{
-                name: "fourth",
-                type: :text,
-                formatted_type: "text",
-                type_mod: -1,
-                type_kind: :base,
-                pk_position: nil,
-                type_id: {25, -1},
-                array_dimensions: 0,
-                not_null: false,
-                array_type: nil
-              },
-              %{
-                name: "third",
-                type: :text,
-                formatted_type: "text",
-                type_mod: -1,
-                type_kind: :enum,
-                pk_position: 2,
-                type_id: {25, -1},
-                array_dimensions: 0,
-                not_null: true,
-                array_type: nil
-              }
-            ],
-            pk: ["first", "second", "third"]
-          }
-        },
+        root_pk: ["first", "second", "third"],
+        selected_columns: ["first", "second", "third", "fourth"],
+        flags: %{selects_all_columns: true, non_primitive_columns_in_where: true},
         where: nil
       }
 
       assert {:ok, json} = Jason.encode(shape)
-      assert ^shape = Jason.decode!(json) |> Shape.from_json_safe!()
+      assert {:ok, ^shape} = Jason.decode!(json) |> Shape.from_json_safe()
     end
   end
 

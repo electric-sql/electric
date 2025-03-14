@@ -177,13 +177,14 @@ defmodule Electric.Replication.Changes do
 
   defmodule Relation do
     @derive Jason.Encoder
-    defstruct [:id, :schema, :table, :columns]
+    defstruct [:id, :schema, :table, :columns, affected_columns: []]
 
     @type t() :: %__MODULE__{
             id: Changes.relation_id(),
             schema: Changes.db_identifier(),
             table: Changes.db_identifier(),
-            columns: [Column.t()]
+            columns: [Column.t()],
+            affected_columns: [Changes.db_identifier()]
           }
   end
 

@@ -24,15 +24,8 @@ defmodule Electric.ShapeCacheTest do
   @shape %Shape{
     root_table: {"public", "items"},
     root_table_id: 1,
-    table_info: %{
-      {"public", "items"} => %{
-        columns: [
-          %{name: "id", type: :text, type_id: {25, 1}},
-          %{name: "value", type: :text, type_id: {25, 1}}
-        ],
-        pk: ["id"]
-      }
-    }
+    root_pk: ["id"],
+    selected_columns: ["id", "value"]
   }
   @lsn Electric.Postgres.Lsn.from_integer(13)
   @change_offset LogOffset.new(@lsn, 2)
@@ -268,18 +261,7 @@ defmodule Electric.ShapeCacheTest do
       storage: storage,
       shape_cache_opts: opts
     } do
-      shape =
-        update_in(
-          @shape.table_info[{"public", "items"}].columns,
-          &(&1 ++
-              [
-                %{name: "date", type: :date},
-                %{name: "timestamptz", type: :timestamptz},
-                %{name: "float", type: :float8},
-                %{name: "bytea", type: :bytea},
-                %{name: "interval", type: :interval}
-              ])
-        )
+      shape = %{@shape | selected_columns: ~w|id value date timestamptz float bytea interval|}
 
       Postgrex.query!(
         pool,
@@ -338,10 +320,7 @@ defmodule Electric.ShapeCacheTest do
       shape = %Shape{
         @shape
         | root_table: {"public", "nonexistent"},
-          root_table_id: 2,
-          table_info: %{
-            {"public", "nonexistent"} => Map.fetch!(@shape.table_info, @shape.root_table)
-          }
+          root_table_id: 2
       }
 
       {shape_handle, log} =
@@ -375,15 +354,8 @@ defmodule Electric.ShapeCacheTest do
       shape = %Shape{
         root_table: {"public", "partitioned_items"},
         root_table_id: 1,
-        table_info: %{
-          {"public", "partitioned_items"} => %{
-            columns: [
-              %{name: "a", type: "int4", type_id: {23, -1}, pk_position: 0},
-              %{name: "b", type: "int4", type_id: {23, -1}, pk_position: 1}
-            ],
-            pk: ["a", "b"]
-          }
-        }
+        root_pk: ["a", "b"],
+        selected_columns: ["a", "b"]
       }
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, ctx.shape_cache_opts)

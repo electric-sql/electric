@@ -1,4 +1,5 @@
 defmodule Electric.Shapes.Api do
+  alias Electric.Postgres.Inspector
   alias Electric.Replication.LogOffset
   alias Electric.Shapes
   alias Electric.Telemetry.OpenTelemetry
@@ -616,18 +617,25 @@ defmodule Electric.Shapes.Api do
     apply(encoder, type, [message])
   end
 
-  def schema(%Request{params: params}) do
-    schema(params)
+  def schema(%Response{
+        api: %Api{inspector: inspector},
+        shape_definition: %Shapes.Shape{} = shape
+      }) do
+    # This technically does double work because we've already fetched this info to build the shape,
+    # but that's not a big deal as it's all ETS backed. This also has an added benefit that
+    # if table schema changes in a way that doesn't invalidate the shape or we can't detect
+    # (e.g. column nullability changes but the type remains the same), we might return the new
+    # version if it's invalidated in ETS or server is restarted.
+    case Inspector.load_column_info(shape.root_table, inspector) do
+      {:ok, columns} ->
+        Electric.Schema.from_column_info(columns, shape.selected_columns)
+
+      :table_not_found ->
+        nil
+    end
   end
 
-  def schema(%{shape_definition: %Shapes.Shape{} = shape}) do
-    shape.table_info
-    |> Map.fetch!(shape.root_table)
-    |> Map.fetch!(:columns)
-    |> Electric.Schema.from_column_info(shape.selected_columns)
-  end
-
-  def schema(_) do
+  def schema(_req) do
     nil
   end
 
