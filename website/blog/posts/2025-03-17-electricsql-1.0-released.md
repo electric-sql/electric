@@ -19,13 +19,13 @@ With [version `1.0`](https://github.com/electric-sql/electric/releases), Electri
 
 Sync makes apps awesome. Electric solves sync.
 
-[Electric](/) is a Postgres sync engine. It handles the core concerns of [partial replication](/docs/guides/shapes), [fan out](/docs/api/http#caching), and [data delivery](/how/it-works). So you can build awesome software without rolling your own sync.
+[Electric](/) is a Postgres sync engine. It handles the core concerns of [partial replication](/docs/guides/shapes), [fan out](/docs/api/http#caching), and [data delivery](/docs/reference/benchmarks#cloud). So you can build awesome software without rolling your own sync.
 
 ## The path to 1.0
 
 In 2024 we [re-built Electric from scratch](/blog/2024/07/17/electric-next) to be simpler, faster, more reliable and more scalable. In December 2024, [we hit BETA](/blog/2024/12/10/electric-beta-release#the-path-to-beta) with production users, [proof of scalability](/docs/reference/benchmarks) and a raft of updated [docs](/docs/intro) and [demos](/demos).
 
-Since then, we've launched a [managed cloud platform](/produuct/cloud), run / supported a wide range of production workloads from both open-source and cloud users and merged 200 bug-fix and reliability PRs.
+Since then, we've launched a [managed cloud platform](/product/cloud), run / supported a wide range of production workloads from both open-source and cloud users and merged 200 bug-fix and reliability PRs.
 
 ## Stable APIs
 
@@ -37,7 +37,7 @@ Our policy is now no backwards-incompatible changes in patch or minor releases. 
 
 Electric is stable, reliable and scales. It's been stress-tested in production for some time now by companies like [Trigger](https://trigger.dev), [Otto](https://ottogrid.ai) and [IP.world](https://ip.world).
 
-We process millions of requests and transactions each day. With hundreds of thousands of active [shapes](/docs/shapes) and application users.
+We process millions of requests and transactions each day. With hundreds of thousands of active [shapes](/docs/guides/shapes) and application users.
 
 ## Increasingly powerful
 
