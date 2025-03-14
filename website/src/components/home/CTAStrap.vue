@@ -6,8 +6,8 @@
 
 <style scoped>
   .cta-strap {
-    margin: 40px -400px;
-    padding: 80px 400px;
+    margin: 50px -400px 60px;
+    padding: 90px 400px 80px;
 
     background: var(--vp-sidebar-bg-color);
   }

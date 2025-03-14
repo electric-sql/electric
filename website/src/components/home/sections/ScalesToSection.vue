@@ -43,9 +43,9 @@
       <a href="/docs/guides/deployment">
         host it yourself</a>
       or use the
-      managed <a href="/product/cloud">
+      <a href="/product/cloud">
         Electric Cloud</a>
-      platform for hosted sync with built-in data delivery network.
+      platform for managed sync with a built-in data delivery network.
     </template>
   </Section>
 </template>

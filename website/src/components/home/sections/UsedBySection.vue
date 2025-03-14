@@ -18,7 +18,7 @@
 
 <style scoped>
   .logo-strap {
-    margin-top: 80px;
+    margin-top: 100px;
   }
   .quotes {
     display: flex;
@@ -56,20 +56,20 @@
     <div class="quotes">
       <Quote>
         <template #quote>
-          ElectricSQL enables us to reliably stream agent updates in real-time at scale.
-          It has dramatically simplified our architecture while delivering cell-level reactive updates.
-        </template>
-        <template #attribution>
-          &mdash; Sully Omar, CEO, <cite>Ottogrid.ai</cite>
-        </template>
-      </Quote>
-      <Quote>
-        <template #quote>
           We use ElectricSQL to power Trigger.dev Realtime, a core feature of our product.
           It's simple to operate as we already use Postgres, and it scales to millions of updates per day.
         </template>
         <template #attribution>
           &mdash; Matt Aitken, CEO, <cite>Trigger.dev</cite>
+        </template>
+      </Quote>
+      <Quote>
+        <template #quote>
+          ElectricSQL enables us to reliably stream agent updates in real-time at scale.
+          It has dramatically simplified our architecture while delivering cell-level reactive updates.
+        </template>
+        <template #attribution>
+          &mdash; Sully Omar, CEO, <cite>Ottogrid.ai</cite>
         </template>
       </Quote>
     </div>
