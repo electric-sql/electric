@@ -1,5 +1,11 @@
 # @electric-sql/experimental
 
+## 0.1.2-beta.5
+
+### Patch Changes
+
+- c2b01c1: Encode LSN as string in JSON responses for correct handling of large values (>53 bits) in Javascript.
+
 ## 0.1.2-beta.4
 
 ### Patch Changes
