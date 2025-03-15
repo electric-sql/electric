@@ -94,6 +94,10 @@
   --vp-font-family-mono: SourceCodePro, ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
+.Layout {
+  overflow-x: hidden;
+}
+
 .vpi-electric-icon {
   --icon: url(/img/brand/icon.svg);
   margin-left: -4px !important;

@@ -20,7 +20,9 @@
       description: `
         Make apps
         <span class="no-wrap">
-          super fast</span>
+          <span class="sync-targets-super-fast">
+            super</span>
+          fast</span>
         <span class="no-wrap">
           and collaborative</span>
       `,
@@ -68,7 +70,14 @@
       Sync makes apps awesome
     </template>
     <template #tagline>
-      Sync is the magic ingredient behind fast, modern software. From apps like Figma and Linear to AI agents running on live local data.
+      Sync is the magic ingredient behind fast, modern software.
+      From apps like
+      <span class="hidden-559">
+        Figma and</span>
+      Linear to AI agents running on
+      <span class="hidden-559">
+        live</span>
+      local data.
     </template>
     <div class="sync-targets">
       <SyncTarget v-for="target in syncTargets"
@@ -92,12 +101,34 @@
       grid-template-columns: 1fr 1fr;
     }
   }
+  @media (max-width: 518px) {
+    .sync-targets {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 559px) {
+    .hidden-559 {
+      display: none;
+    }
+  }
 </style>
 
 <style>
   @media (min-width: 959px) and (max-width: 1117px) {
     .no-wrap-1117 {
       white-space: nowrap;
+    }
+  }
+
+  @media (max-width: 389px) {
+    .sync-targets-super-fast {
+      display: none;
+    }
+  }
+  @media (min-width: 745px) and (max-width: 802px) {
+    .sync-targets-super-fast {
+      display: none;
     }
   }
 </style>
