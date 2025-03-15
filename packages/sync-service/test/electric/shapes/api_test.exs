@@ -739,6 +739,133 @@ defmodule Electric.Shapes.ApiTest do
       assert response.up_to_date
     end
 
+    test "returns correct global_last_seen_lsn on non-live responses during data race", ctx do
+      next_offset = LogOffset.increment(@start_offset_50)
+      next_offset_lsn = next_offset.tx_offset
+      last_minute_next_offset = %LogOffset{tx_offset: next_offset.tx_offset + 1, op_offset: 0}
+      last_minute_next_offset_lsn = last_minute_next_offset.tx_offset
+
+      # Initially set the last_processed_lsn to next_offset_lsn, with this being
+      # the last seen log entry at the start of the request
+      Electric.Replication.PersistentReplicationState.set_last_processed_lsn(
+        next_offset_lsn,
+        persistent_kv: ctx.persistent_kv,
+        stack_id: ctx.stack_id
+      )
+
+      Mock.ShapeCache
+      |> expect(:get_shape, fn @test_shape, _opts ->
+        {@test_shape_handle, next_offset}
+      end)
+      |> stub(:get_shape, fn @test_shape, _opts ->
+        {@test_shape_handle, last_minute_next_offset}
+      end)
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @start_offset_50, _ ->
+        # Set last_seen_lsn to last_minute_next_offset immediately after retrieving
+        # the chunk end log offset, simulating the race where the next log entry
+        # arrives in between determining the the end point of the log to read
+        # and serving the log.
+        Electric.Replication.PersistentReplicationState.set_last_processed_lsn(
+          last_minute_next_offset_lsn,
+          persistent_kv: ctx.persistent_kv,
+          stack_id: ctx.stack_id
+        )
+
+        next_offset
+      end)
+      |> stub(:get_chunk_end_log_offset, fn @start_offset_50, _ -> last_minute_next_offset end)
+      |> expect(:get_log_stream, fn @start_offset_50, ^next_offset, @test_opts ->
+        [
+          Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset})
+        ]
+      end)
+      |> stub(:get_log_stream, fn @start_offset_50, _, @test_opts ->
+        [
+          Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
+          Jason.encode!(%{
+            key: "log2",
+            value: "bar",
+            headers: %{},
+            offset: last_minute_next_offset
+          })
+        ]
+      end)
+
+      assert {:ok, request} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "#{@start_offset_50}",
+                   handle: @test_shape_handle
+                 }
+               )
+
+      assert response = Api.serve_shape_log(request)
+      assert response.status == 200
+
+      # Should see the last seen log entry at the start of the request
+      assert response_body(response) == [
+               %{
+                 "key" => "log1",
+                 "value" => "foo",
+                 "headers" => %{},
+                 "offset" => "#{next_offset}"
+               },
+               %{
+                 headers: %{
+                   control: "up-to-date",
+                   global_last_seen_lsn: "#{next_offset_lsn}"
+                 }
+               }
+             ]
+
+      assert response.offset == next_offset
+      assert response.up_to_date
+
+      # Subsequent request should see the last minute update as well
+      {:ok, request} =
+        Api.validate(
+          ctx.api,
+          %{
+            table: "public.users",
+            offset: "#{@start_offset_50}",
+            handle: @test_shape_handle
+          }
+        )
+
+      response = Api.serve_shape_log(request)
+
+      assert response_body(response) == [
+               %{
+                 "key" => "log1",
+                 "value" => "foo",
+                 "headers" => %{},
+                 "offset" => "#{next_offset}"
+               },
+               %{
+                 "key" => "log2",
+                 "value" => "bar",
+                 "headers" => %{},
+                 "offset" => "#{last_minute_next_offset}"
+               },
+               %{
+                 headers: %{
+                   control: "up-to-date",
+                   global_last_seen_lsn: "#{last_minute_next_offset_lsn}"
+                 }
+               }
+             ]
+
+      assert response.offset == last_minute_next_offset
+      assert response.up_to_date
+    end
+
     test "handles shape rotation", ctx do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
