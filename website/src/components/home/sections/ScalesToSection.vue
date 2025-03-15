@@ -17,7 +17,7 @@
 
 <template>
 
-  <Section :actions="actions">
+  <Section :actions="actions" :wideSectionHead="true">
     <template #title>
       Scales to millions of users
     </template>
@@ -34,7 +34,12 @@
         The chart below shows latency and memory-use stay low and flat as we scale
         <a href="/docs/reference/benchmarks#cloud">
           an 80Gb/s workload</a>
-        to a million concurrent users from a single commodity Postgres.
+        to a
+        <span class="no-wrap">
+          million concurrent users</span>
+        from a
+        <span class="no-wrap">
+          single commodity Postgres</span>.
       </p>
     </template>
     <figure>
