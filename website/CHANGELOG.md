@@ -1,5 +1,11 @@
 # @electric-sql/docs
 
+## 0.0.2-beta.4
+
+### Patch Changes
+
+- eb8167a: Implement `ELECTRIC_QUERY_DATABASE_URL` optional env var to perform queries with separate, potentially pooled connection string.
+
 ## 0.0.2-beta.3
 
 ### Patch Changes
