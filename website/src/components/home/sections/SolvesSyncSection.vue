@@ -1,4 +1,5 @@
 <script setup>
+  import PartialReplicationDiagramme from '../PartialReplicationDiagramme.vue'
   import Section from '../Section.vue'
 
   const actions = [
@@ -29,7 +30,7 @@
       <a href="/how/it-works">
         data&nbsp;delivery</a>.
     </template>
-    ... diagramme ...
+    <PartialReplicationDiagramme />
     <template #outline>
       So you can build awesome, next-gen software &mdash; without rolling your own sync.
     </template>
