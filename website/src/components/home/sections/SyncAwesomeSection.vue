@@ -16,8 +16,8 @@
 
   const syncTargets = [{
       slug: 'app',
-      name: 'Apps',
-      description: `
+      title: 'Apps',
+      body: `
         Make apps
         <span class="no-wrap">
           <span class="sync-targets-super-fast">
@@ -26,22 +26,22 @@
         <span class="no-wrap">
           and collaborative</span>
       `,
-      href: '/use-cases/data-sync'
+      // href: '/use-cases/data-sync'
     },
     {
       slug: 'dashboard',
-      name: 'Dashboards',
-      description: `
+      title: 'Dashboards',
+      body:  `
         Keep dashboards live
         <span class="no-wrap">
           and real-time</span>
       `,
-      href: '/use-cases/cache-invalidation'
+      // href: '/use-cases/cache-invalidation'
     },
     {
       slug: 'worker',
-      name: 'Workers',
-      description: `
+      title: 'Workers',
+      body:  `
         Sync data into
         <span class="no-wrap-1117">
           workers
@@ -49,17 +49,17 @@
             at the edge</span>
         </span>
       `,
-      href: '/use-cases/local-first-software'
+      // href: '/use-cases/local-first-software'
     },
     {
       slug: 'agent',
-      name: 'Agents',
-      description: `
+      title: 'Agents',
+      body:  `
         Run AI agents on
         <span class="no-wrap">
           live local data</span>
       `,
-      href: '/use-cases/local-ai'
+      // href: '/use-cases/local-ai'
     }
   ]
 </script>

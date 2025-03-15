@@ -15,7 +15,7 @@
 </script>
 
 <template>
-  <Section :actions="actions">
+  <Section :actions="actions" :wideSectionHead="true">
     <template #title>
       With your existing stack
     </template>
@@ -31,6 +31,8 @@
         that speaks
         <a href="/docs/guides/client-development">
           HTTP and JSON</a>.
+      </p>
+      <p>
         And it syncs data out of Postgres into anything you like, from a
         <a href="/docs/integrations/react">
           Javascript state variable</a>
