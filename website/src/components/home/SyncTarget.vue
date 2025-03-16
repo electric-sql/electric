@@ -7,6 +7,20 @@
   const icon = `/img/home/sync-targets/${target.slug}.svg`
 </script>
 
+<style scoped>
+  @media (max-width: 767px) {
+    .sync-target {
+      position: relative;
+      display: block;
+      width: 100%;
+      max-width: 340px;
+      margin: 0 auto;
+    }
+  }
+</style>
+
 <template>
-  <Card :href="href" :icon="icon" :title="title" :body="body" />
+  <div class="sync-target">
+    <Card :href="href" :icon="icon" :title="title" :body="body" />
+  </div>
 </template>
