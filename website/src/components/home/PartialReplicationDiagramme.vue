@@ -164,7 +164,7 @@
     align-items: center;
     justify-content: center;
 
-    margin: -18px 0;
+    margin: -15px 0;
   }
   .client img {
     width: 24px;
@@ -215,7 +215,7 @@
       margin-bottom: 10px;
     }
     .client {
-      margin: -14px 0;
+      margin: -13px 0;
     }
     .client img {
       width: 20px;
