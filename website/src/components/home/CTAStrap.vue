@@ -14,6 +14,12 @@
   .cta-strap:last-child {
     margin-bottom: 0px;
   }
+
+  @media (max-width: 959px) {
+    .cta-strap {
+      text-align: center;
+    }
+  }
 </style>
 
 <template>
@@ -26,6 +32,6 @@
         <slot name="tagline" />
       </p>
     </div>
-    <Actions :actions="actions" />
+    <Actions :actions="actions" :isStrap="true" />
   </div>
 </template>

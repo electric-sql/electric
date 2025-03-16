@@ -15,7 +15,7 @@
 </script>
 
 <template>
-  <Section :actions="actions" :wideSectionHead="true">
+  <Section :actions="actions" :wideSectionHead="false">
     <template #title>
       With your existing stack
     </template>
@@ -28,17 +28,27 @@
           any data model</a> and
         <a href="/docs/integrations">
           any web framework</a>
-        that speaks
-        <a href="/docs/guides/client-development">
-          HTTP and JSON</a>.
-      </p>
-      <p>
-        And it syncs data out of Postgres into anything you like, from a
+        <span class="hidden-lg">
+          that speaks
+          <a href="/docs/guides/client-development">
+            HTTP and JSON</a></span>.
+        And it syncs data
+        <span class="hidden-lg">
+          out of Postgres</span>
+        into anything
+        <span class="hidden-lg">
+          you like, </span>
+        from a
         <a href="/docs/integrations/react">
-          Javascript state variable</a>
+          <span class="hidden-lg">
+            Javascript</span>
+          state variable</a>
         to a
         <a href="/product/pglite">
-          local SQL database</a>.
+          local
+          <span class="hidden-lg">
+            SQL</span>
+          database</a>.
       </p>
     </template>
     <ul>

@@ -29,6 +29,18 @@
   .section-body {
     margin: 24px 0;
   }
+  @media (max-width: 959px) {
+    .section-head,
+    .section-outline {
+      text-align: center;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .section-head.wide-section-head {
+      max-width: 600px;
+    }
+  }
 </style>
 
 <style>

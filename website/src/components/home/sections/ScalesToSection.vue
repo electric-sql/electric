@@ -26,9 +26,9 @@
         Electric uses
         <a href="/docs/api/http#caching">
           existing CDNs</a>
-        to scale high-throughput data delivery to
-        <a href="/docs/reference/benchmarks">
-          millions of users</a>.
+        to scale high-throughput data delivery<span class="hidden-lg"> to
+          <a href="/docs/reference/benchmarks">
+            millions of users</a></span>.
       </p>
       <p>
         The chart below shows latency and memory-use stay low and flat as we scale
@@ -36,10 +36,10 @@
           an 80Gb/s workload</a>
         to a
         <span class="no-wrap">
-          million concurrent users</span>
+          million concurrent users</span><span class="hidden-lg">
         from a
         <span class="no-wrap">
-          single commodity Postgres</span>.
+          single commodity Postgres</span></span>.
       </p>
     </template>
     <figure>
@@ -52,7 +52,7 @@
       or use the
       <a href="/product/cloud">
         Electric Cloud</a>
-      platform for managed sync with a built-in data delivery network.
+      platform<span class="hidden-lg"> for managed sync with a built-in data delivery network</span>.
     </template>
   </Section>
 </template>

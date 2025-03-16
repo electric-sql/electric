@@ -51,14 +51,15 @@
   @media (max-width: 959px) {
     .pglite-strap {
       flex-direction: column;
-      align-items: start;
+      align-items: center;
+      text-align: center;
     }
     .logo {
       order: 0;
-      text-align: left;
+      text-align: center;
     }
     .logo img {
-      max-width: calc(70px + 8vw);
+      max-width: calc(60px + 8vw);
       margin-right: 0;
     }
   }

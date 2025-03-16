@@ -40,6 +40,7 @@
     border: 1px solid #2a2c34;
 
     --padding-width: 32px;
+    --padding-height: 32px;
     --extra-padding-width: 0px;
   }
   @media (min-width: 1020px) and (max-width: 1099px) {
@@ -58,17 +59,39 @@
       --extra-padding-width: 8px;
     }
   }
+  @media (max-width: 518px) {
+    .card {
+      --padding-height: 19px;
+      --padding-width: 24px;
+      --extra-padding-width: 0px;
+    }
+    .body :deep(h3) {
+      margin-bottom: 0.5rem !important;
+    }
+    .body :deep(p) {
+      margin-top: 8px;
+    }
+  }
   .icon {
-    padding: 40px var(--padding-width) 0px;
+    padding:
+      calc(var(--padding-height) + 8px)
+      var(--padding-width)
+      4px;
   }
   .icon img {
-    width: calc(2 * var(--padding-width));
-    height: calc(2 * var(--padding-width));
+    /*width: calc(2 * var(--padding-width));
+    height: calc(2 * var(--padding-width));*/
+    width: calc(33px + 1.5vw);
+    height: calc(33px + 1.5vw);
   }
   .body {
     position: relative;
     display: block;
-    padding: 32px calc(var(--padding-width) - var(--extra-padding-width)) 32px var(--padding-width);
+    padding:
+      var(--padding-height)
+      calc(var(--padding-width) - var(--extra-padding-width))
+      calc(var(--padding-height) - 4px)
+      var(--padding-width);
     background: var(--vp-c-bg-soft);
   }
   .body :deep(h3) {

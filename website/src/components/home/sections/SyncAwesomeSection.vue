@@ -57,7 +57,7 @@
       body:  `
         Run AI agents on
         <span class="no-wrap">
-          live local data</span>
+          live local data&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
       `,
       // href: '/use-cases/local-ai'
     }
@@ -70,7 +70,13 @@
       Sync makes apps awesome
     </template>
     <template #tagline>
-      Sync is the magic ingredient behind fast, modern software.
+      Sync is the magic
+      <span class="hidden-lg">
+        ingredient</span>
+      behind
+      <span class="hidden-lg">
+        fast,</span>
+      modern software.
       From apps like
       <span class="hidden-559">
         Figma and</span>
@@ -98,11 +104,14 @@
   }
   @media (max-width: 959px) {
     .sync-targets {
+      gap: 30px;
       grid-template-columns: 1fr 1fr;
     }
   }
   @media (max-width: 518px) {
     .sync-targets {
+      margin: 32px 24px 40px;
+      gap: 24px;
       grid-template-columns: 1fr;
     }
   }

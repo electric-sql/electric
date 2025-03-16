@@ -1,7 +1,7 @@
 <script setup>
   import { onMounted, useTemplateRef } from 'vue'
 
-  const { actions } = defineProps(['actions'])
+  const { actions, isStrap } = defineProps(['actions', 'isStrap'])
   const section = useTemplateRef('section')
 
   const expandedActions = actions !== undefined
@@ -37,10 +37,20 @@
     justify-content: left;
     margin-top: 24px;
   }
+
+  @media (max-width: 959px) {
+    .cta-actions {
+      justify-content: center;
+    }
+    /*.cta-actions.is-strap {
+      justify-content: left;
+    }*/
+  }
 </style>
 
 <template>
-  <div v-if="actions" class="actions cta-actions text-left" ref="section">
+  <div v-if="actions" ref="section"
+      :class="`actions cta-actions ${isStrap ? 'is-strap' : ''}`">
     <div class="action" v-for="({href, key, target, text, theme}) in expandedActions">
       <VPButton
           :href="href"

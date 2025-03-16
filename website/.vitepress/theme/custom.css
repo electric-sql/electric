@@ -260,11 +260,24 @@ span.no-visual {
 .inline-xs,
 .inline-sm,
 .inline-md,
+.inline-lg,
 .block-xxs,
 .block-xs,
 .block-sm,
-.block-md {
+.block-md,
+.block-lg {
   display: none !important;
+}
+@media (max-width: 959px) {
+  .hidden-lg {
+    display: none !important;
+  }
+  .inline-lg {
+    display: inline !important;
+  }
+  .block-lg {
+    display: block !important;
+  }
 }
 @media (max-width: 859px) {
   .hidden-md {
