@@ -1,4 +1,7 @@
 <script setup>
+  import { onMounted, ref } from 'vue'
+
+  import Card from '../Card.vue'
   import Section from '../Section.vue'
 
   const actions = [
@@ -12,7 +15,207 @@
       text: 'Tutorial'
     }
   ]
+
+  const sql = ref(undefined)
+  const tsx = ref(undefined)
+
+  onMounted(() => {
+    if (typeof window !== 'undefined' && document.querySelector) {
+      sql.value = document.getElementById('works-with-sql-template').innerHTML
+      tsx.value = document.getElementById('works-with-tsx-template').innerHTML
+    }
+  })
 </script>
+
+<style scoped>
+  .your-stack {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 32px;
+    margin: 40px 0px 40px;
+    overflow: hidden;
+  }
+
+  .your-stack :deep(div[class*='language-']) {
+    margin: 0 !important;
+
+    border-radius: 12px;
+    border: 1px solid #2a2c34;
+    background: var(--vp-c-bg-soft);
+    height: 288px;
+  }
+
+  .your-stack :deep(div[class*='language-'] button),
+  .your-stack :deep(div[class*='language-'] .lang) {
+    display: none;
+  }
+
+  .your-stack :deep(div[class*='language-'].placeholder) {
+    width: 100%;
+    height: 288px;
+  }
+
+  /*@media (max-width: 959px) {
+    .your-stack {
+      gap: 30px;
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  @media (max-width: 518px) {
+    .your-stack {
+      margin: 32px 24px 40px;
+      gap: 24px;
+      grid-template-columns: 1fr;
+    }
+  }*/
+
+  .stack-label {
+    color: var(--vp-c-text-2);
+    font-weight: 500;
+    font-size: 16px;
+    text-align: center;
+    margin-top: 14px;
+  }
+
+  .layers {
+    text-align: center;
+  }
+  .layer {
+    padding: 17px;
+    margin-bottom: 15px;
+    border-radius: 12px;
+    border: 1px solid #2a2c34;
+    background: var(--vp-c-bg-soft);
+
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    text-align: left;
+  }
+  .layer:last-child {
+    margin-bottom: 0;
+  }
+
+  .layer .icon img {
+    width: 32px;
+    margin: 0 16px 0 12px;
+  }
+  .layer .body {
+
+  }
+  .layer h4 {
+    font-size: 15px;
+    font-weight: 550;
+    margin: 0;
+    color: var(--vp-c-text-1);
+    margin-top: 1px;
+  }
+  .layer p {
+    color: var(--vp-c-text-3);
+    font-weight: 450;
+    font-size: 13px;
+    line-height: 20px;
+    margin: 3px auto 2px !important;
+    max-width: 270px;
+  }
+
+  @media (min-width: 960px) and (max-width: 1099px) {
+    .your-stack :deep(div[class*='language-']) {
+      font-size: 14px;
+    }
+  }
+
+  @media (max-width: 959px) {
+    .your-stack {
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    .layers {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 24px;
+    }
+    .layer,
+    .layer:last-child {
+      margin-bottom: 0px;
+    }
+
+    .your-stack :deep(div[class*='language-']) {
+      max-width: 512px;
+      margin-left: auto !important;
+      margin-right: auto !important;
+    }
+
+    .your-database-col {
+      order: 0;
+    }
+    .your-stack-col {
+      order: 2;
+      grid-column: 1 / span 2;
+    }
+    .your-app-col {
+      order: 1;
+    }
+
+    .stack-label {
+      color: var(--vp-c-text-3);
+      font-weight: 500;
+      font-size: 14px;
+      text-align: center;
+      margin-top: 12px;
+      margin-bottom: 4px;
+    }
+  }
+  @media (max-width: 869px) {
+    .layers {
+      gap: 16px;
+    }
+    .layer .icon img {
+      width: 28px;
+      margin: 0 14px 0 8px;
+    }
+  }
+  @media (max-width: 791px) {
+    .your-stack {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+    .your-database-col {
+      order: 0;
+    }
+    .your-stack-col {
+      order: 1;
+      grid-column: 1;
+    }
+    .your-app-col {
+      order: 2;
+    }
+    .layers,
+    .your-stack :deep(div[class*='language-']) {
+      max-width: 448px;
+      margin-left: auto !important;
+      margin-right: auto !important;
+    }
+    .layers {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+  }
+  @media (max-width: 639px) {
+    .layers,
+    .your-stack :deep(div[class*='language-']) {
+      max-width: 384px;
+    }
+  }
+  @media (max-width: 518px) {
+    .layers,
+    .your-stack :deep(div[class*='language-']) {
+      max-width: 320px;
+    }
+  }
+</style>
 
 <template>
   <Section :actions="actions" :wideSectionHead="false">
@@ -27,43 +230,103 @@
         <a href="/docs/guides/deployment#data-model-compatibility">
           any data model</a> and
         <a href="/docs/integrations">
-          any web framework</a>
-        <span class="hidden-lg">
+          any web framework</a>.
+        <span class="hidden -hidden-lg">
           that speaks
           <a href="/docs/guides/client-development">
-            HTTP and JSON</a></span>.
-        And it syncs data
-        <span class="hidden-lg">
+            HTTP and JSON</a></span>
+        <span class="no-wrap-sm">
+          It syncs data</span>
+        <span class="hidden -hidden-lg">
           out of Postgres</span>
         into anything
         <span class="hidden-lg">
           you like, </span>
         from a
         <a href="/docs/integrations/react">
-          <span class="hidden-lg">
+          <span class="hidden -hidden-lg">
             Javascript</span>
           state variable</a>
         to a
         <a href="/product/pglite">
           local
-          <span class="hidden-lg">
+          <span class="hidden -hidden-lg">
             SQL</span>
           database</a>.
       </p>
     </template>
-    <ul>
-      <li>
-        your database
-      </li>
-      <li>
-        your stack
-      </li>
-      <li>
-        your app
-      </li>
-    </ul>
+    <div class="your-stack">
+      <div class="col your-database-col">
+        <div id="works-with-sql">
+          <div v-if="sql" v-html="sql">
+          </div>
+          <div v-else class="language-sql placeholder" />
+        </div>
+        <div class="stack-label">
+          Your database
+        </div>
+      </div>
+      <div class="col your-stack-col">
+        <div class="layers">
+          <a class="layer no-visual" href="/docs/guides/auth">
+            <div class="icon">
+              <img src="/img/icons/auth.svg" />
+            </div>
+            <div class="body">
+              <h4>Auth</h4>
+              <p>
+                Control data&nbsp;access
+              </p>
+            </div>
+          </a>
+          <a class="layer no-visual" href="/docs/guides/writes">
+            <div class="icon">
+              <img src="/img/icons/writes.svg" />
+            </div>
+            <div class="body">
+              <h4>Writes</h4>
+              <p>
+                Handle writes
+              </p>
+            </div>
+          </a>
+          <a class="layer no-visual" href="/docs/api/http">
+            <div class="icon">
+              <img src="/img/icons/deploy.png" />
+            </div>
+            <div class="body">
+              <h4>Middleware</h4>
+              <p>
+                It's
+                <span class="hidden-xl">
+                  all</span>
+                just
+                <span class="no-wrap">
+                  HTTP
+                  <span class="inline-xl">&amp;</span>
+                  <span class="hidden-xl">and</span>
+                  JSON</span>
+              </p>
+            </div>
+          </a>
+        </div>
+        <div class="stack-label">
+          Your stack
+        </div>
+      </div>
+      <div class="col your-app-col">
+        <div id="works-with-tsx">
+          <div v-if="tsx !== undefined" v-html="tsx">
+          </div>
+          <div v-else class="language-tsx placeholder" />
+        </div>
+        <div class="stack-label">
+          Your app
+        </div>
+      </div>
+    </div>
     <template #outline>
-      So you can adopt sync incrementally, one route at a time, into both greenfield and brownfield applications.
+      So you can adopt sync incrementally, one route at a time<span class="hidden-lg">, into both greenfield and brownfield applications</span>.
     </template>
     <template #outbody>
       ... Supabase, Neon, Phoenix, Next.js, TanStack, React ...

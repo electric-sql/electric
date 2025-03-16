@@ -58,6 +58,39 @@ onMounted(() => {
 })
 </script>
 
+<div data-template="true" class="hidden" id="works-with-sql-template">
+
+```sql
+CREATE TABLE projects (
+  id SERIAL PRIMARY KEY,
+  title TEXT UNIQUE
+);
+
+CREATE TABLE issues (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER
+    REFERENCES projects(id)
+);
+```
+
+</div>
+<div data-template="true" class="hidden" id="works-with-tsx-template">
+
+```tsx
+function Component({ project }) {
+  const { data } = useShape({
+    params: {
+      table: 'issues',
+      where: `project_id = ${project.id}`
+    }
+  })
+
+  return <List issues="data" />
+}
+```
+
+</div>
+
 <SyncAwesomeSection />
 <SolvesSyncSection />
 <WorksWithSection />

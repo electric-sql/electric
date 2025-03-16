@@ -261,12 +261,25 @@ span.no-visual {
 .inline-sm,
 .inline-md,
 .inline-lg,
+.inline-xl,
 .block-xxs,
 .block-xs,
 .block-sm,
 .block-md,
-.block-lg {
+.block-lg,
+.block-xl {
   display: none !important;
+}
+@media (max-width: 1059px) {
+  .hidden-xl {
+    display: none !important;
+  }
+  .inline-xl {
+    display: inline !important;
+  }
+  .block-xl {
+    display: block !important;
+  }
 }
 @media (max-width: 959px) {
   .hidden-lg {
