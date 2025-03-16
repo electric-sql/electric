@@ -225,8 +225,10 @@ span.no-visual {
   font-weight: 400;
 }
 
-.no-wrap {
-  white-space: nowrap;
+@media (min-width: 350px) {
+  .no-wrap {
+    white-space: nowrap;
+  }
 }
 @media (min-width: 450px) {
   .no-wrap-xs {

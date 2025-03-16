@@ -297,17 +297,17 @@
 <template>
   <Section :actions="actions" :wideSectionHead="false">
     <template #title>
-      With your existing stack
+      With your existing&nbsp;stack
     </template>
     <template #override-tagline>
       <p>
-        Electric works with
+        Electric works with <span class="inline-sm">any </span>
         <a href="/docs/guides/deployment#_1-running-postgres">
-          any Postgres</a>,
+          <span class="hidden-sm">any </span>Postgres</a>,
         <a href="/docs/guides/deployment#data-model-compatibility">
-          any data model</a> and
+          <span class="hidden-sm">any </span>data model</a> and
         <a href="/docs/integrations">
-          any web framework</a>.
+          <span class="hidden-sm">any </span>web framework</a>.
         <span class="hidden -hidden-lg">
           that speaks
           <a href="/docs/guides/client-development">

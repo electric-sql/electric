@@ -20,6 +20,17 @@
   .logo-strap {
     margin-top: 100px;
   }
+  .logo-strap-md,
+  .logo-strap-sm {
+    width: 100%;
+    margin: 0 auto;
+  }
+  .logo-strap-md {
+    max-width: 384px;
+  }
+  .logo-strap-sm {
+    max-width: 320px;
+  }
   .quotes {
     display: flex;
     flex: row;
@@ -28,30 +39,37 @@
 
 <template>
   <figure class="logo-strap">
-    <img :src="LogoStrip" class="hidden-sm" />
-    <img :src="LogoStripSm" class="hidden-xs block-sm" />
-    <img :src="LogoStripXs" class="hidden-xxs block-xs" />
-    <img :src="LogoStripXxs" class="block-xxs" />
+    <img :src="LogoStrip" class="hidden-md" />
+    <img :src="LogoStripXxs" class="block-md hidden-sm logo-strap-md" />
+    <img :src="LogoStripXxs" class="block-sm hidden-md logo-strap-sm" />
   </figure>
   <Section :actions="actions">
     <template #title>
-      Used by world leading companies
+      Used by world leading&nbsp;companies
     </template>
     <template #tagline>
-      Built into developer tools like
+      Built into
+      <span class="hidden-sm">
+        developer tools like</span>
       <a href="https://www.npmjs.com/package/firebase-tools?activeTab=dependencies" target="_blank">
-        Google Firebase</a>
+        Firebase</a>
       and
       <a href="https://supabase.com/blog/database-build-v2"
           target="_blank">
         Supabase</a>.
-      Used in production by products like
-      <a href="https://trigger.dev/product/realtime" target="_blank">
-        Trigger.dev</a>,
-      <a href="https://ottogrid.ai" target="_blank">
-        Otto</a> and
-      <a href="https://doorboost.com" target="_blank">
-        Doorboost</a>.
+      Used
+      <span class="hidden-sm">
+        in production</span>
+      by
+      <span class="hidden-sm">
+        products like</span>
+      <span class="no-wrap">
+        <a href="https://trigger.dev/product/realtime" target="_blank">
+          Trigger</a>,
+        <a href="https://ottogrid.ai" target="_blank">
+          Otto</a> and
+        <a href="https://doorboost.com" target="_blank">
+          Doorboost</a></span>.
     </template>
     <div class="quotes">
       <Quote>

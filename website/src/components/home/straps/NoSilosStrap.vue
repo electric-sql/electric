@@ -21,13 +21,16 @@
       No&nbsp;black&nbsp;boxes.
     </template>
     <template #tagline>
-      Just real-time sync, solved. It’s all
-      <a href="https://github.com/electric-sql" class="no-wrap">open source</a>
-      and it’s
-      <span class="no-wrap-md">
-        all just
-        <a href="/how/it-works" class="no-wrap">
-          Postgres and HTTP</a></span>.
+      Just
+      <span class="hidden-sm">
+        real-time</span>
+      sync, solved. It’s all
+      <a href="https://github.com/electric-sql" class="no-wrap">
+        open source</a> <span class="no-wrap-xs">
+        and it’s all just
+        <span class="no-wrap">
+          <a href="/how/it-works">
+            Postgres and HTTP</a></span></span>.
     </template>
   </CTAStrap>
 </template>
