@@ -1,5 +1,7 @@
 <script setup>
   import ScalabilityChart from '../../ScalabilityChart.vue'
+
+  import Card from '../Card.vue'
   import Section from '../Section.vue'
 
   const actions = [
@@ -15,36 +17,67 @@
   ]
 </script>
 
-<template>
+<style scoped>
+  .content {
+    padding: 16px 0;
+  }
+  .scalability-chart {
+    margin-top: -10px;
+  }
+</style>
 
+<template>
   <Section :actions="actions" :wideSectionHead="true">
     <template #title>
-      Scales to millions of users
+      Scales to
+      <span class="no-wrap">
+        millions of users</span>
     </template>
     <template #override-tagline>
       <p>
         Electric uses
         <a href="/docs/api/http#caching">
           existing CDNs</a>
-        to scale high-throughput data delivery<span class="hidden-lg"> to
+        to
+        <span class="no-wrap">
+          scale
+          <span class="hidden-sm">
+            high-throughput</span>
+          data&nbsp;delivery</span><span class="hidden-lg"> to
           <a href="/docs/reference/benchmarks">
             millions of users</a></span>.
       </p>
       <p>
-        The chart below shows latency and memory-use stay low and flat as we scale
+        The chart below shows latency and memory<span class="hidden-sm">-use</span> stay
+        <span class="hidden-lg">
+          low and</span>
+        flat as we scale
         <a href="/docs/reference/benchmarks#cloud">
-          an 80Gb/s workload</a>
-        to a
+          <span class="hidden-sm">
+            an</span>
+          80Gb/s<span class="hidden-sm"> workload</span></a>
+        to&nbsp;a
         <span class="no-wrap">
-          million concurrent users</span><span class="hidden-lg">
+          million
+          <span class="hidden-sm">
+            concurrent</span> users</span><span class="hidden-lg">
         from a
         <span class="no-wrap">
           single commodity Postgres</span></span>.
       </p>
     </template>
-    <figure>
-      <ScalabilityChart />
-    </figure>
+    <div class="content">
+      <div class="hidden-xs">
+        <Card>
+          <div class="scalability-chart">
+            <ScalabilityChart />
+          </div>
+        </Card>
+      </div>
+      <div class="block-xs">
+        <ScalabilityChart />
+      </div>
+    </div>
     <template #outline>
       You can
       <a href="/docs/guides/deployment">

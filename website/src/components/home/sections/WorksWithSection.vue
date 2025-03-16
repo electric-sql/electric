@@ -97,9 +97,9 @@
   }*/
 
   .stack-label {
-    color: var(--vp-c-text-2);
+    color: var(--vp-c-text-3);
     font-weight: 500;
-    font-size: 16px;
+    font-size: 15px;
     text-align: center;
     margin-top: 14px;
   }
