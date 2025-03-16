@@ -4,6 +4,33 @@
   import Card from '../Card.vue'
   import Section from '../Section.vue'
 
+  const integrations = [
+    {
+      slug: 'supabase',
+      name: 'Supabase'
+    },
+    {
+      slug: 'neon',
+      name: 'Neon'
+    },
+    {
+      slug: 'phoenix',
+      name: 'Phoenix'
+    },
+    {
+      slug: 'next',
+      name: 'Next.js'
+    },
+    {
+      slug: 'tanstack',
+      name: 'TanStack'
+    },
+    {
+      slug: 'react',
+      name: 'React'
+    }
+  ]
+
   const actions = [
     {
       href: '/docs/quickstart',
@@ -215,6 +242,56 @@
       max-width: 320px;
     }
   }
+
+  .integrations {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 24px;
+  }
+  .integration-icon {
+    width: 52px;
+    margin: 0 auto;
+  }
+  .integration-label {
+    padding: 12px 0 14px;
+    text-align: center;
+    color: var(--vp-c-text-3);
+    font-weight: 500;
+    font-size: 14px;
+  }
+  .integrations :deep(.card .body) {
+    padding: 28px;
+  }
+  @media (max-width: 869px) {
+    .integrations {
+      gap: 20px;
+    }
+    .integrations :deep(.card .body) {
+      padding: 24px;
+    }
+  }
+  @media (max-width: 791px) {
+    .integrations {
+      gap: 18px;
+    }
+    .integrations :deep(.card .body) {
+      padding: 18px;
+    }
+  }
+  @media (max-width: 699px) {
+    .integrations :deep(.card .body) {
+      padding: 17px;
+    }
+  }
+  @media (max-width: 599px) {
+    .integrations {
+      gap: 20px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .integrations :deep(.card .body) {
+      padding: 18px;
+    }
+  }
 </style>
 
 <template>
@@ -329,7 +406,19 @@
       So you can adopt sync incrementally, one route at a time<span class="hidden-lg">, into both greenfield and brownfield applications</span>.
     </template>
     <template #outbody>
-      ... Supabase, Neon, Phoenix, Next.js, TanStack, React ...
+      <div class="integrations">
+        <a v-for="({ slug, name }) in integrations"
+            :href="`/docs/integrations/${slug}`"
+            :key="slug"
+            class="no-visual">
+          <Card>
+            <img class="integration-icon" :src="`/img/integrations/${slug}.svg`" />
+          </Card>
+          <div class="integration-label">
+            {{ name }}
+          </div>
+        </a>
+      </div>
     </template>
   </Section>
 </template>
