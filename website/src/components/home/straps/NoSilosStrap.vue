@@ -23,9 +23,11 @@
     <template #tagline>
       Just real-time sync, solved. It’s all
       <a href="https://github.com/electric-sql" class="no-wrap">open source</a>
-      and it’s all just
-      <a href="/how/it-works" class="no-wrap">
-        Postgres and HTTP</a>.
+      and it’s
+      <span class="no-wrap-md">
+        all just
+        <a href="/how/it-works" class="no-wrap">
+          Postgres and HTTP</a></span>.
     </template>
   </CTAStrap>
 </template>
