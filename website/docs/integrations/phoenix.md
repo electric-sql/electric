@@ -14,80 +14,311 @@ image: /img/integrations/electric-phoenix.jpg
 
 ## Electric and Phoenix
 
-Electric is [developed in Elixir](/product/electric#how-does-it-work) and provides [an Elixir client](/docs/api/clients/elixir). We've leveraged this to develop a batteries-included Phoenix integration for:
+Electric is [developed in Elixir](/product/electric#how-does-it-work) and provides [an Elixir client](/docs/api/clients/elixir) and deep Phoenix-framework integration in the form of the official [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) libarary.
 
-- [front-end sync](#front-end-sync): into a front-end client from a Postgres-backed Phoenix application
-- [LiveView sync](#liveview-sync): into Phoenix LiveView from Postgres in realtime via [Phoenix.Streams](/docs/integrations/phoenix#liveview-sync)
+### Phoenix.Sync
 
-`Electric.Phoenix` is published on Hex as [hex.pm/packages/electric_phoenix](https://hex.pm/packages/electric_phoenix).
+Phoenix.Sync enables real-time sync for Postgres-backed [Phoenix](https://www.phoenixframework.org/) applications. You can use it to sync data into Elixir, `LiveView` and frontend web and mobile applications.
 
-### Inspiration
+The library integrates with `Plug` and `Phoenix.{Controller, LiveView, Router, Stream}`. It uses [ElectricSQL](https://electric-sql.com) as the core sync engine, either as an embedded application dependency, or running as an external HTTP service.
 
-It was inspired by [`josevalim/sync`](https://github.com/josevalim/sync). You can read José's [original design document](https://github.com/josevalim/sync/blob/main/DESIGN.md).
+The APIs map [Ecto queries](https://hexdocs.pm/ecto/Ecto.Query.html) to [Shapes](/docs/guides/shapes).
 
-## How to use
+Documentation is available at [hexdocs.pm/phoenix_sync](https://hexdocs.pm/phoenix_sync).
 
-### Front-end sync
+## Usage
 
-Phoenix is a general framework that provides a number of different methods to get data from the server to the client. These include exposing [REST APIs](https://hexdocs.pm/phoenix/routing.html#resources) and using [Absinthe](https://hexdocs.pm/absinthe/overview.html) to expose a GraphQL endpoint.
+There are four key APIs:
 
-`Electric.Phoenix` provides an alternative method: exposing [Shapes](/docs/guides/shapes) that sync data directly from Postgres into the client. With this, shapes are exposed and configured in your Phoenix Router. For example, here we expose a predefined shape of all visible todos, deriving the shape definition from an Ecto query using your existing data model:
+- [`Phoenix.Sync.Client.stream/2`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Client.html#stream/2) for low level usage in Elixir
+- [`Phoenix.Sync.LiveView.sync_stream/4`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.LiveView.html#sync_stream/4) to sync into a LiveView stream
+- [`Phoenix.Sync.Router.sync/2`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Router.html#sync/2) macro to expose a statically defined shape in your Router
+- [`Phoenix.Sync.Controller.sync_render/3`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Controller.html#sync_render/3) to expose dynamically constructed shapes from a Controller
+
+### Low level usage in Elixir
+
+Use [`Phoenix.Sync.Client.stream/2`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Client.html#stream/2) to convert an `Ecto.Query` into an Elixir `Stream`:
 
 ```elixir
-defmodule MyAppWeb.Router do
-  use Phoenix.Router
-  alias MyApp.Todos.Todo
+stream = Phoenix.Sync.Client.stream(Todos.Todo)
 
-  scope "/shapes" do
-    pipe_through :browser
+stream =
+  Ecto.Query.from(t in Todos.Todo, where: t.completed == false)
+  |> Phoenix.Sync.Client.stream()
+```
 
-    get "/todos", Electric.Phoenix.Plug,
-      shape: Electric.Client.shape!(Todo, where: "visible = true")
+### Sync into a LiveView stream
+
+Swap out `Phoenix.LiveView.stream/3` for [`Phoenix.Sync.LiveView.sync_stream/4`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.LiveView.html#sync_stream/4) to automatically keep a LiveView up-to-date with the state of your Postgres database:
+
+```elixir
+defmodule MyWeb.MyLive do
+  use Phoenix.LiveView
+  import Phoenix.Sync.LiveView
+
+  def mount(_params, _session, socket) do
+    {:ok, sync_stream(socket, :todos, Todos.Todo)}
+  end
+
+  def handle_info({:sync, event}, socket) do
+    {:noreply, sync_stream_update(socket, event)}
   end
 end
 ```
 
-Because the shape is defined in your Router, it can use Plug middleware for authorization. See [Parameter-based shapes](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.Plug.html#module-parameter-based-shapes) for more details.
+LiveView takes care of automatically keeping the front-end up-to-date with the assigned stream. What Phoenix.Sync does is automatically keep the _stream_ up-to-date with the state of the database.
 
-### LiveView sync
+This means you can build fully end-to-end real-time multi-user applications without writing Javascript _and_ without worrying about message delivery, reconnections, cache invalidation or polling the database for changes.
 
-[Phoenix LiveView](https://hexdocs.pm/phoenix_live_view) allows you to develop interactive web applications in Elixir/Phoenix, often without writing any front-end code.
+### Sync shapes through your Router
 
-LiveView provides a primitive, called [Phoenix.Streams](https://fly.io/phoenix-files/phoenix-dev-blog-streams) that allows you to stream data into a LiveView. `Electric.Phoenix` provides a wrapper around this to automatically stream a [Shape](/docs/guides/shapes) into a LiveView.
-
-The key primitive is an [`electric_stream/4`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.LiveView.html#electric_stream/4) function that wraps [`Phoenix.LiveView.stream/4`](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html#stream/4) to provide a live updating collection of items.
+Use the [`Phoenix.Sync.Router.sync/2`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Router.html#sync/2) macro to expose statically (compile-time) defined shapes in your Router:
 
 ```elixir
-def mount(_params, _session, socket) do
-  socket =
-    Electric.Phoenix.LiveView.electric_stream(
-      socket,
-      :visible_todos,
-      from(t in Todo, where: t.visible == true)
-    )
+defmodule MyWeb.Router do
+  use Phoenix.Router
+  import Phoenix.Sync.Router
 
-  {:ok, socket}
+  pipeline :sync do
+    plug :my_auth
+  end
+
+  scope "/shapes" do
+    pipe_through :sync
+
+    sync "/todos", Todos.Todo
+  end
 end
 ```
 
-This makes your LiveView applications real-time. In fact, it allows you to build interactive, real-time multi-user applications straight out of your existing Ecto schema, without writing any JavaScript at all 🤯
+Because the shapes are exposed through your Router, the client connects through your existing Plug middleware. This allows you to do real-time sync straight out of Postgres _without_ having to translate your auth logic into complex/fragile database rules.
 
-### More details
+### Sync dynamic shapes from a Controller
 
-For more details and full documentation see [hexdocs.pm/electric_phoenix](https://hexdocs.pm/electric_phoenix).
+Sync shapes from any standard Controller using the [`Phoenix.Sync.Controller.sync_render/3`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Controller.html#sync_render/3) view function:
+
+```elixir
+defmodule Phoenix.Sync.LiveViewTest.TodoController do
+  use Phoenix.Controller
+  import Phoenix.Sync.Controller
+  import Ecto.Query, only: [from: 2]
+
+  def show(conn, %{"done" => done} = params) do
+    sync_render(conn, params, from(t in Todos.Todo, where: t.done == ^done))
+  end
+
+  def show_mine(%{assigns: %{current_user: user_id}} = conn, params) do
+    sync_render(conn, params, from(t in Todos.Todo, where: t.owner_id == ^user_id))
+  end
+end
+```
+
+This allows you to define and personalise the shape definition at runtime using the session and request.
+
+### Consume shapes in the frontend
+
+You can sync _into_ any client in any language that [speaks HTTP and JSON](/docs/api/http). For example, using the Electric [Typescript client](/docs/api/clients/typescript):
+
+```typescript
+import { Shape, ShapeStream } from "@electric-sql/client";
+
+const stream = new ShapeStream({
+  url: `/shapes/todos`,
+});
+const shape = new Shape(stream);
+
+// The callback runs every time the data changes.
+shape.subscribe((data) => console.log(data));
+```
+
+Or binding a shape to a component using the [React bindings](/docs/integrations/react):
+
+```tsx
+import { useShape } from "@electric-sql/react";
+
+const MyComponent = () => {
+  const { data } = useShape({
+    url: `shapes/todos`,
+  });
+
+  return <List todos={data} />;
+};
+```
+
+See the Electric [demos](/demos) and [documentation](/docs/intro) for more client-side usage examples.
+
+## Installation and configuration
+
+`Phoenix.Sync` can be used in two modes:
+
+1. `:embedded` where Electric is included as an application dependency and Phoenix.Sync consumes data internally using Elixir APIs
+2. `:http` where Electric does _not_ need to be included as an application dependency and Phoenix.Sync consumes data from an external Electric service using it's [HTTP API](/docs/api/http)
+
+### Embedded mode
+
+In `:embedded` mode, Electric must be included an application dependency but does not expose an HTTP API (internally or externally). Messages are streamed internally between Electric and Phoenix.Sync using Elixir function APIs. The only HTTP API for sync is that exposed via your Phoenix Router using the `sync/2` macro and `sync_render/3` function.
+
+Example config:
+
+```elixir
+# mix.exs
+defp deps do
+  [
+    {:electric, ">= 1.0.0-beta.20"},
+    {:phoenix_sync, "~> 0.3"}
+  ]
+end
+
+# config/config.exs
+config :phoenix_sync,
+  env: config_env(),
+  mode: :embedded,
+  repo: MyApp.Repo
+
+# application.ex
+children = [
+  MyApp.Repo,
+  # ...
+  {MyApp.Endpoint, phoenix_sync: Phoenix.Sync.plug_opts()}
+]
+```
+
+### HTTP
+
+In `:http` mode, Electric does not need to be included as an application dependency. Instead, Phoenix.Sync consumes data from an external Electric service over HTTP.
+
+```elixir
+# mix.exs
+defp deps do
+  [
+    {:phoenix_sync, "~> 0.3"}
+  ]
+end
+
+# config/config.exs
+config :phoenix_sync,
+  env: config_env(),
+  mode: :http,
+  url: "https://api.electric-sql.cloud",
+  credentials: [
+    secret: "...",    # required
+    source_id: "..."  # optional, required for Electric Cloud
+  ]
+
+# application.ex
+children = [
+  MyApp.Repo,
+  # ...
+  {MyApp.Endpoint, phoenix_sync: Phoenix.Sync.plug_opts()}
+]
+```
+
+### Local HTTP services
+
+It is also possible to include Electric as an application dependency and configure it to expose a local HTTP API that's consumed by Phoenix.Sync running in `:http` mode:
+
+```elixir
+# mix.exs
+defp deps do
+  [
+    {:electric, ">= 1.0.0-beta.20"},
+    {:phoenix_sync, "~> 0.3"}
+  ]
+end
+
+# config/config.exs
+config :phoenix_sync,
+  env: config_env(),
+  mode: :http,
+  http: [
+    port: 3000,
+  ],
+  repo: MyApp.Repo,
+  url: "http://localhost:3000"
+
+# application.ex
+children = [
+  MyApp.Repo,
+  # ...
+  {MyApp.Endpoint, phoenix_sync: Phoenix.Sync.plug_opts()}
+]
+```
+
+This is less efficient than running in `:embedded` mode but may be useful for testing or when needing to run an HTTP proxy in front of Electric as part of your development stack.
+
+### Different modes for different envs
+
+Apps using `:http` mode in certain environments can exclude `:electric` as a dependency for that environment. The following example shows how to configure:
+
+- `:embedded` mode in `:dev`
+- `:http` mode with a local Electric service in `:test`
+- `:http` mode with an external Electric service in `:prod`
+
+With Electric only included and compiled as a dependency in `:dev` and `:test`.
+
+```elixir
+# mix.exs
+defp deps do
+  [
+    {:electric, "~> 1.0.0-beta.20", only: [:dev, :test]},
+    {:phoenix_sync, "~> 0.3"}
+  ]
+end
+
+# config/dev.exs
+config :phoenix_sync,
+  env: config_env(),
+  mode: :embedded,
+  repo: MyApp.Repo
+
+# config/test.esx
+config :phoenix_sync,
+  env: config_env(),
+  mode: :http,
+  http: [
+    port: 3000,
+  ],
+  repo: MyApp.Repo,
+  url: "http://localhost:3000"
+
+# config/prod.exs
+config :phoenix_sync,
+  mode: :http,
+  url: "https://api.electric-sql.cloud",
+  credentials: [
+    secret: "...",    # required
+    source_id: "..."  # optional, required for Electric Cloud
+  ]
+
+# application.ex
+children = [
+  MyApp.Repo,
+  # ...
+  {MyApp.Endpoint, phoenix_sync: Phoenix.Sync.plug_opts()}
+]
+```
 
 ## Examples
 
+The source code for Phoenix.Sync is maintained at [electric-sql/phoenix_sync](https://github.com/electric-sql/phoenix_sync). You can see various usage examples in the [test/support](https://github.com/electric-sql/phoenix_sync/tree/main/test/support) folder.
+
 ### Phoenix LiveView
 
-See the [Phoenix LiveView example](/demos/phoenix-liveview). This is an example Phoenix LiveView application that uses [`Electric.Phoenix.LiveView.electric_stream/4`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.LiveView.html#electric_stream/4) to sync data from Postgres into a LiveView using [Phoenix Streams](https://fly.io/phoenix-files/phoenix-dev-blog-streams/).
-
-This keeps the LiveView automatically in-sync with Postgres, without having to re-run queries or trigger any change handling yourself.
+The main Electric monorepo has a [Phoenix LiveView example](/demos/phoenix-liveview). This is an example Phoenix LiveView application that uses [`Electric.Phoenix.LiveView.sync_stream/4`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.LiveView.html#sync_stream/4) to sync data from Postgres into a LiveView using [Phoenix Streams](https://fly.io/phoenix-files/phoenix-dev-blog-streams/).
 
 ### Gatekeeper Auth
 
-The [Gatekeeper auth](/demos/gatekeeper-auth) example also contains a Phoenix application that uses [`Electric.Phoenix.Plug`](https://hexdocs.pm/electric_phoenix/Electric.Phoenix.Plug.html) to authorize shape access and issue shape-scoped access tokens.
+The [Gatekeeper auth](/demos/gatekeeper-auth) example also contains a Phoenix application that uses Plug to authorize shape access and issue shape-scoped access tokens.
+
+### Conductor
+
+There's also a conference demo app using Phoenix.Sync on GitHub at [thruflo/conductor](https://github.com/thruflo/conductor). This demonstrates using the LiveView, Router and Controller integrations.
+
+## Support
+
+There's an `#elixir` channel in the [Electric Discord](https://discord.electric-sql.com) that's a good place to ask questions.
 
 <HelpWanted issue="1878">
   an equivalent integration for other server-side frameworks, such as Rails, Laravel, Django, etc.
 </HelpWanted>
+
