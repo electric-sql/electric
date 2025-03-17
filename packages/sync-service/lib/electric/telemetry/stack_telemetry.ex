@@ -72,7 +72,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
        export_period: opts.otel_export_period,
        resource: %{
          stack_id: opts.stack_id,
-         instance: %{installation_id: Electric.Config.installation_id!(kv)}
+         instance: %{installation_id: Map.get(opts, :installation_id, "electric_default")}
        }}
     end
 
