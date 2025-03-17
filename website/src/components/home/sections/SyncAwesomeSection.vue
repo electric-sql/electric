@@ -4,7 +4,8 @@
 
   const actions = [
     {
-      href: '/why/sync',
+      // href: '/why/sync',
+      href: '/use-cases/data-sync',
       text: 'Why sync',
       theme: 'brand'
     },

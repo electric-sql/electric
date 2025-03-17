@@ -7,9 +7,13 @@
       text: 'Quickstart',
       theme: 'brand'
     },
+    // {
+    //   href: '/docs/tutorial',
+    //   text: 'Tutorial'
+    // },
     {
-      href: '/docs/tutorial',
-      text: 'Tutorial'
+      href: '/docs/intro',
+      text: 'Docs'
     }
   ]
 </script>
@@ -29,7 +33,7 @@
         open source</a> <span class="no-wrap-xs">
         and it’s all just
         <span class="no-wrap">
-          <a href="/how/it-works">
+          <a href="/docs/api/http">
             Postgres and HTTP</a></span></span>.
     </template>
   </CTAStrap>

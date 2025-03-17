@@ -7,10 +7,10 @@
       text: 'Quickstart',
       theme: 'brand'
     },
-    {
-      href: '/docs/tutorial',
-      text: 'Tutorial'
-    },
+    // {
+    //   href: '/docs/tutorial',
+    //   text: 'Tutorial'
+    // },
     {
       href: '/docs/intro',
       text: 'Docs'
@@ -31,8 +31,8 @@
       Start with the
       <a href="/docs/quickstart">Quickstart</a>.
       Dive deeper with the
-      <a href="/docs/tutorial">Tutorial</a>.
-      Explore the
+      <!-- <a href="/docs/tutorial">Tutorial</a>.
+      Explore the -->
       <span class="no-wrap">
         <a href="/docs/intro">Docs</a>
         and

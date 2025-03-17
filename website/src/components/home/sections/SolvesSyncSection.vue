@@ -3,14 +3,20 @@
   import Section from '../Section.vue'
 
   const actions = [
+    // {
+    //   href: '/why/electric',
+    //   text: 'Why Electric',
+    //   theme: 'brand'
+    // },
     {
-      href: '/why/electric',
-      text: 'Why Electric',
+      // href: '/how/it-works',
+      href: '/product/electric',
+      text: 'How it works',
       theme: 'brand'
     },
     {
-      href: '/how/it-works',
-      text: 'How it works'
+      href: '/docs/guides/shapes',
+      text: 'Partial replication'
     }
   ]
 </script>
@@ -33,7 +39,7 @@
         fan-out</a>,
       <span class="no-wrap">
         and
-        <a href="/how/it-works">
+        <a href="/docs/api/http">
           data&nbsp;delivery</a></span>.
     </template>
     <PartialReplicationDiagramme />

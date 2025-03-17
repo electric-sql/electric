@@ -8,10 +8,19 @@
   import Section from '../Section.vue'
 
   const actions = [
+    // {
+    //   href: '/why/case-studies',
+    //   text: 'Case studies',
+    //   theme: 'brand'
+    // },
     {
-      href: '/why/case-studies',
-      text: 'Case studies',
+      href: '/use-cases/data-sync',
+      text: 'Use cases',
       theme: 'brand'
+    },
+    {
+      href: '/demos',
+      text: 'Examples'
     }
   ]
 </script>

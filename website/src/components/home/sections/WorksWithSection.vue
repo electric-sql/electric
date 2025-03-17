@@ -37,9 +37,13 @@
       text: 'Quickstart',
       theme: 'brand'
     },
+    // {
+    //   href: '/docs/tutorial',
+    //   text: 'Tutorial'
+    // }
     {
-      href: '/docs/tutorial',
-      text: 'Tutorial'
+      href: '/docs/intro',
+      text: 'Docs'
     }
   ]
 
