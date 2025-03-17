@@ -1,5 +1,24 @@
 # @core/elixir-client
 
+## 0.3.0
+
+### Minor Changes
+
+- f1a9247: feat!: change the wire protocol to remove `offset` and add an explicit `lsn` header. Only valid offset now is the one provided in headers
+
+### Patch Changes
+
+- 1b8dce0: Fix race condition where response comes before listener has monitored itself.
+- 27481c9: Remove requirement for a shape definition from Electric.Client.stream, so we now support endpoints that return a pre-configured stream. Also remove `oneshot` configuration flag as it no longer makes sense
+- 0dd1f0c: feat: add support for parameters in where clauses to clients
+- 71b8ab2: Add pool behaviour for the Elixir client to allow for per-client persistent connections. Add request timestamp and shape handle to replication stream messages.
+- fc1796a: Fix stalled elixir client streams by ensuring that requests are always made, even if calling process dies
+- 01c63ae: Fix race condition in elixir client when multiple simultaneous clients are streaming the same shape
+- df1c18f: Fix race condition when using mock backend
+- 8ce1353: Add embedded mode to Elixir client using the new Shapes API
+- 9554498: Improve public APIs of Elixir client and core electric
+- 9f0b96a: Add generic params to client config that are appended to every request, remove database_id top-level config as it can be done via the params.
+
 ## 0.3.0-beta.4
 
 ### Patch Changes
