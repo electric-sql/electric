@@ -6,7 +6,7 @@ description: >-
 excerpt: >-
   With version 1.0 Electric is now in GA. The APIs are stable and the
   sync engine is ready for mission critical, production apps.
-authors: [kyle]
+authors: [james]
 image: /img/blog/electric-1.0-released/header.jpg
 tags: [release]
 outline: [2, 3]
