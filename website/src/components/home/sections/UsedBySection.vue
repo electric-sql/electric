@@ -69,9 +69,7 @@
     <template #tagline>
       Built into
       <span class="hidden-sm">
-        developer tools like</span>
-      <a href="https://www.npmjs.com/package/firebase-tools?activeTab=dependencies" target="_blank">
-        Firebase</a>
+        developer tools like</span> <a href="https://www.npmjs.com/package/firebase-tools?activeTab=dependencies" target="_blank">Firebase</a>
       and
       <a href="https://supabase.com/blog/database-build-v2"
           target="_blank">

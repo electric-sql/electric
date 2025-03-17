@@ -26,7 +26,7 @@
 
 <style scoped>
   .community-widgets {
-    padding: 40px 0;
+    padding: 12px 0 24px;
     display: flex;
     flex-direction: row;
     gap: 40px;
@@ -47,6 +47,14 @@
     width: 100%;
     max-width: 440px;
   }
+  @media (max-width: 767px) {
+    .community-widgets {
+      flex-direction: column;
+    }
+    .discord {
+      order: 2;
+    }
+  }
 </style>
 
 <template>
@@ -58,7 +66,11 @@
       With a thriving
       <a href="https://discord.electric-sql.com">
         open source community</a>
-      and over 600,000 downloads a week.
+      and over
+      <span class="no-wrap-xs">
+        600,000
+        <span class="no-wrap">
+          downloads a week</span></span>.
     </template>
     <div class="community-widgets">
       <div class="discord">

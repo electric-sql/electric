@@ -44,7 +44,7 @@
     display: grid;
     grid-template-columns: repeat(8, minmax(0, 1fr));
     gap: 16px;
-    margin: 40px 0px 32px;
+    margin: 40px 0px 26px;
     overflow: hidden;
   }
   @media (max-width: 1149px) {
@@ -109,10 +109,10 @@
     <template #tagline>
       Built by
       <a href="/about/team">
-        world experts</a>.
-      Backed by world leading
+        devtools and database experts</a>.
+      Backed by
       <a href="/about/team#investors">
-        database and devtools founders</a>.
+         industry leading founders</a>.
     </template>
     <div class="backers">
       <Backer :backer="backer" :key="backer.slug" v-for="backer in backers" />

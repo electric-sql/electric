@@ -30,20 +30,20 @@
   }
   .post-image img {
     width: 448px;
-    height: 254px;
+    height: 214px;
     object-fit: cover;
     min-width: 100%;
   }
   @media (min-width: 750px) and (max-width: 949px) {
     .post-image img {
       width: 336px;
-      height: 191px;
+      height: 161px;
     }
   }
   @media (max-width: 549px) {
     .post-image img {
       width: 336px;
-      height: 191px;
+      height: 151px;
     }
   }
   .post-body {
@@ -51,7 +51,8 @@
     flex-grow: 1;
   }
   .post-body h3 {
-    font-size: 22px;
+    font-size: 18px;
+    margin-top: 24px;
   }
   .post-body p {
     color: var(--vp-c-text-2);
@@ -80,7 +81,7 @@
     border-top: 1px solid rgb(46, 46, 50);
     color: var(--vp-c-indigo-1);
 
-    padding: 18px 0 36px;
+    padding: 18px 0 24px;
     margin: 6px 24px 0;
   }
 

@@ -47,6 +47,22 @@
       grid-template-columns: 1fr;
     }
   }
+
+  .listing :deep(.post-body h3) {
+    font-size: 18px;
+    color: var(--vp-c-text-1);
+    font-weight: 500;
+  }
+
+  .listing :deep(p.post-author span) {
+    color: var(--vp-c-text-2);
+  }
+
+  .listing :deep(.post-body > p) {
+    font-size: 14px;
+    line-height: 24px;
+    color: var(--vp-c-text-3);
+  }
 </style>
 
 <template>
@@ -65,9 +81,11 @@
       />
     </div>
     <template #outline>
-      Follow us as
+      Follow
       <a href="https://bsky.app/profile/electric-sql.com">
-        @electric-sql.com</a> on Bluesky:
+        @electric-sql.com</a> on Bluesky
+      and&nbsp;<a href="https://x.com/ElectricSQL">
+        @ElectricSQL</a> on X:
     </template>
     <template #outbody>
       <BlueskyPosts did="did:plc:kuwyhfwegvfzugctjd6cwrlg" :limit="2" />
