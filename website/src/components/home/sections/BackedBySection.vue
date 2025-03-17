@@ -20,10 +20,11 @@
   select('spencer')
   select('jordan')
   select('monica')
-  select('adam')
+  select('sriram')
   select('pvh')
-  select('jose')
   select('chris')
+  select('jose')
+  select('adam')
 
   const actions = [
     {
@@ -40,10 +41,63 @@
 
 <style scoped>
   .backers {
-    display: flex;
-    flex-direction: row;
-    flex: auto;
-    cols: 8;
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 16px;
+    margin: 40px 0px 32px;
+    overflow: hidden;
+  }
+  @media (max-width: 1149px) {
+    .backers {
+      gap: 14px;
+    }
+  }
+  @media (max-width: 1099px) {
+    .backers {
+      gap: 12px;
+    }
+  }
+  @media (max-width: 1055px) {
+    .backers {
+      gap: 10px;
+    }
+  }
+  @media (max-width: 1009px) {
+    .backers {
+      gap: 8px;
+    }
+  }
+  @media (max-width: 959px) {
+    .backers {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 24px;
+
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+  }
+  @media (max-width: 766px) {
+    .backers {
+      gap: 16px;
+    }
+  }
+  @media (max-width: 549px) {
+    .backers {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 20px;
+    }
+  }
+  @media (max-width: 449px) {
+    .backers {
+      gap: 16px;
+    }
+  }
+  @media (max-width: 399px) {
+    .backers {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
   }
 </style>
 
@@ -56,9 +110,9 @@
       Built by
       <a href="/about/team">
         world experts</a>.
-      Backed by the
+      Backed by world leading
       <a href="/about/team#investors">
-        world's leading database and devtools founders</a>.
+        database and devtools founders</a>.
     </template>
     <div class="backers">
       <Backer :backer="backer" :key="backer.slug" v-for="backer in backers" />

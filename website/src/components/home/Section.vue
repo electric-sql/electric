@@ -44,8 +44,10 @@
 </style>
 
 <style>
-  .page-section p a {
-    white-space: nowrap;
+  @media (min-width: 399px) {
+    .page-section p a {
+      white-space: nowrap;
+    }
   }
 </style>
 
