@@ -57,9 +57,10 @@ For a secure connection, set the `sslmode` query parameter to `require`.
 
 <EnvVarConfig
     name="ELECTRIC_QUERY_DATABASE_URL"
+    defaultValue="DATABASE_URL"
     example="postgresql://user:password@example-pooled.com:54321/electric">
 
-Postgres connection string. Used to connect to the Postgres database for anything but the replication.
+Postgres connection string. Used to connect to the Postgres database for anything but the replication, will default to the same as `DATABASE_URL` if not provided.
 
 The connection string must be in the [libpg Connection URI format](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS) of `postgresql://[userspec@][hostspec][/dbname][?sslmode=<sslmode>]`.
 
