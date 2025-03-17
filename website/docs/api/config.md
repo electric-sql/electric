@@ -57,7 +57,6 @@ For a secure connection, set the `sslmode` query parameter to `require`.
 
 <EnvVarConfig
     name="ELECTRIC_QUERY_DATABASE_URL"
-    required={false}
     example="postgresql://user:password@example-pooled.com:54321/electric">
 
 Postgres connection string. Used to connect to the Postgres database for anything but the replication.
