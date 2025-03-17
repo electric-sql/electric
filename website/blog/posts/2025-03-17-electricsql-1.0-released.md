@@ -80,7 +80,7 @@ Running real workloads has been key to this, as it's given us a tight feedback l
 More on these soon but to give a sneak preview of some of the work in progress:
 
 - [electric-sql/d2ts](https://github.com/electric-sql/d2ts) differential dataflow in Typescript to allow for flexible, extensible stream processing in front of Electric (in the client or at the cloud edge)
-- [KyleAMathews/optimistic](http://github.com/KyleAMathews/optimistic) TanStack-compatible library that simplifies working with synced data and optimistic state in the client
+- [tanstack/optimistic](https://github.com/TanStack/optimistic) we're collaborating with TanStack to create a new library to simplify managing optimistic state in the client. This is early but the DX looks really promising
 - [electric-sql/phoenix_sync](https://github.com/electric-sql/phoenix_sync) Phoenix.Sync library to officially add sync support into the Elixir Phoenix web framework
 - [livestore.dev](https://livestore.dev/getting-started/react-web) highly performant reactive state management solution for web and mobile apps with first-class support for syncing with Electric
 
