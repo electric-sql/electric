@@ -38,7 +38,7 @@ defmodule Electric.Client.ShapeDefinition do
               type: {:or, [nil, {:map, :pos_integer, :string}, {:list, :string}]},
               default: nil,
               doc:
-                "List of parameters to include in the shape. If `nil` this is equivalent to all parameters (`SELECT *`)"
+                "Values of positional parameters in the where clause. These will substitute `$i` placeholder in the where clause."
             ],
             parser: [
               type: :mod_arg,

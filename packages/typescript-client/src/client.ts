@@ -67,11 +67,14 @@ export interface PostgresParams {
 
   /**
    * Positional where clause paramater values. These will be passed to the server
-   * and will substitute `$1` parameters in the where clause.
+   * and will substitute `$i` parameters in the where clause.
    *
-   * If where clause is `id = $1 or id = $2`, params must have keys `"1"` and `"2"`.
+   * It can be an array (note that positional arguments start at 1, the array will be mapped
+   * accordingly), or an object with keys matching the used positional parameters in the where clause.
+   *
+   * If where clause is `id = $1 or id = $2`, params must have keys `"1"` and `"2"`, or be an array with length 2.
    */
-  params?: Record<string, string>
+  params?: Record<`${number}`, string> | string[]
 
   /**
    * If `replica` is `default` (the default) then Electric will only send the
@@ -401,7 +404,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         const [requestHeaders, params] = await Promise.all([
           resolveHeaders(this.options.headers),
           this.options.params
-            ? toInternalParams(this.options.params)
+            ? toInternalParams(convertWhereParamsToObj(this.options.params))
             : undefined,
         ])
 
@@ -760,4 +763,16 @@ function setQueryParam(
   } else {
     url.searchParams.set(key, value.toString())
   }
+}
+
+function convertWhereParamsToObj(
+  allPgParams: ExternalParamsRecord
+): ExternalParamsRecord {
+  if (Array.isArray(allPgParams.params)) {
+    return {
+      ...allPgParams,
+      params: Object.fromEntries(allPgParams.params.map((v, i) => [i + 1, v])),
+    }
+  }
+  return allPgParams
 }

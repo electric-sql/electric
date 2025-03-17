@@ -159,4 +159,40 @@ describe(`ShapeStream`, () => {
       `columns=id&handle=potato&offset=-1&params%5B1%5D=test1&params%5B2%5D=test2&table=foo&where=a%3D%241+and+b%3D%242`
     )
   })
+
+  it(`should correctly serialize where clause param array to query params`, async () => {
+    const eventTarget = new EventTarget()
+    const requestedUrls: Array<string> = []
+    const fetchWrapper = (
+      ...args: Parameters<typeof fetch>
+    ): Promise<Response> => {
+      requestedUrls.push(args[0].toString())
+      eventTarget.dispatchEvent(new Event(`fetch`))
+      return Promise.resolve(Response.error())
+    }
+
+    const aborter = new AbortController()
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: {
+        table: `foo`,
+        where: `a=$1 and b=$2`,
+        columns: [`id`],
+        params: [`test1`, `test2`],
+      },
+      handle: `potato`,
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+    })
+
+    const unsub = stream.subscribe(() => unsub())
+
+    await new Promise((resolve) =>
+      eventTarget.addEventListener(`fetch`, resolve, { once: true })
+    )
+
+    expect(requestedUrls[0].split(`?`)[1]).toEqual(
+      `columns=id&handle=potato&offset=-1&params%5B1%5D=test1&params%5B2%5D=test2&table=foo&where=a%3D%241+and+b%3D%242`
+    )
+  })
 })
