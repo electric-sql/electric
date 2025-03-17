@@ -6,6 +6,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   use GenStage
 
   require Electric.Postgres.Lsn
+  alias Electric.Replication.ShapeLogCollector.AffectedColumns
   alias Electric.Postgres.Lsn
   alias Electric.Replication.PersistentReplicationState
   alias Electric.Postgres.Inspector
@@ -67,6 +68,11 @@ defmodule Electric.Replication.ShapeLogCollector do
       persistent_kv: opts.persistent_kv
     ]
 
+    {:ok, tracker_state} =
+      persistent_replication_data_opts
+      |> PersistentReplicationState.get_tracked_relations()
+      |> AffectedColumns.init()
+
     state =
       Map.merge(opts, %{
         producer: nil,
@@ -74,8 +80,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         persistent_replication_data_opts: persistent_replication_data_opts,
         last_seen_lsn:
           PersistentReplicationState.get_last_processed_lsn(persistent_replication_data_opts),
-        tracked_relations:
-          PersistentReplicationState.get_tracked_relations(persistent_replication_data_opts)
+        tracked_relations: tracker_state
       })
 
     # start in demand: :accumulate mode so that the ShapeCache is able to start
@@ -192,9 +197,10 @@ defmodule Electric.Replication.ShapeLogCollector do
   defp handle_relation(rel, from, state) do
     OpenTelemetry.add_span_attributes("rel.is_dropped": false)
 
-    {updated_rel, updated_state} = track_relation(rel, state)
+    {updated_rel, tracker_state} =
+      AffectedColumns.transform_relation(rel, state.tracked_relations)
 
-    case updated_state do
+    case state do
       %{subscriptions: {0, _}} ->
         Logger.debug(fn ->
           "Dropping relation message for #{inspect(rel.schema)}.#{inspect(rel.table)}: no active consumers"
@@ -206,92 +212,11 @@ defmodule Electric.Replication.ShapeLogCollector do
             state.persistent_replication_data_opts
           )
 
-        {:reply, :ok, [], updated_state}
+        {:reply, :ok, [], %{state | tracked_relations: tracker_state}}
 
-      updated_state ->
-        {:noreply, [updated_rel], %{updated_state | producer: from}}
+      _ ->
+        {:noreply, [updated_rel], %{state | producer: from, tracked_relations: tracker_state}}
     end
-  end
-
-  # Helper functions to access relation properties
-  defp schema_table_key(%Relation{schema: schema, table: table}), do: {schema, table}
-  defp schema_table_key(nil), do: nil
-
-  # Tracks a relation and detects changes
-  defp track_relation(
-         %Relation{schema: schema, table: table} = rel,
-         %{tracked_relations: %{id_to_table_info: id_to_table_info, table_to_id: table_to_id}} =
-           state
-       ) do
-    id = rel.id
-    schema_table = schema_table_key(rel)
-
-    # Look up existing relations
-    existing_id = Map.get(table_to_id, schema_table)
-    existing_rel = Map.get(id_to_table_info, id)
-
-    case {existing_id, existing_rel} do
-      # New relation, register it
-      {nil, nil} ->
-        {rel, add_relation(state, id, rel)}
-
-      # Relation identity matches known, let's compare columns
-      {^id, %Relation{schema: ^schema, table: ^table}} ->
-        case find_differing_columns(existing_rel, rel) do
-          # No (noticable) changes to the relation, continue as-is
-          [] ->
-            {rel, state}
-
-          affected_cols ->
-            updated_rel = %{rel | affected_columns: affected_cols}
-            {updated_rel, add_relation(state, id, rel)}
-        end
-
-      # Some part of identity changed, update the state and pass it through
-      {_, _} ->
-        Logger.debug(fn ->
-          "Relation identity changed: #{existing_id}/#{inspect(existing_rel)} -> #{inspect(rel)}"
-        end)
-
-        {rel,
-         state
-         |> delete_tracked_relation(schema_table_key(existing_rel), existing_id)
-         |> add_relation(id, rel)}
-    end
-  end
-
-  defp add_relation(state, id, rel) do
-    # new_table_to_id = Map.put(state.tracked_relations.table_to_id, schema_table_key(rel), id)
-    # new_id_to_table_info = Map.put(state.tracked_relations.id_to_table_info, id, rel)
-    # %{state | tracked_relations: %{state.tracked_relations | table_to_id: new_table_to_id, id_to_table_info: new_id_to_table_info}}
-    state
-    |> put_in([:tracked_relations, :table_to_id, schema_table_key(rel)], id)
-    |> put_in([:tracked_relations, :id_to_table_info, id], rel)
-  end
-
-  defp delete_tracked_relation(state, schema_table, id) do
-    state
-    |> update_in([:tracked_relations, :table_to_id], &Map.delete(&1, schema_table))
-    |> update_in([:tracked_relations, :id_to_table_info], &Map.delete(&1, id))
-  end
-
-  defp find_differing_columns(%Relation{columns: old_cols}, %Relation{columns: new_cols})
-       when old_cols == new_cols,
-       do: []
-
-  defp find_differing_columns(%Relation{columns: old_cols}, %Relation{columns: new_cols}) do
-    (old_cols ++ new_cols)
-    |> Enum.reduce(%{}, fn
-      %{name: name, type_oid: type_oid}, acc when is_map_key(acc, name) ->
-        # We're seeing column with this name for a second time, so we can remove it from the diff if type oid is the same
-        if acc[name] == type_oid, do: Map.delete(acc, name), else: acc
-
-      %{name: name, type_oid: type_oid}, acc ->
-        # If we're seeing column with this name for a first time, it'll either stay if it's present only in one set,
-        # or be deleted if seen again
-        Map.put(acc, name, type_oid)
-    end)
-    |> Map.keys()
   end
 
   defp drop_transaction(txn, state) do
