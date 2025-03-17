@@ -64,8 +64,6 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
     end
 
     defp otel_reporter_child_spec(%{otel_metrics?: true} = opts) do
-      kv = Electric.Config.persistent_kv()
-
       {OtelMetricExporter,
        name: :"stack_otel_telemetry_#{opts.stack_id}",
        metrics: otel_metrics(opts),
