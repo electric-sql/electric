@@ -1322,9 +1322,9 @@ importers:
       '@sqlite.org/sqlite-wasm':
         specifier: 3.49.1-build2
         version: 3.49.1-build2
-      react:
-        specifier: '>=18.3.1 <20.0.0'
-        version: 18.3.1
+      async-mutex:
+        specifier: ^0.5.0
+        version: 0.5.0
     devDependencies:
       '@typescript-eslint/eslint-plugin':
         specifier: ^7.14.1
@@ -5191,6 +5191,9 @@ packages:
   astring@1.9.0:
     resolution: {integrity: sha512-LElXdjswlqjWrPpJFg1Fx4wpkOCxj1TDHlSV4PlaRxHGWko024xICaa97ZkMfs6DRKlCguiAI+rbXv5GWwXIkg==}
     hasBin: true
+
+  async-mutex@0.5.0:
+    resolution: {integrity: sha512-1A94B18jkJ3DYq284ohPxoXbfTA5HsQ7/Mf4DEhcyLx3Bz27Rh59iScbB6EPiP+B+joue6YCxcMXSbFC1tZKwA==}
 
   async@3.2.6:
     resolution: {integrity: sha512-htCUDlxyyCLMgaM3xXg0C0LW2xqfuQ6p05pCEIsXuyQ+a1koYKTuBMzRNwmybfLgvJDMd0r1LTn4+E0Ti6C2AA==}
@@ -14332,6 +14335,10 @@ snapshots:
   assertion-error@2.0.1: {}
 
   astring@1.9.0: {}
+
+  async-mutex@0.5.0:
+    dependencies:
+      tslib: 2.8.1
 
   async@3.2.6: {}
 

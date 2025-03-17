@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+
+<head>
+  <title>SQLite Electric Sync Example</title>
+  <!-- Load SQLite directly in head so it's available before our module script -->
+  <script
+    src="../node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.js"></script>
+  <link rel="stylesheet" href="./style.css" />
+  <script src="./utils.js"></script>
+  <script type="importmap">
+      {
+        "imports": {
+          "@electric-sql/sqlite-sync": "../dist/index.browser.mjs",
+          "@electric-sql/client": "../node_modules/@electric-sql/client/dist/index.browser.mjs",
+          "async-mutex": "../node_modules/async-mutex/index.mjs"
+        }
+      }
+    </script>
+</head>
+
+<body>
+  <h1>SQLite Electric Sync Example</h1>
+
+  <div class="section">
+    <h2>Electric SQLite Example</h2>
+    <div id="output"></div>
+  </div>
+  <div class="script-plus-log">
+    <script type="module">
+      const sqlite3 = await sqlite3InitModule({
+        print: console.log,
+        printErr: console.error,
+      });
+      const { sqliteWasmWrapper, electricSync } = await import('@electric-sql/sqlite-sync');
+      const sqliteDb = new sqlite3.oo1.DB('/mydb.sqlite3', 'c')
+      const sqliteWrapped = sqliteWasmWrapper(sqliteDb)
+
+      const sqlite = electricSync({ db: sqliteWrapped, options: { debug: false } })
+
+      await sqlite.exec(`
+            CREATE TABLE IF NOT EXISTS test (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT
+            )
+          `);
+
+      await sqlite.electric.syncShapeToTable({
+        shape: { url: "http://localhost:3000/v1/shape", table: "test" },
+        table: "test",
+        primaryKey: ["id"],
+      });
+
+      const pollingInterval = setInterval(updateDisplay, 1000);
+      window.addEventListener('beforeunload', () => {
+        if (pollingInterval) {
+          clearInterval(pollingInterval);
+        }
+      });
+
+      async function updateDisplay() {
+        const output = document.getElementById("output");
+        await sqlite.mutex.runExclusive(async (db) => {
+          const stmt = db.prepare('SELECT * FROM test ORDER BY id')
+          const rows = await stmt.all();
+          output.textContent = JSON.stringify(rows, null, 2);
+          stmt.finalize();
+          console.log(`Polling update at ${new Date().toISOString()}`);
+        })
+      }
+
+    </script>
+    <div id="log"></div>
+  </div>
+</body>
+
+</html>

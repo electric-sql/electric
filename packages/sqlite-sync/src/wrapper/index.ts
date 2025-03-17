@@ -1,5 +1,3 @@
-import { ElectricSync } from '../sync'
-
 type SqlValue =
   | string
   | number
@@ -16,11 +14,7 @@ export type ArgsType<Params extends ParamsType> = Params extends SqlValue[]
   ? SqlValue[]
   : [{ [key: string]: SqlValue }]
 
-export interface SQLiteDbWithElectricSync {
-  /**
-   * ElectricSync extension
-   */
-  electric: ElectricSync
+export type SqliteWrapper = {
   /**
    * Execute raw SQL
    */
@@ -40,19 +34,16 @@ export interface SQLiteDbWithElectricSync {
    * The transaction will be committed if the function resolves without error
    * The transaction will be rolled back if the function throws an error
    */
-  transaction<T = ResultType>(
-    fn: (db: SQLiteDbWithElectricSync) => Promise<T>
-  ): Promise<T>
+  transaction<T = ResultType>(fn: (db: SqliteWrapper) => Promise<T>): Promise<T>
 
   close: () => void
 
-  acquire(): Promise<void>
+  // acquire(): Promise<void>
 
-  release(): void
+  // release(): void
 }
 
-// improve to accept other arrays as result
-export interface SQLiteStatement<Params extends ParamsType> {
+export type SQLiteStatement<Params extends ParamsType> = {
   /**
    * Run the prepared statement with parameters
    * Accepts either an array of parameters or an object of named parameters
@@ -76,13 +67,9 @@ export interface SQLiteStatement<Params extends ParamsType> {
    * Accepts either an array of parameters or an object of named parameters
    */
   all<Result extends ResultType>(...params: ArgsType<Params>): Promise<Result[]>
+
   /**
    * Finalize the prepared statement
    */
-  finalize?: () => void
-}
-
-export type SQLiteWithElectricSync = {
-  db: SQLiteDbWithElectricSync
-  electric: ElectricSync
+  finalize: () => number | undefined
 }

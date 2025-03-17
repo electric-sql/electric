@@ -5,10 +5,10 @@ import {
   ShapeStreamOptions,
 } from '@electric-sql/client'
 import { Mock, beforeEach, describe, expect, it, vi } from 'vitest'
-import sqlite3InitModule from '@sqlite.org/sqlite-wasm'
-import { makeElectricSync } from '../src/sqlite'
-import { SQLiteWithElectricSync } from '../src/wrappers'
-import { SQLiteWasmWrapper } from '../src/wrappers/sqlite-wasm'
+import sqlite3InitModule, { Database } from '@sqlite.org/sqlite-wasm'
+import { sqliteWasmWrapper } from '../src/wrapper/sqlite-wasm'
+import { electricSync } from '../src/sync'
+import { ElectricSync } from '../src/types'
 
 vi.mock('@electric-sql/client', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@electric-sql/client')>()
@@ -19,28 +19,27 @@ vi.mock('@electric-sql/client', async (importOriginal) => {
 })
 
 const upToDateMsg: ControlMessage = {
-  headers: { control: 'up-to-date' },
+  headers: { control: `up-to-date` },
 }
 
-describe('sqlite-sync', async () => {
+describe(`sqlite-sync`, async () => {
   const sqlite3 = await sqlite3InitModule({
     print: console.log,
     printErr: console.error,
   })
 
-  let sqliteWithSync: SQLiteWithElectricSync
+  let sqliteDb: Database
+  let db: ElectricSync
 
   const MockShapeStream = ShapeStream as unknown as Mock
 
   beforeEach(async () => {
-    const sqliteDb = new sqlite3.oo1.DB('/mydb.sqlite3', 'ct')
-    const sqliteWrapper = new SQLiteWasmWrapper(sqliteDb)
+    sqliteDb = new sqlite3.oo1.DB(`/mydb.sqlite3`, `c`)
+    const sqliteWrapped = sqliteWasmWrapper(sqliteDb)
 
-    sqliteWithSync = makeElectricSync(sqliteWrapper, { debug: true })
+    db = electricSync({ db: sqliteWrapped, options: { debug: false } })
 
-    const sqlite = sqliteWithSync.db
-
-    sqlite.exec(`
+    await db.exec(`
         CREATE TABLE IF NOT EXISTS todo (
           id SERIAL PRIMARY KEY,
           task TEXT,
@@ -48,10 +47,10 @@ describe('sqlite-sync', async () => {
         );
       `)
 
-    sqlite.exec(`DELETE FROM todo;`)
+    await db.exec(`DELETE FROM todo;`)
   })
 
-  it('handles inserts/updates/deletes', async () => {
+  it(`handles inserts/updates/deletes`, async () => {
     let feedMessage: (message: Message) => Promise<void> = async (_) => {}
     MockShapeStream.mockImplementation(() => ({
       subscribe: vi.fn((cb: (messages: Message[]) => Promise<void>) => {
@@ -61,76 +60,81 @@ describe('sqlite-sync', async () => {
     }))
 
     // Spy on the transaction method
-    const transactionSpy = vi.spyOn(sqliteWithSync.db, 'transaction')
+    const transactionSpy = vi.spyOn(sqliteDb, `transaction`)
 
-    const shape = await sqliteWithSync.electric.syncShapeToTable({
+    const shape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
-      table: 'todo',
-      primaryKey: ['id'],
+      table: `todo`,
+      primaryKey: [`id`],
       shapeKey: null,
     })
 
     // insert
     await feedMessage({
-      headers: { operation: 'insert' },
-      key: 'id1',
+      headers: { operation: `insert` },
+      key: `id1`,
       value: {
         id: 1,
-        task: 'task1',
+        task: `task1`,
         done: 0,
       },
     })
-    expect(await sqliteWithSync.db.prepare(`SELECT* FROM todo;`).all()).toEqual(
-      [
+
+    await db.mutex.runExclusive(async () => {
+      expect(await db.prepare(`SELECT* FROM todo;`).all()).toEqual([
         {
           id: 1,
-          task: 'task1',
+          task: `task1`,
           done: 0,
         },
-      ]
-    )
+      ])
+    })
 
     // update
     await feedMessage({
-      headers: { operation: 'update' },
-      key: 'id1',
+      headers: { operation: `update` },
+      key: `id1`,
       value: {
         id: 1,
-        task: 'task2',
+        task: `task2`,
         done: 1,
       },
     })
-    expect(await sqliteWithSync.db.prepare(`SELECT* FROM todo;`).all()).toEqual(
-      [
+
+    await db.mutex.runExclusive(async () => {
+      expect(await db.prepare(`SELECT* FROM todo;`).all()).toEqual([
         {
           id: 1,
-          task: 'task2',
+          task: `task2`,
           done: 1,
         },
-      ]
-    )
+      ])
+    })
 
     // delete
     await feedMessage({
-      headers: { operation: 'delete' },
-      key: 'id1',
+      headers: { operation: `delete` },
+      key: `id1`,
       value: {
         id: 1,
-        task: 'task2',
+        task: `task2`,
         done: true,
       },
     })
-    expect(await sqliteWithSync.db.prepare(`SELECT* FROM todo;`).all()).toEqual(
-      []
-    )
+
+    await db.mutex.runExclusive(async () => {
+      expect(await db.prepare(`SELECT* FROM todo;`).all()).toEqual([])
+    })
+
+    expect(transactionSpy).toHaveBeenCalledTimes(3)
 
     shape.unsubscribe()
   })
 
-  it('performs operations within a transaction', async () => {
+  it(`performs operations within a transaction`, async () => {
     let feedMessages: (messages: Message[]) => Promise<void> = async (_) => {}
     MockShapeStream.mockImplementation(() => ({
       subscribe: vi.fn((cb: (messages: Message[]) => Promise<void>) => {
@@ -140,15 +144,15 @@ describe('sqlite-sync', async () => {
     }))
 
     // Spy on the transaction method
-    const transactionSpy = vi.spyOn(sqliteWithSync.db, 'transaction')
+    const transactionSpy = vi.spyOn(sqliteDb, `transaction`)
 
-    const shape = await sqliteWithSync.electric.syncShapeToTable({
+    const shape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
-      table: 'todo',
-      primaryKey: ['id'],
+      table: `todo`,
+      primaryKey: [`id`],
       shapeKey: null,
     })
 
@@ -160,7 +164,7 @@ describe('sqlite-sync', async () => {
         Array.from({ length: numBatchInserts }, (_, idx) => {
           const itemIdx = i * numBatchInserts + idx
           return {
-            headers: { operation: 'insert' },
+            headers: { operation: `insert` },
             offset: `1_${itemIdx}`,
             key: `id${itemIdx}`,
             value: {
@@ -181,27 +185,31 @@ describe('sqlite-sync', async () => {
 
     let numItemsInserted = 0
     await vi.waitUntil(async () => {
-      await sqliteWithSync.db.acquire()
-      numItemsInserted =
-        (
-          await sqliteWithSync.db
-            .prepare(`SELECT count(*) as count FROM todo;`)
-            .get<{ count: number }>()
-        )?.count ?? 0
-      sqliteWithSync.db.release()
+      try {
+        await db.mutex.acquire()
+        numItemsInserted =
+          (
+            await db
+              .prepare(`SELECT count(*) as count FROM todo;`)
+              .get<{ count: number }>()
+          )?.count ?? 0
+      } finally {
+        db.mutex.release()
+      }
       return numItemsInserted > 0
     })
 
     // should have exact number of inserts added transactionally
     expect(numItemsInserted).toBe(numInserts)
+    expect(transactionSpy).toHaveBeenCalledTimes(1)
 
     // should have processed microtask within few ms, not blocking main loop
     // expect(timeToProcessMicrotask).toBeLessThan(15) // TODO: flaky on CI
 
-    await shape.unsubscribe()
+    shape.unsubscribe()
   })
 
-  it('persists shape stream state and automatically resumes', async () => {
+  it(`persists shape stream state and automatically resumes`, async () => {
     let feedMessages: (messages: Message[]) => Promise<void> = async (_) => {}
     const shapeStreamInits = vi.fn()
     let mockShapeId: string | void = undefined
@@ -210,7 +218,7 @@ describe('sqlite-sync', async () => {
       return {
         subscribe: vi.fn((cb: (messages: Message[]) => Promise<void>) => {
           feedMessages = (messages) => {
-            mockShapeId ??= Math.random() + ''
+            mockShapeId ??= Math.random() + ``
             return cb([...messages, upToDateMsg])
           }
         }),
@@ -227,19 +235,19 @@ describe('sqlite-sync', async () => {
 
     const numResumes = 3
     for (let i = 0; i < numResumes; i++) {
-      const shape = await sqliteWithSync.electric.syncShapeToTable({
+      const shape = await db.electric.syncShapeToTable({
         shape: {
-          url: 'http://localhost:3000/v1/shape',
-          params: { table: 'todo' },
+          url: `http://localhost:3000/v1/shape`,
+          params: { table: `todo` },
         },
-        table: 'todo',
-        primaryKey: ['id'],
-        shapeKey: 'foo',
+        table: `todo`,
+        primaryKey: [`id`],
+        shapeKey: `foo`,
       })
 
       await feedMessages(
         Array.from({ length: numInserts }, (_, idx) => ({
-          headers: { operation: 'insert' },
+          headers: { operation: `insert` },
           offset: `1_${i * numInserts + idx}`,
           key: `id${i * numInserts + idx}`,
           value: {
@@ -251,29 +259,34 @@ describe('sqlite-sync', async () => {
       )
 
       await vi.waitUntil(async () => {
-        const result = await sqliteWithSync.db
-          .prepare(`SELECT COUNT(*) as count FROM todo;`)
-          .get<{ count: number }>()
+        try {
+          await db.mutex.acquire()
+          const result = await db
+            .prepare(`SELECT COUNT(*) as count FROM todo;`)
+            .get<{ count: number }>()
 
-        if (result && result.count > totalRowCount) {
-          totalRowCount = result!.count
-          return true
+          if (result && result.count > totalRowCount) {
+            totalRowCount = result!.count
+            return true
+          }
+          return false
+        } finally {
+          db.mutex.release()
         }
-        return false
       })
       shapeIds.push(mockShapeId!)
 
       expect(shapeStreamInits).toHaveBeenCalledTimes(i + 1)
       if (i === 0) {
-        expect(shapeStreamInits.mock.calls[i][0]).not.toHaveProperty('shapeId')
-        expect(shapeStreamInits.mock.calls[i][0]).not.toHaveProperty('offset')
+        expect(shapeStreamInits.mock.calls[i][0]).not.toHaveProperty(`shapeId`)
+        expect(shapeStreamInits.mock.calls[i][0]).not.toHaveProperty(`offset`)
       }
 
       shape.unsubscribe()
     }
   })
 
-  it('clears and restarts persisted shape stream state on refetch', async () => {
+  it(`clears and restarts persisted shape stream state on refetch`, async () => {
     let feedMessages: (messages: Message[]) => Promise<void> = async (_) => {}
     const shapeStreamInits = vi.fn()
     let mockShapeId: string | void = undefined
@@ -283,8 +296,8 @@ describe('sqlite-sync', async () => {
       return {
         subscribe: vi.fn((cb: (messages: Message[]) => Promise<void>) => {
           feedMessages = (messages) => {
-            mockShapeId ??= Math.random() + ''
-            if (messages.find((m) => m.headers.control === 'must-refetch')) {
+            mockShapeId ??= Math.random() + ``
+            if (messages.find((m) => m.headers.control === `must-refetch`)) {
               mockShapeId = undefined
             }
 
@@ -299,19 +312,19 @@ describe('sqlite-sync', async () => {
     })
 
     const numInserts = 100
-    const shape = await sqliteWithSync.electric.syncShapeToTable({
+    const shape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
-      table: 'todo',
-      primaryKey: ['id'],
-      shapeKey: 'foo',
+      table: `todo`,
+      primaryKey: [`id`],
+      shapeKey: `foo`,
     })
 
     await feedMessages(
       Array.from({ length: numInserts }, (_, idx) => ({
-        headers: { operation: 'insert' },
+        headers: { operation: `insert` },
         offset: `1_${idx}`,
         key: `id${idx}`,
         value: {
@@ -323,17 +336,22 @@ describe('sqlite-sync', async () => {
     )
 
     await vi.waitUntil(async () => {
-      const result = await sqliteWithSync.db
-        .prepare(`SELECT COUNT(*) as count FROM todo;`)
-        .get<{ count: number }>()
-      return result?.count === numInserts
+      try {
+        await db.mutex.acquire()
+        const result = await db
+          .prepare(`SELECT COUNT(*) as count FROM todo;`)
+          .get<{ count: number }>()
+        return result?.count === numInserts
+      } finally {
+        db.mutex.release()
+      }
     })
 
     // feed a must-refetch message that should clear the table
     // and any aggregated messages
     await feedMessages([
       {
-        headers: { operation: 'insert' },
+        headers: { operation: `insert` },
         key: `id${numInserts}`,
         value: {
           id: numInserts,
@@ -341,9 +359,9 @@ describe('sqlite-sync', async () => {
           done: false,
         },
       },
-      { headers: { control: 'must-refetch' } },
+      { headers: { control: `must-refetch` } },
       {
-        headers: { operation: 'insert' },
+        headers: { operation: `insert` },
         key: `id21`,
         value: {
           id: 21,
@@ -353,75 +371,77 @@ describe('sqlite-sync', async () => {
       },
     ])
 
-    const result = await sqliteWithSync.db.prepare(`SELECT * FROM todo;`).all()
-    expect(result).toHaveLength(1)
-    expect(result[0]).toEqual({
-      id: 21,
-      done: 0,
-      task: 'task',
+    await db.mutex.runExclusive(async () => {
+      const result = await db.prepare(`SELECT * FROM todo;`).all()
+      expect(result).toHaveLength(1)
+      expect(result[0]).toEqual({
+        id: 21,
+        done: 0,
+        task: `task`,
+      })
     })
 
     shape.unsubscribe()
 
     // resuming should
-    const resumedShape = await sqliteWithSync.electric.syncShapeToTable({
+    const resumedShape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
-      table: 'todo',
-      primaryKey: ['id'],
-      shapeKey: 'foo',
+      table: `todo`,
+      primaryKey: [`id`],
+      shapeKey: `foo`,
     })
     resumedShape.unsubscribe()
 
     expect(shapeStreamInits).toHaveBeenCalledTimes(2)
 
-    expect(shapeStreamInits.mock.calls[1][0]).not.toHaveProperty('shapeId')
-    expect(shapeStreamInits.mock.calls[1][0]).not.toHaveProperty('offset')
+    expect(shapeStreamInits.mock.calls[1][0]).not.toHaveProperty(`shapeId`)
+    expect(shapeStreamInits.mock.calls[1][0]).not.toHaveProperty(`offset`)
   })
 
-  it('forbids multiple subscriptions to the same table', async () => {
+  it(`forbids multiple subscriptions to the same table`, async () => {
     MockShapeStream.mockImplementation(() => ({
       subscribe: vi.fn(),
       unsubscribeAll: vi.fn(),
     }))
 
-    const table = 'foo'
-    const altTable = 'bar'
+    const table = `foo`
+    const altTable = `bar`
 
-    const shape1 = await sqliteWithSync.electric.syncShapeToTable({
+    const shape1 = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
       table: table,
-      primaryKey: ['id'],
+      primaryKey: [`id`],
       shapeKey: null,
     })
 
     // should throw if syncing more shapes into same table
     await expect(
       async () =>
-        await sqliteWithSync.electric.syncShapeToTable({
+        await db.electric.syncShapeToTable({
           shape: {
-            url: 'http://localhost:3000/v1/shape',
-            params: { table: 'todo_alt' },
+            url: `http://localhost:3000/v1/shape`,
+            params: { table: `todo_alt` },
           },
           table: table,
-          primaryKey: ['id'],
+          primaryKey: [`id`],
           shapeKey: null,
         })
     ).rejects.toThrowError(`Already syncing shape for table ${table}`)
 
     // should be able to sync shape into other table
-    const altShape = await sqliteWithSync.electric.syncShapeToTable({
+    const altShape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'bar' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `bar` },
       },
       table: altTable,
-      primaryKey: ['id'],
+      primaryKey: [`id`],
       shapeKey: null,
     })
     altShape.unsubscribe()
@@ -430,19 +450,19 @@ describe('sqlite-sync', async () => {
     // (and we assume data has been cleaned up?)
     shape1.unsubscribe()
 
-    const shape2 = await sqliteWithSync.electric.syncShapeToTable({
+    const shape2 = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo_alt' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo_alt` },
       },
       table: table,
-      primaryKey: ['id'],
+      primaryKey: [`id`],
       shapeKey: null,
     })
     shape2.unsubscribe()
   })
 
-  it('handles an update message with no columns to update', async () => {
+  it(`handles an update message with no columns to update`, async () => {
     let feedMessage: (message: Message) => Promise<void> = async (_) => {}
     MockShapeStream.mockImplementation(() => ({
       subscribe: vi.fn((cb: (messages: Message[]) => Promise<void>) => {
@@ -452,80 +472,84 @@ describe('sqlite-sync', async () => {
     }))
 
     // Spy on the transaction method
-    const transactionSpy = vi.spyOn(sqliteWithSync.db, 'transaction')
+    const transactionSpy = vi.spyOn(sqliteDb, `transaction`)
 
-    const shape = await sqliteWithSync.electric.syncShapeToTable({
+    const shape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
-      table: 'todo',
-      primaryKey: ['id'],
+      table: `todo`,
+      primaryKey: [`id`],
       shapeKey: null,
     })
 
     // insert
     await feedMessage({
-      headers: { operation: 'insert' },
-      key: 'id1',
+      headers: { operation: `insert` },
+      key: `id1`,
       value: {
         id: 1,
-        task: 'task1',
+        task: `task1`,
         done: false,
       },
     })
-    expect(await sqliteWithSync.db.prepare(`SELECT* FROM todo;`).all()).toEqual(
-      [
+
+    await db.mutex.runExclusive(async () => {
+      expect(await db.prepare(`SELECT* FROM todo;`).all()).toEqual([
         {
           id: 1,
-          task: 'task1',
+          task: `task1`,
           done: 0,
         },
-      ]
-    )
+      ])
+    })
 
     // update with no columns to update
     await feedMessage({
-      headers: { operation: 'update' },
-      key: 'id1',
+      headers: { operation: `update` },
+      key: `id1`,
       value: {
         id: 1,
       },
     })
-    expect(await sqliteWithSync.db.prepare(`SELECT* FROM todo;`).all()).toEqual(
-      [
+
+    await db.mutex.runExclusive(async () => {
+      expect(await db.prepare(`SELECT* FROM todo;`).all()).toEqual([
         {
           id: 1,
-          task: 'task1',
+          task: `task1`,
           done: 0,
         },
-      ]
-    )
+      ])
+    })
+
+    expect(transactionSpy).toHaveBeenCalledTimes(2)
 
     shape.unsubscribe()
   })
 
-  it('respects numeric batch commit granularity settings', async () => {
+  it(`respects numeric batch commit granularity settings`, async () => {
     let feedMessages: (messages: Message[]) => Promise<void> = async (_) => {}
     MockShapeStream.mockImplementation(() => ({
       subscribe: vi.fn((cb: (messages: Message[]) => Promise<void>) => {
         feedMessages = (messages) => cb([...messages, upToDateMsg])
-        console.log('here once')
+        console.log(`here once`)
       }),
       unsubscribeAll: vi.fn(),
     }))
 
     // Spy on the transaction method
-    const transactionSpy = vi.spyOn(sqliteWithSync.db, 'transaction')
+    const transactionSpy = vi.spyOn(sqliteDb, `transaction`)
 
     const batchSize = 5
-    const shape = await sqliteWithSync.electric.syncShapeToTable({
+    const shape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
-      table: 'todo',
-      primaryKey: ['id'],
+      table: `todo`,
+      primaryKey: [`id`],
       commitGranularity: batchSize,
       shapeKey: null,
     })
@@ -535,7 +559,7 @@ describe('sqlite-sync', async () => {
       { length: 7 },
       (_, idx) =>
         ({
-          headers: { operation: 'insert' },
+          headers: { operation: `insert` },
           key: `id${idx}`,
           value: {
             id: idx,
@@ -549,31 +573,38 @@ describe('sqlite-sync', async () => {
 
     // Wait for all inserts to complete
     await vi.waitUntil(async () => {
-      const result = await sqliteWithSync.db
-        .prepare(
-          `
-        SELECT COUNT(*) as count FROM todo;
-      `
-        )
-        .get<{ count: number }>()
-      return result?.count === 7
+      try {
+        await db.mutex.acquire()
+        const result = await db
+          .prepare(
+            `
+          SELECT COUNT(*) as count FROM todo;
+        `
+          )
+          .get<{ count: number }>()
+        return result?.count === 7
+      } finally {
+        db.mutex.release()
+      }
     })
 
     // Verify all rows were inserted
-    const result = await sqliteWithSync.db
-      .prepare(
-        `
-      SELECT * FROM todo ORDER BY id;
-    `
+    await db.mutex.runExclusive(async () => {
+      const result = await db
+        .prepare(
+          `
+        SELECT * FROM todo ORDER BY id;
+      `
+        )
+        .all<{ count: number }>()
+      expect(result).toEqual(
+        messages.map((m) => ({
+          id: m.value.id,
+          task: m.value.task,
+          done: 0,
+        }))
       )
-      .all<{ count: number }>()
-    expect(result).toEqual(
-      messages.map((m) => ({
-        id: m.value.id,
-        task: m.value.task,
-        done: 0,
-      }))
-    )
+    })
 
     // Verify transaction() was called exactly twice
     expect(transactionSpy).toHaveBeenCalledTimes(2)
@@ -581,7 +612,7 @@ describe('sqlite-sync', async () => {
     shape.unsubscribe()
   })
 
-  it('respects up-to-date commit granularity settings', async () => {
+  it(`respects up-to-date commit granularity settings`, async () => {
     let feedMessages: (messages: Message[]) => Promise<void> = async (_) => {}
     MockShapeStream.mockImplementation(() => ({
       subscribe: vi.fn((cb: (messages: Message[]) => Promise<void>) => {
@@ -591,44 +622,49 @@ describe('sqlite-sync', async () => {
     }))
 
     // Spy on the transaction method
-    const transactionSpy = vi.spyOn(sqliteWithSync.db, 'transaction')
+    const transactionSpy = vi.spyOn(sqliteDb, `transaction`)
 
-    const shape = await sqliteWithSync.electric.syncShapeToTable({
+    const shape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
-      table: 'todo',
-      primaryKey: ['id'],
-      commitGranularity: 'up-to-date',
+      table: `todo`,
+      primaryKey: [`id`],
+      commitGranularity: `up-to-date`,
       shapeKey: null,
     })
 
     // Send multiple messages
     await feedMessages([
       {
-        headers: { operation: 'insert' },
-        key: 'id1',
-        value: { id: 1, task: 'task1', done: false },
+        headers: { operation: `insert` },
+        key: `id1`,
+        value: { id: 1, task: `task1`, done: false },
       },
       {
-        headers: { operation: 'insert' },
-        key: 'id2',
-        value: { id: 2, task: 'task2', done: false },
+        headers: { operation: `insert` },
+        key: `id2`,
+        value: { id: 2, task: `task2`, done: false },
       },
       {
-        headers: { operation: 'insert' },
-        key: 'id3',
-        value: { id: 3, task: 'task3', done: false },
+        headers: { operation: `insert` },
+        key: `id3`,
+        value: { id: 3, task: `task3`, done: false },
       },
     ])
 
     // Wait for all inserts to complete
     await vi.waitUntil(async () => {
-      const result = await sqliteWithSync.db
-        .prepare(`SELECT COUNT(*) as count FROM todo;`)
-        .get<{ count: number }>()
-      return result?.count === 3
+      try {
+        await db.mutex.acquire()
+        const result = await db
+          .prepare(`SELECT COUNT(*) as count FROM todo;`)
+          .get<{ count: number }>()
+        return result?.count === 3
+      } finally {
+        db.mutex.release()
+      }
     })
 
     // Should have received only one commit notification since all operations

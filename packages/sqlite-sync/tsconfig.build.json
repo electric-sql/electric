@@ -5,6 +5,7 @@
   "compilerOptions": {
     "paths": {
       "@electric-sql/client": ["../typescript-client/src"]
-    }
+    },
+    "lib": ["ESNext", "DOM"]
   }
 }

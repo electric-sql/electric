@@ -1,5 +1,5 @@
-import type { Options } from "tsup"
-import { defineConfig } from "tsup"
+import type { Options } from 'tsup'
+import { defineConfig } from 'tsup'
 
 export default defineConfig((options: Options) => {
   const commonOptions: Partial<Options> = {
@@ -43,20 +43,20 @@ export default defineConfig((options: Options) => {
       target: `es2017`,
       dts: false,
       outExtension: () => ({ js: `.js` }),
-      entry: { "index.legacy-esm": `src/index.ts` } as Record<string, string>,
+      entry: { 'index.legacy-esm': `src/index.ts` },
     },
     // Browser-ready ESM, production + minified
     {
       ...commonOptions,
       define: {
-        "process.env.NODE_ENV": JSON.stringify(`production`),
+        'process.env.NODE_ENV': JSON.stringify(`production`),
       },
       format: [`esm`],
       outExtension: () => ({ js: `.mjs` }),
       minify: true,
       entry: {
-        "index.browser": `src/index.ts`,
-      } as Record<string, string>,
+        'index.browser': `src/index.ts`,
+      },
     },
   ]
 })
