@@ -173,7 +173,7 @@ paths:
             type: string
             enum:
               - default
-              - all
+              - full
           description: |-
             Modifies the data sent in update and delete change messages.
 
@@ -182,7 +182,8 @@ paths:
             keys are sent for a delete.
 
             When set to `full` the entire row will be sent for updates and
-            deletes.
+            deletes. `old_value` will also be present on update messages,
+            containing the previous value for changed columns.
 
             Note that insert operations always include the full row,
             in either mode.
@@ -355,6 +356,12 @@ paths:
                         - `TimeZone = 'UTC'`
                         - `IntervalStyle = 'iso_8601'`
                         - `extra_float_digits = 1`
+                    old_value:
+                      type: object
+                      description: |-
+                        The previous value for changed columns on an update.
+
+                        Only present on update messages when `replica=full`.
                 example:
                   - headers:
                       operation: insert
