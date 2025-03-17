@@ -80,8 +80,8 @@
   --vp-nav-logo-height: 30px;
 
   --vp-c-text-1: rgba(255, 255, 245, 0.92);
-  --vp-c-text-2: rgba(235, 235, 245, 0.75);
-  --vp-c-text-3: rgba(235, 235, 245, 0.55);
+  --vp-c-text-2: rgba(235, 235, 245, 0.80);
+  --vp-c-text-3: rgba(235, 235, 245, 0.68);
 
   --electric-color: #00D2A0;
   --ddn-color: #D0BCFF;
@@ -92,6 +92,10 @@
   --vp-code-font-size: 0.875em;
   --vp-font-family-base: OpenSauceOne, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --vp-font-family-mono: SourceCodePro, ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.Layout {
+  overflow-x: hidden;
 }
 
 .vpi-electric-icon {
@@ -221,8 +225,10 @@ span.no-visual {
   font-weight: 400;
 }
 
-.no-wrap {
-  white-space: nowrap;
+@media (min-width: 350px) {
+  .no-wrap {
+    white-space: nowrap;
+  }
 }
 @media (min-width: 450px) {
   .no-wrap-xs {
@@ -256,11 +262,37 @@ span.no-visual {
 .inline-xs,
 .inline-sm,
 .inline-md,
+.inline-lg,
+.inline-xl,
 .block-xxs,
 .block-xs,
 .block-sm,
-.block-md {
+.block-md,
+.block-lg,
+.block-xl {
   display: none !important;
+}
+@media (max-width: 1059px) {
+  .hidden-xl {
+    display: none !important;
+  }
+  .inline-xl {
+    display: inline !important;
+  }
+  .block-xl {
+    display: block !important;
+  }
+}
+@media (max-width: 959px) {
+  .hidden-lg {
+    display: none !important;
+  }
+  .inline-lg {
+    display: inline !important;
+  }
+  .block-lg {
+    display: block !important;
+  }
 }
 @media (max-width: 859px) {
   .hidden-md {
@@ -600,6 +632,25 @@ iframe {
   color-scheme: auto;
 }
 
+.VPHome {
+  margin-bottom: 0 !important;
+}
+
+@media (max-width: 639px) {
+  .VPHomeHero h1.name,
+  .VPHomeHero p.text {
+    font-size: 42px !important;
+    line-height: 52px !important;
+  }
+}
+@media (max-width: 499px) {
+  .VPHomeHero h1.name,
+  .VPHomeHero p.text {
+    font-size: 36px !important;
+    line-height: 45px !important;
+  }
+}
+
 .VPHomeHero .VPImage.image-src {
   max-width: min(calc(250px + 25vw), 560px);
   margin-left: -40px;
@@ -832,7 +883,7 @@ ul.benefits {
   position: relative;
   padding: 18px 24px;
   background: var(--vp-c-bg-soft);
-  z-index: 100;
+  /* z-index: 100; */
   margin-top: -2rem;
 }
 
@@ -876,19 +927,6 @@ ul.demo-actions li .VPButton {
 .demo-embed figcaption {
   margin: 14px 0 14px auto;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /* Primary CTA button styling */
 .primary-cta-button {

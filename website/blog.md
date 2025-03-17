@@ -76,7 +76,7 @@ onMounted(async () => {
   .listing {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 24px;
+    gap: 32px;
     margin: 24px 48px;
     overflow: hidden;
   }
@@ -87,14 +87,14 @@ onMounted(async () => {
   }
   @media (max-width: 949px) {
     .listing {
-      gap: 20px;
+      gap: 32px;
       margin: 24px 40px;
     }
   }
   @media (max-width: 749px) {
     .listing {
       grid-template-columns: 1fr;
-      gap: 18px;
+      gap: 32px;
       margin: 20px 32px;
     }
   }

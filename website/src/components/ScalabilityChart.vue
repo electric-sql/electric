@@ -70,31 +70,36 @@ export default {
           labels,
           datasets: [
             {
-              label: "Mean Latency",
+              label: "Mean latency",
               data: meanData,
               borderColor: latencyColor,
-              borderWidth: 2,
+              borderWidth: 1.5,
+              backgroundColor: 'transparent',
+              padding: 20,
               pointStyle: false,
               fill: false,
               yAxisID: 'y',
               order: 1,
             },
+            // {
+            //   label: "P95",
+            //   data: p95Data,
+            //   borderColor: latencyColor,
+            //   borderWidth: 1.5,
+            //   backgroundColor: 'transparent',
+            //   borderDash: [5, 5],
+            //   pointStyle: false,
+            //   fill: false,
+            //   yAxisID: 'y',
+            //   order: 2,
+            // },
             {
-              label: "95th Percentile",
-              data: p95Data,
-              borderColor: latencyColor,
-              borderWidth: 2,
-              borderDash: [5, 5],
-              pointStyle: false,
-              fill: false,
-              yAxisID: 'y',
-              order: 2,
-            },
-            {
-              label: "99th Percentile",
+              label: "P99",
               data: p99Data,
+              borderWidth: 1.5,
               borderColor: latencyColor,
-              borderWidth: 2,
+              backgroundColor: 'transparent',
+              borderWidth: 1.5,
               borderDash: [2, 2],
               pointStyle: false,
               fill: false,
@@ -102,10 +107,11 @@ export default {
               order: 3,
             },
             {
-              label: "Memory Usage",
+              label: "Memory use",
               data: memoryData,
               borderColor: memoryColor,
-              borderWidth: 2,
+              borderWidth: 1.5,
+              backgroundColor: 'transparent',
               pointStyle: false,
               fill: false,
               yAxisID: 'y1',
@@ -118,15 +124,15 @@ export default {
             legend: {
               display: true,
               position: "top",
-              onClick: null, // Disable toggling datasets
+              // onClick: null, // Disable toggling datasets
               labels: {
-                color: getComputedStyleValue("--vp-c-text-1"),
+                color: getComputedStyleValue("--vp-c-text-2"),
                 usePointStyle: false,
-                padding: 15,
-              },
+                padding: 14
+              }
             },
             tooltip: {
-              enabled: true,
+              enabled: false,
               mode: 'index',
               intersect: false,
               callbacks: {
@@ -149,8 +155,50 @@ export default {
             },
           },
           responsive: true,
-          maintainAspectRatio: true,
-          aspectRatio: 16 / 9,
+          maintainAspectRatio: false,
+          onResize: (chart, size) => {
+            chart.canvas.parentNode.style.height = 'max(min(384px, 33vw), 280px)';
+            chart.canvas.parentNode.style.width = `100%`;
+
+            let hasChanged = false
+
+            if (size.width < 500) {
+              if (chart.data.datasets[0].label !== 'Mean') {
+                hasChanged = true
+              }
+
+              chart.data.datasets[0].label = 'Mean'
+              chart.data.datasets[2].label = 'Memory'
+            }
+            else {
+              if (chart.data.datasets[0].label !== 'Mean latency') {
+                hasChanged = true
+              }
+
+              chart.data.datasets[0].label = 'Mean latency'
+              chart.data.datasets[2].label = 'Memory use'
+            }
+
+            if (size.width < 650) {
+              if (chart.data.datasets[1].label !== 'P99') {
+                hasChanged = true
+              }
+
+              chart.data.datasets[1].label = 'P99'
+            }
+            else {
+              if (chart.data.datasets[1].label !== 'P95 latency') {
+                hasChanged = true
+              }
+
+              chart.data.datasets[1].label = 'P99 latency'
+            }
+
+            if (hasChanged) {
+              chart.update()
+            }
+          },
+          aspectRatio: 16 / 10,
           resizeDelay: 40,
           interaction: {
             mode: 'index',
@@ -207,7 +255,7 @@ export default {
               min: 0,
               title: {
                 display: true,
-                text: "Memory Usage",
+                text: "Memory use",
               },
               ticks: {
                 callback: (value) => humanizeBytes(value),

@@ -43,7 +43,7 @@ onMounted(async () => {
 
 <img src="/img/icons/electric.svg" class="product-icon" />
 
-# Electric <Badge type="warning" text="beta" />
+# Electric <Badge type="success" text="1.0" />
 
 Sync little subsets of your Postgres data into
 local apps and services.
@@ -64,6 +64,9 @@ local apps and services.
     />
   </div>
 </div>
+
+> [!Tip] Electric 1.0 release
+> Electric is now in GA! See the [1.0 release post here](/blog/2025/03/17/electricsql-1.0-released).
 
 ## Electric sync engine
 

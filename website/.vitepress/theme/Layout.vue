@@ -9,6 +9,8 @@ import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import SiteFooter from '../../src/components/SiteFooter.vue'
 import UseCaseHeader from '../../src/components/UseCaseHeader.vue'
 
+import ReleaseBanner from '../../src/components/home/ReleaseBanner.vue'
+
 import HomeFeaturesAfter from '../../src/partials/home-features-after.md'
 import HomeFeaturesBefore from '../../src/partials/home-features-before.md'
 
@@ -19,27 +21,14 @@ const { hasSidebar } = useSidebar()
 </script>
 
 <template>
-  <Layout>
+  <Layout :class="!hasSidebar ? 'nav-relative' : ''">
+    <template #layout-top>
+      <template v-if="!hasSidebar">
+        <ReleaseBanner />
+      </template>
+    </template>
     <template #nav-bar-content-after>
       <NavSignupButton />
-    </template>
-    <template #home-features-before>
-      <div class="vp-doc">
-        <div class="container">
-          <div class="features-content">
-            <HomeFeaturesBefore />
-          </div>
-        </div>
-      </div>
-    </template>
-    <template #home-features-after>
-      <div class="vp-doc">
-        <div class="container">
-          <div class="features-content">
-            <HomeFeaturesAfter />
-          </div>
-        </div>
-      </div>
     </template>
     <template #doc-before>
       <div class="vp-doc" v-if="frontmatter.case">
