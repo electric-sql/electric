@@ -1314,6 +1314,58 @@ importers:
         specifier: ^2.0.2
         version: 2.1.4(@types/node@20.17.6)(jsdom@25.0.1)(terser@5.36.0)
 
+  packages/sqlite-sync:
+    dependencies:
+      '@electric-sql/client':
+        specifier: workspace:*
+        version: link:../typescript-client
+      '@sqlite.org/sqlite-wasm':
+        specifier: 3.49.1-build2
+        version: 3.49.1-build2
+      react:
+        specifier: '>=18.3.1 <20.0.0'
+        version: 18.3.1
+    devDependencies:
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^7.14.1
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.6.3))(eslint@8.57.1)(typescript@5.6.3)
+      '@typescript-eslint/parser':
+        specifier: ^7.14.1
+        version: 7.18.0(eslint@8.57.1)(typescript@5.6.3)
+      concurrently:
+        specifier: ^8.2.2
+        version: 8.2.2
+      eslint:
+        specifier: ^8.57.0
+        version: 8.57.1
+      eslint-config-prettier:
+        specifier: ^9.1.0
+        version: 9.1.0(eslint@8.57.1)
+      eslint-plugin-prettier:
+        specifier: ^5.1.3
+        version: 5.2.1(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.3.3)
+      glob:
+        specifier: ^10.3.10
+        version: 10.4.5
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.1
+      prettier:
+        specifier: ^3.3.2
+        version: 3.3.3
+      shx:
+        specifier: ^0.3.4
+        version: 0.3.4
+      tsup:
+        specifier: ^8.0.1
+        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
+      typescript:
+        specifier: ^5.5.2
+        version: 5.6.3
+      vitest:
+        specifier: ^2.0.2
+        version: 2.1.4(@types/node@20.17.6)(jsdom@25.0.1)(terser@5.36.0)
+
   packages/sync-service: {}
 
   packages/typescript-client:
@@ -4104,6 +4156,10 @@ packages:
   '@sinclair/typebox@0.27.8':
     resolution: {integrity: sha512-+Fj43pSMwJs4KRrH/938Uf+uAELIgVBmQzg/q1YG10djyfA3TnrU8N8XzqCh/okZdszqBQTZf96idMfE5lnwTA==}
 
+  '@sqlite.org/sqlite-wasm@3.49.1-build2':
+    resolution: {integrity: sha512-pZi8OSjNDZEYkvefsTOFKNRRN0GG9S5mtB6qBmrFZ5sraF5vxElPnTOl0DbJgiz9twlsOF5OzVkOce6Uc1TXsw==}
+    hasBin: true
+
   '@surma/rollup-plugin-off-main-thread@2.2.3':
     resolution: {integrity: sha512-lR8q/9W7hZpMWweNiAKU7NQerBnzQQLvi8qnTDU/fxItPhtZVMbPV3lbCwjhIlNBe9Bbr5V+KHshvWmVSG9cxQ==}
 
@@ -4821,8 +4877,8 @@ packages:
     resolution: {integrity: sha512-pCh/qEA8Lb1wVIqNvBke8UaRjJ6wrAWkJO5yyIbs8Yx6TNGYyfNjOo61tLv+WwLvoLPp4BQ8B7AHKijl8NGUfw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@uiw/codemirror-extensions-basic-setup@4.23.6':
-    resolution: {integrity: sha512-bvtq8IOvdkLJMhoJBRGPEzU51fMpPDwEhcAHp9xCR05MtbIokQgsnLXrmD1aZm6e7s/3q47H+qdSfAAkR5MkLA==}
+  '@uiw/codemirror-extensions-basic-setup@4.23.10':
+    resolution: {integrity: sha512-zpbmSeNs3OU/f/Eyd6brFnjsBUYwv2mFjWxlAsIRSwTlW+skIT60rQHFBSfsj/5UVSxSLWVeUYczN7AyXvgTGQ==}
     peerDependencies:
       '@codemirror/autocomplete': '>=6.0.0'
       '@codemirror/commands': '>=6.0.0'
@@ -4832,21 +4888,21 @@ packages:
       '@codemirror/state': '>=6.0.0'
       '@codemirror/view': '>=6.0.0'
 
-  '@uiw/codemirror-theme-github@4.23.6':
-    resolution: {integrity: sha512-p74sbyuDo7JsYlGWNtyNyJSyr9N4niCPGqYreQhoAk2C6c4JXi0sGwZRlHd8KyynsxCdSA9L727SADOuukD1Ug==}
+  '@uiw/codemirror-theme-github@4.23.10':
+    resolution: {integrity: sha512-jTg2sHAcU1d+8x0O+EBDI71rtJ8PWKIW8gzy+SW4wShQTAdsqGHk5y1ynt3KIeoaUkqngLqAK4SkhPaUKlqZqg==}
 
-  '@uiw/codemirror-theme-xcode@4.23.6':
-    resolution: {integrity: sha512-t4shD5Cq6e1mqzG6w/+oMCw3oXn6QSbYZbCHDZ7GrbN51f6ZttKVOSZgUInlNeh9Spbvag8ZE5osMFFv6+twcQ==}
+  '@uiw/codemirror-theme-xcode@4.23.10':
+    resolution: {integrity: sha512-meYMRLr0mTqGZerihSTKpjceRkxbFfpnXX9RyDZFwloydxzWY/6iGEt1/RMY+cWoxgjBYSiunqtU0qgQH0WAuA==}
 
-  '@uiw/codemirror-themes@4.23.6':
-    resolution: {integrity: sha512-0dpuLQW+V6zrKvfvor/eo71V3tpr2L2Hsu8QZAdtSzksjWABxTOzH3ShaBRxCEsrz6sU9sa9o7ShwBMMDz59bQ==}
+  '@uiw/codemirror-themes@4.23.10':
+    resolution: {integrity: sha512-dU0UgEEgEXCAYpxuVDQ6fovE82XsqgHZckTJOH6Bs8xCi3Z7dwBKO4pXuiA8qGDwTOXOMjSzfi+pRViDm7OfWw==}
     peerDependencies:
       '@codemirror/language': '>=6.0.0'
       '@codemirror/state': '>=6.0.0'
       '@codemirror/view': '>=6.0.0'
 
-  '@uiw/react-codemirror@4.23.6':
-    resolution: {integrity: sha512-caYKGV6TfGLRV1HHD3p0G3FiVzKL1go7wes5XT2nWjB0+dTdyzyb81MKRSacptgZcotujfNO6QXn65uhETRAMw==}
+  '@uiw/react-codemirror@4.23.10':
+    resolution: {integrity: sha512-AbN4eVHOL4ckRuIXpZxkzEqL/1ChVA+BSdEnAKjIB68pLQvKsVoYbiFP8zkXkYc4+Fcgq5KbAjvYqdo4ewemKw==}
     peerDependencies:
       '@babel/runtime': '>=7.11.0'
       '@codemirror/state': '>=6.0.0'
@@ -11197,10 +11253,10 @@ snapshots:
       '@codemirror/language': 6.10.6
       '@codemirror/view': 6.35.2
       '@electric-sql/pglite-react': 0.2.17(@electric-sql/pglite@0.2.17)(react@19.0.0)
-      '@uiw/codemirror-theme-github': 4.23.6(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)
-      '@uiw/codemirror-theme-xcode': 4.23.6(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)
-      '@uiw/codemirror-themes': 4.23.6(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)
-      '@uiw/react-codemirror': 4.23.6(@babel/runtime@7.26.0)(@codemirror/autocomplete@6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3))(@codemirror/language@6.10.6)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/theme-one-dark@6.1.2)(@codemirror/view@6.35.2)(codemirror@6.0.1(@lezer/common@1.2.3))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
+      '@uiw/codemirror-theme-github': 4.23.10(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)
+      '@uiw/codemirror-theme-xcode': 4.23.10(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)
+      '@uiw/codemirror-themes': 4.23.10(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)
+      '@uiw/react-codemirror': 4.23.10(@babel/runtime@7.26.0)(@codemirror/autocomplete@6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3))(@codemirror/language@6.10.6)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/theme-one-dark@6.1.2)(@codemirror/view@6.35.2)(codemirror@6.0.1(@lezer/common@1.2.3))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       psql-describe: 0.1.6
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
@@ -13014,6 +13070,8 @@ snapshots:
 
   '@sinclair/typebox@0.27.8': {}
 
+  '@sqlite.org/sqlite-wasm@3.49.1-build2': {}
+
   '@surma/rollup-plugin-off-main-thread@2.2.3':
     dependencies:
       ejs: 3.1.10
@@ -13850,7 +13908,7 @@ snapshots:
       '@typescript-eslint/types': 8.18.0
       eslint-visitor-keys: 4.2.0
 
-  '@uiw/codemirror-extensions-basic-setup@4.23.6(@codemirror/autocomplete@6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3))(@codemirror/commands@6.7.1)(@codemirror/language@6.10.6)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)':
+  '@uiw/codemirror-extensions-basic-setup@4.23.10(@codemirror/autocomplete@6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3))(@codemirror/commands@6.7.1)(@codemirror/language@6.10.6)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)':
     dependencies:
       '@codemirror/autocomplete': 6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3)
       '@codemirror/commands': 6.7.1
@@ -13860,36 +13918,36 @@ snapshots:
       '@codemirror/state': 6.5.0
       '@codemirror/view': 6.35.2
 
-  '@uiw/codemirror-theme-github@4.23.6(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)':
+  '@uiw/codemirror-theme-github@4.23.10(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)':
     dependencies:
-      '@uiw/codemirror-themes': 4.23.6(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)
+      '@uiw/codemirror-themes': 4.23.10(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)
     transitivePeerDependencies:
       - '@codemirror/language'
       - '@codemirror/state'
       - '@codemirror/view'
 
-  '@uiw/codemirror-theme-xcode@4.23.6(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)':
+  '@uiw/codemirror-theme-xcode@4.23.10(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)':
     dependencies:
-      '@uiw/codemirror-themes': 4.23.6(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)
+      '@uiw/codemirror-themes': 4.23.10(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)
     transitivePeerDependencies:
       - '@codemirror/language'
       - '@codemirror/state'
       - '@codemirror/view'
 
-  '@uiw/codemirror-themes@4.23.6(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)':
+  '@uiw/codemirror-themes@4.23.10(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)':
     dependencies:
       '@codemirror/language': 6.10.6
       '@codemirror/state': 6.5.0
       '@codemirror/view': 6.35.2
 
-  '@uiw/react-codemirror@4.23.6(@babel/runtime@7.26.0)(@codemirror/autocomplete@6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3))(@codemirror/language@6.10.6)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/theme-one-dark@6.1.2)(@codemirror/view@6.35.2)(codemirror@6.0.1(@lezer/common@1.2.3))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)':
+  '@uiw/react-codemirror@4.23.10(@babel/runtime@7.26.0)(@codemirror/autocomplete@6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3))(@codemirror/language@6.10.6)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/theme-one-dark@6.1.2)(@codemirror/view@6.35.2)(codemirror@6.0.1(@lezer/common@1.2.3))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)':
     dependencies:
       '@babel/runtime': 7.26.0
       '@codemirror/commands': 6.7.1
       '@codemirror/state': 6.5.0
       '@codemirror/theme-one-dark': 6.1.2
       '@codemirror/view': 6.35.2
-      '@uiw/codemirror-extensions-basic-setup': 4.23.6(@codemirror/autocomplete@6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3))(@codemirror/commands@6.7.1)(@codemirror/language@6.10.6)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)
+      '@uiw/codemirror-extensions-basic-setup': 4.23.10(@codemirror/autocomplete@6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3))(@codemirror/commands@6.7.1)(@codemirror/language@6.10.6)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)
       codemirror: 6.0.1(@lezer/common@1.2.3)
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
