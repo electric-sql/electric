@@ -84,8 +84,7 @@
         host it yourself</a>
       or use the
       <a href="/product/cloud">
-        Electric Cloud</a>
-      platform<span class="hidden-lg"> for managed sync with a built-in data delivery network</span>.
+        Electric Cloud</a>&nbsp;platform<span class="hidden-lg"> for managed sync with a built-in data delivery network</span>.
     </template>
   </Section>
 </template>

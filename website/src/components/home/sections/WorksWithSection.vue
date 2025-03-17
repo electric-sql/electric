@@ -67,7 +67,7 @@
     margin: 0 !important;
 
     border-radius: 12px;
-    border: 1px solid #2a2c34;
+    border: 1px solid rgba(42, 44, 52, 0.5);
     background: var(--vp-c-bg-soft);
     height: 288px;
   }
@@ -111,7 +111,7 @@
     padding: 17px;
     margin-bottom: 15px;
     border-radius: 12px;
-    border: 1px solid #2a2c34;
+    border: 1px solid rgba(42, 44, 52, 0.5);
     background: var(--vp-c-bg-soft);
 
     display: flex;

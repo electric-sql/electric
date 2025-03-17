@@ -32,8 +32,18 @@
     max-width: 320px;
   }
   .quotes {
-    display: flex;
+    padding: 16px 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
     flex: row;
+  }
+  @media (max-width: 749px) {
+    .quotes {
+      grid-template-columns: 1fr;
+      max-width: 512px;
+      margin: 0 auto;
+    }
   }
 </style>
 
@@ -65,29 +75,39 @@
         products like</span>
       <span class="no-wrap">
         <a href="https://trigger.dev/product/realtime" target="_blank">
-          Trigger</a>,
+          Trigger.dev</a>,
         <a href="https://ottogrid.ai" target="_blank">
           Otto</a> and
         <a href="https://doorboost.com" target="_blank">
           Doorboost</a></span>.
     </template>
     <div class="quotes">
-      <Quote>
+      <Quote image="/img/home/quotes/trigger.jpg"
+          href="https://trigger.dev/launchweek/0/realtime">
         <template #quote>
-          We use ElectricSQL to power Trigger.dev Realtime, a core feature of our product.
-          It's simple to operate as we already use Postgres, and it scales to millions of updates per day.
+            “We use ElectricSQL to power Trigger.dev Realtime<span class="hidden-md">, a core feature of our product</span>.
+            It's&nbsp;simple to operate
+            <span class="hidden-md">
+              as we already use Postgres,</span>
+            and it scales to millions of updates&nbsp;per&nbsp;day.”
         </template>
         <template #attribution>
-          &mdash; Matt Aitken, CEO, <cite>Trigger.dev</cite>
+          <span class="hidden-md">
+            &mdash;</span>
+          Matt Aitken, CEO, <cite class="highlight">Trigger.dev</cite>
         </template>
       </Quote>
-      <Quote>
+      <Quote image="/img/home/quotes/otto.jpg" href="https://ottogrid.ai">
         <template #quote>
-          ElectricSQL enables us to reliably stream agent updates in real-time at scale.
-          It has dramatically simplified our architecture while delivering cell-level reactive updates.
+          “ElectricSQL enables us to reliably stream agent updates
+          in real-time at scale. It has dramatically simplified
+          our&nbsp;architecture<span class="hidden-md">
+            while delivering cell-level reactive updates</span>.
         </template>
         <template #attribution>
-          &mdash; Sully Omar, CEO, <cite>Ottogrid.ai</cite>
+          <span class="hidden-md">
+            &mdash;</span>
+          Sully Omar, CEO, <cite class="highlight">Otto</cite>
         </template>
       </Quote>
     </div>

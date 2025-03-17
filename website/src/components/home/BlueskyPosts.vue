@@ -330,7 +330,7 @@ onMounted(() => {
 }
 
 .post {
-  border: 1px solid #2a2c34;
+  border: 1px solid rgba(42, 44, 52, 0.5);
   border-radius: 12px;
   padding: 1rem;
   background: #202127;
