@@ -45,7 +45,7 @@ defmodule Electric.Plug.Router do
   match _, do: send_resp(conn, 404, "Not found")
 
   def server_header(conn, version),
-    do: conn |> Plug.Conn.put_resp_header("server", "ElectricSQL/#{version}")
+    do: conn |> Plug.Conn.put_resp_header("electric-server", "ElectricSQL/#{version}")
 
   def put_cors_headers(%Plug.Conn{path_info: ["v1", "shape" | _]} = conn, _opts),
     do: CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD", "DELETE", "OPTIONS"]})
