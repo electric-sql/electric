@@ -101,6 +101,14 @@ export interface ShapeStreamOptions<T = never> {
     where?: string
 
     /**
+     * Params for the positional parameters (`$1`) in the where clause. Must have keys
+     * matching the used positional parameters in the where clause.
+     * 
+     * If where clause is `id = $1 or id = $2`, params must have keys `"1"` and `"2"`.
+     */
+    params: Record<string, string>
+
+    /**
      * The columns to include in the shape.
      * Must include primary keys, and can only include valid columns.
      */
@@ -200,6 +208,7 @@ Note that certain parameter names are reserved for Electric's internal use and c
 The following PostgreSQL-specific parameters should be included within the `params` object:
 - `table` - The root table for the shape
 - `where` - SQL where clause for filtering rows
+- `params` - Values for positional parameters in the where clause (e.g. `$1`)
 - `columns` - List of columns to include
 - `replica` - Controls whether to send full or partial row updates
 
@@ -209,8 +218,11 @@ const stream = new ShapeStream({
   url: 'http://localhost:3000/v1/shape',
   params: {
     table: 'users',
-    where: 'age > 18',
+    where: 'age > $1',
     columns: ['id', 'name', 'email'],
+    params: {
+      '1': '18'
+    },
     replica: 'full'
   }
 })

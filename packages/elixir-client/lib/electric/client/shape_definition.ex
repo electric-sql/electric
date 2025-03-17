@@ -8,7 +8,7 @@ defmodule Electric.Client.ShapeDefinition do
 
   alias Electric.Client.Util
 
-  @public_keys [:namespace, :table, :columns, :where]
+  @public_keys [:namespace, :table, :columns, :where, :params]
   @derive {Jason.Encoder, only: @public_keys}
   @enforce_keys [:table]
 
@@ -33,6 +33,12 @@ defmodule Electric.Client.ShapeDefinition do
               default: nil,
               doc:
                 "The namespace the table belongs to. If `nil` then Postgres will use whatever schema is the default (usually `public`)."
+            ],
+            params: [
+              type: {:or, [nil, {:map, :pos_integer, :string}, {:list, :string}]},
+              default: nil,
+              doc:
+                "List of parameters to include in the shape. If `nil` this is equivalent to all parameters (`SELECT *`)"
             ],
             parser: [
               type: :mod_arg,
@@ -82,7 +88,8 @@ defmodule Electric.Client.ShapeDefinition do
          where: Access.get(opts, :where),
          columns: Access.get(opts, :columns),
          namespace: Access.get(opts, :namespace),
-         parser: Access.get(opts, :parser)
+         parser: Access.get(opts, :parser),
+         params: Access.get(opts, :params)
        }}
     end
   end
@@ -163,7 +170,7 @@ defmodule Electric.Client.ShapeDefinition do
   @doc false
   @spec params(t(), [{:format, :query | :json}]) :: Electric.Client.Fetch.Request.params()
   def params(%__MODULE__{} = shape, opts \\ []) do
-    %{where: where, columns: columns} = shape
+    %{where: where, columns: columns, params: params} = shape
     table_name = url_table_name(shape)
     format = Keyword.get(opts, :format, :query)
 
@@ -174,6 +181,7 @@ defmodule Electric.Client.ShapeDefinition do
       fn -> params_columns_list(columns, format) end,
       is_list(columns)
     )
+    |> maybe_add_where_params(:params, params, format)
   end
 
   defp params_columns_list(columns, :query) when is_list(columns) do
@@ -182,5 +190,33 @@ defmodule Electric.Client.ShapeDefinition do
 
   defp params_columns_list(columns, :json) when is_list(columns) do
     columns
+  end
+
+  defp maybe_add_where_params(input, _, nil, _), do: input
+
+  defp maybe_add_where_params(input, key, params, format) do
+    params
+    |> normalize_params_form()
+    |> then(&put_param_map(input, key, &1, format))
+  end
+
+  defp normalize_params_form(params) when is_list(params) do
+    params
+    |> Enum.with_index(fn elem, index -> {to_string(index + 1), to_string(elem)} end)
+    |> Map.new()
+  end
+
+  defp normalize_params_form(params) when is_map(params) do
+    Map.new(params, fn {k, v} -> {to_string(k), to_string(v)} end)
+  end
+
+  defp put_param_map(input, key, params, :query) do
+    params
+    |> Map.new(fn {k, v} -> {"#{key}[#{k}]", v} end)
+    |> Map.merge(input)
+  end
+
+  defp put_param_map(input, key, params, :json) do
+    Map.put(input, key, params)
   end
 end
