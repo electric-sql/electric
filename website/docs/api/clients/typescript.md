@@ -101,12 +101,15 @@ export interface ShapeStreamOptions<T = never> {
     where?: string
 
     /**
-     * Params for the positional parameters (`$1`) in the where clause. Must have keys
-     * matching the used positional parameters in the where clause.
+     * Positional where clause paramater values. These will be passed to the server
+     * and will substitute `$i` parameters in the where clause. 
      * 
-     * If where clause is `id = $1 or id = $2`, params must have keys `"1"` and `"2"`.
+     * It can be an array (note that positional arguments start at 1, the array will be mapped
+     * accordingly), or an object with keys matching the used positional parameters in the where clause.
+     * 
+     * If where clause is `id = $1 or id = $2`, params must have keys `"1"` and `"2"`, or be an array with length 2.
      */
-    params: Record<string, string>
+    params?: Record<`${number}`, string> | string[]
 
     /**
      * The columns to include in the shape.
@@ -220,9 +223,7 @@ const stream = new ShapeStream({
     table: 'users',
     where: 'age > $1',
     columns: ['id', 'name', 'email'],
-    params: {
-      '1': '18'
-    },
+    params: ["18"],
     replica: 'full'
   }
 })
