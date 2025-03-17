@@ -120,7 +120,7 @@
 [endmacro]
 
 [macro setup_electric_with_pooler]
-  [invoke setup_electric_with_env "DATABASE_URL=$database_url ELECTRIC_QUERY_DATABASE_URL=$pooled_database_url"]
+  [invoke setup_electric_with_env "ELECTRIC_INSECURE=true DATABASE_URL=$database_url ELECTRIC_QUERY_DATABASE_URL=$pooled_database_url"]
 [endmacro]
 
 [macro setup_multi_tenant_electric]
