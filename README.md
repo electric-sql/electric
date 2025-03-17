@@ -17,15 +17,14 @@
 <p align="center">
   <a href="https://github.com/electric-sql/electric/actions"><img src="https://github.com/electric-sql/electric/actions/workflows/elixir_tests.yml/badge.svg"></a>
   <a href="https://github.com/electric-sql/electric/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-green" alt="License - Apache 2.0"></a>
-  <a href="https://github.com/electric-sql/electric-n
-  ext/milestones"><img src="https://img.shields.io/badge/status-beta-orange" alt="Status - Beta"></a>
+  <a href="https://electric-sql.com/blog/2025/03/17/electricsql-1.0-released"><img src="https://img.shields.io/badge/status-1.0-green" alt="Status - Beta"></a>
   <a href="https://discord.electric-sql.com"><img src="https://img.shields.io/discord/933657521581858818?color=5969EA&label=discord" alt="Chat - Discord"></a>
   <a href="https://x.com/ElectricSQL" target="_blank"><img src="https://img.shields.io/twitter/follow/ElectricSQL.svg?style=social&label=Follow @ElectricSQL"></a>
 </p>
 
 # Electric <!-- omit in toc -->
 
-Your Postgres data, in sync, wherever you need it.
+Real-time sync for Postgres.
 
 **Table of Contents:**
 
@@ -41,18 +40,20 @@ Your Postgres data, in sync, wherever you need it.
 ## Quick links
 
 - [Quickstart](https://electric-sql.com/docs/quickstart)
+- [Website](https://electric-sql.com)
 - [About](https://electric-sql.com/about)
 - [Docs](https://electric-sql.com/docs)
-- [Examples](./examples)
+- [Demos](https://electric-sql.com/demos) (also see the [`./examples` folder](./examples))
 
 ## What is Electric?
 
-Electric provides an [HTTP API](https://electric-sql.com/docs/api/http) for syncing [Shapes](https://electric-sql.com/docs/guides/shapes) of data from Postgres. This can be used directly or via [client libraries](https://electric-sql.com/docs/api/clients/typescript) and [integrations](https://electric-sql.com/docs/api/integrations/react).
+Sync is the magic ingredient behind fast, modern software. From apps like Figma and Linear to AI agents running on live local data.
 
-### This looks a bit different than the last time I visited? <!-- omit in toc -->
+Electric is a Postgres sync engine. It solves the hard problems of sync for you, including partial replication, fan-out, and data delivery. So you can build awesome software, without rolling your own sync.
 
-We started a clean rebuild of the sync engine in July 2024. One that's informed by the lessons learned building the [previous system](https://github.com/electric-sql/electric-old). See
-[James' blog post for background on the change](https://electric-sql.com/blog/2024/07/17/electric-next).
+Specifically, Electric is a read-path sync engine for Postgres. It syncs data out of Postgres into ... anything you like. The core sync protocol is based on a low-level [HTTP API](https://electric-sql.com/docs/api/http). This integrates with CDNs for highly-scalable data delivery.
+
+Partial replication is managed using [Shapes](https://electric-sql.com/docs/guides/shapes). Sync can be consumed directly or via [client libraries](https://electric-sql.com/docs/api/clients/typescript) and [framework integrations](https://electric-sql.com/docs/api/integrations/react).
 
 ## Getting Started
 
