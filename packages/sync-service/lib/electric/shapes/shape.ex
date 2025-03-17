@@ -3,6 +3,7 @@ defmodule Electric.Shapes.Shape do
   Struct describing the requested shape
   """
   require Logger
+  alias Electric.Replication.Eval.Expr
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Changes
@@ -14,9 +15,11 @@ defmodule Electric.Shapes.Shape do
   defstruct [
     :root_table,
     :root_table_id,
-    :table_info,
+    :root_pk,
+    :root_column_count,
     :where,
     :selected_columns,
+    flags: %{},
     storage: %{compaction: :disabled},
     replica: @default_replica
   ]
@@ -29,14 +32,15 @@ defmodule Electric.Shapes.Shape do
   @type storage_config :: %{
           compaction: :enabled | :disabled
         }
+  @type flag() :: :selects_all_columns | :non_primitive_columns_in_where
   @type t() :: %__MODULE__{
           root_table: Electric.relation(),
           root_table_id: Electric.relation_id(),
-          table_info: %{
-            Electric.relation() => table_info()
-          },
+          root_pk: [String.t(), ...],
+          root_column_count: non_neg_integer(),
+          flags: %{optional(flag()) => boolean()},
           where: Electric.Replication.Eval.Expr.t() | nil,
-          selected_columns: [String.t(), ...] | nil,
+          selected_columns: [String.t(), ...],
           replica: replica(),
           storage: storage_config() | nil
         }
@@ -47,11 +51,13 @@ defmodule Electric.Shapes.Shape do
   @type json_safe() :: %{
           root_table: json_relation(),
           root_table_id: non_neg_integer(),
+          root_pk: [String.t(), ...],
+          root_column_count: non_neg_integer(),
+          selects_all_columns?: boolean(),
           where: String.t(),
-          selected_columns: [String.t(), ...] | nil,
+          selected_columns: [String.t(), ...],
           replica: String.t(),
-          storage: %{required(String.t()) => String.t()},
-          table_info: [json_table_list(), ...]
+          storage: %{required(String.t()) => String.t()}
         }
 
   def hash(%__MODULE__{} = shape),
@@ -70,9 +76,7 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  def pk(%__MODULE__{table_info: table_info, root_table: root_table}, relation \\ nil)
-      when is_nil(relation) or is_map_key(table_info, relation),
-      do: Map.fetch!(table_info, relation || root_table).pk
+  def pk(%__MODULE__{root_pk: root_pk}, _relation \\ nil), do: root_pk
 
   @schema_options [
     relation: [type: {:tuple, [:string, :string]}, required: true],
@@ -129,11 +133,23 @@ defmodule Electric.Shapes.Shape do
            validate_selected_columns(column_info, pk_cols, Access.get(opts, :columns)),
          refs = Inspector.columns_to_expr(column_info),
          {:ok, where} <- maybe_parse_where_clause(Access.get(opts, :where), opts[:params], refs) do
+      flags =
+        [
+          if(is_nil(Access.get(opts, :columns)), do: :selects_all_columns),
+          if(any_columns_non_primitive?(column_info, where),
+            do: :non_primitive_columns_in_where
+          )
+        ]
+        |> Enum.reject(&is_nil/1)
+        |> Map.new(fn k -> {k, true} end)
+
       {:ok,
        %__MODULE__{
          root_table: table,
          root_table_id: relation_id,
-         table_info: %{table => %{pk: pk_cols, columns: column_info}},
+         root_column_count: length(column_info),
+         root_pk: pk_cols,
+         flags: flags,
          where: where,
          selected_columns: selected_columns,
          replica: Access.get(opts, :replica, :default),
@@ -157,8 +173,8 @@ defmodule Electric.Shapes.Shape do
           [String.t(), ...] | nil
         ) ::
           {:ok, [String.t(), ...] | nil} | {:error, {:columns, [String.t()]}}
-  defp validate_selected_columns(_column_info, _pk_cols, nil) do
-    {:ok, nil}
+  defp validate_selected_columns(column_info, _pk_cols, nil) do
+    {:ok, Enum.map(column_info, & &1.name)}
   end
 
   defp validate_selected_columns(column_info, pk_cols, columns_to_select) do
@@ -198,6 +214,20 @@ defmodule Electric.Shapes.Shape do
 
         {:ok, column_info, pk_cols}
     end
+  end
+
+  defp any_columns_non_primitive?(_, nil), do: false
+
+  defp any_columns_non_primitive?(column_info, where) do
+    unqualified_refs =
+      Expr.unqualified_refs(where)
+
+    column_info
+    |> Enum.filter(&(&1.name in unqualified_refs))
+    |> Enum.any?(fn
+      %{type_kind: kind} when kind in [:enum, :domain, :composite] -> true
+      _ -> false
+    end)
   end
 
   defp validate_relation(opts, inspector) do
@@ -249,7 +279,8 @@ defmodule Electric.Shapes.Shape do
       when table != relation,
       do: []
 
-  def convert_change(%__MODULE__{where: nil, selected_columns: nil}, change), do: [change]
+  def convert_change(%__MODULE__{where: nil, flags: %{selects_all_columns: true}}, change),
+    do: [change]
 
   def convert_change(%__MODULE__{}, %Changes.TruncatedRelation{} = change), do: [change]
 
@@ -294,6 +325,14 @@ defmodule Electric.Shapes.Shape do
 
   defp filtered_columns_changed(_), do: true
 
+  # If neither oid nor schema/table name matches, then shape is not affected
+  def is_affected_by_relation_change?(
+        %__MODULE__{root_table_id: id1, root_table: {schema1, table1}},
+        %Changes.Relation{id: id2, schema: schema2, table: table2}
+      )
+      when id1 != id2 and (schema1 != schema2 or table1 != table2),
+      do: false
+
   # If relation OID matches, but qualified table name does not, then shape is affected
   def is_affected_by_relation_change?(
         %__MODULE__{root_table_id: id, root_table: {shape_schema, shape_table}},
@@ -301,29 +340,6 @@ defmodule Electric.Shapes.Shape do
       )
       when shape_schema != schema or shape_table != table,
       do: true
-
-  def is_affected_by_relation_change?(
-        %__MODULE__{
-          root_table_id: id,
-          root_table: {schema, table} = root_table,
-          table_info: table_info
-        },
-        %Changes.Relation{id: id, schema: schema, table: table, columns: new_columns}
-      ) do
-    shape_columns = Map.get(table_info, root_table, %{})[:columns]
-
-    if length(shape_columns) != length(new_columns) do
-      true
-    else
-      shape_columns
-      |> Enum.map(&{&1.name, elem(&1.type_id, 0)})
-      |> Map.new()
-      |> then(fn shape_col_map ->
-        new_columns
-        |> Enum.any?(fn new_col -> Map.get(shape_col_map, new_col.name) != new_col.type_oid end)
-      end)
-    end
-  end
 
   # If qualified table is the same but OID is different, it affects this shape as
   # it means that its root table has been renamed or deleted
@@ -334,38 +350,70 @@ defmodule Electric.Shapes.Shape do
       when old_id !== new_id,
       do: true
 
-  def is_affected_by_relation_change?(_shape, _relation), do: false
+  # If shape selects all columns, but number of columns has changed, it affects this shape
+  def is_affected_by_relation_change?(
+        %__MODULE__{flags: %{selects_all_columns: true}, root_column_count: old_column_count},
+        %Changes.Relation{columns: new_columns}
+      )
+      when length(new_columns) != old_column_count,
+      do: true
 
+  def is_affected_by_relation_change?(
+        %__MODULE__{selected_columns: columns},
+        %Changes.Relation{affected_columns: affected_columns}
+      ) do
+    Enum.any?(columns, &(&1 in affected_columns))
+  end
+
+  @doc false
   @spec to_json_safe(t()) :: json_safe()
   def to_json_safe(%__MODULE__{} = shape) do
     %{
+      version: 1,
       root_table: Tuple.to_list(shape.root_table),
       root_table_id: shape.root_table_id,
-      where: if(shape.where, do: shape.where.query),
+      root_pks: shape.root_pk,
+      root_column_count: shape.root_column_count,
+      flags: shape.flags,
+      where: shape.where,
       selected_columns: shape.selected_columns,
-      replica: shape.replica,
       storage: shape.storage,
-      table_info:
-        Enum.map(shape.table_info, fn {relation, columns} ->
-          [Tuple.to_list(relation), json_safe_columns(columns)]
-        end)
+      replica: shape.replica
     }
   end
 
-  defp json_safe_columns(column_info) do
-    Map.update!(column_info, :columns, fn columns ->
-      Enum.map(columns, fn column ->
-        Map.new(column, &column_info_to_json_safe/1)
-      end)
-    end)
+  @spec from_json_safe(map()) :: {:ok, t()} | {:error, String.t()}
+  def from_json_safe(%{
+        "version" => 1,
+        "root_table" => [schema, name],
+        "root_table_id" => root_table_id,
+        "root_pks" => root_pks,
+        "root_column_count" => root_column_count,
+        "flags" => flags,
+        "where" => where,
+        "selected_columns" => selected_columns,
+        "storage" => storage,
+        "replica" => replica
+      }) do
+    with {:ok, where} <- if(where != nil, do: Expr.from_json_safe(where), else: {:ok, nil}) do
+      {:ok,
+       %__MODULE__{
+         root_table: {schema, name},
+         root_table_id: root_table_id,
+         root_pk: root_pks,
+         root_column_count: root_column_count,
+         flags: Map.new(flags, fn {k, v} -> {String.to_existing_atom(k), v} end),
+         where: where,
+         selected_columns: selected_columns,
+         storage: storage_config_from_json(storage),
+         replica: String.to_existing_atom(replica)
+       }}
+    end
   end
 
-  defp column_info_to_json_safe({:type, type}), do: {:type, to_string(type)}
-  defp column_info_to_json_safe({:type_id, {id, mod}}), do: {:type_id, [id, mod]}
-  defp column_info_to_json_safe({k, v}), do: {k, v}
-
-  @spec from_json_safe!(json_safe()) :: t() | no_return()
-  def from_json_safe!(
+  # This implementation is kept for backwards compatibility, because we're currently not doing
+  # cleanup of old shape files if the definition is malformed.
+  def from_json_safe(
         %{
           "root_table" => [schema, name],
           "root_table_id" => root_table_id,
@@ -373,7 +421,8 @@ defmodule Electric.Shapes.Shape do
           "selected_columns" => selected_columns,
           "table_info" => info
         } = data
-      ) do
+      )
+      when not is_map_key(data, "version") do
     table_info =
       Enum.reduce(info, %{}, fn [[schema, name], table_info], info ->
         %{"columns" => columns, "pk" => pk} = table_info
@@ -384,19 +433,33 @@ defmodule Electric.Shapes.Shape do
         })
       end)
 
-    {:ok, %{columns: column_info}} = Map.fetch(table_info, {schema, name})
+    %{columns: column_info, pk: pk} = Map.fetch!(table_info, {schema, name})
     refs = Inspector.columns_to_expr(column_info)
     {:ok, where} = maybe_parse_where_clause(where, Map.get(data, "params", %{}), refs)
 
-    %__MODULE__{
-      root_table: {schema, name},
-      root_table_id: root_table_id,
-      where: where,
-      selected_columns: selected_columns,
-      table_info: table_info,
-      replica: String.to_atom(Map.get(data, "replica", "default")),
-      storage: storage_config_from_json(Map.get(data, "storage"))
-    }
+    flags =
+      Enum.reject(
+        [
+          if(is_nil(selected_columns), do: :selects_all_columns),
+          if(any_columns_non_primitive?(column_info, where),
+            do: :non_primitive_columns_in_where
+          )
+        ],
+        &is_nil/1
+      )
+
+    {:ok,
+     %__MODULE__{
+       root_table: {schema, name},
+       root_table_id: root_table_id,
+       root_pk: pk,
+       root_column_count: length(column_info),
+       flags: flags,
+       where: where,
+       selected_columns: selected_columns || Enum.map(column_info, & &1.name),
+       replica: String.to_atom(Map.get(data, "replica", "default")),
+       storage: storage_config_from_json(Map.get(data, "storage"))
+     }}
   end
 
   defp storage_config_from_json(nil), do: %{compaction: :disabled}

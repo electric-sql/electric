@@ -6,6 +6,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   use GenStage
 
   require Electric.Postgres.Lsn
+  alias Electric.Replication.ShapeLogCollector.AffectedColumns
   alias Electric.Postgres.Lsn
   alias Electric.Replication.PersistentReplicationState
   alias Electric.Postgres.Inspector
@@ -67,13 +68,19 @@ defmodule Electric.Replication.ShapeLogCollector do
       persistent_kv: opts.persistent_kv
     ]
 
+    {:ok, tracker_state} =
+      persistent_replication_data_opts
+      |> PersistentReplicationState.get_tracked_relations()
+      |> AffectedColumns.init()
+
     state =
       Map.merge(opts, %{
         producer: nil,
         subscriptions: {0, MapSet.new()},
         persistent_replication_data_opts: persistent_replication_data_opts,
         last_seen_lsn:
-          PersistentReplicationState.get_last_processed_lsn(persistent_replication_data_opts)
+          PersistentReplicationState.get_last_processed_lsn(persistent_replication_data_opts),
+        tracked_relations: tracker_state
       })
 
     # start in demand: :accumulate mode so that the ShapeCache is able to start
@@ -107,6 +114,12 @@ defmodule Electric.Replication.ShapeLogCollector do
     :ok =
       PersistentReplicationState.set_last_processed_lsn(
         state.last_seen_lsn,
+        state.persistent_replication_data_opts
+      )
+
+    :ok =
+      PersistentReplicationState.set_tracked_relations(
+        state.tracked_relations,
         state.persistent_replication_data_opts
       )
 
@@ -181,19 +194,29 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:noreply, [txn], %{state | producer: from} |> put_last_seen_lsn(txn.lsn)}
   end
 
-  defp handle_relation(rel, _from, %{subscriptions: {0, _}} = state) do
-    Logger.debug(fn ->
-      "Dropping relation message for #{inspect(rel.schema)}.#{inspect(rel.table)}: no active consumers"
-    end)
-
-    OpenTelemetry.add_span_attributes("rel.is_dropped": true)
-
-    {:reply, :ok, [], state}
-  end
-
   defp handle_relation(rel, from, state) do
     OpenTelemetry.add_span_attributes("rel.is_dropped": false)
-    {:noreply, [rel], %{state | producer: from}}
+
+    {updated_rel, tracker_state} =
+      AffectedColumns.transform_relation(rel, state.tracked_relations)
+
+    case state do
+      %{subscriptions: {0, _}} ->
+        Logger.debug(fn ->
+          "Dropping relation message for #{inspect(rel.schema)}.#{inspect(rel.table)}: no active consumers"
+        end)
+
+        :ok =
+          PersistentReplicationState.set_tracked_relations(
+            state.tracked_relations,
+            state.persistent_replication_data_opts
+          )
+
+        {:reply, :ok, [], %{state | tracked_relations: tracker_state}}
+
+      _ ->
+        {:noreply, [updated_rel], %{state | producer: from, tracked_relations: tracker_state}}
+    end
   end
 
   defp drop_transaction(txn, state) do

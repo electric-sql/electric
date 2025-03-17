@@ -150,6 +150,9 @@ defmodule Electric.Replication.PublicationManager do
 
   @impl true
   def init(opts) do
+    Logger.metadata(stack_id: Access.fetch!(opts, :stack_id))
+    Process.set_label({:publication_manager, Access.fetch!(opts, :stack_id)})
+
     state = %__MODULE__{
       relation_filter_counters: %{},
       prepared_relation_filters: %{},
@@ -437,7 +440,7 @@ defmodule Electric.Replication.PublicationManager do
   end
 
   @spec get_selected_columns_for_shape(Shape.t()) :: MapSet.t(String.t() | nil)
-  defp get_selected_columns_for_shape(%Shape{where: _, selected_columns: nil}),
+  defp get_selected_columns_for_shape(%Shape{where: _, flags: %{selects_all_columns: true}}),
     do: MapSet.new([nil])
 
   defp get_selected_columns_for_shape(%Shape{where: nil, selected_columns: columns}),
@@ -453,20 +456,8 @@ defmodule Electric.Replication.PublicationManager do
           MapSet.t(Electric.Replication.Eval.Expr.t() | nil)
   defp get_where_clauses_for_shape(%Shape{where: nil}), do: MapSet.new([nil])
   # TODO: flatten where clauses by splitting top level ANDs
-  defp get_where_clauses_for_shape(%Shape{
-         where: where,
-         table_info: table_info,
-         root_table: root_table
-       }) do
-    unqualified_refs = Expr.unqualified_refs(where)
-
-    table_info[root_table].columns
-    |> Enum.filter(&(&1.name in unqualified_refs))
-    |> Enum.any?(fn
-      %{type_kind: kind} when kind in [:enum, :domain, :composite] -> true
-      _ -> false
-    end)
-    |> if do
+  defp get_where_clauses_for_shape(%Shape{where: where, flags: flags}) do
+    if Map.get(flags, :non_primitive_columns_in_where, false) do
       MapSet.new([nil])
     else
       MapSet.new([where])

@@ -23,15 +23,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
   @test_shape %Shape{
     root_table: {"public", "users"},
     root_table_id: :erlang.phash2({"public", "users"}),
-    table_info: %{
-      {"public", "users"} => %{
-        columns: [
-          %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0, array_dimensions: 0},
-          %{name: "value", type: "text", type_id: {28, 1}, pk_position: nil, array_dimensions: 0}
-        ],
-        pk: ["id"]
-      }
-    }
+    root_column_count: 2,
+    root_pk: ["id"],
+    selected_columns: ["id", "value"],
+    flags: %{selects_all_columns: true}
   }
   @test_shape_handle "test-shape-handle"
   @test_opts %{foo: "bar"}
@@ -45,7 +40,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
   @receive_timeout 2000
 
   def load_column_info({"public", "users"}, _),
-    do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
+    do:
+      {:ok,
+       [
+         %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0, array_dimensions: 0},
+         %{name: "value", type: "text", type_id: {28, 1}, pk_position: nil, array_dimensions: 0}
+       ]}
 
   def load_column_info(_, _),
     do: :table_not_found
