@@ -37,7 +37,7 @@
       <p>
         Electric uses
         <a href="/docs/api/http#caching">
-          existing CDNs</a>
+          standard CDNs</a>
         to
         <span class="no-wrap">
           scale
@@ -51,7 +51,7 @@
         The chart below shows latency and memory<span class="hidden-sm">-use</span> stay
         <span class="hidden-lg">
           low and</span>
-        flat as we scale
+        flat as we scale up-to
         <a href="/docs/reference/benchmarks#cloud">
           <span class="hidden-sm">
             an</span>
