@@ -1,5 +1,48 @@
 # @electric-sql/client
 
+## 1.0.0
+
+### Minor Changes
+
+- f1a9247: feat!: change the wire protocol to remove `offset` and add an explicit `lsn` header. Only valid offset now is the one provided in headers
+
+### Patch Changes
+
+- 1255205: First beta release
+- ade15b9: Expose `shape.stream` as public readonly property.
+- 91774d3: Cleanup `AbortSignal` chained listeners to avoid memory leaks.
+- 0dd1f0c: feat: add support for parameters in where clauses to clients
+- 1c28aee: Start streaming only after at least one subscriber is present.
+- ade15b9: Use "get" instead of "has" for checking searchParams
+
+  Not all implementations of JS have the has(name, value) syntax e.g. Expo.
+
+- 19a7ab3: Simplify `Shape` subscriber notification mechanism
+- 6616b81: Correctly set the cache busting url param when using `forceDisconnectAndRefresh`
+- dcd8a9f: feat: add `old_value` to updates under replica mode `full`
+- dd5aeab: This PR adds support for function-based options in the TypeScript client's params and headers. Functions can be either synchronous or asynchronous and are resolved in parallel when needed.
+
+  ```typescript
+  const stream = new ShapeStream({
+    url: 'http://localhost:3000/v1/shape',
+    params: {
+      table: 'items',
+      userId: () => getCurrentUserId(),
+      filter: async () => await getUserPreferences(),
+    },
+    headers: {
+      Authorization: async () => `Bearer ${await getAccessToken()}`,
+    },
+  })
+  ```
+
+  ## Common Use Cases
+
+  - Authentication tokens that need to be refreshed
+  - User-specific parameters that may change
+  - Dynamic filtering based on current state
+  - Multi-tenant applications where context determines the request
+
 ## 1.0.0-beta.5
 
 ### Patch Changes

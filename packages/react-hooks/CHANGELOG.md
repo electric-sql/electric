@@ -1,5 +1,26 @@
 # @electric-sql/react
 
+## 1.0.0
+
+### Patch Changes
+
+- 1255205: First beta release
+- 19a7ab3: Ensure `useSyncExternalStore` always has latest shape data snapshot.
+- 2d9a636: Loosen `react` peer dependency to prevent conflict warnings.
+- ade15b9: Expose `stream` in the useShape result data. This allows React components to easily access the stream to match on.
+- Updated dependencies [1255205]
+- Updated dependencies [ade15b9]
+- Updated dependencies [91774d3]
+- Updated dependencies [0dd1f0c]
+- Updated dependencies [1c28aee]
+- Updated dependencies [ade15b9]
+- Updated dependencies [19a7ab3]
+- Updated dependencies [6616b81]
+- Updated dependencies [f1a9247]
+- Updated dependencies [dcd8a9f]
+- Updated dependencies [dd5aeab]
+  - @electric-sql/client@1.0.0
+
 ## 1.0.0-beta.6
 
 ### Patch Changes
