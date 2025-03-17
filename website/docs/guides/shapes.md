@@ -99,6 +99,7 @@ Where clauses support:
 
 1. columns of numerical types, `boolean`, `uuid`, `text`, `interval`, date and time types (with the exception of `timetz`), [Arrays](https://github.com/electric-sql/electric/issues/1767) (but not yet [Enums](https://github.com/electric-sql/electric/issues/1709), except when explicitly casting them to `text`)
 2. operators that work on those types: arithmetics, comparisons, logical/boolean operators like `OR`, string operators like `LIKE`, etc.
+3. positional placeholders, like `$1`, values for which must be provided alongside the where clause.
 
 You can use `AND` and `OR` to group multiple conditions, e.g.:
 
@@ -110,6 +111,10 @@ Where clauses are limited in that they:
 1. can only refer to columns in the target row
 1. can't perform joins or refer to other tables
 1. can't use non-deterministic SQL functions like `count()` or `now()`
+
+When constructing a where clause with user input as a filter, it's recommended to use a positional placeholder (`$1`) to avoid
+SQL injection-like situations. For example, if filtering a table on a user id, it's better to use `where=user = $1` with
+`params[1]=provided_id`. If not using positional placeholders and constructing where clauses yourself, take care to SQL-escape user input.
 
 See [`known_functions.ex`](https://github.com/electric-sql/electric/blob/main/packages/sync-service/lib/electric/replication/eval/env/known_functions.ex) and [`parser.ex`](https://github.com/electric-sql/electric/blob/main/packages/sync-service/lib/electric/replication/eval/parser.ex) for the source of truth on which types, operators and functions are currently supported. If you need a feature that isn't supported yet, please [raise a feature request](https://github.com/electric-sql/electric/discussions/categories/feature-requests).
 

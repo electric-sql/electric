@@ -34,6 +34,7 @@ import {
   SHAPE_HANDLE_QUERY_PARAM,
   SHAPE_SCHEMA_HEADER,
   WHERE_QUERY_PARAM,
+  WHERE_PARAMS_PARAM,
   TABLE_QUERY_PARAM,
   REPLICA_PARAM,
   FORCE_DISCONNECT_AND_REFRESH,
@@ -65,6 +66,14 @@ export interface PostgresParams {
   where?: string
 
   /**
+   * Positional where clause paramater values. These will be passed to the server
+   * and will substitute `$1` parameters in the where clause.
+   *
+   * If where clause is `id = $1 or id = $2`, params must have keys `"1"` and `"2"`.
+   */
+  params?: Record<string, string>
+
+  /**
    * If `replica` is `default` (the default) then Electric will only send the
    * changed columns in an update.
    *
@@ -77,11 +86,10 @@ export interface PostgresParams {
    */
   replica?: Replica
 }
-
+type SerializableParamValue = string | string[] | Record<string, string>
 type ParamValue =
-  | string
-  | string[]
-  | (() => string | string[] | Promise<string | string[]>)
+  | SerializableParamValue
+  | (() => SerializableParamValue | Promise<SerializableParamValue>)
 
 /**
  * External params type - what users provide.
@@ -112,7 +120,9 @@ export type ExternalHeadersRecord = {
  * All values are converted to strings.
  */
 type InternalParamsRecord = {
-  [K in string as K extends ReservedParamKeys ? never : K]: string
+  [K in string as K extends ReservedParamKeys ? never : K]:
+    | string
+    | Record<string, string>
 }
 
 /**
@@ -405,13 +415,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // Add PostgreSQL-specific parameters
         if (params) {
           if (params.table)
-            fetchUrl.searchParams.set(TABLE_QUERY_PARAM, params.table)
+            setQueryParam(fetchUrl, TABLE_QUERY_PARAM, params.table)
           if (params.where)
-            fetchUrl.searchParams.set(WHERE_QUERY_PARAM, params.where)
+            setQueryParam(fetchUrl, WHERE_QUERY_PARAM, params.where)
           if (params.columns)
-            fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, params.columns)
+            setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, params.columns)
           if (params.replica)
-            fetchUrl.searchParams.set(REPLICA_PARAM, params.replica)
+            setQueryParam(fetchUrl, REPLICA_PARAM, params.replica)
+          if (params.params)
+            setQueryParam(fetchUrl, WHERE_PARAMS_PARAM, params.params)
 
           // Add any remaining custom parameters
           const customParams = { ...params }
@@ -419,9 +431,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
           delete customParams.where
           delete customParams.columns
           delete customParams.replica
+          delete customParams.params
 
           for (const [key, value] of Object.entries(customParams)) {
-            fetchUrl.searchParams.set(key, value as string)
+            setQueryParam(fetchUrl, key, value)
           }
         }
 
@@ -728,4 +741,23 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   validateParams(options.params)
 
   return
+}
+
+// `unknown` being in the value is a bit of defensive programming if user doesn't use TS
+function setQueryParam(
+  url: URL,
+  key: string,
+  value: Record<string, string> | string | unknown
+): void {
+  if (value === undefined || value == null) {
+    return
+  } else if (typeof value === `string`) {
+    url.searchParams.set(key, value)
+  } else if (typeof value === `object`) {
+    for (const [k, v] of Object.entries(value)) {
+      url.searchParams.set(`${key}[${k}]`, v)
+    }
+  } else {
+    url.searchParams.set(key, value.toString())
+  }
 }
