@@ -85,7 +85,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
           cores: processors,
           ram: total_mem,
           electric_instance_id: Electric.instance_id(),
-          electric_installation_id: Map.fetch!(opts, :installation_id)
+          electric_installation_id: Map.get(opts, :installation_id, "electric_default")
         }
       }
     end

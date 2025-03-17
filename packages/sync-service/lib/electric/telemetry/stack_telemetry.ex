@@ -64,15 +64,13 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
     end
 
     defp otel_reporter_child_spec(%{otel_metrics?: true} = opts) do
-      kv = Electric.Config.persistent_kv()
-
       {OtelMetricExporter,
        name: :"stack_otel_telemetry_#{opts.stack_id}",
        metrics: otel_metrics(opts),
        export_period: opts.otel_export_period,
        resource: %{
          stack_id: opts.stack_id,
-         instance: %{installation_id: Electric.Config.installation_id!(kv)}
+         instance: %{installation_id: Map.get(opts, :installation_id, "electric_default")}
        }}
     end
 
