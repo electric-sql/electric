@@ -1,5 +1,10 @@
 #!/bin/bash
-docker compose -f ./config/docker-compose.yml up -d
-sleep 4
-docker compose -f ./config/docker-compose.yml exec electric /opt/antithesis/test/v1/quickstart/singleton_driver_first_test
-docker compose -f ./config/docker-compose.yml down
+
+curl --fail -u "$ANTITHESIS_USER:$ANTITHESIS_PASSWORD" \
+-X POST https://electricsql.antithesis.com/api/v1/launch/basic_test \
+-d '{"params": { "antithesis.description":"basic_test on main",
+    "antithesis.duration":"2",
+    "antithesis.config_image":"antithesis-config:latest",
+    "antithesis.images":"electric-antithesis:latest,postgres-electric:latest",
+    "antithesis.report.recipients":"rob@electric-sql.com"
+    } }'
