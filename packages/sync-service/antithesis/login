@@ -1,0 +1,2 @@
+#!/bin/bash
+cat antithesis-key.json | docker login -u _json_key https://us-central1-docker.pkg.dev --password-stdin
