@@ -46,7 +46,7 @@ defmodule Electric.Plug.Router do
   match _, do: send_resp(conn, 404, "Not found")
 
   def server_header(conn, version),
-    do: conn |> Plug.Conn.put_resp_header("electric-server", "ElectricSQL/#{version}")
+    do: conn |> Plug.Conn.put_resp_header("server", "ElectricSQL/#{version}")
 
   # OPTIONS requests should not be authenticated
   def authenticate(%Plug.Conn{method: "OPTIONS"} = conn, _opts), do: conn
