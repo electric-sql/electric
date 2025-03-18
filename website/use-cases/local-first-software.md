@@ -17,9 +17,9 @@ benefits:
 
 ## Building resilient software that works offline
 
-Cloud-first software needs to be online in order to work. If the network connection fails or the backed is down, the software breaks.
+Cloud-first software needs to be online in order to work. If the network connection fails or the back end is down, the software breaks.
 
-Local-first software defaults to working. It's resilient by design. If the network connection fails, it still works. If the backed is down, it still works.
+Local-first software defaults to working. It's resilient by design. If the network connection fails, it still works. If the back end is down, it still works.
 
 Electric is a sync engine that supports building local-first software. Making your apps more reliable as well as faster, more modern and naturally collaborative.
 
