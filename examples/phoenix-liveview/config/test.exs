@@ -32,5 +32,6 @@ config :phoenix_live_view,
   enable_expensive_runtime_checks: true
 
 config :phoenix_sync,
+  env: config_env(),
   mode: :embedded,
   repo: Electric.PhoenixExample.Repo

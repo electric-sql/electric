@@ -84,7 +84,6 @@ config :phoenix_live_view,
   enable_expensive_runtime_checks: true
 
 config :phoenix_sync,
-  mode: :embedded,
   env: config_env(),
-  url: "http://localhost:3000",
+  mode: :embedded,
   repo: Electric.PhoenixExample.Repo
