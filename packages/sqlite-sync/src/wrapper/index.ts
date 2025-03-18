@@ -18,11 +18,7 @@ export type SqliteWrapper = {
   /**
    * Execute raw SQL
    */
-  exec<
-    T extends { [column: string]: SqlValue } = { [column: string]: SqlValue },
-  >(
-    sql: string
-  ): Promise<T | undefined>
+  exec(sql: string): Promise<void>
 
   /**
    * Prepare a statement
@@ -34,7 +30,9 @@ export type SqliteWrapper = {
    * The transaction will be committed if the function resolves without error
    * The transaction will be rolled back if the function throws an error
    */
-  transaction<T = ResultType>(fn: (db: SqliteWrapper) => Promise<T>): Promise<T>
+  transaction<R = ResultType>(
+    fn: (db: SqliteWrapper) => R | Promise<R>
+  ): Promise<R>
 
   close: () => void
 

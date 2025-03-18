@@ -9,8 +9,9 @@ import sqlite3InitModule, { Database } from '@sqlite.org/sqlite-wasm'
 import { sqliteWasmWrapper } from '../src/wrapper/sqlite-wasm'
 import { electricSync } from '../src/sync'
 import { ElectricSync } from '../src/types'
+import { SqliteWrapper } from '../src'
 
-vi.mock('@electric-sql/client', async (importOriginal) => {
+vi.mock(`@electric-sql/client`, async (importOriginal) => {
   const mod = await importOriginal<typeof import('@electric-sql/client')>()
   const ShapeStream = vi.fn(() => ({
     subscribe: vi.fn(),
@@ -30,12 +31,13 @@ describe(`sqlite-sync`, async () => {
 
   let sqliteDb: Database
   let db: ElectricSync
+  let sqliteWrapped: SqliteWrapper
 
   const MockShapeStream = ShapeStream as unknown as Mock
 
   beforeEach(async () => {
     sqliteDb = new sqlite3.oo1.DB(`/mydb.sqlite3`, `c`)
-    const sqliteWrapped = sqliteWasmWrapper(sqliteDb)
+    sqliteWrapped = sqliteWasmWrapper(sqliteDb)
 
     db = electricSync({ db: sqliteWrapped, options: { debug: false } })
 
@@ -60,7 +62,7 @@ describe(`sqlite-sync`, async () => {
     }))
 
     // Spy on the transaction method
-    const transactionSpy = vi.spyOn(sqliteDb, `transaction`)
+    const transactionSpy = vi.spyOn(sqliteWrapped, `transaction`)
 
     const shape = await db.electric.syncShapeToTable({
       shape: {
@@ -144,7 +146,7 @@ describe(`sqlite-sync`, async () => {
     }))
 
     // Spy on the transaction method
-    const transactionSpy = vi.spyOn(sqliteDb, `transaction`)
+    const transactionSpy = vi.spyOn(sqliteWrapped, `transaction`)
 
     const shape = await db.electric.syncShapeToTable({
       shape: {
@@ -472,7 +474,7 @@ describe(`sqlite-sync`, async () => {
     }))
 
     // Spy on the transaction method
-    const transactionSpy = vi.spyOn(sqliteDb, `transaction`)
+    const transactionSpy = vi.spyOn(sqliteWrapped, `transaction`)
 
     const shape = await db.electric.syncShapeToTable({
       shape: {
@@ -534,13 +536,12 @@ describe(`sqlite-sync`, async () => {
     MockShapeStream.mockImplementation(() => ({
       subscribe: vi.fn((cb: (messages: Message[]) => Promise<void>) => {
         feedMessages = (messages) => cb([...messages, upToDateMsg])
-        console.log(`here once`)
       }),
       unsubscribeAll: vi.fn(),
     }))
 
     // Spy on the transaction method
-    const transactionSpy = vi.spyOn(sqliteDb, `transaction`)
+    const transactionSpy = vi.spyOn(sqliteWrapped, `transaction`)
 
     const batchSize = 5
     const shape = await db.electric.syncShapeToTable({
@@ -622,7 +623,7 @@ describe(`sqlite-sync`, async () => {
     }))
 
     // Spy on the transaction method
-    const transactionSpy = vi.spyOn(sqliteDb, `transaction`)
+    const transactionSpy = vi.spyOn(sqliteWrapped, `transaction`)
 
     const shape = await db.electric.syncShapeToTable({
       shape: {

@@ -8,62 +8,87 @@ import {
 } from '.'
 
 export const sqliteWasmWrapper = (sqlite: Database): SqliteWrapper => ({
-  exec: <T extends { [column: string]: SqlValue }>(sql: string) => {
-    const res = sqlite.selectValue(sql) as T | undefined
-    return Promise.resolve(res)
+  exec(sql: string) {
+    sqlite.exec(sql)
+    return Promise.resolve()
   },
 
-  transaction: async <T>(fn: (db: SqliteWrapper) => Promise<T>): Promise<T> =>
-    sqlite.transaction(async () => fn(sqliteWasmWrapper(sqlite))),
+  async transaction<T>(fn: (tx: SqliteWrapper) => T | Promise<T>): Promise<T> {
+    try {
+      sqlite.exec(`BEGIN TRANSACTION`)
+      const result = await fn(this)
+      sqlite.exec(`COMMIT`)
+      return result
+    } catch (error) {
+      sqlite.exec(`ROLLBACK`)
+      throw error
+    }
+  },
 
-  prepare: <P extends ParamsType>(sql: string): SQLiteStatement<P> => {
+  prepare<P extends ParamsType>(sql: string): SQLiteStatement<P> {
     const stmt = sqlite.prepare(sql)
 
     return {
       run: (...params) => {
-        if (params.length > 1) {
-          for (let i = 0; i < params.length; i++) {
-            stmt.bind(i + 1, params[i] as SqlValue)
+        try {
+          if (params.length > 1) {
+            for (let i = 0; i < params.length; i++) {
+              stmt.bind(i + 1, params[i] as SqlValue)
+            }
+          } else if (params.length === 1) {
+            stmt.bind(params[0] as SqlValue)
           }
-        } else if (params.length === 1) {
-          stmt.bind(params[0] as SqlValue)
+          stmt.step()
+          return Promise.resolve()
+        } finally {
+          stmt.reset()
         }
-        stmt.step()
-        return Promise.resolve()
       },
 
-      get: <R extends ResultType>(...params: ArgsType<P>) => {
-        if (params.length > 1) {
-          for (let i = 0; i < params.length; i++) {
-            stmt.bind(i + 1, params[i] as SqlValue)
+      get<R extends ResultType>(...params: ArgsType<P>) {
+        try {
+          if (params.length > 1) {
+            for (let i = 0; i < params.length; i++) {
+              stmt.bind(i + 1, params[i] as SqlValue)
+            }
+          } else if (params.length === 1) {
+            stmt.bind(params[0] as SqlValue)
           }
-        } else if (params.length === 1) {
-          stmt.bind(params[0] as SqlValue)
-        }
 
-        const res = stmt.step() ? (stmt.get({}) as R) : undefined
-        return Promise.resolve(res)
+          const res = stmt.step() ? (stmt.get({}) as R) : undefined
+          return Promise.resolve(res)
+        } finally {
+          stmt.reset()
+        }
       },
 
-      all: <R extends ResultType>(...params: ArgsType<P>) => {
-        if (params.length > 1) {
-          for (let i = 0; i < params.length; i++) {
-            stmt.bind(i + 1, params[i] as SqlValue)
+      all<R extends ResultType>(...params: ArgsType<P>) {
+        try {
+          if (params.length > 1) {
+            for (let i = 0; i < params.length; i++) {
+              stmt.bind(i + 1, params[i] as SqlValue)
+            }
+          } else if (params.length === 1) {
+            stmt.bind(params[0] as SqlValue)
           }
-        } else if (params.length === 1) {
-          stmt.bind(params[0] as SqlValue)
-        }
 
-        const results: R[] = []
-        while (stmt.step()) {
-          results.push(stmt.get({}) as R)
+          const results: R[] = []
+          while (stmt.step()) {
+            results.push(stmt.get({}) as R)
+          }
+          return Promise.resolve(results)
+        } finally {
+          stmt.reset()
         }
-        return Promise.resolve(results)
       },
 
-      finalize: () => stmt.finalize(),
+      finalize() {
+        return stmt.finalize()
+      },
     }
   },
 
-  close: () => sqlite.close(),
+  close() {
+    sqlite.close()
+  },
 })

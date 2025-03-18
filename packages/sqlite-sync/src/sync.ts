@@ -71,7 +71,7 @@ export const makeElectricSync = (
   options?: ElectricSyncOptions
 ) => {
   const debug = options?.debug ?? false
-  const metadataSchema = options?.metadataSchema ?? 'electric'
+  const metadataSchema = options?.metadataSchema ?? `electric`
   const streams: Array<{
     stream: ShapeStream
     aborter: AbortController
@@ -108,11 +108,11 @@ export const makeElectricSync = (
       ): Promise<SyncShapeToTableResult> => {
         await initMetadataTables()
         options = {
-          commitGranularity: 'up-to-date',
+          commitGranularity: `up-to-date`,
           ...options,
         }
         if (shapePerTableLock.has(options.table)) {
-          throw new Error('Already syncing shape for table ' + options.table)
+          throw new Error(`Already syncing shape for table ` + options.table)
         }
         shapePerTableLock.set(options.table)
         let shapeSubState: ShapeSubscriptionState | null = null
@@ -126,7 +126,7 @@ export const makeElectricSync = (
             shapeKey: options.shapeKey,
           })
           if (debug && shapeSubState) {
-            console.log('resuming from shape state', shapeSubState)
+            console.log(`resuming from shape state`, shapeSubState)
           }
         }
 
@@ -141,7 +141,7 @@ export const makeElectricSync = (
           // we new to have our own aborter to be able to abort the stream
           // but still accept the signal from the user
           options.shape.signal.addEventListener(
-            'abort',
+            `abort`,
             () => aborter.abort(),
             {
               once: true,
@@ -173,8 +173,8 @@ export const makeElectricSync = (
           const shapeHandle = stream.shapeHandle // The shape handle could change while we are committing
           await sqlite.transaction(async (tx) => {
             if (debug) {
-              console.log('committing message batch', messageAggregator.length)
-              console.time('commit')
+              console.log(`committing message batch`, messageAggregator.length)
+              console.time(`commit`)
             }
 
             // In PGlite plugin we set a flag to signal that a sync is in progress
@@ -225,7 +225,7 @@ export const makeElectricSync = (
               })
             }
           })
-          if (debug) console.timeEnd('commit')
+          if (debug) console.timeEnd(`commit`)
           messageAggregator = []
           // Await a timeout to start a new task and  allow other connections to do work
           await new Promise((resolve) => setTimeout(resolve, 0))
@@ -241,11 +241,11 @@ export const makeElectricSync = (
           }
           if (options.commitThrottle && debug)
             console.log(
-              'throttled commit: now:',
+              `throttled commit: now:`,
               now,
-              'lastCommitAt:',
+              `lastCommitAt:`,
               lastCommitAt,
-              'diff:',
+              `diff:`,
               now - lastCommitAt
             )
           if (
@@ -253,7 +253,7 @@ export const makeElectricSync = (
             now - lastCommitAt < options.commitThrottle
           ) {
             // Skip this commit - messages will be caught by next commit or up-to-date
-            if (debug) console.log('skipping commit due to throttle')
+            if (debug) console.log(`skipping commit due to throttle`)
             return
           }
           lastCommitAt = now
@@ -261,7 +261,7 @@ export const makeElectricSync = (
         }
 
         stream.subscribe(async (messages) => {
-          if (debug) console.log('sync messages received', messages)
+          if (debug) console.log(`sync messages received`, messages)
 
           for (const message of messages) {
             if (isChangeMessage(message)) {
@@ -281,10 +281,10 @@ export const makeElectricSync = (
               // accumulate change messages for committing all at once or in batches
               messageAggregator.push(message)
 
-              if (options.commitGranularity === 'operation') {
+              if (options.commitGranularity === `operation`) {
                 // commit after each operation if granularity is set to operation
                 await throttledCommit()
-              } else if (typeof options.commitGranularity === 'number') {
+              } else if (typeof options.commitGranularity === `number`) {
                 // commit after every N messages if granularity is set to a number
                 if (messageAggregator.length >= options.commitGranularity) {
                   await throttledCommit()
@@ -292,14 +292,14 @@ export const makeElectricSync = (
               }
             } else if (isControlMessage(message)) {
               switch (message.headers?.control) {
-                case 'must-refetch':
+                case `must-refetch`:
                   // mark table as needing truncation before next batch commit
-                  if (debug) console.log('refetching shape')
+                  if (debug) console.log(`refetching shape`)
                   truncateNeeded = true
                   messageAggregator = []
                   break
 
-                case 'up-to-date':
+                case `up-to-date`:
                   // perform all accumulated changes and store stream state
                   await throttledCommit({ reset: true }) // not throttled, we want this to happen ASAP
                   if (
@@ -351,7 +351,6 @@ async function migrateShapeMetadataTables({
   sqlite,
   metadataSchema,
 }: MigrateShapeMetadataTablesOptions) {
-  console.log('migrating shape metadata tables')
   await sqlite.exec(
     `
       CREATE TABLE IF NOT EXISTS ${subscriptionMetadataTableName(metadataSchema)} (
@@ -361,14 +360,13 @@ async function migrateShapeMetadataTables({
       );
       `
   )
-  console.log('migrated shape metadata tables')
 }
 
 function doMapColumns(
   mapColumns: MapColumns,
   message: ChangeMessage<any>
 ): Record<string, any> {
-  if (typeof mapColumns === 'function') {
+  if (typeof mapColumns === `function`) {
     return mapColumns(message)
   } else {
     const result: Record<string, any> = {}
@@ -381,7 +379,7 @@ function doMapColumns(
   }
 }
 
-type ShapeSubscriptionState = Pick<ShapeStreamOptions, 'handle' | 'offset'>
+type ShapeSubscriptionState = Pick<ShapeStreamOptions, `handle` | `offset`>
 
 interface GetShapeSubscriptionStateOptions {
   readonly sqlite: SqliteWrapper
@@ -394,7 +392,6 @@ async function getShapeSubscriptionState({
   metadataSchema,
   shapeKey,
 }: GetShapeSubscriptionStateOptions): Promise<ShapeSubscriptionState | null> {
-  console.log('getting shape subscription state')
   const stmt = sqlite.prepare<string[]>(
     `
   SELECT handle, offset
@@ -453,7 +450,6 @@ async function updateShapeSubscriptionState({
   shapeId,
   lastOffset,
 }: UpdateShapeSubscriptionStateOptions): Promise<void> {
-  console.log('update shape subscription state')
   const tableName = subscriptionMetadataTableName(metadataSchema)
 
   const stmt = sqlite.prepare(
@@ -478,7 +474,7 @@ function getMessageOffset(
 ): string {
   return message.offset
     ? JSON.stringify(message.offset)
-    : (stream.shapeHandle ?? '')
+    : (stream.shapeHandle ?? ``)
 }
 
 // TODO: make better use of prepared statements
@@ -491,17 +487,17 @@ async function applyMessageToTable({
   debug,
 }: ApplyMessageToTableOptions): Promise<void> {
   const data = mapColumns ? doMapColumns(mapColumns, message) : message.value
-  if (debug) console.log('applying message', message)
+  if (debug) console.log(`applying message`, message)
 
   switch (message.headers?.operation) {
-    case 'insert': {
+    case `insert`: {
       const columns = Object.keys(data)
       const stmt = sqlite.prepare(
         `
             INSERT INTO ${table}
-            (${columns.join(', ')})
+            (${columns.join(`, `)})
             VALUES
-            (${columns.map((_v, i) => '$' + (i + 1)).join(', ')})
+            (${columns.map((_v, i) => `$` + (i + 1)).join(`, `)})
         `
       )
       try {
@@ -512,8 +508,8 @@ async function applyMessageToTable({
       return
     }
 
-    case 'update': {
-      if (debug) console.log('updating', data)
+    case `update`: {
+      if (debug) console.log(`updating`, data)
       const columns = Object.keys(data).filter(
         // we don't update the primary key, they are used to identify the row
         (column) => !primaryKey.includes(column)
@@ -524,10 +520,10 @@ async function applyMessageToTable({
               UPDATE ${table}
               SET ${columns
                 .map((column, i) => `${column} = $${i + 1}`)
-                .join(', ')}
+                .join(`, `)}
               WHERE ${primaryKey
                 .map((column, i) => `${column} = $${columns.length + i + 1}`)
-                .join(' AND ')}
+                .join(` AND `)}
             `
       )
       try {
@@ -541,14 +537,14 @@ async function applyMessageToTable({
       return
     }
 
-    case 'delete': {
-      if (debug) console.log('deleting', data)
+    case `delete`: {
+      if (debug) console.log(`deleting`, data)
       const stmt = sqlite.prepare(
         `
               DELETE FROM ${table}
               WHERE ${primaryKey
                 .map((column, i) => `${column} = $${i + 1}`)
-                .join(' AND ')}
+                .join(` AND `)}
             `
       )
       try {
@@ -562,7 +558,6 @@ async function applyMessageToTable({
 }
 
 function subscriptionMetadataTableName(metadataSchema: string) {
-  console.log(`${metadataSchema}_${subscriptionTableName}`)
   return `${metadataSchema}_${subscriptionTableName}`
 }
 

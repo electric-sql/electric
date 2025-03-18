@@ -8,10 +8,10 @@
   },
   "dependencies": {
     "@electric-sql/client": "workspace:*",
-    "@sqlite.org/sqlite-wasm": "3.49.1-build2",
     "async-mutex": "^0.5.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
     "@typescript-eslint/parser": "^7.14.1",
     "concurrently": "^8.2.2",
@@ -48,7 +48,8 @@
   "main": "dist/cjs/index.cjs",
   "module": "dist/index.legacy-esm.js",
   "peerDependencies": {
-    "@sqlite.org/sqlite-wasm": ">=3.49.1-build2 <4.0.0"
+    "@sqlite.org/sqlite-wasm": "^3.49.1-build2",
+    "better-sqlite3": "^11.9.1"
   },
   "repository": {
     "type": "git",
