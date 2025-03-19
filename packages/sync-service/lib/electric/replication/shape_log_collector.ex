@@ -117,12 +117,6 @@ defmodule Electric.Replication.ShapeLogCollector do
         state.persistent_replication_data_opts
       )
 
-    :ok =
-      PersistentReplicationState.set_tracked_relations(
-        state.tracked_relations,
-        state.persistent_replication_data_opts
-      )
-
     {:noreply, [], %{state | producer: nil}}
   end
 
@@ -200,17 +194,17 @@ defmodule Electric.Replication.ShapeLogCollector do
     {updated_rel, tracker_state} =
       AffectedColumns.transform_relation(rel, state.tracked_relations)
 
+    :ok =
+      PersistentReplicationState.set_tracked_relations(
+        tracker_state,
+        state.persistent_replication_data_opts
+      )
+
     case state do
       %{subscriptions: {0, _}} ->
         Logger.debug(fn ->
           "Dropping relation message for #{inspect(rel.schema)}.#{inspect(rel.table)}: no active consumers"
         end)
-
-        :ok =
-          PersistentReplicationState.set_tracked_relations(
-            state.tracked_relations,
-            state.persistent_replication_data_opts
-          )
 
         {:reply, :ok, [], %{state | tracked_relations: tracker_state}}
 
