@@ -242,9 +242,8 @@ export const makeElectricSync = (
             debug,
           })
         }
-        // TODO need to add explicit rollback inside transaction
         if (unsubscribed) {
-          throw new Error(`Unsubscribed while committing`)
+          tx.rollback()
         }
       })
       if (debug) console.timeEnd(`commit`)

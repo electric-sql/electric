@@ -14,6 +14,8 @@ import type {
  * @throws Error if better-sqlite3 is not installed
  */
 export const betterSqliteWrapper = (db: Database): SqliteWrapper => ({
+  txOpen: false,
+
   exec(sql: string) {
     db.exec(sql)
     return Promise.resolve()
@@ -69,12 +71,19 @@ export const betterSqliteWrapper = (db: Database): SqliteWrapper => ({
   async transaction<T>(fn: (tx: SqliteWrapper) => T | Promise<T>): Promise<T> {
     try {
       db.exec(`BEGIN TRANSACTION`)
+      this.txOpen = true
       const res = await fn(this)
-      db.exec(`COMMIT`)
+      if (this.txOpen) {
+        db.exec(`COMMIT`)
+      }
       return res
     } catch (error) {
-      db.exec(`ROLLBACK`)
+      if (this.txOpen) {
+        db.exec(`ROLLBACK`)
+      }
       throw error
+    } finally {
+      this.txOpen = false
     }
   },
 
@@ -83,5 +92,12 @@ export const betterSqliteWrapper = (db: Database): SqliteWrapper => ({
    */
   close() {
     db.close()
+  },
+
+  rollback() {
+    if (this.txOpen) {
+      db.exec(`ROLLBACK`)
+      this.txOpen = false
+    }
   },
 })

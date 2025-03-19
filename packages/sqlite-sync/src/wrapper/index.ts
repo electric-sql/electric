@@ -16,6 +16,8 @@ export type ArgsType<Params extends ParamsType> = Params extends SqlValue[]
   : [{ [key: string]: SqlValue }]
 
 export type SqliteWrapper = {
+  txOpen: boolean
+
   /**
    * Execute raw SQL
    */
@@ -37,9 +39,7 @@ export type SqliteWrapper = {
 
   close: () => void
 
-  // acquire(): Promise<void>
-
-  // release(): void
+  rollback: () => void
 }
 
 export type SQLiteStatement<Params extends ParamsType> = {

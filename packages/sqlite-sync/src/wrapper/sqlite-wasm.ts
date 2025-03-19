@@ -8,6 +8,8 @@ import {
 } from '.'
 
 export const sqliteWasmWrapper = (sqlite: Database): SqliteWrapper => ({
+  txOpen: false,
+
   exec(sql: string) {
     sqlite.exec(sql)
     return Promise.resolve()
@@ -16,12 +18,19 @@ export const sqliteWasmWrapper = (sqlite: Database): SqliteWrapper => ({
   async transaction<T>(fn: (tx: SqliteWrapper) => T | Promise<T>): Promise<T> {
     try {
       sqlite.exec(`BEGIN TRANSACTION`)
+      this.txOpen = true
       const result = await fn(this)
-      sqlite.exec(`COMMIT`)
+      if (this.txOpen) {
+        sqlite.exec(`COMMIT`)
+      }
       return result
     } catch (error) {
-      sqlite.exec(`ROLLBACK`)
+      if (this.txOpen) {
+        sqlite.exec(`ROLLBACK`)
+      }
       throw error
+    } finally {
+      this.txOpen = false
     }
   },
 
@@ -90,5 +99,12 @@ export const sqliteWasmWrapper = (sqlite: Database): SqliteWrapper => ({
 
   close() {
     sqlite.close()
+  },
+
+  rollback() {
+    if (this.txOpen) {
+      sqlite.exec(`ROLLBACK`)
+      this.txOpen = false
+    }
   },
 })

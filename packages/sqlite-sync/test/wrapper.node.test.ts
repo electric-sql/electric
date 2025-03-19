@@ -216,5 +216,50 @@ describe.each(implementations)(
       // This will be 1 if transaction rolled back properly, 2 if not
       expect(result?.count).toBe(1)
     })
+
+    test(`transaction - should handle explicit rollback from within transaction`, async () => {
+      // Insert initial test data
+      await wrapper.exec(
+        `INSERT INTO test_table (id, name, value) VALUES (30, 'before_explicit_rollback', 3000)`
+      )
+
+      // Execute a transaction with explicit rollback
+      const txResult = await wrapper.transaction(async (tx) => {
+        // Insert data that should be rolled back
+        const stmt = tx.prepare(
+          `INSERT INTO test_table (id, name, value) VALUES (?, ?, ?)`
+        )
+        await stmt.run(31, 'will_be_rolled_back', 3100)
+        
+        // Verify data is visible within the transaction
+        const checkStmt = tx.prepare(`SELECT * FROM test_table WHERE id = 31`)
+        const rowInTransaction = await checkStmt.get()
+        expect(rowInTransaction).toBeDefined()
+        expect(rowInTransaction?.name).toBe('will_be_rolled_back')
+        
+        // Explicitly rollback the transaction
+        tx.rollback()
+        
+        // Return a value to indicate we completed without error
+        return 'transaction explicitly rolled back'
+      })
+
+      // Verify transaction completed with our return value
+      expect(txResult).toBe('transaction explicitly rolled back')
+
+      // Verify only the initial row exists (transaction was rolled back)
+      const stmt = wrapper.prepare(
+        `SELECT COUNT(*) as count FROM test_table WHERE id >= 30`
+      )
+      const result = await stmt.get()
+
+      // This will be 1 if transaction rolled back properly, 2 if not
+      expect(result?.count).toBe(1)
+      
+      // Double-check that the specific row we tried to insert is not present
+      const checkStmt = wrapper.prepare(`SELECT * FROM test_table WHERE id = 31`)
+      const rolledBackRow = await checkStmt.get()
+      expect(rolledBackRow).toBeUndefined()
+    })
   }
 )
