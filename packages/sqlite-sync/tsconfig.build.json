@@ -4,7 +4,8 @@
   "exclude": ["node_modules", "tests", "dist"],
   "compilerOptions": {
     "paths": {
-      "@electric-sql/client": ["../typescript-client/src"]
+      "@electric-sql/client": ["../typescript-client/src"],
+      "@electric-sql/experimental": ["../experimental/src"]
     },
     "lib": ["ESNext", "DOM"]
   }

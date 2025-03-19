@@ -3,7 +3,8 @@
   "compilerOptions": {
     "paths": {
       "@electric-sql/sqlite-sync": ["./src"],
-      "@electric-sql/client": ["../typescript-client/src"]
+      "@electric-sql/client": ["../typescript-client/src"],
+      "@electric-sql/experimental": ["../experimental/src"]
     },
     "lib": ["ESNext", "DOM"]
   },
