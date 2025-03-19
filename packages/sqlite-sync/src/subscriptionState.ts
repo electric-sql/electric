@@ -90,20 +90,12 @@ export async function updateSubscriptionState({
 }: UpdateSubscriptionStateOptions) {
   if (debug) {
     console.log(
-      'updating subscription state',
+      `updating subscription state`,
       subscriptionKey,
       shapeMetadata,
       lastLsn
     )
   }
-
-  const existingSubscription = await getSubscriptionState({
-    sqlite,
-    metadataSchema,
-    subscriptionKey,
-  })
-
-  console.log('existingSubscription', existingSubscription)
 
   await sqlite
     .prepare(

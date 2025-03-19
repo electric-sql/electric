@@ -1,4 +1,5 @@
-type SqlValue =
+export type SqlValue =
+  | boolean
   | string
   | number
   | null

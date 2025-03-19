@@ -4,26 +4,26 @@ import {
   ShapeStreamInterface,
   ShapeStreamOptions,
 } from '@electric-sql/client'
-import { SqliteWrapper } from './wrapper'
+import { SqliteWrapper, SqlValue } from './wrapper'
 import { makeElectricSync } from './sync'
 
 export type SerializedLsn = string
 export type Lsn = bigint
 
 export type MapColumnsMap = Record<string, string>
-export type MapColumnsFn = (message: ChangeMessage<any>) => Record<string, any>
+export type MapColumnsFn = (
+  message: ChangeMessage<Row<unknown>>
+) => Record<string, SqlValue>
 export type MapColumns = MapColumnsMap | MapColumnsFn
 export type SubscriptionKey = string
 
-export type Transaction = SqliteWrapper | SqliteWrapper['transaction']
-
-export interface ShapeToTableOptions {
+interface ShapeToTableOptions {
   shape: ShapeStreamOptions
   table: string
   schema?: string
   mapColumns?: MapColumns
   primaryKey: string[]
-  onMustRefetch?: (tx: Transaction) => Promise<void>
+  onMustRefetch?: (tx: SqliteWrapper) => Promise<void>
 }
 
 export interface SyncShapesToTablesOptions {
@@ -36,7 +36,7 @@ export interface SyncShapesToTablesOptions {
 export interface SyncShapesToTablesResult {
   unsubscribe: () => void
   readonly isUpToDate: boolean
-  streams: Record<string, ShapeStreamInterface<Row<unknown>>>
+  streams: Record<string, ShapeStreamInterface<Row>>
 }
 
 export interface SyncShapeToTableOptions {
@@ -48,13 +48,13 @@ export interface SyncShapeToTableOptions {
   shapeKey: string | null
   useCopy?: boolean
   onInitialSync?: () => void
-  onMustRefetch?: (tx: Transaction) => Promise<void>
+  onMustRefetch?: (tx: SqliteWrapper) => Promise<void>
 }
 
 export interface SyncShapeToTableResult {
   unsubscribe: () => void
   readonly isUpToDate: boolean
-  stream: ShapeStreamInterface<Row<unknown>>
+  stream: ShapeStreamInterface<Row>
 }
 
 export interface ElectricSyncOptions {
@@ -62,8 +62,8 @@ export interface ElectricSyncOptions {
   metadataSchema?: string
 }
 
-export type InsertChangeMessage = ChangeMessage<any> & {
-  headers: { operation: 'insert' }
+export type InsertChangeMessage = ChangeMessage<Row> & {
+  headers: { operation: `insert` }
 }
 
 export type SyncNamespaceObj = Awaited<

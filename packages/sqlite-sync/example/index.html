@@ -13,6 +13,7 @@
         "imports": {
           "@electric-sql/sqlite-sync": "../dist/index.browser.mjs",
           "@electric-sql/client": "../node_modules/@electric-sql/client/dist/index.browser.mjs",
+          "@electric-sql/experimental": "../node_modules/@electric-sql/experimental/dist/index.browser.mjs",
           "async-mutex": "../node_modules/async-mutex/index.mjs"
         }
       }
@@ -33,10 +34,10 @@
         printErr: console.error,
       });
       const { sqliteWasmWrapper, electricSync } = await import('@electric-sql/sqlite-sync');
-      const sqliteDb = new sqlite3.oo1.DB('/mydb.sqlite3', 'c')
+              const sqliteDb = new sqlite3.oo1.DB('/mydb.sqlite3', 'ct')
       const sqliteWrapped = sqliteWasmWrapper(sqliteDb)
 
-      const sqlite = electricSync({ db: sqliteWrapped, options: { debug: false } })
+          const sqlite = electricSync({ db: sqliteWrapped, options: { debug: true } })
 
       await sqlite.exec(`
             CREATE TABLE IF NOT EXISTS test (
@@ -46,7 +47,7 @@
           `);
 
       await sqlite.electric.syncShapeToTable({
-        shape: { url: "http://localhost:3000/v1/shape", table: "test" },
+        shape: { url: "http://localhost:3000/v1/shape", params: { table: "test" } },
         table: "test",
         primaryKey: ["id"],
       });

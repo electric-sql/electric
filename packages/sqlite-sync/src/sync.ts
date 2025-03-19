@@ -1,6 +1,5 @@
 import {
   ChangeMessage,
-  Offset,
   Row,
   ShapeStreamOptions,
   isChangeMessage,
@@ -12,7 +11,6 @@ import { MultiShapeStream } from '@electric-sql/experimental'
 import {
   SyncShapeToTableOptions,
   SyncShapeToTableResult,
-  MapColumns,
   ElectricSyncOptions,
   ElectricSync,
   SyncShapesToTablesOptions,
@@ -29,11 +27,6 @@ import {
   SubscriptionState,
   updateSubscriptionState,
 } from './subscriptionState'
-
-interface MigrateShapeMetadataTablesOptions {
-  sqlite: SqliteWrapper
-  metadataSchema: string
-}
 
 export function electricSync({
   db,
@@ -67,9 +60,9 @@ export const makeElectricSync = (
   options?: ElectricSyncOptions
 ) => {
   const debug = options?.debug ?? false
-  const metadataSchema = options?.metadataSchema ?? 'electric'
+  const metadataSchema = options?.metadataSchema ?? `electric`
   const streams: Array<{
-    stream: MultiShapeStream<Record<string, Row<unknown>>>
+    stream: MultiShapeStream<Record<string, Row>>
     aborter: AbortController
   }> = []
 
@@ -100,7 +93,7 @@ export const makeElectricSync = (
       .filter((shape) => !shape.onMustRefetch) // Shapes with onMustRefetch bypass the lock
       .forEach((shape) => {
         if (shapePerTableLock.has(shape.table)) {
-          throw new Error('Already syncing shape for table ' + shape.table)
+          throw new Error(`Already syncing shape for table ` + shape.table)
         }
         shapePerTableLock.set(shape.table)
       })
@@ -109,7 +102,6 @@ export const makeElectricSync = (
 
     // if key is not null, ensure persistence of subscription state
     // is possible and check if it is already persisted
-    console.log("shape key", key)
     if (key !== null) {
       subState = await getSubscriptionState({
         sqlite,
@@ -117,7 +109,7 @@ export const makeElectricSync = (
         subscriptionKey: key,
       })
       if (debug && subState) {
-        console.log('resuming from subscription state', subState)
+        console.log(`resuming from subscription state`, subState)
       }
     }
 
@@ -126,7 +118,7 @@ export const makeElectricSync = (
 
     // Map of shape name to lsn to changes
     // We accumulate changes for each lsn and then apply them all at once
-    const changes = new Map<string, Map<Lsn, ChangeMessage<Row<unknown>>[]>>(
+    const changes = new Map<string, Map<Lsn, ChangeMessage<Row>[]>>(
       Object.keys(shapes).map((key) => [key, new Map()])
     )
 
@@ -151,7 +143,7 @@ export const makeElectricSync = (
       .filter((shapeOptions) => !!shapeOptions.shape.signal)
       .forEach((shapeOptions) => {
         shapeOptions.shape.signal!.addEventListener(
-          'abort',
+          `abort`,
           () => aborter.abort(),
           {
             once: true,
@@ -159,32 +151,30 @@ export const makeElectricSync = (
         )
       })
 
-    const multiShapeStream = new MultiShapeStream<Record<string, Row<unknown>>>(
-      {
-        shapes: Object.fromEntries(
-          Object.entries(shapes).map(([key, shapeOptions]) => {
-            const shapeMetadata = subState?.shape_metadata[key]
-            return [
-              key,
-              {
-                ...shapeOptions.shape,
-                ...(shapeMetadata
-                  ? {
-                      offset: shapeMetadata.offset,
-                      handle: shapeMetadata.handle,
-                    }
-                  : {}),
-                signal: aborter.signal,
-              } satisfies ShapeStreamOptions,
-            ]
-          })
-        ),
-      }
-    )
+    const multiShapeStream = new MultiShapeStream<Record<string, Row>>({
+      shapes: Object.fromEntries(
+        Object.entries(shapes).map(([key, shapeOptions]) => {
+          const shapeMetadata = subState?.shape_metadata[key]
+          return [
+            key,
+            {
+              ...shapeOptions.shape,
+              ...(shapeMetadata
+                ? {
+                    offset: shapeMetadata.offset,
+                    handle: shapeMetadata.handle,
+                  }
+                : {}),
+              signal: aborter.signal,
+            } satisfies ShapeStreamOptions,
+          ]
+        })
+      ),
+    })
 
     const commitUpToLsn = async (targetLsn: Lsn) => {
       // We need to collect all the messages for each shape that we need to commit
-      const messagesToCommit = new Map<string, ChangeMessage<Row<unknown>>[]>(
+      const messagesToCommit = new Map<string, ChangeMessage<Row>[]>(
         Object.keys(shapes).map((shapeName) => [shapeName, []])
       )
       for (const [shapeName, shapeChanges] of changes.entries()) {
@@ -201,17 +191,17 @@ export const makeElectricSync = (
 
       await sqlite.transaction(async (tx) => {
         if (debug) {
-          console.time('commit')
+          console.time(`commit`)
         }
 
         for (const [shapeName, initialMessages] of messagesToCommit.entries()) {
           const shape = shapes[shapeName]
-          let messages = initialMessages
+          const messages = initialMessages
 
           // If we need to truncate the table, do so
           if (truncateNeeded.has(shapeName)) {
             if (debug) {
-              console.log('truncating table', shape.table)
+              console.log(`truncating table`, shape.table)
             }
             if (shape.onMustRefetch) {
               await shape.onMustRefetch(tx)
@@ -254,11 +244,10 @@ export const makeElectricSync = (
         }
         // TODO need to add explicit rollback inside transaction
         if (unsubscribed) {
-          console.log('unsubscribed while committing..................')
-          throw new Error('Unsubscribed while committing')
+          throw new Error(`Unsubscribed while committing`)
         }
       })
-      if (debug) console.timeEnd('commit')
+      if (debug) console.timeEnd(`commit`)
       if (
         onInitialSync &&
         !onInitialSyncCalled &&
@@ -274,7 +263,7 @@ export const makeElectricSync = (
         return
       }
       if (debug) {
-        console.log('received messages', messages.length)
+        console.log(`received messages`, messages.length)
       }
       messages.forEach((message) => {
         const lastCommittedLsnForShape =
@@ -282,7 +271,7 @@ export const makeElectricSync = (
         if (isChangeMessage(message)) {
           const shapeChanges = changes.get(message.shape)!
           const lsn =
-            typeof message.headers.lsn === 'string'
+            typeof message.headers.lsn === `string`
               ? BigInt(message.headers.lsn)
               : BigInt(0) // we default to 0 if there no lsn on the message
           if (lsn <= lastCommittedLsnForShape) {
@@ -301,10 +290,10 @@ export const makeElectricSync = (
           }
         } else if (isControlMessage(message)) {
           switch (message.headers.control) {
-            case 'up-to-date': {
+            case `up-to-date`: {
               // Update the complete lsn for this shape
               if (debug) {
-                console.log('received up-to-date', message)
+                console.log(`received up-to-date`, message)
               }
               if (typeof message.headers.global_last_seen_lsn !== `string`) {
                 throw new Error(`global_last_seen_lsn is not a string`)
@@ -320,10 +309,10 @@ export const makeElectricSync = (
               completeLsns.set(message.shape, globalLastSeenLsn)
               break
             }
-            case 'must-refetch': {
+            case `must-refetch`: {
               // Reset the changes for this shape
               if (debug) {
-                console.log('received must-refetch', message)
+                console.log(`received must-refetch`, message)
               }
               const shapeChanges = changes.get(message.shape)!
               shapeChanges.clear()
@@ -360,7 +349,7 @@ export const makeElectricSync = (
     })
     const unsubscribe = () => {
       if (debug) {
-        console.log('unsubscribing')
+        console.log(`unsubscribing`)
       }
       unsubscribed = true
       multiShapeStream.unsubscribeAll()

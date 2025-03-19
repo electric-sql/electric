@@ -22,9 +22,10 @@ services:
       - wal_level=logical
 
   electric:
-    image: electricsql/electric:1.0.0-beta.3
+    image: electricsql/electric:latest
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/electric?sslmode=disable
+      ELECTRIC_INSECURE: true
     ports:
       - "3000:3000"
     depends_on:

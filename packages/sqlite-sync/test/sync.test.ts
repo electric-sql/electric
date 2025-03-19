@@ -2,17 +2,18 @@ import { ShapeStreamOptions } from '@electric-sql/client'
 import { MultiShapeMessages } from '@electric-sql/experimental'
 import { Mock, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MultiShapeStream } from '@electric-sql/experimental'
-
 import sqlite3InitModule, { Database } from '@sqlite.org/sqlite-wasm'
 import { sqliteWasmWrapper } from '../src/wrapper/sqlite-wasm'
 import { electricSync } from '../src/sync'
 import { ElectricSync } from '../src/types'
 import { SqliteWrapper } from '../src'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MultiShapeMessage = MultiShapeMessages<any>
 
-vi.mock('@electric-sql/experimental', async (importOriginal) => {
+vi.mock(`@electric-sql/experimental`, async (importOriginal) => {
   const mod =
+    /* eslint-disable-next-line @typescript-eslint/quotes */
     await importOriginal<typeof import('@electric-sql/experimental')>()
   const MultiShapeStream = vi.fn(() => ({
     subscribe: vi.fn(),
@@ -23,7 +24,7 @@ vi.mock('@electric-sql/experimental', async (importOriginal) => {
   return { ...mod, MultiShapeStream }
 })
 
-describe('pglite-sync', async () => {
+describe(`sqlite-sync`, async () => {
   const sqlite3 = await sqlite3InitModule({
     print: console.log,
     printErr: console.error,
@@ -52,7 +53,7 @@ describe('pglite-sync', async () => {
     await db.exec(`DELETE FROM todo;`)
   })
 
-  it('handles inserts/updates/deletes', async () => {
+  it(`handles inserts/updates/deletes`, async () => {
     let feedMessage: (
       lsn: number,
       message: MultiShapeMessage
@@ -64,9 +65,9 @@ describe('pglite-sync', async () => {
             cb([
               message,
               {
-                shape: 'shape',
+                shape: `shape`,
                 headers: {
-                  control: 'up-to-date',
+                  control: `up-to-date`,
                   global_last_seen_lsn: lsn.toString(),
                 },
               },
@@ -85,24 +86,24 @@ describe('pglite-sync', async () => {
 
     const shape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
-      table: 'todo',
-      primaryKey: ['id'],
+      table: `todo`,
+      primaryKey: [`id`],
       shapeKey: null,
     })
 
     // insert
     await feedMessage(0, {
-      headers: { operation: 'insert', lsn: '0' },
-      key: 'id1',
+      headers: { operation: `insert`, lsn: `0` },
+      key: `id1`,
       value: {
         id: 1,
-        task: 'task1',
+        task: `task1`,
         done: false,
       },
-      shape: 'shape',
+      shape: `shape`,
     })
 
     await db.mutex.runExclusive(async () => {
@@ -117,14 +118,14 @@ describe('pglite-sync', async () => {
 
     // update
     await feedMessage(1, {
-      headers: { operation: 'update', lsn: '1' },
-      key: 'id1',
+      headers: { operation: `update`, lsn: `1` },
+      key: `id1`,
       value: {
         id: 1,
-        task: 'task2',
+        task: `task2`,
         done: true,
       },
-      shape: 'shape',
+      shape: `shape`,
     })
 
     await db.mutex.runExclusive(async () => {
@@ -139,14 +140,14 @@ describe('pglite-sync', async () => {
 
     // delete
     await feedMessage(2, {
-      headers: { operation: 'delete', lsn: '2' },
-      key: 'id1',
+      headers: { operation: `delete`, lsn: `2` },
+      key: `id1`,
       value: {
         id: 1,
-        task: 'task2',
+        task: `task2`,
         done: true,
       },
-      shape: 'shape',
+      shape: `shape`,
     })
 
     await db.mutex.runExclusive(async () => {
@@ -156,7 +157,7 @@ describe('pglite-sync', async () => {
     shape.unsubscribe()
   })
 
-  it('performs operations within a transaction', async () => {
+  it(`performs operations within a transaction`, async () => {
     let feedMessages: (
       lsn: number,
       messages: MultiShapeMessage[]
@@ -168,9 +169,9 @@ describe('pglite-sync', async () => {
             cb([
               ...messages,
               {
-                shape: 'shape',
+                shape: `shape`,
                 headers: {
-                  control: 'up-to-date',
+                  control: `up-to-date`,
                   global_last_seen_lsn: lsn.toString(),
                 },
               },
@@ -189,11 +190,11 @@ describe('pglite-sync', async () => {
 
     const shape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
-      table: 'todo',
-      primaryKey: ['id'],
+      table: `todo`,
+      primaryKey: [`id`],
       shapeKey: null,
     })
 
@@ -206,14 +207,14 @@ describe('pglite-sync', async () => {
         Array.from({ length: numBatchInserts }, (_, idx) => {
           const itemIdx = i * numBatchInserts + idx
           return {
-            headers: { operation: 'insert', lsn: i.toString() },
+            headers: { operation: `insert`, lsn: i.toString() },
             key: `id${itemIdx}`,
             value: {
               id: itemIdx,
               task: `task${itemIdx}`,
               done: false,
             },
-            shape: 'shape',
+            shape: `shape`,
           }
         })
       )
@@ -250,7 +251,7 @@ describe('pglite-sync', async () => {
     shape.unsubscribe()
   })
 
-  it('persists shape stream state and automatically resumes', async () => {
+  it(`persists shape stream state and automatically resumes`, async () => {
     let feedMessages: (
       lsn: number,
       messages: MultiShapeMessage[]
@@ -263,13 +264,13 @@ describe('pglite-sync', async () => {
         subscribe: vi.fn(
           (cb: (messages: MultiShapeMessage[]) => Promise<void>) => {
             feedMessages = (lsn, messages) => {
-              mockShapeId ??= Math.random() + ''
+              mockShapeId ??= Math.random() + ``
               return cb([
                 ...messages,
                 {
-                  shape: 'shape',
+                  shape: `shape`,
                   headers: {
-                    control: 'up-to-date',
+                    control: `up-to-date`,
                     global_last_seen_lsn: lsn.toString(),
                   },
                 },
@@ -296,19 +297,19 @@ describe('pglite-sync', async () => {
     for (let i = 0; i < numResumes; i++) {
       const shape = await db.electric.syncShapeToTable({
         shape: {
-          url: 'http://localhost:3000/v1/shape',
-          params: { table: 'todo' },
+          url: `http://localhost:3000/v1/shape`,
+          params: { table: `todo` },
         },
-        table: 'todo',
-        primaryKey: ['id'],
-        shapeKey: 'foo',
+        table: `todo`,
+        primaryKey: [`id`],
+        shapeKey: `foo`,
       })
 
       await feedMessages(
         i,
         Array.from({ length: numInserts }, (_, idx) => ({
           headers: {
-            operation: 'insert',
+            operation: `insert`,
             lsn: i.toString(),
           },
           key: `id${i * numInserts + idx}`,
@@ -317,7 +318,7 @@ describe('pglite-sync', async () => {
             task: `task${idx}`,
             done: false,
           },
-          shape: 'shape',
+          shape: `shape`,
         }))
       )
 
@@ -341,15 +342,15 @@ describe('pglite-sync', async () => {
 
       expect(shapeStreamInits).toHaveBeenCalledTimes(i + 1)
       if (i === 0) {
-        expect(shapeStreamInits.mock.calls[i][0]).not.toHaveProperty('shapeId')
-        expect(shapeStreamInits.mock.calls[i][0]).not.toHaveProperty('offset')
+        expect(shapeStreamInits.mock.calls[i][0]).not.toHaveProperty(`shapeId`)
+        expect(shapeStreamInits.mock.calls[i][0]).not.toHaveProperty(`offset`)
       }
 
       shape.unsubscribe()
     }
   })
 
-  it('clears and restarts persisted shape stream state on refetch', async () => {
+  it(`clears and restarts persisted shape stream state on refetch`, async () => {
     let feedMessages: (messages: MultiShapeMessage[]) => Promise<void> = async (
       _
     ) => {}
@@ -361,18 +362,18 @@ describe('pglite-sync', async () => {
         subscribe: vi.fn(
           (cb: (messages: MultiShapeMessage[]) => Promise<void>) => {
             feedMessages = (messages) => {
-              mockShapeId ??= Math.random() + ''
-              if (messages.find((m) => m.headers.control === 'must-refetch')) {
+              mockShapeId ??= Math.random() + ``
+              if (messages.find((m) => m.headers.control === `must-refetch`)) {
                 mockShapeId = undefined
               }
 
               return cb([
                 ...messages,
                 {
-                  shape: 'shape',
+                  shape: `shape`,
                   headers: {
-                    control: 'up-to-date',
-                    global_last_seen_lsn: '0',
+                    control: `up-to-date`,
+                    global_last_seen_lsn: `0`,
                   },
                 },
               ])
@@ -392,36 +393,36 @@ describe('pglite-sync', async () => {
 
     const shape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
-      table: 'todo',
-      primaryKey: ['id'],
-      shapeKey: 'foo',
+      table: `todo`,
+      primaryKey: [`id`],
+      shapeKey: `foo`,
     })
 
     const numInserts = 100
     await feedMessages([
       {
-        headers: { operation: 'insert' },
+        headers: { operation: `insert` },
         key: `id${numInserts}`,
         value: {
           id: numInserts,
           task: `task`,
           done: false,
         },
-        shape: 'shape',
+        shape: `shape`,
       },
-      { headers: { control: 'must-refetch' }, shape: 'shape' },
+      { headers: { control: `must-refetch` }, shape: `shape` },
       {
-        headers: { operation: 'insert' },
+        headers: { operation: `insert` },
         key: `id21`,
         value: {
           id: 21,
           task: `task`,
           done: false,
         },
-        shape: 'shape',
+        shape: `shape`,
       },
     ])
 
@@ -440,22 +441,22 @@ describe('pglite-sync', async () => {
     // resuming should
     const resumedShape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
-      table: 'todo',
-      primaryKey: ['id'],
-      shapeKey: 'foo',
+      table: `todo`,
+      primaryKey: [`id`],
+      shapeKey: `foo`,
     })
     resumedShape.unsubscribe()
 
     expect(shapeStreamInits).toHaveBeenCalledTimes(2)
 
-    expect(shapeStreamInits.mock.calls[1][0]).not.toHaveProperty('shapeId')
-    expect(shapeStreamInits.mock.calls[1][0]).not.toHaveProperty('offset')
+    expect(shapeStreamInits.mock.calls[1][0]).not.toHaveProperty(`shapeId`)
+    expect(shapeStreamInits.mock.calls[1][0]).not.toHaveProperty(`offset`)
   })
 
-  it('forbids multiple subscriptions to the same table', async () => {
+  it(`forbids multiple subscriptions to the same table`, async () => {
     MockMultiShapeStream.mockImplementation(() => ({
       subscribe: vi.fn(),
       unsubscribeAll: vi.fn(),
@@ -468,16 +469,16 @@ describe('pglite-sync', async () => {
       },
     }))
 
-    const table = 'foo'
-    const altTable = 'bar'
+    const table = `foo`
+    const altTable = `bar`
 
     const shape1 = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
       table: table,
-      primaryKey: ['id'],
+      primaryKey: [`id`],
       shapeKey: null,
     })
 
@@ -486,11 +487,11 @@ describe('pglite-sync', async () => {
       async () =>
         await db.electric.syncShapeToTable({
           shape: {
-            url: 'http://localhost:3000/v1/shape',
-            params: { table: 'todo_alt' },
+            url: `http://localhost:3000/v1/shape`,
+            params: { table: `todo_alt` },
           },
           table: table,
-          primaryKey: ['id'],
+          primaryKey: [`id`],
           shapeKey: null,
         })
     ).rejects.toThrowError(`Already syncing shape for table ${table}`)
@@ -498,11 +499,11 @@ describe('pglite-sync', async () => {
     // should be able to sync shape into other table
     const altShape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'bar' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `bar` },
       },
       table: altTable,
-      primaryKey: ['id'],
+      primaryKey: [`id`],
       shapeKey: null,
     })
     altShape.unsubscribe()
@@ -513,17 +514,17 @@ describe('pglite-sync', async () => {
 
     const shape2 = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo_alt' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo_alt` },
       },
       table: table,
-      primaryKey: ['id'],
+      primaryKey: [`id`],
       shapeKey: null,
     })
     shape2.unsubscribe()
   })
 
-  it('handles an update message with no columns to update', async () => {
+  it(`handles an update message with no columns to update`, async () => {
     let feedMessage: (message: MultiShapeMessage) => Promise<void> = async (
       _
     ) => {}
@@ -534,10 +535,10 @@ describe('pglite-sync', async () => {
             cb([
               message,
               {
-                shape: 'shape',
+                shape: `shape`,
                 headers: {
-                  control: 'up-to-date',
-                  global_last_seen_lsn: '0',
+                  control: `up-to-date`,
+                  global_last_seen_lsn: `0`,
                 },
               },
             ])
@@ -555,24 +556,24 @@ describe('pglite-sync', async () => {
 
     const shape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
-      table: 'todo',
-      primaryKey: ['id'],
+      table: `todo`,
+      primaryKey: [`id`],
       shapeKey: null,
     })
 
     // insert
     await feedMessage({
-      headers: { operation: 'insert' },
-      key: 'id1',
+      headers: { operation: `insert` },
+      key: `id1`,
       value: {
         id: 1,
-        task: 'task1',
+        task: `task1`,
         done: false,
       },
-      shape: 'shape',
+      shape: `shape`,
     })
 
     await db.mutex.runExclusive(async () => {
@@ -587,12 +588,12 @@ describe('pglite-sync', async () => {
 
     // update with no columns to update
     await feedMessage({
-      headers: { operation: 'update' },
-      key: 'id1',
+      headers: { operation: `update` },
+      key: `id1`,
       value: {
         id: 1,
       },
-      shape: 'shape',
+      shape: `shape`,
     })
     await db.mutex.runExclusive(async () => {
       expect(await db.prepare(`SELECT * FROM todo;`).all()).toEqual([
@@ -607,7 +608,7 @@ describe('pglite-sync', async () => {
     shape.unsubscribe()
   })
 
-  it('calls onInitialSync callback after initial sync', async () => {
+  it(`calls onInitialSync callback after initial sync`, async () => {
     let feedMessages: (
       lsn: number,
       messages: MultiShapeMessage[]
@@ -619,9 +620,9 @@ describe('pglite-sync', async () => {
             cb([
               ...messages,
               {
-                shape: 'shape',
+                shape: `shape`,
                 headers: {
-                  control: 'up-to-date',
+                  control: `up-to-date`,
                   global_last_seen_lsn: lsn.toString(),
                 },
               },
@@ -639,15 +640,15 @@ describe('pglite-sync', async () => {
     }))
 
     const onInitialSync = vi.fn(() => {
-      console.log('onInitialSync')
+      console.log(`onInitialSync`)
     })
     const shape = await db.electric.syncShapeToTable({
       shape: {
-        url: 'http://localhost:3000/v1/shape',
-        params: { table: 'todo' },
+        url: `http://localhost:3000/v1/shape`,
+        params: { table: `todo` },
       },
-      table: 'todo',
-      primaryKey: ['id'],
+      table: `todo`,
+      primaryKey: [`id`],
       onInitialSync,
       shapeKey: null,
     })
@@ -655,24 +656,24 @@ describe('pglite-sync', async () => {
     // Send some initial data
     await feedMessages(0, [
       {
-        headers: { operation: 'insert', lsn: '0' },
-        key: 'id1',
+        headers: { operation: `insert`, lsn: `0` },
+        key: `id1`,
         value: {
           id: 1,
-          task: 'task1',
+          task: `task1`,
           done: false,
         },
-        shape: 'shape',
+        shape: `shape`,
       },
       {
-        headers: { operation: 'insert', lsn: '0' },
-        key: 'id2',
+        headers: { operation: `insert`, lsn: `0` },
+        key: `id2`,
         value: {
           id: 2,
-          task: 'task2',
+          task: `task2`,
           done: true,
         },
-        shape: 'shape',
+        shape: `shape`,
       },
     ])
 
@@ -682,14 +683,14 @@ describe('pglite-sync', async () => {
     // Send more data - callback should not be called again
     await feedMessages(1, [
       {
-        headers: { operation: 'insert', lsn: '1' },
-        key: 'id3',
+        headers: { operation: `insert`, lsn: `1` },
+        key: `id3`,
         value: {
           id: 3,
-          task: 'task3',
+          task: `task3`,
           done: false,
         },
-        shape: 'shape',
+        shape: `shape`,
       },
     ])
 
@@ -711,7 +712,7 @@ describe('pglite-sync', async () => {
     shape.unsubscribe()
   })
 
-  it('syncs multiple shapes to multiple tables simultaneously', async () => {
+  it(`syncs multiple shapes to multiple tables simultaneously`, async () => {
     // Create a second table for testing multi-shape sync
     await db.exec(`
       CREATE TABLE IF NOT EXISTS project (
@@ -734,16 +735,16 @@ describe('pglite-sync', async () => {
             cb([
               ...messages,
               {
-                shape: 'todo_shape',
+                shape: `todo_shape`,
                 headers: {
-                  control: 'up-to-date',
+                  control: `up-to-date`,
                   global_last_seen_lsn: lsn.toString(),
                 },
               },
               {
-                shape: 'project_shape',
+                shape: `project_shape`,
                 headers: {
-                  control: 'up-to-date',
+                  control: `up-to-date`,
                   global_last_seen_lsn: lsn.toString(),
                 },
               },
@@ -767,23 +768,23 @@ describe('pglite-sync', async () => {
     // Set up sync for both tables
     const onInitialSync = vi.fn()
     const syncResult = await db.electric.syncShapesToTables({
-      key: 'multi_sync_test',
+      key: `multi_sync_test`,
       shapes: {
         todo_shape: {
           shape: {
-            url: 'http://localhost:3000/v1/shape',
-            params: { table: 'todo' },
+            url: `http://localhost:3000/v1/shape`,
+            params: { table: `todo` },
           },
-          table: 'todo',
-          primaryKey: ['id'],
+          table: `todo`,
+          primaryKey: [`id`],
         },
         project_shape: {
           shape: {
-            url: 'http://localhost:3000/v1/shape',
-            params: { table: 'project' },
+            url: `http://localhost:3000/v1/shape`,
+            params: { table: `project` },
           },
-          table: 'project',
-          primaryKey: ['id'],
+          table: `project`,
+          primaryKey: [`id`],
         },
       },
       onInitialSync,
@@ -793,45 +794,45 @@ describe('pglite-sync', async () => {
     await feedMessages(0, [
       // Todo table inserts
       {
-        headers: { operation: 'insert', lsn: '0' },
-        key: 'id1',
+        headers: { operation: `insert`, lsn: `0` },
+        key: `id1`,
         value: {
           id: 1,
-          task: 'task1',
+          task: `task1`,
           done: false,
         },
-        shape: 'todo_shape',
+        shape: `todo_shape`,
       },
       {
-        headers: { operation: 'insert', lsn: '0' },
-        key: 'id2',
+        headers: { operation: `insert`, lsn: `0` },
+        key: `id2`,
         value: {
           id: 2,
-          task: 'task2',
+          task: `task2`,
           done: true,
         },
-        shape: 'todo_shape',
+        shape: `todo_shape`,
       },
       // Project table inserts
       {
-        headers: { operation: 'insert', lsn: '0' },
-        key: 'id1',
+        headers: { operation: `insert`, lsn: `0` },
+        key: `id1`,
         value: {
           id: 1,
-          name: 'Project 1',
+          name: `Project 1`,
           active: true,
         },
-        shape: 'project_shape',
+        shape: `project_shape`,
       },
       {
-        headers: { operation: 'insert', lsn: '0' },
-        key: 'id2',
+        headers: { operation: `insert`, lsn: `0` },
+        key: `id2`,
         value: {
           id: 2,
-          name: 'Project 2',
+          name: `Project 2`,
           active: false,
         },
-        shape: 'project_shape',
+        shape: `project_shape`,
       },
     ])
 
@@ -842,8 +843,8 @@ describe('pglite-sync', async () => {
           .prepare(`SELECT * FROM todo ORDER BY id;`)
           .all<{ id: number; task: string; done: number }>()
       ).toEqual([
-        { id: 1, task: 'task1', done: 0 },
-        { id: 2, task: 'task2', done: 1 },
+        { id: 1, task: `task1`, done: 0 },
+        { id: 2, task: `task2`, done: 1 },
       ])
     })
 
@@ -853,8 +854,8 @@ describe('pglite-sync', async () => {
           .prepare(`SELECT * FROM project ORDER BY id;`)
           .all<{ id: number; name: string; active: number }>()
       ).toEqual([
-        { id: 1, name: 'Project 1', active: 1 },
-        { id: 2, name: 'Project 2', active: 0 },
+        { id: 1, name: `Project 1`, active: 1 },
+        { id: 2, name: `Project 2`, active: 0 },
       ])
     })
 
@@ -865,25 +866,25 @@ describe('pglite-sync', async () => {
     await feedMessages(1, [
       // Update todo
       {
-        headers: { operation: 'update', lsn: '1' },
-        key: 'id1',
+        headers: { operation: `update`, lsn: `1` },
+        key: `id1`,
         value: {
           id: 1,
-          task: 'Updated task 1',
+          task: `Updated task 1`,
           done: true,
         },
-        shape: 'todo_shape',
+        shape: `todo_shape`,
       },
       // Update project
       {
-        headers: { operation: 'update', lsn: '1' },
-        key: 'id2',
+        headers: { operation: `update`, lsn: `1` },
+        key: `id2`,
         value: {
           id: 2,
-          name: 'Updated Project 2',
+          name: `Updated Project 2`,
           active: true,
         },
-        shape: 'project_shape',
+        shape: `project_shape`,
       },
     ])
 
@@ -893,7 +894,7 @@ describe('pglite-sync', async () => {
         await db
           .prepare(`SELECT * FROM todo WHERE id = 1;`)
           .all<{ id: number; task: string; done: number }>()
-      ).toEqual([{ id: 1, task: 'Updated task 1', done: 1 }])
+      ).toEqual([{ id: 1, task: `Updated task 1`, done: 1 }])
     })
 
     await db.mutex.runExclusive(async () => {
@@ -901,21 +902,21 @@ describe('pglite-sync', async () => {
         await db
           .prepare(`SELECT * FROM project WHERE id = 2;`)
           .all<{ id: number; name: string; active: number }>()
-      ).toEqual([{ id: 2, name: 'Updated Project 2', active: 1 }])
+      ).toEqual([{ id: 2, name: `Updated Project 2`, active: 1 }])
     })
 
     // Test deletes across both tables
     await feedMessages(2, [
       {
-        headers: { operation: 'delete', lsn: '2' },
-        key: 'id2',
-        shape: 'todo_shape',
+        headers: { operation: `delete`, lsn: `2` },
+        key: `id2`,
+        shape: `todo_shape`,
         value: { id: 2 },
       },
       {
-        headers: { operation: 'delete', lsn: '2' },
-        key: 'id1',
-        shape: 'project_shape',
+        headers: { operation: `delete`, lsn: `2` },
+        key: `id1`,
+        shape: `project_shape`,
         value: { id: 1 },
       },
     ])
@@ -941,7 +942,7 @@ describe('pglite-sync', async () => {
     syncResult.unsubscribe()
   })
 
-  it('handles transactions across multiple tables with syncShapesToTables', async () => {
+  it(`handles transactions across multiple tables with syncShapesToTables`, async () => {
     // Create a second table for testing multi-shape sync
     await db.exec(`
       CREATE TABLE IF NOT EXISTS project (
@@ -964,7 +965,7 @@ describe('pglite-sync', async () => {
           feedMessages = (lsn, messages) =>
             cb([
               ...messages.map((msg) => {
-                if ('headers' in msg && 'operation' in msg.headers) {
+                if (`headers` in msg && `operation` in msg.headers) {
                   return {
                     ...msg,
                     headers: {
@@ -976,16 +977,16 @@ describe('pglite-sync', async () => {
                 return msg
               }),
               {
-                shape: 'todo_shape',
+                shape: `todo_shape`,
                 headers: {
-                  control: 'up-to-date',
+                  control: `up-to-date`,
                   global_last_seen_lsn: lsn.toString(),
                 },
               } as MultiShapeMessage,
               {
-                shape: 'project_shape',
+                shape: `project_shape`,
                 headers: {
-                  control: 'up-to-date',
+                  control: `up-to-date`,
                   global_last_seen_lsn: lsn.toString(),
                 },
               } as MultiShapeMessage,
@@ -1008,23 +1009,23 @@ describe('pglite-sync', async () => {
 
     // Set up sync for both tables
     const syncResult = await db.electric.syncShapesToTables({
-      key: 'transaction_test',
+      key: `transaction_test`,
       shapes: {
         todo_shape: {
           shape: {
-            url: 'http://localhost:3000/v1/shape',
-            params: { table: 'todo' },
+            url: `http://localhost:3000/v1/shape`,
+            params: { table: `todo` },
           },
-          table: 'todo',
-          primaryKey: ['id'],
+          table: `todo`,
+          primaryKey: [`id`],
         },
         project_shape: {
           shape: {
-            url: 'http://localhost:3000/v1/shape',
-            params: { table: 'project' },
+            url: `http://localhost:3000/v1/shape`,
+            params: { table: `project` },
           },
-          table: 'project',
-          primaryKey: ['id'],
+          table: `project`,
+          primaryKey: [`id`],
         },
       },
     })
@@ -1032,24 +1033,24 @@ describe('pglite-sync', async () => {
     // Send initial data with LSN 1
     await feedMessages(1, [
       {
-        headers: { operation: 'insert' },
-        key: 'id1',
+        headers: { operation: `insert` },
+        key: `id1`,
         value: {
           id: 1,
-          task: 'Initial task',
+          task: `Initial task`,
           done: false,
         },
-        shape: 'todo_shape',
+        shape: `todo_shape`,
       },
       {
-        headers: { operation: 'insert' },
-        key: 'id1',
+        headers: { operation: `insert` },
+        key: `id1`,
         value: {
           id: 1,
-          name: 'Initial project',
+          name: `Initial project`,
           active: true,
         },
-        shape: 'project_shape',
+        shape: `project_shape`,
       },
     ])
 
@@ -1073,24 +1074,24 @@ describe('pglite-sync', async () => {
     // Simulate a transaction with LSN 2 that updates both tables
     await feedMessages(2, [
       {
-        headers: { operation: 'update' },
-        key: 'id1',
+        headers: { operation: `update` },
+        key: `id1`,
         value: {
           id: 1,
-          task: 'Updated in transaction',
+          task: `Updated in transaction`,
           done: true,
         },
-        shape: 'todo_shape',
+        shape: `todo_shape`,
       },
       {
-        headers: { operation: 'update' },
-        key: 'id1',
+        headers: { operation: `update` },
+        key: `id1`,
         value: {
           id: 1,
-          name: 'Updated in transaction',
+          name: `Updated in transaction`,
           active: false,
         },
-        shape: 'project_shape',
+        shape: `project_shape`,
       },
     ])
 
@@ -1099,7 +1100,7 @@ describe('pglite-sync', async () => {
         await db
           .prepare(`SELECT * FROM todo WHERE id = 1;`)
           .all<{ id: number; task: string; done: number }>()
-      ).toEqual([{ id: 1, task: 'Updated in transaction', done: 1 }])
+      ).toEqual([{ id: 1, task: `Updated in transaction`, done: 1 }])
     })
 
     await db.mutex.runExclusive(async () => {
@@ -1107,14 +1108,14 @@ describe('pglite-sync', async () => {
         await db
           .prepare(`SELECT * FROM project WHERE id = 1;`)
           .all<{ id: number; name: string; active: number }>()
-      ).toEqual([{ id: 1, name: 'Updated in transaction', active: 0 }])
+      ).toEqual([{ id: 1, name: `Updated in transaction`, active: 0 }])
     })
 
     // Cleanup
     syncResult.unsubscribe()
   })
 
-  it('handles must-refetch control message across multiple tables', async () => {
+  it(`handles must-refetch control message across multiple tables`, async () => {
     // Create a second table for testing multi-shape sync
     await db.exec(`
       CREATE TABLE IF NOT EXISTS project (
@@ -1135,25 +1136,25 @@ describe('pglite-sync', async () => {
       subscribe: vi.fn(
         (cb: (messages: MultiShapeMessage[]) => Promise<void>) => {
           feedMessages = (messages) => {
-            mockShapeId ??= Math.random() + ''
-            if (messages.find((m) => m.headers.control === 'must-refetch')) {
+            mockShapeId ??= Math.random() + ``
+            if (messages.find((m) => m.headers.control === `must-refetch`)) {
               mockShapeId = undefined
             }
 
             return cb([
               ...messages,
               {
-                shape: 'todo_shape',
+                shape: `todo_shape`,
                 headers: {
-                  control: 'up-to-date',
-                  global_last_seen_lsn: '0',
+                  control: `up-to-date`,
+                  global_last_seen_lsn: `0`,
                 },
               } as MultiShapeMessage,
               {
-                shape: 'project_shape',
+                shape: `project_shape`,
                 headers: {
-                  control: 'up-to-date',
-                  global_last_seen_lsn: '0',
+                  control: `up-to-date`,
+                  global_last_seen_lsn: `0`,
                 },
               } as MultiShapeMessage,
             ])
@@ -1176,23 +1177,23 @@ describe('pglite-sync', async () => {
 
     // Set up sync for both tables
     const syncResult = await db.electric.syncShapesToTables({
-      key: 'refetch_test',
+      key: `refetch_test`,
       shapes: {
         todo_shape: {
           shape: {
-            url: 'http://localhost:3000/v1/shape',
-            params: { table: 'todo' },
+            url: `http://localhost:3000/v1/shape`,
+            params: { table: `todo` },
           },
-          table: 'todo',
-          primaryKey: ['id'],
+          table: `todo`,
+          primaryKey: [`id`],
         },
         project_shape: {
           shape: {
-            url: 'http://localhost:3000/v1/shape',
-            params: { table: 'project' },
+            url: `http://localhost:3000/v1/shape`,
+            params: { table: `project` },
           },
-          table: 'project',
-          primaryKey: ['id'],
+          table: `project`,
+          primaryKey: [`id`],
         },
       },
     })
@@ -1200,24 +1201,24 @@ describe('pglite-sync', async () => {
     // Insert initial data
     await feedMessages([
       {
-        headers: { operation: 'insert' },
-        key: 'id1',
+        headers: { operation: `insert` },
+        key: `id1`,
         value: {
           id: 1,
-          task: 'Initial task',
+          task: `Initial task`,
           done: false,
         },
-        shape: 'todo_shape',
+        shape: `todo_shape`,
       },
       {
-        headers: { operation: 'insert' },
-        key: 'id1',
+        headers: { operation: `insert` },
+        key: `id1`,
         value: {
           id: 1,
-          name: 'Initial project',
+          name: `Initial project`,
           active: true,
         },
-        shape: 'project_shape',
+        shape: `project_shape`,
       },
     ])
 
@@ -1240,27 +1241,27 @@ describe('pglite-sync', async () => {
 
     // Send must-refetch control message and new data
     await feedMessages([
-      { headers: { control: 'must-refetch' }, shape: 'todo_shape' },
-      { headers: { control: 'must-refetch' }, shape: 'project_shape' },
+      { headers: { control: `must-refetch` }, shape: `todo_shape` },
+      { headers: { control: `must-refetch` }, shape: `project_shape` },
       {
-        headers: { operation: 'insert' },
-        key: 'id2',
+        headers: { operation: `insert` },
+        key: `id2`,
         value: {
           id: 2,
-          task: 'New task after refetch',
+          task: `New task after refetch`,
           done: true,
         },
-        shape: 'todo_shape',
+        shape: `todo_shape`,
       },
       {
-        headers: { operation: 'insert' },
-        key: 'id2',
+        headers: { operation: `insert` },
+        key: `id2`,
         value: {
           id: 2,
-          name: 'New project after refetch',
+          name: `New project after refetch`,
           active: false,
         },
-        shape: 'project_shape',
+        shape: `project_shape`,
       },
     ])
 
@@ -1272,7 +1273,7 @@ describe('pglite-sync', async () => {
       expect(todoResult).toEqual([
         {
           id: 2,
-          task: 'New task after refetch',
+          task: `New task after refetch`,
           done: 1,
         },
       ])
@@ -1285,7 +1286,7 @@ describe('pglite-sync', async () => {
       expect(projectResult).toEqual([
         {
           id: 2,
-          name: 'New project after refetch',
+          name: `New project after refetch`,
           active: 0,
         },
       ])

@@ -1,20 +1,20 @@
 import { MapColumns } from './types'
 
-import { ChangeMessage } from 'packages/typescript-client/dist'
+import { ChangeMessage, Row } from '@electric-sql/client'
 import { SqliteWrapper } from './wrapper'
+import { SqlValue } from '@sqlite.org/sqlite-wasm'
 
-export interface ApplyMessageToTableOptions {
+interface ApplyMessageToTableOptions {
   sqlite: SqliteWrapper
   table: string
   schema?: string
-  message: ChangeMessage<any>
+  message: ChangeMessage<Row<unknown>>
   mapColumns?: MapColumns
   primaryKey: string[]
   debug: boolean
 }
 
 // TODO: make better use of prepared statements
-// TODO: maybe add schema and create table with _
 export async function applyMessageToTable({
   sqlite,
   table,
@@ -23,7 +23,9 @@ export async function applyMessageToTable({
   primaryKey,
   debug,
 }: ApplyMessageToTableOptions): Promise<void> {
-  const data = mapColumns ? doMapColumns(mapColumns, message) : message.value
+  const data = mapColumns
+    ? doMapColumns(mapColumns, message)
+    : (message.value as Record<string, SqlValue>)
   if (debug) console.log(`applying message`, message)
 
   switch (message.headers?.operation) {
@@ -96,14 +98,14 @@ export async function applyMessageToTable({
 
 function doMapColumns(
   mapColumns: MapColumns,
-  message: ChangeMessage<any>
-): Record<string, any> {
-  if (typeof mapColumns === 'function') {
+  message: ChangeMessage<Row<unknown>>
+): Record<string, SqlValue> {
+  if (typeof mapColumns === `function`) {
     return mapColumns(message)
   }
-  const mappedColumns: Record<string, any> = {}
+  const mappedColumns: Record<string, SqlValue> = {}
   for (const [key, value] of Object.entries(mapColumns)) {
-    mappedColumns[key] = message.value[value]
+    mappedColumns[key] = message.value[value] as SqlValue
   }
   return mappedColumns
 }
