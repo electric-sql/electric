@@ -35,6 +35,11 @@ defmodule Electric.Replication.ShapeLogCollector do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
+  def start_publishing(server, last_processed_lsn) do
+    GenStage.call(server, {:set_last_processed_lsn, last_processed_lsn})
+    :ok = GenStage.demand(server, :forward)
+  end
+
   # use `GenStage.call/2` here to make the event processing synchronous.
   #
   # Because `Electric.Shapes.Dispatcher` only sends demand to this producer
@@ -79,7 +84,6 @@ defmodule Electric.Replication.ShapeLogCollector do
         producer: nil,
         subscriptions: {0, MapSet.new()},
         persistent_replication_data_opts: persistent_replication_data_opts,
-        last_seen_lsn: LsnTracker.get_last_processed_lsn(opts.stack_id),
         tracked_relations: tracker_state
       })
 
@@ -125,6 +129,11 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def handle_cancel({:down, _reason}, from, state) do
     {:noreply, [], remove_subscription(from, state)}
+  end
+
+  def handle_call({:set_last_processed_lsn, lsn}, _from, state) do
+    LsnTracker.init(lsn, state.stack_id)
+    {:reply, :ok, [], Map.put(state, :last_seen_lsn, lsn)}
   end
 
   def handle_call({:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, trace_context}, from, state) do

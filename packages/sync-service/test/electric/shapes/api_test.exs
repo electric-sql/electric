@@ -70,7 +70,7 @@ defmodule Electric.Shapes.ApiTest do
     {:via, _, {registry_name, registry_key}} = Electric.Replication.Supervisor.name(ctx)
 
     {:ok, _} = Registry.register(registry_name, registry_key, nil)
-    Electric.LsnTracker.init(ctx.stack_id)
+    Electric.LsnTracker.init(Lsn.from_integer(0), ctx.stack_id)
     :ok
   end
 

@@ -23,9 +23,9 @@ end
 defmodule Electric.ShapeCache do
   use GenServer
 
-  alias Electric.LsnTracker
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
+  alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes
   alias Electric.Shapes.Shape
@@ -176,8 +176,6 @@ defmodule Electric.ShapeCache do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    LsnTracker.init(stack_id)
-
     {:ok, shape_status_state} =
       opts.shape_status.initialise(
         shape_meta_table: meta_table,
@@ -203,11 +201,13 @@ defmodule Electric.ShapeCache do
       subscription: nil
     }
 
-    if opts[:purge_all_shapes?] do
-      clean_up_all_shapes(state)
-    else
-      recover_shapes(state)
-    end
+    last_processed_lsn =
+      if opts[:purge_all_shapes?] do
+        clean_up_all_shapes(state)
+        Lsn.from_integer(0)
+      else
+        recover_shapes(state)
+      end
 
     # ensure publication filters are in line with existing shapes
     {publication_manager, publication_manager_opts} = opts.publication_manager
@@ -215,14 +215,14 @@ defmodule Electric.ShapeCache do
 
     # do this after finishing this function so that we're subscribed to the
     # producer before it starts forwarding its demand
-    send(self(), :consumers_ready)
+    send(self(), {:consumers_ready, last_processed_lsn})
 
     {:ok, state}
   end
 
   @impl GenServer
-  def handle_info(:consumers_ready, state) do
-    :ok = GenStage.demand(state.log_producer, :forward)
+  def handle_info({:consumers_ready, last_processed_lsn}, state) do
+    ShapeLogCollector.start_publishing(state.log_producer, last_processed_lsn)
     {:noreply, state}
   end
 
@@ -316,7 +316,6 @@ defmodule Electric.ShapeCache do
       end
     end)
     |> Lsn.max()
-    |> LsnTracker.set_last_processed_lsn(state.stack_id)
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
