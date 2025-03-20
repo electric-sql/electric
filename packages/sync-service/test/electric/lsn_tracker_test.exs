@@ -7,13 +7,21 @@ defmodule Electric.LsnTrackerTest do
 
   setup [:with_stack_id_from_test]
 
-  test "get_last_processed_lsn/1", %{stack_id: stack_id} do
-    lsn = Lsn.from_integer(7)
+  describe "get_last_processed_lsn/1" do
+    test "returns last set lsn", %{stack_id: stack_id} do
+      lsn = Lsn.from_integer(7)
 
-    LsnTracker.init(stack_id)
-    LsnTracker.set_last_processed_lsn(lsn, stack_id)
+      LsnTracker.init(stack_id)
+      LsnTracker.set_last_processed_lsn(lsn, stack_id)
 
-    assert LsnTracker.get_last_processed_lsn(stack_id) == lsn
+      assert LsnTracker.get_last_processed_lsn(stack_id) == lsn
+    end
+
+    test "returns lsn of 0 if lsn has not been set", %{stack_id: stack_id} do
+      LsnTracker.init(stack_id)
+
+      assert LsnTracker.get_last_processed_lsn(stack_id) == Lsn.from_integer(0)
+    end
   end
 
   test "reset/1", %{stack_id: stack_id} do

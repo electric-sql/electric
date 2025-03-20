@@ -70,6 +70,7 @@ defmodule Electric.Shapes.ApiTest do
     {:via, _, {registry_name, registry_key}} = Electric.Replication.Supervisor.name(ctx)
 
     {:ok, _} = Registry.register(registry_name, registry_key, nil)
+    Electric.LsnTracker.init(ctx.stack_id)
     :ok
   end
 
@@ -746,10 +747,9 @@ defmodule Electric.Shapes.ApiTest do
 
       # Initially set the last_processed_lsn to next_offset_lsn, with this being
       # the last seen log entry at the start of the request
-      Electric.Replication.PersistentReplicationState.set_last_processed_lsn(
+      Electric.LsnTracker.set_last_processed_lsn(
         next_offset_lsn,
-        persistent_kv: ctx.persistent_kv,
-        stack_id: ctx.stack_id
+        ctx.stack_id
       )
 
       Mock.ShapeCache
@@ -769,10 +769,9 @@ defmodule Electric.Shapes.ApiTest do
         # the chunk end log offset, simulating the race where the next log entry
         # arrives in between determining the the end point of the log to read
         # and serving the log.
-        Electric.Replication.PersistentReplicationState.set_last_processed_lsn(
+        Electric.LsnTracker.set_last_processed_lsn(
           last_minute_next_offset_lsn,
-          persistent_kv: ctx.persistent_kv,
-          stack_id: ctx.stack_id
+          ctx.stack_id
         )
 
         next_offset
