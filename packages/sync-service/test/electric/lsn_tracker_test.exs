@@ -1,10 +1,13 @@
 defmodule Electric.LsnTrackerTest do
   use ExUnit.Case
+
+  import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
   alias Electric.LsnTracker
   alias Electric.Postgres.Lsn
 
-  test "set_last_processed_lsn/2" do
-    stack_id = "stack_id"
+  setup [:with_stack_id_from_test]
+
+  test "get_last_processed_lsn/1", %{stack_id: stack_id} do
     lsn = Lsn.from_integer(7)
 
     LsnTracker.init(stack_id)
@@ -13,8 +16,7 @@ defmodule Electric.LsnTrackerTest do
     assert LsnTracker.get_last_processed_lsn(stack_id) == lsn
   end
 
-  test "reset/1" do
-    stack_id = "stack_id"
+  test "reset/1", %{stack_id: stack_id} do
     lsn = Lsn.from_integer(7)
 
     LsnTracker.init(stack_id)
