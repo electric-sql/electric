@@ -34,8 +34,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def start_processing(server, last_processed_lsn) do
-    GenStage.call(server, {:set_last_processed_lsn, last_processed_lsn})
-    :ok = GenStage.demand(server, :forward)
+    GenStage.call(server, {:start_processing, last_processed_lsn})
   end
 
   # use `GenStage.call/2` here to make the event processing synchronous.
@@ -129,8 +128,9 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:noreply, [], remove_subscription(from, state)}
   end
 
-  def handle_call({:set_last_processed_lsn, lsn}, _from, state) do
+  def handle_call({:start_processing, lsn}, _from, state) do
     LsnTracker.init(lsn, state.stack_id)
+    GenStage.demand(self(), :forward)
     {:reply, :ok, [], Map.put(state, :last_processed_lsn, lsn)}
   end
 
