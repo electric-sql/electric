@@ -12,9 +12,6 @@ defmodule Electric.Replication.LogOffset do
 
   defstruct tx_offset: 0, op_offset: 0
 
-  @before_all_tx_offset -1
-  @before_all_op_offset 0
-
   @type int64 :: 0..0xFFFFFFFFFFFFFFFF
   @type t :: %LogOffset{
           tx_offset: int64() | -1,
@@ -70,12 +67,6 @@ defmodule Electric.Replication.LogOffset do
 
   ## Examples
 
-      iex> extract_lsn(LogOffset.before_all())
-      #Lsn<0/0>
-
-      iex> extract_lsn(LogOffset.first())
-      #Lsn<0/0>
-
       iex> extract_lsn(%LogOffset{tx_offset: 10, op_offset: 0})
       #Lsn<0/A>
 
@@ -84,12 +75,13 @@ defmodule Electric.Replication.LogOffset do
 
       iex> extract_lsn(%LogOffset{tx_offset: 11, op_offset: 5})
       #Lsn<0/B>
+
+      iex> extract_lsn(LogOffset.before_all())
+      #Lsn<0/0>
   """
   @spec extract_lsn(t()) :: Lsn.t()
-  def extract_lsn(%LogOffset{tx_offset: @before_all_tx_offset, op_offset: @before_all_op_offset}),
-    do: Lsn.from_integer(0)
-
-  def extract_lsn(%LogOffset{tx_offset: tx_offset, op_offset: _}), do: Lsn.from_integer(tx_offset)
+  def extract_lsn(%LogOffset{tx_offset: offset}) when offset < 0, do: Lsn.from_integer(0)
+  def extract_lsn(%LogOffset{tx_offset: offset}), do: Lsn.from_integer(offset)
 
   @doc """
   Compare two log offsets
@@ -131,26 +123,6 @@ defmodule Electric.Replication.LogOffset do
                   (offset1.tx_offset == offset2.tx_offset and
                      offset1.op_offset < offset2.op_offset)
 
-  @doc """
-  Returns the maximum offset in the given enumerable.
-
-  ## Examples
-
-      iex> max([])
-      %LogOffset{tx_offset: -1, op_offset: 0}
-
-      iex> max([before_all(), first()])
-      %LogOffset{tx_offset: 0, op_offset: 0}
-
-      iex> max([%LogOffset{tx_offset: 1, op_offset: 1}, before_all(), first()])
-      %LogOffset{tx_offset: 1, op_offset: 1}
-  """
-  @spec max(Enumerable.t(t())) :: t()
-  def max([]), do: before_all()
-
-  def max(offsets) when is_list(offsets),
-    do: Enum.max(offsets, fn a, b -> not is_log_offset_lt(a, b) end)
-
   defguard is_min_offset(offset) when offset.tx_offset == -1
 
   defguard is_virtual_offset(offset) when offset.tx_offset == 0
@@ -164,8 +136,7 @@ defmodule Electric.Replication.LogOffset do
       :lt
   """
   @spec before_all() :: t
-  def before_all(),
-    do: %LogOffset{tx_offset: @before_all_tx_offset, op_offset: @before_all_op_offset}
+  def before_all(), do: %LogOffset{tx_offset: -1, op_offset: 0}
 
   @doc """
   The first possible offset in the log.
