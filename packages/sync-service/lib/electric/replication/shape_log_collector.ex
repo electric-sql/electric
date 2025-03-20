@@ -112,7 +112,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   # client.
   def handle_demand(_demand, %{producer: producer} = state) do
     LsnTracker.set_last_processed_lsn(
-      state.last_seen_lsn,
+      state.last_processed_lsn,
       state.stack_id
     )
 
@@ -131,7 +131,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def handle_call({:set_last_processed_lsn, lsn}, _from, state) do
     LsnTracker.init(lsn, state.stack_id)
-    {:reply, :ok, [], Map.put(state, :last_seen_lsn, lsn)}
+    {:reply, :ok, [], Map.put(state, :last_processed_lsn, lsn)}
   end
 
   def handle_call({:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, trace_context}, from, state) do
@@ -165,10 +165,10 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   # If we've already processed a transaction, then drop it without processing
-  defp handle_transaction(txn, _from, %{last_seen_lsn: last_seen_lsn} = state)
-       when not Lsn.is_larger(txn.lsn, last_seen_lsn) do
+  defp handle_transaction(txn, _from, %{last_processed_lsn: last_processed_lsn} = state)
+       when not Lsn.is_larger(txn.lsn, last_processed_lsn) do
     Logger.debug(fn ->
-      "Dropping transaction #{txn.xid}: transaction LSN #{txn.lsn} smaller than last processed #{last_seen_lsn}"
+      "Dropping transaction #{txn.xid}: transaction LSN #{txn.lsn} smaller than last processed #{last_processed_lsn}"
     end)
 
     drop_transaction(state)
@@ -191,7 +191,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     # we don't reply to this call. we only reply when we receive demand from
     # the consumers, signifying that every one has processed this txn
-    {:noreply, [txn], %{state | producer: from} |> put_last_seen_lsn(txn.lsn)}
+    {:noreply, [txn], %{state | producer: from} |> put_last_processed_lsn(txn.lsn)}
   end
 
   defp handle_relation(rel, from, state) do
@@ -247,9 +247,9 @@ defmodule Electric.Replication.ShapeLogCollector do
     state
   end
 
-  defp put_last_seen_lsn(%{last_seen_lsn: last_seen_lsn} = state, lsn)
-       when Lsn.is_larger(lsn, last_seen_lsn),
-       do: %{state | last_seen_lsn: lsn}
+  defp put_last_processed_lsn(%{last_processed_lsn: last_processed_lsn} = state, lsn)
+       when Lsn.is_larger(lsn, last_processed_lsn),
+       do: %{state | last_processed_lsn: lsn}
 
-  defp put_last_seen_lsn(state, _lsn), do: state
+  defp put_last_processed_lsn(state, _lsn), do: state
 end
