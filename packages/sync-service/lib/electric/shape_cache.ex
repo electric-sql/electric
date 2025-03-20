@@ -221,7 +221,11 @@ defmodule Electric.ShapeCache do
 
   @impl GenServer
   def handle_info({:consumers_ready, global_latest_offset}, state) do
-    ShapeLogCollector.start_processing(state.log_producer, global_latest_offset)
+    ShapeLogCollector.start_processing(
+      state.log_producer,
+      LogOffset.extract_lsn(global_latest_offset)
+    )
+
     {:noreply, state}
   end
 

@@ -115,7 +115,7 @@ defmodule Electric.Shapes.ConsumerTest do
             ])
         )
 
-      ShapeLogCollector.start_processing(producer, LogOffset.before_all())
+      ShapeLogCollector.start_processing(producer, Lsn.from_integer(0))
 
       consumers =
         for {shape_handle, shape} <- ctx.shapes do
