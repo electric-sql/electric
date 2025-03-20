@@ -20,9 +20,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
             inspector: [type: :mod_arg, required: true],
-            persistent_kv: [type: :any, required: true],
-            # see https://hexdocs.pm/gen_stage/GenStage.html#c:init/1-options
-            demand: [type: {:in, [:forward, :accumulate]}, default: :accumulate]
+            persistent_kv: [type: :any, required: true]
           )
 
   def start_link(opts) do
@@ -90,7 +88,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     # start in demand: :accumulate mode so that the ShapeCache is able to start
     # all active consumers before we start sending transactions
     {:producer, state,
-     dispatcher: {Electric.Shapes.Dispatcher, inspector: state.inspector}, demand: opts.demand}
+     dispatcher: {Electric.Shapes.Dispatcher, inspector: state.inspector}, demand: :accumulate}
   end
 
   def handle_subscribe(:consumer, _opts, from, state) do

@@ -108,13 +108,14 @@ defmodule Electric.Shapes.ConsumerTest do
       {:ok, producer} =
         ShapeLogCollector.start_link(
           stack_id: ctx.stack_id,
-          demand: :forward,
           persistent_kv: ctx.persistent_kv,
           inspector:
             Support.StubInspector.new([
               %{name: "id", type: "int8", pk_position: 0}
             ])
         )
+
+      ShapeLogCollector.start_publishing(producer, Lsn.from_integer(0))
 
       consumers =
         for {shape_handle, shape} <- ctx.shapes do

@@ -41,8 +41,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     opts = [
       stack_id: ctx.stack_id,
       inspector: {Mock.Inspector, []},
-      persistent_kv: ctx.persistent_kv,
-      demand: :forward
+      persistent_kv: ctx.persistent_kv
     ]
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
