@@ -23,6 +23,7 @@ end
 defmodule Electric.ShapeCache do
   use GenServer
 
+  alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes
@@ -291,23 +292,28 @@ defmodule Electric.ShapeCache do
   defp recover_shapes(state) do
     %{publication_manager: {publication_manager, publication_manager_opts}} = state
 
-    state.shape_status_state
-    |> state.shape_status.list_shapes()
-    |> Enum.each(fn {shape_handle, shape} ->
-      try do
-        {:ok, _latest_offset} = start_shape(shape_handle, shape, state)
+    last_processed_lsn =
+      state.shape_status_state
+      |> state.shape_status.list_shapes()
+      |> Enum.flat_map(fn {shape_handle, shape} ->
+        try do
+          {:ok, latest_offset} = start_shape(shape_handle, shape, state)
 
-        # recover publication filter state
-        publication_manager.recover_shape(shape, publication_manager_opts)
-      rescue
-        e ->
-          Logger.error("Failed to recover shape #{shape_handle}: #{inspect(e)}")
+          # recover publication filter state
+          publication_manager.recover_shape(shape, publication_manager_opts)
+          [LogOffset.extract_lsn(latest_offset)]
+        rescue
+          e ->
+            Logger.error("Failed to recover shape #{shape_handle}: #{inspect(e)}")
 
-          # clean up corrupted data to avoid persisting bad state
-          Electric.ShapeCache.Storage.for_shape(shape_handle, state.storage)
-          |> Electric.ShapeCache.Storage.unsafe_cleanup!()
-      end
-    end)
+            # clean up corrupted data to avoid persisting bad state
+            Electric.ShapeCache.Storage.for_shape(shape_handle, state.storage)
+            |> Electric.ShapeCache.Storage.unsafe_cleanup!()
+
+            []
+        end
+      end)
+      |> Lsn.max()
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
