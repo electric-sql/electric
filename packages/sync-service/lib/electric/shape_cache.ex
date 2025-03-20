@@ -23,7 +23,6 @@ end
 defmodule Electric.ShapeCache do
   use GenServer
 
-  alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache.ShapeStatus
@@ -201,10 +200,10 @@ defmodule Electric.ShapeCache do
       subscription: nil
     }
 
-    last_processed_lsn =
+    global_latest_offset =
       if opts[:purge_all_shapes?] do
         clean_up_all_shapes(state)
-        Lsn.from_integer(0)
+        LogOffset.before_all()
       else
         recover_shapes(state)
       end
@@ -215,14 +214,14 @@ defmodule Electric.ShapeCache do
 
     # do this after finishing this function so that we're subscribed to the
     # producer before it starts forwarding its demand
-    send(self(), {:consumers_ready, last_processed_lsn})
+    send(self(), {:consumers_ready, global_latest_offset})
 
     {:ok, state}
   end
 
   @impl GenServer
-  def handle_info({:consumers_ready, last_processed_lsn}, state) do
-    ShapeLogCollector.start_publishing(state.log_producer, last_processed_lsn)
+  def handle_info({:consumers_ready, global_latest_offset}, state) do
+    ShapeLogCollector.start_processing(state.log_producer, global_latest_offset)
     {:noreply, state}
   end
 
@@ -292,6 +291,7 @@ defmodule Electric.ShapeCache do
     end
   end
 
+  @spec recover_shapes(state :: map()) :: LogOffset.t()
   defp recover_shapes(state) do
     %{publication_manager: {publication_manager, publication_manager_opts}} = state
 
@@ -303,7 +303,7 @@ defmodule Electric.ShapeCache do
 
         # recover publication filter state
         publication_manager.recover_shape(shape, publication_manager_opts)
-        [LogOffset.extract_lsn(latest_offset)]
+        [latest_offset]
       rescue
         e ->
           Logger.error("Failed to recover shape #{shape_handle}: #{inspect(e)}")
@@ -315,7 +315,7 @@ defmodule Electric.ShapeCache do
           []
       end
     end)
-    |> Lsn.max()
+    |> LogOffset.max()
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do

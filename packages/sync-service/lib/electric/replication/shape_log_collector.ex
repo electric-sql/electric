@@ -6,6 +6,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   use GenStage
 
   require Electric.Postgres.Lsn
+  alias Electric.Replication.LogOffset
   alias Electric.LsnTracker
   alias Electric.Replication.ShapeLogCollector.AffectedColumns
   alias Electric.Postgres.Lsn
@@ -33,8 +34,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
-  def start_publishing(server, last_processed_lsn) do
-    GenStage.call(server, {:set_last_processed_lsn, last_processed_lsn})
+  def start_processing(server, global_latest_offset) do
+    GenStage.call(server, {:set_last_processed_lsn, LogOffset.extract_lsn(global_latest_offset)})
     :ok = GenStage.demand(server, :forward)
   end
 
