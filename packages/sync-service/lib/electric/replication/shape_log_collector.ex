@@ -6,6 +6,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   use GenStage
 
   require Electric.Postgres.Lsn
+  alias Electric.LsnTracker
   alias Electric.Replication.ShapeLogCollector.AffectedColumns
   alias Electric.Postgres.Lsn
   alias Electric.Replication.PersistentReplicationState
@@ -78,8 +79,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         producer: nil,
         subscriptions: {0, MapSet.new()},
         persistent_replication_data_opts: persistent_replication_data_opts,
-        last_seen_lsn:
-          PersistentReplicationState.get_last_processed_lsn(persistent_replication_data_opts),
+        last_seen_lsn: LsnTracker.get_last_processed_lsn(opts.stack_id),
         tracked_relations: tracker_state
       })
 
@@ -111,11 +111,10 @@ defmodule Electric.Replication.ShapeLogCollector do
   def handle_demand(_demand, %{producer: producer} = state) do
     GenServer.reply(producer, :ok)
 
-    :ok =
-      PersistentReplicationState.set_last_processed_lsn(
-        state.last_seen_lsn,
-        state.persistent_replication_data_opts
-      )
+    LsnTracker.set_last_processed_lsn(
+      state.last_seen_lsn,
+      state.stack_id
+    )
 
     {:noreply, [], %{state | producer: nil}}
   end
@@ -218,11 +217,10 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     state =
       if Lsn.is_larger(txn.lsn, state.last_seen_lsn) do
-        :ok =
-          PersistentReplicationState.set_last_processed_lsn(
-            txn.lsn,
-            state.persistent_replication_data_opts
-          )
+        LsnTracker.set_last_processed_lsn(
+          txn.lsn,
+          state.stack_id
+        )
 
         put_last_seen_lsn(state, txn.lsn)
       else

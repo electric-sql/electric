@@ -24,6 +24,10 @@ defmodule Electric.LsnTracker do
     lsn
   end
 
+  def reset(stack_id) do
+    set_last_processed_lsn(Lsn.from_integer(0), stack_id)
+  end
+
   defp table(stack_id) do
     :"#{stack_id}:lsn_tracker"
   end
