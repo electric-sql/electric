@@ -111,12 +111,12 @@ defmodule Electric.Replication.ShapeLogCollector do
   # last transaction and we can reply to the call and unblock the replication
   # client.
   def handle_demand(_demand, %{producer: producer} = state) do
-    GenServer.reply(producer, :ok)
-
     LsnTracker.set_last_processed_lsn(
       state.last_seen_lsn,
       state.stack_id
     )
+
+    GenServer.reply(producer, :ok)
 
     {:noreply, [], %{state | producer: nil}}
   end
