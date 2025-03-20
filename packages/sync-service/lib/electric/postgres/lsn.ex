@@ -245,6 +245,7 @@ defmodule Electric.Postgres.Lsn do
       %#{Lsn}{segment: 0, offset: 0}
 
   """
+  @spec max(Enumerable.t(t())) :: t()
   def max([]), do: from_integer(0)
   def max(lsns) when is_list(lsns), do: Enum.max_by(lsns, &to_integer/1)
 

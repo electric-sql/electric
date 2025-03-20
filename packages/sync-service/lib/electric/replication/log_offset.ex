@@ -76,6 +76,7 @@ defmodule Electric.Replication.LogOffset do
       iex> extract_lsn(%LogOffset{tx_offset: 11, op_offset: 5})
       #Lsn<0/B>
   """
+  @spec extract_lsn(t()) :: Lsn.t()
   def extract_lsn(%LogOffset{tx_offset: tx_offset, op_offset: _}), do: Lsn.from_integer(tx_offset)
 
   @doc """
