@@ -161,7 +161,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   # will prompt the `GenServer.reply/2` call.
   defp handle_transaction(txn, _from, %{subscriptions: {0, _}} = state) do
     Logger.debug(fn -> "Dropping transaction #{txn.xid}: no active consumers" end)
-    drop_transaction(txn, state)
+    drop_transaction(state)
   end
 
   # If we've already processed a transaction, then drop it without processing
@@ -171,7 +171,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       "Dropping transaction #{txn.xid}: transaction LSN #{txn.lsn} smaller than last processed #{last_seen_lsn}"
     end)
 
-    drop_transaction(txn, state)
+    drop_transaction(state)
   end
 
   defp handle_transaction(txn, from, state) do
@@ -219,21 +219,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     end
   end
 
-  defp drop_transaction(txn, state) do
+  defp drop_transaction(state) do
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
-
-    state =
-      if Lsn.is_larger(txn.lsn, state.last_seen_lsn) do
-        LsnTracker.set_last_processed_lsn(
-          txn.lsn,
-          state.stack_id
-        )
-
-        put_last_seen_lsn(state, txn.lsn)
-      else
-        state
-      end
-
     {:reply, :ok, [], state}
   end
 
