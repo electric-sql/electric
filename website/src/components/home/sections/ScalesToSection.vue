@@ -11,7 +11,7 @@
       theme: 'brand'
     },
     {
-      href: '/docs/reference/benchamrks',
+      href: '/docs/reference/benchmarks',
       text: 'Benchmarks'
     }
   ]
