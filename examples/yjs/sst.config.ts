@@ -41,6 +41,11 @@ export default $config({
           dns: sst.cloudflare.dns(),
         },
       },
+      transform: {
+        service: {
+          waitForSteadyState: true,
+        },
+      },
       environment: {
         ELECTRIC_URL: process.env.ELECTRIC_API!,
         DATABASE_URL: pooledDatabaseUri,
@@ -55,6 +60,16 @@ export default $config({
         command: `npm run dev`,
       },
     })
+
+    service.url.apply((url) =>
+      command.local.runOutput({
+        command: `pnpm test:browser`,
+        dir: `../../`,
+        environment: {
+          BASE_URL: $dev ? `http://localhost:5173` : url,
+        },
+      })
+    )
 
     return {
       website: service.url,
