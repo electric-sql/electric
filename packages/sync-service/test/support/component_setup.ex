@@ -142,6 +142,11 @@ defmodule Support.ComponentSetup do
     }
   end
 
+  def with_lsn_tracker(ctx) do
+    Electric.LsnTracker.init(Electric.Postgres.Lsn.from_integer(0), ctx.stack_id)
+    %{}
+  end
+
   def with_shape_log_collector(ctx) do
     {:ok, _} =
       ShapeLogCollector.start_link(

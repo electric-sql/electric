@@ -23,7 +23,9 @@ end
 defmodule Electric.ShapeCache do
   use GenServer
 
+  alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
+  alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes
   alias Electric.Shapes.Shape
@@ -199,11 +201,13 @@ defmodule Electric.ShapeCache do
       subscription: nil
     }
 
-    if opts[:purge_all_shapes?] do
-      clean_up_all_shapes(state)
-    else
-      recover_shapes(state)
-    end
+    last_processed_lsn =
+      if opts[:purge_all_shapes?] do
+        clean_up_all_shapes(state)
+        Lsn.from_integer(0)
+      else
+        recover_shapes(state)
+      end
 
     # ensure publication filters are in line with existing shapes
     {publication_manager, publication_manager_opts} = opts.publication_manager
@@ -211,14 +215,14 @@ defmodule Electric.ShapeCache do
 
     # do this after finishing this function so that we're subscribed to the
     # producer before it starts forwarding its demand
-    send(self(), :consumers_ready)
+    send(self(), {:consumers_ready, last_processed_lsn})
 
     {:ok, state}
   end
 
   @impl GenServer
-  def handle_info(:consumers_ready, state) do
-    :ok = GenStage.demand(state.log_producer, :forward)
+  def handle_info({:consumers_ready, last_processed_lsn}, state) do
+    ShapeLogCollector.start_processing(state.log_producer, last_processed_lsn)
     {:noreply, state}
   end
 
@@ -293,12 +297,13 @@ defmodule Electric.ShapeCache do
 
     state.shape_status_state
     |> state.shape_status.list_shapes()
-    |> Enum.each(fn {shape_handle, shape} ->
+    |> Enum.flat_map(fn {shape_handle, shape} ->
       try do
-        {:ok, _latest_offset} = start_shape(shape_handle, shape, state)
+        {:ok, latest_offset} = start_shape(shape_handle, shape, state)
 
         # recover publication filter state
         publication_manager.recover_shape(shape, publication_manager_opts)
+        [LogOffset.extract_lsn(latest_offset)]
       rescue
         e ->
           Logger.error("Failed to recover shape #{shape_handle}: #{inspect(e)}")
@@ -306,8 +311,11 @@ defmodule Electric.ShapeCache do
           # clean up corrupted data to avoid persisting bad state
           Electric.ShapeCache.Storage.for_shape(shape_handle, state.storage)
           |> Electric.ShapeCache.Storage.unsafe_cleanup!()
+
+          []
       end
     end)
+    |> Lsn.max()
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do

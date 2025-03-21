@@ -63,6 +63,27 @@ defmodule Electric.Replication.LogOffset do
   def new(%__MODULE__{} = offset), do: offset
 
   @doc """
+  Returns the LSN part of the LogOffset.
+
+  ## Examples
+
+      iex> extract_lsn(%LogOffset{tx_offset: 10, op_offset: 0})
+      #Lsn<0/A>
+
+      iex> extract_lsn(%LogOffset{tx_offset: 10, op_offset: 5})
+      #Lsn<0/A>
+
+      iex> extract_lsn(%LogOffset{tx_offset: 11, op_offset: 5})
+      #Lsn<0/B>
+
+      iex> extract_lsn(LogOffset.before_all())
+      #Lsn<0/0>
+  """
+  @spec extract_lsn(t()) :: Lsn.t()
+  def extract_lsn(%LogOffset{tx_offset: offset}) when offset < 0, do: Lsn.from_integer(0)
+  def extract_lsn(%LogOffset{tx_offset: offset}), do: Lsn.from_integer(offset)
+
+  @doc """
   Compare two log offsets
 
   ## Examples

@@ -896,6 +896,8 @@ defmodule Electric.ShapeCacheTest do
     defp restart_shape_cache(context) do
       stop_shape_cache(context)
 
+      context = Map.merge(context, with_shape_log_collector(context))
+
       with_shape_cache(Map.put(context, :inspector, @stub_inspector),
         create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
           GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
@@ -920,12 +922,16 @@ defmodule Electric.ShapeCacheTest do
         assert_receive {:DOWN, ^ref, :process, ^pid, _}
       end
 
-      stop_processes([shape_cache_opts[:server], ctx.consumer_supervisor])
+      stop_processes([
+        shape_cache_opts[:server],
+        ctx.shape_log_collector,
+        ctx.consumer_supervisor
+      ])
     end
 
     defp stop_processes(process_names) do
       processes =
-        for name <- process_names, pid = Process.whereis(name) do
+        for name <- process_names, pid = GenServer.whereis(name) do
           Process.unlink(pid)
           Process.monitor(pid)
           Process.exit(pid, :kill)

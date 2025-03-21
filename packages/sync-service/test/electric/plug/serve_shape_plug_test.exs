@@ -85,7 +85,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
   end
 
   describe "serving shape" do
-    setup :with_stack_id_from_test
+    setup [:with_stack_id_from_test, :with_lsn_tracker]
 
     setup ctx do
       {:via, _, {registry_name, registry_key}} =
