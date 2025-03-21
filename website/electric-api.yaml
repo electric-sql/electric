@@ -60,7 +60,6 @@ paths:
             Can be just a tablename, or can be prefixed by the database schema
             using a `.` delimiter, such as `foo.issues`. If you don't provide
             a schema prefix, then the table is assumed to be in the `public.` schema.
-        # Query parameters
         - name: offset
           in: query
           schema:
@@ -498,7 +497,6 @@ paths:
             The name of the table for which to delete the shape.
 
             Can be qualified by the schema name.
-        # Query parameters
         - name: source_id
           in: query
           schema:
