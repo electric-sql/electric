@@ -1,0 +1,103 @@
+name: Phoenix.Sync integration tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/phoenix-liveview
+    env:
+      MIX_ENV: test
+      POSTGRES_VERSION: 160006
+      ELECTRIC_PORT: 3100
+      PG_PORT: 54324
+      DATABASE_URL: "postgresql://postgres:password@127.0.0.1:54324/postgres?sslmode=disable"
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 54324:5432
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Set PG settings"
+        run: |
+          docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
+          docker restart ${{ job.services.postgres.id }}
+
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
+
+      - name: Cache elixir-client dependencies
+        uses: actions/cache@v4
+        with:
+          path: examples/phoenix-liveview/deps
+          key: ${{ runner.os }}-elixir-client-deps-${{ hashFiles('examples/phoenix-liveview/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-elixir-client-deps-${{ hashFiles('examples/phoenix-liveview/mix.lock') }}
+            ${{ runner.os }}-elixir-client-deps-
+
+      - name: Cache elixir-client compiled code
+        uses: actions/cache@v4
+        with:
+          path: |
+            examples/phoenix-liveview/_build/*/lib
+            !examples/phoenix-liveview/_build/*/lib/electric_phoenix_example
+          key: "${{ runner.os }}-electric_phoenix_example-build-[${{ github.ref_name }}]-${{ github.sha }}"
+          restore-keys: |
+            ${{ runner.os }}-electric_phoenix_example-build-[${{ github.ref_name }}]-${{ github.sha }}
+            ${{ runner.os }}-electric_phoenix_example-build-[${{ github.ref_name }}]-
+            ${{ runner.os }}-electric_phoenix_example-build-
+
+      - name: Install dependencies
+        run: mix deps.get && mix deps.compile
+
+      - name: Run tests
+        run: mix test
+
+  formatting:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/elixir-client
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
+
+      - name: Cache dependencies
+        id: cache-deps
+        uses: actions/cache/restore@v4
+        with:
+          path: packages/elixir-client/deps
+          key: ${{ runner.os }}-elixir-client-deps-${{ hashFiles('packages/elixir-client/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-elixir-client-deps-${{ hashFiles('packages/elixir-client/mix.lock') }}
+            ${{ runner.os }}-elixir-client-deps-
+
+      - run: mix deps.get
+
+      - run: mix format --check-formatted
