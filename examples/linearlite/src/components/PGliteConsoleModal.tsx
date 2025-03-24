@@ -8,7 +8,6 @@ interface Props {
 }
 
 export default function PGliteConsoleModal({ isOpen, onDismiss }: Props) {
-
   const pg = usePGlite()
 
   return (
