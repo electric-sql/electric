@@ -575,10 +575,7 @@ defmodule Electric.Shapes.Api do
   end
 
   defp get_global_last_seen_lsn(%Request{} = request) do
-    Electric.Replication.PersistentReplicationState.get_last_processed_lsn(
-      persistent_kv: request.api.persistent_kv,
-      stack_id: request.api.stack_id
-    )
+    Electric.LsnTracker.get_last_processed_lsn(request.api.stack_id)
     |> Electric.Postgres.Lsn.to_integer()
   end
 
