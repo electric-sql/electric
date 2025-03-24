@@ -677,15 +677,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
     end
 
-    test "sends 400 when shape handle does not match shape definition",
+    test "sends 409 when shape handle does not match shape definition",
          ctx do
+      new_shape_handle = "new-shape-handle"
+
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts -> nil end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, opts ->
-        {@test_shape_handle, opts}
+      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
+        {new_shape_handle, @test_offset}
       end)
 
       conn =
@@ -697,13 +696,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
         )
         |> call_serve_shape_plug(ctx)
 
-      assert conn.status == 400
+      assert conn.status == 409
 
-      assert Jason.decode!(conn.resp_body) == %{
-               "message" =>
-                 "The specified shape definition and handle do not match." <>
-                   " Please ensure the shape definition is correct or omit the shape handle from the request to obtain a new one."
-             }
+      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
+      assert get_resp_header(conn, "electric-handle") == [new_shape_handle]
+
+      assert get_resp_header(conn, "location") == [
+               "/?handle=#{new_shape_handle}&offset=-1&table=public.users"
+             ]
     end
 
     test "sends 400 when omitting primary key columns in selection", ctx do

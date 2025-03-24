@@ -635,8 +635,8 @@ describe(`HTTP Sync`, () => {
     const shapeOffset = res.headers.get(`electric-offset`)!
     const fakeMidOffset = shapeOffset
       .split(`_`)
-      .map(BigInt)
-      .map((x, i) => (i === 0 ? x - BigInt(1) : x))
+      .map(Number)
+      .map((x, i) => (i === 0 ? x - 1 : x))
       .join(`_`)
     const etag = res.headers.get(`etag`)
     expect(etag, `Response should have etag header`).not.toBe(null)
@@ -819,8 +819,7 @@ describe(`HTTP Sync`, () => {
         const isLastResponse = responseSizes.length === 0
         if (!isLastResponse) {
           // expect chunks to be close to 10 kB +- some kB
-          const expectedSize = 10 * 1e3
-          expect(responseSize).closeTo(expectedSize, expectedSize * 0.2)
+          expect(responseSize).closeTo(10 * 1e3, 1e3)
         } else {
           // expect last response to be ~ 10 kB or less
           expect(responseSize).toBeLessThan(11 * 1e3)
@@ -842,7 +841,7 @@ describe(`HTTP Sync`, () => {
       url: `${BASE_URL}/v1/shape`,
       params: {
         table: issuesTableUrl,
-        where: `1=1`,
+        where: `1 x 1`, // invalid SQL
       },
       signal: aborter.signal,
       handle: streamState.handle,
@@ -859,16 +858,18 @@ describe(`HTTP Sync`, () => {
     expect(invalidIssueStream.error).instanceOf(FetchError)
     expect((invalidIssueStream.error! as FetchError).status).toBe(400)
     expect(invalidIssueStream.isConnected()).false
-    expect(error!.message).contains(
-      `The specified shape definition and handle do not match. Please ensure the shape definition is correct or omit the shape handle from the request to obtain a new one.`
-    )
+    expect((error! as FetchError).json).toStrictEqual({
+      message: `Invalid request`,
+      errors: {
+        where: [`At location 17: syntax error at or near "x"`],
+      },
+    })
   })
 
   it(`should detect shape deprecation and restart syncing`, async ({
     expect,
     insertIssues,
     issuesTableUrl,
-    waitForIssues,
     aborter,
     clearIssuesShape,
   }) => {
@@ -878,12 +879,23 @@ describe(`HTTP Sync`, () => {
     await insertIssues({ id: rowId, title: `foo1` })
 
     const statusCodesReceived: number[] = []
+    let numRequests = 0
 
-    let fetchPausePromise = Promise.resolve()
     const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
-      await fetchPausePromise
+      // before any subsequent requests after the initial one, ensure
+      // that the existing shape is deleted and some more data is inserted
+      if (numRequests === 2) {
+        await insertIssues({ id: rowId2, title: `foo2` })
+        await clearIssuesShape(issueStream.shapeHandle)
+      }
+
+      numRequests++
       const response = await fetch(...args)
-      if (response.status < 500) statusCodesReceived.push(response.status)
+
+      if (response.status < 500) {
+        statusCodesReceived.push(response.status)
+      }
+
       return response
     }
 
@@ -911,19 +923,11 @@ describe(`HTTP Sync`, () => {
           expect(statusCodesReceived).toHaveLength(2)
           expect(statusCodesReceived[0]).toBe(200)
           expect(statusCodesReceived[1]).toBe(200)
-
-          // before any subsequent requests after the initial one, ensure
-          // that the existing shape is deleted and some more data is inserted
-          fetchPausePromise = Promise.resolve().then(async () => {
-            await insertIssues({ id: rowId2, title: `foo2` })
-            await waitForIssues({ numChangesExpected: 2 })
-            await clearIssuesShape(issueStream.shapeHandle)
-          })
         } else if (upToDateReachedCount === 2) {
           // the next up to date message should have had
           // a 409 interleaved before it that instructed the
           // client to go and fetch data from scratch
-          expect(statusCodesReceived.length).toBeGreaterThanOrEqual(5)
+          expect(statusCodesReceived).toHaveLength(5)
           expect(statusCodesReceived[2]).toBe(409)
           expect(statusCodesReceived[3]).toBe(200)
           return res()
