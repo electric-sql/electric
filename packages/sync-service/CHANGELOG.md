@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.1
+
+### Patch Changes
+
+- 4c24123: Speed up replication processing by removing file writes from the main processing loop
+
 ## 1.0.0
 
 ### Minor Changes
