@@ -1,5 +1,23 @@
 name: Phoenix.Sync integration tests
 
+# Purpose:
+#
+# To test if the HEAD of electric and electric-client break compatibility with Phoenix.Sync
+#
+# Actions:
+#
+# If this test fails it means that we need to update Phoenix.Sync to fix the
+# problem, or roll-back the breaking change here.
+#
+# Phoenix.Sync is configured to depend on a fixed version of electric, so
+# a failure here doesn't mean that installed versions of Phoenix.Sync will
+# break, it just means that we should:
+#
+# 1. Wait for the breaking version to be published to hex.pm
+# 2. Fix Phoenix.Sync to work with this published version
+# 3. Ensure that Phoenix.Sync depends on the new version
+# 4. Publish phoenix_sync package to hex.pm
+# 5. Update `examples/phoenix-liveview` to use the new phoenix_sync package
 on:
   push:
     branches: ["main"]
