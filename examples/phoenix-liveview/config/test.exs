@@ -9,7 +9,7 @@ config :electric_phoenix_example, Electric.PhoenixExample.Repo,
   username: "postgres",
   password: "password",
   hostname: "localhost",
-  port: 54321,
+  port: System.get_env("PG_PORT", "54321") |> String.to_integer(),
   database: "electric_phoenix_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
