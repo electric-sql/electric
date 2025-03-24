@@ -63,6 +63,7 @@ defmodule Electric.Application do
   end
 
   @doc false
+  # REQUIRED (but undocumented) public API for Phoenix.Sync
   def api_plug_opts(opts \\ []) do
     opts
     |> api_configuration()
@@ -71,7 +72,9 @@ defmodule Electric.Application do
 
   # Gets a complete configuration for the `StackSupervisor` based on the passed opts
   # plus the application configuration and the defaults.
-  defp configuration(opts \\ []) do
+  # REQUIRED (but undocumented) public API for Phoenix.Sync
+  @doc false
+  def configuration(opts \\ []) do
     instance_id = Electric.Config.ensure_instance_id()
 
     core_config = core_configuration(opts)
@@ -202,6 +205,7 @@ defmodule Electric.Application do
   end
 
   @doc false
+  # REQUIRED (but undocumented) public API for Phoenix.Sync
   def api_server do
     api_server(Bandit, [])
   end
