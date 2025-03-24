@@ -16,6 +16,20 @@ servers:
   - url: http://localhost:3000
     description: Local server
 
+components:
+  parameters:
+    api_secret:
+      name: api_secret
+      in: query
+      schema:
+        type: string
+      example: 1U6ItbhoQb4kGUU5wXBLbxvNf
+      description: |-
+        Secret defined by the [ELECTRIC_SECRET](https://electric-sql.com/docs/api/config#electric-secret)
+        configuration variable. This is required unless
+        `ELECTRIC_INSECURE` is set to `true`. More details are
+        available in the [security guide](https://electric-sql.com/docs/guides/security).
+
 paths:
   /v1/shape:
     get:
@@ -46,7 +60,6 @@ paths:
             Can be just a tablename, or can be prefixed by the database schema
             using a `.` delimiter, such as `foo.issues`. If you don't provide
             a schema prefix, then the table is assumed to be in the `public.` schema.
-        # Query parameters
         - name: offset
           in: query
           schema:
@@ -187,6 +200,7 @@ paths:
 
             Note that insert operations always include the full row,
             in either mode.
+        - $ref: '#/components/parameters/api_secret'
         # Headers
         - name: If-None-Match
           in: header
@@ -483,7 +497,6 @@ paths:
             The name of the table for which to delete the shape.
 
             Can be qualified by the schema name.
-        # Query parameters
         - name: source_id
           in: query
           schema:
@@ -499,6 +512,7 @@ paths:
           description:
             Optional, deletes the current shape if it matches the `handle` provided.
             If not provided, deletes the current shape.
+        - $ref: '#/components/parameters/api_secret'
       responses:
         "202":
           description: |-
