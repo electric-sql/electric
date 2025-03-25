@@ -16,7 +16,7 @@
     background-color: var(--vp-c-indigo-3);
     font-weight: 500;
 
-    padding: 12px 24px 14px;
+    padding: 12px 24px 13px;
     margin-bottom: 2px;
 
     font-size: 15px;

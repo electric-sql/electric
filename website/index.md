@@ -1,4 +1,5 @@
 ---
+title: Sync Solved
 layout: home
 hero:
   name: 'Sync'
