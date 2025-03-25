@@ -45,7 +45,7 @@
     "src"
   ],
   "homepage": "https://electric-sql.com",
-  "license": "Apache-2",
+  "license": "Apache-2.0",
   "main": "./dist/cjs/index.cjs",
   "module": "./dist/index.legacy-esm.js",
   "types": "./dist/index.d.ts",
