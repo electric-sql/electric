@@ -5,7 +5,7 @@
         <img src={~p"/images/logo.svg"} width="36" />
       </a>
       <p class="bg-brand/5 text-brand rounded-full px-2 font-medium leading-6">
-        v<%= Application.spec(:phoenix, :vsn) %>
+        v{Application.spec(:phoenix, :vsn)}
       </p>
     </div>
     <div class="flex items-center gap-4 font-semibold leading-6 text-zinc-900">
@@ -37,7 +37,8 @@
     </div>
     <div id="blurb">
       <p>
-        A todo-list powered by <a href="https://github.com/electric-sql/electric_phoenix">Electric.Phoenix</a>.
+        A todo-list powered by <a href="https://electric-sql.com">ElectricSQL</a>
+        and <a href="https://github.com/electric-sql/phoenix_sync">Phoenix.Sync</a>.
       </p>
       <p>
         All connected clients will see the same updates, powered by
@@ -53,6 +54,6 @@
 <main class="sm:px-6 lg:px-8">
   <div class="mx-auto max-w-2xl">
     <.flash_group flash={@flash} />
-    <%= @inner_content %>
+    {@inner_content}
   </div>
 </main>
