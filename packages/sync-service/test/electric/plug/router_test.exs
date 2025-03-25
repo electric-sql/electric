@@ -574,6 +574,53 @@ defmodule Electric.Plug.RouterTest do
              ] = Jason.decode!(conn.resp_body)
     end
 
+    @large_binary_table "large_binary_table"
+    @tag with_sql: ["CREATE TABLE #{@large_binary_table} (id INT PRIMARY KEY, blob BYTEA)"]
+    test "can sync large binaries", %{opts: opts, db_conn: db_conn} do
+      # 10 MB
+      blob_size = 10_000_000
+
+      # ensure initial sync works
+      blob = :rand.bytes(blob_size)
+      hex_blob = "\\x" <> Base.encode16(blob, case: :lower)
+
+      Postgrex.query!(db_conn, "INSERT INTO #{@large_binary_table} (id, blob) VALUES (1, $1)", [
+        blob
+      ])
+
+      conn =
+        conn("GET", "/v1/shape?table=#{@large_binary_table}&offset=-1") |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      shape_handle = get_resp_shape_handle(conn)
+      latest_offset = get_resp_last_offset(conn)
+      assert [%{"value" => %{"id" => "1", "blob" => ^hex_blob}}] = Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape?table=#{@large_binary_table}&offset=#{latest_offset}&handle=#{shape_handle}&live"
+          )
+          |> Router.call(opts)
+        end)
+
+      # ensure that updates also work
+      blob = :rand.bytes(blob_size)
+      hex_blob = "\\x" <> Base.encode16(blob, case: :lower)
+
+      Postgrex.query!(db_conn, "UPDATE #{@large_binary_table} SET blob = $1 WHERE id = 1", [
+        blob
+      ])
+
+      assert %{status: 200} = conn = Task.await(task)
+
+      assert [
+               %{"value" => %{"id" => "1", "blob" => ^hex_blob}},
+               @up_to_date
+             ] = Jason.decode!(conn.resp_body)
+    end
+
     @tag with_sql: [
            "CREATE TABLE wide_table (id BIGINT PRIMARY KEY, value1 TEXT NOT NULL, value2 TEXT NOT NULL, value3 TEXT NOT NULL)",
            "INSERT INTO wide_table VALUES (1, 'test value 1', 'test value 1', 'test value 1')"
