@@ -403,6 +403,177 @@ defmodule Electric.Plug.RouterTest do
              ] = Jason.decode!(conn.resp_body)
     end
 
+    @all_types_table_name "all_types_table"
+    @tag with_sql: [
+           "CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')",
+           "CREATE TYPE complex AS (r double precision, i double precision)",
+           "CREATE DOMAIN posint AS integer CHECK (VALUE > 0)",
+           "CREATE TABLE #{@all_types_table_name} (
+              txt VARCHAR,
+              i2 INT2 PRIMARY KEY,
+              i4 INT4,
+              i8 INT8,
+              f8 FLOAT8,
+              b  BOOLEAN,
+              json JSON,
+              jsonb JSONB,
+              blob BYTEA,
+              ints INT8[],
+              ints2 INT8[][],
+              int4s INT4[],
+              doubles FLOAT8[],
+              bools BOOLEAN[],
+              moods mood[],
+              moods2 mood[][],
+              complexes complex[],
+              posints posint[],
+              jsons JSONB[],
+              txts TEXT[]
+            )"
+         ]
+    test "can sync all data types", %{opts: opts, db_conn: db_conn} do
+      Postgrex.query!(db_conn, "
+        INSERT INTO #{@all_types_table_name} (txt, i2, i4, i8, f8, b, json, jsonb, blob, ints, ints2, int4s, doubles, bools, moods, moods2, complexes, posints, jsons, txts)
+        VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20 )
+        ", [
+        "test",
+        1,
+        2_147_483_647,
+        9_223_372_036_854_775_807,
+        4.5,
+        true,
+        %{foo: "bar"},
+        %{foo: "bar"},
+        <<0, 1, 255, 254>>,
+        [1, 2, 3],
+        [
+          [1, 2, 3],
+          [4, 5, 6]
+        ],
+        [1, 2, 3],
+        [1.2, -3.2, :inf, :"-inf", :NaN],
+        [true, false, true],
+        ["sad", "ok", "happy"],
+        [
+          ["sad", "ok"],
+          ["ok", "happy"]
+        ],
+        [{1.1, 2.2}, {3.3, 4.4}],
+        [5, 9, 2],
+        [%{foo: "bar"}, %{bar: "baz"}],
+        ["foo", "bar", "baz"]
+      ])
+
+      conn =
+        conn("GET", "/v1/shape?table=#{@all_types_table_name}&offset=-1") |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      shape_handle = get_resp_shape_handle(conn)
+      latest_offset = get_resp_last_offset(conn)
+
+      assert [
+               %{
+                 "value" => %{
+                   "txt" => "test",
+                   "i2" => "1",
+                   "i4" => "2147483647",
+                   "i8" => "9223372036854775807",
+                   "f8" => "4.5",
+                   "b" => "true",
+                   "json" => "{\"foo\":\"bar\"}",
+                   "jsonb" => "{\"foo\": \"bar\"}",
+                   "blob" => "\\x0001fffe",
+                   "ints" => "{1,2,3}",
+                   "ints2" => "{{1,2,3},{4,5,6}}",
+                   "int4s" => "{1,2,3}",
+                   "doubles" => "{1.2,-3.2,Infinity,-Infinity,NaN}",
+                   "bools" => "{t,f,t}",
+                   "moods" => "{sad,ok,happy}",
+                   "moods2" => "{{sad,ok},{ok,happy}}",
+                   "posints" => "{5,9,2}",
+                   "complexes" => "{\"(1.1,2.2)\",\"(3.3,4.4)\"}",
+                   "jsons" => "{\"{\\\"foo\\\": \\\"bar\\\"}\",\"{\\\"bar\\\": \\\"baz\\\"}\"}",
+                   "txts" => "{foo,bar,baz}"
+                 },
+                 "key" => key
+               }
+             ] = Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape?table=#{@all_types_table_name}&offset=#{latest_offset}&handle=#{shape_handle}&live"
+          )
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "UPDATE #{@all_types_table_name} SET
+        txt = $1, i4 = $2, i8 = $3, f8 = $4, b = $5, json = $6,
+        jsonb = $7, blob = $8, ints = $9, ints2 = $10, int4s = $11,
+        doubles = $12, bools = $13, moods = $14, moods2 = $15,
+        complexes = $16, posints = $17, jsons = $18, txts = $19
+        WHERE i2 = 1
+      ", [
+        "changed",
+        20,
+        30,
+        40.5,
+        false,
+        %{bar: "foo"},
+        %{bar: "foo"},
+        <<255, 254, 0, 1>>,
+        [4, 5, 6],
+        [
+          [4, 5, 6],
+          [7, 8, 9]
+        ],
+        [4, 5, 6],
+        [-100.2, :"-inf", :NaN, 3.2],
+        [false, true, false],
+        ["sad", "happy"],
+        [
+          ["sad", "happy"],
+          ["happy", "ok"]
+        ],
+        [{2.2, 3.3}, {4.4, 5.5}],
+        [6, 10, 3],
+        [%{bar: "baz"}],
+        ["new", "values"]
+      ])
+
+      assert %{status: 200} = conn = Task.await(task)
+
+      assert [
+               %{
+                 "key" => ^key,
+                 "value" => %{
+                   "txt" => "changed",
+                   "i2" => "1",
+                   "i4" => "20",
+                   "i8" => "30",
+                   "f8" => "40.5",
+                   "b" => "f",
+                   "json" => "{\"bar\":\"foo\"}",
+                   "jsonb" => "{\"bar\": \"foo\"}",
+                   "blob" => "\\xfffe0001",
+                   "ints" => "{4,5,6}",
+                   "ints2" => "{{4,5,6},{7,8,9}}",
+                   "int4s" => "{4,5,6}",
+                   "doubles" => "{-100.2,-Infinity,NaN,3.2}",
+                   "bools" => "{f,t,f}",
+                   "moods" => "{sad,happy}",
+                   "moods2" => "{{sad,happy},{happy,ok}}",
+                   "posints" => "{6,10,3}",
+                   "complexes" => "{\"(2.2,3.3)\",\"(4.4,5.5)\"}",
+                   "jsons" => "{\"{\\\"bar\\\": \\\"baz\\\"}\"}",
+                   "txts" => "{new,values}"
+                 }
+               },
+               @up_to_date
+             ] = Jason.decode!(conn.resp_body)
+    end
+
     @tag with_sql: [
            "CREATE TABLE wide_table (id BIGINT PRIMARY KEY, value1 TEXT NOT NULL, value2 TEXT NOT NULL, value3 TEXT NOT NULL)",
            "INSERT INTO wide_table VALUES (1, 'test value 1', 'test value 1', 'test value 1')"
