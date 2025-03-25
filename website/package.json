@@ -5,8 +5,9 @@
   "scripts": {
     "api:generate": "redocly build-docs ./electric-api.yaml --output=./public/openapi.html",
     "api:watch": "nodemon -w ./ -x \"npm run api:generate\" -e \"*.yaml\"",
-    "build": "npm run api:generate && vitepress build .",
+    "build": "npm run api:generate && vitepress build . && npm run llms:generate",
     "dev": "vitepress dev .",
+    "llms:generate": "node ../scripts/llms.js",
     "preview": "vitepress preview ."
   },
   "engineManager": "^pnpm@9.15.0",
