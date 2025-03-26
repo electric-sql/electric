@@ -114,7 +114,7 @@ defmodule Electric.Client.Fetch.Monitor do
       {:error, %{status: _} = response} ->
         Logger.warning(
           fn ->
-            "Request failed: #{inspect(response)}"
+            "Request failed: #{inspect(response)}\nFor request: #{inspect(state.request)}"
           end,
           request_id: state.request_id
         )
@@ -122,7 +122,7 @@ defmodule Electric.Client.Fetch.Monitor do
       {:error, reason} ->
         Logger.error(
           fn ->
-            "Request failed: #{inspect(reason)}"
+            "Request failed: #{inspect(reason)}\nFor requestt: #{inspect(state.request)}"
           end,
           request_id: state.request_id
         )
