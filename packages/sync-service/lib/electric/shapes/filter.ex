@@ -86,6 +86,8 @@ defmodule Electric.Shapes.Filter do
       #{Exception.format(:error, error, __STACKTRACE__)}
       """)
 
+      OpenTelemetry.record_exception(:error, error, __STACKTRACE__)
+
       # We can't tell which shapes are affected, the safest thing to do is return all shapes
       filter
       |> all_shapes()

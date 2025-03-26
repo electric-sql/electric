@@ -124,9 +124,16 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     defp node_empty?(_), do: false
 
     def affected_shapes(%InclusionIndex{} = index, field, record) do
+      record
+      |> value_from_record(field, index.type)
+      |> shapes_affected_by_array(index, record)
+    end
+
+    defp shapes_affected_by_array(nil, _, _), do: MapSet.new()
+
+    defp shapes_affected_by_array(values, index, record) when is_list(values) do
       values =
-        record
-        |> value_from_record(field, index.type)
+        values
         |> Enum.sort()
         |> Enum.dedup()
 
