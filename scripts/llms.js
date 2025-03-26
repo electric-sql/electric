@@ -30,6 +30,17 @@ const packageVersionPlaceholders = {
   'typescript-client': '__PLACEHOLDER_TYPESCRIPT_CLIENT_VERSION__'
 };
 
+const truncationPoints = {
+  'auth.md': '### Gatekeeper auth',
+  'client-development.md': '## Examples',
+  'http.md': '## Syncing shapes',
+  'installation.md': '## Advanced',
+  'phoenix.md': '### Local HTTP services',
+  'security.md': '## Encryption',
+  'shapes.md': '## Throughput',
+  'writes.md': '> [!Warning] Write-patterns example on GitHub'
+};
+
 function getPackageVersion(packageName) {
   const packagePath = path.join(REPO_ROOT, 'packages', packageName, 'package.json');
 
@@ -166,6 +177,37 @@ function isFile(filePath) {
   }
 }
 
+function truncateContent(filePath, content) {
+  // Extract just the filename from the path
+  const fileName = filePath.split('/').pop();
+
+  // Check if we have a truncation point for this file
+  if (truncationPoints[fileName]) {
+    const splitText = truncationPoints[fileName];
+
+    // Verify the split text exists in the content
+    if (!content.includes(splitText)) {
+      console.error(
+        `
+Error: Split text "${splitText}" not found in ${fileName}
+
+Has the included content changed in a way that breaks the \`truncationPoints\` mapping?
+Maybe you need to truncate a doc file using a different match string?
+
+        `.trim()
+      );
+
+      process.exit(1);
+    }
+
+    // Perform the truncation
+    return content.split(splitText)[0].trim();
+  }
+
+  // If no truncation defined for this file, return the original content
+  return content;
+}
+
 // Function to process a file and expand includes
 function processFile(filePath, visitedPaths = new Set()) {
   // Check for circular includes or non-existent files
@@ -187,31 +229,8 @@ function processFile(filePath, visitedPaths = new Set()) {
     content = content.split('---').slice(2).join('---').trim()
   }
 
-  // Special handling.
-  if (filePath.endsWith('auth.md')) {
-    content = content.split('### Gatekeeper auth')[0].trim()
-  }
-  if (filePath.endsWith('client-development.md')) {
-    content = content.split('## Examples')[0].trim()
-  }
-  if (filePath.endsWith('http.md')) {
-    content = content.split('## Syncing shapes')[0].trim()
-  }
-  if (filePath.endsWith('installation.md')) {
-    content = content.split('## Advanced')[0].trim()
-  }
-  if (filePath.endsWith('phoenix.md')) {
-    content = content.split('### Local HTTP services')[0].trim()
-  }
-  if (filePath.endsWith('security.md')) {
-    content = content.split('## Encryption')[0].trim()
-  }
-  if (filePath.endsWith('shapes.md')) {
-    content = content.split('## Throughput')[0].trim()
-  }
-  if (filePath.endsWith('writes.md')) {
-    content = content.split('> [!Warning] Write-patterns example on GitHub')[0].trim()
-  }
+  // Truncate based on filename.
+  content = truncateContent(filePath, content);
 
   // Special handling for http.md - inject the API spec
   if (filePath.endsWith('http.md')) {
