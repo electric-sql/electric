@@ -42,8 +42,6 @@ function replaceVersionPlaceholders(content) {
   for (const [packageName, placeholder] of Object.entries(packageVersionPlaceholders)) {
     const version = getPackageVersion(packageName);
 
-    console.log('replacing', placeholder, version);
-
     updatedContent = updatedContent.replace(new RegExp(placeholder, 'g'), version);
   }
 
@@ -190,14 +188,29 @@ function processFile(filePath, visitedPaths = new Set()) {
   }
 
   // Special handling.
+  if (filePath.endsWith('auth.md')) {
+    content = content.split('### Gatekeeper auth')[0].trim()
+  }
   if (filePath.endsWith('client-development.md')) {
     content = content.split('## Examples')[0].trim()
+  }
+  if (filePath.endsWith('http.md')) {
+    content = content.split('## Syncing shapes')[0].trim()
   }
   if (filePath.endsWith('installation.md')) {
     content = content.split('## Advanced')[0].trim()
   }
+  if (filePath.endsWith('phoenix.md')) {
+    content = content.split('### Local HTTP services')[0].trim()
+  }
   if (filePath.endsWith('security.md')) {
     content = content.split('## Encryption')[0].trim()
+  }
+  if (filePath.endsWith('shapes.md')) {
+    content = content.split('## Throughput')[0].trim()
+  }
+  if (filePath.endsWith('writes.md')) {
+    content = content.split('> [!Warning] Write-patterns example on GitHub')[0].trim()
   }
 
   // Special handling for http.md - inject the API spec
@@ -255,6 +268,67 @@ function ensureDirectoryExists(dirPath) {
   }
 }
 
+function removeUnnecessaryTokens(content) {
+  // Create a copy of the content to avoid modifying the original
+  let cleanedContent = content;
+
+  // 1. Warning/Tip Blocks: Find and replace all warning/tip formatting
+  cleanedContent = cleanedContent.replace(/> \[!Warning\].*?\n/g, '[WARNING] ');
+  cleanedContent = cleanedContent.replace(/> \[!Tip\].*?\n/g, '[TIP] ');
+  cleanedContent = cleanedContent.replace(/> \[!.*?\]\n/g, '');
+
+  // 3. Comment Markers: Remove comment markers
+  cleanedContent = cleanedContent.replace(/<!--.*?-->/gs, '');
+
+  // 4. Horizontal Rules: Remove horizontal rule markers
+  cleanedContent = cleanedContent.replace(/---+/g, '');
+
+  // 6. Emoji and Decorative Characters: Remove emoji and decorative characters
+  cleanedContent = cleanedContent.replace(/&mdash;/g, '-');
+  cleanedContent = cleanedContent.replace(/&dash;/g, '-');
+  cleanedContent = cleanedContent.replace(/&hellip;/g, '-');
+  cleanedContent = cleanedContent.replace(/&ZeroWidthSpace;/g, '');
+  // Add more emoji patterns if needed
+  cleanedContent = cleanedContent.replace(/[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}]/gu, '');
+
+  // 7. Repeated Phrase Patterns
+  cleanedContent = cleanedContent.replace(/This is what both the.+?\./gs, '');
+  cleanedContent = cleanedContent.replace(/For more information see.+?\./g, '');
+  cleanedContent = cleanedContent.replace(/This allows you to.+?\./g, '');
+
+  // 8. Template Language Markers: Remove template language markers
+  cleanedContent = cleanedContent.replace(/:::tabs[\s\S]*?:::/g, '');
+  cleanedContent = cleanedContent.replace(/==.*?==/g, '');
+
+  // 10. Redundant Phrases
+  const redundantPhrases = [
+    'For example',
+    'Note that',
+    'As you can see',
+    'In this way',
+    'It\'s worth noting that',
+    'Please note',
+    'Keep in mind',
+    'As mentioned earlier',
+    'In other words',
+    'To be specific',
+    'In particular',
+    'To put it simply',
+    'In essence',
+    'To summarize'
+  ];
+
+  redundantPhrases.forEach(phrase => {
+    cleanedContent = cleanedContent.replace(new RegExp(phrase + '[,:]?\\s+', 'gi'), '');
+  });
+
+  // Clean up any resulting double spaces or extra newlines
+  cleanedContent = cleanedContent.replace(/\s+\n/g, '\n');
+  cleanedContent = cleanedContent.replace(/\n{3,}/g, '\n\n');
+
+  return cleanedContent;
+}
+
 // Main function
 function main() {
   console.log(`Starting LLMs content generation...`);
@@ -281,6 +355,7 @@ function main() {
     processedContent = fixCodeBlockFormatting(processedContent);
     processedContent += `\n\n\`\`\`tsx\n${pgliteSyncContent}\n\`\`\`\n`;
     processedContent = replaceVersionPlaceholders(processedContent);
+    processedContent = removeUnnecessaryTokens(processedContent);
 
     // Ensure output directory exists and write result
     ensureDirectoryExists(OUTPUT_DIR);
