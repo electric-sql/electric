@@ -1,1 +1,1 @@
-export * from "./use-shape";
+export * from './use-shape'
