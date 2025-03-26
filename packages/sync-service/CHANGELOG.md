@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.2
+
+### Patch Changes
+
+- d222480: Fix where clause inclusion index to support array is null
+
 ## 1.0.1
 
 ### Patch Changes
