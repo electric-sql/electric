@@ -24,6 +24,32 @@ const VUE_SCRIPT_SETUP_PATTERN = /<script\s+setup\s*>[\s\S]*?<\/script\s*>/gi;
 const HTML_IMG_TAG_PATTERN = /<img[^>]*>/gi;
 const HTML_FIGURE_PATTERN = /<figure\b[^>]*>[\s\S]*?<\/figure\s*>/gi;
 
+const packageVersionPlaceholders = {
+  'sync-service': '__PLACEHOLDER_SYNC_SERVICE_VERSION__',
+  'react-hooks': '__PLACEHOLDER_REACT_HOOKS_VERSION__',
+  'typescript-client': '__PLACEHOLDER_TYPESCRIPT_CLIENT_VERSION__'
+};
+
+function getPackageVersion(packageName) {
+  const packagePath = path.join(REPO_ROOT, 'packages', packageName, 'package.json');
+
+  return JSON.parse(fs.readFileSync(packagePath, 'utf8')).version;
+}
+
+function replaceVersionPlaceholders(content) {
+  let updatedContent = content;
+
+  for (const [packageName, placeholder] of Object.entries(packageVersionPlaceholders)) {
+    const version = getPackageVersion(packageName);
+
+    console.log('replacing', placeholder, version);
+
+    updatedContent = updatedContent.replace(new RegExp(placeholder, 'g'), version);
+  }
+
+  return updatedContent;
+}
+
 // Function to resolve file path
 function resolvePath(basePath, includePath) {
   if (includePath.startsWith('../../examples/') || includePath.startsWith('../../packages/')) {
@@ -167,6 +193,9 @@ function processFile(filePath, visitedPaths = new Set()) {
   if (filePath.endsWith('client-development.md')) {
     content = content.split('## Examples')[0].trim()
   }
+  if (filePath.endsWith('installation.md')) {
+    content = content.split('## Advanced')[0].trim()
+  }
   if (filePath.endsWith('security.md')) {
     content = content.split('## Encryption')[0].trim()
   }
@@ -250,8 +279,8 @@ function main() {
     // Process file and apply final formatting
     let processedContent = processFile(tempFilePath);
     processedContent = fixCodeBlockFormatting(processedContent);
-
-    processedContent += `\n\n\`\`\`tsx\n${pgliteSyncContent}\n\`\`\`\n`
+    processedContent += `\n\n\`\`\`tsx\n${pgliteSyncContent}\n\`\`\`\n`;
+    processedContent = replaceVersionPlaceholders(processedContent);
 
     // Ensure output directory exists and write result
     ensureDirectoryExists(OUTPUT_DIR);
