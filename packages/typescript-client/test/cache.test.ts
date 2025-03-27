@@ -218,7 +218,6 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
       client1Res.headers.get(`electric-handle`) ?? undefined
     assert(originalShapeHandle, `Should have shape handle`)
     expect(getCacheStatus(client1Res)).toBe(CacheStatus.MISS)
-    //const messages = client1Res.status === 204 ? [] : await client1Res.json()
 
     // Make a 2nd client that fetches the shape
     // check that it is served from cached data
