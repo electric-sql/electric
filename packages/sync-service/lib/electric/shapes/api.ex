@@ -259,23 +259,14 @@ defmodule Electric.Shapes.Api do
   end
 
   defp handle_shape_info(nil, %Request{} = request) do
-    %{params: %{shape_definition: shape, handle: shape_handle}, api: api} = request
-    # There is no shape that matches the shape definition (because shape info is `nil`)
-    if shape_handle != nil && Shapes.has_shape?(api, shape_handle) do
-      # but there is a shape that matches the shape handle
-      # thus the shape handle does not match the shape definition
-      # and we return a 400 bad request status code
-      {:error, Response.shape_definition_mismatch(request)}
-    else
-      # The shape handle does not exist or no longer exists
-      # e.g. it may have been deleted.
-      # Hence, create a new shape for this shape definition
-      # and return a 409 with a redirect to the newly created shape.
-      # (will be done by the recursive `handle_shape_info` call)
-      api
-      |> Shapes.get_or_create_shape_handle(shape)
-      |> handle_shape_info(request)
-    end
+    %{params: %{shape_definition: shape}, api: api} = request
+    # There is no shape that matches the shape definition (because shape info is `nil`).
+    # Hence, create a new shape for this shape definition
+    # and return a 409 with a redirect to the newly created shape.
+    # (will be done by the recursive `handle_shape_info` call)
+    api
+    |> Shapes.get_or_create_shape_handle(shape)
+    |> handle_shape_info(request)
   end
 
   defp handle_shape_info(
@@ -303,26 +294,28 @@ defmodule Electric.Shapes.Api do
 
   defp handle_shape_info(
          {active_shape_handle, _},
-         %Request{params: %{handle: shape_handle}} = request
+         %Request{} = request
        ) do
-    if Shapes.has_shape?(request.api, shape_handle) do
-      # The shape with the provided ID exists but does not match the shape definition
-      # otherwise we would have found it and it would have matched the previous function clause
-      {:error, Response.shape_definition_mismatch(request)}
-    else
-      # The requested shape_handle is not found, returns 409 along with a location redirect for clients to
-      # re-request the shape from scratch with the new shape id which acts as a consistent cache buster
-      # e.g. GET /v1/shape?table={root_table}&handle={new_shape_handle}&offset=-1
+    # Either the requested shape handle exists or does not exist.
+    # If it exists there is a mismatch between the shape definition and the shape handle
+    # (otherwise we would have matched the previous function clause).
+    # The mismatch may occur because the shape definition has changed,
+    # which happens frequently when working with dependent shapes
+    # where a shape's WHERE clause is constructed based on the values of another shape
+    # (e.g. to load all children pointed at by a FK in a parent table).
 
-      # TODO: discuss returning a 307 redirect rather than a 409, the client
-      # will have to detect this and throw out old data
+    # If the shape handle does not exist, it may have never existed or it may have been deleted.
+    # In either case we return a 409 with a location redirect for clients to
+    # re-request the shape from scratch with the new shape id which acts as a consistent cache buster
+    # e.g. GET /v1/shape?table={root_table}&handle={new_shape_handle}&offset=-1
 
-      {:error,
-       Response.error(request, @must_refetch,
-         handle: active_shape_handle,
-         status: 409
-       )}
-    end
+    # TODO: discuss returning a 307 redirect rather than a 409, the client
+    # will have to detect this and throw out old data
+    {:error,
+     Response.error(request, @must_refetch,
+       handle: active_shape_handle,
+       status: 409
+     )}
   end
 
   defp hold_until_stack_ready(%Api{} = api) do

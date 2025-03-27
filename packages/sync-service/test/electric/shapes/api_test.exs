@@ -209,11 +209,11 @@ defmodule Electric.Shapes.ApiTest do
       |> expect(:get_shape, fn @test_shape, _opts ->
         nil
       end)
-      |> expect(:has_shape?, fn ^request_handle, _opts ->
-        true
+      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
+        {@test_shape_handle, @test_offset}
       end)
 
-      assert {:error, %{status: 400} = response} =
+      assert {:error, %{status: 409} = response} =
                Api.validate(
                  ctx.api,
                  %{
@@ -223,9 +223,8 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert %{
-               message: "The specified shape definition and handle do not match" <> _
-             } = response_body(response)
+      assert response.handle == @test_shape_handle
+      assert [%{headers: %{control: "must-refetch"}}] = response_body(response)
     end
 
     test "shape for handle does not match the shape definition", ctx do
@@ -235,11 +234,8 @@ defmodule Electric.Shapes.ApiTest do
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_handle, @before_all_offset}
       end)
-      |> expect(:has_shape?, fn ^request_handle, _opts ->
-        true
-      end)
 
-      assert {:error, %{status: 400} = response} =
+      assert {:error, %{status: 409} = response} =
                Api.validate(
                  ctx.api,
                  %{
@@ -249,9 +245,8 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert %{
-               message: "The specified shape definition and handle do not match" <> _
-             } = response_body(response)
+      assert response.handle == @test_shape_handle
+      assert [%{headers: %{control: "must-refetch"}}] = response_body(response)
     end
 
     test "returns a 409 error when requested shape handle does not exist", ctx do
@@ -260,9 +255,6 @@ defmodule Electric.Shapes.ApiTest do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_handle, @before_all_offset}
-      end)
-      |> expect(:has_shape?, fn ^request_handle, _opts ->
-        false
       end)
 
       assert {:error, %{status: 409} = response} =
