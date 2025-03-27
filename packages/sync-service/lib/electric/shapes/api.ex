@@ -486,7 +486,7 @@ defmodule Electric.Shapes.Api do
         else
           up_to_date_lsn =
             if live? do
-              # In live mode, if we've gotten an actual update and are here and not in `empty_response`,
+              # In live mode, if we've gotten an actual update and are here and not in `no_change_response`,
               # then for this shape and this request we trust the locally last seen LSN.
               chunk_end_offset.tx_offset
             else
@@ -536,14 +536,14 @@ defmodule Electric.Shapes.Api do
         request
         |> update_attrs(%{ot_is_shape_rotated: true})
         |> determine_global_last_seen_lsn()
-        |> empty_response()
+        |> no_change_response()
     after
       # If we timeout, return an up-to-date message
       long_poll_timeout ->
         request
         |> update_attrs(%{ot_is_long_poll_timeout: true})
         |> determine_global_last_seen_lsn()
-        |> empty_response()
+        |> no_change_response()
     end
   end
 
@@ -556,7 +556,7 @@ defmodule Electric.Shapes.Api do
 
   defp clean_up_change_listener(%Request{} = request), do: request
 
-  defp empty_response(%Request{} = request) do
+  defp no_change_response(%Request{} = request) do
     %{response: response, global_last_seen_lsn: global_last_seen_lsn} =
       update_attrs(request, %{ot_is_empty_response: true})
 
