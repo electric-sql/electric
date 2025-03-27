@@ -901,7 +901,7 @@ defmodule Electric.Shapes.ApiTest do
 
       assert response = Task.await(task)
 
-      assert response.status == 204
+      assert response.status == 200
       refute response.chunked
       assert [%{headers: %{control: "up-to-date"}}] = response_body(response)
       assert response.up_to_date
@@ -938,7 +938,7 @@ defmodule Electric.Shapes.ApiTest do
 
       assert response = Api.serve_shape_log(request)
 
-      assert response.status == 204
+      assert response.status == 200
       refute response.chunked
 
       assert [%{headers: %{control: "up-to-date"}}] = response_body(response)
@@ -1049,7 +1049,7 @@ defmodule Electric.Shapes.ApiTest do
         end)
 
       # Wait for the task process to subscribe to stack events
-      wait_until_subscribed(ctx.stack_id, 50, 4)
+      wait_until_subscribed(ctx.stack_id, 50, 10)
 
       Electric.StackSupervisor.dispatch_stack_event(ctx.stack_id, :ready)
 

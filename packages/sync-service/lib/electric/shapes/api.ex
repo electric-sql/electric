@@ -538,7 +538,7 @@ defmodule Electric.Shapes.Api do
         |> determine_global_last_seen_lsn()
         |> empty_response()
     after
-      # If we timeout, return an empty body and 204 as there's no response body.
+      # If we timeout, return an up-to-date message
       long_poll_timeout ->
         request
         |> update_attrs(%{ot_is_long_poll_timeout: true})
@@ -562,7 +562,7 @@ defmodule Electric.Shapes.Api do
 
     %{
       response
-      | status: 204,
+      | status: 200,
         body: encode_log(request, [up_to_date_ctl(global_last_seen_lsn)])
     }
   end
