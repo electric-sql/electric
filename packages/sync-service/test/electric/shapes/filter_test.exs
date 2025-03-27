@@ -291,7 +291,8 @@ defmodule Electric.Shapes.FilterTest do
           %{where: "an_array @> '{1,3}'", record: %{"an_array" => "{1,3}"}, affected: true},
           %{where: "an_array @> '{}'", record: %{"an_array" => "{1,3}"}, affected: true},
           %{where: "an_array @> '{}'", record: %{"an_array" => "{}"}, affected: true},
-          %{where: "an_array @> '{1}'", record: %{"an_array" => nil}, affected: false}
+          %{where: "an_array @> '{}'", record: %{"an_array" => nil}, affected: false},
+          %{where: "an_array @> NULL", record: %{"an_array" => nil}, affected: false}
         ] do
       test "where: #{test.where}, record: #{inspect(test.record)}" do
         %{where: where, record: record, affected: affected} = unquote(Macro.escape(test))
