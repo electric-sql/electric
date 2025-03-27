@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.3
+
+### Patch Changes
+
+- 15e6d1d: Fix backwards compatibility parsing of old shape definitions' flags
+
 ## 1.0.2
 
 ### Patch Changes
