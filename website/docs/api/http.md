@@ -103,7 +103,7 @@ curl -i 'http://localhost:3000/v1/shape?table=foo&live=true&handle=3833821-17218
 
 The `live` parameter puts the server into live mode, where it will hold open the connection, waiting for new data arrive. This allows you to implement a long-polling strategy to consume real-time updates.
 
-The server holds open the request until either a timeout (returning `204 No content`) or when new data is available, which it sends back as the response. The client then reconnects and the server blocks again for new content. This way the client is always updated as soon as new data is available.
+The server holds open the request until either a timeout (returning `200` with only an up-to-date message) or when new data is available, which it sends back as the response. The client then reconnects and the server blocks again for new content. This way the client is always updated as soon as new data is available.
 
 ### Clients
 

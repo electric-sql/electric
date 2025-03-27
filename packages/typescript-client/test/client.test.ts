@@ -317,14 +317,18 @@ describe(`Shape`, () => {
             undefined
           )
         await sleep(50)
-        return new Response(undefined, {
-          status: 204,
-          headers: new Headers({
-            [`electric-offset`]: `0_0`,
-            [`electric-handle`]: `foo`,
-            [`electric-schema`]: ``,
-          }),
-        })
+        return new Response(
+          JSON.stringify([{ headers: { control: `up-to-date` } }]),
+          {
+            status: 200,
+            headers: new Headers({
+              [`electric-offset`]: `0_0`,
+              [`electric-handle`]: `foo`,
+              [`electric-schema`]: ``,
+              [`electric-cursor`]: `123`,
+            }),
+          }
+        )
       },
     })
 
@@ -394,7 +398,10 @@ describe(`Shape`, () => {
           })
         }
 
-        return new Response(`[]`, { status: 204 })
+        return new Response(
+          JSON.stringify([{ headers: { control: `up-to-date` } }]),
+          { status: 200 }
+        )
       },
       onError: mockErrorHandler,
     })
