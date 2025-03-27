@@ -450,6 +450,46 @@ defmodule Electric.Shapes.ShapeTest do
       assert {:ok, json} = Jason.encode(shape)
       assert {:ok, ^shape} = Jason.decode!(json) |> Shape.from_json_safe()
     end
+
+    test "should serialize shape with complex columns with backwards compatibility" do
+      shape_old_json =
+        %{
+          root_table: ["public", "foo"],
+          root_table_id: 1,
+          selected_columns: ["first", "second", "third", "fourth"],
+          where: nil,
+          table_info: [
+            [
+              ["public", "foo"],
+              %{
+                pk: ["first", "second", "third"],
+                columns: [
+                  %{name: "first", type: "text"},
+                  %{name: "second", type: "text"},
+                  %{name: "third", type: "text"},
+                  %{name: "fourth", type: "text"}
+                ]
+              }
+            ]
+          ]
+        }
+        |> Jason.encode!()
+        |> Jason.decode!()
+
+      shape_v1 =
+        %Shape{
+          root_table: {"public", "foo"},
+          root_table_id: 1,
+          root_pk: ["first", "second", "third"],
+          root_column_count: 4,
+          selected_columns: ["first", "second", "third", "fourth"],
+          where: nil
+        }
+
+      assert {:ok, shape_old_decoded} = Shape.from_json_safe(shape_old_json)
+
+      assert shape_old_decoded == shape_v1
+    end
   end
 
   def load_column_info({"public", "table"}, _),
