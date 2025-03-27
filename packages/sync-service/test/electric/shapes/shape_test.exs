@@ -456,7 +456,7 @@ defmodule Electric.Shapes.ShapeTest do
         %{
           root_table: ["public", "foo"],
           root_table_id: 1,
-          selected_columns: ["first", "second", "third", "fourth"],
+          selected_columns: nil,
           where: nil,
           table_info: [
             [
@@ -483,6 +483,7 @@ defmodule Electric.Shapes.ShapeTest do
           root_pk: ["first", "second", "third"],
           root_column_count: 4,
           selected_columns: ["first", "second", "third", "fourth"],
+          flags: %{selects_all_columns: true},
           where: nil
         }
 
