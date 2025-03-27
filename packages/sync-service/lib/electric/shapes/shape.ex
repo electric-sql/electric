@@ -447,6 +447,7 @@ defmodule Electric.Shapes.Shape do
         ],
         &is_nil/1
       )
+      |> Map.new(&{&1, true})
 
     {:ok,
      %__MODULE__{
