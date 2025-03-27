@@ -318,7 +318,7 @@ describe(`Shape`, () => {
           )
         await sleep(50)
         return new Response(undefined, {
-          status: 204,
+          status: 200,
           headers: new Headers({
             [`electric-offset`]: `0_0`,
             [`electric-handle`]: `foo`,
