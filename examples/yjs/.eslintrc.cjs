@@ -8,7 +8,6 @@ module.exports = {
     `eslint:recommended`,
     `plugin:@typescript-eslint/recommended`,
     `plugin:prettier/recommended`,
-    'plugin:@next/next/recommended',
   ],
   parserOptions: {
     ecmaVersion: 2022,
@@ -31,7 +30,6 @@ module.exports = {
         caughtErrorsIgnorePattern: `^_`,
       },
     ],
-    "@next/next/no-img-element": "off"
   },
   ignorePatterns: [
     `**/node_modules/**`,

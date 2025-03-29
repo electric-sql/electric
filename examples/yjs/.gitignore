@@ -1,10 +1,2 @@
 dist
 .env.local
-
-# Turborepo
-.turbo
-
-# next.js
-/.next/
-/out/
-next-env.d.ts
