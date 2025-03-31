@@ -517,8 +517,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
             // Notify subscribers
             this.#sendErrorToSubscribers(e)
 
-            // these errors are not actionable without additional user input,
-            // so we exit the loop
+            // errors that have reached this point are not actionable without
+            // additional user input, such as 400s or failures to read the
+            // body of a response, so we exit the loop
             throw e
           }
         } finally {
