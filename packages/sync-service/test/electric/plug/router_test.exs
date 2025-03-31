@@ -1199,7 +1199,7 @@ defmodule Electric.Plug.RouterTest do
              ] = Jason.decode!(conn.resp_body)
     end
 
-    test "GET receives 400 when shape handle does not match shape definition", %{
+    test "GET receives 409 when shape handle does not match shape definition", %{
       opts: opts
     } do
       where = "value ILIKE 'yes%'"
@@ -1221,13 +1221,17 @@ defmodule Electric.Plug.RouterTest do
         conn("GET", "/v1/shape?table=items", %{offset: next_offset, handle: shape_handle})
         |> Router.call(opts)
 
-      assert %{status: 400} = conn
+      assert %{status: 409} = conn
 
-      assert conn.resp_body ==
-               Jason.encode!(%{
-                 message:
-                   "The specified shape definition and handle do not match. Please ensure the shape definition is correct or omit the shape handle from the request to obtain a new one."
-               })
+      assert Jason.decode!(conn.resp_body) == [
+               %{"headers" => %{"control" => "must-refetch"}}
+             ]
+
+      new_shape_handle = get_resp_header(conn, "electric-handle")
+      assert new_shape_handle != shape_handle
+
+      assert get_resp_header(conn, "location") ==
+               "/v1/shape?handle=#{new_shape_handle}&offset=-1&table=items"
     end
 
     test "GET receives 409 to a newly created shape when shape handle is not found and no shape matches the shape definition",
