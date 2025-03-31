@@ -218,8 +218,12 @@ defmodule Electric.ShapeCache do
 
     try do
       :ok = publication_manager.refresh_publication(publication_manager_opts)
+    rescue
+      error ->
+        clean_up_all_shapes(state)
+        reraise error, __STACKTRACE__
     catch
-      kind, reason when kind in [:exit, :error] ->
+      :exit, reason ->
         clean_up_all_shapes(state)
         exit(reason)
     end
@@ -321,7 +325,7 @@ defmodule Electric.ShapeCache do
       catch
         kind, reason when kind in [:exit, :error] ->
           Logger.error(
-            "Failed to recover shape #{shape_handle}: #{inspect(kind)} #{inspect(reason)}"
+            "Failed to recover shape #{shape_handle}: #{Exception.format(kind, reason, __STACKTRACE__)}"
           )
 
           # clean up corrupted data to avoid persisting bad state
