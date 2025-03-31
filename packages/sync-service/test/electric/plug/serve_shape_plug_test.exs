@@ -261,11 +261,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
                }
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "etag") == [
+      assert get_resp_header(conn, "etag") == [
                ~s|"#{@test_shape_handle}:-1:#{@first_offset}"|
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-handle") == [@test_shape_handle]
+      assert get_resp_header(conn, "electric-handle") == [@test_shape_handle]
     end
 
     test "snapshot has correct cache control headers", ctx do
@@ -302,9 +302,19 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 200
 
-      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+      assert get_resp_header(conn, "cache-control") == [
                "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746"
              ]
+    end
+
+    test "invalid response specifies it should not be cached", ctx do
+      conn =
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=bababa")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 400
+      assert get_resp_header(conn, "cache-control") == ["no-cache"]
     end
 
     test "response has correct schema header", ctx do
@@ -331,7 +341,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
         |> call_serve_shape_plug(ctx)
 
-      assert Plug.Conn.get_resp_header(conn, "electric-schema") == [
+      assert get_resp_header(conn, "electric-schema") == [
                ~s|{"id":{"type":"int8","pk_index":0},"value":{"type":"text"}}|
              ]
     end
@@ -385,17 +395,17 @@ defmodule Electric.Plug.ServeShapePlugTest do
                }
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "etag") == [
+      assert get_resp_header(conn, "etag") == [
                ~s|"#{@test_shape_handle}:#{@start_offset_50}:#{next_next_offset}"|
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-handle") == [@test_shape_handle]
+      assert get_resp_header(conn, "electric-handle") == [@test_shape_handle]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-offset") == [
+      assert get_resp_header(conn, "electric-offset") == [
                "#{next_next_offset}"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == []
+      assert get_resp_header(conn, "electric-up-to-date") == []
     end
 
     test "returns 304 Not Modified when If-None-Match matches ETag",
@@ -511,13 +521,13 @@ defmodule Electric.Plug.ServeShapePlugTest do
                }
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+      assert get_resp_header(conn, "cache-control") == [
                "public, max-age=5, stale-while-revalidate=5"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-offset") == [next_offset_str]
-      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
-      assert Plug.Conn.get_resp_header(conn, "electric-schema") == []
+      assert get_resp_header(conn, "electric-offset") == [next_offset_str]
+      assert get_resp_header(conn, "electric-up-to-date") == [""]
+      assert get_resp_header(conn, "electric-schema") == []
 
       expected_cursor =
         Electric.Plug.Utils.get_next_interval_timestamp(long_poll_timeout(ctx), nil)
@@ -571,7 +581,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 204
       assert [%{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
-      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
+      assert get_resp_header(conn, "electric-up-to-date") == [""]
     end
 
     test "sends an up-to-date response after a timeout if no changes are observed",
@@ -607,11 +617,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert [%{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
 
-      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+      assert get_resp_header(conn, "cache-control") == [
                "public, max-age=5, stale-while-revalidate=5"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
+      assert get_resp_header(conn, "electric-up-to-date") == [""]
     end
 
     test "sends 409 with a redirect to existing shape when requested shape handle does not exist",
@@ -638,6 +648,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
       assert get_resp_header(conn, "electric-handle") == [@test_shape_handle]
+      assert get_resp_header(conn, "cache-control") == ["public, max-age=60, must-revalidate"]
 
       assert get_resp_header(conn, "location") == [
                "/?handle=#{@test_shape_handle}&offset=-1&table=public.users"
@@ -697,6 +708,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> call_serve_shape_plug(ctx)
 
       assert conn.status == 409
+      assert get_resp_header(conn, "cache-control") == ["public, max-age=60, must-revalidate"]
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
       assert get_resp_header(conn, "electric-handle") == [new_shape_handle]
@@ -775,11 +787,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
                }
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "etag") == [
+      assert get_resp_header(conn, "etag") == [
                ~s|"#{test_shape_handle}:-1:#{next_offset}"|
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-handle") == [test_shape_handle]
+      assert get_resp_header(conn, "electric-handle") == [test_shape_handle]
     end
   end
 
@@ -814,6 +826,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn = Task.await(conn_task)
 
       assert conn.status == 400
+      assert get_resp_header(conn, "cache-control") == ["no-cache"]
     end
   end
 
