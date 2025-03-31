@@ -183,7 +183,7 @@ export class MultiShapeStream<
                 : BigInt(0)
             )
           if (upToDateLsns.length > 0) {
-            const maxUpToDateLsn = bigIntMax(...upToDateLsns)
+            const maxUpToDateLsn = bigIntMax(upToDateLsns)
             const lastMaxUpToDateLsn = this.#lastUpToDateLsns[key]
             if (maxUpToDateLsn > lastMaxUpToDateLsn) {
               this.#lastUpToDateLsns[key] = maxUpToDateLsn
@@ -197,7 +197,7 @@ export class MultiShapeStream<
               typeof headers.lsn === `string` ? BigInt(headers.lsn) : BigInt(0)
             )
           if (dataLsns.length > 0) {
-            const maxDataLsn = bigIntMax(...dataLsns)
+            const maxDataLsn = bigIntMax(dataLsns)
             const lastMaxDataLsn = this.#lastDataLsns[key]
             if (maxDataLsn > lastMaxDataLsn) {
               this.#lastDataLsns[key] = maxDataLsn
@@ -231,7 +231,7 @@ export class MultiShapeStream<
   }
 
   async #checkForUpdates() {
-    const maxDataLsn = bigIntMax(...Object.values(this.#lastDataLsns))
+    const maxDataLsn = bigIntMax(Object.values(this.#lastDataLsns))
     const refreshPromises = this.#shapeEntries()
       .filter(([key]) => {
         // We only need to refresh shapes that have not seen an up-to-date message
@@ -310,11 +310,11 @@ export class MultiShapeStream<
   /** Unix time at which we last synced. Undefined when `isLoading` is true. */
   lastSyncedAt(): number | undefined {
     // Min of all the lastSyncedAt values
-    return Math.min(
-      ...this.#shapeEntries().map(
-        ([_, shape]) => shape.lastSyncedAt() ?? Infinity
-      )
-    )
+    const shapeEntries = this.#shapeEntries()
+    if (shapeEntries.length === 0) return
+    return shapeEntries.reduce((minLastSyncedAt, [_, shape]) => {
+      return Math.min(minLastSyncedAt, shape.lastSyncedAt() ?? Infinity)
+    }, Infinity)
   }
 
   /** Time elapsed since last sync (in ms). Infinity if we did not yet sync. */
@@ -394,7 +394,7 @@ export class TransactionalMultiShapeStream<
   }
 
   #getLowestCompleteLsn() {
-    return bigIntMin(...Object.values(this.#completeLsns))
+    return bigIntMin(Object.values(this.#completeLsns))
   }
 
   protected async _publish(
@@ -447,17 +447,20 @@ export class TransactionalMultiShapeStream<
           typeof headers.last === `boolean` &&
           headers.last === true
         ) {
-          this.#completeLsns[shape] = bigIntMax(this.#completeLsns[shape], lsn)
+          this.#completeLsns[shape] = bigIntMax([
+            this.#completeLsns[shape],
+            lsn,
+          ])
         }
       } else if (isControlMessage(message)) {
         if (headers.control === `up-to-date`) {
           if (typeof headers.global_last_seen_lsn !== `string`) {
             throw new Error(`global_last_seen_lsn is not a number`)
           }
-          this.#completeLsns[shape] = bigIntMax(
+          this.#completeLsns[shape] = bigIntMax([
             this.#completeLsns[shape],
-            BigInt(headers.global_last_seen_lsn)
-          )
+            BigInt(headers.global_last_seen_lsn),
+          ])
         }
       }
     })
