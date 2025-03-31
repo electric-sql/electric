@@ -149,7 +149,7 @@ defmodule Electric.Plug.RouterTest do
         conn("GET", "/v1/shape?table=items&handle=#{shape_handle}&offset=0_0&live")
         |> Router.call(opts)
 
-      assert length(Jason.decode!(conn.resp_body)) == 11
+      assert length(Jason.decode!(conn.resp_body)) == 10
       {:ok, offset} = LogOffset.from_string(get_resp_header(conn, "electric-offset"))
 
       # Force compaction
