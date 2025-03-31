@@ -898,9 +898,9 @@ defmodule Electric.ShapeCacheTest do
       :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
 
       Mock.PublicationManager
+      |> stub(:remove_shape, fn _, _ -> :ok end)
       |> expect(:recover_shape, 1, fn _, _ -> :ok end)
       |> expect(:refresh_publication, 1, fn _ -> raise "failed recovery" end)
-      |> stub(:remove_shape, fn _, _ -> :ok end)
       |> allow(self(), fn -> Shapes.Consumer.whereis(context[:stack_id], shape_handle1) end)
       |> allow(self(), fn -> Process.whereis(opts[:server]) end)
 
@@ -916,18 +916,10 @@ defmodule Electric.ShapeCacheTest do
 
       Process.flag(:trap_exit, false)
 
-      # Next restart should have no shapes to recover
-      Mock.PublicationManager
-      |> expect(:recover_shape, 0, fn _, _ -> :ok end)
-      |> expect(:refresh_publication, 1, fn _ -> :ok end)
-      |> allow(self(), fn -> Process.whereis(opts[:server]) end)
-
-      restart_shape_cache(%{
-        context
-        | publication_manager: {Mock.PublicationManager, []}
-      })
-
+      # Next restart should not recover shape
+      restart_shape_cache(context)
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
       assert shape_handle1 != shape_handle2
     end
 
@@ -954,7 +946,9 @@ defmodule Electric.ShapeCacheTest do
           {pid, Process.monitor(pid)}
         end
 
-      Shapes.DynamicConsumerSupervisor.stop_all_consumers(ctx.consumer_supervisor)
+      if Enum.count(consumers) > 0 do
+        Shapes.DynamicConsumerSupervisor.stop_all_consumers(ctx.consumer_supervisor)
+      end
 
       for {pid, ref} <- consumers do
         assert_receive {:DOWN, ^ref, :process, ^pid, _}
