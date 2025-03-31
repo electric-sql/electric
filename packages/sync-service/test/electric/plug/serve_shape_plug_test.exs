@@ -648,6 +648,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
       assert get_resp_header(conn, "electric-handle") == [@test_shape_handle]
+      assert get_resp_header(conn, "cache-control") == ["public, max-age=60, must-revalidate"]
 
       assert get_resp_header(conn, "location") == [
                "/?handle=#{@test_shape_handle}&offset=-1&table=public.users"

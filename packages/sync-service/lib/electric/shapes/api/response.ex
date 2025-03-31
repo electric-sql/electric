@@ -155,12 +155,24 @@ defmodule Electric.Shapes.Api.Response do
     conn
   end
 
+  # Do not cache responses for any methods other then GET and OPTIONS
   defp put_cache_headers(%Plug.Conn{method: method} = conn, %__MODULE__{api: api})
        when method not in ["GET", "OPTIONS"] do
     conn
     |> put_cache_header("cache-control", "no-cache", api)
   end
 
+  # Briefly cache 409s as they act as shape redirects, when the requested shape
+  # is either invalidated or does not match the requested definition, and thus
+  # can benefit from persisting this cache for a brief period of time to avoid
+  # surges of traffic hitting the server whenever a shape is invalidated
+  defp put_cache_headers(conn, %__MODULE__{status: status, api: api})
+       when status in [409] do
+    conn
+    |> put_cache_header("cache-control", "public, max-age=60, must-revalidate", api)
+  end
+
+  # All other 4xx and 5xx responses should never be cached
   defp put_cache_headers(conn, %__MODULE__{status: status, api: api})
        when status >= 400 do
     conn
