@@ -21,6 +21,7 @@ import {
   BackoffOptions,
   createFetchWithBackoff,
   createFetchWithChunkBuffer,
+  createFetchWithConsumedMessages,
   createFetchWithResponseHeadersCheck,
 } from './fetch'
 import {
@@ -368,8 +369,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       },
     })
 
-    this.#fetchClient = createFetchWithResponseHeadersCheck(
-      createFetchWithChunkBuffer(fetchWithBackoffClient)
+    this.#fetchClient = createFetchWithConsumedMessages(
+      createFetchWithResponseHeadersCheck(
+        createFetchWithChunkBuffer(fetchWithBackoffClient)
+      )
     )
   }
 
@@ -510,12 +513,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
             this.#reset(newShapeHandle)
             await this.#publish(e.json as Message<T>[])
             continue
-          } else if (e.status >= 400 && e.status < 500) {
+          } else {
             // Notify subscribers
             this.#sendErrorToSubscribers(e)
 
-            // 400 errors are not actionable without additional user input,
-            // so we exit the loop
+            // errors that have reached this point are not actionable without
+            // additional user input, such as 400s or failures to read the
+            // body of a response, so we exit the loop
             throw e
           }
         } finally {

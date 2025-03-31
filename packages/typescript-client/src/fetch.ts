@@ -95,6 +95,32 @@ export function createFetchWithBackoff(
   }
 }
 
+// Ensure body can actually be read in its entirety
+export function createFetchWithConsumedMessages(fetchClient: typeof fetch) {
+  return async (...args: Parameters<typeof fetch>): Promise<Response> => {
+    const url = args[0]
+    const res = await fetchClient(...args)
+    try {
+      if (res.body === null) return res
+      const text = await res.text()
+      return new Response(text, res)
+    } catch (err) {
+      throw new FetchError(
+        res.status,
+        undefined,
+        undefined,
+        Object.fromEntries([...res.headers.entries()]),
+        url.toString(),
+        err instanceof Error
+          ? err.message
+          : typeof err === `string`
+            ? err
+            : `failed to read body`
+      )
+    }
+  }
+}
+
 interface ChunkPrefetchOptions {
   maxChunksToPrefetch: number
 }
