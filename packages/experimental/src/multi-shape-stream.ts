@@ -312,9 +312,9 @@ export class MultiShapeStream<
     // Min of all the lastSyncedAt values
     const shapeEntries = this.#shapeEntries()
     if (shapeEntries.length === 0) return
-    return shapeEntries
-      .map(([_, shape]) => shape.lastSyncedAt() ?? Infinity)
-      .reduce((a, b) => (a < b ? a : b))
+    return shapeEntries.reduce((minLastSyncedAt, [_, shape]) => {
+      return Math.min(minLastSyncedAt, shape.lastSyncedAt() ?? Infinity)
+    }, Infinity)
   }
 
   /** Time elapsed since last sync (in ms). Infinity if we did not yet sync. */
