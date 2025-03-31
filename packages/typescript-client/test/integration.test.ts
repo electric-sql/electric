@@ -864,6 +864,42 @@ describe(`HTTP Sync`, () => {
     )
   })
 
+  it(`should handle invalid requests by terminating stream`, async ({
+    expect,
+    issuesTableUrl,
+    aborter,
+  }) => {
+    let error: Error
+    const invalidIssueStream = new ShapeStream<IssueRow>({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+        where: `1=1`,
+      },
+      signal: aborter.signal,
+      // handle: streamState.handle,
+      onError: (err) => {
+        error = err
+      },
+      fetchClient: async (...args) => {
+        const res = await fetch(...args)
+        await res.text()
+        return res
+      },
+    })
+
+    const errorSubscriberPromise = new Promise((_, reject) =>
+      invalidIssueStream.subscribe(() => {}, reject)
+    )
+
+    await expect(errorSubscriberPromise).rejects.toThrow(FetchError)
+    expect(invalidIssueStream.error).instanceOf(FetchError)
+    expect(invalidIssueStream.isConnected()).false
+    expect(error!.message).contains(
+      `Body is unusable: Body has already been read`
+    )
+  })
+
   it(`should detect shape deprecation and restart syncing`, async ({
     expect,
     insertIssues,
