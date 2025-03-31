@@ -88,7 +88,10 @@ defmodule Electric.ShapeCache do
       GenServer.start_link(
         __MODULE__,
         Map.new(opts) |> Map.put(:db_pool, db_pool) |> Map.put(:name, name),
-        name: name
+        name: name,
+        # allow extra time for shape cache to initialise as it needs to
+        # restore existing shapes
+        timeout: Keyword.get(opts, :timeout, 20_000)
       )
     end
   end
@@ -209,9 +212,21 @@ defmodule Electric.ShapeCache do
         recover_shapes(state)
       end
 
-    # ensure publication filters are in line with existing shapes
+    # ensure publication filters are in line with existing shapes,
+    # and clean up cache if publication fails to update
     {publication_manager, publication_manager_opts} = opts.publication_manager
-    publication_manager.refresh_publication(publication_manager_opts)
+
+    try do
+      :ok = publication_manager.refresh_publication(publication_manager_opts)
+    rescue
+      error ->
+        clean_up_all_shapes(state)
+        reraise error, __STACKTRACE__
+    catch
+      :exit, reason ->
+        clean_up_all_shapes(state)
+        exit(reason)
+    end
 
     # do this after finishing this function so that we're subscribed to the
     # producer before it starts forwarding its demand
@@ -270,15 +285,21 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_shape(state, shape_handle) do
-    Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
-      state.consumer_supervisor,
-      state.stack_id,
-      shape_handle
-    )
+    try do
+      Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
+        state.consumer_supervisor,
+        state.stack_id,
+        shape_handle
+      )
+    after
+      # another failsafe for ensuring data is cleaned if consumer fails to
+      # clean itself - this is not guaranteed to run in case of an actual exit
+      # but provides an additional safeguard
 
-    shape_handle
-    |> Electric.ShapeCache.Storage.for_shape(state.storage)
-    |> Electric.ShapeCache.Storage.unsafe_cleanup!()
+      shape_handle
+      |> Electric.ShapeCache.Storage.for_shape(state.storage)
+      |> Electric.ShapeCache.Storage.unsafe_cleanup!()
+    end
 
     :ok
   end
@@ -304,9 +325,11 @@ defmodule Electric.ShapeCache do
         # recover publication filter state
         publication_manager.recover_shape(shape, publication_manager_opts)
         [LogOffset.extract_lsn(latest_offset)]
-      rescue
-        e ->
-          Logger.error("Failed to recover shape #{shape_handle}: #{inspect(e)}")
+      catch
+        kind, reason when kind in [:exit, :error] ->
+          Logger.error(
+            "Failed to recover shape #{shape_handle}: #{Exception.format(kind, reason, __STACKTRACE__)}"
+          )
 
           # clean up corrupted data to avoid persisting bad state
           Electric.ShapeCache.Storage.for_shape(shape_handle, state.storage)

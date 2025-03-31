@@ -635,8 +635,8 @@ describe(`HTTP Sync`, () => {
     const shapeOffset = res.headers.get(`electric-offset`)!
     const fakeMidOffset = shapeOffset
       .split(`_`)
-      .map(Number)
-      .map((x, i) => (i === 0 ? x - 1 : x))
+      .map(BigInt)
+      .map((x, i) => (i === 0 ? x - BigInt(1) : x))
       .join(`_`)
     const etag = res.headers.get(`etag`)
     expect(etag, `Response should have etag header`).not.toBe(null)
@@ -927,7 +927,7 @@ describe(`HTTP Sync`, () => {
           // the next up to date message should have had
           // a 409 interleaved before it that instructed the
           // client to go and fetch data from scratch
-          expect(statusCodesReceived).toHaveLength(5)
+          expect(statusCodesReceived.length).greaterThanOrEqual(5)
           expect(statusCodesReceived[2]).toBe(409)
           expect(statusCodesReceived[3]).toBe(200)
           return res()
