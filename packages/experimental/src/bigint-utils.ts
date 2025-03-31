@@ -1,9 +1,9 @@
-export function bigIntMax(...args: Array<bigint | number>): bigint {
-  return BigInt(args.reduce((m, e) => (e > m ? e : m)))
+export function bigIntMax(nums: Array<bigint | number>): bigint {
+  return BigInt(nums.reduce((m, e) => (e > m ? e : m)))
 }
 
-export function bigIntMin(...args: Array<bigint | number>): bigint {
-  return BigInt(args.reduce((m, e) => (e < m ? e : m)))
+export function bigIntMin(nums: Array<bigint | number>): bigint {
+  return BigInt(nums.reduce((m, e) => (e < m ? e : m)))
 }
 
 export function bigIntCompare(a: bigint, b: bigint): 1 | -1 | 0 {
