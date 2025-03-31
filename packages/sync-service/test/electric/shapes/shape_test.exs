@@ -367,6 +367,16 @@ defmodule Electric.Shapes.ShapeTest do
 
       assert {:error, _} = Shape.new("other_table", inspector: inspector, replica: :teapot)
     end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS gen_col_table (val JSONB NOT NULL, id uuid PRIMARY KEY GENERATED ALWAYS AS ((val->>'id')::uuid) STORED)"
+         ]
+    test "validates selected columns for generated columns", %{inspector: inspector} do
+      assert {:error,
+              {:columns,
+               ["The following columns are generated and cannot be included in replication: id"]}} =
+               Shape.new("gen_col_table", inspector: inspector)
+    end
   end
 
   describe "new!/2" do

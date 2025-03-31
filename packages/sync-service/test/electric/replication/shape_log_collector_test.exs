@@ -117,7 +117,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
       end)
       |> stub(:load_column_info, fn {"public", "test_table"}, _ ->
-        {:ok, [%{pk_position: 0, name: "id"}]}
+        {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
       end)
       |> allow(self(), ctx.server)
 
@@ -158,7 +158,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
       end)
       |> stub(:load_column_info, fn {"public", "test_table"}, _ ->
-        {:ok, [%{pk_position: 0, name: "id"}]}
+        {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
       end)
       |> allow(self(), ctx.server)
 
@@ -295,7 +295,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
     end)
     |> stub(:load_column_info, fn {"public", "test_table"}, _ ->
-      {:ok, [%{pk_position: 0, name: "id"}]}
+      {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
     end)
     |> allow(self(), pid)
 

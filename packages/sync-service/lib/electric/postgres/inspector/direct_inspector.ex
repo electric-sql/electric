@@ -88,6 +88,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
       attndims as array_dimensions,
       atttypmod as type_mod,
       attnotnull as not_null,
+      attgenerated != '' as is_generated,
       pg_type.typname as type,
       pg_type.typtype as type_kind, -- e.g. an enum is kind 'e'
       elem_pg_type.typname as array_type, -- type of the element inside the array or nil if it's not an array

@@ -35,8 +35,22 @@ defmodule Electric.Shapes.ApiTest do
   def load_column_info({"public", "users"}, _) do
     {:ok,
      [
-       %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0, array_dimensions: 0},
-       %{name: "value", type: "text", type_id: {28, 1}, pk_position: nil, array_dimensions: 0}
+       %{
+         name: "id",
+         type: "int8",
+         type_id: {20, 1},
+         pk_position: 0,
+         array_dimensions: 0,
+         is_generated: false
+       },
+       %{
+         name: "value",
+         type: "text",
+         type_id: {28, 1},
+         pk_position: nil,
+         array_dimensions: 0,
+         is_generated: false
+       }
      ]}
   end
 

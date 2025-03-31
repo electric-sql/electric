@@ -45,7 +45,8 @@ defmodule Electric.Shapes.ConsumerTest do
   @moduletag :capture_log
 
   stub(Mock.Inspector, :load_column_info, fn
-    {"public", "test_table"}, _ -> {:ok, [%{name: "id", type: "int8", pk_position: 0}]}
+    {"public", "test_table"}, _ ->
+      {:ok, [%{name: "id", type: "int8", pk_position: 0, is_generated: false}]}
   end)
 
   stub(Mock.Inspector, :load_relation, fn
