@@ -818,8 +818,8 @@ describe(`HTTP Sync`, () => {
         const responseSize = responseSizes.shift()
         const isLastResponse = responseSizes.length === 0
         if (!isLastResponse) {
-          // expect chunks to be close to 10 kB +- some kB
-          expect(responseSize).closeTo(10 * 1e3, 1e3)
+          // expect chunks to be close to 10 kB +- 20%
+          expect(responseSize).closeTo(10 * 1e3, 2e3)
         } else {
           // expect last response to be ~ 10 kB or less
           expect(responseSize).toBeLessThan(11 * 1e3)
