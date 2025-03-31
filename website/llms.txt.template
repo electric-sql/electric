@@ -27,6 +27,8 @@ There is no need to alter your Postgres tables with `ENABLE ELECTRIC`. There is 
 
 INSTEAD YOU MUST USE THE APIS LISTED BELOW IN THIS GUIDE. This includes `Shape` and `ShapeStream` for Typescript, `useShape` for React, etc.
 
+There is no need to re-fetch shapes after changes. Shapes are automatically kept in sync by Electric. DO NOT USE `prefetchShape` to refresh a shape after making a change.
+
 :::
 
 ## Introduction
