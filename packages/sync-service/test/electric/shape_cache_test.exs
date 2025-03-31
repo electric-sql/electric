@@ -900,7 +900,7 @@ defmodule Electric.ShapeCacheTest do
       Mock.PublicationManager
       |> expect(:recover_shape, 1, fn _, _ -> :ok end)
       |> expect(:refresh_publication, 1, fn _ -> raise "failed recovery" end)
-      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
+      |> stub(:remove_shape, fn _, _ -> :ok end)
       |> allow(self(), fn -> Shapes.Consumer.whereis(context[:stack_id], shape_handle1) end)
       |> allow(self(), fn -> Process.whereis(opts[:server]) end)
 
