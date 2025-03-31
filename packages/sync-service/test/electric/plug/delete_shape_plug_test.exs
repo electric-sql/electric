@@ -92,6 +92,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         |> call_delete_shape_plug(ctx)
 
       assert conn.status == 400
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-cache"]
 
       assert Jason.decode!(conn.resp_body) == %{
                "message" => "Invalid request",
@@ -110,6 +111,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         |> call_delete_shape_plug(ctx)
 
       assert conn.status == 400
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-cache"]
 
       assert Jason.decode!(conn.resp_body) == %{
                "message" => "Invalid request",
@@ -132,6 +134,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         |> call_delete_shape_plug(ctx)
 
       assert conn.status == 202
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-cache"]
     end
 
     test "should clean shape based only on shape_handle", ctx do

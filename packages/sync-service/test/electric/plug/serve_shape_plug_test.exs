@@ -307,6 +307,16 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
     end
 
+    test "invalid response specifies it should not be cached", ctx do
+      conn =
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=bababa")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 400
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-cache"]
+    end
+
     test "response has correct schema header", ctx do
       Mock.ShapeCache
       |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
@@ -697,6 +707,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> call_serve_shape_plug(ctx)
 
       assert conn.status == 409
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-cache"]
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
       assert get_resp_header(conn, "electric-handle") == [new_shape_handle]
@@ -814,6 +825,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn = Task.await(conn_task)
 
       assert conn.status == 400
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-cache"]
     end
   end
 

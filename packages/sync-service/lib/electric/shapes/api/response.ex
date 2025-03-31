@@ -155,6 +155,18 @@ defmodule Electric.Shapes.Api.Response do
     conn
   end
 
+  defp put_cache_headers(%Plug.Conn{method: method} = conn, %__MODULE__{api: api})
+       when method not in ["GET", "OPTIONS"] do
+    conn
+    |> put_cache_header("cache-control", "no-cache", api)
+  end
+
+  defp put_cache_headers(conn, %__MODULE__{status: status, api: api})
+       when status >= 400 do
+    conn
+    |> put_cache_header("cache-control", "no-cache", api)
+  end
+
   defp put_cache_headers(conn, %__MODULE__{api: api} = response) do
     case response do
       # If the offset is -1, set a 1 week max-age, 1 hour s-maxage (shared cache)
