@@ -49,6 +49,7 @@ defmodule Electric.Shapes.Shape do
   @type json_table_info() :: table_info() | json_relation()
   @type json_table_list() :: [json_table_info(), ...]
   @type json_safe() :: %{
+          version: non_neg_integer(),
           root_table: json_relation(),
           root_table_id: non_neg_integer(),
           root_pk: [String.t(), ...],
@@ -279,8 +280,14 @@ defmodule Electric.Shapes.Shape do
       when table != relation,
       do: []
 
-  def convert_change(%__MODULE__{where: nil, flags: %{selects_all_columns: true}}, change),
-    do: [change]
+  def convert_change(%__MODULE__{where: nil, flags: %{selects_all_columns: true}}, change) do
+    # If the change actually doesn't change any columns, we can skip it - this is possible on Postgres but we don't care for those.
+    if is_struct(change, Changes.UpdatedRecord) and change.changed_columns == MapSet.new() do
+      []
+    else
+      [change]
+    end
+  end
 
   def convert_change(%__MODULE__{}, %Changes.TruncatedRelation{} = change), do: [change]
 
