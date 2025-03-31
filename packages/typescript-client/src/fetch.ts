@@ -101,7 +101,8 @@ export function createFetchWithConsumedMessages(fetchClient: typeof fetch) {
     const url = args[0]
     const res = await fetchClient(...args)
     try {
-      const text = res.status === 204 ? `[]` : await res.text()
+      if (res.body === null) return res
+      const text = await res.text()
       return new Response(text, res)
     } catch (err) {
       throw new FetchError(

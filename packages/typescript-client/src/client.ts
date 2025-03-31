@@ -550,7 +550,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
         this.#schema = this.#schema ?? getSchema()
 
-        const messages = await response.text()
+        const messages = status === 204 ? `[]` : await response.text()
 
         if (status === 204) {
           // There's no content so we are live and up to date
