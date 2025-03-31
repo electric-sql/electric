@@ -292,7 +292,10 @@ defmodule Electric.ShapeCache do
         shape_handle
       )
     after
-      # ensure data is cleaned even if consumer exits mid-call
+      # another failsafe for ensuring data is cleaned if consumer fails to
+      # clean itself - this is not guaranteed to run in case of an actual exit
+      # but provides an additional safeguard
+
       shape_handle
       |> Electric.ShapeCache.Storage.for_shape(state.storage)
       |> Electric.ShapeCache.Storage.unsafe_cleanup!()
