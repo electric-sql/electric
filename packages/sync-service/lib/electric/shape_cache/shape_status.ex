@@ -231,7 +231,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
       }
     ])
     |> Enum.sort_by(fn {_, last_read} -> last_read end)
-    |> Stream.map(fn {handle, _} -> handle end)
+    |> Stream.map(fn {handle, last_read} ->
+      %{
+        shape_handle: handle,
+        elapsed_ms_since_use: (:erlang.monotonic_time(:microsecond) - last_read) / 1000
+      }
+    end)
     |> Enum.take(shape_count)
   end
 

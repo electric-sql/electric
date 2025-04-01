@@ -305,17 +305,22 @@ defmodule Electric.ShapeCache do
 
       state.shape_status_state
       |> state.shape_status.least_recently_used(number_to_expire)
-      |> Enum.each(fn shape_handle ->
+      |> Enum.each(fn shape ->
         OpenTelemetry.with_span(
           "expiring_shape",
-          [shape_handle: shape_handle, max_shapes: max_shapes, shape_count: shape_count],
+          [
+            shape_handle: shape.shape_handle,
+            max_shapes: max_shapes,
+            shape_count: shape_count,
+            elapsed_ms_since_use: shape.elapsed_ms_since_use
+          ],
           fn ->
             Logger.info(
-              "Expiring shape #{shape_handle} as as the number of shapes " <>
+              "Expiring shape #{shape.shape_handle} as as the number of shapes " <>
                 "has exceeded the limit (#{state.max_shapes})"
             )
 
-            clean_up_shape(state, shape_handle)
+            clean_up_shape(state, shape.shape_handle)
           end
         )
       end)
