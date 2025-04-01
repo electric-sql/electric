@@ -203,7 +203,8 @@ defmodule Electric.ShapeCache do
       log_producer: opts.log_producer,
       registry: opts.registry,
       consumer_supervisor: opts.consumer_supervisor,
-      subscription: nil
+      subscription: nil,
+      max_shapes: nil
     }
 
     last_processed_lsn =
@@ -249,6 +250,8 @@ defmodule Electric.ShapeCache do
         _from,
         %{shape_status: shape_status} = state
       ) do
+    maybe_expire_shapes(state)
+
     {{shape_handle, latest_offset}, state} =
       if shape_state = shape_status.get_existing_shape(state.shape_status_state, shape) do
         {shape_state, state}
@@ -284,6 +287,19 @@ defmodule Electric.ShapeCache do
     Logger.info("Cleaning up all shapes")
     clean_up_all_shapes(state)
     {:reply, :ok, state}
+  end
+
+  defp maybe_expire_shapes(%{shape_status: shape_status} = state) do
+    if state.max_shapes && shape_count(state) > state.max_shapes do
+      {:ok, shape_handle} = shape_status.least_recently_used(shape_status)
+      clean_up_shape(state, shape_handle)
+    end
+  end
+
+  defp shape_count(%{shape_status: shape_status, shape_status_state: shape_status_state}) do
+    shape_status_state
+    |> shape_status.list_shapes()
+    |> length()
   end
 
   defp clean_up_shape(state, shape_handle) do
