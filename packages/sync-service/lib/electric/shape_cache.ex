@@ -61,7 +61,8 @@ defmodule Electric.ShapeCache do
               type: {:fun, 7},
               default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/7
             ],
-            purge_all_shapes?: [type: :boolean, required: false]
+            purge_all_shapes?: [type: :boolean, required: false],
+            max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil]
           )
 
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
@@ -204,7 +205,7 @@ defmodule Electric.ShapeCache do
       registry: opts.registry,
       consumer_supervisor: opts.consumer_supervisor,
       subscription: nil,
-      max_shapes: nil
+      max_shapes: opts.max_shapes
     }
 
     last_processed_lsn =

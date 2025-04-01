@@ -46,6 +46,7 @@ defmodule Electric.StackSupervisor do
                    required: true,
                    keys: Electric.connection_opts_schema()
                  ],
+                 max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
                  replication_opts: [
                    type: :keyword_list,
                    required: true,
@@ -267,7 +268,8 @@ defmodule Electric.StackSupervisor do
       chunk_bytes_threshold: config.chunk_bytes_threshold,
       log_producer: shape_log_collector,
       consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
-      registry: shape_changes_registry_name
+      registry: shape_changes_registry_name,
+      max_shapes: config.max_shapes
     ]
 
     new_connection_manager_opts = [
