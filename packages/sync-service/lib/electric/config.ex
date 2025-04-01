@@ -50,7 +50,7 @@ defmodule Electric.Config do
     listen_on_ipv6?: false,
     stack_ready_timeout: 5_000,
     send_cache_headers?: true,
-    max_shapes: nil,
+    max_shapes: 10,
     ## Storage
     storage_dir: "./persistent",
     storage: &Electric.Config.Defaults.storage/0,
