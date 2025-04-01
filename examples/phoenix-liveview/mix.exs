@@ -61,9 +61,10 @@ defmodule Electric.PhoenixExample.MixProject do
   end
 
   defp deps_for_env(:test) do
-    # use local electric for tests
+    # use local electric and electric_client for tests
     [
-      {:electric, path: "../../packages/sync-service", only: [:test], override: true}
+      {:electric, path: "../../packages/sync-service", only: [:test], override: true},
+      {:electric_client, path: "../../packages/elixir-client", only: [:test], override: true}
     ]
   end
 
