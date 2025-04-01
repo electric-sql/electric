@@ -234,11 +234,12 @@ When you call an API or function you typically know the "blast radius" of what d
 
 So you either need to constantly track and re-fetch everything. Or you need to monitor what data changes, so that you're automatically informed about it. What you really need is a way of declaring the subset of the data that the app, agent or UI depends on so you can automatically monitor it, stay up-to-date and be able to respond to changes.
 
-That's what a sync engine does. That's why Sunil says that AI agents are local-first clients and that's why Theo is searching for the ideal sync engine.
+That's why Sunil says that [AI agents are local-first clients](https://sunilpai.dev/posts/local-first-ai-agents/). That's why Theo is [searching for the ideal sync engine](https://youtu.be/3gVBjTMS8FE).
+
 
 ## AI needs sync
 
-Sync solves a range of practical challenges of AI UX in resumeability, interruptibility, multi-tab, multi-device and multi-user. And it provides the data layer for the next-generation of AI apps and agents.
+Sync solves a range of practical AI UX challenges in resumeability, interruptibility, multi-tab, multi-device and multi-user. And it provides the data layer for the next-generation of interactive AI apps and agents.
 
 That's the future of software. It's powered by sync. Electric has [sync solved](/).
 
