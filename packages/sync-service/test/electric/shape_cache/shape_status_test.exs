@@ -205,12 +205,12 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     do:
       {:ok,
        [
-         %{name: "id", type: :int8, type_id: {1, 1}, pk_position: 0},
-         %{name: "value", type: :text, type_id: {2, 2}, pk_position: nil}
+         %{name: "id", type: :int8, type_id: {1, 1}, pk_position: 0, is_generated: false},
+         %{name: "value", type: :text, type_id: {2, 2}, pk_position: nil, is_generated: false}
        ]}
 
   def load_column_info({"public", "table"}, _),
-    do: {:ok, [%{name: "id", type: :int8, pk_position: 0}]}
+    do: {:ok, [%{name: "id", type: :int8, type_id: {1, 1}, pk_position: 0, is_generated: false}]}
 
   def load_relation(tbl, _),
     do: StubInspector.load_relation(tbl, nil)

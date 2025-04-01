@@ -44,8 +44,14 @@ defmodule Electric.ShapeCacheTest do
   @zero_offset LogOffset.last_before_real_offsets()
 
   @stub_inspector StubInspector.new([
-                    %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0},
-                    %{name: "value", type: "text", type_id: {25, 1}}
+                    %{
+                      name: "id",
+                      type: "int8",
+                      type_id: {20, 1},
+                      pk_position: 0,
+                      is_generated: false
+                    },
+                    %{name: "value", type: "text", type_id: {25, 1}, is_generated: false}
                   ])
 
   # {xmin, xmax, xip_list}

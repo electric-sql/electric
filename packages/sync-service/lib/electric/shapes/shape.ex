@@ -174,13 +174,18 @@ defmodule Electric.Shapes.Shape do
           [String.t(), ...] | nil
         ) ::
           {:ok, [String.t(), ...] | nil} | {:error, {:columns, [String.t()]}}
-  defp validate_selected_columns(column_info, _pk_cols, nil) do
-    {:ok, Enum.map(column_info, & &1.name)}
+  defp validate_selected_columns(column_info, pk_cols, nil) do
+    validate_selected_columns(column_info, pk_cols, Enum.map(column_info, & &1.name))
   end
 
   defp validate_selected_columns(column_info, pk_cols, columns_to_select) do
     missing_pk_cols = pk_cols -- columns_to_select
     invalid_cols = columns_to_select -- Enum.map(column_info, & &1.name)
+
+    generated_cols =
+      column_info
+      |> Enum.filter(&(&1.is_generated and &1.name in columns_to_select))
+      |> Enum.map(& &1.name)
 
     cond do
       missing_pk_cols != [] ->
@@ -195,6 +200,13 @@ defmodule Electric.Shapes.Shape do
          {:columns,
           [
             "The following columns could not be found: #{invalid_cols |> Enum.join(", ")}"
+          ]}}
+
+      generated_cols != [] ->
+        {:error,
+         {:columns,
+          [
+            "The following columns are generated and cannot be included in replication: #{generated_cols |> Enum.join(", ")}"
           ]}}
 
       true ->

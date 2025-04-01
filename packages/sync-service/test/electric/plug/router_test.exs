@@ -621,6 +621,56 @@ defmodule Electric.Plug.RouterTest do
              ] = Jason.decode!(conn.resp_body)
     end
 
+    @generated_pk_table "generated_pk_table"
+    @tag with_sql: [
+           "CREATE TABLE #{@generated_pk_table} (val JSONB NOT NULL, id uuid PRIMARY KEY GENERATED ALWAYS AS ((val->>'id')::uuid) STORED)"
+         ]
+    test "returns an error when trying to select a generated column", %{opts: opts} do
+      # When selecting all columns
+      conn = conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1") |> Router.call(opts)
+      assert %{status: 400} = conn
+
+      assert Jason.decode!(conn.resp_body) ==
+               %{
+                 "errors" => %{
+                   "columns" => [
+                     "The following columns are generated and cannot be included in replication: id"
+                   ]
+                 },
+                 "message" => "Invalid request"
+               }
+
+      # When selecting a single column but PK is generated
+      conn =
+        conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1&columns=val")
+        |> Router.call(opts)
+
+      assert %{status: 400} = conn
+
+      assert Jason.decode!(conn.resp_body) ==
+               %{
+                 "errors" => %{"columns" => ["Must include all primary key columns, missing: id"]},
+                 "message" => "Invalid request"
+               }
+
+      # When selecting a generated column explicitly
+      conn =
+        conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1&columns=id,val")
+        |> Router.call(opts)
+
+      assert %{status: 400} = conn
+
+      assert Jason.decode!(conn.resp_body) ==
+               %{
+                 "errors" => %{
+                   "columns" => [
+                     "The following columns are generated and cannot be included in replication: id"
+                   ]
+                 },
+                 "message" => "Invalid request"
+               }
+    end
+
     @tag with_sql: [
            "CREATE TABLE wide_table (id BIGINT PRIMARY KEY, value1 TEXT NOT NULL, value2 TEXT NOT NULL, value3 TEXT NOT NULL)",
            "INSERT INTO wide_table VALUES (1, 'test value 1', 'test value 1', 'test value 1')"

@@ -13,6 +13,7 @@ defmodule Support.StubInspector do
       |> Map.put_new(:pk_position, nil)
       |> Map.put_new(:type, "text")
       |> Map.put_new(:type_id, {25, -1})
+      |> Map.put_new(:is_generated, false)
     end)
     |> then(&{:ok, &1})
   end

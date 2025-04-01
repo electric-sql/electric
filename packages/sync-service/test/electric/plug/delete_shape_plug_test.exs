@@ -26,7 +26,8 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   @test_pg_id "12345"
 
   def load_column_info({"public", "users"}, _),
-    do: {:ok, [%{name: "id", type: "int8", pk_position: 0, type_id: {20, -1}}]}
+    do:
+      {:ok, [%{name: "id", type: "int8", pk_position: 0, type_id: {20, -1}, is_generated: false}]}
 
   def load_relation(tbl, _),
     do: Support.StubInspector.load_relation(tbl, nil)
