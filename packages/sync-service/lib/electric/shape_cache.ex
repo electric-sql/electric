@@ -144,6 +144,8 @@ defmodule Electric.ShapeCache do
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
     stack_id = Access.fetch!(opts, :stack_id)
 
+    shape_status.set_last_read_time(table, shape_handle)
+
     cond do
       shape_status.snapshot_started?(table, shape_handle) ->
         :started
