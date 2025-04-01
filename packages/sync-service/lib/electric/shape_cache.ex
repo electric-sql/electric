@@ -29,6 +29,7 @@ defmodule Electric.ShapeCache do
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes
   alias Electric.Shapes.Shape
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -305,12 +306,18 @@ defmodule Electric.ShapeCache do
       state.shape_status_state
       |> state.shape_status.least_recently_used(number_to_expire)
       |> Enum.each(fn shape_handle ->
-        Logger.info(
-          "Expiring shape #{shape_handle} as as the number of shapes " <>
-            "has exceeded the limit (#{state.max_shapes})"
-        )
+        OpenTelemetry.with_span(
+          "expiring_shape",
+          [shape_handle: shape_handle, max_shapes: max_shapes, shape_count: shape_count],
+          fn ->
+            Logger.info(
+              "Expiring shape #{shape_handle} as as the number of shapes " <>
+                "has exceeded the limit (#{state.max_shapes})"
+            )
 
-        clean_up_shape(state, shape_handle)
+            clean_up_shape(state, shape_handle)
+          end
+        )
       end)
     end
   end
