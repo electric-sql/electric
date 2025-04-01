@@ -57,7 +57,7 @@ If, instead, you stream tokens into a store and then subscribe to that store the
 > ... diagramme of model -> token stream -> store -> stream -> UI ...
 >
 
-For example, here's how better systems like [Assistant-UI](https://www.assistant-ui.com) and [Lobe Chat](https://github.com/lobehub/lobe-chat) (that are both built on Electric) behave:
+For example, here's how better systems like [Assistant-UI](https://www.assistant-ui.com) and [Lobe Chat](https://github.com/lobehub/lobe-chat) (both are building on Electric) behave:
 
 >
 > ... two videos side by side showing not breaking ...
@@ -184,13 +184,13 @@ The interrupt in this example is another illustration of the power of syncing in
 > ... code sample ...
 >
 
-This fixes the problem where the user is frantically clicking or saying "stop" but Claude just ignores it and carries on generating artefacts.
+This fixes the problem where the user is frantically clicking or saying "stop" but Claude just ignores it and carries on generating artifacts.
 
 ## Agents are users
 
-But of course, human users are not the only thing that can interrupt flows and update data. An agent is not just an interface. An agent is an actor.
+Human users are not the only thing that can interrupt flows and update data. An agent is not just an interface. An agent is an actor.
 
-Agents can [send notifications](https://modelcontextprotocol.io/docs/concepts/transports#notifications) and update application state.
+Agents can [send notifications](https://modelcontextprotocol.io/docs/concepts/transports#notifications) and [update application state](https://modelcontextprotocol.io/docs/concepts/tools).
 
 >
 > ... chat demo pinning and renaming example video ...
@@ -198,14 +198,18 @@ Agents can [send notifications](https://modelcontextprotocol.io/docs/concepts/tr
 
 So, as soon as you have a user interacting with an agent, you have a multi-user app. Every conversation with an AI agent is inherently multi-user. It's at least you and the AI.
 
-But also ... you're not just going to have one agent. Soon, we're going to have [armies of agents](https://github.com/openai/openai-agents-python). With shared context and situational awareness.
+### Swarms
+
+The thing is, you're not just going to have one agent. Soon, we're all going to have [swarms of agents](https://github.com/openai/openai-agents-python) running around in the background for us. These are going to need to share context and have situational awareness.
 
 <figure style="border-radius: 16px; overflow: hidden">
   <a href="https://github.com/openai/openai-agents-python" class="no-visual" target="_blank">
     <img src="/img/blog/why-ai-needs-sync/swarm.png" /></a>
 </figure>
 
-Core AI software like [LangGraph](https://www.langchain.com/langgraph) has known this for a while but doesn't solve the last mile problem of syncing into user-facing apps.
+Tools like [LangGraph](https://www.langchain.com/langgraph) provide a shared data layer for collaborative agents. However, this type of core AI software doesn't solve the last mile problem of syncing into user-facing apps.
+
+State can't just be in the cloud. Users are agents too!
 
 For example, imagine you're managing a project and you have an AI assistant. You tell it to "monitor the todo list and perform the tasks". You then fire up a new session with another agent to plan out the project and generate tasks.
 
@@ -255,7 +259,7 @@ Sync solves a range of practical challenges with AI UX. From resumeability and i
 
 As AI agents become more collaborative and autonomous (and lots more of them are spawned), then sharing state, reviewing progress, reacting to changes and maintaining local data sets are all going to get more important.
 
-This is the future of software. It needs to powered by sync. Rolling your own sync is hard. Electric has [sync solved](/).
+This is the future of software. It needs to be powered by sync. Rolling your own sync is hard. Electric has [sync solved](/).
 
 ### Let's jump in
 
