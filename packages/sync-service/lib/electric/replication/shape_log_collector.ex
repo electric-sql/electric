@@ -200,6 +200,14 @@ defmodule Electric.Replication.ShapeLogCollector do
     {updated_rel, tracker_state} =
       AffectedColumns.transform_relation(rel, state.tracked_relations)
 
+    # PG doesn't send all the details in the relation message (in particular, nullability), but
+    # it will send a message even if the relation is unchanged. So if we see a relation message that's not
+    # changed, it might be after a reconnection, or it might be because something actually changed.
+    # In either case, we need to clean the inspector cache so we get the latest info.
+    if rel == updated_rel do
+      Inspector.clean({updated_rel.schema, updated_rel.table}, state.inspector)
+    end
+
     :ok =
       PersistentReplicationState.set_tracked_relations(
         tracker_state,

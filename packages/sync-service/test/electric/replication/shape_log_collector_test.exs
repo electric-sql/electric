@@ -238,6 +238,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       id = @shape.root_table_id
 
       Mock.Inspector
+      |> expect(:clean, 2, fn
+        {"public", "test_table"}, _ ->
+          :ok
+
+        {"public", "bar"}, _ ->
+          :ok
+      end)
       |> stub(:load_relation, fn
         {"public", "test_table"}, _ ->
           {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
