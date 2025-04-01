@@ -658,6 +658,64 @@ defmodule Electric.ShapeCacheTest do
 
       assert log =~ "Snapshot creation failed for #{shape_handle}"
     end
+
+    test "expires shapes if shape count has gone over max_shapes", ctx do
+      %{shape_cache_opts: opts} =
+        with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
+          run_with_conn_fn: &run_with_conn_noop/2,
+          create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
+            GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
+            Storage.make_new_snapshot!([["test"]], storage)
+            GenServer.cast(parent, {:snapshot_started, shape_handle})
+          end,
+          max_shapes: 1
+        )
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      Process.sleep(50)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+
+      storage = Storage.for_shape(shape_handle, ctx.storage)
+
+      Storage.append_to_log!(
+        changes_to_log_items([
+          %Electric.Replication.Changes.NewRecord{
+            relation: {"public", "items"},
+            record: %{"id" => "1", "value" => "Alice"},
+            log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
+          }
+        ]),
+        storage
+      )
+
+      assert Storage.snapshot_started?(storage)
+
+      assert Enum.count(Storage.get_log_stream(LogOffset.last_before_real_offsets(), storage)) ==
+               1
+
+      {module, _} = storage
+
+      ref =
+        Process.monitor(
+          module.name(ctx.stack_id, shape_handle)
+          |> GenServer.whereis()
+        )
+
+      {new_shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(%{@shape | where: "1 == 1"}, opts)
+
+      Process.sleep(50)
+      assert :started = ShapeCache.await_snapshot_start(new_shape_handle, opts)
+
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}
+
+      assert_raise ArgumentError,
+                   ~r"the table identifier does not refer to an existing ETS table",
+                   fn -> Stream.run(Storage.get_log_stream(@zero_offset, storage)) end
+
+      {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      assert shape_handle != shape_handle2
+    end
   end
 
   describe "clean_shape/2" do
