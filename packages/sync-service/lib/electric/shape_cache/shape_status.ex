@@ -218,25 +218,21 @@ defmodule Electric.ShapeCache.ShapeStatus do
     ])
   end
 
-  def least_recently_used(%__MODULE__{shape_meta_table: meta_table}) do
-    least_recently_used(meta_table)
+  def least_recently_used(%__MODULE__{shape_meta_table: meta_table}, shape_count) do
+    least_recently_used(meta_table, shape_count)
   end
 
-  def least_recently_used(meta_table) do
-    case :ets.select(meta_table, [
-           {
-             {{@shape_meta_data, :"$1"}, :_, :_, :_, :"$2"},
-             [true],
-             [{{:"$1", :"$2"}}]
-           }
-         ]) do
-      [] ->
-        {:error, :no_shapes}
-
-      shapes ->
-        {handle, _} = Enum.min_by(shapes, fn {_, last_read} -> last_read end)
-        {:ok, handle}
-    end
+  def least_recently_used(meta_table, shape_count) do
+    :ets.select(meta_table, [
+      {
+        {{@shape_meta_data, :"$1"}, :_, :_, :_, :"$2"},
+        [true],
+        [{{:"$1", :"$2"}}]
+      }
+    ])
+    |> Enum.sort_by(fn {_, last_read} -> last_read end)
+    |> Stream.map(fn {handle, _} -> handle end)
+    |> Enum.take(shape_count)
   end
 
   def latest_offset!(%__MODULE__{shape_meta_table: table} = _state, shape_handle) do

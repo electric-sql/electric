@@ -290,17 +290,26 @@ defmodule Electric.ShapeCache do
     {:reply, :ok, state}
   end
 
-  defp maybe_expire_shapes(%{shape_status: shape_status} = state) do
-    if state.max_shapes && shape_count(state) > state.max_shapes do
-      {:ok, shape_handle} = shape_status.least_recently_used(state.shape_status_state)
+  defp maybe_expire_shapes(%{max_shapes: max_shapes} = state) when max_shapes != nil do
+    shape_count = shape_count(state)
 
-      Logger.info(
-        "Expiring shape #{shape_handle} as as the number of shapes has exceeded the limit (#{state.max_shapes})"
-      )
+    if shape_count > max_shapes do
+      number_to_expire = shape_count - max_shapes
 
-      clean_up_shape(state, shape_handle)
+      state.shape_status_state
+      |> state.shape_status.least_recently_used(number_to_expire)
+      |> Enum.each(fn shape_handle ->
+        Logger.info(
+          "Expiring shape #{shape_handle} as as the number of shapes " <>
+            "has exceeded the limit (#{state.max_shapes})"
+        )
+
+        clean_up_shape(state, shape_handle)
+      end)
     end
   end
+
+  defp maybe_expire_shapes(_), do: :ok
 
   defp shape_count(%{shape_status: shape_status, shape_status_state: shape_status_state}) do
     shape_status_state
