@@ -208,11 +208,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
     ])
   end
 
-  def set_last_read_time(%__MODULE__{shape_meta_table: meta_table}, shape_handle) do
-    set_last_read_time(meta_table, shape_handle)
+  def update_last_read_time_to_now(%__MODULE__{shape_meta_table: meta_table}, shape_handle) do
+    update_last_read_time_to_now(meta_table, shape_handle)
   end
 
-  def set_last_read_time(meta_table, shape_handle) do
+  def update_last_read_time_to_now(meta_table, shape_handle) do
     :ets.update_element(meta_table, {@shape_meta_data, shape_handle}, [
       {@shape_meta_last_read_pos, :erlang.monotonic_time(:microsecond)}
     ])

@@ -202,17 +202,17 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   describe "least_recently_used/1" do
-    test "returns last shape set_last_read_time was called on", ctx do
+    test "returns last shape update_last_read_time_to_now was called on", ctx do
       {:ok, state, []} = new_state(ctx)
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
-      ShapeStatus.set_last_read_time(state, shape2)
-      ShapeStatus.set_last_read_time(state, shape1)
+      ShapeStatus.update_last_read_time_to_now(state, shape2)
+      ShapeStatus.update_last_read_time_to_now(state, shape1)
 
       assert ShapeStatus.least_recently_used(state) == {:ok, shape2}
     end
 
-    test "returns shape first created if set_last_read_time has not been called", ctx do
+    test "returns shape first created if update_last_read_time_to_now has not been called", ctx do
       {:ok, state, []} = new_state(ctx)
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, _shape2} = ShapeStatus.add_shape(state, shape2!())
