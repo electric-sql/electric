@@ -69,6 +69,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @shape_meta_shape_pos 2
   @shape_meta_xmin_pos 3
   @shape_meta_latest_offset_pos 4
+  @shape_meta_last_read_pos 5
   @snapshot_started :snapshot_started
 
   @spec initialise(options()) :: {:ok, t()} | {:error, term()}
@@ -102,7 +103,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
         state.shape_meta_table,
         [
           {{@shape_hash_lookup, hash}, shape_handle},
-          {{@shape_meta_data, shape_handle}, shape, nil, offset}
+          {{@shape_meta_data, shape_handle}, shape, nil, offset,
+           :erlang.monotonic_time(:microsecond)}
         ]
       )
 
@@ -113,7 +115,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def list_shapes(state) do
     :ets.select(state.shape_meta_table, [
       {
-        {{@shape_meta_data, :"$1"}, :"$2", :_, :_},
+        {{@shape_meta_data, :"$1"}, :"$2", :_, :_, :_},
         [true],
         [{{:"$1", :"$2"}}]
       }
@@ -133,7 +135,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.select_delete(
         state.shape_meta_table,
         [
-          {{{@shape_meta_data, shape_handle}, :_, :_, :_}, [], [true]},
+          {{{@shape_meta_data, shape_handle}, :_, :_, :_, :_}, [], [true]},
           {{{@shape_hash_lookup, :_}, shape_handle}, [], [true]}
         ]
       )
@@ -172,7 +174,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def get_existing_shape(meta_table, shape_handle) when is_binary(shape_handle) do
     case :ets.lookup(meta_table, {@shape_meta_data, shape_handle}) do
       [] -> nil
-      [{_, _shape, _xmin, offset}] -> {shape_handle, offset}
+      [{_, _shape, _xmin, offset, _}] -> {shape_handle, offset}
     end
   end
 
@@ -204,6 +206,29 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ets.update_element(meta_table, {@shape_meta_data, shape_handle}, [
       {@shape_meta_latest_offset_pos, latest_offset}
     ])
+  end
+
+  def set_last_read_time(%__MODULE__{shape_meta_table: meta_table}, shape_handle) do
+    :ets.update_element(meta_table, {@shape_meta_data, shape_handle}, [
+      {@shape_meta_last_read_pos, :erlang.monotonic_time(:microsecond)}
+    ])
+  end
+
+  def least_recently_used(%__MODULE__{shape_meta_table: meta_table}) do
+    case :ets.select(meta_table, [
+           {
+             {{@shape_meta_data, :"$1"}, :_, :_, :_, :"$2"},
+             [true],
+             [{{:"$1", :"$2"}}]
+           }
+         ]) do
+      [] ->
+        {:error, :no_shapes}
+
+      shapes ->
+        {handle, _} = Enum.min_by(shapes, fn {_, last_read} -> last_read end)
+        {:ok, handle}
+    end
   end
 
   def latest_offset!(%__MODULE__{shape_meta_table: table} = _state, shape_handle) do
@@ -273,7 +298,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
             [
               {{@shape_hash_lookup, hash}, shape_handle},
-              {{@shape_meta_data, shape_handle}, shape, nil, LogOffset.first()}
+              {{@shape_meta_data, shape_handle}, shape, nil, LogOffset.first(),
+               :erlang.monotonic_time(:microsecond)}
             ]
           end)
         ])

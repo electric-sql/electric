@@ -201,6 +201,42 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert ShapeStatus.snapshot_started?(state.shape_meta_table, shape_handle)
   end
 
+  describe "least_recently_used/1" do
+    test "returns last shape set_last_read_time was called on", ctx do
+      {:ok, state, []} = new_state(ctx)
+      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
+      {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+      ShapeStatus.set_last_read_time(state, shape2)
+      ShapeStatus.set_last_read_time(state, shape1)
+
+      assert ShapeStatus.least_recently_used(state) == {:ok, shape2}
+    end
+
+    test "returns shape first created if set_last_read_time has not been called", ctx do
+      {:ok, state, []} = new_state(ctx)
+      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
+      {:ok, _shape2} = ShapeStatus.add_shape(state, shape2!())
+
+      assert ShapeStatus.least_recently_used(state) == {:ok, shape1}
+    end
+
+    test "returns no_shapes if no shapes have been added", ctx do
+      {:ok, state, []} = new_state(ctx)
+
+      assert ShapeStatus.least_recently_used(state) == {:error, :no_shapes}
+    end
+
+    test "returns no_shapes if all shapes have been deleted", ctx do
+      {:ok, state, []} = new_state(ctx)
+      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
+      {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+      ShapeStatus.remove_shape(state, shape1)
+      ShapeStatus.remove_shape(state, shape2)
+
+      assert ShapeStatus.least_recently_used(state) == {:error, :no_shapes}
+    end
+  end
+
   def load_column_info({"public", "other_table"}, _),
     do:
       {:ok,
