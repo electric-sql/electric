@@ -228,20 +228,34 @@ For example, this is the Electric code to monitor and react to the todolist:
 > ... code sample ...
 >
 
-### With added chaos
+### Structure
+
+So far when discussing streaming, we've focused on tokens. But models are just as adept at returning structured data. This is another major advantage of streaming through a store. That store can be a structured database.
+
+This allows agents to collaborate on different parts of a shared state, by working on different parts of a structured data model. For example, one agent can be outlining the high level structure of a Figma project whilst another agent fills in the details on each of the canvases.
+
+### Chatter
+
+The more agents there are out there, the higher your query costs. Querying a data warehouse can be very expensive. Human data analysts tend to limit their query throughput by taking time to understand the responses. AI agents can issue and analyse queries much faster, generating higher query workload. Swarms of agents are going to amplify this further.
+
+The main way to mitigate this is with caching. I.e.: don't hit the warehouse if you can avoid it. One pattern for this is to maintain a local working set that can answer most queries. The tool to maintain a live, local working data set is a sync engine.
+
+### Chaos
 
 When you call an API or function you typically know the "blast radius" of what data it can change. So you can know what to refetch. When you interact with an AI agent (that has any kind of agency) you don't know what it's going to change.
 
 So you either need to constantly track and re-fetch everything. Or you need to monitor what data changes, so that you're automatically informed about it. What you really need is a way of declaring the subset of the data that the app, agent or UI depends on so you can automatically monitor it, stay up-to-date and be able to respond to changes.
 
-That's why Sunil says that [AI agents are local-first clients](https://sunilpai.dev/posts/local-first-ai-agents/). That's why Theo is [searching for the ideal sync engine](https://youtu.be/3gVBjTMS8FE).
+That's why Sunil says that [AI agents are local-first clients](https://sunilpai.dev/posts/local-first-ai-agents/). That's why Theo is [searching for the ideal sync engine](https://youtu.be/3gVBjTMS8FE). That's why Electric syncs [Shapes](/docs/guides/shapes).
 
 
-## AI needs sync
+## Future of software
 
-Sync solves a range of practical AI UX challenges in resumeability, interruptibility, multi-tab, multi-device and multi-user. And it provides the data layer for the next-generation of interactive AI apps and agents.
+Sync solves a range of practical challenges with AI UX. From resumeability and interruptibility to multi-tab, multi-device and multi-user.
 
-That's the future of software. It's powered by sync. Electric has [sync solved](/).
+As AI agents become more collaborative and autonomous (and lots more of them are spawned), then sharing state, reviewing progress, reacting to changes and maintaining local data sets are all going to get more important.
+
+This is the future of software. It needs to powered by sync. Rolling your own sync is hard. Electric has [sync solved](/).
 
 ### Let's jump in
 
