@@ -156,6 +156,7 @@ defmodule Electric.ShapeCache do
 
       true ->
         server = Electric.Shapes.Consumer.name(stack_id, shape_handle)
+        send(self(), :maybe_expire_shapes)
         GenServer.call(server, :await_snapshot_start, 15_000)
     end
   end
@@ -245,14 +246,17 @@ defmodule Electric.ShapeCache do
     {:noreply, state}
   end
 
+  def handle_info(:maybe_expire_shapes, state) do
+    maybe_expire_shapes(state)
+    {:noreply, state}
+  end
+
   @impl GenServer
   def handle_call(
         {:create_or_wait_shape_handle, shape, otel_ctx},
         _from,
         %{shape_status: shape_status} = state
       ) do
-    maybe_expire_shapes(state)
-
     {{shape_handle, latest_offset}, state} =
       if shape_state = shape_status.get_existing_shape(state.shape_status_state, shape) do
         {shape_state, state}
