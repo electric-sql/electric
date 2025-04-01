@@ -188,9 +188,7 @@ This fixes the problem where the user is frantically clicking or saying "stop" b
 
 ## Agents are users
 
-Human users are not the only thing that can interrupt flows and update data. An agent is not just an interface. An agent is an actor.
-
-Agents can [send notifications](https://modelcontextprotocol.io/docs/concepts/transports#notifications) and [update application state](https://modelcontextprotocol.io/docs/concepts/tools).
+Human users are not the only thing that can interrupt flows and update data. An agent is not just an interface. An agent is an actor. They can [send notifications](https://modelcontextprotocol.io/docs/concepts/transports#notifications) and [update application state](https://modelcontextprotocol.io/docs/concepts/tools).
 
 >
 > ... chat demo pinning and renaming example video ...
@@ -200,16 +198,14 @@ So, as soon as you have a user interacting with an agent, you have a multi-user 
 
 ### Swarms
 
-The thing is, you're not just going to have one agent. Soon, we're all going to have [swarms of agents](https://github.com/openai/openai-agents-python) running around in the background for us. These are going to need to share context and have situational awareness.
+You're also not going to just have one agent. Soon, we're all going to have [swarms of agents](https://github.com/openai/openai-agents-python) running around in the background for us. These are going to need to share context and have situational awareness.
 
 <figure style="border-radius: 16px; overflow: hidden">
   <a href="https://github.com/openai/openai-agents-python" class="no-visual" target="_blank">
     <img src="/img/blog/why-ai-needs-sync/swarm.png" /></a>
 </figure>
 
-Tools like [LangGraph](https://www.langchain.com/langgraph) provide a shared data layer for collaborative agents. However, this type of core AI software doesn't solve the last mile problem of syncing into user-facing apps.
-
-State can't just be in the cloud. Users are agents too!
+Tools like [LangGraph](https://www.langchain.com/langgraph) provide a shared data layer for agents. However, they don't solve the last mile problem of syncing into user-facing apps to also keep the human in the loop. State can't just be in the cloud. Users are agents too!
 
 For example, imagine you're managing a project and you have an AI assistant. You tell it to "monitor the todo list and perform the tasks". You then fire up a new session with another agent to plan out the project and generate tasks.
 
@@ -224,9 +220,15 @@ For example, imagine you're managing a project and you have an AI assistant. You
 >  6. user closes a todo and it interrupts the task
 >
 
-These agents need to collaborate via shared state. In this example, the todo-list. They need to known when it's changed and react to the changes. And so do the users! They want to see the state too. That's what sync allows you to do.
+These agents need to collaborate via shared state. In this example, the todo-list. They need to known when it's changed and react to the changes. And so do the users! They want to see the state too.
 
-For example, this is the Electric code to monitor and react to the todolist:
+For example, this is the Electric code for the agents to monitor and react to the todolist:
+
+>
+> ... code sample ...
+>
+
+This is the code to show the same state to the user:
 
 >
 > ... code sample ...
@@ -234,7 +236,7 @@ For example, this is the Electric code to monitor and react to the todolist:
 
 ### Structure
 
-So far when discussing streaming, we've focused on tokens. But models are just as adept at returning structured data. This is another major advantage of streaming through a store. That store can be a structured database.
+So far, when discussing streaming, we've focused on tokens. But models are just as adept at returning structured data. This is another major advantage of streaming through a store. That store can be a structured database.
 
 This allows agents to collaborate on different parts of a shared state, by working on different parts of a structured data model. For example, one agent can be outlining the high level structure of a Figma project whilst another agent fills in the details on each of the canvases.
 
@@ -242,7 +244,7 @@ This allows agents to collaborate on different parts of a shared state, by worki
 
 The more agents there are out there, the higher your query costs. Querying a data warehouse can be very expensive. Human data analysts tend to limit their query throughput by taking time to understand the responses. AI agents can issue and analyse queries much faster, generating higher query workload. Swarms of agents are going to amplify this further.
 
-The main way to mitigate this is with caching. I.e.: don't hit the warehouse if you can avoid it. One pattern for this is to maintain a local working set that can answer most queries. The tool to maintain a live, local working data set is a sync engine.
+The main way to mitigate this is with [caching](/use-cases/cache-invalidation). I.e.: don't hit the warehouse if you can avoid it. [One pattern](https://www.smalldatasf.com/#manifesto) for this is to maintain a local working set that can answer most queries.
 
 ### Chaos
 
@@ -250,7 +252,7 @@ When you call an API or function you typically know the "blast radius" of what d
 
 So you either need to constantly track and re-fetch everything. Or you need to monitor what data changes, so that you're automatically informed about it. What you really need is a way of declaring the subset of the data that the app, agent or UI depends on so you can automatically monitor it, stay up-to-date and be able to respond to changes.
 
-That's why Sunil says that [AI agents are local-first clients](https://sunilpai.dev/posts/local-first-ai-agents/). That's why Theo is [searching for the ideal sync engine](https://youtu.be/3gVBjTMS8FE). That's why Electric syncs [Shapes](/docs/guides/shapes).
+That's why Sunil says that [AI agents are local-first clients](https://sunilpai.dev/posts/local-first-ai-agents/). That's why Theo is [searching for the ideal sync engine](https://youtu.be/3gVBjTMS8FE) and it's why Electric syncs [Shapes](/docs/guides/shapes).
 
 
 ## Future of software
