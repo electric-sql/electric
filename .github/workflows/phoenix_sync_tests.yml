@@ -18,6 +18,7 @@ name: Phoenix.Sync integration tests
 # 3. Ensure that Phoenix.Sync depends on the new version
 # 4. Publish phoenix_sync package to hex.pm
 # 5. Update `examples/phoenix-liveview` to use the new phoenix_sync package
+
 on:
   push:
     branches: ["main"]
