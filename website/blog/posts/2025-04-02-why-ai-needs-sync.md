@@ -103,7 +103,7 @@ So even just the possibility of multiple browser tabs means you need to split th
 > ... diagramme of model -> token stream -> store -> two streams -> two UIs ...
 >
 
-But, of course, the world is not just about browser tabs. Agents do stuff in the background. What are the chances your user is going to grab their mobile, nip across to [Linea Coffee Roasters](https://lineacaffe.com) on Mariposa and check progress while waiting in the queue?
+But, of course, the world is not just about browser tabs. Agents do stuff in the background. What are the chances your user is going to grab their mobile, nip across to [Linea Coffee](https://lineacaffe.com) on Mariposa and check progress while waiting in the queue?
 
 <figure style="border-radius: 16px; overflow: hidden">
   <img src="/img/blog/why-ai-needs-sync/nipping-out-for-coffee.jpg" />
@@ -134,7 +134,7 @@ Traditional software was designed around this. Work colleagues can collaborate o
 
 Now we have AI, collaboration-by-clicking-buttons is going to be replaced by by interacting with agents. That direct stream from the agent to the UI, it's single-user. It doesn't work for collaboration. For multi-user, you need the same pattern as with resumability and multi-device. Stream through a store with fan-out. As long as you stream the right sessions to the right users.
 
-That's what sync engines like [Figma's LiveGraph](https://www.figma.com/blog/livegraph-real-time-data-fetching-at-figma/) do. They handle resilient streaming and fan-out, with partial replication. So the right data syncs to the right users.
+That's what sync engines like Electric and [Figma's LiveGraph](https://www.figma.com/blog/livegraph-real-time-data-fetching-at-figma/) do. They handle resilient streaming and fan-out, with partial replication. So the right data syncs to the right users.
 
 For example, with Electric, you can define partial replication using [Shapes](/docs/guides/shapes):
 
@@ -174,6 +174,8 @@ For example, here we show a chat app built on Electric where two users are talki
 >  - collab but updates the underlying data
 >
 
+This is a simple example but it's the tip of the iceberg of [things to come](#agents-are-users).
+
 ### Interruptibility
 
 The interrupt in this example is another illustration of the power of syncing into a store before syncing into the UI. Because the stream to the UI is under our control, we can pause it instantly, even while the underlying agent (which is out of our direct control) continues to the end of it's stream.
@@ -203,6 +205,8 @@ But also ... you're not just going to have one agent. Soon, we're going to have 
     <img src="/img/blog/why-ai-needs-sync/swarm.png" /></a>
 </figure>
 
+Core AI software like [LangGraph](https://www.langchain.com/langgraph) has known this for a while but doesn't solve the last mile problem of syncing into user-facing apps.
+
 For example, imagine you're managing a project and you have an AI assistant. You tell it to "monitor the todo list and perform the tasks". You then fire up a new session with another agent to plan out the project and generate tasks.
 
 >
@@ -216,7 +220,9 @@ For example, imagine you're managing a project and you have an AI assistant. You
 >  6. user closes a todo and it interrupts the task
 >
 
-These agents need to collaborate via shared state. In this example, the todo-list. They need to known when it's changed and react to the changes. That's what sync allows you to do. For example, this is the Electric code to monitor and react to the todolist:
+These agents need to collaborate via shared state. In this example, the todo-list. They need to known when it's changed and react to the changes. And so do the users! They want to see the state too. That's what sync allows you to do.
+
+For example, this is the Electric code to monitor and react to the todolist:
 
 >
 > ... code sample ...
@@ -232,7 +238,7 @@ That's what a sync engine does. That's why Sunil says that AI agents are local-f
 
 ## AI needs sync
 
-Sync solves a range of practical challenges of AI UX in resumeability, interruptibility, multi-tab, multi-device and multi-user. And it provides the data layer for the next-generation of collaborative, multi-step agentic systems.
+Sync solves a range of practical challenges of AI UX in resumeability, interruptibility, multi-tab, multi-device and multi-user. And it provides the data layer for the next-generation of AI apps and agents.
 
 That's the future of software. It's powered by sync. Electric has [sync solved](/).
 
