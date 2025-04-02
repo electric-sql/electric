@@ -593,7 +593,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       # The conn process should exit after sending the response
       refute Process.alive?(conn.owner)
 
-      assert conn.status == 204
+      assert conn.status == 200
       assert [%{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
       assert get_resp_header(conn, "electric-up-to-date") == [""]
     end
@@ -627,7 +627,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         )
         |> call_serve_shape_plug(ctx)
 
-      assert conn.status == 204
+      assert conn.status == 200
 
       assert [%{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
 

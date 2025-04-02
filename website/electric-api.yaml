@@ -396,21 +396,6 @@ paths:
                       status: backlog
                   - headers:
                       control: up-to-date
-        "204":
-          description: >-
-            No content. The `live=true` polling request timed out without
-            any new content to process.
-          headers:
-            electric-cursor:
-              schema:
-                type: string
-              example: "1674440"
-              description: |-
-                Provides a cursor to use as the value of the `cursor` parameter
-                in the next long polling request.
-
-                This works around some inconsistent request coalescing behaviour
-                with different CDNs.
         "400":
           description: Bad request.
         "404":

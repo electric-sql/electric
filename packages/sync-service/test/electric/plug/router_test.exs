@@ -1371,7 +1371,7 @@ defmodule Electric.Plug.RouterTest do
         end)
 
       Postgrex.query!(db_conn, "TRUNCATE TABLE items", [])
-      assert %{status: 204} = Task.await(task)
+      assert %{status: 200} = Task.await(task)
 
       conn =
         Router.call(conn("GET", "/v1/shape?table=items&offset=#{offset}&handle=#{handle}"), opts)
