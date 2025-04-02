@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.0.1
+
+### Patch Changes
+
+- 56c338a: Surface errors from consuming response body as `FetchError`s in regular handling flow
+
 ## 1.0.0
 
 ### Minor Changes
