@@ -1505,6 +1505,80 @@ defmodule Electric.Plug.RouterTest do
                  ["public", "items"]
                )
     end
+
+    @tag with_sql: [
+           "CREATE TABLE nullability_test (id INT PRIMARY KEY, value TEXT NOT NULL)"
+         ]
+    test "GET returns updated schema in header after column nullability changes", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      # Initial request to create the shape and get the schema
+      conn =
+        conn("GET", "/v1/shape?table=nullability_test&offset=-1")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      shape_handle = get_resp_shape_handle(conn)
+      offset = get_resp_last_offset(conn)
+      initial_schema = get_resp_schema(conn)
+
+      assert initial_schema["value"]["not_null"]
+
+      # Make a write to trigger relation message processing
+      # Use a live request first to ensure the change propagates and cache is cleaned
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape?table=nullability_test&offset=#{offset}&handle=#{shape_handle}&live"
+          )
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "INSERT INTO nullability_test (id, value) VALUES (1, 'test')", [])
+      assert %{status: 200} = Task.await(task)
+
+      assert %{status: 200} =
+               conn =
+               conn(
+                 "GET",
+                 "/v1/shape?table=nullability_test&offset=#{offset}&handle=#{shape_handle}"
+               )
+               |> Router.call(opts)
+
+      assert get_resp_schema(conn)["value"]["not_null"]
+
+      # Alter table to make 'value' nullable
+      Postgrex.query!(
+        db_conn,
+        "ALTER TABLE nullability_test ALTER COLUMN value DROP NOT NULL",
+        []
+      )
+
+      # Make a write to trigger relation message processing
+      # Use a live request first to ensure the change propagates and cache is cleaned
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape?table=nullability_test&offset=#{offset}&handle=#{shape_handle}&live"
+          )
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "INSERT INTO nullability_test (id, value) VALUES (2, NULL)", [])
+      assert %{status: 200} = Task.await(task)
+
+      # Make a non-live request to get the updated schema header
+      conn =
+        conn("GET", "/v1/shape?table=nullability_test&offset=#{offset}&handle=#{shape_handle}")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      updated_schema = get_resp_schema(conn)
+      refute updated_schema["value"]["not_null"]
+    end
   end
 
   describe "404" do
@@ -1618,5 +1692,11 @@ defmodule Electric.Plug.RouterTest do
   defp get_resp_header(conn, header) do
     assert [val] = Plug.Conn.get_resp_header(conn, header)
     val
+  end
+
+  defp get_resp_schema(conn) do
+    conn
+    |> get_resp_header("electric-schema")
+    |> Jason.decode!()
   end
 end
