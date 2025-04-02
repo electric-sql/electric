@@ -1,5 +1,13 @@
 # @electric-sql/experimental
 
+## 1.0.1
+
+### Patch Changes
+
+- 96b502e: Fix stack limit issue when using functions with array arg destructuring.
+- Updated dependencies [56c338a]
+  - @electric-sql/client@1.0.1
+
 ## 1.0.0
 
 ### Patch Changes

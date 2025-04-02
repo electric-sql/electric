@@ -1,5 +1,17 @@
 # @core/sync-service
 
+## 1.0.3
+
+### Patch Changes
+
+- e45d390: fix: disallow generated columns in shapes
+- 85b863a: Synchronously recover shapes and publication to ensure Electric boot is successfuly, and clear cache if it fails.
+- b8a71cd: Add experimental LRU shape expiry
+- a71686e: Never cache `>= 400` response codes, except `409` as effective redirects, and anything other than `GET` and `OPTIONS`.
+- 844a54f: fix: skip updates that don't change any columns
+- f810e82: Electric now also returns 409 instead of 400 when the shape handle and the shape definition do not match.
+- 15e6d1d: Fix backwards compatibility parsing of old shape definitions' flags
+
 ## 1.0.2
 
 ### Patch Changes
