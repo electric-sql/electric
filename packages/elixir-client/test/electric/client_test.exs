@@ -107,6 +107,13 @@ defmodule Electric.ClientTest do
       assert {:error, _} = Client.new([])
     end
 
+    test "returns error if fetch opts are not valid for impl" do
+      endpoint = URI.new!("http://localhost:3000/some/random/path")
+
+      assert {:error, _} =
+               Client.new(endpoint: endpoint, fetch: {Electric.Client.Fetch.HTTP, invalid: true})
+    end
+
     test "params are appended to all requests" do
       params = %{my_goal: "unknowable", my_reasons: "inscrutable"}
 
@@ -173,7 +180,6 @@ defmodule Electric.ClientTest do
             {Fetch.HTTP,
              [
                request: [
-                 retry_delay: fn _n -> 50 end,
                  retry_log_level: false,
                  max_retries: 3,
                  connect_options: [protocols: [:http1]]

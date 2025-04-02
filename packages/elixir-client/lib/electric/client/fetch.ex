@@ -2,9 +2,8 @@ defmodule Electric.Client.Fetch do
   alias Electric.Client.Fetch.{Request, Response}
   alias Electric.Client
 
-  @callback fetch(Request.t(), Keyword.t()) ::
-              {:ok, Response.t()}
-              | {:error, Response.t() | term()}
+  @callback validate_opts(keyword()) :: {:ok, keyword()} | {:error, term()}
+  @callback fetch(Request.t(), keyword()) :: {:ok, Response.t()} | {:error, Response.t() | term()}
 
   @behaviour Electric.Client.Fetch.Pool
 

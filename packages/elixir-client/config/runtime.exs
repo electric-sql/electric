@@ -2,10 +2,6 @@ import Config
 
 config :logger, level: :warning
 
-config :sentry,
-  environment_name: config_env(),
-  client: Electric.Telemetry.SentryReqHTTPClient
-
 if config_env() == :test do
   port = 3333
   default_database_url = "postgresql://postgres:password@localhost:54321/electric?sslmode=disable"
@@ -24,7 +20,7 @@ if config_env() == :test do
 
   config :electric,
     start_in_library_mode: false,
-    connection_opts: Electric.Utils.obfuscate_password(connection_opts),
+    replication_connection_opts: Electric.Utils.obfuscate_password(connection_opts),
     # enable the http api so that the client tests against a real endpoint can
     # run against our embedded electric instance.
     enable_http_api: true,

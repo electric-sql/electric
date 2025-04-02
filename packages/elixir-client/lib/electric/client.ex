@@ -190,7 +190,27 @@ defmodule Electric.Client do
                      default: {Client.Authenticator.Unauthenticated, []},
                      doc: false
                    ],
-                   fetch: [type: :mod_arg, default: {Client.Fetch.HTTP, []}, doc: false],
+                   fetch: [
+                     type: :mod_arg,
+                     default: {Client.Fetch.HTTP, []},
+                     doc: """
+                     A `{module, opts}` tuple specifying the `Electric.Client.Fetch`
+                     implementation to use for calling the Electric API.
+
+                     See `Electric.Client.Fetch.HTTP` for the options available
+                     when using the default `HTTP` fetcher.
+
+                          Client.new(
+                            base_url: "http://localhost:3000",
+                            fetch: {Electric.Client.Fetch.HTTP,
+                              # never error, just keep retrying if the Electric server is down
+                              timeout: :infinity,
+                              # add a bearer token to every request (see `authenticator` if you need more
+                              # control over authenticating your requests
+                              headers: [{"authorize", "Bearer some-token-here"}]}
+                          )
+                     """
+                   ],
                    pool: [type: :mod_arg, default: {Electric.Client.Fetch.Pool, []}, doc: false]
                  )
 
@@ -245,8 +265,14 @@ defmodule Electric.Client do
   @spec new(client_options()) :: {:ok, t()} | {:error, term()}
   def new(opts) do
     with {:ok, attrs} <- NimbleOptions.validate(Map.new(opts), @client_schema),
+         %{fetch: {fetch_module, fetch_opts}} = attrs,
+         {:ok, fetch_opts} <- fetch_module.validate_opts(fetch_opts),
          {:ok, endpoint} <- client_endpoint(attrs) do
-      {:ok, struct(__MODULE__, Map.put(attrs, :endpoint, endpoint))}
+      {:ok,
+       struct(
+         __MODULE__,
+         Map.merge(attrs, %{endpoint: endpoint, fetch: {fetch_module, fetch_opts}})
+       )}
     end
   end
 
