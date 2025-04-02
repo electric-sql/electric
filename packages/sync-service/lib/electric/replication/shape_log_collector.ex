@@ -53,7 +53,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   # it should raise.
   def store_transaction(%Transaction{} = txn, server) do
     trace_context = OpenTelemetry.get_current_context()
-    GenStage.call(server, {:new_txn, txn, trace_context}, :infinity)
+    call_time = :erlang.monotonic_time(:microsecond)
+    GenStage.call(server, {:new_txn, txn, trace_context, call_time}, :infinity)
   end
 
   def handle_relation_msg(%Changes.Relation{} = rel, server) do
@@ -134,8 +135,18 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:reply, :ok, [], Map.put(state, :last_processed_lsn, lsn)}
   end
 
-  def handle_call({:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, trace_context}, from, state) do
+  def handle_call(
+        {:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, trace_context, call_time},
+        from,
+        state
+      ) do
+    receive_time = :erlang.monotonic_time(:microsecond) - call_time
+
     OpenTelemetry.set_current_context(trace_context)
+
+    OpenTelemetry.add_span_attributes(
+      "shape_log_collector.transaction_message.duration_µs": receive_time
+    )
 
     Logger.info("Received transaction #{xid} from Postgres at #{lsn}")
     Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
