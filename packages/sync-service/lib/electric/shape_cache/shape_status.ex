@@ -222,6 +222,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     least_recently_used(meta_table, shape_count)
   end
 
+  @microseconds_in_a_minute 60 * 1000 * 1000
   def least_recently_used(meta_table, shape_count) do
     :ets.select(meta_table, [
       {
@@ -234,7 +235,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
     |> Stream.map(fn {handle, last_read} ->
       %{
         shape_handle: handle,
-        elapsed_ms_since_use: (:erlang.monotonic_time(:microsecond) - last_read) / 1000
+        elapsed_minutes_since_use:
+          (:erlang.monotonic_time(:microsecond) - last_read) / @microseconds_in_a_minute
       }
     end)
     |> Enum.take(shape_count)

@@ -312,7 +312,7 @@ defmodule Electric.ShapeCache do
             shape_handle: shape.shape_handle,
             max_shapes: max_shapes,
             shape_count: shape_count,
-            elapsed_ms_since_use: shape.elapsed_ms_since_use
+            elapsed_minutes_since_use: shape.elapsed_minutes_since_use
           ],
           fn ->
             Logger.info(
