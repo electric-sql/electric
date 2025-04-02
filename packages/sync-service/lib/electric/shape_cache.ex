@@ -147,8 +147,6 @@ defmodule Electric.ShapeCache do
     stack_id = Access.fetch!(opts, :stack_id)
 
     shape_status.update_last_read_time_to_now(table, shape_handle)
-    server = Access.get(opts, :server, name(opts))
-    GenServer.cast(server, :maybe_expire_shapes)
 
     cond do
       shape_status.snapshot_started?(table, shape_handle) ->
@@ -248,8 +246,7 @@ defmodule Electric.ShapeCache do
     {:noreply, state}
   end
 
-  @impl GenServer
-  def handle_cast(:maybe_expire_shapes, state) do
+  def handle_info(:maybe_expire_shapes, state) do
     maybe_expire_shapes(state)
     {:noreply, state}
   end
@@ -266,6 +263,7 @@ defmodule Electric.ShapeCache do
       else
         {:ok, shape_handle} = shape_status.add_shape(state.shape_status_state, shape)
         {:ok, latest_offset} = start_shape(shape_handle, shape, state, otel_ctx)
+        send(self(), :maybe_expire_shapes)
         {{shape_handle, latest_offset}, state}
       end
 
