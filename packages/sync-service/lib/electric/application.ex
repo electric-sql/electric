@@ -102,7 +102,8 @@ defmodule Electric.Application do
       pool_opts: get_env_with_default(opts, :pool_opts, pool_size: get_env(opts, :db_pool_size)),
       chunk_bytes_threshold: get_env(opts, :chunk_bytes_threshold),
       telemetry_opts:
-        telemetry_opts([instance_id: instance_id, installation_id: installation_id] ++ opts)
+        telemetry_opts([instance_id: instance_id, installation_id: installation_id] ++ opts),
+      max_shapes: get_env(opts, :max_shapes)
     )
   end
 
