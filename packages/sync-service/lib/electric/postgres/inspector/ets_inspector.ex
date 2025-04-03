@@ -33,7 +33,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   def load_relation(table, opts) do
     case relation_from_ets(table, opts) do
       :not_found ->
-        GenServer.call(opts[:server], {:load_relation, table})
+        # We don't set a timeout here because it's managed by the underlying query.
+        GenServer.call(opts[:server], {:load_relation, table}, :infinity)
 
       rel ->
         {:ok, rel}
@@ -56,7 +57,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   def load_column_info({_namespace, _table_name} = table, opts) do
     case column_info_from_ets(table, opts) do
       :not_found ->
-        case GenServer.call(opts[:server], {:load_column_info, table}) do
+        case GenServer.call(opts[:server], {:load_column_info, table}, :infinity) do
           {:error, err, stacktrace} -> reraise err, stacktrace
           result -> result
         end
