@@ -465,7 +465,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       )
 
     conn_mgr = ctx.connection_manager
-    assert_receive {^conn_mgr, :ready_to_stream}
+    assert_receive {^conn_mgr, :ready_to_stream}, @assert_receive_db_timeout
     ReplicationClient.start_streaming(client_pid)
 
     client_pid
