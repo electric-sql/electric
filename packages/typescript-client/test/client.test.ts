@@ -853,6 +853,40 @@ describe(`Shape`, () => {
   })
 })
 
+describe(`Shape - backwards compatible`, () => {
+  it(`should set isConnected to false on fetch error and back on true when fetch succeeds again`, async ({
+    issuesTableUrl,
+  }) => {
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      fetchClient: async (_input, _init) => {
+        await sleep(20)
+        return new Response(null, {
+          status: 204,
+          headers: new Headers({
+            [`electric-offset`]: `0_0`,
+            [`electric-handle`]: `foo`,
+            [`electric-schema`]: ``,
+            [`electric-cursor`]: `123`,
+          }),
+        })
+      },
+    })
+
+    const unsubscribe = shapeStream.subscribe(() => unsubscribe())
+
+    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
+    expect(shapeStream.lastSyncedAt()).closeTo(Date.now(), 200)
+
+    await sleep(400)
+
+    expect(shapeStream.lastSyncedAt()).closeTo(Date.now(), 200)
+  })
+})
+
 function waitForFetch(stream: ShapeStream): Promise<void> {
   let unsub = () => {}
   return new Promise<void>((resolve) => {
