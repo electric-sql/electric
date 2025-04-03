@@ -2,7 +2,7 @@ defmodule Debug.Process do
   def top_memory_by_type(count \\ 5) do
     Process.list()
     |> Enum.map(&type_and_memory/1)
-    |> Enum.reject(&is_nil/1)
+    |> Enum.reject(&is_dead_or_nil/1)
     |> Enum.group_by(& &1.type, & &1.memory)
     |> Enum.map(fn {type, memory} -> %{type: type, memory: Enum.sum(memory)} end)
     |> Enum.sort_by(&(-&1.memory))
@@ -10,10 +10,8 @@ defmodule Debug.Process do
   end
 
   defp type_and_memory(pid) do
-    with [memory: memory] <- Process.info(pid, [:memory]),
-         type when type != :dead <- type(pid) do
-      %{type: type, memory: memory}
-    end
+    [memory: memory] = Process.info(pid, [:memory])
+    %{type: type(pid), memory: memory}
   end
 
   def type(pid) do
@@ -64,4 +62,8 @@ defmodule Debug.Process do
       nil -> :error
     end
   end
+
+  defp is_dead_or_nil(nil), do: true
+  defp is_dead_or_nil(%{type: :dead}), do: true
+  defp is_dead_or_nil(_), do: false
 end
