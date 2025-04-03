@@ -33,6 +33,11 @@ defmodule Electric.Connection.Manager do
       :connection_opts,
       # Replication options specific to `Electric.Postgres.ReplicationClient`
       :replication_opts,
+      # Connection options that are shared between regular connections and the replication
+      # connection. If this is set to `nil` post-initialization, it means that regular
+      # connections and the replication connection have been configured using different
+      # connection URLs.
+      :shared_connection_opts,
       # Database connection pool options
       :pool_opts,
       # Options specific to `Electric.Timeline`
@@ -172,41 +177,57 @@ defmodule Electric.Connection.Manager do
     Logger.metadata(stack_id: opts[:stack_id])
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
 
-    connection_opts =
-      opts
-      |> Keyword.fetch!(:connection_opts)
-      |> update_connection_opts()
-
-    replication_opts =
-      opts
-      |> Keyword.fetch!(:replication_opts)
-      |> Keyword.update!(:connection_opts, &update_connection_opts/1)
-      |> Keyword.put(:start_streaming?, false)
-      |> Keyword.put(:connection_manager, self())
-
     pool_opts = Keyword.fetch!(opts, :pool_opts)
     timeline_opts = Keyword.fetch!(opts, :timeline_opts)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
 
     state =
       %State{
-        connection_opts: connection_opts,
-        replication_opts: replication_opts,
         pool_opts: pool_opts,
         timeline_opts: timeline_opts,
         shape_cache_opts: shape_cache_opts,
         pg_lock_acquired: false,
+        replication_connection_established: false,
         connection_backoff: {ConnectionBackoff.init(1000, 10_000), nil},
         stack_id: Keyword.fetch!(opts, :stack_id),
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
         tweaks: Keyword.fetch!(opts, :tweaks),
         persistent_kv: Keyword.fetch!(opts, :persistent_kv)
       }
+      |> initialize_connection_opts(opts)
 
     # Try to acquire the connection lock on the replication slot
     # before starting shape and replication processes, to ensure
     # a single active sync service is connected to Postgres per slot.
     {:ok, state, {:continue, :start_lock_connection}}
+  end
+
+  defp initialize_connection_opts(state, opts) do
+    in_connection_opts = Keyword.fetch!(opts, :connection_opts)
+    in_replication_opts = Keyword.fetch!(opts, :replication_opts)
+
+    shared_connection_opts =
+      if in_connection_opts == Keyword.fetch!(in_replication_opts, :connection_opts) do
+        populate_connection_opts(in_connection_opts)
+      end
+
+    connection_opts =
+      if is_nil(shared_connection_opts), do: populate_connection_opts(in_connection_opts)
+
+    replication_opts =
+      in_replication_opts
+      |> Keyword.put(:start_streaming?, false)
+      |> Keyword.put(:connection_manager, self())
+      |> Keyword.update!(:connection_opts, fn in_connection_opts ->
+        if is_nil(shared_connection_opts), do: populate_connection_opts(in_connection_opts)
+      end)
+
+    %State{
+      state
+      | shared_connection_opts: shared_connection_opts,
+        connection_opts: connection_opts,
+        replication_opts: replication_opts
+    }
   end
 
   @impl true
@@ -257,7 +278,7 @@ defmodule Electric.Connection.Manager do
   @impl true
   def handle_continue(:start_lock_connection, %State{lock_connection_pid: nil} = state) do
     opts = [
-      connection_opts: state.connection_opts,
+      connection_opts: connection_opts(state),
       connection_manager: self(),
       lock_name: Keyword.fetch!(state.replication_opts, :slot_name),
       stack_id: state.stack_id
@@ -265,8 +286,10 @@ defmodule Electric.Connection.Manager do
 
     case start_lock_connection(opts) do
       {:ok, pid, connection_opts} ->
-        state = mark_connection_succeeded(state)
-        state = %State{state | lock_connection_pid: pid, connection_opts: connection_opts}
+        state =
+          %State{state | lock_connection_pid: pid}
+          |> mark_connection_succeeded()
+          |> update_connection_opts(connection_opts)
 
         Electric.StackSupervisor.dispatch_stack_event(
           state.stack_events_registry,
@@ -288,7 +311,7 @@ defmodule Electric.Connection.Manager do
         %State{replication_connection_established: false} = state
       ) do
     opts = [
-      replication_opts: state.replication_opts,
+      replication_opts: replication_opts(state),
       connection_manager: self(),
       stack_id: state.stack_id
     ]
@@ -315,7 +338,7 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_continue(:start_connection_pool, state) do
-    case start_connection_pool(state.connection_opts, state.pool_opts) do
+    case start_connection_pool(connection_opts(state), state.pool_opts) do
       {:ok, pool_pid} ->
         state = mark_connection_succeeded(state)
         # Checking the timeline continuity to see if we need to purge all shapes persisted so far
@@ -611,7 +634,7 @@ defmodule Electric.Connection.Manager do
         "Database connection failed to find valid IPv6 address for #{connection_opts[:hostname]} - falling back to IPv4"
       )
 
-      {:ok, connection_opts |> Keyword.put(:ipv6, false) |> update_tcp_opts()}
+      {:ok, connection_opts |> Keyword.put(:ipv6, false) |> populate_tcp_opts()}
     else
       {:error, error}
     end
@@ -827,7 +850,7 @@ defmodule Electric.Connection.Manager do
     %State{state | connection_backoff: {conn_backoff, tref}}
   end
 
-  defp update_ssl_opts(connection_opts) do
+  defp populate_ssl_opts(connection_opts) do
     ssl_opts =
       case connection_opts[:sslmode] do
         :disable ->
@@ -884,7 +907,7 @@ defmodule Electric.Connection.Manager do
     [verify: :verify_none]
   end
 
-  defp update_tcp_opts(connection_opts) do
+  defp populate_tcp_opts(connection_opts) do
     tcp_opts =
       if connection_opts[:ipv6] do
         [:inet6]
@@ -895,8 +918,20 @@ defmodule Electric.Connection.Manager do
     Keyword.put(connection_opts, :socket_options, tcp_opts)
   end
 
-  defp update_connection_opts(connection_opts),
-    do: connection_opts |> update_ssl_opts() |> update_tcp_opts()
+  defp populate_connection_opts(conn_opts),
+    do: conn_opts |> populate_ssl_opts() |> populate_tcp_opts()
+
+  defp update_connection_opts(%State{shared_connection_opts: nil} = state, conn_opts) do
+    %State{state | connection_opts: conn_opts}
+  end
+
+  defp update_connection_opts(state, conn_opts) do
+    %State{state | shared_connection_opts: conn_opts}
+  end
+
+  defp update_replication_connection_opts(%State{shared_connection_opts: nil} = state, conn_opts) do
+    %State{state | replication_opts: put_in(state.replication_opts[:connection_opts], conn_opts)}
+  end
 
   defp lookup_log_collector_pid(shapes_supervisor) do
     {Electric.Replication.ShapeLogCollector, log_collector_pid, :worker, _modules} =
@@ -962,4 +997,12 @@ defmodule Electric.Connection.Manager do
   defp schedule_periodic_connection_status_log(type) do
     Process.send_after(self(), type, @connection_status_logging_interval)
   end
+
+  defp connection_opts(%State{shared_connection_opts: nil} = state), do: state.connection_opts
+  defp connection_opts(%State{shared_connection_opts: conn_opts}), do: conn_opts
+
+  defp replication_opts(%State{shared_connection_opts: nil} = state), do: state.replication_opts
+
+  defp replication_opts(%State{shared_connection_opts: conn_opts} = state),
+    do: Keyword.put(state.replication_opts, :connection_opts, conn_opts)
 end
