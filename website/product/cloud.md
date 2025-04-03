@@ -38,7 +38,7 @@ and scales to millions of users
 
 <div class="cloud-cta">
   <VPButton
-      href="/product/cloud/sign-up"
+      href="https://dashboard.electric-sql.cloud/"
       text="Sign up "
       theme="brand"
   />
@@ -61,7 +61,7 @@ Electric Cloud is available now in <Badge type="warning" text="private beta" />.
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta">
     <VPButton
-        href="/product/cloud/sign-up"
+        href="https://dashboard.electric-sql.cloud/"
         text="Sign up "
         theme="brand"
     />
