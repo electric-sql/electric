@@ -675,37 +675,25 @@ defmodule Electric.Connection.Manager do
 
   defp handle_connection_error(
          %DBConnection.ConnectionError{severity: :error} = error,
-         %State{replication_opts: replication_opts} = state,
-         "replication" = mode
-       ) do
-    case maybe_fallback_to_ipv4(error, replication_opts[:connection_opts]) do
-      {:ok, connection_opts} ->
-        # disable IPv6 and retry immediately
-        state = %State{
-          state
-          | replication_opts: Keyword.put(replication_opts, :connection_opts, connection_opts)
-        }
-
-        step = current_connection_step(state)
-        handle_continue(step, state)
-
-      {:error, error} ->
-        fail_on_error_or_reconnect(error, state, mode)
-    end
-  end
-
-  defp handle_connection_error(
-         %DBConnection.ConnectionError{severity: :error} = error,
-         %State{connection_opts: connection_opts} = state,
+         state,
          mode
        ) do
-    case maybe_fallback_to_ipv4(error, connection_opts) do
-      {:ok, connection_opts} ->
+    conn_opts =
+      if current_connection_step(state) == :start_replication_client do
+        Keyword.fetch!(replication_opts(state), :connection_opts)
+      else
+        connection_opts(state)
+      end
+
+    case maybe_fallback_to_ipv4(error, conn_opts) do
+      {:ok, conn_opts} ->
         # disable IPv6 and retry immediately
-        state = %State{
-          state
-          | connection_opts: connection_opts
-        }
+        state =
+          if current_connection_step(state) == :start_replication_client do
+            update_replication_connection_opts(state, conn_opts)
+          else
+            update_connection_opts(state, conn_opts)
+          end
 
         step = current_connection_step(state)
         handle_continue(step, state)
@@ -757,13 +745,13 @@ defmodule Electric.Connection.Manager do
     schedule_reconnection(step, state)
   end
 
-  defp current_connection_step(%State{lock_connection_pid: pid}) when not is_pid(pid),
+  defp current_connection_step(%State{lock_connection_pid: nil}),
     do: :start_lock_connection
 
-  defp current_connection_step(%State{replication_client_pid: pid}) when not is_pid(pid),
+  defp current_connection_step(%State{replication_connection_established: false}),
     do: :start_replication_client
 
-  defp current_connection_step(%State{pool_pid: pid}) when not is_pid(pid),
+  defp current_connection_step(%State{pool_pid: nil}),
     do: :start_connection_pool
 
   defp pg_error_extra_info(pg_error) do
