@@ -51,6 +51,8 @@ defmodule Electric.Connection.Manager do
       :connection_backoff,
       # Flag indicating whether the lock on the replication has been acquired
       :pg_lock_acquired,
+      # This flag is set to true when the replication connection completes its setup procedure.
+      :replication_connection_established,
       # PostgreSQL server version
       :pg_version,
       # PostgreSQL system identifier
@@ -141,6 +143,14 @@ defmodule Electric.Connection.Manager do
 
   def exclusive_connection_lock_acquired(server) do
     GenServer.cast(server, :exclusive_connection_lock_acquired)
+  end
+
+  def replication_connection_started_initializing(server) do
+    GenServer.cast(server, :replication_connection_started_initializing)
+  end
+
+  def replication_connection_established(server) do
+    GenServer.cast(server, :replication_connection_established)
   end
 
   def pg_info_looked_up(server, pg_info) do
@@ -272,39 +282,27 @@ defmodule Electric.Connection.Manager do
     end
   end
 
-  def handle_continue(:start_replication_client, %State{replication_client_pid: nil} = state) do
-    opts =
-      state
-      |> Map.take([:stack_id, :replication_opts])
-      |> Map.to_list()
+  def handle_continue(
+        :start_replication_client,
+        %State{replication_connection_established: false} = state
+      ) do
+    opts = [
+      replication_opts: state.replication_opts,
+      connection_manager: self(),
+      stack_id: state.stack_id
+    ]
 
-    Logger.debug("Starting replication client for stack #{state.stack_id}")
+    # This function might be called multiple times due to the possibility of the noSSL
+    # fallback. We want to do some of the steps on the first connection attempt only.
+    first_time? = is_nil(state.replication_client_pid)
 
-    case start_replication_client(opts) do
-      {:ok, pid, replication_opts} ->
-        state = mark_connection_succeeded(state)
+    if first_time?, do: Logger.debug("Starting replication client for stack #{state.stack_id}")
 
-        state = %State{
-          state
-          | replication_client_pid: pid,
-            replication_opts: replication_opts
-        }
 
-        if is_nil(state.pool_pid) do
-          # This is the case where Connection.Manager starts connections from the initial state.
-          # Replication connection is opened after the lock connection has acquired the
-          # exclusive lock. After it, we start the connection pool.
-          false = is_nil(state.lock_connection_pid)
-          {:noreply, state, {:continue, :start_connection_pool}}
-        else
-          # The replication client process exited while the other connection processes were
-          # already running. Now that it's been restarted, we can transition it into the
-          # logical replication mode immediately since all the other connection process and the
-          # shapes supervisor are already up.
-          false = is_nil(state.lock_connection_pid)
-          Electric.Postgres.ReplicationClient.start_streaming(pid)
-          {:noreply, state}
-        end
+    case Electric.Postgres.ReplicationClient.start_link(opts) do
+      {:ok, pid} ->
+        state = %State{state | replication_client_pid: pid}
+        {:noreply, state}
 
       {:error, reason} ->
         handle_connection_error(reason, state, "replication")
@@ -393,9 +391,28 @@ defmodule Electric.Connection.Manager do
   def handle_info({:EXIT, _, :shutdown}, state), do: {:noreply, state}
   def handle_info({:EXIT, _, {:shutdown, _}}, state), do: {:noreply, state}
 
-  # When the replication client exits on its own, it can be restarted independently of the lock
-  # connection and the DB pool. If any of the latter two shut down, Connection.Manager will
-  # itself terminate to be restarted by its supervisor in a clean state.
+  # The replication client failed to establish its database connection.
+  def handle_info(
+        {:EXIT, pid, reason},
+        %State{replication_client_pid: pid, replication_connection_established: false} = state
+      ) do
+    error = {:error, reason}
+    conn_opts = Keyword.fetch!(replication_opts(state), :connection_opts)
+
+    case maybe_fallback_to_no_ssl(error, conn_opts) do
+      {:ok, conn_opts} ->
+        state = update_replication_connection_opts(state, conn_opts)
+        {:noreply, state, {:continue, :start_replication_client}}
+
+      error ->
+        handle_connection_error(error, state, "replication")
+    end
+  end
+
+  # The replication client exited after it had already started streaming from the database.
+  # It can be restarted independently of the lock connection and the DB pool. If any of the
+  # latter two shut down, Connection.Manager will itself terminate to be restarted by its
+  # supervisor in a clean state.
   def handle_info({:EXIT, pid, reason}, %State{replication_client_pid: pid} = state) do
     with false <- stop_if_fatal_error(reason, state) do
       Logger.debug(
@@ -470,6 +487,37 @@ defmodule Electric.Connection.Manager do
     {:noreply, %State{state | pg_lock_acquired: true}, {:continue, :start_replication_client}}
   end
 
+  def handle_cast(
+        :replication_connection_started_initializing,
+        %State{replication_connection_established: false} = state
+      ) do
+    state = mark_connection_succeeded(state)
+    {:noreply, state}
+  end
+
+  def handle_cast(
+        :replication_connection_established,
+        %State{replication_connection_established: false} = state
+      ) do
+    state = %State{state | replication_connection_established: true}
+
+    if is_nil(state.pool_pid) do
+      # This is the case where Connection.Manager starts connections from the initial state.
+      # Replication connection is opened after the lock connection has acquired the
+      # exclusive lock. After it, we start the connection pool.
+      false = is_nil(state.lock_connection_pid)
+      {:noreply, state, {:continue, :start_connection_pool}}
+    else
+      # The replication client process exited while the other connection processes were
+      # already running. Now that it's been restarted, we can transition it into the
+      # logical replication mode immediately since all the other connection process and the
+      # shapes supervisor are already up.
+      false = is_nil(state.lock_connection_pid)
+      Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
+      {:noreply, state}
+    end
+  end
+
   def handle_cast({:pg_info_looked_up, {server_version, system_identifier, timeline_id}}, state) do
     :telemetry.execute(
       [:electric, :postgres, :info_looked_up],
@@ -497,29 +545,8 @@ defmodule Electric.Connection.Manager do
 
       error ->
         with {:ok, connection_opts} <- maybe_fallback_to_no_ssl(error, opts[:connection_opts]) do
-          Keyword.put(opts, :connection_opts, connection_opts)
-          |> start_lock_connection()
-        end
-    end
-  end
-
-  defp start_replication_client(opts) do
-    case Electric.Postgres.ReplicationClient.start_link(opts) do
-      {:ok, pid} ->
-        {:ok, pid, opts[:replication_opts]}
-
-      error ->
-        with {:ok, connection_opts} <-
-               maybe_fallback_to_no_ssl(
-                 error,
-                 get_in(opts, [:replication_opts, :connection_opts])
-               ) do
-          Keyword.update!(
-            opts,
-            :replication_opts,
-            &Keyword.put(&1, :connection_opts, connection_opts)
-          )
-          |> start_replication_client()
+          opts = Keyword.put(opts, :connection_opts, connection_opts)
+          start_lock_connection(opts)
         end
     end
   end
