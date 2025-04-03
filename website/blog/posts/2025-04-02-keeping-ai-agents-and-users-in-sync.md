@@ -1,14 +1,11 @@
 ---
-title: "Why AI needs sync"
+title: Keeping AI agents and users in sync
 description: >-
-  Why should centralised, cloud-first AI systems be built on sync?
-  What problems does sync actually solve for them?
+  AI apps are collaborative. Building them means keeping agents and users in sync.
 excerpt: >-
-  Most AI apps run in the cloud and work by calling out to web services
-  like the OpenAI API and MCP Servers. Why should these centralised,
-  cloud-first AI apps be built on sync?
+  AI apps are collaborative. Building them means keeping agents and users in sync.
 authors: [thruflo]
-image: /img/blog/why-ai-needs-sync/header.jpg
+image: /img/blog/keeping-ai-agents-and-users-in-sync/header.jpg
 tags: [ai, sync]
 outline: [2, 3]
 post: true
@@ -25,15 +22,11 @@ post: true
   }
 </style>
 
-There's a consensus forming that AI apps should be built on sync.
+AI apps are collaborative. Building them means keeping agents and users in sync.
 
-Sunil Pai's framing is that [AI agents are local-first clients](https://sunilpai.dev/posts/local-first-ai-agents/). Theo Brown is [searching for the ideal sync engine](https://youtu.be/3gVBjTMS8FE) *(spoiler alert, if you're on Postgres it's [Electric](https://electric-sql.com))*.
+AI developers need to solve a raft of practical AX challenges including [resumeability](#resumeability), [interruptability](#interruptability), [multi&#8209;step](#multi-step-workflows), [multi&#8209;device](#multi-device) and [multi&#8209;user](#multi-user).
 
-However, most AI apps run in the cloud and work by calling out to web services like [OpenAI APIs](https://openai.com/api/) and [MCP servers](https://modelcontextprotocol.io/introduction). Why should these centralised, cloud-first AI apps be built on sync? What problems does sync actually solve for them?
-
-The answer is a raft of practical concerns, including [resumeability](#resumeability), [interruptability](#interruptability), [multi&#8209;device](#multi-device), [multi&#8209;user](#multi-user) and [multi&#8209;step](#multi-step-workflows) workflows.
-
-These are not edge-cases. They are concerns that cut to the core of AI UX and they're solved, elegantly, by sync.
+These are not edge-cases. They cut to the core of AI UX. They're solved, elegantly, by building on sync.
 
 ## Resumeability
 
@@ -91,7 +84,7 @@ You know another thing users do? They open multiple browser tabs and they flit i
 
 So what do you do when they open your app in two tabs at the same time? They can't remember which tab they used last. They're just confused when their session isn't there. Where did my vibes go?!
 
-<img src="/img/blog/why-ai-needs-sync/multi-tab-broken.png" style="width: 95%" />
+<img src="/img/blog/keeping-ai-agents-and-users-in-sync/multi-tab-broken.png" style="width: 95%" />
 
 Or worse, they kick off the same prompt twice because they think it's not running. Now they have two threads competing to do the same thing.
 
@@ -106,7 +99,7 @@ So even just the possibility of multiple browser tabs means you need to split th
 But, of course, the world is not just about browser tabs. Agents do stuff in the background. What are the chances your user is going to grab their mobile, nip across to [Linea Coffee](https://lineacaffe.com) on Mariposa and check progress while waiting in the queue?
 
 <figure style="border-radius: 16px; overflow: hidden">
-  <img src="/img/blog/why-ai-needs-sync/nipping-out-for-coffee.jpg" />
+  <img src="/img/blog/keeping-ai-agents-and-users-in-sync/nipping-out-for-coffee.jpg" />
 </figure>
 
 In this example, how do you keep the mobile app up-to-date with the session that was started in the browser? This is exactly what sync does. It handles *fan out*, so you can (resiliently) stream changes to multiple places at the same time.
@@ -128,7 +121,7 @@ Traditional software was designed around this. Work colleagues can collaborate o
 <figure style="border-radius: 16px; opacity: 0.82; overflow: hidden">
   <a href="https://www.figma.com/blog/introducing-figma-community/" class="no-visual"
       target="_blank">
-    <img src="/img/blog/why-ai-needs-sync/figma.png" style="margin: -30px 0" />
+    <img src="/img/blog/keeping-ai-agents-and-users-in-sync/figma.png" style="margin: -30px 0" />
   </a>
 </figure>
 
@@ -202,7 +195,7 @@ You're also not going to just have one agent. Soon, we're all going to have [swa
 
 <figure style="border-radius: 16px; overflow: hidden">
   <a href="https://github.com/openai/openai-agents-python" class="no-visual" target="_blank">
-    <img src="/img/blog/why-ai-needs-sync/swarm.png" /></a>
+    <img src="/img/blog/keeping-ai-agents-and-users-in-sync/swarm.png" /></a>
 </figure>
 
 Tools like [LangGraph](https://www.langchain.com/langgraph) provide a shared data layer for agents. However, they don't solve the last mile problem of syncing into user-facing apps to also keep the human in the loop. State can't just be in the cloud. Users are agents too!
@@ -252,7 +245,7 @@ When you call an API or function you typically know the "blast radius" of what d
 
 So you either need to constantly track and re-fetch everything. Or you need to monitor what data changes, so that you're automatically informed about it. What you really need is a way of declaring the subset of the data that the app, agent or UI depends on so you can automatically monitor it, stay up-to-date and be able to respond to changes.
 
-That's why Sunil says that [AI agents are local-first clients](https://sunilpai.dev/posts/local-first-ai-agents/). That's why Theo is [searching for the ideal sync engine](https://youtu.be/3gVBjTMS8FE) and it's why Electric syncs [Shapes](/docs/guides/shapes).
+That's why Sunil Pai says that [AI agents are local-first clients](https://sunilpai.dev/posts/local-first-ai-agents/). That's why Theo Brown is [searching for the ideal sync engine](https://youtu.be/3gVBjTMS8FE) and it's why Electric syncs [Shapes](/docs/guides/shapes).
 
 
 ## Future of software
@@ -261,7 +254,7 @@ Sync solves a range of practical challenges with AI UX. From resumeability and i
 
 As AI agents become more collaborative and autonomous (and lots more of them are spawned), then sharing state, reviewing progress, reacting to changes and maintaining local data sets are all going to get more important.
 
-This is the future of software. It needs to be powered by sync. Rolling your own sync is hard. Electric has [sync solved](/).
+This is the future of software. It needs to be powered by sync. Electric [solves sync](/).
 
 ### Let's jump in
 
