@@ -336,16 +336,23 @@ defmodule Electric.Connection.Manager do
           Electric.LsnTracker.reset(state.stack_id)
         end
 
-        {:ok, shapes_sup_pid} =
-          Electric.Connection.Supervisor.start_shapes_supervisor(
-            stack_id: state.stack_id,
-            shape_cache_opts: shape_cache_opts,
-            pool_opts: state.pool_opts,
-            replication_opts: state.replication_opts,
-            stack_events_registry: state.stack_events_registry,
-            tweaks: state.tweaks,
-            persistent_kv: state.persistent_kv
-          )
+        shapes_sup_pid =
+          case Electric.Connection.Supervisor.start_shapes_supervisor(
+                 stack_id: state.stack_id,
+                 shape_cache_opts: shape_cache_opts,
+                 pool_opts: state.pool_opts,
+                 replication_opts: state.replication_opts,
+                 stack_events_registry: state.stack_events_registry,
+                 tweaks: state.tweaks,
+                 persistent_kv: state.persistent_kv
+               ) do
+            {:ok, shapes_sup_pid} ->
+              shapes_sup_pid
+
+            {:error, reason} ->
+              Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
+              exit(reason)
+          end
 
         # Everything is ready to start accepting and processing logical messages from Postgres.
         Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
