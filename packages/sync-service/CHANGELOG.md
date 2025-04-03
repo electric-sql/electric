@@ -1,5 +1,16 @@
 # @core/sync-service
 
+## 1.0.4
+
+### Patch Changes
+
+- d278b9f: fix!: Convert live responses with no changes from `204` to `200`.
+
+  BREAKING CHANGE: community clients relying on `204` alone for up-to-date logic might break - live responses now always return a `200` with a body/
+
+- d2c2342: Improved replication processing telemetry
+- 1c729fa: fix: refetch schema from DB when seeing a relation message to get recent info
+
 ## 1.0.3
 
 ### Patch Changes
