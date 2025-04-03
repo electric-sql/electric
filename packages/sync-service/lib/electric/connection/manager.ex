@@ -322,7 +322,6 @@ defmodule Electric.Connection.Manager do
 
     if first_time?, do: Logger.debug("Starting replication client for stack #{state.stack_id}")
 
-
     case Electric.Postgres.ReplicationClient.start_link(opts) do
       {:ok, pid} ->
         state = %State{state | replication_client_pid: pid}
