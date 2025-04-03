@@ -60,7 +60,7 @@ defmodule Electric.Plug.Router do
     else
       conn = conn |> fetch_query_params()
 
-      case conn.query_params["api_secret"] do
+      case conn.query_params["secret"] do
         ^api_secret ->
           conn
 
