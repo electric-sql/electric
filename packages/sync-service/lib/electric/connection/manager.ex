@@ -88,7 +88,7 @@ defmodule Electric.Connection.Manager do
 
   @type options :: [option]
 
-  @lock_status_logging_interval 10_000
+  @connection_status_logging_interval 10_000
 
   def child_spec(init_arg) do
     %{
@@ -274,7 +274,8 @@ defmodule Electric.Connection.Manager do
           :waiting_for_connection_lock
         )
 
-        Process.send_after(self(), :log_lock_connection_status, @lock_status_logging_interval)
+        schedule_periodic_connection_status_log(:log_lock_connection_status)
+
         {:noreply, state}
 
       {:error, reason} ->
@@ -302,6 +303,10 @@ defmodule Electric.Connection.Manager do
     case Electric.Postgres.ReplicationClient.start_link(opts) do
       {:ok, pid} ->
         state = %State{state | replication_client_pid: pid}
+
+        if first_time?,
+          do: schedule_periodic_connection_status_log(:log_replication_connection_status)
+
         {:noreply, state}
 
       {:error, reason} ->
@@ -473,7 +478,24 @@ defmodule Electric.Connection.Manager do
   def handle_info(:log_lock_connection_status, state) do
     if not state.pg_lock_acquired do
       Logger.warning(fn -> "Waiting for postgres lock to be acquired..." end)
-      Process.send_after(self(), :log_lock_connection_status, @lock_status_logging_interval)
+      schedule_periodic_connection_status_log(:log_lock_connection_status)
+    end
+
+    {:noreply, state}
+  end
+
+  # Periodically log the status of the replication connection while waiting for it to get ready
+  # for streaming.
+  def handle_info(:log_replication_connection_status, state) do
+    if not state.replication_connection_established do
+      Logger.warning(fn ->
+        "Waiting for the replication connection setup to complete... " <>
+          "Check that you don't have pending transactions in the database. " <>
+          "Electric has to wait for all pending transactions to commit or rollback " <>
+          "before it can create the replication slot."
+      end)
+
+      schedule_periodic_connection_status_log(:log_replication_connection_status)
     end
 
     {:noreply, state}
@@ -935,5 +957,9 @@ defmodule Electric.Connection.Manager do
     end
 
     :ok
+  end
+
+  defp schedule_periodic_connection_status_log(type) do
+    Process.send_after(self(), type, @connection_status_logging_interval)
   end
 end
