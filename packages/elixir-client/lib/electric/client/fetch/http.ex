@@ -12,6 +12,16 @@ defmodule Electric.Client.Fetch.HTTP do
               default: @default_timeout,
               type_spec: quote(do: pos_integer() | :infinity)
             ],
+            is_transient_fun: [
+              type: {:fun, 1},
+              default: &Electric.Client.Fetch.HTTP.transient_response?/1,
+              doc: """
+              Function that determines if a server response represents a transient error and should be retried.
+
+              Defaults to identical behaviour to `Req`, and retries any
+              response with an HTTP 408/429/500/502/503/504 status.
+              """
+            ],
             headers: [
               type: {:or, [{:map, :string, :string}, {:list, {:tuple, [:string, :string]}}]},
               doc: """
@@ -84,6 +94,9 @@ defmodule Electric.Client.Fetch.HTTP do
         delay when is_integer(delay) and delay > 0 -> fn _ -> delay end
       end
 
+    is_transient_fun =
+      Keyword.get(opts, :is_transient_fun, &Electric.Client.Fetch.HTTP.transient_response?/1)
+
     connect_options = []
     timeout = Keyword.get(opts, :timeout, @default_timeout)
 
@@ -91,7 +104,7 @@ defmodule Electric.Client.Fetch.HTTP do
       method: request.method,
       url: Fetch.Request.url(request),
       headers: merge_headers(request.headers, Keyword.get(opts, :headers, [])),
-      retry: &retry(&1, &2, retry_delay_fun, timeout),
+      retry: &retry(&1, &2, retry_delay_fun, is_transient_fun, timeout),
       # turn off req's retry logging and replace with ours
       retry_log_level: false,
       # :infinity actually means this number of retries, which equates to ~10 years
@@ -142,8 +155,14 @@ defmodule Electric.Client.Fetch.HTTP do
     Enum.concat(Enum.to_list(request_headers), Enum.to_list(opts_headers))
   end
 
-  defp retry(%Req.Request{} = request, response_or_error, retry_delay_fun, :infinity) do
-    if transient?(response_or_error) do
+  defp retry(
+         %Req.Request{} = request,
+         response_or_error,
+         retry_delay_fun,
+         is_transient_fun,
+         :infinity
+       ) do
+    if transient?(response_or_error, is_transient_fun) do
       delay_ms = request_delay(request, retry_delay_fun)
       log_retry(response_or_error, retry_count(request), delay_ms, "")
 
@@ -151,7 +170,13 @@ defmodule Electric.Client.Fetch.HTTP do
     end
   end
 
-  defp retry(%Req.Request{} = request, response_or_error, retry_delay_fun, max_age)
+  defp retry(
+         %Req.Request{} = request,
+         response_or_error,
+         retry_delay_fun,
+         is_transient_fun,
+         max_age
+       )
        when is_integer(max_age) do
     start_time = Req.Request.get_private(request, :electric_start_request)
     age = now() - start_time
@@ -159,7 +184,7 @@ defmodule Electric.Client.Fetch.HTTP do
 
     # using the :transient retry methodology here, retrying even POSTs,
     # because our server's endpoints are idempotent by design
-    if transient?(response_or_error) && age + delay_ms / 1000 <= max_age do
+    if transient?(response_or_error, is_transient_fun) && age + delay_ms / 1000 <= max_age do
       log_retry(
         response_or_error,
         retry_count(request),
@@ -218,24 +243,41 @@ defmodule Electric.Client.Fetch.HTTP do
 
   defp now, do: System.monotonic_time(:second)
 
-  defp transient?(%Req.Response{status: status}) when status in [408, 429, 500, 502, 503, 504] do
-    true
+  @transient_status [408, 429, 500, 502, 503, 504]
+
+  @doc """
+  List of HTTP status codes that represent a retryable error.
+  """
+  def transient_status_codes, do: @transient_status
+
+  @doc """
+  Test the given `Req.Response` against the list of transient error status
+  codes.
+
+  Returns `true` if the response has a status code in this list and so the
+  request is retryable.
+  """
+  @spec transient_response?(Req.Response.t(), [pos_integer(), ...]) :: boolean()
+  def transient_response?(response, status_codes \\ @transient_status)
+
+  def transient_response?(%Req.Response{status: status}, status_codes) do
+    status in status_codes
   end
 
-  defp transient?(%Req.Response{}) do
-    false
+  defp transient?(%Req.Response{} = response, is_transient_fun) do
+    is_transient_fun.(response)
   end
 
-  defp transient?(%Req.TransportError{reason: reason})
+  defp transient?(%Req.TransportError{reason: reason}, _is_transient_fun)
        when reason in [:timeout, :econnrefused, :closed] do
     true
   end
 
-  defp transient?(%Req.HTTPError{protocol: :http2, reason: :unprocessed}) do
+  defp transient?(%Req.HTTPError{protocol: :http2, reason: :unprocessed}, _is_transient_fun) do
     true
   end
 
-  defp transient?(%{__exception__: true}) do
+  defp transient?(%{__exception__: true}, _is_transient_fun) do
     false
   end
 end

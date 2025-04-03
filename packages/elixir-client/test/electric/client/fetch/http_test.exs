@@ -31,6 +31,15 @@ defmodule Electric.Client.Fetch.HTTPTest do
     test "reject invalid opts" do
       assert {:error, _} = Fetch.HTTP.validate_opts(request: :ouch)
     end
+
+    test "pass valid is_transient_fun" do
+      assert {:ok, _opts} = Fetch.HTTP.validate_opts(is_transient_fun: fn _ -> false end)
+    end
+
+    test "reject invalid is_transient_fun" do
+      assert {:error, _} = Fetch.HTTP.validate_opts(is_transient_fun: fn _, _ -> false end)
+      assert {:error, _} = Fetch.HTTP.validate_opts(is_transient_fun: nil)
+    end
   end
 
   describe "build_request/2" do
