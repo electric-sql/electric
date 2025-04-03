@@ -97,6 +97,14 @@ defmodule Electric.Client.Mock do
   @type transaction_opts :: [transaction_opt() | change_opt()]
 
   @impl Electric.Client.Fetch
+  def validate_opts(opts) do
+    case Keyword.fetch(opts, :endpoint) do
+      {:ok, pid} when is_pid(pid) -> {:ok, opts}
+      :error -> {:error, "missing :endpoint"}
+    end
+  end
+
+  @impl Electric.Client.Fetch
   def fetch(%Fetch.Request{} = request, opts) do
     {:ok, endpoint} = Keyword.fetch(opts, :endpoint)
 

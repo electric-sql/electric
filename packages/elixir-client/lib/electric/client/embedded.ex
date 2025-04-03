@@ -6,6 +6,17 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
     @behaviour Electric.Client.Fetch
 
     @impl Electric.Client.Fetch
+    def validate_opts(opts) do
+      case Keyword.fetch(opts, :api) do
+        {:ok, %Api{}} ->
+          {:ok, opts}
+
+        :error ->
+          {:error, "missing required api: %#{Api}{} setting"}
+      end
+    end
+
+    @impl Electric.Client.Fetch
     def fetch(%Fetch.Request{method: :delete} = request, opts) do
       {:ok, api} = Keyword.fetch(opts, :api)
 
