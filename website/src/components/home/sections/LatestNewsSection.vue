@@ -8,7 +8,7 @@
 
   const actions = [
     {
-      href: '/product/cloud/sign-up',
+      href: 'https://dashboard.electric-sql.cloud/',
       text: 'Subscribe',
       theme: 'brand'
     },
