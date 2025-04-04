@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@microsoft/fetch-event-source':
+    hash: lgwcujj3mimdfutlwueisfm32u
+    path: patches/@microsoft__fetch-event-source.patch
+
 importers:
 
   .:
@@ -1387,6 +1392,10 @@ importers:
   packages/sync-service: {}
 
   packages/typescript-client:
+    dependencies:
+      '@microsoft/fetch-event-source':
+        specifier: ^2.0.1
+        version: 2.0.1(patch_hash=lgwcujj3mimdfutlwueisfm32u)
     optionalDependencies:
       '@rollup/rollup-darwin-arm64':
         specifier: ^4.18.1
@@ -3255,6 +3264,9 @@ packages:
 
   '@mdx-js/mdx@2.3.0':
     resolution: {integrity: sha512-jLuwRlz8DQfQNiUCJR50Y09CGPq3fLtmtUQfVrj79E0JWu3dvsVcxVIcfhR5h0iXu+/z++zDrYeiJqifRynJkA==}
+
+  '@microsoft/fetch-event-source@2.0.1':
+    resolution: {integrity: sha512-W6CLUJ2eBMw3Rec70qrsEW0jOm/3twwJv21mrmj2yORiaVmVYGS4sSS5yUwvQc1ZlDLYGPnClVWmUUMagKNsfA==}
 
   '@next/env@14.2.17':
     resolution: {integrity: sha512-MCgO7VHxXo8sYR/0z+sk9fGyJJU636JyRmkjc7ZJY8Hurl8df35qG5hoAh5KMs75FLjhlEo9bb2LGe89Y/scDA==}
@@ -12201,6 +12213,8 @@ snapshots:
       vfile: 5.3.7
     transitivePeerDependencies:
       - supports-color
+
+  '@microsoft/fetch-event-source@2.0.1(patch_hash=lgwcujj3mimdfutlwueisfm32u)': {}
 
   '@next/env@14.2.17': {}
 

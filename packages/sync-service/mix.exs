@@ -110,6 +110,7 @@ defmodule Electric.MixProject do
         {:retry, "~> 0.19"},
         {:remote_ip, "~> 1.2"},
         {:req, "~> 0.5"},
+        {:stream_split, "~> 0.1"},
         {:telemetry_poller, "~> 1.2"},
         # tls_certificate_check is required by otel_exporter_otlp
         {:tls_certificate_check, "~> 1.27"},

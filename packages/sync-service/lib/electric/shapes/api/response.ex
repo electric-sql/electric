@@ -120,7 +120,7 @@ defmodule Electric.Shapes.Api.Response do
         message
       end
 
-    Api.encode_message(api_or_request, body)
+    Api.encode_error_message(api_or_request, body)
   end
 
   @spec send(Plug.Conn.t(), t()) :: Plug.Conn.t()
@@ -215,6 +215,7 @@ defmodule Electric.Shapes.Api.Response do
     |> put_up_to_date_header(response)
     |> put_offset_header(response)
     |> put_known_error_header(response)
+    |> put_sse_headers(response)
   end
 
   defp put_shape_handle_header(conn, %__MODULE__{handle: nil}) do
@@ -273,6 +274,13 @@ defmodule Electric.Shapes.Api.Response do
       "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746",
       api
     )
+  end
+
+  # For live SSE requests we want to cache for just under the
+  # sse_timeout, in order to enable request collapsing.
+  defp put_cache_headers(conn, %__MODULE__{params: %{live: true, experimental_live_sse: true}, api: api}) do
+    conn
+    |> put_cache_header("cache-control", "public, max-age=#{max(1, div(api.sse_timeout, 1000) - 1)}", api)
   end
 
   # For live requests we want short cache lifetimes and to update the live cursor
@@ -352,6 +360,16 @@ defmodule Electric.Shapes.Api.Response do
 
   defp validate_response_finalized!(%__MODULE__{finalized?: true} = _response) do
     :ok
+  end
+
+  defp put_sse_headers(conn, %__MODULE__{params: %{live: true, experimental_live_sse: true}}) do
+    conn
+    |> Plug.Conn.put_resp_header("content-type", "text/event-stream")
+    |> Plug.Conn.put_resp_header("connection", "keep-alive")
+  end
+
+  defp put_sse_headers(conn, _response) do
+    conn
   end
 
   defp send_stream(%Plug.Conn{} = conn, %__MODULE__{status: status} = response) do
