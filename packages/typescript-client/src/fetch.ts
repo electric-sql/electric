@@ -95,13 +95,18 @@ export function createFetchWithBackoff(
   }
 }
 
+const NO_BODY_STATUS_CODES = [201, 204, 205]
+
 // Ensure body can actually be read in its entirety
 export function createFetchWithConsumedMessages(fetchClient: typeof fetch) {
   return async (...args: Parameters<typeof fetch>): Promise<Response> => {
     const url = args[0]
     const res = await fetchClient(...args)
     try {
-      if (res.body === null) return res
+      if (res.status < 200 || NO_BODY_STATUS_CODES.includes(res.status)) {
+        return res
+      }
+
       const text = await res.text()
       return new Response(text, res)
     } catch (err) {
