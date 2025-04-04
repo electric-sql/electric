@@ -554,12 +554,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // NOTE: 204s are deprecated, the Electric server should not
         // send these in latest versions but this is here for backwards
         // compatibility
-        const messages = status === 204 ? `[]` : await response.text()
         if (status === 204) {
           // There's no content so we are live and up to date
           this.#lastSyncedAt = Date.now()
         }
 
+        const messages = (await response.text()) || `[]`
         const batch = this.#messageParser.parse(messages, this.#schema)
 
         // Update isUpToDate
