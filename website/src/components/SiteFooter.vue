@@ -143,7 +143,7 @@
               Demos</a>
             <a href="/blog">
               Blog</a>
-            <a href="/product/cloud/sign-up">
+            <a href="https://dashboard.electric-sql.cloud/">
               Sign up</a>
           </span>
         </span>

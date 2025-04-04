@@ -8,7 +8,7 @@
 
   const actions = [
     {
-      href: '/product/cloud/sign-up',
+      href: 'https://dashboard.electric-sql.cloud/',
       text: 'Subscribe',
       theme: 'brand'
     },
@@ -72,7 +72,7 @@
     </template>
     <template #tagline>
       Subscribe to the
-      <a hreg="/blog">Electric Blog</a> for the latest news and updates.
+      <a href="/blog">Electric Blog</a> for the latest news and updates.
     </template>
     <div class="listing">
       <BlogPostListing v-for="post in posts"

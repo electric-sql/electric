@@ -8,19 +8,19 @@
 <template>
   <div :class="[...classes, ...extraClasses]">
     <div class="cta-lg">
-      <VPButton href="/product/cloud/sign-up"
+      <VPButton href="https://dashboard.electric-sql.cloud/"
           theme="brand"
           text="Sign-up to Cloud"
       />
     </div>
     <div class="cta-md">
-      <VPButton href="/product/cloud/sign-up"
+      <VPButton href="https://dashboard.electric-sql.cloud/"
           theme="brand"
           text="Sign-up"
       />
     </div>
     <div class="cta-sm">
-      <VPButton href="/product/cloud/sign-up"
+      <VPButton href="https://dashboard.electric-sql.cloud/"
           theme="brand"
           text="Sign-up to Cloud"
       />

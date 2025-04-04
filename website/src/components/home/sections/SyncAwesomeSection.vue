@@ -10,7 +10,7 @@
       theme: 'brand'
     },
     {
-      href: '/product/cloud/sign-up',
+      href: 'https://dashboard.electric-sql.cloud/',
       text: 'Sign-up'
     }
   ]
