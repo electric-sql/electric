@@ -17,8 +17,8 @@ servers:
 
 components:
   parameters:
-    api_secret:
-      name: api_secret
+    secret:
+      name: secret
       in: query
       schema:
         type: string
@@ -199,7 +199,7 @@ paths:
 
             Note that insert operations always include the full row,
             in either mode.
-        - $ref: '#/components/parameters/api_secret'
+        - $ref: '#/components/parameters/secret'
         # Headers
         - name: If-None-Match
           in: header
@@ -496,7 +496,7 @@ paths:
           description:
             Optional, deletes the current shape if it matches the `handle` provided.
             If not provided, deletes the current shape.
-        - $ref: '#/components/parameters/api_secret'
+        - $ref: '#/components/parameters/secret'
       responses:
         "202":
           description: |-
