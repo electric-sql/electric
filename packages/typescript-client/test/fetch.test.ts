@@ -5,8 +5,10 @@ import {
   createFetchWithBackoff,
   BackoffDefaults,
   createFetchWithChunkBuffer,
+  createFetchWithConsumedMessages,
 } from '../src/fetch'
 import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
+import { afterEach } from 'node:test'
 
 describe(`createFetchWithBackoff`, () => {
   const initialDelay = 10
@@ -428,6 +430,137 @@ describe(`createFetchWithChunkBuffer`, () => {
 
     // no new prefetches since main request was aborted
     expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe(`createFetchWithConsumedMessages`, () => {
+  const mockFetch = vi.fn()
+
+  afterEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it(`should return the original response for status codes < 200`, async () => {
+    const mockResponse = {
+      status: 199,
+      text: vi.fn(),
+      headers: new Headers(),
+    }
+    mockFetch.mockResolvedValue(mockResponse)
+
+    const enhancedFetch = createFetchWithConsumedMessages(mockFetch)
+    const result = await enhancedFetch(`http://example.com`)
+
+    expect(result).toBe(mockResponse)
+    expect(mockResponse.text).not.toHaveBeenCalled()
+  })
+
+  it(`should return the original response for status codes with no body (201, 204, 205)`, async () => {
+    const mockResponse = {
+      status: 204,
+      text: vi.fn(),
+      headers: new Headers(),
+    }
+    mockFetch.mockResolvedValue(mockResponse)
+
+    const enhancedFetch = createFetchWithConsumedMessages(mockFetch)
+    const result = await enhancedFetch(`http://example.com`)
+
+    expect(result).toBe(mockResponse)
+    expect(mockResponse.text).not.toHaveBeenCalled()
+  })
+
+  it(`should consume the body and return a new Response for successful status codes`, async () => {
+    const mockText = `response body`
+    const mockHeaders = new Headers({ 'content-type': `text/plain` })
+    const mockResponse = {
+      status: 200,
+      text: vi.fn().mockResolvedValue(mockText),
+      headers: mockHeaders,
+    }
+    mockFetch.mockResolvedValue(mockResponse)
+
+    const enhancedFetch = createFetchWithConsumedMessages(mockFetch)
+    const result = await enhancedFetch(`http://example.com`)
+
+    expect(result).not.toBe(mockResponse)
+    expect(result.status).toBe(200)
+    expect(await result.text()).toBe(mockText)
+    expect(mockResponse.text).toHaveBeenCalled()
+  })
+
+  it(`should throw FetchError when reading body fails`, async () => {
+    const mockError = new Error(`Failed to read body`)
+    const mockHeaders = new Headers({ 'content-type': `text/plain` })
+    const mockResponse = {
+      status: 200,
+      text: vi.fn().mockRejectedValue(mockError),
+      headers: mockHeaders,
+    }
+    mockFetch.mockResolvedValue(mockResponse)
+
+    const enhancedFetch = createFetchWithConsumedMessages(mockFetch)
+    const url = `http://example.com`
+
+    await expect(() => enhancedFetch(url)).rejects.toThrow(FetchError)
+
+    try {
+      await enhancedFetch(url)
+    } catch (error) {
+      expect(error).toBeInstanceOf(FetchError)
+      if (error instanceof FetchError) {
+        expect(error.status).toBe(200)
+        expect(error.url).toBe(url)
+        expect(error.headers).toEqual(Object.fromEntries(mockHeaders.entries()))
+        expect(error.message).toBe(mockError.message)
+      }
+    }
+  })
+
+  it(`should handle non-Error rejection values when reading body`, async () => {
+    const mockResponse = {
+      status: 200,
+      text: vi.fn().mockRejectedValue(`some error string`),
+      headers: new Headers(),
+    }
+    mockFetch.mockResolvedValue(mockResponse)
+
+    const enhancedFetch = createFetchWithConsumedMessages(mockFetch)
+    const url = `http://example.com`
+
+    await expect(() => enhancedFetch(url)).rejects.toThrow(FetchError)
+
+    try {
+      await enhancedFetch(url)
+    } catch (error) {
+      expect(error).toBeInstanceOf(FetchError)
+      if (error instanceof FetchError) {
+        expect(error.message).toBe(`some error string`)
+      }
+    }
+  })
+
+  it(`should handle unknown rejection values when reading body`, async () => {
+    const mockResponse = {
+      status: 200,
+      text: vi.fn().mockRejectedValue({ some: `object` }),
+      headers: new Headers(),
+    }
+    mockFetch.mockResolvedValue(mockResponse)
+
+    const enhancedFetch = createFetchWithConsumedMessages(mockFetch)
+    const url = `http://example.com`
+
+    await expect(() => enhancedFetch(url)).rejects.toThrow(FetchError)
+
+    try {
+      await enhancedFetch(url)
+    } catch (error) {
+      expect(error).toBeInstanceOf(FetchError)
+      if (error instanceof FetchError) {
+        expect(error.message).toBe(`failed to read body`)
+      }
+    }
   })
 })
 
