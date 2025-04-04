@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.0.5
+
+### Patch Changes
+
+- fd11e14: Improve error handling in case of failure to start shapes supervisor.
+- dea3e1b: fix: improve error handling in bad PG connectivity
+
 ## 1.0.4
 
 ### Patch Changes
