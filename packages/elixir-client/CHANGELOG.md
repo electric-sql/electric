@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.3.1
+
+### Patch Changes
+
+- 9cd556c: Change retry behaviour to timeout after some number of seconds, or keep going indefinitely
+
 ## 0.3.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.0.3
+
+### Patch Changes
+
+- 22cde89: Maintain backwards compatibility of client for 204 responses
+
 ## 1.0.2
 
 ### Patch Changes
