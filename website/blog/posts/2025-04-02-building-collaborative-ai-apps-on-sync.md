@@ -1,11 +1,13 @@
 ---
-title: Keeping AI agents and users in sync
+title: Building collaborative AI apps? You need sync.
 description: >-
-  AI apps are collaborative. Building them means keeping agents and users in sync.
+  AI apps are collaborative. Building then requires solving resumeability,
+  interruptability, multi‑tab, multi‑device and multi‑user.
 excerpt: >-
-  AI apps are collaborative. Building them means keeping agents and users in sync.
+  AI apps are collaborative. Building then requires solving resumeability,
+  interruptability, multi‑tab, multi‑device and multi‑user.
 authors: [thruflo]
-image: /img/blog/keeping-ai-agents-and-users-in-sync/header.jpg
+image: /img/blog/building-collaborative-ai-apps-on-sync/header.jpg
 tags: [ai, sync]
 outline: [2, 3]
 post: true
@@ -22,11 +24,11 @@ post: true
   }
 </style>
 
-AI apps are collaborative. Building them means keeping agents and users in sync.
+AI apps are collaborative. Building then requires solving [resumeability](#resumeability), [interruptability](#interruptability), [multi&#8209;tab](#multi-device), [multi&#8209;device](#multi-device) and [multi&#8209;user](#multi-user).
 
-AI developers need to solve a raft of practical AX challenges including [resumeability](#resumeability), [interruptability](#interruptability), [multi&#8209;step](#multi-step-workflows), [multi&#8209;device](#multi-device) and [multi&#8209;user](#multi-user).
+These are not edge-cases. They're core to [user-agent collaboration](#collaboration) and the new world of [multi&#8209;step, task&#8209;and&#8209;review workflows](#multi-step-workflows). They're also [key growth hacks](#to-replacing-saas) for products looking to replace current-generation SaaS and enteprise software.
 
-These are not edge-cases. They cut to the core of AI UX. They're solved, elegantly, by building on sync.
+As AI apps become more collaborative, with multiple users interacting with the same AI session and those sessions spawning more and more agents, these challenges are only going to get more important. Luckily, they're all [solved by&nbsp;sync](#sync-is-the-solution).
 
 ## Resumeability
 
@@ -84,7 +86,7 @@ You know another thing users do? They open multiple browser tabs and they flit i
 
 So what do you do when they open your app in two tabs at the same time? They can't remember which tab they used last. They're just confused when their session isn't there. Where did my vibes go?!
 
-<img src="/img/blog/keeping-ai-agents-and-users-in-sync/multi-tab-broken.png" style="width: 95%" />
+<img src="/img/blog/building-collaborative-ai-apps-on-sync/multi-tab-broken.png" style="width: 95%" />
 
 Or worse, they kick off the same prompt twice because they think it's not running. Now they have two threads competing to do the same thing.
 
@@ -99,7 +101,7 @@ So even just the possibility of multiple browser tabs means you need to split th
 But, of course, the world is not just about browser tabs. Agents do stuff in the background. What are the chances your user is going to grab their mobile, nip across to [Linea Coffee](https://lineacaffe.com) on Mariposa and check progress while waiting in the queue?
 
 <figure style="border-radius: 16px; overflow: hidden">
-  <img src="/img/blog/keeping-ai-agents-and-users-in-sync/nipping-out-for-coffee.jpg" />
+  <img src="/img/blog/building-collaborative-ai-apps-on-sync/nipping-out-for-coffee.jpg" />
 </figure>
 
 In this example, how do you keep the mobile app up-to-date with the session that was started in the browser? This is exactly what sync does. It handles *fan out*, so you can (resiliently) stream changes to multiple places at the same time.
@@ -121,7 +123,7 @@ Traditional software was designed around this. Work colleagues can collaborate o
 <figure style="border-radius: 16px; opacity: 0.82; overflow: hidden">
   <a href="https://www.figma.com/blog/introducing-figma-community/" class="no-visual"
       target="_blank">
-    <img src="/img/blog/keeping-ai-agents-and-users-in-sync/figma.png" style="margin: -30px 0" />
+    <img src="/img/blog/building-collaborative-ai-apps-on-sync/figma.png" style="margin: -30px 0" />
   </a>
 </figure>
 
@@ -195,7 +197,7 @@ You're also not going to just have one agent. Soon, we're all going to have [swa
 
 <figure style="border-radius: 16px; overflow: hidden">
   <a href="https://github.com/openai/openai-agents-python" class="no-visual" target="_blank">
-    <img src="/img/blog/keeping-ai-agents-and-users-in-sync/swarm.png" /></a>
+    <img src="/img/blog/building-collaborative-ai-apps-on-sync/swarm.png" /></a>
 </figure>
 
 Tools like [LangGraph](https://www.langchain.com/langgraph) provide a shared data layer for agents. However, they don't solve the last mile problem of syncing into user-facing apps to also keep the human in the loop. State can't just be in the cloud. Users are agents too!
@@ -248,13 +250,17 @@ So you either need to constantly track and re-fetch everything. Or you need to m
 That's why Sunil Pai says that [AI agents are local-first clients](https://sunilpai.dev/posts/local-first-ai-agents/). That's why Theo Brown is [searching for the ideal sync engine](https://youtu.be/3gVBjTMS8FE) and it's why Electric syncs [Shapes](/docs/guides/shapes).
 
 
-## Future of software
+## Sync is the solution
 
 Sync solves a range of practical challenges with AI UX. From resumeability and interruptibility to multi-tab, multi-device and multi-user.
 
 As AI agents become more collaborative and autonomous (and lots more of them are spawned), then sharing state, reviewing progress, reacting to changes and maintaining local data sets are all going to get more important.
 
-This is the future of software. It needs to be powered by sync. Electric [solves sync](/).
+### To replacing SaaS
+
+For AI apps to deliver on their promise of replacing current-generation SaaS and enterprise software, they need to match and then exceed the capabilities of the current software. SaaS has had decades to build out multi-user support and team-based collaboration. Single-user AI sessions are not going to scale across the enterprise.
+
+Teams building AI products that are serious about scaling and market adoption need to make sure they're collaborative. That means building on sync. Sync is a hard problem to solve yourself. That's why Electric [solves sync](/).
 
 ### Let's jump in
 
