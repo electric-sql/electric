@@ -129,6 +129,16 @@ defmodule Electric.Client.EctoAdapterTest do
                parser: {EctoAdapter, NamespacedTable}
              } = EctoAdapter.shape_from_query!(NamespacedTable)
     end
+
+    test "prefixed queries", %{column_names: column_names} = _ctx do
+      assert %Electric.Client.ShapeDefinition{
+               namespace: "hamster",
+               table: @table_name,
+               where: nil,
+               columns: ^column_names,
+               parser: {EctoAdapter, TestTable}
+             } = EctoAdapter.shape_from_query!(Ecto.Query.put_query_prefix(TestTable, "hamster"))
+    end
   end
 
   describe "ValueMapper.for_schema/2" do

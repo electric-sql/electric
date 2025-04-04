@@ -28,8 +28,11 @@ if Code.ensure_loaded?(Ecto) do
       )
     end
 
-    defp table_name(%{from: %{prefix: prefix, source: {table_name, struct}}}) do
-      {table_name, prefix, struct}
+    defp table_name(%{
+           prefix: query_prefix,
+           from: %{prefix: source_prefix, source: {table_name, struct}}
+         }) do
+      {table_name, query_prefix || source_prefix, struct}
     end
 
     defp query_columns(%{from: %{source: {_table_name, struct}}}) do
