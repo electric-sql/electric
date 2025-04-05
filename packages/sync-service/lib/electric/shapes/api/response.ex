@@ -122,7 +122,7 @@ defmodule Electric.Shapes.Api.Response do
       |> Map.delete("live")
       |> Map.delete("cursor")
 
-    query = URI.encode_query(params)
+    query = Plug.Conn.Query.encode(params)
 
     Plug.Conn.put_resp_header(
       conn,
