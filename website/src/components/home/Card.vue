@@ -1,11 +1,13 @@
 <script setup>
   const {
+    background,
     body,
     href,
     icon,
     image,
     title
   } = defineProps([
+    'background',
     'body',
     'href',
     'icon',
@@ -105,7 +107,9 @@
 
 <template>
   <a class="no-visual" :href="href">
-    <div class="card">
+    <div class="card" :style="{
+        backgroundColor: background ? background : 'var(--vp-c-bg-soft)'
+      }">
       <slot name="override_contents">
         <div v-if="image" class="image">
           <img :src="image" />
@@ -113,7 +117,9 @@
         <div v-if="icon" class="icon">
           <img :src="icon" />
         </div>
-        <div class="body">
+        <div class="body" :style="{
+            backgroundColor: background ? background : 'var(--vp-c-bg-soft)'
+          }">
           <h3 v-if="title">
             {{ title }}
           </h3>
