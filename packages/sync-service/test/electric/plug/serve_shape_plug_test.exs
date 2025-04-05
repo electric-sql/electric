@@ -732,6 +732,42 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
     end
 
+    test "correctly encodes shape params in the location header of a 409 response", ctx do
+      new_shape_handle = "new-shape-handle"
+
+      Mock.ShapeCache
+      |> expect(:get_shape, fn test_shape, _opts ->
+        "value = 'just-a-user'::text" = test_shape.where.query
+        nil
+      end)
+      |> expect(:get_or_create_shape_handle, fn test_shape, _opts ->
+        "value = 'just-a-user'::text" = test_shape.where.query
+        {new_shape_handle, @test_offset}
+      end)
+
+      conn =
+        ctx
+        |> conn(
+          :get,
+          %{
+            "table" => "public.users",
+            "where" => "value = $1",
+            "params" => %{"1" => "just-a-user"}
+          },
+          "?offset=-1&handle=#{@test_shape_handle}"
+        )
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 409
+
+      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
+      assert get_resp_header(conn, "electric-handle") == [new_shape_handle]
+
+      assert get_resp_header(conn, "location") == [
+               "/?handle=#{new_shape_handle}&offset=-1&params[1]=just-a-user&table=public.users&where=value+%3D+%241"
+             ]
+    end
+
     test "sends 400 when omitting primary key columns in selection", ctx do
       conn =
         ctx
