@@ -31,6 +31,7 @@ defmodule Electric.Plug.ServeShapePlug do
     all_params =
       Map.merge(conn.query_params, conn.path_params)
       |> Map.update("live", "false", &(&1 != "false"))
+      |> Map.update("experimental_live_sse", "false", &(&1 != "false"))
 
     case Api.validate(api, all_params) do
       {:ok, request} ->

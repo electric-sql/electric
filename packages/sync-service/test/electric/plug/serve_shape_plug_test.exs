@@ -90,6 +90,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         inspector: {__MODULE__, []},
         registry: @registry,
         long_poll_timeout: long_poll_timeout(ctx),
+        sse_timeout: sse_timeout(ctx),
         max_age: max_age(ctx),
         stale_age: stale_age(ctx),
         persistent_kv: ctx.persistent_kv
@@ -809,6 +810,118 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
   end
 
+  describe "serving shapes with sse mode" do
+    setup [:with_stack_id_from_test, :with_lsn_tracker]
+
+    setup ctx do
+      {:via, _, {registry_name, registry_key}} =
+        Electric.Replication.Supervisor.name(ctx)
+
+      {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      :ok
+    end
+
+    test "returns proper SSE format response when experimental_live_sse=true and live=true", ctx do
+      Mock.ShapeCache
+      |> expect(:get_shape, fn @test_shape, _opts ->
+        {@test_shape_handle, @test_offset}
+      end)
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+
+      # Remove unused variable
+      # Set up storage mocks
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ -> nil end)
+      |> expect(:get_log_stream, fn @test_offset, @test_offset, @test_opts -> [] end)
+
+      # Use a short SSE timeout for the test
+      ctx = Map.put(ctx, :sse_timeout, 100)
+
+      conn =
+        ctx
+        |> conn(
+          :get,
+          %{"table" => "public.users"},
+          "?offset=#{@test_offset}&handle=#{@test_shape_handle}&live=true&experimental_live_sse=true"
+        )
+        |> call_serve_shape_plug(ctx)
+
+      # Validate response headers for SSE
+      assert {"content-type", "text/event-stream"} in conn.resp_headers
+      assert {"connection", "keep-alive"} in conn.resp_headers
+
+      # Verify cache control header for request collapsing
+      cache_control =
+        Enum.find_value(conn.resp_headers, fn
+          {"cache-control", value} -> value
+          _ -> nil
+        end)
+      assert cache_control =~ "public"
+      assert cache_control =~ "max-age="
+
+      # Verify chunked transfer encoding
+      assert conn.state == :chunked
+
+      # Verify response format (should be SSE events)
+      assert conn.status == 200
+      assert conn.state == :chunked
+    end
+
+    test "returns 400 when experimental_live_sse=true but live=false", ctx do
+      conn =
+        ctx
+        |> conn(
+          :get,
+          %{"table" => "public.users"},
+          "?offset=#{@test_offset}&handle=#{@test_shape_handle}&experimental_live_sse=true"
+        )
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 400
+      assert Jason.decode!(conn.resp_body) == %{
+        "message" => "Invalid request",
+        "errors" => %{
+          "experimental_live_sse" => ["can't be true unless live is also true"]
+        }
+      }
+    end
+
+    test "sends properly formatted SSE events", ctx do
+      next_offset = LogOffset.increment(@test_offset)
+      test_content = %{key: "test-key", value: "test-value", headers: %{}, offset: next_offset}
+
+      # Set up mocks
+      Mock.ShapeCache
+      |> expect(:get_shape, fn @test_shape, _opts ->
+        {@test_shape_handle, @test_offset}
+      end)
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ -> next_offset end)
+      |> expect(:get_log_stream, fn @test_offset, _, @test_opts -> [test_content] end)
+
+      # Make the request
+      %{resp_body: body} =
+        ctx
+        |> conn(
+          :get,
+          %{"table" => "public.users"},
+          "?offset=#{@test_offset}&handle=#{@test_shape_handle}&live=true&experimental_live_sse=true"
+        )
+        |> call_serve_shape_plug(ctx)
+
+      # Verify the SSE formatted body
+      assert body =~ "data:"
+      assert body =~ "test-key"
+      assert body =~ "test-value"
+    end
+  end
+
   describe "stack not ready" do
     setup :with_stack_id_from_test
 
@@ -860,6 +973,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
   defp max_age(ctx), do: Access.get(ctx, :max_age, 60)
   defp stale_age(ctx), do: Access.get(ctx, :stale_age, 300)
   defp long_poll_timeout(ctx), do: Access.get(ctx, :long_poll_timeout, 20_000)
+  defp sse_timeout(ctx), do: Access.get(ctx, :sse_timeout, 60_000)
 
   defp wait_until_subscribed(stack_id, _sleep, 0) do
     raise "Timed out waiting for a process to subscribe to stack events in stack \"#{stack_id}\""

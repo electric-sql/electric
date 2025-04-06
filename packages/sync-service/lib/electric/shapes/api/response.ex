@@ -112,6 +112,7 @@ defmodule Electric.Shapes.Api.Response do
     |> put_schema_header(response)
     |> put_up_to_date_header(response)
     |> put_offset_header(response)
+    |> put_sse_headers(response)
   end
 
   defp put_location_header(conn, %__MODULE__{status: 409} = response) do
@@ -180,37 +181,32 @@ defmodule Electric.Shapes.Api.Response do
   end
 
   defp put_cache_headers(conn, %__MODULE__{api: api} = response) do
-    case response do
-      # If the offset is -1, set a 1 week max-age, 1 hour s-maxage (shared cache)
-      # and 1 month stale-while-revalidate We want private caches to cache the
-      # initial offset for a long time but for shared caches to frequently
-      # revalidate so they're serving a fairly fresh copy of the initials shape
-      # log.
-      %{params: %{offset: @before_all_offset}} ->
-        conn
-        |> put_cache_header(
-          "cache-control",
-          "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746",
-          api
-        )
+    header_value =
+      case response do
+        # If the offset is -1, set a 1 week max-age, 1 hour s-maxage (shared cache)
+        # and 1 month stale-while-revalidate We want private caches to cache the
+        # initial offset for a long time but for shared caches to frequently
+        # revalidate so they're serving a fairly fresh copy of the initials shape
+        # log.
+        %{params: %{offset: @before_all_offset}} ->
+          "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746"
 
-      # For live requests we want short cache lifetimes and to update the live cursor
-      %{params: %{live: true}, api: api} ->
-        conn
-        |> put_cache_header(
-          "cache-control",
-          "public, max-age=5, stale-while-revalidate=5",
-          api
-        )
+        # For live SSE requests we want to cache for just under the
+        # sse_timeout, in order to enable request collapsing.
+        %{params: %{live: true, experimental_live_sse: true}} ->
+          "public, max-age=#{max(1, div(api.sse_timeout, 1000) - 1)}"
 
-      %{params: %{live: false}, api: api} ->
-        conn
-        |> put_cache_header(
-          "cache-control",
-          "public, max-age=#{api.max_age}, stale-while-revalidate=#{api.stale_age}",
-          api
-        )
-    end
+        # For normal live requests we want short cache lifetimes.
+        %{params: %{live: true}} ->
+          "public, max-age=5, stale-while-revalidate=5"
+
+        # Non-live requests have the default cache headers.
+        %{params: %{live: false}} ->
+          "public, max-age=#{api.max_age}, stale-while-revalidate=#{api.stale_age}"
+      end
+
+    conn
+    |> put_cache_header("cache-control", header_value, api)
   end
 
   defp put_cache_header(conn, header, value, %{send_cache_headers?: true}) do
@@ -261,6 +257,16 @@ defmodule Electric.Shapes.Api.Response do
 
   defp put_offset_header(conn, %__MODULE__{offset: offset}) do
     Plug.Conn.put_resp_header(conn, "electric-offset", "#{offset}")
+  end
+
+  defp put_sse_headers(conn, %__MODULE__{params: %{live: true, experimental_live_sse: true}}) do
+    conn
+    |> Plug.Conn.put_resp_header("content-type", "text/event-stream")
+    |> Plug.Conn.put_resp_header("connection", "keep-alive")
+  end
+
+  defp put_sse_headers(conn, _response) do
+    conn
   end
 
   defp send_stream(%Plug.Conn{} = conn, %__MODULE__{body: stream, status: status} = response) do

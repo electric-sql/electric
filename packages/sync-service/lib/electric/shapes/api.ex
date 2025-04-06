@@ -56,6 +56,7 @@ defmodule Electric.Shapes.Api do
     stale_age: 300,
     send_cache_headers?: true,
     encoder: Electric.Shapes.Api.Encoder.JSON,
+    sse_encoder: Electric.Shapes.Api.Encoder.SSE,
     configured: false
   ]
 
@@ -484,7 +485,7 @@ defmodule Electric.Shapes.Api do
         if live? && Enum.take(log, 1) == [] do
           request
           |> update_attrs(%{ot_is_immediate_response: false})
-          |> hold_until_change()
+          |> handle_live_request()
         else
           up_to_date_lsn =
             if live? do
@@ -497,9 +498,9 @@ defmodule Electric.Shapes.Api do
               max(global_last_seen_lsn, chunk_end_offset.tx_offset)
             end
 
-          body = Stream.concat([log, maybe_up_to_date(request, up_to_date_lsn)])
+          log_stream = Stream.concat(log, maybe_up_to_date(request, up_to_date_lsn))
 
-          %{response | chunked: true, body: encode_log(request, body)}
+          %{response | chunked: true, body: encode_log(request, log_stream)}
         end
 
       {:error, error} ->
@@ -511,6 +512,13 @@ defmodule Electric.Shapes.Api do
           status: 500
         )
     end
+  end
+
+  defp handle_live_request(%Request{params: %{experimental_live_sse: true}} = request) do
+    stream_sse_events(request)
+  end
+  defp handle_live_request(%Request{} = request) do
+    hold_until_change(request)
   end
 
   defp hold_until_change(%Request{} = request) do
@@ -549,10 +557,107 @@ defmodule Electric.Shapes.Api do
     end
   end
 
-  defp clean_up_change_listener(%Request{handle: shape_handle} = request)
-       when not is_nil(shape_handle) do
-    %{api: %{registry: registry}} = request
-    Registry.unregister(registry, shape_handle)
+  defp stream_sse_events(%Request{} = request) do
+    %{
+      new_changes_ref: ref,
+      handle: shape_handle,
+      api: %{sse_timeout: sse_timeout}
+    } = request
+
+    Logger.debug("Client #{inspect(self())} is streaming SSE for changes to #{shape_handle}")
+
+    # Set up timer for SSE timeout
+    timer_ref = Process.send_after(self(), {:sse_timeout, ref}, sse_timeout)
+
+    # Stream changes as SSE events for the duration of the timer.
+    sse_event_stream = Stream.resource(
+      fn ->
+        request
+      end,
+      &next_sse_event/1,
+      fn _ ->
+        Process.cancel_timer(timer_ref)
+      end
+    )
+
+    response = %{request.response | chunked: true, body: sse_event_stream}
+
+    %{response | trace_attrs: Map.put(response.trace_attrs || %{}, :ot_is_sse_response, true)}
+  end
+
+  defp next_sse_event(:done), do: {:halt, :done}
+
+  defp next_sse_event(%Request{} = request) do
+    %{
+      api: api,
+      handle: shape_handle,
+      new_changes_ref: ref
+    } = request
+
+    receive do
+      {^ref, :new_changes, latest_log_offset} ->
+        updated_request =
+          %{request | last_offset: latest_log_offset}
+          |> determine_global_last_seen_lsn()
+          |> determine_log_chunk_offset()
+          |> determine_up_to_date()
+
+        case Shapes.get_merged_log_stream(
+          updated_request.api,
+          shape_handle,
+          since: updated_request.params.offset,
+          up_to: updated_request.chunk_end_offset
+        ) do
+          {:ok, log} ->
+            up_to_date_lsn = updated_request.chunk_end_offset.tx_offset
+            up_to_date_messages = maybe_up_to_date(updated_request, up_to_date_lsn)
+
+            message_stream = Stream.concat(log, up_to_date_messages)
+            messages = Enum.to_list(encode_log(updated_request, message_stream))
+
+            {messages, updated_request}
+
+          {:error, _error} ->
+            {[], request}
+        end
+
+      {^ref, :shape_rotation} ->
+        must_refetch = %{headers: %{control: "must-refetch"}}
+        message = encode_message(api, must_refetch)
+
+        {message, :done}
+
+      {:sse_timeout, ^ref} ->
+        {[], :done}
+    end
+  end
+
+  defp clean_up_change_listener(%Request{handle: shape_handle} = request) when not is_nil(shape_handle) do
+    %{
+      api: %{
+        registry: registry,
+        sse_timeout: sse_timeout
+      },
+      params: %{
+        live: live?,
+        experimental_live_sse: live_sse?
+      }
+    } = request
+
+    # When handling SSE requests, the response body is a stream that listens for
+    # :new_changes events. If we unregister the shape_handle event listener immediately,
+    # we don't receive the events. So, in this case, we unregister the shape_handle
+    # listener after the sse_timeout, when we can be sure that the request is over.
+    if live? and live_sse? do
+      spawn(fn ->
+        :timer.sleep(sse_timeout)
+
+        Registry.unregister(registry, shape_handle)
+      end)
+    else
+      Registry.unregister(registry, shape_handle)
+    end
+
     request
   end
 
@@ -600,6 +705,10 @@ defmodule Electric.Shapes.Api do
   def stack_id(%Api{stack_id: stack_id}), do: stack_id
   def stack_id(%{api: %{stack_id: stack_id}}), do: stack_id
 
+  defp encode_log(%Request{api: api, params: %{live: true, experimental_live_sse: true}}, stream) do
+    encode_sse(api, :log, stream)
+  end
+
   defp encode_log(%Request{api: api}, stream) do
     encode(api, :log, stream)
   end
@@ -609,12 +718,20 @@ defmodule Electric.Shapes.Api do
     encode(api, :message, message)
   end
 
+  def encode_message(%Request{api: api, params: %{live: true, experimental_live_sse: true}}, message) do
+    encode_sse(api, :message, message)
+  end
+
   def encode_message(%Request{api: api}, message) do
     encode(api, :message, message)
   end
 
   defp encode(%Api{encoder: encoder}, type, message) when type in [:message, :log] do
     apply(encoder, type, [message])
+  end
+
+  defp encode_sse(%Api{sse_encoder: sse_encoder}, type, message) when type in [:message, :log] do
+    apply(sse_encoder, type, [message])
   end
 
   def schema(%Response{
