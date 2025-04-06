@@ -446,7 +446,12 @@ defmodule Electric.Connection.Manager do
         "Handling the exit of the replication client #{inspect(pid)} with reason #{inspect(reason)}"
       )
 
-      state = %State{state | replication_client_pid: nil, replication_connection_established: false}
+      state = %State{
+        state
+        | replication_client_pid: nil,
+          replication_connection_established: false
+      }
+
       state = schedule_reconnection(:start_replication_client, state)
       {:noreply, state}
     end
