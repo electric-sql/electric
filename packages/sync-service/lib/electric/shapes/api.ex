@@ -700,7 +700,7 @@ defmodule Electric.Shapes.Api do
     #
     # The JSON encoder groups stream elements by 500. So perhaps this
     # could be a larger number for more efficiency?
-    case Electric.Utils.take_and_drop(stream, 3) do
+    case StreamSplit.take_and_drop(stream, 3) do
       {[], _tail} ->
         {[], %{state | mode: :receive, stream: nil}}
 
