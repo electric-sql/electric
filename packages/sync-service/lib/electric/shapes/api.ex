@@ -7,6 +7,7 @@ defmodule Electric.Shapes.Api do
   alias __MODULE__
   alias __MODULE__.Request
   alias __MODULE__.Response
+  alias __MODULE__.SseState
 
   import Electric.Replication.LogOffset, only: [is_log_offset_lt: 2]
 
@@ -25,6 +26,7 @@ defmodule Electric.Shapes.Api do
       required: true
     ],
     allow_shape_deletion: [type: :boolean],
+    keepalive_interval: [type: :integer],
     long_poll_timeout: [type: :integer],
     sse_timeout: [type: :integer],
     max_age: [type: :integer],
@@ -49,6 +51,7 @@ defmodule Electric.Shapes.Api do
     :stack_id,
     :storage,
     allow_shape_deletion: false,
+    keepalive_interval: 21_000,
     long_poll_timeout: 20_000,
     sse_timeout: 60_000,
     max_age: 60,
@@ -562,7 +565,7 @@ defmodule Electric.Shapes.Api do
     %{
       new_changes_ref: ref,
       handle: shape_handle,
-      api: %{sse_timeout: sse_timeout},
+      api: %{keepalive_interval: keepalive_interval, sse_timeout: sse_timeout},
       params: %{offset: since_offset}
     } = request
 
@@ -570,18 +573,29 @@ defmodule Electric.Shapes.Api do
       "Client #{inspect(self())} is streaming SSE for changes to #{shape_handle} since #{inspect(since_offset)}"
     )
 
+    # Set up timer for SSE comment as keep-alive
+    keepalive_ref = Process.send_after(self(), {:sse_keepalive, ref}, keepalive_interval)
+
     # Set up timer for SSE timeout
-    timer_ref = Process.send_after(self(), {:sse_timeout, ref}, sse_timeout)
+    timeout_ref = Process.send_after(self(), {:sse_timeout, ref}, sse_timeout)
 
     # Stream changes as SSE events for the duration of the timer.
     sse_event_stream =
       Stream.resource(
         fn ->
-          {request, since_offset}
+          %SseState{
+            mode: :receive,
+            request: request,
+            stream: nil,
+            since_offset: since_offset,
+            last_message_time: System.monotonic_time(:millisecond),
+            keepalive_ref: keepalive_ref
+          }
         end,
         &next_sse_event/1,
-        fn _ ->
-          Process.cancel_timer(timer_ref)
+        fn %SseState{keepalive_ref: latest_keepalive_ref} ->
+          Process.cancel_timer(latest_keepalive_ref)
+          Process.cancel_timer(timeout_ref)
         end
       )
 
@@ -590,12 +604,19 @@ defmodule Electric.Shapes.Api do
     %{response | trace_attrs: Map.put(response.trace_attrs || %{}, :ot_is_sse_response, true)}
   end
 
-  defp next_sse_event({%Request{} = request, since_offset}) do
+  defp next_sse_event(%SseState{mode: :receive} = state) do
     %{
-      api: api,
-      handle: shape_handle,
-      new_changes_ref: ref
-    } = request
+      keepalive_ref: keepalive_ref,
+      last_message_time: last_message_time,
+      request: %{
+        api: %{
+          keepalive_interval: keepalive_interval,
+        } = api,
+        handle: shape_handle,
+        new_changes_ref: ref
+      } = request,
+      since_offset: since_offset
+    } = state
 
     receive do
       {^ref, :new_changes, latest_log_offset} ->
@@ -614,28 +635,57 @@ defmodule Electric.Shapes.Api do
                up_to: end_offset
              ) do
           {:ok, log} ->
+            Process.cancel_timer(keepalive_ref)
+
             control_messages = maybe_up_to_date(updated_request, end_offset.tx_offset)
             message_stream = Stream.concat(log, control_messages)
             encoded_stream = encode_log(updated_request, message_stream)
 
-            {[], {:emit, encoded_stream, updated_request, end_offset}}
+            current_time = System.monotonic_time(:millisecond)
+            new_keepalive_ref = Process.send_after(self(), {:sse_keepalive, ref}, keepalive_interval)
+
+            {[], %{state |
+              mode: :emit,
+              stream: encoded_stream,
+              since_offset: end_offset,
+              last_message_time: current_time,
+              keepalive_ref: new_keepalive_ref
+            }}
 
           {:error, _error} ->
-            {[], {request, since_offset}}
+            {[], state}
         end
 
       {^ref, :shape_rotation} ->
         must_refetch = %{headers: %{control: "must-refetch"}}
         message = encode_message(api, must_refetch)
 
-        {message, :done}
+        {message, %{state | mode: :done}}
+
+      {:sse_keepalive, ^ref} ->
+        current_time = System.monotonic_time(:millisecond)
+        time_since_last_message = current_time - last_message_time
+
+        if time_since_last_message >= keepalive_interval do
+          new_keepalive_ref = Process.send_after(self(), {:sse_keepalive, ref}, keepalive_interval)
+
+          {[": keep-alive\n\n"], %{state | last_message_time: current_time, keepalive_ref: new_keepalive_ref}}
+        else
+          # Not time to send a keep-alive yet, schedule for the remaining time
+          remaining_time = keepalive_interval - time_since_last_message
+          new_keepalive_ref = Process.send_after(self(), {:sse_keepalive, ref}, remaining_time)
+
+          {[], %{state | keepalive_ref: new_keepalive_ref}}
+        end
 
       {:sse_timeout, ^ref} ->
-        {[], :done}
+        {[], %{state | mode: :done}}
     end
   end
 
-  defp next_sse_event({:emit, stream, %Request{} = request, since_offset}) do
+  defp next_sse_event(%SseState{mode: :emit} = state) do
+    %{stream: stream} = state
+
     # Can change the number taken to adjust the grouping. Currently three
     # because there's typically 3 elements per SSE -- the actual message
     # and the "data: " and "\n\n" delimiters around it.
@@ -643,18 +693,15 @@ defmodule Electric.Shapes.Api do
     # The JSON encoder groups stream elements by 500. So perhaps this
     # could be a larger number for more efficiency?
     case Electric.Utils.take_and_drop(stream, 3) do
-      {[], []} ->
-        {[], {request, since_offset}}
-
-      {head, []} ->
-        {head, {request, since_offset}}
+      {[], _tail} ->
+        {[], %{state | mode: :receive, stream: nil}}
 
       {head, tail} ->
-        {head, {:emit, tail, request, since_offset}}
+        {head, %{state | stream: tail}}
     end
   end
 
-  defp next_sse_event(:done), do: {:halt, :done}
+  defp next_sse_event(%SseState{mode: :done} = state), do: {:halt, state}
 
   defp clean_up_change_listener(%Request{handle: shape_handle} = request)
        when not is_nil(shape_handle) do
