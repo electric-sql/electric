@@ -608,13 +608,15 @@ defmodule Electric.Shapes.Api do
     %{
       keepalive_ref: keepalive_ref,
       last_message_time: last_message_time,
-      request: %{
-        api: %{
-          keepalive_interval: keepalive_interval,
-        } = api,
-        handle: shape_handle,
-        new_changes_ref: ref
-      } = request,
+      request:
+        %{
+          api:
+            %{
+              keepalive_interval: keepalive_interval
+            } = api,
+          handle: shape_handle,
+          new_changes_ref: ref
+        } = request,
       since_offset: since_offset
     } = state
 
@@ -642,15 +644,19 @@ defmodule Electric.Shapes.Api do
             encoded_stream = encode_log(updated_request, message_stream)
 
             current_time = System.monotonic_time(:millisecond)
-            new_keepalive_ref = Process.send_after(self(), {:sse_keepalive, ref}, keepalive_interval)
 
-            {[], %{state |
-              mode: :emit,
-              stream: encoded_stream,
-              since_offset: end_offset,
-              last_message_time: current_time,
-              keepalive_ref: new_keepalive_ref
-            }}
+            new_keepalive_ref =
+              Process.send_after(self(), {:sse_keepalive, ref}, keepalive_interval)
+
+            {[],
+             %{
+               state
+               | mode: :emit,
+                 stream: encoded_stream,
+                 since_offset: end_offset,
+                 last_message_time: current_time,
+                 keepalive_ref: new_keepalive_ref
+             }}
 
           {:error, _error} ->
             {[], state}
@@ -667,9 +673,11 @@ defmodule Electric.Shapes.Api do
         time_since_last_message = current_time - last_message_time
 
         if time_since_last_message >= keepalive_interval do
-          new_keepalive_ref = Process.send_after(self(), {:sse_keepalive, ref}, keepalive_interval)
+          new_keepalive_ref =
+            Process.send_after(self(), {:sse_keepalive, ref}, keepalive_interval)
 
-          {[": keep-alive\n\n"], %{state | last_message_time: current_time, keepalive_ref: new_keepalive_ref}}
+          {[": keep-alive\n\n"],
+           %{state | last_message_time: current_time, keepalive_ref: new_keepalive_ref}}
         else
           # Not time to send a keep-alive yet, schedule for the remaining time
           remaining_time = keepalive_interval - time_since_last_message
