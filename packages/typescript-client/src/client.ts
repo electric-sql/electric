@@ -39,6 +39,7 @@ import {
   TABLE_QUERY_PARAM,
   REPLICA_PARAM,
   FORCE_DISCONNECT_AND_REFRESH,
+  EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
 } from './constants'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
@@ -244,6 +245,11 @@ export interface ShapeStreamOptions<T = never> {
    */
   subscribe?: boolean
 
+  /**
+   * Experimental support for Server-Sent Events (SSE) for live updates.
+   */
+  experimentalLiveSse?: boolean
+
   signal?: AbortSignal
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
@@ -281,8 +287,9 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
 }
 
 /**
- * Reads updates to a shape from Electric using HTTP requests and long polling. Notifies subscribers
- * when new messages come in. Doesn't maintain any history of the
+ * Reads updates to a shape from Electric using HTTP requests and long polling or
+ * Server-Sent Events (SSE).
+ * Notifies subscribers when new messages come in. Doesn't maintain any history of the
  * log but does keep track of the offset position and is the best way
  * to consume the HTTP `GET /v1/shape` api.
  *
@@ -294,6 +301,14 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
  * const stream = new ShapeStream(options)
  * stream.subscribe(messages => {
  *   // messages is 1 or more row updates
+ * })
+ * ```
+ *
+ * To use Server-Sent Events (SSE) for real-time updates:
+ * ```
+ * const stream = new ShapeStream({
+ *   url: `http://localhost:3000/v1/shape`,
+ *   liveMode: 'sse'
  * })
  * ```
  *
@@ -482,6 +497,26 @@ export class ShapeStream<T extends Row<unknown> = Row>
             // If the signal is already aborted, abort the request immediately
             this.#requestAbortController?.abort(signal.reason)
           }
+        }
+
+        // If using SSE mode we handle the connection differently using the
+        // this.#connectSSE method which wraps the EventSource API.
+        if (this.#isUpToDate && this.options.experimentalLiveSse) {
+          fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
+          try {
+            await this.#connectSSE(fetchUrl.toString())
+          } catch (error) {
+            if (error instanceof SSEConnectionAborted) {
+              break
+            }
+            this.#sendErrorToSubscribers(
+              error instanceof Error ? error : new Error(String(error))
+            )
+            throw error
+          }
+          // TODO: What should we do here? Is this the behaviour we want?
+          // Skip the regular fetch and continue the loop to reconnect if needed
+          continue
         }
 
         let response!: Response
@@ -714,6 +749,108 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#connected = false
     this.#schema = undefined
   }
+
+  /**
+   * Connects to the server using Server-Sent Events.
+   * Returns a promise that resolves when the connection is closed.
+   */
+  async #connectSSE(url: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        if (!this.#requestAbortController) {
+          reject(
+            new Error(
+              `Request abort controller is not set - this should never happen`
+            )
+          )
+          return
+        }
+
+        if (this.#requestAbortController.signal.aborted) {
+          reject(
+            new SSEConnectionAborted(
+              `Connection aborted before SSE connection established`
+            )
+          )
+          return
+        }
+
+        // Create an EventSource instance
+        const eventSource = new EventSource(url)
+
+        // Set up event handlers
+        eventSource.onopen = () => {
+          this.#connected = true
+        }
+
+        eventSource.onmessage = async (event: MessageEvent) => {
+          try {
+            if (event.data) {
+              // Process the SSE message
+              // Provide an empty schema object if schema is undefined, which it
+              // should not be as we only get to SSE mode after being in normal mode
+              // and getting a schema from a header then.
+              // The event.data is a single JSON object, so we wrap it in an array
+              // to be consistent with the way we parse the response from the HTTP API.
+              // TODO: Is this needed?
+              const batch = this.#messageParser.parse(
+                `[${event.data}]`,
+                this.#schema || {}
+              )
+
+              if (batch.length > 0) {
+                const lastMessage = batch[batch.length - 1]
+                if (isUpToDateMessage(lastMessage)) {
+                  const upToDateMsg = lastMessage as typeof lastMessage & {
+                    headers: { global_last_seen_lsn: string }
+                  }
+                  this.#lastSyncedAt = Date.now()
+                  this.#isUpToDate = true
+                  this.#lastOffset =
+                    `${upToDateMsg.headers.global_last_seen_lsn}_0` as Offset
+                  // TODO: we also need the cache buster `cursor` value
+                }
+
+                await this.#publish(batch)
+              }
+            }
+          } catch (error) {
+            // Handle parsing errors
+            this.#sendErrorToSubscribers(
+              error instanceof Error ? error : new Error(String(error))
+            )
+          }
+        }
+
+        eventSource.onerror = (_error: Event) => {
+          // Connection was closed or errored
+          // EventSource would normally automatically reconnect but want to close the
+          // connection and reconnect on the next outer loop iteration with the new
+          // url and offset.
+          // TODO: It may be that some errors we should elevate to the user
+          eventSource.close()
+          resolve()
+        }
+
+        // Listen for abort signals
+        const abortHandler = () => {
+          eventSource.close()
+          reject(new SSEConnectionAborted(`SSE connection aborted`))
+        }
+
+        this.#requestAbortController.signal.addEventListener(
+          `abort`,
+          abortHandler,
+          { once: true }
+        )
+      } catch (error) {
+        this.#sendErrorToSubscribers(
+          error instanceof Error ? error : new Error(String(error))
+        )
+        reject(error)
+      }
+    })
+  }
 }
 
 /**
@@ -781,4 +918,11 @@ function convertWhereParamsToObj(
     }
   }
   return allPgParams
+}
+
+class SSEConnectionAborted extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = `SSEConnectionAborted`
+  }
 }
