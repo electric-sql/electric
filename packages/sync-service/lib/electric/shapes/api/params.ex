@@ -161,7 +161,9 @@ defmodule Electric.Shapes.Api.Params do
     if live do
       changeset
     else
-      validate_exclusion(changeset, @tmp_sse_flag, [true], message: "can't be true unless live is also true")
+      validate_exclusion(changeset, @tmp_sse_flag, [true],
+        message: "can't be true unless live is also true"
+      )
     end
   end
 

@@ -517,6 +517,7 @@ defmodule Electric.Shapes.Api do
   defp handle_live_request(%Request{params: %{experimental_live_sse: true}} = request) do
     stream_sse_events(request)
   end
+
   defp handle_live_request(%Request{} = request) do
     hold_until_change(request)
   end
@@ -742,7 +743,10 @@ defmodule Electric.Shapes.Api do
     encode(api, :message, message)
   end
 
-  def encode_message(%Request{api: api, params: %{live: true, experimental_live_sse: true}}, message) do
+  def encode_message(
+        %Request{api: api, params: %{live: true, experimental_live_sse: true}},
+        message
+      ) do
     encode_sse(api, :message, message)
   end
 

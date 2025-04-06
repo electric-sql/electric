@@ -821,7 +821,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       :ok
     end
 
-    test "returns proper SSE format response when experimental_live_sse=true and live=true", ctx do
+    test "returns proper SSE format response when experimental_live_sse=true and live=true",
+         ctx do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_handle, @test_offset}
@@ -858,6 +859,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
           {"cache-control", value} -> value
           _ -> nil
         end)
+
       assert cache_control =~ "public"
       assert cache_control =~ "max-age="
 
@@ -880,12 +882,13 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> call_serve_shape_plug(ctx)
 
       assert conn.status == 400
+
       assert Jason.decode!(conn.resp_body) == %{
-        "message" => "Invalid request",
-        "errors" => %{
-          "experimental_live_sse" => ["can't be true unless live is also true"]
-        }
-      }
+               "message" => "Invalid request",
+               "errors" => %{
+                 "experimental_live_sse" => ["can't be true unless live is also true"]
+               }
+             }
     end
 
     test "sends properly formatted SSE events", ctx do
