@@ -28,7 +28,7 @@ cd examples/nextjs
 Start the example backend services using [Docker Compose](https://docs.docker.com/compose/):
 
 ```shell
-pnpm backend:up
+pnpm example-backend:up
 ```
 
 > Note that this always stops and deletes the volumes mounted by any other example backend containers that are running or have been run before. This ensures that the example always starts with a clean database and clean disk.
