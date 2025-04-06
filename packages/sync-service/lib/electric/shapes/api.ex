@@ -561,33 +561,35 @@ defmodule Electric.Shapes.Api do
     %{
       new_changes_ref: ref,
       handle: shape_handle,
-      api: %{sse_timeout: sse_timeout}
+      api: %{sse_timeout: sse_timeout},
+      params: %{offset: since_offset}
     } = request
 
-    Logger.debug("Client #{inspect(self())} is streaming SSE for changes to #{shape_handle}")
+    Logger.debug(
+      "Client #{inspect(self())} is streaming SSE for changes to #{shape_handle} since #{inspect(since_offset)}"
+    )
 
     # Set up timer for SSE timeout
     timer_ref = Process.send_after(self(), {:sse_timeout, ref}, sse_timeout)
 
     # Stream changes as SSE events for the duration of the timer.
-    sse_event_stream = Stream.resource(
-      fn ->
-        request
-      end,
-      &next_sse_event/1,
-      fn _ ->
-        Process.cancel_timer(timer_ref)
-      end
-    )
+    sse_event_stream =
+      Stream.resource(
+        fn ->
+          {request, since_offset}
+        end,
+        &next_sse_event/1,
+        fn _ ->
+          Process.cancel_timer(timer_ref)
+        end
+      )
 
     response = %{request.response | chunked: true, body: sse_event_stream}
 
     %{response | trace_attrs: Map.put(response.trace_attrs || %{}, :ot_is_sse_response, true)}
   end
 
-  defp next_sse_event(:done), do: {:halt, :done}
-
-  defp next_sse_event(%Request{} = request) do
+  defp next_sse_event({%Request{} = request, since_offset}) do
     %{
       api: api,
       handle: shape_handle,
@@ -602,23 +604,23 @@ defmodule Electric.Shapes.Api do
           |> determine_log_chunk_offset()
           |> determine_up_to_date()
 
-        case Shapes.get_merged_log_stream(
-          updated_request.api,
-          shape_handle,
-          since: updated_request.params.offset,
-          up_to: updated_request.chunk_end_offset
-        ) do
+        # This is usually but not always the `latest_log_offset`
+        # as per `determine_log_chunk_offset/1`.
+        end_offset = updated_request.chunk_end_offset
+
+        case Shapes.get_merged_log_stream(updated_request.api, shape_handle,
+               since: since_offset,
+               up_to: end_offset
+             ) do
           {:ok, log} ->
-            up_to_date_lsn = updated_request.chunk_end_offset.tx_offset
-            up_to_date_messages = maybe_up_to_date(updated_request, up_to_date_lsn)
+            control_messages = maybe_up_to_date(updated_request, end_offset.tx_offset)
+            message_stream = Stream.concat(log, control_messages)
+            encoded_stream = encode_log(updated_request, message_stream)
 
-            message_stream = Stream.concat(log, up_to_date_messages)
-            messages = Enum.to_list(encode_log(updated_request, message_stream))
-
-            {messages, updated_request}
+            {[], {:emit, encoded_stream, updated_request, end_offset}}
 
           {:error, _error} ->
-            {[], request}
+            {[], {request, since_offset}}
         end
 
       {^ref, :shape_rotation} ->
@@ -632,7 +634,29 @@ defmodule Electric.Shapes.Api do
     end
   end
 
-  defp clean_up_change_listener(%Request{handle: shape_handle} = request) when not is_nil(shape_handle) do
+  defp next_sse_event({:emit, stream, %Request{} = request, since_offset}) do
+    # Can change the number taken to adjust the grouping. Currently three
+    # because there's typically 3 elements per SSE -- the actual message
+    # and the "data: " and "\n\n" delimiters around it.
+    #
+    # The JSON encoder groups stream elements by 500. So perhaps this
+    # could be a larger number for more efficiency?
+    case Electric.Utils.take_and_drop(stream, 3) do
+      {[], []} ->
+        {[], {request, since_offset}}
+
+      {head, []} ->
+        {head, {request, since_offset}}
+
+      {head, tail} ->
+        {head, {:emit, tail, request, since_offset}}
+    end
+  end
+
+  defp next_sse_event(:done), do: {:halt, :done}
+
+  defp clean_up_change_listener(%Request{handle: shape_handle} = request)
+       when not is_nil(shape_handle) do
     %{
       api: %{
         registry: registry,
