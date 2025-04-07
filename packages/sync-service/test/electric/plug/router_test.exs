@@ -1657,9 +1657,17 @@ defmodule Electric.Plug.RouterTest do
 
       # Wrong secret
       assert %{status: 401} =
-               Router.call(conn("GET", "/v1/shape?api_secret=wrong_secret"), secret: secret)
+               Router.call(conn("GET", "/v1/shape?secret=wrong_secret"), secret: secret)
 
       # Correct secret
+      assert %{status: 400} =
+               Router.call(
+                 conn("GET", "/v1/shape?secret=#{secret}"),
+                 Keyword.merge([secret: secret], api_opts)
+               )
+    end
+
+    test "also supports old api_secret parameter", %{secret: secret, api_opts: api_opts} do
       assert %{status: 400} =
                Router.call(
                  conn("GET", "/v1/shape?api_secret=#{secret}"),
@@ -1673,12 +1681,12 @@ defmodule Electric.Plug.RouterTest do
 
       # Wrong secret
       assert %{status: 401} =
-               Router.call(conn("DELETE", "/v1/shape?api_secret=wrong_secret"), secret: secret)
+               Router.call(conn("DELETE", "/v1/shape?secret=wrong_secret"), secret: secret)
 
       # Correct secret
       assert %{status: 400} =
                Router.call(
-                 conn("DELETE", "/v1/shape?api_secret=#{secret}"),
+                 conn("DELETE", "/v1/shape?secret=#{secret}"),
                  Keyword.merge([secret: secret], api_opts)
                )
 

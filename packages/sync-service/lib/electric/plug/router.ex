@@ -60,7 +60,9 @@ defmodule Electric.Plug.Router do
     else
       conn = conn |> fetch_query_params()
 
-      case conn.query_params["api_secret"] do
+      # Keep `api_secret` for backwards compatibility
+      # We'll remove it when we release v2
+      case conn.query_params["secret"] || conn.query_params["api_secret"] do
         ^api_secret ->
           conn
 
