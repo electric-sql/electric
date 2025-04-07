@@ -6,7 +6,7 @@ description: >-
 excerpt: >-
   AI apps are collaborative. Building then requires solving resumeability,
   interruptability, multi‑tab, multi‑device and multi‑user.
-authors: [thruflo]
+authors: [thruflo, samwillis]
 image: /img/blog/building-collaborative-ai-apps-on-sync/header.jpg
 tags: [ai, sync]
 outline: [2, 3]
@@ -47,9 +47,9 @@ If you stream directly from the agent to the UI, you have a fragile system. Your
 
 For example, here's how ChatGPT behaves:
 
->
-> ... video showing it break for refresh and patchy network ...
->
+<video class="w-full" controls poster="/videos/blog/building-collaborative-ai-apps-on-sync/chatgpt-breaking.jpg">
+  <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/chatgpt-breaking-1080.mp4" />
+</video>
 
 If, instead, you stream tokens into a store and then subscribe to that store then you get a resilient UI that doesn't break.
 
@@ -62,25 +62,25 @@ If, instead, you stream tokens into a store and then subscribe to that store the
   />
 </figure>
 
-For example, here's how better systems like [Assistant-UI](https://www.assistant-ui.com) and [Lobe Chat](https://github.com/lobehub/lobe-chat) (both are building on Electric) behave:
+For example, here's how a better system built with Electric behaves:
 
->
-> ... two videos side by side showing not breaking ...
->
+<video class="w-full" controls poster="/videos/blog/building-collaborative-ai-apps-on-sync/electric-chat-resilient.jpg">
+  <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/electric-chat-resilient-1080.mp4" />
+</video>
 
 The key to this behaviour is resumeability: the ability to resume streaming from a known position in the stream. The app keeps track of the last position its seen. Then when re-connecting, it requests the stream from that position.
 
-This pattern is fiddly to wire up yourself (message delivery is a [distributed systems rabbit hole](https://jepsen.io/consistency/models)) but is *baked in* to sync engines. For example, Electric's [sync protocol](/docs/api/http) is based on the client sending `offset` and `cursor` parameters.
+This pattern is fiddly to wire up yourself (message delivery is a [distributed systems rabbit hole](https://jepsen.io/consistency/models)) but is _baked in_ to sync engines. For example, Electric's [sync protocol](/docs/api/http) is based on the client sending `offset` and `cursor` parameters.
 
 These are usually abstracted away at a [higher-level](/docs/api/clients/typescript), e.g.:
 
 ```tsx
-import { ShapeStream } from '@electric-sql/client'
+import { ShapeStream } from "@electric-sql/client"
 
 const tokenStream = new ShapeStream({
   params: {
-    table: 'tokens'
-  }
+    table: "tokens",
+  },
 })
 
 // tokenStream.subscribe(tokens => ...)
@@ -119,15 +119,15 @@ But, of course, the world is not just about browser tabs. Agents do stuff in the
   <img src="/img/blog/building-collaborative-ai-apps-on-sync/nipping-out-for-coffee.jpg" />
 </figure>
 
-In this example, how do you keep the mobile app up-to-date with the session that was started in the browser? This is exactly what sync does. It handles *fan out*, so you can (resiliently) stream changes to multiple places at the same time.
+In this example, how do you keep the mobile app up-to-date with the session that was started in the browser? This is exactly what sync does. It handles _fan out_, so you can (resiliently) stream changes to multiple places at the same time.
 
 For example, with Electric, you can just write changes to Postgres and then Electric takes care of fanning-out data delivery to as many clients as you like (you can literally scale to [millions of clients](/docs/reference/benchmarks#cloud) straight out of the box).
 
 So whichever device your user grabs or tab they return to, it can be up-to-date and exactly in the state they're expecting:
 
->
-> ... demo videos desktop and mobile side by side ...
->
+<video class="w-full" controls poster="/videos/blog/building-collaborative-ai-apps-on-sync/multi-device.jpg">
+  <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/multi-device-1080.mp4" />
+</video>
 
 ## Multi-user
 
@@ -161,10 +161,10 @@ Filtering just the content you need using where clauses:
 ```tsx
 const tokenStream = new ShapeStream({
   params: {
-    table: 'tokens',
+    table: "tokens",
     // Just sync the tokens for a given session.
-    where: 'session_id = 1234'
-  }
+    where: "session_id = 1234",
+  },
 })
 ```
 
@@ -172,27 +172,52 @@ Which really changes the game for AI UX. Because it allows users to collaborate 
 
 ### Collaboration
 
-For example, here we show a chat app built on Electric where two users are talking to the same AI. A context resource provided by the second user interrupts the agent handling the first user's prompt and makes the response much more informed and accurate:
+For example, here we show a chat app built on Electric where two users are talking to the same AI. A context resource provided by the second user to the agent handling the first user's prompt and makes the response much more informed and accurate:
 
->
-> => two users talking to the same AI
->  - => user 1 asks a question
->    - response is a bit iffy
->  - => user 2 adds a resource
->  - => user 1 asks the same question again
->    - response is awesome
->  - collab but updates the underlying data
->
+<video class="w-full" controls poster="/videos/blog/building-collaborative-ai-apps-on-sync/multi-user.jpg">
+  <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/multi-user-1080.mp4" />
+</video>
 
 This is a simple example but it's the tip of the iceberg of [things to come](#agents-are-users).
 
 ### Interruptibility
 
-The interrupt in this example is another illustration of the power of syncing into a store before syncing into the UI. Because the stream to the UI is under our control, we can pause it instantly, even while the underlying agent (which is out of our direct control) continues to the end of it's stream.
+Using a Electric also allows you to interrupt the agent. By subscribing to the state of the current response in Postgres, you can watch for state changes and interrupt the agent. This can to to abort the current response and start a new one, or to provide additional context to the agent.
 
->
-> ... code sample ...
->
+<video class="w-full" controls poster="/videos/blog/building-collaborative-ai-apps-on-sync/interrupt.jpg">
+  <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/interrupt-1080.mp4" />
+</video>
+
+In the code below, we subscribe to the state of the current response in Postgres by using a Electric Shape, and when the message state is set to `abort`, we abort the current AI response.
+
+```ts
+// Call OpenAI with streaming
+const stream = await openai.chat.completions.create({
+  model,
+  messages,
+  stream: true,
+})
+
+// Use and Electric Shape to subscribe to the state of the current
+// response in Postgres
+const messageShapeStream = new ShapeStream({
+  url: `${ELECTRIC_API_URL}/v1/shape`,
+  params: {
+    table: "messages",
+    where: `id = '${messageId}'`,
+  },
+})
+const messageShape = new Shape(messageShapeStream)
+
+// When it changes, check if the message is aborted and if so,
+// abort the OpenAI stream
+messageShape.subscribe(({ rows }) => {
+  const message = rows[0]
+  if (message && message.status === "aborted") {
+    abortController.abort()
+  }
+})
+```
 
 This fixes the problem where the user is frantically clicking or saying "stop" but Claude just ignores it and carries on generating artifacts.
 
@@ -200,9 +225,9 @@ This fixes the problem where the user is frantically clicking or saying "stop" b
 
 Human users are not the only thing that can interrupt flows and update data. An agent is not just an interface. An agent is an actor. They can [send notifications](https://modelcontextprotocol.io/docs/concepts/transports#notifications) and [update application state](https://modelcontextprotocol.io/docs/concepts/tools).
 
->
-> ... chat demo pinning and renaming example video ...
->
+<video class="w-full" controls poster="/videos/blog/building-collaborative-ai-apps-on-sync/shopping-list.jpg">
+  <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/shopping-list-1080.mp4" />
+</video>
 
 So, as soon as you have a user interacting with an agent, you have a multi-user app. Every conversation with an AI agent is inherently multi-user. It's at least you and the AI.
 
@@ -219,30 +244,74 @@ Tools like [LangGraph](https://www.langchain.com/langgraph) provide a shared dat
 
 For example, imagine you're managing a project and you have an AI assistant. You tell it to "monitor the todo list and perform the tasks". You then fire up a new session with another agent to plan out the project and generate tasks.
 
->
 > 7. Electric collaborative agents updating state
->  1. kick off long running dev task
+> 1. kick off long running dev task
 >    => "monitor the todo list and perform the tasks"
->  2. background it -> open new session
->  3. add new task
->  4. navigate to the first session and see that it's performed the task
->  5. fire up multi-user across 3 windows
->  6. user closes a todo and it interrupts the task
->
+> 1. background it -> open new session
+> 1. add new task
+> 1. navigate to the first session and see that it's performed the task
+> 1. fire up multi-user across 3 windows
+> 1. user closes a todo and it interrupts the task
 
 These agents need to collaborate via shared state. In this example, the todo-list. They need to known when it's changed and react to the changes. And so do the users! They want to see the state too.
 
 For example, this is the Electric code for the agents to monitor and react to the todolist:
 
->
-> ... code sample ...
->
+```ts
+const listItemsStream = new ShapeStream({
+  url: `${ELECTRIC_API_URL}/v1/shape`,
+  params: {
+    table: "todo_items",
+    where: `list_id = '${listId}'`,
+  },
+})
+const listItemsShape = new Shape(listItemsStream)
+
+async function processNextItem() {
+  const item = listItemsShape.currentRows.find((item) => !item.done)
+  if (item) {
+    // Perform the task using the agent
+  }
+}
+
+let processing = false
+async function processItems() {
+  if (processing) return
+  processing = true
+  while (listItemsShape.currentRows.some((item) => !item.done)) {
+    await processNextItem()
+  }
+  processing = false
+}
+
+listItemsShape.subscribe(async () => {
+  await processItems()
+})
+```
 
 This is the code to show the same state to the user:
 
->
-> ... code sample ...
->
+```tsx
+function TodoListItems() {
+  const { data: todoListItems } = useShape({
+    url: `${ELECTRIC_API_URL}/v1/shape`,
+    params: {
+      table: "todo_lists_items",
+    },
+  })
+
+  return (
+    <ul>
+      {todoListItems.map((todoListItem) => (
+        <li key={todoListItem.id}>
+          {todoListItem.task}
+          {todoListItem.done && <span> Done</span>}
+        </li>
+      ))}
+    </ul>
+  )
+}
+```
 
 ### Structure
 
@@ -263,7 +332,6 @@ When you call an API or function you typically know the "blast radius" of what d
 So you either need to constantly track and re-fetch everything. Or you need to monitor what data changes, so that you're automatically informed about it. What you really need is a way of declaring the subset of the data that the app, agent or UI depends on so you can automatically monitor it, stay up-to-date and be able to respond to changes.
 
 That's why Sunil Pai says that [AI agents are local-first clients](https://sunilpai.dev/posts/local-first-ai-agents/). That's why Theo Brown is [searching for the ideal sync engine](https://youtu.be/3gVBjTMS8FE) and it's why Electric syncs [Shapes](/docs/guides/shapes).
-
 
 ## Sync is the solution
 
