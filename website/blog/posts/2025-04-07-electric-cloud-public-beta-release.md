@@ -37,7 +37,7 @@ The chart below is from our [cloud benchmarks](/docs/reference/benchmarks#cloud)
 
 ## **Real-Time Features Shouldn't Be This Hard**
 
-Every major web app we’ve worked on, from [Pantheon](https://pantheon.io/) to [Gatsby Cloud](https://www.gatsbyjs.com/docs/reference/cloud/what-is-gatsby-cloud/), has had critical real-time features. And they were the most fragile, frustrating parts of the app.
+Every major web app we’ve worked on, including [Gatsby Cloud](https://www.gatsbyjs.com/docs/reference/cloud/what-is-gatsby-cloud/), [Posterhaste](https://www.posterhaste.com/), [OpenIDEO](https://www.openideo.com/), and [Pantheon](https://pantheon.io/) has had critical real-time features. And they were the most fragile, frustrating parts of the app.
 
 The real-time systems plumbing was complex to build and operate (redis pub/sub & websocket servers) and we couldn’t ever get to 100% reliable event delivery as almost daily we’d get support requests from customers resulting from edge cases around race conditions or connectivity issues.
 
