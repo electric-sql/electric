@@ -116,7 +116,7 @@
 [endmacro]
 
 [macro setup_secure_electric secret]
-  [invoke setup_electric_with_env "DATABASE_URL=$database_url ELECTRIC_SECRET=$secret"]
+  [invoke setup_electric_with_env "DATABASE_URL=$database_url ELECTRIC_INSECURE=false ELECTRIC_SECRET=$secret"]
 [endmacro]
 
 [macro setup_electric_with_pooler]
