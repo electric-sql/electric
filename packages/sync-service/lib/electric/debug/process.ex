@@ -31,11 +31,11 @@ defmodule Electric.Debug.Process do
 
       type ->
         case Process.info(pid, [:memory]) do
-          [memory: nil] ->
-            %{type: :dead, memory: 0}
-
-          [memory: memory] ->
+          [memory: memory] when is_integer(memory) ->
             %{type: type, memory: memory}
+
+          _ ->
+            %{type: :dead, memory: 0}
         end
     end
   end
