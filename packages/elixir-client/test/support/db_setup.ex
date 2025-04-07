@@ -18,7 +18,10 @@ defmodule Support.DbSetup do
   end
 
   def with_table(tablename \\ tablename(), table_columns) do
-    base_config = Application.fetch_env!(:electric_client, :database_config)
+    base_config =
+      Application.fetch_env!(:electric_client, :database_config)
+      |> Electric.Utils.deobfuscate_password()
+
     extra_opts = [backoff_type: :stop, max_restarts: 0]
 
     {:ok, utility_pool} = Postgrex.start_link(base_config ++ extra_opts)
