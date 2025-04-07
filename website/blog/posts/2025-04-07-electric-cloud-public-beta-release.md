@@ -43,7 +43,7 @@ Every major web app we’ve worked on, including [Gatsby Cloud](https://www.gats
 
 The real-time systems plumbing was complex to build and operate (redis pub/sub & websocket servers) and we couldn’t ever get to 100% reliable event delivery as almost daily we’d get support requests from customers resulting from edge cases around race conditions or connectivity issues.
 
-Our team has been build apps for decades and have all felt this pain. Talking to other developers, we heard the same frustrations:
+Our team has been building apps and doing research on sync problems for decades and have all felt this pain. Talking to other developers, we heard the same frustrations:
 
 "Our app felt sluggish because every interaction required a network round trip."
 
