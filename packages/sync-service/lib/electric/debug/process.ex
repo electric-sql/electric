@@ -1,6 +1,21 @@
-defmodule Debug.Process do
-  def top_memory_by_type(count \\ 5) do
-    Process.list()
+defmodule Electric.Debug.Process do
+  @default_count 5
+
+  def top_memory_by_type do
+    top_memory_by_type(Process.list(), @default_count)
+  end
+
+  def top_memory_by_type(count) when is_integer(count) do
+    top_memory_by_type(Process.list(), count)
+  end
+
+  def top_memory_by_type(process_list) when is_list(process_list) do
+    top_memory_by_type(process_list, @default_count)
+  end
+
+  def top_memory_by_type(process_list, count)
+      when is_list(process_list) and is_integer(count) and count > 0 do
+    process_list
     |> Enum.map(&type_and_memory/1)
     |> Enum.reject(&is_dead_or_nil/1)
     |> Enum.group_by(& &1.type, & &1.memory)
@@ -15,8 +30,13 @@ defmodule Debug.Process do
         %{type: :dead, memory: 0}
 
       type ->
-        [memory: memory] = Process.info(pid, [:memory])
-        %{type: type, memory: memory}
+        case Process.info(pid, [:memory]) do
+          [memory: nil] ->
+            %{type: :dead, memory: 0}
+
+          [memory: memory] ->
+            %{type: type, memory: memory}
+        end
     end
   end
 
