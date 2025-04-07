@@ -61,20 +61,21 @@ reuse that configuration if you want:
       password: "postgres",
       hostname: "localhost"
     ]
+
     config :my_app, Repo, database_config
 
-    config :electric,
-      replication_connection_opts: Electric.Utils.obfuscate_password(database_config)
+    config :electric, replication_connection_opts: database_config
 
 Or if you're getting your db connection from an environment variable, then you
 can use
 [`Electric.Config.parse_postgresql_uri!/1`](https://hexdocs.pm/electric/Electric.Config.html#parse_postgresql_uri!/1):
 
     # config/*.exs
-    {:ok, database_config} = Electric.Config.parse_postgresql_uri(System.fetch_env!("DATABASE_URL"))
+    {:ok, database_config} =
+      System.fetch_env!("DATABASE_URL")
+      |> Electric.Config.parse_postgresql_uri()
 
-    config :electric,
-      replication_connection_opts: Electric.Utils.obfuscate_password(database_config)
+    config :electric, replication_connection_opts: database_config
 
 The Electric app will startup along with the rest of your Elixir app.
 

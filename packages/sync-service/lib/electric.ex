@@ -4,14 +4,7 @@ defmodule Electric do
     port: [type: :integer, required: true, doc: "Server port"],
     database: [type: :string, required: true, doc: "Database"],
     username: [type: :string, required: true, doc: "Username"],
-    password: [
-      type: {:fun, 0},
-      required: true,
-      doc:
-        "User password. To prevent leaking of the Pg password in logs and stack traces, you **must** wrap the password with a function." <>
-          " We provide `Electric.Utils.obfuscate_password/1` which will return the `connection_opts` with a wrapped password value.\n\n" <>
-          "    config :electric, connection_opts: Electric.Utils.obfuscate_password(connection_opts)"
-    ],
+    password: [type: {:or, [:string, {:fun, 0}]}, required: true, doc: "User password"],
     sslmode: [
       type: {:in, [:disable, :allow, :prefer, :require]},
       required: false,
