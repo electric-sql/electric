@@ -80,13 +80,13 @@ Here is an example request using `curl`:
 
 ```shell
 export SOURCE_ID="8ea4e5fb-9217-4ca6-80b7-0a97581c4c10"
-export SOURCE_SECRET="<long secret value>"
+export SECRET="<long secret value>"
 
 export SHAPE_DEFINITION="table=items&offset=-1"
 
 curl -i "https://api.electric-sql.cloud/v1/shape?$SHAPE_DEFINITION\
     &source_id=$SOURCE_ID\
-    &source_secret=$SOURCE_SECRET"
+    &source_secret=$SECRET"
 ```
 
 ### Security Model
