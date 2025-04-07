@@ -43,3 +43,23 @@ jobs:
         run: node scripts/tag-latest.mjs
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Get the Electric version of the Docker image
+      - name: Get sync-service version
+        if: steps.changesets.outputs.published == 'true'
+        id: sync_version
+        run: |
+          VERSION=$(jq -r '.version' packages/sync-service/package.json)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+      # Trigger cloud update workflow
+      - name: Trigger cloud update
+        if: steps.changesets.outputs.published == 'true'
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.CLOUD_REPO_TRIGGER_TOKEN }}
+          repository: electric-sql/stratovolt
+          event-type: update-electric
+          client-payload: |
+            {
+              "electric_commit_sha": "${{ github.sha }}",
+              "electric_docker_version": "${{ steps.sync_version.outputs.version }}"
+            }
