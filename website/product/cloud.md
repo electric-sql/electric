@@ -69,7 +69,6 @@ Once connected you should see your source details akin to the screenshot below.
 <img alt="Source details in cloud dashboard" src="/static/img/docs/cloud/source-details.png" />
 
 It shouldn't take long before the source `state` becomes `active` and you're ready to make your first API request.
-Make sure to store the source ID and source secret credentials somewhere secure (like in your password manager) as you will need them to make API requests.
 
 ### Making API Requests
 
