@@ -1667,6 +1667,14 @@ defmodule Electric.Plug.RouterTest do
                )
     end
 
+    test "also supports old api_secret parameter", %{secret: secret, api_opts: api_opts} do
+      assert %{status: 400} =
+               Router.call(
+                 conn("GET", "/v1/shape?api_secret=#{secret}"),
+                 Keyword.merge([secret: secret], api_opts)
+               )
+    end
+
     test "requires secret for /v1/shape deletion", %{secret: secret, api_opts: api_opts} do
       # No secret provided
       assert %{status: 401} = Router.call(conn("DELETE", "/v1/shape"), secret: secret)
