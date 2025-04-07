@@ -10,8 +10,14 @@ defmodule Debug.Process do
   end
 
   defp type_and_memory(pid) do
-    [memory: memory] = Process.info(pid, [:memory])
-    %{type: type(pid), memory: memory}
+    case type(pid) do
+      :dead ->
+        %{type: :dead, memory: 0}
+
+      type ->
+        [memory: memory] = Process.info(pid, [:memory])
+        %{type: type, memory: memory}
+    end
   end
 
   def type(pid) do
