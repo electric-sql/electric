@@ -30,7 +30,7 @@ export default $config({
     }
 
     if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
-      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_SECRET is not set`)
     }
 
     try {
