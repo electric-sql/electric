@@ -34,9 +34,14 @@ As AI apps become more collaborative, with multiple users interacting with the s
 
 Most AI apps stream tokens into the front-end. That's how Claude and ChatGPT write out their response to you, one word at a time.
 
->
-> ... diagramme of model -> token stream -> UI ...
->
+<figure>
+  <img class="hidden-sm"
+      src="/img/blog/building-collaborative-ai-apps-on-sync/token-streaming.png"
+  />
+  <img class="block-sm" style="width: 100%; max-width: 315px"
+      src="/img/blog/building-collaborative-ai-apps-on-sync/token-streaming.sm.png"
+  />
+</figure>
 
 If you stream directly from the agent to the UI, you have a fragile system. Your app breaks when the connection drops and when the user refreshes the page.
 
@@ -48,9 +53,14 @@ For example, here's how ChatGPT behaves:
 
 If, instead, you stream tokens into a store and then subscribe to that store then you get a resilient UI that doesn't break.
 
->
-> ... diagramme of model -> token stream -> store -> stream -> UI ...
->
+<figure>
+  <img class="hidden-sm"
+      src="/img/blog/building-collaborative-ai-apps-on-sync/streaming-via-store.png"
+  />
+  <img class="block-sm" style="width: 100%; max-width: 396px"
+      src="/img/blog/building-collaborative-ai-apps-on-sync/streaming-via-store.sm.png"
+  />
+</figure>
 
 For example, here's how better systems like [Assistant-UI](https://www.assistant-ui.com) and [Lobe Chat](https://github.com/lobehub/lobe-chat) (both are building on Electric) behave:
 
@@ -94,9 +104,14 @@ Who are they going to blame? Your software.
 
 So even just the possibility of multiple browser tabs means you need to split that stream and keep both tabs in sync.
 
->
-> ... diagramme of model -> token stream -> store -> two streams -> two UIs ...
->
+<figure>
+  <img class="hidden-sm"
+      src="/img/blog/building-collaborative-ai-apps-on-sync/streaming-two-clients.png"
+  />
+  <img class="block-sm" style="width: 100%; max-width: 396px"
+      src="/img/blog/building-collaborative-ai-apps-on-sync/streaming-two-clients.sm.png"
+  />
+</figure>
 
 But, of course, the world is not just about browser tabs. Agents do stuff in the background. What are the chances your user is going to grab their mobile, nip across to [Linea Coffee](https://lineacaffe.com) on Mariposa and check progress while waiting in the queue?
 
