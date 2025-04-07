@@ -96,7 +96,7 @@ The source ID is a key that uniquely identifies your Postgres database.
 
 The source secret is a token that grants access to it. You should treat the source secret as securely as you would with your database password.
 
-> [!Warning] Do not leak your source secret to the client
+> [!Warning] Do not use your source secret in the client!
 > If you use the source secret from an insecure client, then this exposes it to malicious users, who can then use it to connect to your cloud API.
 
 #### Proxy Auth
