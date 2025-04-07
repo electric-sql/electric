@@ -1,13 +1,13 @@
 ---
-title: "Electric Cloud in public BETA"
+title: "Announcing Electric Cloud Public Beta: Sync in 30 Seconds"
 description: >-
   Electric Cloud is now in public BETA!
   This means it's open to everyone for immediate access.
 excerpt: >-
   Electric Cloud is now in public BETA!
   This means it's open to everyone for immediate access.
-authors: [kyle]
-image: /img/blog/electric-cloud-public-beta-release/header.jpg
+authors: [kyle, thruflo]
+image: "/img/blog/electric-cloud-public-beta-release/header.jpg"
 tags: [release]
 outline: [2, 3]
 post: true
@@ -19,21 +19,15 @@ post: true
 
 [Electric Cloud](https://dashboard.electric-sql.cloud) is in public BETA! It's open to everyone for immediate access.
 
-You can [create your account here](https://dashboard.electric-sql.cloud) and start using it straight away to sync data and build apps with. Use the new dashboard to connect and manage multiple sources (i.e.: multiple Electric services backed by different Postgres databases), see system logs and service health and status.
+You can [create your account here](https://dashboard.electric-sql.cloud) and start using it straight away to sync data and build apps.
+
+Use the new dashboard to connect and manage backing Postgres databases, and see system logs and service health and status.
 
 <a href="https://dashboard.electric-sql.cloud" class="no-visual">
   <img src="/img/blog/electric-cloud-public-beta-release/dashboard.png" />
 </a>
 
-We'll be iterating on adding more features to the dashboard and cloud tooling. However, now cloud is in public BETA, you can use it together with our [llms.txt](https://electric-sql.com/llms.txt) to go from a Postgres database to a real-time app in seconds. Especially if you're building on hosts like [Supabase](/docs/integrations/supabase) and [Neon](/docs/integrations/neon), which have great support for LLM code generation.
-
-<div style="max-width: 512px; margin: 24px 0">
-  <div class="embed-container">
-    <YoutubeEmbed video-id="ooWaPVvljlU" />
-  </div>
-</div>
-
-As well as being easy to [use](/docs/intro), [integrate](/blog/2024/11/21/local-first-with-your-existing-api) and [get-started with](/docs/quickstart), Electric Cloud is also [highly performant and scalable](/docs/reference/benchmarks#cloud), with an integrated CDN and low-latency edge primitives. Unlike other systems that demo well and fall over, you can build real-time apps on Electric Cloud and not worry that they're going to explode or fall over when you hit hockey stick growth.
+As well as being easy to [use](/docs/intro), [integrate](/blog/2024/11/21/local-first-with-your-existing-api) and [get-started with](/docs/quickstart), Electric Cloud is also [highly performant and scalable](/docs/reference/benchmarks#cloud), with an integrated CDN. Unlike other systems that demo well and fall over, you can build real-time apps on Electric Cloud and not worry that they're going to explode or fall over when you hit hockey stick growth.
 
 The chart below is from our [cloud benchmarks](/docs/reference/benchmarks#cloud), testing Electric's memory usage and latency with a single Electric service scaling real-time sync from 100k to 1 million concurrent clients under a sustained load of 960 writes/minute. Both memory usage and latency are essentially <em>flat</em>:
 
@@ -41,28 +35,73 @@ The chart below is from our [cloud benchmarks](/docs/reference/benchmarks#cloud)
   <ScalabilityChart />
 </figure>
 
-If you've been waiting for hosted Electric to stabilize, now's a great time to dive in. The [core sync service is in GA](/blog/2025/03/17/electricsql-1.0-released) and cloud is fully available. Support is available through [GitHub](https://github.com/electric-sql/electric/issues) and [Discord](https://discord.electric-sql.com) and premium support available for teams who need direct email support and/or technical assistance.
+## **Real-Time Features Shouldn't Be This Hard**
 
-Can't wait to see what you build with it 🚀
+Every major web app we’ve worked on, from [Pantheon](https://pantheon.io/) to [Gatsby Cloud](https://www.gatsbyjs.com/docs/reference/cloud/what-is-gatsby-cloud/), has had critical real-time features. And they were the most fragile, frustrating parts of the app.
 
-<div class="actions cta-actions page-footer-actions left">
-  <div class="action cloud-cta">
-    <VPButton
-        href="https://dashboard.electric-sql.cloud"
-        text="Sign up"
-        theme="brand"
-    />
-    &nbsp;
-    <VPButton
-        href="/docs/quickstart"
-        text="Quickstart"
-        theme="alt"
-    />
-    &nbsp;
-    <VPButton
-        href="https://discord.electric-sql.com"
-        text="Discord"
-        theme="alt"
-    />
-  </div>
-</div>
+The real-time systems plumbing was complex to build and operate (redis pub/sub & websocket servers) and we couldn’t ever get to 100% reliable event delivery as almost daily we’d get support requests from customers resulting from edge cases around race conditions or connectivity issues.
+
+Our team has been build apps for decades and have all felt this pain. Talking to other developers, we heard the same frustrations:
+
+"Our app felt sluggish because every interaction required a network round trip."
+
+"We spent weeks building and debugging our real-time infrastructure."
+
+"Our state management code was 3x larger than our actual business logic."
+
+Something is fundamentally broken with how we build modern apps.
+
+
+## **Sync: The Missing Abstraction for Simple, Fast Apps**
+
+The ElectricSQL team came together to build a proper abstraction for data synchronization.
+
+We asked ourselves: instead of manually orchestrating data fetching, caching, and real-time updates, what if developers could simply declare what data they need, and have it automatically stay in sync between the server and client?
+
+That's why we built Electric — an open source sync engine that works directly with Postgres.
+
+We had three core requirements:
+
+1. **Zero assumptions about your stack**: It should work with any Postgres database, any data model, and any frontend framework.
+
+2. **Simple to integrate**: It should be a thin layer that fits into existing architectures without requiring a rewrite.
+
+3. **Infinitely scalable**: It should handle millions of concurrent users without breaking a sweat.
+
+
+With Electric, you don't need to write imperative state transfer code. You don't need complex state management frameworks. You don't need to engineer for high uptime when your app naturally tolerates network issues.
+
+Instead, you get:
+
+* **Dead-simple integration**: Sync data directly from your Postgres database
+* **Instant responsiveness**: Data is locally available, making your app lightning fast
+* **Offline support**: local data reads should keep working regardless of connectivity
+* **Real-time by default**: Changes propagate automatically to all connected clients
+* **Reduced cloud costs**: Move data and compute to the client, lowering your server load
+
+We released the 1.0 of the OSS Electric sync engine a few weeks ago.
+
+And today, we're launching **Electric Cloud** — a managed platform that gives you all the benefits of sync in just 30 seconds.
+
+## **Try Electric Cloud Today**
+
+Getting started is dead simple:
+
+1. Connect your existing Postgres database via a standard connection string
+2. Specify what data you want to sync using our simple Shape API
+3. Use our client libraries to bind that data directly to your UI
+
+<img src="/img/blog/electric-cloud-public-beta-release/dashboard.png" />
+
+That's it. No complex infrastructure to set up or maintain. No opinionated frameworks to adopt. Just real-time sync, solved.
+
+Companies like Trigger.dev are already using Electric in production, noting that it has "it’s simple to operate as we already use Postgres, and it scales to millions of updates per day."
+
+**Ready to add sync to your app in 30 seconds?** [Sign up for the Electric Cloud Public Beta](https://dashboard.electric-sql.cloud) today.
+
+We can't wait to see what you build with it 🚀
+
+---
+
+*Have questions? Join our[ Discord community](https://discord.gg/electric), check out our[ documentation](https://electric-sql.com/docs), or find us on[ GitHub](https://github.com/electric-sql/electric).*
+
