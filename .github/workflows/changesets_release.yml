@@ -43,8 +43,13 @@ jobs:
         run: node scripts/tag-latest.mjs
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+  update-cloud:
+    name: Update Electric version used by Cloud
+    runs-on: ubuntu-latest
+    needs: changesets
+    steps:
       # Get the Electric version of the Docker image
-      - name: Get sync-service version
+      - name: Get Electric version
         if: steps.changesets.outputs.published == 'true'
         id: sync_version
         run: |
