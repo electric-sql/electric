@@ -23,7 +23,7 @@ You can [create your account here](https://dashboard.electric-sql.cloud) and sta
 
 Use the new dashboard to connect and manage backing Postgres databases, and see system logs and service health and status.
 
-Electric Cloud is our managed service for our [OSS Postgres sync engine](https://electric-sql.com/). It solves the hard problems of sync for you, including [partial replication](https://electric-sql.com/docs/guides/shapes), [fan-out](https://electric-sql.com/docs/api/http#caching), and [data delivery](https://electric-sql.com/docs/api/http).
+Electric Cloud is our managed service for our [open-source Postgres sync engine](https://electric-sql.com/). It solves the hard problems of sync for you, including [partial replication](https://electric-sql.com/docs/guides/shapes), [fan-out](https://electric-sql.com/docs/api/http#caching), and [data delivery](https://electric-sql.com/docs/api/http).
 
 <a href="https://dashboard.electric-sql.cloud" class="no-visual">
   <img src="/img/blog/electric-cloud-public-beta-release/dashboard.png" />
@@ -60,7 +60,7 @@ The ElectricSQL team came together to build a proper abstraction for data synchr
 
 We asked ourselves: instead of manually orchestrating data fetching, caching, and real-time updates, what if developers could simply declare what data they need, and have it automatically stay in sync between the server and client?
 
-That's why we built Electric — an open source sync engine that works directly with Postgres.
+That's why we built Electric — an open-source sync engine that works directly with Postgres.
 
 We had three core requirements:
 
@@ -81,7 +81,7 @@ Instead, you get:
 * **Real-time by default**: Changes propagate automatically to all connected clients
 * **Reduced cloud costs**: Move data and compute to the client, lowering your server load
 
-We released the 1.0 of the OSS Electric sync engine a few weeks ago.
+We released the 1.0 of the open-source Electric sync engine a few weeks ago.
 
 And today, we're launching **Electric Cloud** — a managed platform that gives you all the benefits of sync in just 30 seconds.
 
