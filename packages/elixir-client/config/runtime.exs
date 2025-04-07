@@ -20,7 +20,7 @@ if config_env() == :test do
 
   config :electric,
     start_in_library_mode: false,
-    replication_connection_opts: Electric.Utils.obfuscate_password(connection_opts),
+    replication_connection_opts: connection_opts,
     # enable the http api so that the client tests against a real endpoint can
     # run against our embedded electric instance.
     enable_http_api: true,
