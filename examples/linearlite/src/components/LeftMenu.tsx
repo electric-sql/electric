@@ -2,6 +2,7 @@ import { ReactComponent as HelpIcon } from '../assets/icons/help.svg'
 import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
 import { ReactComponent as ElectricIcon } from '../assets/images/icon.inverse.svg'
 import { ReactComponent as BacklogIcon } from '../assets/icons/circle-dot.svg'
+import { ReactComponent as DumpIcon } from '../assets/icons/relationship.svg'
 import { MenuContext } from '../App'
 import classnames from 'classnames'
 import { memo, RefObject, useRef, useState, useContext } from 'react'
@@ -18,6 +19,7 @@ import IssueModal from './IssueModal'
 import PGliteConsoleModal from './PGliteConsoleModal'
 import ItemGroup from './ItemGroup'
 import ProfileMenu from './ProfileMenu'
+import PGliteDumpRestoreModal from './PGliteDumpRestoreModal'
 
 function LeftMenu() {
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>
@@ -25,6 +27,7 @@ function LeftMenu() {
   const [showAboutModal, setShowAboutModal] = useState(false)
   const [showIssueModal, setShowIssueModal] = useState(false)
   const [showPGliteConsoleModal, setShowPGliteConsoleModal] = useState(false)
+  const [showPGliteDumpModal, setShowPGliteDumpModal] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
 
   const classes = classnames(
@@ -154,6 +157,13 @@ function LeftMenu() {
             >
               <ConsoleIcon className="w-3 mr-2 mt-1" /> PGlite Console
             </button>
+            <button
+              type="button"
+              className="inline-flex mt-1"
+              onClick={() => setShowPGliteDumpModal(true)}
+            >
+              <DumpIcon className="w-3 mr-2 mt-1" /> Dump and restore
+            </button>            
             <a className="inline-flex mt-1" href="https://electric-sql.com/">
               <ElectricIcon className="w-3 h-3 mr-2 mt-1 scale-150" />
               {` `}
@@ -188,6 +198,12 @@ function LeftMenu() {
           onDismiss={() => setShowPGliteConsoleModal(false)}
         />
       }
+      {
+        <PGliteDumpRestoreModal
+          isOpen={showPGliteDumpModal}
+          onDismiss={() => setShowPGliteDumpModal(false)}
+        />
+      }      
     </>
   )
 }

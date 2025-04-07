@@ -5,7 +5,7 @@ import svgr from 'vite-plugin-svgr'
 // https://vitejs.dev/config/
 export default defineConfig({
   optimizeDeps: {
-    exclude: ['@electric-sql/pglite'],
+    exclude: ['@electric-sql/pglite', '@electric-sql/pglite-tools'],
   },
   worker: {
     format: 'es',

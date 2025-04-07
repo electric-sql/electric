@@ -4,11 +4,16 @@ import { migrate } from './migrations'
 
 worker({
   async init() {
+    
+    let dataDirName = new URL(location.href).searchParams.get('dataDirName') ?? 'linearlite2'
+    console.log('using dataDir', dataDirName)
+
     const pg = await PGlite.create({
-      dataDir: 'idb://linearlite2',
+      dataDir: `idb://${dataDirName}`,
       relaxedDurability: true,
     })
-    // Migrate the database to the latest schema
+    await pg.waitReady
+
     await migrate(pg)
     return pg
   },

@@ -55,10 +55,10 @@ function Modal({
   )
   const handleClick = useCallback(
     (event: MouseEvent) => {
-      event.stopPropagation()
-      event.preventDefault()
       if (!onDismiss) return
       if (ref.current && !ref.current.contains(event.target as Element)) {
+        event.stopPropagation()
+        event.preventDefault()
         onDismiss()
       }
     },
