@@ -70,7 +70,7 @@ jobs:
       # On commit, only update the commit SHA, not the Docker image version
       - name: Trigger cloud update (on commit)
         uses: peter-evans/repository-dispatch@v2
-        if: steps.changesets.outputs.published == 'false'
+        if: steps.changesets.outputs.published != 'true'
         with:
           token: ${{ secrets.CLOUD_REPO_TRIGGER_TOKEN }}
           repository: electric-sql/stratovolt
