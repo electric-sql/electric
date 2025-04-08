@@ -206,6 +206,9 @@ defmodule Electric.Connection.Manager do
     in_connection_opts = Keyword.fetch!(opts, :connection_opts)
     in_replication_opts = Keyword.fetch!(opts, :replication_opts)
 
+    # If we see that both top-level connection opts and replication connection opts have been
+    # initialized from the same kwlist, we'll skip the extra work and only perform the no-ssl
+    # and ipv4 fallbacks once.
     shared_connection_opts =
       if in_connection_opts == Keyword.fetch!(in_replication_opts, :connection_opts) do
         populate_connection_opts(in_connection_opts)
