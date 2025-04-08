@@ -24,7 +24,7 @@ See the [Nextjs example](/demos/nextjs) on GitHub. This demonstrates using Elect
 
 <<< @../../examples/nextjs/app/page.tsx
 
-It also demonstrates using a [shape-proxy endpoint](https://github.com/electric-sql/electric/blob/main/examples/nextjs-example/app/shape-proxy/route.ts) for proxying access to the Electric sync service. This allows you to implement [auth](/docs/guides/auth) and routing in-front-of Electric (and other concerns like transforming or decrypting the stream) using your Next.js backend:
+It also demonstrates using a [shape-proxy endpoint](https://github.com/electric-sql/electric/blob/main/examples/nextjs/app/shape-proxy/route.ts) for proxying access to the Electric sync service. This allows you to implement [auth](/docs/guides/auth) and routing in-front-of Electric (and other concerns like transforming or decrypting the stream) using your Next.js backend:
 
 <<< @../../examples/nextjs/app/shape-proxy/route.ts
 
