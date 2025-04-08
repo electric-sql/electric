@@ -1,5 +1,5 @@
 ---
-title: Building collaborative AI apps? You need sync.
+title: Building AI apps? You need sync.
 description: >-
   AI apps are collaborative. Building then requires solving resumeability,
   interruptability, multi‑tab, multi‑device and multi‑user.
@@ -7,7 +7,7 @@ excerpt: >-
   AI apps are collaborative. Building then requires solving resumeability,
   interruptability, multi‑tab, multi‑device and multi‑user.
 authors: [thruflo]
-image: /img/blog/building-collaborative-ai-apps-on-sync/header.jpg
+image: /img/blog/building-ai-apps-on-sync/header.jpg
 tags: [ai, sync]
 outline: [2, 3]
 post: true
@@ -36,10 +36,10 @@ Most AI apps stream tokens into the front-end. That's how Claude and ChatGPT wri
 
 <figure>
   <img class="hidden-sm"
-      src="/img/blog/building-collaborative-ai-apps-on-sync/token-streaming.png"
+      src="/img/blog/building-ai-apps-on-sync/token-streaming.png"
   />
   <img class="block-sm" style="width: 100%; max-width: 315px"
-      src="/img/blog/building-collaborative-ai-apps-on-sync/token-streaming.sm.png"
+      src="/img/blog/building-ai-apps-on-sync/token-streaming.sm.png"
   />
 </figure>
 
@@ -55,10 +55,10 @@ If, instead, you stream tokens into a store and then subscribe to that store the
 
 <figure>
   <img class="hidden-sm"
-      src="/img/blog/building-collaborative-ai-apps-on-sync/streaming-via-store.png"
+      src="/img/blog/building-ai-apps-on-sync/streaming-via-store.png"
   />
   <img class="block-sm" style="width: 100%; max-width: 396px"
-      src="/img/blog/building-collaborative-ai-apps-on-sync/streaming-via-store.sm.png"
+      src="/img/blog/building-ai-apps-on-sync/streaming-via-store.sm.png"
   />
 </figure>
 
@@ -96,7 +96,7 @@ You know another thing users do? They open multiple browser tabs and they flit i
 
 So what do you do when they open your app in two tabs at the same time? They can't remember which tab they used last. They're just confused when their session isn't there. Where did my vibes go?!
 
-<img src="/img/blog/building-collaborative-ai-apps-on-sync/multi-tab-broken.png" style="width: 95%" />
+<img src="/img/blog/building-ai-apps-on-sync/multi-tab-broken.png" style="width: 95%" />
 
 Or worse, they kick off the same prompt twice because they think it's not running. Now they have two threads competing to do the same thing.
 
@@ -106,17 +106,17 @@ So even just the possibility of multiple browser tabs means you need to split th
 
 <figure>
   <img class="hidden-sm"
-      src="/img/blog/building-collaborative-ai-apps-on-sync/streaming-two-clients.png"
+      src="/img/blog/building-ai-apps-on-sync/streaming-two-clients.png"
   />
   <img class="block-sm" style="width: 100%; max-width: 396px"
-      src="/img/blog/building-collaborative-ai-apps-on-sync/streaming-two-clients.sm.png"
+      src="/img/blog/building-ai-apps-on-sync/streaming-two-clients.sm.png"
   />
 </figure>
 
 But, of course, the world is not just about browser tabs. Agents do stuff in the background. What are the chances your user is going to grab their mobile, nip across to [Linea Coffee](https://lineacaffe.com) on Mariposa and check progress while waiting in the queue?
 
 <figure style="border-radius: 16px; overflow: hidden">
-  <img src="/img/blog/building-collaborative-ai-apps-on-sync/nipping-out-for-coffee.jpg" />
+  <img src="/img/blog/building-ai-apps-on-sync/nipping-out-for-coffee.jpg" />
 </figure>
 
 In this example, how do you keep the mobile app up-to-date with the session that was started in the browser? This is exactly what sync does. It handles *fan out*, so you can (resiliently) stream changes to multiple places at the same time.
@@ -138,7 +138,7 @@ Traditional software was designed around this. Work colleagues can collaborate o
 <figure style="border-radius: 16px; opacity: 0.82; overflow: hidden">
   <a href="https://www.figma.com/blog/introducing-figma-community/" class="no-visual"
       target="_blank">
-    <img src="/img/blog/building-collaborative-ai-apps-on-sync/figma.png" style="margin: -30px 0" />
+    <img src="/img/blog/building-ai-apps-on-sync/figma.png" style="margin: -30px 0" />
   </a>
 </figure>
 
@@ -212,7 +212,7 @@ You're also not going to just have one agent. Soon, we're all going to have [swa
 
 <figure style="border-radius: 16px; overflow: hidden">
   <a href="https://github.com/openai/openai-agents-python" class="no-visual" target="_blank">
-    <img src="/img/blog/building-collaborative-ai-apps-on-sync/swarm.png" /></a>
+    <img src="/img/blog/building-ai-apps-on-sync/swarm.png" /></a>
 </figure>
 
 Tools like [LangGraph](https://www.langchain.com/langgraph) provide a shared data layer for agents. However, they don't solve the last mile problem of syncing into user-facing apps to also keep the human in the loop. State can't just be in the cloud. Users are agents too!
