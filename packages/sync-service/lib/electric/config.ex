@@ -161,7 +161,7 @@ defmodule Electric.Config do
 
   ## Examples
 
-      iex> parse_postgresql_uri("postgresql://postgres:password@example.com/app-db")
+      iex> parse_postgresql_uri("postgresql://postgres:password@example.com/app-db") |> deobfuscate()
       {:ok, [
         hostname: "example.com",
         port: 5432,
@@ -194,7 +194,7 @@ defmodule Electric.Config do
         username: "user"
       ]}
 
-      iex> parse_postgresql_uri("postgresql://user%2Btesting%40gmail.com:weird%2Fpassword@localhost:5433/my%2Bdb%2Bname")
+      iex> parse_postgresql_uri("postgresql://user%2Btesting%40gmail.com:weird%2Fpassword@localhost:5433/my%2Bdb%2Bname") |> deobfuscate()
       {:ok, [
         hostname: "localhost",
         port: 5433,
@@ -267,7 +267,7 @@ defmodule Electric.Config do
             port: port || 5432,
             database: parse_database(path, username) |> URI.decode(),
             username: URI.decode(username),
-            password: if(password, do: URI.decode(password))
+            password: if(password, do: password |> URI.decode() |> Electric.Utils.wrap_in_fun())
           ] ++ options,
           fn {_key, val} -> is_nil(val) end
         )
@@ -422,4 +422,11 @@ defmodule Electric.Config do
         :ok
     end
   end
+
+  @doc false
+  # helper function for use in doc tests
+  def deobfuscate({:ok, connection_opts}),
+    do: {:ok, Electric.Utils.deobfuscate_password(connection_opts)}
+
+  def deobfuscate(other), do: other
 end

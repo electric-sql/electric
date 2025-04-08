@@ -134,12 +134,9 @@ query_database_url_config =
 
 database_ipv6_config = env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
 
-replication_connection_opts = replication_database_url_config ++ [ipv6: database_ipv6_config]
-query_connection_opts = query_database_url_config ++ [ipv6: database_ipv6_config]
-
 config :electric,
-  replication_connection_opts: Electric.Utils.obfuscate_password(replication_connection_opts),
-  query_connection_opts: Electric.Utils.obfuscate_password(query_connection_opts)
+  replication_connection_opts: replication_database_url_config ++ [ipv6: database_ipv6_config],
+  query_connection_opts: query_database_url_config ++ [ipv6: database_ipv6_config]
 
 enable_integration_testing? = env!("ELECTRIC_ENABLE_INTEGRATION_TESTING", :boolean, nil)
 cache_max_age = env!("ELECTRIC_CACHE_MAX_AGE", :integer, nil)

@@ -442,8 +442,9 @@ defmodule Electric.Utils do
   @spec map_values(map(), (term() -> term())) :: map()
   def map_values(map, fun), do: Map.new(map, fn {k, v} -> {k, fun.(v)} end)
 
-  defp wrap_in_fun(val) when is_function(val, 0), do: val
-  defp wrap_in_fun(val), do: fn -> val end
+  @doc false
+  def wrap_in_fun(val) when is_function(val, 0), do: val
+  def wrap_in_fun(val), do: fn -> val end
 
   @doc """
   Merge a list of streams by taking the minimum element from each stream and emitting it and its
