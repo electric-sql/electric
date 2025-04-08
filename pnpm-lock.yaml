@@ -220,6 +220,9 @@ importers:
       lodash.debounce:
         specifier: ^4.0.8
         version: 4.0.8
+      pglite-03:
+        specifier: npm:@electric-sql/pglite@0.3.0-next.0
+        version: '@electric-sql/pglite@0.3.0-next.0'
       postgres:
         specifier: ^3.4.3
         version: 3.4.5
@@ -2232,6 +2235,9 @@ packages:
 
   '@electric-sql/pglite@0.2.17':
     resolution: {integrity: sha512-qEpKRT2oUaWDH6tjRxLHjdzMqRUGYDnGZlKrnL4dJ77JVMcP2Hpo3NYnOSPKdZdeec57B6QPprCUFg0picx5Pw==}
+
+  '@electric-sql/pglite@0.3.0-next.0':
+    resolution: {integrity: sha512-2FoIhgJVHx44oAzToCgO+sS2miwx9OScZYxltswPXSqqoNTY8nPh6Wjhrm/a9CwBxVVRl/qLjKaqKP8bafQUEA==}
 
   '@emotion/hash@0.9.2':
     resolution: {integrity: sha512-MyqliTZGuOm3+5ZRSaaBGP3USLw6+EGykkwZns2EPC5g8jJ4z9OrdZY9apkl3+UP9+sdz76YYkwCKP5gh8iY3g==}
@@ -11229,6 +11235,8 @@ snapshots:
   '@electric-sql/pglite-tools@0.2.3': {}
 
   '@electric-sql/pglite@0.2.17': {}
+
+  '@electric-sql/pglite@0.3.0-next.0': {}
 
   '@emotion/hash@0.9.2': {}
 

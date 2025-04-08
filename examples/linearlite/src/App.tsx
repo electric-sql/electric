@@ -35,6 +35,7 @@ type PGliteWorkerWithLive = PGliteWorker & { live: LiveNamespace }
 
 let doSync = !new URL(window.location.href).searchParams.has('noSync')
 let dataDirName = new URL(window.location.href).searchParams.get('dataDirName')
+let usePGnext = new URL(window.location.href).searchParams.get('usePGnext')
 
 async function createPGliteWorker() {
 
@@ -43,9 +44,12 @@ async function createPGliteWorker() {
     sync: electricSync(),
   }
 
-  const paramDataDirName = dataDirName ? `?dataDirName=${dataDirName}` : ''
-  if (paramDataDirName !== '') {
-    const pgWorker = new Worker(new URL('./pglite-worker.ts' + paramDataDirName, import.meta.url), {
+  const url = new URL('./pglite-worker.ts', import.meta.url)
+  dataDirName && url.searchParams.set('dataDirName', dataDirName)
+  usePGnext && url.searchParams.set('usePGnext', usePGnext)
+
+  if (url.searchParams.size) {
+    const pgWorker = new Worker(url, {
       type: 'module'
     })
     return await PGliteWorker.create(pgWorker, {
@@ -60,24 +64,6 @@ async function createPGliteWorker() {
     })
   }
 }
-
-// async function createPGliteWorker() {
-//   const extensions: any = {
-//     live,
-//     sync: electricSync(),
-//   }
-//   const paramDataDirName = dataDirName ? `?dataDirName=${dataDirName}` : ''
-//   const pgWorker = new Worker(new URL('./pglite-worker.ts' + paramDataDirName, import.meta.url), {
-//     type: 'module'
-//   })
-
-//   const pgliteWorker = await PGliteWorker.create(pgWorker, {
-//     extensions
-//   })
-//   await pgliteWorker.waitReady
-
-//   return pgliteWorker
-// }
 
 const pgWorkerPromise = createPGliteWorker()
 

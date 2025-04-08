@@ -141,7 +141,6 @@ export default function PGliteDumpRestoreModal({ isOpen, onDismiss }: Props) {
                 Restore dump & reload with no sync
               </button>
           }
-
         </div>
       </div>
     </Modal>
