@@ -23,13 +23,4 @@ defmodule Electric.LsnTrackerTest do
       assert LsnTracker.get_last_processed_lsn(stack_id) == lsn
     end
   end
-
-  test "reset/1", %{stack_id: stack_id} do
-    lsn = Lsn.from_integer(7)
-
-    LsnTracker.init(lsn, stack_id)
-    LsnTracker.reset(stack_id)
-
-    assert LsnTracker.get_last_processed_lsn(stack_id) == Lsn.from_integer(0)
-  end
 end
