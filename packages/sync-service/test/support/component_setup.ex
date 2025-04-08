@@ -180,6 +180,11 @@ defmodule Support.ComponentSetup do
     }
   end
 
+  def with_status_monitor(ctx) do
+    start_link_supervised!({Electric.StatusMonitor, ctx.stack_id})
+    %{}
+  end
+
   def with_complete_stack(ctx) do
     stack_id = full_test_name(ctx)
 

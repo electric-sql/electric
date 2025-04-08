@@ -1,7 +1,7 @@
 defmodule Electric.Postgres.ReplicationClientTest do
   use ExUnit.Case, async: true
 
-  import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
+  import Support.ComponentSetup, only: [with_stack_id_from_test: 1, with_status_monitor: 1]
   import Support.DbSetup, except: [with_publication: 1]
   import Support.DbStructureSetup
 
@@ -40,7 +40,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   setup :with_stack_id_from_test
 
   describe "ReplicationClient init" do
-    setup [:with_unique_db, :with_basic_tables]
+    setup [:with_unique_db, :with_basic_tables, :with_status_monitor]
 
     test "creates an empty publication on startup if requested",
          %{db_conn: conn, dummy_pid: dummy_pid} = ctx do
@@ -65,7 +65,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   describe "ReplicationClient against real db" do
-    setup [:with_unique_db, :with_basic_tables, :with_publication, :with_replication_opts]
+    setup [
+      :with_unique_db,
+      :with_basic_tables,
+      :with_publication,
+      :with_replication_opts,
+      :with_status_monitor
+    ]
 
     test "calls a provided function when receiving it from the PG", %{db_conn: conn} = ctx do
       start_client(ctx)
@@ -254,7 +260,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   describe "ReplicationClient against real db (toast)" do
-    setup [:with_unique_db, :with_basic_tables, :with_publication, :with_replication_opts]
+    setup [
+      :with_unique_db,
+      :with_basic_tables,
+      :with_publication,
+      :with_replication_opts,
+      :with_status_monitor
+    ]
 
     setup %{db_conn: conn} = ctx do
       Postgrex.query!(
