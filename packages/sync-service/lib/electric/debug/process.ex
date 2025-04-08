@@ -17,7 +17,7 @@ defmodule Electric.Debug.Process do
       when is_list(process_list) and is_integer(count) and count > 0 do
     process_list
     |> Enum.map(&type_and_memory/1)
-    |> Enum.reject(&is_dead_or_nil/1)
+    |> Enum.reject(&(&1.type == :dead))
     |> Enum.group_by(& &1.type, & &1.memory)
     |> Enum.map(fn {type, memory} -> %{type: type, memory: Enum.sum(memory)} end)
     |> Enum.sort_by(&(-&1.memory))
@@ -25,71 +25,44 @@ defmodule Electric.Debug.Process do
   end
 
   defp type_and_memory(pid) do
-    case type(pid) do
-      :dead ->
-        %{type: :dead, memory: 0}
-
-      type ->
-        case Process.info(pid, [:memory]) do
-          [memory: memory] when is_integer(memory) ->
-            %{type: type, memory: memory}
-
-          _ ->
-            %{type: :dead, memory: 0}
-        end
-    end
+    info = Process.info(pid, [:dictionary, :initial_call, :label, :memory])
+    %{type: process_type(pid, info), memory: memory_from_info(info)}
   end
 
-  def type(pid) do
-    with :error <- process_type_if_dead(pid),
-         :error <- process_label(pid),
-         :error <- initial_module(pid) do
-      :unknown
-    end
+  def process_type(pid, info) do
+    label_from_info(info) ||
+      initial_module_from_info(info) ||
+      if(Process.alive?(pid), do: :unknown, else: :dead)
   end
 
-  defp process_type_if_dead(pid) do
-    if Process.alive?(pid) do
-      :error
-    else
-      :dead
-    end
-  end
-
-  defp process_label(pid) do
-    case :proc_lib.get_label(pid) do
-      :undefined -> :error
+  defp label_from_info(info) do
+    case info[:label] do
+      :undefined -> nil
       {name, _} -> name
       {name, _, _} -> name
       name when is_atom(name) -> name
       name when is_binary(name) -> name
-      _ -> :error
+      _ -> nil
     end
   end
 
-  defp initial_module(pid) do
-    [dictionary: dictionary] = Process.info(pid, [:dictionary])
-
-    dictionary
-    |> Map.new()
-    |> Map.get(:"$initial_call")
-    |> case do
+  defp initial_module_from_info(info) do
+    case get_in(info, [:dictionary, :"$initial_call"]) do
       {module, _function, _arg_count} ->
         module
 
       _ ->
-        initial_module_from_info(pid)
+        case info[:initial_call] do
+          {module, _function, _arg_count} -> module
+          nil -> nil
+        end
     end
   end
 
-  defp initial_module_from_info(pid) do
-    case Process.info(pid, [:initial_call]) do
-      [initial_call: {module, _function, _arg_count}] -> module
-      nil -> :error
+  defp memory_from_info(info) do
+    case info[:memory] do
+      bytes when is_integer(bytes) -> bytes
+      _ -> 0
     end
   end
-
-  defp is_dead_or_nil(nil), do: true
-  defp is_dead_or_nil(%{type: :dead}), do: true
-  defp is_dead_or_nil(_), do: false
 end
