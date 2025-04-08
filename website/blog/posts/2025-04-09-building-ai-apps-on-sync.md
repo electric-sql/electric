@@ -199,7 +199,7 @@ Which really changes the game for AI UX. Because it allows multiple users to col
 
 ### Collaboration
 
-For example, here we show two users collaborating on the same AI session. The first users asks the AI to perform a task. The second user is watching in real-time. They see that the AI needs more context and upload a context document to provide it. The AI generates a better response and streams it to both users.
+For example, here we show two users collaborating on the same task. The first user prompts the AI. The second user is watching in real-time. They see that the AI needs more context and upload a document to provide it. The AI sees this generates a better response.
 
 <figure>
   <video controls preload="auto" class="wide">
