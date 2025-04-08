@@ -46,7 +46,7 @@ and scales to millions of users
 
 ## Hosted Electric
 
-Electric Cloud is a hosted Electric service. It provisions, runs and operates the [Electric sync engine](/product/electric) for you.
+Electric Cloud is a hosted Electric service. We provision, run and operate the [Electric sync engine](/product/electric) for you.
 
 ## Data delivery network
 
@@ -142,6 +142,10 @@ export async function GET(req: Request) {
 }
 ```
 
+### Pricing
+
+Electric Cloud is free while we work on pricing. We'll be launching pricing in the next month or two (May/June 2025). There'll always be generous free tier. If you plan to use Electric in a larger app (1000+ MAU) please reach out to make sure we can fully support you & to get a sense of what pricing will be like.
+
 ### Support
 
-Let us know if you have any questions. We'll be very happy to help.
+Let us know if you have any questions. We'll be very happy to help. Email us at support@electric-sql.com
