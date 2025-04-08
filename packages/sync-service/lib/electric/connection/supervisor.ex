@@ -36,7 +36,7 @@ defmodule Electric.Connection.Supervisor do
   end
 
   def shutdown(stack_id, reason) do
-    Logger.error(
+    Logger.warning(
       "Stopping connection supervisor with stack_id=#{inspect(stack_id)} " <>
         "due to an unrecoverable error: #{inspect(reason)}"
     )

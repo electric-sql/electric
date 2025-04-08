@@ -720,10 +720,32 @@ defmodule Electric.Connection.Manager do
          } = error,
          state
        ) do
+    dispatch_fatal_error_and_shutdown({:database_slot_invalidated, %{error: error}}, state)
+  end
+
+  defp stop_if_fatal_error(
+         %Postgrex.Error{
+           postgres: %{
+             code: :internal_error,
+             pg_code: "XX000"
+           }
+         } = error,
+         state
+       ) do
+    if Regex.match?(~r/database ".*" does not exist$/, error.postgres.message) do
+      dispatch_fatal_error_and_shutdown({:database_does_not_exist, %{error: error}}, state)
+    else
+      false
+    end
+  end
+
+  defp stop_if_fatal_error(_, _), do: false
+
+  defp dispatch_fatal_error_and_shutdown(error, state) do
     Electric.StackSupervisor.dispatch_stack_event(
       state.stack_events_registry,
       state.stack_id,
-      {:database_slot_invalidated, %{error: error}}
+      error
     )
 
     # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
@@ -733,8 +755,6 @@ defmodule Electric.Connection.Manager do
 
     {:noreply, state}
   end
-
-  defp stop_if_fatal_error(_, _), do: false
 
   defp schedule_reconnection(
          step,
