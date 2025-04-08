@@ -13,7 +13,7 @@ interface Props {
 export default function PGliteDumpRestoreModal({ isOpen, onDismiss }: Props) {
   const pg = usePGlite()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [dump, setDump] = useState<any>()
+  const [dump, setDump] = useState<File | undefined>()
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [status, setStatus] = useState<string>('')
   const [restoreStatus, setRestoreStatus] = useState<string>('not_started')
@@ -34,7 +34,7 @@ export default function PGliteDumpRestoreModal({ isOpen, onDismiss }: Props) {
 
   const downloadDump = () => {
     try {
-      const url = URL.createObjectURL(dump)
+      const url = URL.createObjectURL(dump!)
       const a = document.createElement('a')
       a.href = url
       a.download = 'database-dump.sql'

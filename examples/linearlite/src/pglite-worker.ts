@@ -19,7 +19,7 @@ worker({
         dataDir: `idb://${dataDirName}`,
         relaxedDurability: true,
       })
-      pg = pg03 as any
+      pg = pg03 as unknown as PGlite
     } else {
       pg = await PGlite.create({
         dataDir: `idb://${dataDirName}`,
