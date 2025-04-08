@@ -720,18 +720,7 @@ defmodule Electric.Connection.Manager do
          } = error,
          state
        ) do
-    Electric.StackSupervisor.dispatch_stack_event(
-      state.stack_events_registry,
-      state.stack_id,
-      {:database_slot_invalidated, %{error: error}}
-    )
-
-    # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
-    # process is waiting for the supervisor to shut down its children, one of which is the
-    # manager process itself.
-    Task.start(Electric.Connection.Supervisor, :shutdown, [state.stack_id, error])
-
-    {:noreply, state}
+    dispatch_fatal_error_and_shutdown({:database_slot_invalidated, %{error: error}}, state)
   end
 
   defp stop_if_fatal_error(
@@ -744,24 +733,28 @@ defmodule Electric.Connection.Manager do
          state
        ) do
     if Regex.match?(~r/database ".*" does not exist$/, error.postgres.message) do
-      Electric.StackSupervisor.dispatch_stack_event(
-        state.stack_events_registry,
-        state.stack_id,
-        {:database_does_not_exist, %{error: error}}
-      )
-
-      # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
-      # process is waiting for the supervisor to shut down its children, one of which is the
-      # manager process itself.
-      Task.start(Electric.Connection.Supervisor, :shutdown, [state.stack_id, error])
-
-      {:noreply, state}
+      dispatch_fatal_error_and_shutdown({:database_does_not_exist, %{error: error}}, state)
     else
       false
     end
   end
 
   defp stop_if_fatal_error(_, _), do: false
+
+  defp dispatch_fatal_error_and_shutdown(error, state) do
+    Electric.StackSupervisor.dispatch_stack_event(
+      state.stack_events_registry,
+      state.stack_id,
+      error
+    )
+
+    # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
+    # process is waiting for the supervisor to shut down its children, one of which is the
+    # manager process itself.
+    Task.start(Electric.Connection.Supervisor, :shutdown, [state.stack_id, error])
+
+    {:noreply, state}
+  end
 
   defp schedule_reconnection(
          step,
