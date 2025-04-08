@@ -204,7 +204,9 @@ defmodule Electric.Shapes.Consumer do
     handle_event(event, state)
   end
 
-  defp handle_event(%Changes.Relation{id: id}, %{shape: %{root_table_id: id}} = state) do
+  # Any relation that gets let through by the `ShapeLogCollector` (as coupled with `Shapes.Dispatcher`)
+  # is a signal that we need to terminate the shape.
+  defp handle_event(%Changes.Relation{}, state) do
     %{shape: %{root_table: root_table}, inspector: inspector} = state
 
     Logger.info(
