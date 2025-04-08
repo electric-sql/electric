@@ -38,7 +38,7 @@ Most AI apps stream tokens into the front-end. That's how Claude and ChatGPT wri
   <img class="hidden-sm"
       src="/img/blog/building-ai-apps-on-sync/token-streaming.png"
   />
-  <img class="block-sm" style="width: 100%; max-width: 315px"
+  <img class="block-sm" style="width: 100%; max-width: 275px"
       src="/img/blog/building-ai-apps-on-sync/token-streaming.sm.png"
   />
 </figure>
