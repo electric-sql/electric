@@ -1578,6 +1578,60 @@ defmodule Electric.Plug.RouterTest do
       updated_schema = get_resp_schema(conn)
       refute updated_schema["value"]["not_null"]
     end
+
+    @tag with_sql: [
+           "CREATE TABLE droppability_test (id INT PRIMARY KEY, value TEXT NOT NULL)",
+           "INSERT INTO droppability_test (id, value) VALUES (1, 'test')"
+         ]
+    test "Recreating the table causes a 409", %{
+      opts: opts,
+      db_conn: db_conn,
+      publication_name: publication_name
+    } do
+      assert %{status: 200} =
+               conn =
+               conn("GET", "/v1/shape", %{table: "droppability_test", offset: "-1"})
+               |> Router.call(opts)
+
+      shape_handle = get_resp_shape_handle(conn)
+
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape?table=droppability_test&offset=0_0&handle=#{shape_handle}&live"
+          )
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "DROP TABLE droppability_test", [])
+
+      Postgrex.query!(
+        db_conn,
+        "CREATE TABLE droppability_test (id INT PRIMARY KEY, value TEXT NOT NULL)",
+        []
+      )
+
+      Postgrex.query!(
+        db_conn,
+        "ALTER PUBLICATION #{publication_name} ADD TABLE droppability_test",
+        []
+      )
+
+      Postgrex.query!(db_conn, "INSERT INTO droppability_test (id, value) VALUES (1, 'test')", [])
+
+      # 1 sec timeout to make sure we see the change instead of acting as if no changes have been observed
+      assert %{status: 200} = Task.await(task, 1_000)
+
+      assert %{status: 409} =
+               conn =
+               conn("GET", "/v1/shape", %{
+                 table: "droppability_test",
+                 offset: "0_0",
+                 handle: shape_handle
+               })
+               |> Router.call(opts)
+    end
   end
 
   describe "404" do
