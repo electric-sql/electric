@@ -25,7 +25,7 @@
 
 [macro verify_connection_and_stack_supervisors_shutdown stack_id invalidated_slot_error]
   ??$invalidated_slot_error
-  ??[error] Stopping connection supervisor with stack_id=$stack_id due to an unrecoverable error
+  ??[warning] Stopping connection supervisor with stack_id=$stack_id due to an unrecoverable error
 
   !receive do \
      {:DOWN, ^stack_supervisor_mon, :process, ^stack_supervisor_pid, _} -> IO.puts "stack supervisor is down" \
