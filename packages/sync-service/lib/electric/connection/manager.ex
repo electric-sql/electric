@@ -150,8 +150,8 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(server, :exclusive_connection_lock_acquired)
   end
 
-  def replication_connection_started_initializing(server) do
-    GenServer.cast(server, :replication_connection_started_initializing)
+  def replication_connection_initializing(server) do
+    GenServer.cast(server, :replication_connection_initializing)
   end
 
   def replication_connection_established(server) do
@@ -540,7 +540,7 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_cast(
-        :replication_connection_started_initializing,
+        :replication_connection_initializing,
         %State{replication_connection_established: false} = state
       ) do
     state = mark_connection_succeeded(state)

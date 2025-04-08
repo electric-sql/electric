@@ -351,7 +351,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
   defp notify_connection_open(%State{connection_manager: connection_manager} = state) do
     :ok =
-      Electric.Connection.Manager.replication_connection_started_initializing(connection_manager)
+      Electric.Connection.Manager.replication_connection_initializing(connection_manager)
 
     state
   end
