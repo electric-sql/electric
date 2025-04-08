@@ -2,14 +2,15 @@ import { worker } from '@electric-sql/pglite/worker'
 import { PGlite } from '@electric-sql/pglite'
 import { migrate } from './migrations'
 
-import { PGlite as PGlite03 } from "pglite-03"
+import { PGlite as PGlite03 } from 'pglite-03'
 
 worker({
   async init() {
-    
-    let usePGliteNext = new URL(location.href).searchParams.has('usePGnext') ?? false
+    let usePGliteNext =
+      new URL(location.href).searchParams.has('usePGnext') ?? false
 
-    let dataDirName = new URL(location.href).searchParams.get('dataDirName') ?? 'linearlite2'
+    let dataDirName =
+      new URL(location.href).searchParams.get('dataDirName') ?? 'linearlite2'
     console.log('using dataDir', dataDirName)
 
     let pg

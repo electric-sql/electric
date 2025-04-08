@@ -3,7 +3,7 @@ import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
 import { ReactComponent as ElectricIcon } from '../assets/images/icon.inverse.svg'
 import { ReactComponent as BacklogIcon } from '../assets/icons/circle-dot.svg'
 import { ReactComponent as DumpIcon } from '../assets/icons/relationship.svg'
-import { ReactComponent as ParentIssue} from '../assets/icons/parent-issue.svg'
+import { ReactComponent as ParentIssue } from '../assets/icons/parent-issue.svg'
 
 import { MenuContext } from '../App'
 import classnames from 'classnames'
@@ -174,7 +174,7 @@ function LeftMenu() {
               onClick={() => setShowPGliteMigrateModal(true)}
             >
               <ParentIssue className="w-3 mr-2 mt-1" /> Migrate
-            </button>            
+            </button>
             <a className="inline-flex mt-1" href="https://electric-sql.com/">
               <ElectricIcon className="w-3 h-3 mr-2 mt-1 scale-150" />
               {` `}
