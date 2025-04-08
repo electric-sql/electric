@@ -35,15 +35,15 @@ export default function PGliteMigrateModal({ isOpen, onDismiss }: Props) {
     setMigrationInProgress(true)
     const dataDirName = `linearlite2_pglite_next_${uuidv4()}`
 
-    const dbDeletePromise = new Promise<void>((resolve, reject) => {
+    const dbDeletePromise = new Promise<void>((resolve) => {
       const request = indexedDB.deleteDatabase(`/pglite/${dataDirName}`)
 
-      request.onerror = function (event) {
+      request.onerror = function () {
         console.log('Error deleting database.')
         resolve()
       }
 
-      request.onsuccess = function (event) {
+      request.onsuccess = function () {
         console.log('Database deleted successfully.')
         resolve()
       }

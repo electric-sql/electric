@@ -2,7 +2,7 @@ import { PGlite } from '@electric-sql/pglite'
 import Modal from './Modal'
 import { usePGlite } from '@electric-sql/pglite-react'
 import { pgDump } from '@electric-sql/pglite-tools/pg_dump'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
 interface Props {
@@ -61,16 +61,16 @@ export default function PGliteDumpRestoreModal({ isOpen, onDismiss }: Props) {
 
       const dataDirName = `linearlite2_${uuidv4()}`
 
-      const dbDeletePromise = new Promise<void>((resolve, reject) => {
+      const dbDeletePromise = new Promise<void>((resolve) => {
         const request = indexedDB.deleteDatabase(`/pglite/${dataDirName}`)
 
-        request.onerror = function (event) {
+        request.onerror = function () {
           console.log('Error deleting database.')
           // hope for the best
           resolve()
         }
 
-        request.onsuccess = function (event) {
+        request.onsuccess = function () {
           console.log('Database deleted successfully.')
           resolve()
         }
@@ -82,7 +82,7 @@ export default function PGliteDumpRestoreModal({ isOpen, onDismiss }: Props) {
         dataDir: `idb://${dataDirName}`,
       })
       const dumpText = await selectedFile.text()
-      const execResult = await restoredPg.exec(dumpText)
+      await restoredPg.exec(dumpText)
       await restoredPg.exec('SET SEARCH_PATH = public;')
       setTimeout(() => {
         window.location.href = `/?noSync=true&dataDirName=${dataDirName}`

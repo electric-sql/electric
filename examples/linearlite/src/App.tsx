@@ -38,7 +38,7 @@ let dataDirName = new URL(window.location.href).searchParams.get('dataDirName')
 let usePGnext = new URL(window.location.href).searchParams.get('usePGnext')
 
 async function createPGliteWorker() {
-  const extensions: any = {
+  const extensions = {
     live,
     sync: electricSync(),
   }
