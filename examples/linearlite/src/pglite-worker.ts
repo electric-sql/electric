@@ -6,10 +6,10 @@ import { PGlite as PGlite03 } from 'pglite-03'
 
 worker({
   async init() {
-    let usePGliteNext =
+    const usePGliteNext =
       new URL(location.href).searchParams.has('usePGnext') ?? false
 
-    let dataDirName =
+    const dataDirName =
       new URL(location.href).searchParams.get('dataDirName') ?? 'linearlite2'
     console.log('using dataDir', dataDirName)
 

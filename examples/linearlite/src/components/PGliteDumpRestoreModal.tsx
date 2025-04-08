@@ -101,6 +101,7 @@ export default function PGliteDumpRestoreModal({ isOpen, onDismiss }: Props) {
         <div className="mb-6">
           <h3 className="text-lg font-semibold mb-2">Database Dump</h3>
           <button
+            type="button"
             onClick={doDump}
             className="mb-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
           >
@@ -109,6 +110,7 @@ export default function PGliteDumpRestoreModal({ isOpen, onDismiss }: Props) {
 
           {dump && (
             <button
+              type="button"
               onClick={downloadDump}
               className="ml-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
             >
@@ -132,8 +134,9 @@ export default function PGliteDumpRestoreModal({ isOpen, onDismiss }: Props) {
 
           {selectedFile && (
             <button
+              type="button"
               onClick={restore}
-              disabled={restoreStatus != 'not_started'}
+              disabled={restoreStatus !== 'not_started'}
               className="ml-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
             >
               Restore dump & reload with no sync

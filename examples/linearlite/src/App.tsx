@@ -33,9 +33,9 @@ export const MenuContext = createContext(null as MenuContextInterface | null)
 
 type PGliteWorkerWithLive = PGliteWorker & { live: LiveNamespace }
 
-let doSync = !new URL(window.location.href).searchParams.has('noSync')
-let dataDirName = new URL(window.location.href).searchParams.get('dataDirName')
-let usePGnext = new URL(window.location.href).searchParams.get('usePGnext')
+const doSync = !new URL(window.location.href).searchParams.has('noSync')
+const dataDirName = new URL(window.location.href).searchParams.get('dataDirName')
+const usePGnext = new URL(window.location.href).searchParams.get('usePGnext')
 
 async function createPGliteWorker() {
   const extensions = {
