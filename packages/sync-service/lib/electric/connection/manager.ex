@@ -749,14 +749,16 @@ defmodule Electric.Connection.Manager do
         state.stack_id,
         {:database_does_not_exist, %{error: error}}
       )
+
+      # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
+      # process is waiting for the supervisor to shut down its children, one of which is the
+      # manager process itself.
+      Task.start(Electric.Connection.Supervisor, :shutdown, [state.stack_id, error])
+
+      {:noreply, state}
+    else
+      false
     end
-
-    # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
-    # process is waiting for the supervisor to shut down its children, one of which is the
-    # manager process itself.
-    Task.start(Electric.Connection.Supervisor, :shutdown, [state.stack_id, error])
-
-    {:noreply, state}
   end
 
   defp stop_if_fatal_error(_, _), do: false
