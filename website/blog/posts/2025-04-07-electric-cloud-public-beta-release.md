@@ -55,15 +55,13 @@ Something is fundamentally broken with how we build modern apps.
 
 ### Especially when building AI apps
 
-AI apps are inherantly real-time, whether that's [token streaming](/blog/2025/04/09/building-ai-apps-on-sync#resumability) or [user <> agent collaboration](/blog/2025/04/09/building-ai-apps-on-sync#collaboration).
+AI apps are inherantly real-time, whether that's [token streaming](/blog/2025/04/09/building-ai-apps-on-sync#resumability) or [user <> agent collaboration](/blog/2025/04/09/building-ai-apps-on-sync#collaboration). [Keeping agents and users in sync](/blog/2025/04/09/building-ai-apps-on-sync) yourself with a combination of ad-hoc data fetching and notifications is a massive pain.
 
 <figure>
   <video controls preload="auto" class="wide">
     <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/multi-user-1080.mp4" />
   </video>
 </figure>
-
-[Keeping agents and users in sync](/blog/2025/04/09/building-ai-apps-on-sync) yourself with a combination of ad-hoc data fetching and notifications is a massive pain.
 
 ## Sync: the missing abstraction for simple, fast apps
 
