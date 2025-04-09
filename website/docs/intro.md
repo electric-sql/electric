@@ -9,8 +9,8 @@ outline: deep
 import { data as demosData } from '../data/demos.data.ts'
 const { demos } = demosData
 
+const aiChat = demos.find(x => x.link === '/demos/ai-chat')
 const linearlite = demos.find(x => x.link === '/demos/linearlite')
-const notes = demos.find(x => x.link === '/demos/notes')
 </script>
 
 <p class="intro-zap-container">
@@ -45,8 +45,8 @@ The easiest way to use Electric in production is the [Electric Cloud](/product/c
 See the [Demos](/demos) section and [`examples`](https://github.com/electric-sql/electric/tree/main/examples) folder on GitHub for demo apps and examples, e.g.:
 
 <div class="demos-grid">
+  <DemoListing :demo="aiChat"/>
   <DemoListing :demo="linearlite"/>
-  <DemoListing :demo="notes"/>
 </div>
 
 The integration docs also illustrate common patterns, e.g. using Electric with frameworks like [TanStack](/docs/integrations/tanstack) and [Phoenix](/docs/integrations/phoenix) and platforms like [Supabase](/docs/integrations/supabase) and [Cloudflare](/docs/integrations/cloudflare).
