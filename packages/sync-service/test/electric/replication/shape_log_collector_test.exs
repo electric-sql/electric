@@ -13,6 +13,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
   alias Support.Mock
   alias Support.StubInspector
+  alias Support.RepatchExt
 
   import Support.ComponentSetup,
     only: [
@@ -357,5 +358,16 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     assert :ok = ShapeLogCollector.store_transaction(txn_to_process, pid)
     Support.TransactionConsumer.assert_consume(consumers, [txn_to_process])
     assert next_lsn == LsnTracker.get_last_processed_lsn(ctx.stack_id)
+  end
+
+  test "notifies the StatusMonitor when it's ready", ctx do
+    setup_log_collector(ctx)
+
+    assert RepatchExt.called_within_ms?(
+             StatusMonitor,
+             :shape_log_collector_ready,
+             [ctx.stack_id],
+             100
+           )
   end
 end
