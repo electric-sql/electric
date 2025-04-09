@@ -314,6 +314,8 @@ defmodule Electric.Connection.Manager do
   def handle_continue(:start_connection_pool, state) do
     case start_connection_pool(state.connection_opts, state.pool_opts) do
       {:ok, pool_pid} ->
+        Electric.StatusMonitor.connection_pool_ready(state.stack_id, pool_pid)
+
         state = mark_connection_succeeded(state)
         # Checking the timeline continuity to see if we need to purge all shapes persisted so far
         # and reset any replication related persistent state

@@ -34,7 +34,7 @@ defmodule Electric.StatusMonitor do
     condition_met(stack_id, :replication_client_ready)
   end
 
-  def connection_pool_ready(stack_id) do
+  def connection_pool_ready(stack_id, _pool_pid) do
     condition_met(stack_id, :connection_pool_ready)
   end
 
