@@ -42,6 +42,9 @@ and scales to millions of users
   />
 </div>
 
+> [!Warning] Electric Cloud public BETA
+> Electric Cloud is now in public BETA! See the [release post here](/blog/2025/04/07/electric-cloud-public-beta-release).
+
 ## Hosted Electric
 
 Electric Cloud is a hosted Electric service. We provision, run and operate the [Electric sync engine](/product/electric) for you.

@@ -4,8 +4,7 @@
 
   const actions = [
     {
-      // href: '/why/sync',
-      href: '/use-cases/data-sync',
+      href: '/blog/2025/04/09/building-ai-apps-on-sync',
       text: 'Why sync',
       theme: 'brand'
     },
@@ -15,7 +14,18 @@
     }
   ]
 
-  const syncTargets = [{
+  const syncTargets = [
+    {
+      slug: 'agent',
+      title: 'Agents',
+      body:  `
+        Keep AI agents and
+        <span class="no-wrap">
+          users in sync </span>&nbsp;&nbsp;&nbsp;
+      `,
+      href: '/demos/ai-chat'
+    },
+    {
       slug: 'app',
       title: 'Apps',
       body: `
@@ -27,17 +37,18 @@
         <span class="no-wrap">
           and collaborative</span>
       `,
-      // href: '/use-cases/data-sync'
+      href: '/demos/linearlite'
     },
     {
       slug: 'dashboard',
       title: 'Dashboards',
       body:  `
-        Keep dashboards live
+        Build live,
         <span class="no-wrap">
-          and real-time</span>
+          real-time</span>
+        dashboards&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
       `,
-      // href: '/use-cases/cache-invalidation'
+      href: '#dashboard-examples'
     },
     {
       slug: 'worker',
@@ -50,17 +61,7 @@
             at the edge</span>
         </span>
       `,
-      // href: '/use-cases/local-first-software'
-    },
-    {
-      slug: 'agent',
-      title: 'Agents',
-      body:  `
-        Run AI agents on
-        <span class="no-wrap">
-          live local data&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-      `,
-      // href: '/use-cases/local-ai'
+      href: '/docs/integrations/cloudflare'
     }
   ]
 </script>
@@ -78,13 +79,15 @@
       <span class="hidden-lg">
         fast,</span>
       modern software.
-      From apps like
-      <span class="hidden-559">
-        Figma and</span>
-      Linear to AI agents running on
-      <span class="hidden-559">
-        live</span>
-      local data.
+      From apps
+      <a href="/demos/linearlite">
+        like
+        <span class="hidden-559">
+          Figma and</span>
+        Linear</a>
+      to
+      <a href="/demos/ai-chat">
+        <span class="no-wrap">multi-user</span>, <span class="no-wrap">multi-agent</span> <span class="no-wrap">AI apps</span></a>.
     </template>
     <div class="sync-targets">
       <SyncTarget v-for="target in syncTargets"

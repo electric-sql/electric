@@ -4,7 +4,7 @@
   import Section from '../Section.vue'
 
   import { data } from '../../../../data/posts.data.ts'
-  const posts = data.slice(0, 4)
+  const posts = data.filter(post => post.homepage !== false).slice(0, 4)
 
   const actions = [
     {
