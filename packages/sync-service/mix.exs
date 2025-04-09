@@ -100,7 +100,7 @@ defmodule Electric.MixProject do
         {:pg_query_ex, "0.6.0"},
         {:plug, "~> 1.16"},
         {:postgrex, "~> 0.19"},
-        {:retry, "~> 0.18"},
+        {:retry, "~> 0.19"},
         {:remote_ip, "~> 1.2"},
         {:req, "~> 0.5"},
         {:telemetry_poller, "~> 1.1"},
