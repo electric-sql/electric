@@ -118,14 +118,6 @@ defmodule Electric.Connection.Manager do
   end
 
   @doc """
-  Returns the status of the connection manager.
-  """
-  @spec get_status(GenServer.server()) :: status()
-  def get_status(server) do
-    GenServer.call(server, :get_status)
-  end
-
-  @doc """
   Only returns once the status is `:active`.
   If the status is alredy active it returns immediately.
   This is useful if you need to the connection pool to be running before proceeding.
@@ -204,23 +196,6 @@ defmodule Electric.Connection.Manager do
     # If we haven't queried the PG version by the time it is requested, that's a fatal error.
     false = is_nil(pg_version)
     {:reply, pg_version, state}
-  end
-
-  def handle_call(:get_status, _from, %State{pg_lock_acquired: pg_lock_acquired} = state) do
-    status =
-      cond do
-        not pg_lock_acquired ->
-          :waiting
-
-        is_nil(state.replication_client_pid) || is_nil(state.pool_pid) ||
-            not Process.alive?(state.pool_pid) ->
-          :starting
-
-        true ->
-          :active
-      end
-
-    {:reply, status, state}
   end
 
   def handle_call(:await_active, from, %State{pool_pid: nil} = state) do
