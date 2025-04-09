@@ -69,8 +69,13 @@ defmodule Electric.StatusMonitorTest do
       end)
 
       refute_receive :active, 20
-      StatusMonitor.shape_log_collector_ready(stack_id)
+      assert StatusMonitor.shape_log_collector_ready(stack_id) == :ok
       assert_receive :active, 20
+    end
+
+    test "returns error on timeout", %{stack_id: stack_id} do
+      start_supervised!({StatusMonitor, stack_id})
+      assert StatusMonitor.wait_until_active(stack_id, 1) == {:error, :timeout}
     end
   end
 end
