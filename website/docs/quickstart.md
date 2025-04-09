@@ -14,7 +14,7 @@ outline: 2
 
 # Quickstart
 
-Let's get you up-and-running with Electric and real-time sync of your Postgres data.
+Let's get you up-and-running with Electric and start syncing data out of Postgres in real-time.
 
 First we'll setup Electric and show you how to use the low-level [HTTP API](/docs/api/http) directly. Then we'll create a simple React app using our higher-level [React hooks](/docs/integrations/react#useshape).
 
@@ -40,16 +40,16 @@ You can now start using Electric!
 
 First let's try the low-level [HTTP API](/docs/api/http).
 
-In a new terminal, use `curl` to request a [Shape](/docs/guides/shapes) containing all rows in the `foo` table:
+In a new terminal, use `curl` to request a [Shape](/docs/guides/shapes) containing all rows in the `scores` table:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
+curl -i 'http://localhost:3000/v1/shape?table=scores&offset=-1'
 ```
 
 ::: info A bit of explanation about the URL structure.
 
 - `/v1/shape` is a standard prefix with the API version and the shape sync endpoint path
-- `foo` is the name of the [`table`](/docs/guides/shapes#table) of the shape (and is required); if you wanted to sync data from the `items` table, you would change the path to `/v1/shape?table=items`
+- `scores` is the name of the [`table`](/docs/guides/shapes#table) of the shape (and is required); if you wanted to sync data from the `items` table, you would change the path to `/v1/shape?table=items`
 - `offset=-1` means we're asking for the *entire* Shape as we don't have any of the data cached locally yet. If we had previously fetched the shape and wanted to see if there were any updates, we'd set the offset to the last offset we'd already seen.
 :::
 
@@ -57,17 +57,19 @@ You should get a response like this:
 
 ```http
 HTTP/1.1 400 Bad Request
-date: Thu, 18 Jul 2024 10:36:01 GMT
-content-length: 34
+date: Wed, 09 Apr 2025 20:03:40 GMT
+content-length: 170
 vary: accept-encoding
-cache-control: max-age=0, private, must-revalidate
-x-request-id: F-NISWIE1CJTnIgAAADQ
+cache-control: no-cache
+x-request-id: GDS_DYUuk2dR6FEAAAAh
+electric-server: ElectricSQL/1.0.4
 access-control-allow-origin: *
 access-control-expose-headers: *
-access-control-allow-methods: GET, POST, OPTIONS
+access-control-allow-methods: GET, HEAD, DELETE, OPTIONS
 content-type: application/json; charset=utf-8
+electric-schema: null
 
-{"table":["table not found"]}
+{"message":"Invalid request","errors":{"table":["Table \"public\".\"scores\" does not exist. If the table name contains capitals or special characters you must quote it."]}}
 ```
 
 So it didn't work! Which makes sense... as it's an empty database without any tables or data. Let's fix that.
@@ -80,10 +82,10 @@ Use a Postgres client to connect to Postgres. For example, with [psql](https://w
 psql "postgresql://postgres:password@localhost:54321/electric"
 ```
 
-Then create a `foo` table
+Then create a `scores` table
 
 ```sql
-CREATE TABLE foo (
+CREATE TABLE scores (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255),
   value FLOAT
@@ -93,7 +95,7 @@ CREATE TABLE foo (
 And insert some rows:
 
 ```sql
-INSERT INTO foo (name, value) VALUES
+INSERT INTO scores (name, value) VALUES
   ('Alice', 3.14),
   ('Bob', 2.71),
   ('Charlie', -1.618),
@@ -106,34 +108,33 @@ INSERT INTO foo (name, value) VALUES
 Exit your Postgres client (e.g.: with `psql` enter `\q`) and try the `curl` request again:
 
 ```sh
-curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
+curl -i 'http://localhost:3000/v1/shape?table=scores&offset=-1'
 ```
 
 Success! You should see the data you just put into Postgres in the shape response:
 
 ```bash
 HTTP/1.1 200 OK
-date: Thu, 18 Jul 2024 10:49:12 GMT
-content-length: 643
-vary: accept-encoding
-cache-control: public, max-age=60, stale-while-revalidate=300
-x-request-id: F-NJAXyulHAQP2MAAABN
+transfer-encoding: chunked
+date: Wed, 09 Apr 2025 20:07:01 GMT
+cache-control: public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746
+x-request-id: GDS_PHZhjLuApVQAAAEB
+electric-server: ElectricSQL/1.0.4
 access-control-allow-origin: *
 access-control-expose-headers: *
-access-control-allow-methods: GET, POST, OPTIONS
+access-control-allow-methods: GET, HEAD, DELETE, OPTIONS
 content-type: application/json; charset=utf-8
-electric-handle: 3833821-1721299734314
+etag: "64351139-1744229222132:-1:0_0"
+electric-handle: 64351139-1744229222132
+electric-schema: {"id":{"type":"int4","not_null":true,"pk_index":0},"name":{"type":"varchar","max_length":255},"value":{"type":"float8"}}
 electric-offset: 0_0
-electric-schema: {"id":{"type":"int4","pk_index":0},"name":{"type":"varchar","max_length":255},"value":{"type":"float8"}}
-electric-up-to-date:
-etag: 3833821-1721299734314:-1:0_0
 
-[{"offset":"0_0","value":{"id":"1","name":"Alice","value":"3.14"},"key":"\"public\".\"foo\"/1","headers":{"operation"
-:"insert"}},{"offset":"0_0","value":{"id":"2","name":"Bob","value":"2.71"},"key":"\"public\".\"foo\"/2","headers":
-{"operation":"insert"}},{"offset":"0_0","value":{"id":"3","name":"Charlie","value":"-1.618"},"key":"\"public\".\"foo\
-"/3","headers":{"operation":"insert"}},{"offset":"0_0","value":{"id":"4","name":"David","value":"1.414"},"key":"\"pub
-lic\".\"foo\"/4","headers":{"operation":"insert"}},{"offset":"0_0","value":{"id":"5","name":"Eve","value":"0.0"},"key
-":"\"public\".\"foo\"/5","headers":{"operation":"insert"}},{"headers":{"control":"up-to-date"}}]
+[{"key":"\"public\".\"scores\"/\"1\"","value":{"id":"1","name":"Alice","value":"3.14"},"headers":{"operation":"insert","relation":["public","scores"]}}
+,{"key":"\"public\".\"scores\"/\"2\"","value":{"id":"2","name":"Bob","value":"2.71"},"headers":{"operation":"insert","relation":["public","scores"]}}
+,{"key":"\"public\".\"scores\"/\"3\"","value":{"id":"3","name":"Charlie","value":"-1.618"},"headers":{"operation":"insert","relation":["public","scores"]}}
+,{"key":"\"public\".\"scores\"/\"4\"","value":{"id":"4","name":"David","value":"1.414"},"headers":{"operation":"insert","relation":["public","scores"]}}
+,{"key":"\"public\".\"scores\"/\"5\"","value":{"id":"5","name":"Eve","value":"0"},"headers":{"operation":"insert","relation":["public","scores"]}}
+]
 ```
 
 ::: info What are those messages in the response data?
@@ -168,7 +169,7 @@ function Component() {
   const { data } = useShape({
     url: `http://localhost:3000/v1/shape`,
     params: {
-      table: `foo`
+      table: `scores`
     }
   })
 
@@ -223,7 +224,7 @@ Navigate to http://localhost:5173 in your web browser. You should see output lik
 Note that the row with id `2` has the name `"Bob"`. Go back to your Postgres client and update the name of that row. It'll instantly be synced to your component!
 
 ```sql
-UPDATE foo SET name = 'James' WHERE id = 2;
+UPDATE scores SET name = 'James' WHERE id = 2;
 ```
 
 Congratulations! You've built your first real-time, reactive Electric app!
