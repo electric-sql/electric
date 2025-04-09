@@ -6,7 +6,7 @@ description: >-
 excerpt: >-
   AI apps are collaborative. Building them requires solving resumeability,
   interruptability, multi‑tab, multi‑device and multi‑user.
-authors: [samwillis]
+authors: [samwillis, thruflo]
 image: /img/blog/building-ai-apps-on-sync/header.jpg
 tags: [ai, sync]
 outline: [2, 3]
@@ -71,8 +71,8 @@ If you stream directly from the agent to the UI, you have a fragile system. Your
 For example, here's a video showing how ChatGPT behaves:
 
 <figure>
-  <video controls preload="auto">
-    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/chatgpt-breaking-1080.mp4" />
+  <video controls preload="auto" poster="/videos/blog/building-ai-apps-on-sync/video-1-chatgpt-breaking.jpg">
+    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-1-chatgpt-breaking.mp4" />
   </video>
 </figure>
 
@@ -90,24 +90,24 @@ If, instead, you stream tokens into a store and then subscribe to that store, yo
 For example, here's our [Electric AI chat app](https://github.com/electric-sql/electric-ai-chat), streaming tokens via a store (in this case [a Postgres database](https://electric-sql.com/docs/guides/deployment#_1-running-postgres)). It handles offline, patchy connectivity and page refreshes without a problem:
 
 <figure>
-  <video controls preload="auto">
-    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/electric-chat-resilient-1080.mp4" />
+  <video controls preload="auto" poster="/videos/blog/building-ai-apps-on-sync/video-2-electric-chat-resilient.jpg">
+    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-2-electric-chat-resilient.mp4" />
   </video>
 </figure>
 
-The key to this behaviour is *resumeability*: the ability to resume streaming from a known position in the stream. To do this, the app keeps track of the last position its seen. Then when re-connecting, it requests the stream from that position.
+The key to this behaviour is _resumeability_: the ability to resume streaming from a known position in the stream. To do this, the app keeps track of the last position its seen. Then when re-connecting, it requests the stream from that position.
 
-This pattern is fiddly to wire up yourself (message delivery is a [distributed systems rabbit hole](https://jepsen.io/consistency/models)) but is *built in* to sync engines for you. For example, Electric's [sync protocol](/docs/api/http) is based on the client sending an `offset` parameter.
+This pattern is fiddly to wire up yourself (message delivery is a [distributed systems rabbit hole](https://jepsen.io/consistency/models)) but is _built in_ to sync engines for you. For example, Electric's [sync protocol](/docs/api/http) is based on the client sending an `offset` parameter.
 
 This is usually abstracted away at a [higher-level](/docs/api/clients/typescript), e.g.:
 
 ```tsx
-import { ShapeStream } from '@electric-sql/client'
+import { ShapeStream } from "@electric-sql/client"
 
 const tokenStream = new ShapeStream({
   params: {
-    table: 'tokens'
-  }
+    table: "tokens",
+  },
 })
 
 // tokenStream.subscribe(tokens => ...)
@@ -135,7 +135,7 @@ But, of course, the world is not just about browser tabs. Agents do stuff in the
   <img src="/img/blog/building-ai-apps-on-sync/nipping-out-for-coffee.jpg" />
 </figure>
 
-When they do so, how do you keep the mobile app up-to-date with the session that was started in the browser? This is exactly what sync does. It handles *fan out*, so you can (resiliently) stream changes to multiple places at the same time.
+When they do so, how do you keep the mobile app up-to-date with the session that was started in the browser? This is exactly what sync does. It handles _fan out_, so you can (resiliently) stream changes to multiple places at the same time.
 
 <figure>
   <img class="hidden-sm"
@@ -151,8 +151,8 @@ For example, with Electric, you can just write changes to Postgres and then Elec
 So whichever device your user grabs or tab they return to, it can be up-to-date and exactly in the state they're expecting:
 
 <figure>
-  <video controls preload="auto" class="wide">
-    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/multi-device-1080.mp4" />
+  <video controls preload="auto" class="wide" poster="/videos/blog/building-ai-apps-on-sync/video-3-multi-device.jpg">
+    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-3-multi-device.mp4" />
   </video>
 </figure>
 
@@ -188,10 +188,10 @@ Filtering just the content you need using where clauses:
 ```tsx
 const tokenStream = new ShapeStream({
   params: {
-    table: 'tokens',
+    table: "tokens",
     // Just sync the tokens for a given session.
-    where: 'session_id = 1234'
-  }
+    where: "session_id = 1234",
+  },
 })
 ```
 
@@ -202,8 +202,8 @@ Which really changes the game for AI UX. Because it allows multiple users to col
 For example, here we show two users collaborating on the same task. The first user prompts the AI. The second user is watching in real-time. They see that the AI needs more context and upload a document to provide it. The AI sees this generates a better response.
 
 <figure>
-  <video controls preload="auto" class="wide">
-    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/multi-user-1080.mp4" />
+  <video controls preload="auto" class="wide" poster="/videos/blog/building-ai-apps-on-sync/video-4-multi-user.jpg">
+    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-4-multi-user.mp4" />
   </video>
 </figure>
 
@@ -212,6 +212,12 @@ This is a simple example (just the tip of the iceberg of [things to come](#agent
 ### Interruptibility
 
 Streaming tokens via a store also makes it simple to interrupt the stream for all users.
+
+<!--figure>
+  <video controls preload="auto" class="wide" poster="/videos/blog/building-ai-apps-on-sync/video-5-interupt.jpg">
+    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-5-interupt.mp4" />
+  </video>
+</figure-->
 
 Rather than each user streaming from an agent, the agent streams into the store. Any user can then issue an instruction to interrupt, with aborts the token stream from the agent and stops it being written to the store. This naturally interrupts the session for all concurrent users.
 
@@ -227,7 +233,7 @@ const stream = await openai.chat.completions.create({
 
 // Into Postgres
 for await (const event of stream) {
-  pg.insert('INSERT INTO tokens value ($1)', [event.message])
+  pg.insert("INSERT INTO tokens value ($1)", [event.message])
 }
 
 // Until interrupted
@@ -257,9 +263,11 @@ Tools like [LangGraph](https://www.langchain.com/langgraph) and [Mastra](https:/
 
 For example, imagine you're managing a project and you have an AI assistant. You tell it to "monitor the todo list and perform the tasks". You then fire up a new session with another agent to plan out the project and generate tasks.
 
->
-> XXX video here
->
+<figure>
+  <video controls preload="auto" class="wide" poster="/videos/blog/building-ai-apps-on-sync/video-6-multi-agent.jpg">
+    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-6-multi-agent.mp4" />
+  </video>
+</figure>
 
 These agents need to collaborate via shared state. In this example, the todo-list. They need to known when it's changed and react to the changes. And so do the users! They want to see the state too.
 
@@ -269,9 +277,9 @@ For example, this is the Electric code for the agents to monitor and react to th
 const listItemsStream = new ShapeStream({
   url: `${ELECTRIC_API_URL}/v1/shape`,
   params: {
-    table: 'todo_items',
-    where: `list_id = '${listId}'`
-  }
+    table: "todo_items",
+    where: `list_id = '${listId}'`,
+  },
 })
 const listItemsShape = new Shape(listItemsStream)
 
@@ -304,8 +312,8 @@ function TodoListItems() {
   const { data: todoListItems } = useShape({
     url: `${ELECTRIC_API_URL}/v1/shape`,
     params: {
-      table: 'todo_lists_items'
-    }
+      table: "todo_lists_items",
+    },
   })
 
   return (
