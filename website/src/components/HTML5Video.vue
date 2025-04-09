@@ -1,7 +1,7 @@
 <script setup>
   const { poster, src } = defineProps(['poster', 'src'])
 
-  const baseUrl = window?.location?.origin || ''
+  const baseUrl = import.meta.env.SSR ? '' : window.location.origin
 </script>
 
 <template>
