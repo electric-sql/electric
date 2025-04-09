@@ -1,11 +1,11 @@
 ---
 title: Building AI apps? You need sync
 description: >-
-  AI apps are collaborative. Building them requires solving resumeability,
-  interruptability, multi‑tab, multi‑device and multi‑user.
+  AI apps are collaborative. Building them requires solving resumability,
+  interruptibility, multi‑tab, multi‑device and multi‑user.
 excerpt: >-
-  AI apps are collaborative. Building them requires solving resumeability,
-  interruptability, multi‑tab, multi‑device and multi‑user.
+  AI apps are collaborative. Building them requires solving resumability,
+  interruptibility, multi‑tab, multi‑device and multi‑user.
 authors: [samwillis]
 image: /img/blog/building-ai-apps-on-sync/header.jpg
 tags: [ai, sync]
@@ -40,9 +40,9 @@ post: true
   }
 </style>
 
-AI apps are inherantly collaborative. Building them requires solving [resumeability](#resumeability), [interruptability](#interruptability), [multi&#8209;device](#multi-device) and [multi&#8209;user](#multi-user).
+AI apps are inherently collaborative. Building them requires solving [resumability](#resumability), [interruptibility](#interruptibility), [multi&#8209;device](#multi-device) and [multi&#8209;user](#multi-user).
 
-These are not edge-cases. They're core to [user <-> agent collaboration](#collaboration) and the new world of [multi&#8209;step, task&#8209;and&#8209;review workflows](#multi-step-workflows). They're also [key growth hacks](#unlocking-adoption) for products looking to replace current-generation SaaS and enteprise software.
+These are not edge-cases. They're core to [user <-> agent collaboration](#collaboration) and the new world of [multi&#8209;step, task&#8209;and&#8209;review workflows](#multi-step-workflows). They're also [key growth hacks](#unlocking-adoption) for products looking to replace current-generation SaaS and enterprise software.
 
 As AI apps become more collaborative, with [multiple users interacting with the same AI session](#collaboration) and those sessions spawning [more and more agents](#swarms), these challenges are only going to get more important. Luckily, they're all [solved by&nbsp;sync](#sync-is-the-solution).
 
@@ -53,7 +53,7 @@ As AI apps become more collaborative, with [multiple users interacting with the 
 
 </div>
 
-## Resumeability
+## Resumability
 
 Most AI apps stream tokens into the front-end. That's how Claude and ChatGPT write out their response to you, one word at a time.
 
@@ -97,7 +97,7 @@ For example, here's our [Electric AI chat app](https://github.com/electric-sql/e
   />
 </figure>
 
-The key to this behaviour is _resumeability_: the ability to resume streaming from a known position in the stream. To do this, the app keeps track of the last position its seen. Then when re-connecting, it requests the stream from that position.
+The key to this behaviour is _resumability_: the ability to resume streaming from a known position in the stream. To do this, the app keeps track of the last position its seen. Then when re-connecting, it requests the stream from that position.
 
 This pattern is fiddly to wire up yourself (message delivery is a [distributed systems rabbit hole](https://jepsen.io/consistency/models)) but is _built in_ to sync engines for you. For example, Electric's [sync protocol](/docs/api/http) is based on the client sending an `offset` parameter.
 
@@ -115,7 +115,7 @@ const tokenStream = new ShapeStream({
 // tokenStream.subscribe(tokens => ...)
 ```
 
-But under the hood, the sync protocol provides automatic resumeability. So apps just work and users don't swear at your software when their vibes disappear.
+But under the hood, the sync protocol provides automatic resumability. So apps just work and users don't swear at your software when their vibes disappear.
 
 <!-- James' talk video here when published -->
 
@@ -344,7 +344,7 @@ That's why Sunil Pai says that [AI agents are local-first clients](https://sunil
 
 ## Sync is the solution
 
-Sync solves a range of practical challenges with AI UX. From resumeability and interruptibility to multi-tab, multi-device and multi-user.
+Sync solves a range of practical challenges with AI UX. From resumability and interruptibility to multi-tab, multi-device and multi-user.
 
 As AI agents become more collaborative and autonomous (and lots more of them are spawned), then sharing state, reviewing progress, reacting to changes and maintaining local data sets are all going to get more important.
 
