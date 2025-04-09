@@ -26,8 +26,8 @@ Welcome to the ElectricSQL developer documentation!
 
 ElectricSQL is a Postgres sync engine. Use it to sync [subsets](/docs/guides/shapes) of your Postgres data into [local apps](/use-cases/data-sync), services and [environments](/use-cases/dev-and-test).
 
-> [!Tip] Electric 1.0 release
-> Electric is now in GA! See the [1.0 release post here](/blog/2025/03/17/electricsql-1.0-released).
+> [!Warning] 🚀 Latest releases
+> Electric is [now 1.0](/blog/2025/03/17/electricsql-1.0-released) and Cloud is now [in public BETA](/blog/2025/04/07/electrics-cloud-public-beta-release)!
 
 ## New to ElectricSQL?
 

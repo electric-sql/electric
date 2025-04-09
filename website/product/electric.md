@@ -65,8 +65,8 @@ local apps and services.
   </div>
 </div>
 
-> [!Tip] Electric 1.0 release
-> Electric is now in GA! See the [1.0 release post here](/blog/2025/03/17/electricsql-1.0-released).
+> [!Warning] Electric 1.0 release
+> Electric is now 1.0! See the [release post here](/blog/2025/03/17/electricsql-1.0-released).
 
 ## Electric sync engine
 

@@ -4,7 +4,7 @@
       🚀 Electric is
       <a href="/blog/2025/03/17/electricsql-1.0-released">
         <span class="no-wrap">
-          now in GA</span></a>
+          now 1.0</span></a>
       and Cloud is
       <a href="/blog/2025/04/07/electric-cloud-public-beta-release">
         <span class="no-wrap">
