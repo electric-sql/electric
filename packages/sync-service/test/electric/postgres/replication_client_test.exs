@@ -1,5 +1,6 @@
 defmodule Electric.Postgres.ReplicationClientTest do
   use ExUnit.Case, async: true
+  use Repatch.ExUnit
 
   import Support.ComponentSetup, only: [with_stack_id_from_test: 1, with_status_monitor: 1]
   import Support.DbSetup, except: [with_publication: 1]
@@ -7,6 +8,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient
+  alias Electric.StatusMonitor
 
   alias Electric.Replication.Changes.{
     DeletedRecord,
@@ -92,6 +94,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
         end)
 
       log =~ "Started replication from postgres"
+    end
+
+    test "notifies the StatusMonitor when it is ready", ctx do
+      Repatch.patch(StatusMonitor, :replication_client_ready, [mode: :shared], fn _ -> :ok end)
+      {:ok, pid} = start_client(ctx)
+      Repatch.allow(self(), pid)
+      assert Repatch.called?(StatusMonitor, :replication_client_ready, [ctx.stack_id], by: :any)
     end
 
     test "works with an existing publication", %{replication_opts: replication_opts} = ctx do
