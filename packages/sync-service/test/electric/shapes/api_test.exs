@@ -6,11 +6,11 @@ defmodule Electric.Shapes.ApiTest do
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
-  alias Electric.StatusMonitor
 
   alias Support.Mock
 
   import Support.ComponentSetup
+  import Support.TestUtils, only: [set_status_to_active: 1]
   import Mox
 
   @test_shape %Shape{
@@ -1069,13 +1069,5 @@ defmodule Electric.Shapes.ApiTest do
 
       assert response.status == 400
     end
-  end
-
-  defp set_status_to_active(ctx) do
-    StatusMonitor.pg_lock_acquired(ctx.stack_id)
-    StatusMonitor.replication_client_ready(ctx.stack_id)
-    StatusMonitor.connection_pool_ready(ctx.stack_id, self())
-    StatusMonitor.shape_log_collector_ready(ctx.stack_id)
-    StatusMonitor.wait_for_messages_to_be_processed(ctx.stack_id)
   end
 end

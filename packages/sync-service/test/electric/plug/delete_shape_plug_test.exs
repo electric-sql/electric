@@ -3,9 +3,9 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
   alias Electric.Plug.DeleteShapePlug
   alias Electric.Shapes.Shape
-  alias Electric.StatusMonitor
 
   import Support.ComponentSetup
+  import Support.TestUtils, only: [set_status_to_active: 1]
   alias Support.Mock
 
   import Mox
@@ -167,13 +167,5 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == %{"message" => "Stack not ready"}
     end
-  end
-
-  defp set_status_to_active(ctx) do
-    StatusMonitor.pg_lock_acquired(ctx.stack_id)
-    StatusMonitor.replication_client_ready(ctx.stack_id)
-    StatusMonitor.connection_pool_ready(ctx.stack_id, self())
-    StatusMonitor.shape_log_collector_ready(ctx.stack_id)
-    StatusMonitor.wait_for_messages_to_be_processed(ctx.stack_id)
   end
 end
