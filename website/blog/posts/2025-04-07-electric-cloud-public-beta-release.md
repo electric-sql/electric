@@ -1,5 +1,5 @@
 ---
-title: "Electric Cloud public BETA: Sync in 30 seconds"
+title: "Electric Cloud public BETA: Sync in 30 seconds"
 description: >-
   Electric Cloud is now in public BETA!
   This means it's open to everyone for immediate access.
