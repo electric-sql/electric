@@ -37,7 +37,7 @@ The chart below is from our [cloud benchmarks](/docs/reference/benchmarks#cloud)
   <ScalabilityChart />
 </figure>
 
-## **Real-Time Features Shouldn't Be This Hard**
+## Real-time features shouldn't be this hard
 
 Every major web app we’ve worked on, including [Gatsby Cloud](https://www.gatsbyjs.com/docs/reference/cloud/what-is-gatsby-cloud/), [Posterhaste](https://www.posterhaste.com/), [OpenIDEO](https://www.openideo.com/), and [Pantheon](https://pantheon.io/) has had critical real-time features. And they were the most fragile, frustrating parts of the app.
 
@@ -53,8 +53,19 @@ Our team has been building apps and doing research on sync problems for decades 
 
 Something is fundamentally broken with how we build modern apps.
 
+### Especially when building AI apps
 
-## **Sync: The Missing Abstraction for Simple, Fast Apps**
+AI apps are inherantly real-time, whether that's [token streaming](/blog/2025/04/09/building-ai-apps-on-sync#resumability) or [user <> agent collaboration](/blog/2025/04/09/building-ai-apps-on-sync#collaboration).
+
+<figure>
+  <video controls preload="auto" class="wide">
+    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/multi-user-1080.mp4" />
+  </video>
+</figure>
+
+[Keeping agents and users in sync](/blog/2025/04/09/building-ai-apps-on-sync) yourself with a combination of ad-hoc data fetching and notifications is a massive pain.
+
+## Sync: the missing abstraction for simple, fast apps
 
 The ElectricSQL team came together to build a proper abstraction for data synchronization.
 
@@ -69,7 +80,6 @@ We had three core requirements:
 2. **Simple to integrate**: It should be a thin layer that fits into existing architectures without requiring a rewrite.
 
 3. **Infinitely scalable**: It should handle millions of concurrent users without breaking a sweat.
-
 
 With Electric, you don't need to write imperative state transfer code. You don't need complex state management frameworks. You don't need to engineer for high uptime when your app naturally tolerates network issues.
 
