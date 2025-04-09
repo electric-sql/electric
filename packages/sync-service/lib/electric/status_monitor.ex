@@ -1,6 +1,8 @@
 defmodule Electric.StatusMonitor do
   use GenServer
 
+  @type status() :: :waiting | :starting | :active
+
   @conditions [
     :pg_lock_acquired,
     :replication_client_ready,
@@ -20,9 +22,10 @@ defmodule Electric.StatusMonitor do
 
     :ets.new(ets_table(stack_id), [:named_table, :protected])
 
-    {:ok, %{stack_id: stack_id}}
+    {:ok, %{stack_id: stack_id, waiters: []}}
   end
 
+  @spec status(String.t()) :: status()
   def status(stack_id) do
     case results(stack_id) do
       %{pg_lock_acquired: false} ->
@@ -60,9 +63,42 @@ defmodule Electric.StatusMonitor do
     GenServer.call(name(stack_id), {:condition_met, condition})
   end
 
+  def wait_until_active(stack_id, timeout \\ 60_000) do
+    if status(stack_id) == :active do
+      :ok
+    else
+      GenServer.call(name(stack_id), :wait_until_active, timeout)
+    end
+  end
+
   def handle_call({:condition_met, condition}, _from, state) when condition in @conditions do
     :ets.insert(ets_table(state.stack_id), {condition, true})
+    state = maybe_reply_to_waiters(state)
     {:reply, :ok, state}
+  end
+
+  def handle_call(:wait_until_active, from, %{waiters: waiters} = state) do
+    if status(state.stack_id) == :active do
+      {:reply, :ok, state}
+    else
+      {:noreply, %{state | waiters: [from | waiters]}}
+    end
+  end
+
+  defp maybe_reply_to_waiters(%{waiters: []} = state), do: state
+
+  defp maybe_reply_to_waiters(%{waiters: waiters} = state) do
+    case status(state.stack_id) do
+      :active ->
+        Enum.each(waiters, fn waiter ->
+          GenServer.reply(waiter, :ok)
+        end)
+
+        %{state | waiters: []}
+
+      _ ->
+        state
+    end
   end
 
   defp results(stack_id) do

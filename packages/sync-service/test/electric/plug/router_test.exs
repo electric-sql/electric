@@ -42,9 +42,10 @@ defmodule Electric.Plug.RouterTest do
 
     setup :with_complete_stack
 
-    setup(ctx,
-      do: %{opts: Router.init(build_router_opts(ctx, get_service_status: fn -> :active end))}
-    )
+    setup(ctx) do
+      Electric.StatusMonitor.wait_until_active(ctx.stack_id)
+      %{opts: Router.init(build_router_opts(ctx))}
+    end
 
     test "GET returns health status of service", %{opts: opts} do
       conn =
@@ -61,7 +62,10 @@ defmodule Electric.Plug.RouterTest do
 
     setup :with_complete_stack
 
-    setup(ctx, do: %{opts: Router.init(build_router_opts(ctx))})
+    setup(ctx) do
+      Electric.StatusMonitor.wait_until_active(ctx.stack_id)
+      %{opts: Router.init(build_router_opts(ctx))}
+    end
 
     @tag with_sql: [
            "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
@@ -1609,8 +1613,10 @@ defmodule Electric.Plug.RouterTest do
 
     setup(ctx, do: %{opts: Router.init(build_router_opts(ctx))})
 
-    setup(ctx,
-      do: %{
+    setup(ctx) do
+      Electric.StatusMonitor.wait_until_active(ctx.stack_id)
+
+      %{
         api_opts:
           Electric.Shapes.Api.plug_opts(
             stack_id: ctx.stack_id,
@@ -1628,7 +1634,7 @@ defmodule Electric.Plug.RouterTest do
             allow_shape_deletion: true
           )
       }
-    )
+    end
 
     test "allows access to / without secret", %{secret: secret} do
       assert %{status: 200} = Router.call(conn("GET", "/"), secret: secret)
@@ -1638,12 +1644,8 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 404} = Router.call(conn("GET", "/nonexistent"), secret: secret)
     end
 
-    test "allows access to /v1/health without secret", %{secret: secret} do
-      assert %{status: 200} =
-               Router.call(conn("GET", "/v1/health"),
-                 secret: secret,
-                 get_service_status: fn -> :active end
-               )
+    test "allows access to /v1/health without secret", %{opts: opts} do
+      assert %{status: 200} = Router.call(conn("GET", "/v1/health"), opts)
     end
 
     test "allows OPTIONS requests to /v1/shape without secret", %{secret: secret} do

@@ -209,8 +209,7 @@ defmodule Electric.StackSupervisor do
       storage: storage_mod_arg(opts),
       inspector: inspector,
       stack_id: stack_id,
-      persistent_kv: persistent_kv,
-      get_service_status: fn -> Electric.ServiceStatus.check(stack_id) end
+      persistent_kv: persistent_kv
     ]
   end
 
