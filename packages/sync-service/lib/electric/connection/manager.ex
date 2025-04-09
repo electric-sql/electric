@@ -360,8 +360,6 @@ defmodule Electric.Connection.Manager do
             stack_id: state.stack_id,
             persistent_kv: state.persistent_kv
           )
-
-          Electric.LsnTracker.reset(state.stack_id)
         end
 
         shapes_sup_pid =
