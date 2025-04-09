@@ -44,23 +44,23 @@ defmodule Electric.StatusMonitor do
   end
 
   def pg_lock_acquired(stack_id) do
-    condition_met(stack_id, :pg_lock_acquired)
+    condition_met(stack_id, :pg_lock_acquired, self())
   end
 
   def replication_client_ready(stack_id) do
-    condition_met(stack_id, :replication_client_ready)
+    condition_met(stack_id, :replication_client_ready, self())
   end
 
-  def connection_pool_ready(stack_id, _pool_pid) do
-    condition_met(stack_id, :connection_pool_ready)
+  def connection_pool_ready(stack_id, pool_pid) do
+    condition_met(stack_id, :connection_pool_ready, pool_pid)
   end
 
   def shape_log_collector_ready(stack_id) do
-    condition_met(stack_id, :shape_log_collector_ready)
+    condition_met(stack_id, :shape_log_collector_ready, self())
   end
 
-  defp condition_met(stack_id, condition) do
-    GenServer.call(name(stack_id), {:condition_met, condition})
+  defp condition_met(stack_id, condition, process) do
+    GenServer.call(name(stack_id), {:condition_met, condition, process})
   end
 
   def wait_until_active(stack_id, timeout \\ 60_000) do
@@ -76,10 +76,16 @@ defmodule Electric.StatusMonitor do
     end
   end
 
-  def handle_call({:condition_met, condition}, _from, state) when condition in @conditions do
-    :ets.insert(ets_table(state.stack_id), {condition, true})
-    state = maybe_reply_to_waiters(state)
-    {:reply, :ok, state}
+  # Only used in tests
+  def wait_for_messages_to_be_processed(stack_id) do
+    GenServer.call(name(stack_id), :wait_for_messages_to_be_processed)
+  end
+
+  def handle_call({:condition_met, condition, process}, _from, state)
+      when condition in @conditions do
+    Process.monitor(process)
+    :ets.insert(ets_table(state.stack_id), {condition, process})
+    {:reply, :ok, maybe_reply_to_waiters(state)}
   end
 
   def handle_call(:wait_until_active, from, %{waiters: waiters} = state) do
@@ -88,6 +94,18 @@ defmodule Electric.StatusMonitor do
     else
       {:noreply, %{state | waiters: [from | waiters]}}
     end
+  end
+
+  def handle_call(:wait_for_messages_to_be_processed, _from, state) do
+    {:reply, :ok, state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    for {condition, ^pid} <- :ets.tab2list(ets_table(state.stack_id)) do
+      true = :ets.delete(ets_table(state.stack_id), condition)
+    end
+
+    {:noreply, state}
   end
 
   defp maybe_reply_to_waiters(%{waiters: []} = state), do: state
@@ -111,12 +129,13 @@ defmodule Electric.StatusMonitor do
       stack_id
       |> ets_table()
       |> :ets.tab2list()
-      |> Map.new()
+      |> Map.new(fn {condition, _pid} -> {condition, true} end)
 
     Map.merge(@default_results, results)
   rescue
     ArgumentError ->
-      # This happens when the table is not found, which means the process is not started
+      # This happens when the table is not found, which means the
+      # process has not been started yet
       @default_results
   end
 

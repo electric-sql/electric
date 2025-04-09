@@ -53,6 +53,32 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.replication_client_ready(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
     end
+
+    test "when a process dies, it's condition is reset", %{stack_id: stack_id} do
+      start_supervised!({StatusMonitor, stack_id})
+      StatusMonitor.pg_lock_acquired(stack_id)
+
+      process =
+        Task.async(fn ->
+          StatusMonitor.connection_pool_ready(stack_id, self())
+
+          receive do
+            :exit -> :ok
+          end
+        end)
+
+      StatusMonitor.replication_client_ready(stack_id)
+      StatusMonitor.shape_log_collector_ready(stack_id)
+      assert StatusMonitor.status(stack_id) == :active
+
+      send(process.pid, :exit)
+      stop_process(process.pid)
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+      assert StatusMonitor.status(stack_id) == :starting
+
+      StatusMonitor.connection_pool_ready(stack_id, self())
+      assert StatusMonitor.status(stack_id) == :active
+    end
   end
 
   describe "wait_until_active/2" do
@@ -76,6 +102,18 @@ defmodule Electric.StatusMonitorTest do
     test "returns error on timeout", %{stack_id: stack_id} do
       start_supervised!({StatusMonitor, stack_id})
       assert StatusMonitor.wait_until_active(stack_id, 1) == {:error, :timeout}
+    end
+  end
+
+  defp stop_process(pid) do
+    Process.unlink(pid)
+    Process.monitor(pid)
+    Process.exit(pid, :kill)
+
+    receive do
+      {:DOWN, _, :process, ^pid, :killed} -> :process_killed
+    after
+      500 -> raise "#{pid} process not killed"
     end
   end
 end
