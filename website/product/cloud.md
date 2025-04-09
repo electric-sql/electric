@@ -13,8 +13,6 @@ onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {
     let links = document.querySelectorAll('.cloud-cta a.VPButton.brand')
 
-    console.log('links', links)
-
     links.forEach((link) => {
       if (link.querySelector('span.vpi-electric-icon')) {
         return
@@ -46,7 +44,7 @@ and scales to millions of users
 
 ## Hosted Electric
 
-Electric Cloud is a hosted Electric service. It provisions, runs and operates the [Electric sync engine](/product/electric) for you.
+Electric Cloud is a hosted Electric service. We provision, run and operate the [Electric sync engine](/product/electric) for you.
 
 ## Data delivery network
 
@@ -97,12 +95,12 @@ The source secret is a token that grants access to it. You should treat the sour
 
 > [!Warning] Do not use your source secret in the client!
 > If you use the source secret from a client, then this exposes it to malicious users, who can then use it to connect to your cloud API.
+>
+> See the [security guide](/docs/guides/security) for more context.
 
 #### Proxy Auth
 
 The recommended pattern for secure use of the Electric Cloud is to add the source ID and secret parameter to the origin request made by your [auth proxy](/docs/guides/auth) or API. (You can proxy requests to Electric using an edge worker, or an API. In many cases, this can be your [existing backend API](/blog/2024/11/21/local-first-with-your-existing-api#using-your-existing-api)).
-
-See the [security guide](/docs/guides/security) for more context.
 
 ##### Example
 
@@ -142,6 +140,22 @@ export async function GET(req: Request) {
 }
 ```
 
+### Pricing
+
+Electric Cloud is currently free in public BETA. We'll be launching low-cost, usage-based pricing soon (likely by the end of June 2025).
+
+Electric Cloud will always provide a generous free tier, so many apps will roll over with zero cost. If your plan is to use Electric in a larger app (more than 1,000 monthly active users) please reach out to make sure we can fully support you and to get a sense of what the future pricing will be like.
+
 ### Support
 
-Let us know if you have any questions. We'll be very happy to help.
+Let us know if you have any questions. We'll be very happy to help. You can ask questions on [Discord](https://discord.electric-sql.com) or email us directly at [support@electric-sql.com](mailto:support@electric-sql.com).
+
+<div class="actions cta-actions page-footer-actions left">
+  <div class="action cloud-cta">
+    <VPButton
+        href="/product/cloud/sign-up"
+        text="Sign-up for Cloud"
+        theme="brand"
+    />
+  </div>
+</div>
