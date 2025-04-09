@@ -6,7 +6,7 @@ description: >-
 excerpt: >-
   AI apps are collaborative. Building them requires solving resumeability,
   interruptability, multi‑tab, multi‑device and multi‑user.
-authors: [samwillis, thruflo]
+authors: [samwillis]
 image: /img/blog/building-ai-apps-on-sync/header.jpg
 tags: [ai, sync]
 outline: [2, 3]
@@ -71,9 +71,10 @@ If you stream directly from the agent to the UI, you have a fragile system. Your
 For example, here's a video showing how ChatGPT behaves:
 
 <figure>
-  <video controls preload="auto" poster="/videos/blog/building-ai-apps-on-sync/video-1-chatgpt-breaking.jpg">
-    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-1-chatgpt-breaking.mp4" />
-  </video>
+  <HTML5Video
+      poster="/img/blog/building-ai-apps-on-sync/video-1-chatgpt-breaking.jpg"
+      src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-1-chatgpt-breaking.mp4"
+  />
 </figure>
 
 If, instead, you stream tokens into a store and then subscribe to that store, you can build non-fragile, resilient apps where the data isn't lost when a connection drops.
@@ -90,9 +91,10 @@ If, instead, you stream tokens into a store and then subscribe to that store, yo
 For example, here's our [Electric AI chat app](https://github.com/electric-sql/electric-ai-chat), streaming tokens via a store (in this case [a Postgres database](https://electric-sql.com/docs/guides/deployment#_1-running-postgres)). It handles offline, patchy connectivity and page refreshes without a problem:
 
 <figure>
-  <video controls preload="auto" poster="/videos/blog/building-ai-apps-on-sync/video-2-electric-chat-resilient.jpg">
-    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-2-electric-chat-resilient.mp4" />
-  </video>
+  <HTML5Video
+      poster="/img/blog/building-ai-apps-on-sync/video-2-electric-chat-resilient.jpg"
+      src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-2-electric-chat-resilient.mp4"
+  />
 </figure>
 
 The key to this behaviour is _resumeability_: the ability to resume streaming from a known position in the stream. To do this, the app keeps track of the last position its seen. Then when re-connecting, it requests the stream from that position.
@@ -151,9 +153,10 @@ For example, with Electric, you can just write changes to Postgres and then Elec
 So whichever device your user grabs or tab they return to, it can be up-to-date and exactly in the state they're expecting:
 
 <figure>
-  <video controls preload="auto" class="wide" poster="/videos/blog/building-ai-apps-on-sync/video-3-multi-device.jpg">
-    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-3-multi-device.mp4" />
-  </video>
+  <HTML5Video class="wide"
+      poster="/img/blog/building-ai-apps-on-sync/video-3-multi-device.jpg"
+      src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-3-multi-device.mp4"
+  />
 </figure>
 
 ## Multi-user
@@ -202,9 +205,10 @@ Which really changes the game for AI UX. Because it allows multiple users to col
 For example, here we show two users collaborating on the same task. The first user prompts the AI. The second user is watching in real-time. They see that the AI needs more context and upload a document to provide it. The AI sees this generates a better response.
 
 <figure>
-  <video controls preload="auto" class="wide" poster="/videos/blog/building-ai-apps-on-sync/video-4-multi-user.jpg">
-    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-4-multi-user.mp4" />
-  </video>
+  <HTML5Video class="wide"
+      poster="/img/blog/building-ai-apps-on-sync/video-4-multi-user.jpg"
+      src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-4-multi-user.mp4"
+  />
 </figure>
 
 This is a simple example (just the tip of the iceberg of [things to come](#agents-are-users)). However, it already clearly illustrates how AI apps need to be built on real-time sync, in order to facilitate multi-user collaboration.
@@ -212,12 +216,6 @@ This is a simple example (just the tip of the iceberg of [things to come](#agent
 ### Interruptibility
 
 Streaming tokens via a store also makes it simple to interrupt the stream for all users.
-
-<!--figure>
-  <video controls preload="auto" class="wide" poster="/videos/blog/building-ai-apps-on-sync/video-5-interupt.jpg">
-    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-5-interupt.mp4" />
-  </video>
-</figure-->
 
 Rather than each user streaming from an agent, the agent streams into the store. Any user can then issue an instruction to interrupt, with aborts the token stream from the agent and stops it being written to the store. This naturally interrupts the session for all concurrent users.
 
@@ -264,9 +262,10 @@ Tools like [LangGraph](https://www.langchain.com/langgraph) and [Mastra](https:/
 For example, imagine you're managing a project and you have an AI assistant. You tell it to "monitor the todo list and perform the tasks". You then fire up a new session with another agent to plan out the project and generate tasks.
 
 <figure>
-  <video controls preload="auto" class="wide" poster="/videos/blog/building-ai-apps-on-sync/video-6-multi-agent.jpg">
-    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-6-multi-agent.mp4" />
-  </video>
+  <HTML5Video class="wide"
+      poster="/img/blog/building-ai-apps-on-sync/video-6-multi-agent.jpg"
+      src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-6-multi-agent.mp4"
+  />
 </figure>
 
 These agents need to collaborate via shared state. In this example, the todo-list. They need to known when it's changed and react to the changes. And so do the users! They want to see the state too.

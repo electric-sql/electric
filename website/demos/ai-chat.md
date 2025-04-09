@@ -35,9 +35,10 @@ It demonstrates:
 - real-time streaming of LLM tool responses
 
 <figure>
-  <video controls preload="auto" class="wide">
-    <source src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/multi-user-1080.mp4" />
-  </video>
+  <HTML5Video class="wide"
+      poster="/img/blog/building-ai-apps-on-sync/video-4-multi-user.jpg"
+      src="https://electric-sql-blog-assets.s3.us-east-1.amazonaws.com/building-collaborative-ai-apps-on-sync/video-4-multi-user.mp4"
+  />
 </figure>
 
 See the [Building AI apps? You need sync](/blog/2025/04/09/building-ai-apps-on-sync) blog post for more details.
