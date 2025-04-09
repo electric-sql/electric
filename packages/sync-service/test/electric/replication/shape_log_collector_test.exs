@@ -1,5 +1,6 @@
 defmodule Electric.Replication.ShapeLogCollectorTest do
   use ExUnit.Case, async: false
+  use Repatch.ExUnit
 
   alias Electric.LsnTracker
   alias Electric.Postgres.Lsn
@@ -8,6 +9,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Shape
+  alias Electric.StatusMonitor
 
   alias Support.Mock
   alias Support.StubInspector
@@ -49,6 +51,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     ]
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
+    Repatch.patch(StatusMonitor, :shape_log_collector_ready, [mode: :shared], fn _ -> :ok end)
+    Repatch.allow(self(), pid)
 
     Mock.ShapeStatus
     |> expect(:initialise, 1, fn _opts -> {:ok, %{}} end)
@@ -296,6 +300,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     ]
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
+    Repatch.patch(StatusMonitor, :shape_log_collector_ready, [mode: :shared], fn _ -> :ok end)
+    Repatch.allow(self(), pid)
 
     Mock.Inspector
     |> stub(:load_relation, fn {"public", "test_table"}, _ ->

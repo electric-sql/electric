@@ -26,6 +26,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.pg_lock_acquired(stack_id)
       StatusMonitor.replication_client_ready(stack_id)
       StatusMonitor.connection_pool_ready(stack_id, self())
+      StatusMonitor.shape_log_collector_ready(stack_id)
       assert StatusMonitor.status(stack_id) == :active
     end
 
@@ -33,12 +34,22 @@ defmodule Electric.StatusMonitorTest do
       start_supervised!({StatusMonitor, stack_id})
       StatusMonitor.pg_lock_acquired(stack_id)
       StatusMonitor.connection_pool_ready(stack_id, self())
+      StatusMonitor.shape_log_collector_ready(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
     end
 
     test "when connection pool not ready, returns :starting", %{stack_id: stack_id} do
       start_supervised!({StatusMonitor, stack_id})
       StatusMonitor.pg_lock_acquired(stack_id)
+      StatusMonitor.replication_client_ready(stack_id)
+      StatusMonitor.shape_log_collector_ready(stack_id)
+      assert StatusMonitor.status(stack_id) == :starting
+    end
+
+    test "when shape log collector not ready, returns :starting", %{stack_id: stack_id} do
+      start_supervised!({StatusMonitor, stack_id})
+      StatusMonitor.pg_lock_acquired(stack_id)
+      StatusMonitor.connection_pool_ready(stack_id, self())
       StatusMonitor.replication_client_ready(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
     end

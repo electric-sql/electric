@@ -72,11 +72,10 @@ defmodule Electric.ShapeCacheTest do
     %{inspector: @stub_inspector, run_with_conn_fn: fn _, cb -> cb.(:connection) end}
   end
 
-  setup :with_persistent_kv
+  setup [:with_persistent_kv, :with_stack_id_from_test, :with_status_monitor]
 
   describe "get_or_create_shape_handle/2" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_no_pool,
@@ -106,7 +105,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "get_or_create_shape_handle/2 shape initialization" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -269,7 +267,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "get_or_create_shape_handle/2 against real db" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -443,7 +440,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "list_shapes/1" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -513,7 +509,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "has_shape?/2" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -554,7 +549,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "await_snapshot_start/4" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -726,7 +720,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "clean_shape/2" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -807,7 +800,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "clean_all_shapes/1" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_tracing_storage,
       :with_log_chunking,
@@ -858,7 +850,6 @@ defmodule Electric.ShapeCacheTest do
     end
 
     setup [
-      :with_stack_id_from_test,
       :with_cub_db_storage,
       :with_log_chunking,
       :with_registry,

@@ -1,7 +1,12 @@
 defmodule Electric.StatusMonitor do
   use GenServer
 
-  @conditions [:pg_lock_acquired, :replication_client_ready, :connection_pool_ready]
+  @conditions [
+    :pg_lock_acquired,
+    :replication_client_ready,
+    :connection_pool_ready,
+    :shape_log_collector_ready
+  ]
 
   @default_results for condition <- @conditions, into: %{}, do: {condition, false}
 
@@ -20,9 +25,18 @@ defmodule Electric.StatusMonitor do
 
   def status(stack_id) do
     case results(stack_id) do
-      %{pg_lock_acquired: false} -> :waiting
-      %{replication_client_ready: true, connection_pool_ready: true} -> :active
-      _ -> :starting
+      %{pg_lock_acquired: false} ->
+        :waiting
+
+      %{
+        replication_client_ready: true,
+        connection_pool_ready: true,
+        shape_log_collector_ready: true
+      } ->
+        :active
+
+      _ ->
+        :starting
     end
   end
 
@@ -36,6 +50,10 @@ defmodule Electric.StatusMonitor do
 
   def connection_pool_ready(stack_id, _pool_pid) do
     condition_met(stack_id, :connection_pool_ready)
+  end
+
+  def shape_log_collector_ready(stack_id) do
+    condition_met(stack_id, :shape_log_collector_ready)
   end
 
   defp condition_met(stack_id, condition) do
