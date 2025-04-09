@@ -1,4 +1,5 @@
 defmodule Electric.Replication.PublicationManager do
+  @moduledoc false
   require Logger
   use GenServer
 
@@ -24,13 +25,17 @@ defmodule Electric.Replication.PublicationManager do
     :publication_name,
     :db_pool,
     :pg_version,
-    :configure_tables_for_replication_fn
+    :configure_tables_for_replication_fn,
+    :shape_cache,
+    next_update_forced?: false
   ]
 
+  @typep oid_rel() :: {non_neg_integer(), Electric.relation()}
+
   @typep state() :: %__MODULE__{
-           relation_filter_counters: %{Electric.relation() => map()},
-           prepared_relation_filters: %{Electric.relation() => __MODULE__.RelationFilter.t()},
-           committed_relation_filters: %{Electric.relation() => __MODULE__.RelationFilter.t()},
+           relation_filter_counters: %{oid_rel() => map()},
+           prepared_relation_filters: %{oid_rel() => __MODULE__.RelationFilter.t()},
+           committed_relation_filters: %{oid_rel() => __MODULE__.RelationFilter.t()},
            row_filtering_enabled: boolean(),
            update_debounce_timeout: timeout(),
            scheduled_updated_ref: nil | reference(),
@@ -38,7 +43,9 @@ defmodule Electric.Replication.PublicationManager do
            publication_name: String.t(),
            db_pool: term(),
            pg_version: non_neg_integer(),
-           configure_tables_for_replication_fn: fun()
+           configure_tables_for_replication_fn: fun(),
+           shape_cache: {module(), term()},
+           next_update_forced?: boolean()
          }
   @typep filter_operation :: :add | :remove
 
@@ -75,12 +82,13 @@ defmodule Electric.Replication.PublicationManager do
             stack_id: [type: :string, required: true],
             publication_name: [type: :string, required: true],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
+            shape_cache: [type: :mod_arg, required: false],
             pg_version: [type: {:or, [:integer, :atom]}, required: false, default: nil],
             update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
             configure_tables_for_replication_fn: [
-              type: {:fun, 4},
+              type: {:fun, 5},
               required: false,
-              default: &Configuration.configure_tables_for_replication!/4
+              default: &Configuration.configure_publication!/5
             ],
             server: [type: :any, required: false]
           )
@@ -125,7 +133,11 @@ defmodule Electric.Replication.PublicationManager do
     server = Access.get(opts, :server, name(opts))
     timeout = Access.get(opts, :timeout, 10_000)
 
-    case GenServer.call(server, :refresh_publication, timeout) do
+    case GenServer.call(
+           server,
+           {:refresh_publication, Access.get(opts, :forced?, false)},
+           timeout
+         ) do
       :ok -> :ok
       {:error, err} -> raise err
     end
@@ -141,6 +153,8 @@ defmodule Electric.Replication.PublicationManager do
       GenServer.start_link(__MODULE__, [name: name, db_pool: db_pool] ++ opts, name: name)
     end
   end
+
+  # --- Private API ---
 
   @impl true
   def init(opts) do
@@ -161,6 +175,7 @@ defmodule Electric.Replication.PublicationManager do
       publication_name: opts.publication_name,
       db_pool: opts.db_pool,
       pg_version: opts.pg_version,
+      shape_cache: Map.get(opts, :shape_cache, {Electric.ShapeCache, [stack_id: opts.stack_id]}),
       configure_tables_for_replication_fn: opts.configure_tables_for_replication_fn
     }
 
@@ -188,9 +203,9 @@ defmodule Electric.Replication.PublicationManager do
     {:noreply, state}
   end
 
-  def handle_call(:refresh_publication, from, state) do
+  def handle_call({:refresh_publication, forced?}, from, state) do
     state = add_waiter(from, state)
-    state = schedule_update_publication(state.update_debounce_timeout, state)
+    state = schedule_update_publication(state.update_debounce_timeout, forced?, state)
     {:noreply, state}
   end
 
@@ -198,6 +213,10 @@ defmodule Electric.Replication.PublicationManager do
     state = update_relation_filters_for_shape(shape, :add, state)
     {:reply, :ok, state}
   end
+
+  defguardp is_fatal(err)
+            when is_exception(err, Postgrex.Error) and
+                   err.postgres.code in ~w|undefined_function undefined_table|a
 
   @impl true
   def handle_info(
@@ -207,11 +226,28 @@ defmodule Electric.Replication.PublicationManager do
     state = %{state | scheduled_updated_ref: nil, retries: 0}
 
     case update_publication(state) do
-      {:ok, state} ->
-        state = reply_to_waiters(:ok, state)
-        {:noreply, %{state | committed_relation_filters: relation_filters}}
+      {:ok, state, missing_relations} ->
+        if missing_relations != [] do
+          Logger.info(
+            "Relations dropped/renamed since last publication update: #{inspect(missing_relations)}"
+          )
 
-      {:error, err} when retries < @max_retries ->
+          {mod, args} = state.shape_cache
+          mod.clean_all_shapes_for_relations(missing_relations, args)
+        end
+
+        state = reply_to_waiters(:ok, state)
+        committed_filters = Map.drop(relation_filters, missing_relations)
+
+        {:noreply,
+         %{
+           state
+           | committed_relation_filters: committed_filters,
+             next_update_forced?: false,
+             prepared_relation_filters: relation_filters
+         }}
+
+      {:error, err} when retries < @max_retries and not is_fatal(err) ->
         Logger.warning("Failed to configure publication, retrying: #{inspect(err)}")
         state = schedule_update_publication(@retry_timeout, %{state | retries: retries + 1})
         {:noreply, state}
@@ -219,28 +255,40 @@ defmodule Electric.Replication.PublicationManager do
       {:error, err} ->
         Logger.error("Failed to configure publication: #{inspect(err)}")
         state = reply_to_waiters({:error, err}, state)
-        {:noreply, state}
+        {:noreply, %{state | next_update_forced?: false}}
     end
   end
 
-  @spec schedule_update_publication(timeout(), state()) :: state()
-  defp schedule_update_publication(timeout, %__MODULE__{scheduled_updated_ref: nil} = state) do
+  @spec schedule_update_publication(timeout(), boolean(), state()) :: state()
+  defp schedule_update_publication(timeout, forced? \\ false, state)
+
+  defp schedule_update_publication(
+         timeout,
+         forced?,
+         %__MODULE__{scheduled_updated_ref: nil} = state
+       ) do
     ref = Process.send_after(self(), :update_publication, timeout)
-    %{state | scheduled_updated_ref: ref}
+    %{state | scheduled_updated_ref: ref, next_update_forced?: forced?}
   end
 
-  defp schedule_update_publication(_timeout, %__MODULE__{scheduled_updated_ref: _} = state),
-    do: state
+  defp schedule_update_publication(
+         _timeout,
+         forced?,
+         %__MODULE__{scheduled_updated_ref: _} = state
+       ),
+       do: %{state | next_update_forced?: forced? or state.next_update_forced?}
 
-  @spec update_publication(state()) :: {:ok, state()} | {:error, term()}
+  @spec update_publication(state()) ::
+          {:ok, state(), [Electric.oid_relation()]} | {:error, term()}
   defp update_publication(
          %__MODULE__{
            committed_relation_filters: committed_filters,
-           prepared_relation_filters: current_filters
+           prepared_relation_filters: current_filters,
+           next_update_forced?: forced?
          } = state
        )
-       when current_filters == committed_filters,
-       do: {:ok, state}
+       when current_filters == committed_filters and not forced?,
+       do: {:ok, state, []}
 
   defp update_publication(
          %__MODULE__{
@@ -250,25 +298,28 @@ defmodule Electric.Replication.PublicationManager do
            publication_name: publication_name,
            db_pool: db_pool,
            pg_version: pg_version,
-           configure_tables_for_replication_fn: configure_tables_for_replication_fn
+           configure_tables_for_replication_fn: configure_tables_for_replication_fn,
+           next_update_forced?: forced?
          } = state
        ) do
     # If row filtering is disabled, we only care about changes in actual relations
     # included in the publication
-    if Map.keys(current_filters) == Map.keys(committed_filters) do
-      {:ok, state}
+    if not forced? and Map.keys(current_filters) == Map.keys(committed_filters) do
+      {:ok, state, []}
     else
       try do
-        configure_tables_for_replication_fn.(
-          db_pool,
-          Map.new(current_filters, fn {rel, filter} ->
-            {rel, RelationFilter.relation_only(filter)}
-          end),
-          pg_version,
-          publication_name
-        )
+        missing_relations =
+          configure_tables_for_replication_fn.(
+            db_pool,
+            Map.keys(committed_filters),
+            Map.new(current_filters, fn {rel, filter} ->
+              {rel, RelationFilter.relation_only(filter)}
+            end),
+            pg_version,
+            publication_name
+          )
 
-        {:ok, state}
+        {:ok, state, missing_relations}
       rescue
         err -> {:error, err}
       end
@@ -277,6 +328,7 @@ defmodule Electric.Replication.PublicationManager do
 
   defp update_publication(
          %__MODULE__{
+           committed_relation_filters: committed_filters,
            prepared_relation_filters: relation_filters,
            row_filtering_enabled: true,
            publication_name: publication_name,
@@ -285,14 +337,16 @@ defmodule Electric.Replication.PublicationManager do
            configure_tables_for_replication_fn: configure_tables_for_replication_fn
          } = state
        ) do
-    configure_tables_for_replication_fn.(
-      db_pool,
-      relation_filters,
-      pg_version,
-      publication_name
-    )
+    missing_relations =
+      configure_tables_for_replication_fn.(
+        db_pool,
+        Map.keys(committed_filters),
+        relation_filters,
+        pg_version,
+        publication_name
+      )
 
-    {:ok, state}
+    {:ok, state, missing_relations}
   rescue
     # if we are unable to do row filtering for whatever reason, fall back to doing only
     # relation-based filtering - this is a fallback for unsupported where clauses that we
@@ -337,27 +391,27 @@ defmodule Electric.Replication.PublicationManager do
 
   @spec update_relation_filters_for_shape(Shape.t(), filter_operation(), state()) :: state()
   defp update_relation_filters_for_shape(
-         %Shape{root_table: relation} = shape,
+         %Shape{root_table: relation, root_table_id: oid} = shape,
          operation,
          %__MODULE__{prepared_relation_filters: prepared_relation_filters} = state
        ) do
     state = update_relation_filter_counters(shape, operation, state)
-    new_relation_filter = get_relation_filter(relation, state)
+    new_relation_filter = get_relation_filter({oid, relation}, state)
 
     new_relation_filters =
       if new_relation_filter == nil,
-        do: Map.delete(prepared_relation_filters, relation),
-        else: Map.put(prepared_relation_filters, relation, new_relation_filter)
+        do: Map.delete(prepared_relation_filters, {oid, relation}),
+        else: Map.put(prepared_relation_filters, {oid, relation}, new_relation_filter)
 
     %{state | prepared_relation_filters: new_relation_filters}
   end
 
   @spec get_relation_filter(Electric.relation(), state()) :: RelationFilter.t() | nil
   defp get_relation_filter(
-         relation,
+         {_oid, relation} = oid_rel,
          %__MODULE__{relation_filter_counters: relation_filter_counters} = _state
        ) do
-    case Map.get(relation_filter_counters, relation) do
+    case Map.get(relation_filter_counters, oid_rel) do
       nil ->
         nil
 
@@ -393,12 +447,14 @@ defmodule Electric.Replication.PublicationManager do
 
   @spec update_relation_filter_counters(Shape.t(), filter_operation(), state()) :: state()
   defp update_relation_filter_counters(
-         %Shape{root_table: table} = shape,
+         %Shape{root_table: table, root_table_id: oid} = shape,
          operation,
          %__MODULE__{relation_filter_counters: relation_filter_counters} = state
        ) do
+    oid_rel_key = {oid, table}
+
     increment = if operation == :add, do: 1, else: -1
-    filter_counters = Map.get(relation_filter_counters, table, %{})
+    filter_counters = Map.get(relation_filter_counters, oid_rel_key, %{})
 
     {relation_ctr, filter_counters} =
       update_map_counter(filter_counters, @relation_counter, increment)
@@ -416,10 +472,11 @@ defmodule Electric.Replication.PublicationManager do
 
       %{
         state
-        | relation_filter_counters: Map.put(relation_filter_counters, table, filter_counters)
+        | relation_filter_counters:
+            Map.put(relation_filter_counters, oid_rel_key, filter_counters)
       }
     else
-      %{state | relation_filter_counters: Map.delete(relation_filter_counters, table)}
+      %{state | relation_filter_counters: Map.delete(relation_filter_counters, oid_rel_key)}
     end
   end
 

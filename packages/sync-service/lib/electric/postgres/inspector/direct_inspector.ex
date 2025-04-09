@@ -1,36 +1,66 @@
 defmodule Electric.Postgres.Inspector.DirectInspector do
   @behaviour Electric.Postgres.Inspector
 
+  @doc false
+  @impl Electric.Postgres.Inspector
+  def list_diverged_relations(_opts), do: :error
+
   @doc """
   Returns the PG relation from the table name.
   """
+  @impl Electric.Postgres.Inspector
   def load_relation(table, conn) when is_binary(table) do
     # The extra cast from $1 to text is needed because of Postgrex' OID type encoding
     # see: https://github.com/elixir-ecto/postgrex#oid-type-encoding
     query = load_relation_query("$1::text::regclass")
-    do_load_relation(conn, query, [table])
+
+    case do_load_relation(conn, query, [table]) do
+      {:ok, []} ->
+        {:error, "No relation found"}
+
+      {:ok, relations} ->
+        {:ok, hd(relations)}
+
+      {:error, err} ->
+        {:error, err}
+    end
   end
 
   def load_relation({schema, name}, conn) when is_binary(schema) and is_binary(name) do
     query = load_relation_query("format('%I.%I', $1::text, $2::text)::regclass")
-    do_load_relation(conn, query, [schema, name])
+
+    case do_load_relation(conn, query, [schema, name]) do
+      {:ok, []} ->
+        {:error, "No relation found"}
+
+      {:ok, relations} ->
+        {:ok, hd(relations)}
+
+      {:error, err} ->
+        {:error, err}
+    end
+  end
+
+  def load_relations_by_oids(oids, conn) when is_list(oids) do
+    query = load_relation_query("ANY ($1::oid[])")
+    do_load_relation(conn, query, [oids])
   end
 
   defp do_load_relation(conn, query, params) do
     case Postgrex.query(conn, query, params) do
-      {:ok, result} ->
-        # We expect exactly one row because the query didn't fail
-        # so the relation exists since we could cast it to a regclass
-        [[schema, table, oid, kind, parent, children]] = result.rows
+      {:ok, %{rows: rows}} ->
+        relations =
+          Enum.map(rows, fn [schema, table, oid, kind, parent, children] ->
+            %{
+              relation_id: oid,
+              relation: {schema, table},
+              kind: resolve_kind(kind),
+              parent: map_relations(parent),
+              children: map_relations(children)
+            }
+          end)
 
-        {:ok,
-         %{
-           relation_id: oid,
-           relation: {schema, table},
-           kind: resolve_kind(kind),
-           parent: map_relations(parent),
-           children: map_relations(children)
-         }}
+        {:ok, relations}
 
       {:error, err} ->
         {:error, Exception.message(err)}
@@ -77,12 +107,9 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
   defp map_relations(relations) when is_list(relations),
     do: Enum.map(relations, &map_relations/1)
 
-  @doc """
-  Load table information (refs) from the database
-  """
-  def load_column_info({namespace, tbl}, conn) do
-    query = """
-    SELECT
+  @column_info_query_base """
+  SELECT
+      pg_class.oid as relation_id,
       attname as name,
       (atttypid, atttypmod) as type_id,
       attndims as array_dimensions,
@@ -100,29 +127,55 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
     JOIN pg_type ON atttypid = pg_type.oid
     LEFT JOIN pg_index ON indrelid = pg_class.oid AND indisprimary
     LEFT JOIN pg_type AS elem_pg_type ON pg_type.typelem = elem_pg_type.oid
+  """
+
+  @doc """
+  Load table information (refs) from the database
+  """
+  @impl Electric.Postgres.Inspector
+  def load_column_info({namespace, tbl}, conn) do
+    query = """
+    #{@column_info_query_base}
     WHERE relname = $1 AND nspname = $2 AND relkind IN ('r', 'p')
     ORDER BY pg_class.oid, attnum
     """
 
-    result = Postgrex.query!(conn, query, [tbl, namespace])
+    case do_query_column_info!(conn, query, [tbl, namespace]) do
+      [] ->
+        # Fixme: this is not necessarily true. The table might exist but have no columns.
+        :table_not_found
 
-    if Enum.empty?(result.rows) do
-      # Fixme: this is not necessarily true. The table might exist but have no columns.
-      :table_not_found
-    else
-      columns = Enum.map(result.columns, &String.to_atom/1)
-
-      rows =
-        Enum.map(result.rows, fn row ->
-          Enum.zip_with(columns, row, fn
-            :type_kind, val -> {:type_kind, parse_type_kind(val)}
-            col, val -> {col, val}
-          end)
-          |> Map.new()
-        end)
-
-      {:ok, rows}
+      rows ->
+        {:ok, rows}
     end
+  end
+
+  def load_column_info_by_oids(oids, conn) do
+    query = """
+    #{@column_info_query_base}
+    WHERE pg_class.oid = ANY ($1::oid[])
+    ORDER BY pg_class.oid, attnum
+    """
+
+    do_query_column_info!(conn, query, [oids])
+    |> Enum.group_by(& &1.relation_id)
+  end
+
+  defp do_query_column_info!(conn, query, params) do
+    %{rows: rows, columns: columns} = Postgrex.query!(conn, query, params)
+
+    columns = Enum.map(columns, &String.to_atom/1)
+
+    rows =
+      Enum.map(rows, fn row ->
+        Enum.zip_with(columns, row, fn
+          :type_kind, val -> {:type_kind, parse_type_kind(val)}
+          col, val -> {col, val}
+        end)
+        |> Map.new()
+      end)
+
+    rows
   end
 
   @spec parse_type_kind(String.t()) :: Electric.Postgres.Inspector.type_kind()
@@ -134,5 +187,6 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
   defp parse_type_kind("r"), do: :range
   defp parse_type_kind("m"), do: :multirange
 
+  @impl Electric.Postgres.Inspector
   def clean(_, _), do: true
 end

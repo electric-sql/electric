@@ -83,8 +83,10 @@ defmodule Support.ComponentSetup do
           Access.get(
             ctx,
             :configure_tables_for_replication_fn,
-            &Electric.Postgres.Configuration.configure_tables_for_replication!/4
-          )
+            &Electric.Postgres.Configuration.configure_publication!/5
+          ),
+        shape_cache:
+          Access.get(ctx, :shape_cache, {Electric.ShapeCache, [stack_id: ctx.stack_id]})
       )
 
     %{

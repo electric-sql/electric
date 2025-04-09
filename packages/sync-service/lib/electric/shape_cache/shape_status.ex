@@ -66,6 +66,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @shape_meta_data :shape_meta_data
   @shape_hash_lookup :shape_hash_lookup
+  @shape_relation_lookup :shape_relation_lookup
   @shape_meta_shape_pos 2
   @shape_meta_xmin_pos 3
   @shape_meta_latest_offset_pos 4
@@ -105,6 +106,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
           {{@shape_hash_lookup, hash}, shape_handle},
           {{@shape_meta_data, shape_handle}, shape, nil, offset,
            :erlang.monotonic_time(:microsecond)}
+          | Enum.map(Shape.list_relations(shape), fn {oid, _name} ->
+              {{@shape_relation_lookup, oid, shape_handle}, true}
+            end)
         ]
       )
 
@@ -122,6 +126,16 @@ defmodule Electric.ShapeCache.ShapeStatus do
     ])
   end
 
+  @spec list_shape_handles_for_relations(t(), list(Electric.oid_relation())) :: [
+          shape_handle()
+        ]
+  def list_shape_handles_for_relations(state, relations) do
+    relations
+    |> Enum.map(fn {oid, _} -> {{@shape_relation_lookup, oid, :"$1"}, :_} end)
+    |> Enum.map(fn match -> {match, [true], [:"$1"]} end)
+    |> then(&:ets.select(state.shape_meta_table, &1))
+  end
+
   @spec remove_shape(t(), Shape.t()) :: {:ok, t()} | {:error, term()}
   def remove_shape(state, shape_handle) do
     try do
@@ -137,6 +151,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
         [
           {{{@shape_meta_data, shape_handle}, :_, :_, :_, :_}, [], [true]},
           {{{@shape_hash_lookup, :_}, shape_handle}, [], [true]}
+          | Enum.map(Shape.list_relations(shape), fn {oid, _} ->
+              {{{@shape_relation_lookup, oid, shape_handle}, :_}, [], [true]}
+            end)
         ]
       )
 
@@ -306,11 +323,15 @@ defmodule Electric.ShapeCache.ShapeStatus do
         Enum.concat([
           Enum.flat_map(shapes, fn {shape_handle, shape} ->
             hash = Shape.hash(shape)
+            relations = Shape.list_relations(shape)
 
             [
               {{@shape_hash_lookup, hash}, shape_handle},
               {{@shape_meta_data, shape_handle}, shape, nil, LogOffset.first(),
                :erlang.monotonic_time(:microsecond)}
+              | Enum.map(relations, fn {oid, _} ->
+                  {{@shape_relation_lookup, oid, shape_handle}, true}
+                end)
             ]
           end)
         ])

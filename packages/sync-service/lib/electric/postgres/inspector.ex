@@ -35,6 +35,9 @@ defmodule Electric.Postgres.Inspector do
 
   @callback clean(relation(), opts :: term()) :: true
 
+  @callback list_diverged_relations(opts :: term()) ::
+              {:ok, [Electric.oid_relation()]} | :error
+
   @type inspector :: {module(), opts :: term()}
 
   @doc """
@@ -102,6 +105,10 @@ defmodule Electric.Postgres.Inspector do
       %{name: name, type: type} ->
         {[name], atom_type(type)}
     end)
+  end
+
+  def list_diverged_relations({module, opts}) do
+    module.list_diverged_relations(opts)
   end
 
   defp atom_type(type) when is_binary(type), do: String.to_atom(type)

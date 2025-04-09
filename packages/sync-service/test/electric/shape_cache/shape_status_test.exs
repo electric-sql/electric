@@ -74,6 +74,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       )
 
     assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
+
+    assert [^shape_handle] =
+             ShapeStatus.list_shape_handles_for_relations(state, [
+               {shape.root_table_id, {"public", "other_table"}}
+             ])
   end
 
   test "can add shapes", ctx do
@@ -97,6 +102,16 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     assert {:ok, ^shape_1} = ShapeStatus.remove_shape(state, shape_handle_1)
     assert [{^shape_handle_2, ^shape_2}] = ShapeStatus.list_shapes(state)
+
+    assert [^shape_handle_2] =
+             ShapeStatus.list_shape_handles_for_relations(state, [
+               {shape_2.root_table_id, {"public", "table"}}
+             ])
+
+    assert [] =
+             ShapeStatus.list_shape_handles_for_relations(state, [
+               {shape_1.root_table_id, {"public", "other_table"}}
+             ])
   end
 
   test "get_existing_shape/2 with %Shape{}", ctx do

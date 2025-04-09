@@ -7,40 +7,101 @@ defmodule Electric.Postgres.Configuration do
   alias Electric.Replication.PublicationManager.RelationFilter
   alias Electric.Utils
 
-  @type filters() :: %{Electric.relation() => RelationFilter.t()}
+  @type filters() :: %{Electric.oid_relation() => RelationFilter.t()}
 
   @pg_15 150_000
 
   @doc """
-  Ensure that all tables are configured for replication.
+  Configure the publication to include all relevant tables, also setting table identity to `FULL`
+  if necessary.
 
-  Table is considered configured for replication when it's `REPLICA IDENTITY` is set to `FULL`
-  and it's added to the specified publication.
+  Any tables that were previously configured but were either renamed or dropped will *not* be automatically
+  re-added to the publication.
+
+  `previous_relations` argument is used to figure out renamed/dropped table based on table OIDs.
 
   Important: this function should not be ran in a transaction, because it starts multiple
   internal transactions that are sometimes expected to fail.
 
   Raises if it fails to configure all the tables in the expected way.
   """
-  @spec configure_tables_for_replication!(
+  @spec configure_publication!(
           Postgrex.conn(),
+          [Electric.oid_relation()],
           filters(),
-          String.t(),
-          float()
-        ) ::
-          {:ok, [:ok]}
-  def configure_tables_for_replication!(pool, relation_filters, pg_version, publication_name) do
-    Postgrex.transaction(
-      pool,
-      fn conn ->
-        configure_tables_for_replication_internal!(
-          conn,
-          relation_filters,
-          pg_version,
-          publication_name
-        )
+          non_neg_integer(),
+          String.t()
+        ) :: [Electric.oid_relation()]
+  def configure_publication!(
+        conn,
+        previous_relations,
+        new_filters,
+        pg_version,
+        publication_name
+      ) do
+    Postgrex.transaction(conn, fn conn ->
+      # "New filters" were configured using a schema read in a different transaction (if at all, might have been from cache)
+      # so we need to check if any of the relations were dropped/renamed since then
+      changed_relations =
+        (previous_relations ++ Map.keys(new_filters))
+        |> Enum.uniq()
+        |> list_missing_relations(conn)
+
+      used_filters = Map.drop(new_filters, changed_relations)
+
+      if pg_version < @pg_15 do
+        alter_pub_set_whole_tables!(conn, publication_name, used_filters)
+      else
+        alter_pub_set_filtered_tables!(conn, publication_name, used_filters)
       end
-    )
+
+      # `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
+      # but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
+      # deadlock if the order is reversed.
+      set_replica_identity!(conn, used_filters)
+
+      changed_relations
+    end)
+    |> case do
+      {:ok, missing_relations} ->
+        missing_relations
+
+      {:error, reason} ->
+        raise reason
+    end
+  end
+
+  defp list_missing_relations(previous_relations, conn) do
+    # We're checking whether the table has been renamed (same oid, different name) or
+    # dropped (maybe same name exists, but different oid). If either is true, we need to update
+    # the new filters and maybe notify existing shapes.
+
+    {oids, relations} = Enum.unzip(previous_relations)
+    {schemas, tables} = Enum.unzip(relations)
+
+    result =
+      Postgrex.query!(
+        conn,
+        """
+        WITH input_relations AS (
+          SELECT
+            UNNEST($1::oid[]) AS oid,
+            UNNEST($2::text[]) AS input_nspname,
+            UNNEST($3::text[]) AS input_relname
+        )
+        SELECT
+          ir.oid, (ir.input_nspname, ir.input_relname) as input_relation
+        FROM input_relations ir
+        LEFT JOIN pg_class pc ON pc.oid = ir.oid
+        LEFT JOIN pg_namespace pn ON pc.relnamespace = pn.oid
+        WHERE pc.oid IS NULL OR (relname != input_relname OR nspname != input_nspname)
+        """,
+        [oids, schemas, tables]
+      )
+
+    for [input_oid, input_relation] <- result.rows do
+      {input_oid, input_relation}
+    end
   end
 
   @doc """
@@ -62,16 +123,8 @@ defmodule Electric.Postgres.Configuration do
     end
   end
 
-  defp configure_tables_for_replication_internal!(
-         conn,
-         relation_filters,
-         pg_version,
-         publication_name
-       )
-       when pg_version < @pg_15 do
+  defp alter_pub_set_whole_tables!(conn, publication_name, relation_filters) do
     publication = Utils.quote_name(publication_name)
-
-    relation_filters = filter_for_existing_relations(conn, relation_filters)
 
     prev_published_tables =
       get_publication_tables(conn, publication_name)
@@ -81,6 +134,7 @@ defmodule Electric.Postgres.Configuration do
     new_published_tables =
       relation_filters
       |> Map.keys()
+      |> Enum.map(&elem(&1, 1))
       |> Enum.map(&Utils.relation_to_sql/1)
       |> MapSet.new()
 
@@ -111,57 +165,28 @@ defmodule Electric.Postgres.Configuration do
           raise reason
       end
     end
-
-    set_replica_identity!(conn, relation_filters)
-    [:ok]
   end
 
-  defp configure_tables_for_replication_internal!(
-         conn,
-         relation_filters,
-         _pg_version,
-         publication_name
-       ) do
-    # Ensure that all tables are present in the publication
-    relation_filters = filter_for_existing_relations(conn, relation_filters)
-
+  defp alter_pub_set_filtered_tables!(conn, publication_name, filters) do
     # Update the entire publication with the new filters
-    Postgrex.query!(
-      conn,
-      make_alter_publication_query(publication_name, relation_filters),
-      []
-    )
-
-    # `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
-    # but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
-    # deadlock if the order is reversed.
-    set_replica_identity!(conn, relation_filters)
-
-    [:ok]
+    Postgrex.query!(conn, make_alter_publication_query(publication_name, filters), [])
   end
 
   defp set_replica_identity!(conn, relation_filters) do
     query_for_relations_without_full_identity = """
-    WITH input_relations AS (
-      SELECT
-        UNNEST($1::text[]) AS schemaname,
-        UNNEST($2::text[]) AS tablename
-    )
-    SELECT ir.schemaname, ir.tablename
-    FROM input_relations ir
-    JOIN pg_class pc ON pc.relname = ir.tablename
+    SELECT nspname, relname
+    FROM pg_class pc
     JOIN pg_namespace pn ON pn.oid = pc.relnamespace
-    WHERE pn.nspname = ir.schemaname AND relreplident != 'f'
+    WHERE relreplident != 'f' AND pc.oid = ANY($1)
     """
 
-    params =
+    oids =
       relation_filters
       |> Map.keys()
-      |> Enum.unzip()
-      |> Tuple.to_list()
+      |> Enum.map(&elem(&1, 0))
 
     %Postgrex.Result{rows: rows} =
-      Postgrex.query!(conn, query_for_relations_without_full_identity, params)
+      Postgrex.query!(conn, query_for_relations_without_full_identity, [oids])
 
     tables = for [schema, table] <- rows, do: Utils.relation_to_sql({schema, table})
 
@@ -249,37 +274,6 @@ defmodule Electric.Postgres.Configuration do
 
         base_sql <> tables
     end
-  end
-
-  @spec filter_for_existing_relations(Postgrex.conn(), filters()) :: filters()
-  defp filter_for_existing_relations(conn, filters) do
-    query = """
-    WITH input_relations AS (
-        SELECT
-          UNNEST($1::text[]) AS schemaname,
-          UNNEST($2::text[]) AS tablename
-    )
-    SELECT ir.schemaname, ir.tablename
-    FROM input_relations ir
-    JOIN pg_class pc ON pc.relname = ir.tablename
-    JOIN pg_namespace pn ON pn.oid = pc.relnamespace
-    WHERE pn.nspname = ir.schemaname AND pc.relkind IN ('r', 'p');
-    """
-
-    relations = Map.keys(filters)
-
-    Postgrex.query!(conn, query, [
-      Enum.map(relations, &elem(&1, 0)),
-      Enum.map(relations, &elem(&1, 1))
-    ])
-    |> Map.fetch!(:rows)
-    |> Enum.map(&List.to_tuple/1)
-    |> Enum.reduce(%{}, fn rel, new_filters ->
-      case Map.get(filters, rel) do
-        nil -> new_filters
-        filter -> Map.put(new_filters, rel, filter)
-      end
-    end)
   end
 
   @spec make_table_clause(RelationFilter.t()) :: String.t()
