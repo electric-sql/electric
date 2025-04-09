@@ -42,7 +42,7 @@ post: true
 
 AI apps are inherantly collaborative. Building them requires solving [resumeability](#resumeability), [interruptability](#interruptability), [multi&#8209;device](#multi-device) and [multi&#8209;user](#multi-user).
 
-These are not edge-cases. They're core to [user <-> agent collaboration](#collaboration) and the new world of [multi&#8209;step, task&#8209;and&#8209;review workflows](#multi-step-workflows). They're also [key growth hacks](#to-replacing-saas) for products looking to replace current-generation SaaS and enteprise software.
+These are not edge-cases. They're core to [user <-> agent collaboration](#collaboration) and the new world of [multi&#8209;step, task&#8209;and&#8209;review workflows](#multi-step-workflows). They're also [key growth hacks](#unlocking-adoption) for products looking to replace current-generation SaaS and enteprise software.
 
 As AI apps become more collaborative, with [multiple users interacting with the same AI session](#collaboration) and those sessions spawning [more and more agents](#swarms), these challenges are only going to get more important. Luckily, they're all [solved by&nbsp;sync](#sync-is-the-solution).
 
@@ -97,9 +97,9 @@ For example, here's our [Electric AI chat app](https://github.com/electric-sql/e
 
 The key to this behaviour is *resumeability*: the ability to resume streaming from a known position in the stream. To do this, the app keeps track of the last position its seen. Then when re-connecting, it requests the stream from that position.
 
-This pattern is fiddly to wire up yourself (message delivery is a [distributed systems rabbit hole](https://jepsen.io/consistency/models)) but is *built in* to sync engines for you. For example, Electric's [sync protocol](/docs/api/http) is based on the client sending `offset` and `cursor` parameters.
+This pattern is fiddly to wire up yourself (message delivery is a [distributed systems rabbit hole](https://jepsen.io/consistency/models)) but is *built in* to sync engines for you. For example, Electric's [sync protocol](/docs/api/http) is based on the client sending an `offset` parameter.
 
-These are usually abstracted away at a [higher-level](/docs/api/clients/typescript), e.g.:
+This is usually abstracted away at a [higher-level](/docs/api/clients/typescript), e.g.:
 
 ```tsx
 import { ShapeStream } from '@electric-sql/client'
@@ -331,7 +331,7 @@ This allows agents to collaborate on different parts of a shared state, by worki
 
 When you call an API or function you typically know the "blast radius" of what data it can change. So you can know what to refetch. When you interact with an AI agent (that has any kind of agency) you don't know what it's going to change.
 
-So you either need to constantly track and re-fetch everything. Or you need to monitor what data changes, so that you're automatically informed about it. What you really need is a way of declaring the subset of the data that the app, agent or UI depends on so you can automatically monitor it, stay up-to-date and be able to respond to changes.
+So you either need to constantly track and re-fetch everything. Or you need to monitor what data changes, so that you're automatically informed about it. What you really need is a way of declaring the subset of the data that the app, agent or UI needs, in order to monitor it, stay up-to-date and respond to changes.
 
 That's why Sunil Pai says that [AI agents are local-first clients](https://sunilpai.dev/posts/local-first-ai-agents/) and that's why Theo Brown is [searching for the ideal sync engine](https://youtu.be/3gVBjTMS8FE).
 
@@ -341,21 +341,19 @@ Sync solves a range of practical challenges with AI UX. From resumeability and i
 
 As AI agents become more collaborative and autonomous (and lots more of them are spawned), then sharing state, reviewing progress, reacting to changes and maintaining local data sets are all going to get more important.
 
-### To replacing SaaS
+### Unlocking adoption
 
-For AI apps to deliver on their promise of replacing current-generation SaaS and enterprise software, they need to match and then exceed the capabilities of the current software. SaaS has had decades to build out multi-user support and team-based collaboration. Single-user AI sessions are not going to scale across the enterprise.
+One of the main opportunities for AI startups and teams building AI apps is to replace current-generation software with smarter, AI-powered systems. Particularly in b2b and enterprise software, which tends to built around team-based collaboration, with support for multiple users with different roles.
 
-Teams building AI products that are serious about scaling and market adoption need to make sure they're collaborative. That means building on sync. Sync is a hard problem to solve yourself. Electric [solves sync for you](/).
+This is where the ability to build multi-user, collaborative AI apps is key to adoption. Single-user AI sessions are not going to cut it. To replace incumbent systems and get wide adoption across the enterprise, AI apps need to support team-based collaboration. As we've seen, that means keeping multiple users and agents in sync.
+
+Sync is a hard problem to solve yourself &mdash; and the last thing you want to be spending time on when you could be building your core product. That's why AI apps with ambition should be built on a sync engine, like [Electric](/), that solves sync for you.
 
 ### Let's jump in
 
-As you've seen, this post is accompanied by a resilient, multi-user, AI chat demo, on GitHub at [electric-sql/electric-ai-chat](https://github.com/electric-sql/electric-ai-chat).
+This post is accompanied by a resilient, multi-user, multi-agent AI chat demo.
 
-It's a Node app using Docker and OpenAI. You need:
-
-- [Node](https://nodejs.org/en/download) (v18 or higher) and [pnpm](https://pnpm.io/installation) (v8 or higher)
-- [Docker](https://docs.docker.com/compose/install/) (for the local development environment); and an
-- [OpenAI API key](https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key)
+The source code is on GitHub at [electric-sql/electric-ai-chat](https://github.com/electric-sql/electric-ai-chat) and the demo is deployed online at [electric-ai-chat.examples.electric-sql.com](https://electric-ai-chat.examples.electric-sql.com).
 
 Start by cloning the repo:
 
@@ -363,6 +361,8 @@ Start by cloning the repo:
 git clone https://github.com/electric-sql/electric-ai-chat.git
 cd electric-ai-chat
 ```
+
+Make sure you have [Node](https://nodejs.org/en/download), [pnpm](https://pnpm.io/installation), [Docker](https://docs.docker.com/compose/install/) and an [OpenAI API key](https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key).
 
 Install the dependencies:
 
