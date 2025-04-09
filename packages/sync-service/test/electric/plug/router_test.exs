@@ -1612,6 +1612,10 @@ defmodule Electric.Plug.RouterTest do
         []
       )
 
+      # The table will not be automatically added to the publication, however since we have
+      # the table definition cached with old OID and column information, any further shape creation
+      # with where clauses will cause us to run a `ALTER PUBLICATION SET ...` command effectively re-adding
+      # the table. This emulates that behaviour.
       Postgrex.query!(
         db_conn,
         "ALTER PUBLICATION #{publication_name} ADD TABLE droppability_test",
@@ -1621,14 +1625,72 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(db_conn, "INSERT INTO droppability_test (id, value) VALUES (1, 'test')", [])
 
       # 1 sec timeout to make sure we see the change instead of acting as if no changes have been observed
-      assert %{status: 200} = Task.await(task, 1_000)
+      assert %{status: 409} = Task.await(task, 1_000)
 
       assert %{status: 409} =
-               conn =
                conn("GET", "/v1/shape", %{
                  table: "droppability_test",
                  offset: "0_0",
                  handle: shape_handle
+               })
+               |> Router.call(opts)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE droppability_test (id INT PRIMARY KEY, value TEXT NOT NULL)",
+           "INSERT INTO droppability_test (id, value) VALUES (1, 'test')"
+         ]
+    test "recreating the table with a different column set doesn't trigger a failure", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      assert %{status: 200} =
+               conn("GET", "/v1/shape", %{
+                 table: "droppability_test",
+                 offset: "-1"
+               })
+               |> Router.call(opts)
+
+      Postgrex.query!(db_conn, "DROP TABLE droppability_test", [])
+
+      Postgrex.query!(
+        db_conn,
+        "CREATE TABLE droppability_test (id INT PRIMARY KEY, column_other_than_value TEXT NOT NULL)",
+        []
+      )
+
+      assert %{status: 409} =
+               conn("GET", "/v1/shape", %{
+                 table: "droppability_test",
+                 offset: "-1",
+                 where: "value = 'test' AND 2 = 2"
+               })
+               |> Router.call(opts)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE droppability_test (id INT PRIMARY KEY, value INTEGER NOT NULL)",
+           "INSERT INTO droppability_test (id, value) VALUES (1, 1)"
+         ]
+    test "dropping a table doesn't cause a 500", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      assert %{status: 200} =
+               conn("GET", "/v1/shape", %{
+                 table: "droppability_test",
+                 offset: "-1",
+                 where: "id = 1"
+               })
+               |> Router.call(opts)
+
+      Postgrex.query!(db_conn, "DROP TABLE droppability_test", [])
+
+      assert %{status: 409} =
+               conn("GET", "/v1/shape", %{
+                 table: "droppability_test",
+                 offset: "-1",
+                 where: "value + 1 >= 2"
                })
                |> Router.call(opts)
     end

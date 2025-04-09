@@ -388,7 +388,7 @@ defmodule Electric.ShapeCacheTest do
         with_log(fn ->
           {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, opts)
 
-          assert {:error, %Postgrex.Error{postgres: %{code: :undefined_table}}} =
+          assert {:error, %Electric.Shapes.Api.Error{status: 409}} =
                    ShapeCache.await_snapshot_start(shape_handle, opts)
 
           shape_handle
