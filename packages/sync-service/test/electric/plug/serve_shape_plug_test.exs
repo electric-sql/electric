@@ -899,5 +899,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
     StatusMonitor.replication_client_ready(ctx.stack_id)
     StatusMonitor.connection_pool_ready(ctx.stack_id, self())
     StatusMonitor.shape_log_collector_ready(ctx.stack_id)
+    StatusMonitor.wait_for_messages_to_be_processed(ctx.stack_id)
   end
 end

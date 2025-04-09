@@ -89,13 +89,6 @@ defmodule Electric.Shapes.ApiTest do
     set_status_to_active(ctx)
   end
 
-  defp set_status_to_active(ctx) do
-    StatusMonitor.pg_lock_acquired(ctx.stack_id)
-    StatusMonitor.replication_client_ready(ctx.stack_id)
-    StatusMonitor.connection_pool_ready(ctx.stack_id, self())
-    StatusMonitor.shape_log_collector_ready(ctx.stack_id)
-  end
-
   defp max_age(ctx), do: Access.get(ctx, :max_age, 60)
   defp stale_age(ctx), do: Access.get(ctx, :stale_age, 300)
   defp long_poll_timeout(ctx), do: Access.get(ctx, :long_poll_timeout, 20_000)
@@ -1076,5 +1069,13 @@ defmodule Electric.Shapes.ApiTest do
 
       assert response.status == 400
     end
+  end
+
+  defp set_status_to_active(ctx) do
+    StatusMonitor.pg_lock_acquired(ctx.stack_id)
+    StatusMonitor.replication_client_ready(ctx.stack_id)
+    StatusMonitor.connection_pool_ready(ctx.stack_id, self())
+    StatusMonitor.shape_log_collector_ready(ctx.stack_id)
+    StatusMonitor.wait_for_messages_to_be_processed(ctx.stack_id)
   end
 end

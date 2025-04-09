@@ -18,6 +18,7 @@ defmodule Electric.StatusMonitorTest do
     test "when pg_lock_acquired has been received, returns :starting", %{stack_id: stack_id} do
       start_supervised!({StatusMonitor, stack_id})
       StatusMonitor.pg_lock_acquired(stack_id)
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
     end
 
@@ -27,6 +28,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.replication_client_ready(stack_id)
       StatusMonitor.connection_pool_ready(stack_id, self())
       StatusMonitor.shape_log_collector_ready(stack_id)
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :active
     end
 
@@ -35,6 +37,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.pg_lock_acquired(stack_id)
       StatusMonitor.connection_pool_ready(stack_id, self())
       StatusMonitor.shape_log_collector_ready(stack_id)
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
     end
 
@@ -43,6 +46,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.pg_lock_acquired(stack_id)
       StatusMonitor.replication_client_ready(stack_id)
       StatusMonitor.shape_log_collector_ready(stack_id)
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
     end
 
@@ -51,6 +55,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.pg_lock_acquired(stack_id)
       StatusMonitor.connection_pool_ready(stack_id, self())
       StatusMonitor.replication_client_ready(stack_id)
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
     end
 
@@ -76,6 +81,7 @@ defmodule Electric.StatusMonitorTest do
 
       StatusMonitor.replication_client_ready(stack_id)
       StatusMonitor.shape_log_collector_ready(stack_id)
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :active
 
       send(process.pid, :exit)
@@ -84,6 +90,7 @@ defmodule Electric.StatusMonitorTest do
       assert StatusMonitor.status(stack_id) == :starting
 
       StatusMonitor.connection_pool_ready(stack_id, self())
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :active
     end
   end
@@ -120,7 +127,7 @@ defmodule Electric.StatusMonitorTest do
     receive do
       {:DOWN, _, :process, ^pid, _} -> :process_killed
     after
-      500 -> raise "#{pid} process not killed"
+      500 -> raise "#{inspect(pid)} process not killed"
     end
   end
 end

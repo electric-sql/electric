@@ -60,7 +60,7 @@ defmodule Electric.StatusMonitor do
   end
 
   defp condition_met(stack_id, condition, process) do
-    GenServer.call(name(stack_id), {:condition_met, condition, process})
+    GenServer.cast(name(stack_id), {:condition_met, condition, process})
   end
 
   def wait_until_active(stack_id, timeout \\ 60_000) do
@@ -81,11 +81,11 @@ defmodule Electric.StatusMonitor do
     GenServer.call(name(stack_id), :wait_for_messages_to_be_processed)
   end
 
-  def handle_call({:condition_met, condition, process}, _from, state)
+  def handle_cast({:condition_met, condition, process}, state)
       when condition in @conditions do
     Process.monitor(process)
     :ets.insert(ets_table(state.stack_id), {condition, process})
-    {:reply, :ok, maybe_reply_to_waiters(state)}
+    {:noreply, maybe_reply_to_waiters(state)}
   end
 
   def handle_call(:wait_until_active, from, %{waiters: waiters} = state) do
