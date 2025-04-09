@@ -40,7 +40,7 @@ post: true
   }
 </style>
 
-AI apps are inherantly collaborative. Building them requires solving [resumeability](#resumeability), [interruptability](#interruptability), [multi&#8209;device](#multi-device) and [multi&#8209;user](#multi-user).
+AI apps are inherently collaborative. Building them requires solving [resumeability](#resumeability), [interruptability](#interruptability), [multi&#8209;device](#multi-device) and [multi&#8209;user](#multi-user).
 
 These are not edge-cases. They're core to [user <-> agent collaboration](#collaboration) and the new world of [multi&#8209;step, task&#8209;and&#8209;review workflows](#multi-step-workflows). They're also [key growth hacks](#unlocking-adoption) for products looking to replace current-generation SaaS and enteprise software.
 
