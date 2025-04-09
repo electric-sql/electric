@@ -11,9 +11,15 @@
           target="_blank"
       />
     </div>
+    <div class="action" v-if="demo.blog_post_url">
+      <VPButton :href="demo.blog_post_url"
+          :theme="demo.deployed_url ? 'alt' : 'brand'"
+          text="Blog post"
+      />
+    </div>
     <div class="action" v-if="demo.source_url">
       <VPButton :href="demo.source_url"
-          :theme="demo.deployed_url ? 'alt' : 'brand'"
+          :theme="(demo.deployed_url || demo.blog_post_url) ? 'alt' : 'brand'"
           text="View on GitHub"
           target="_blank"
       />
