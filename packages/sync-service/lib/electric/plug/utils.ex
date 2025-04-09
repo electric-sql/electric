@@ -157,7 +157,6 @@ defmodule Electric.Plug.Utils do
       do:
         conn
         |> put_resp_header("access-control-allow-origin", get_allowed_origin(conn, opts))
-
         |> put_resp_header(
           "access-control-expose-headers",
           "electric-cursor, electric-handle, electric-offset, electric-schema, electric-up-to-date"
