@@ -13,8 +13,6 @@ onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {
     let links = document.querySelectorAll('.cloud-cta a.VPButton.brand')
 
-    console.log('links', links)
-
     links.forEach((link) => {
       if (link.querySelector('span.vpi-electric-icon')) {
         return
@@ -144,8 +142,20 @@ export async function GET(req: Request) {
 
 ### Pricing
 
-Electric Cloud is free while we work on pricing. We'll be launching pricing in the next month or two (May/June 2025). There'll always be generous free tier. If you plan to use Electric in a larger app (1000+ MAU) please reach out to make sure we can fully support you & to get a sense of what pricing will be like.
+Electric Cloud is currently free in public BETA. We'll be launching low-cost, usage-based pricing soon (likely by the end of June 2025).
+
+Electric Cloud will always provide a generous free tier, so many apps will roll over with zero cost. If your plan is to use Electric in a larger app (more than 1,000 monthly active users) please reach out to make sure we can fully support you and to get a sense of what the future pricing will be like.
 
 ### Support
 
-Let us know if you have any questions. We'll be very happy to help. Email us at support@electric-sql.com
+Let us know if you have any questions. We'll be very happy to help. You can ask questions on [Discord](https://discord.electric-sql.com) or email us directly at [support@electric-sql.com](mailto:support@electric-sql.com).
+
+<div class="actions cta-actions page-footer-actions left">
+  <div class="action cloud-cta">
+    <VPButton
+        href="/product/cloud/sign-up"
+        text="Sign-up for Cloud"
+        theme="brand"
+    />
+  </div>
+</div>
