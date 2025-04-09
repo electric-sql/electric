@@ -1,5 +1,5 @@
 ---
-title: Building AI apps? You need sync.
+title: Building AI apps? You need sync
 description: >-
   AI apps are collaborative. Building them requires solving resumeability,
   interruptability, multi‑tab, multi‑device and multi‑user.

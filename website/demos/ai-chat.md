@@ -40,6 +40,6 @@ It demonstrates:
   </video>
 </figure>
 
-See the [Building AI apps? You need sync.](/blog/2025/04/09/building-ai-apps-on-sync) blog post for more details.
+See the [Building AI apps? You need sync](/blog/2025/04/09/building-ai-apps-on-sync) blog post for more details.
 
 <DemoCTAs :demo="$frontmatter" />
