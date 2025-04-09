@@ -3,6 +3,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
   alias Electric.Plug.DeleteShapePlug
   alias Electric.Shapes.Shape
+  alias Electric.StatusMonitor
 
   import Support.ComponentSetup
   alias Support.Mock
@@ -60,7 +61,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   setup :with_persistent_kv
 
   describe "DeleteShapePlug" do
-    setup :with_stack_id_from_test
+    setup [:with_stack_id_from_test, :with_status_monitor]
 
     setup ctx do
       start_link_supervised!({Registry, keys: :duplicate, name: @registry})
@@ -69,6 +70,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         Electric.Replication.Supervisor.name(ctx)
 
       {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      set_status_to_active(ctx)
 
       :ok
     end
@@ -153,7 +155,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   end
 
   describe "stack not ready" do
-    setup :with_stack_id_from_test
+    setup [:with_stack_id_from_test, :with_status_monitor]
 
     test "returns 503", ctx do
       conn =
@@ -165,5 +167,12 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == %{"message" => "Stack not ready"}
     end
+  end
+
+  defp set_status_to_active(ctx) do
+    StatusMonitor.pg_lock_acquired(ctx.stack_id)
+    StatusMonitor.replication_client_ready(ctx.stack_id)
+    StatusMonitor.connection_pool_ready(ctx.stack_id, self())
+    StatusMonitor.shape_log_collector_ready(ctx.stack_id)
   end
 end

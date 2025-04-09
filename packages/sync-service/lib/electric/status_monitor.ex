@@ -67,7 +67,12 @@ defmodule Electric.StatusMonitor do
     if status(stack_id) == :active do
       :ok
     else
-      GenServer.call(name(stack_id), :wait_until_active, timeout)
+      try do
+        GenServer.call(name(stack_id), :wait_until_active, timeout)
+      catch
+        :exit, {:timeout, _} ->
+          {:error, :timeout}
+      end
     end
   end
 
