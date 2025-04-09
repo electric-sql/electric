@@ -58,14 +58,21 @@ defmodule Electric.StatusMonitorTest do
       start_supervised!({StatusMonitor, stack_id})
       StatusMonitor.pg_lock_acquired(stack_id)
 
+      test_process = self()
+
       process =
         Task.async(fn ->
           StatusMonitor.connection_pool_ready(stack_id, self())
+          send(test_process, :ready)
 
           receive do
             :exit -> :ok
           end
         end)
+
+      receive do
+        :ready -> :ok
+      end
 
       StatusMonitor.replication_client_ready(stack_id)
       StatusMonitor.shape_log_collector_ready(stack_id)
@@ -111,7 +118,7 @@ defmodule Electric.StatusMonitorTest do
     Process.exit(pid, :kill)
 
     receive do
-      {:DOWN, _, :process, ^pid, :killed} -> :process_killed
+      {:DOWN, _, :process, ^pid, _} -> :process_killed
     after
       500 -> raise "#{pid} process not killed"
     end
