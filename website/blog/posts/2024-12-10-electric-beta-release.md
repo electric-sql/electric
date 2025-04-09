@@ -13,6 +13,7 @@ image: /img/blog/electric-beta-release/header.jpg
 tags: [release]
 outline: [2, 3]
 post: true
+homepage: false
 ---
 
 <script setup>
