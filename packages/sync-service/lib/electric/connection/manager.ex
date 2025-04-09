@@ -63,7 +63,6 @@ defmodule Electric.Connection.Manager do
       :stack_events_registry,
       :tweaks,
       :persistent_kv,
-      awaiting_active: [],
       drop_slot_requested: false,
       monitoring_started?: false
     ]
@@ -115,16 +114,6 @@ defmodule Electric.Connection.Manager do
   @spec get_pg_version(GenServer.server()) :: integer()
   def get_pg_version(server) do
     GenServer.call(server, :get_pg_version)
-  end
-
-  @doc """
-  Only returns once the status is `:active`.
-  If the status is alredy active it returns immediately.
-  This is useful if you need to the connection pool to be running before proceeding.
-  """
-  @spec await_active(GenServer.server()) :: :ok
-  def await_active(server) do
-    GenServer.call(server, :await_active)
   end
 
   def drop_replication_slot_on_stop(server) do
@@ -196,14 +185,6 @@ defmodule Electric.Connection.Manager do
     # If we haven't queried the PG version by the time it is requested, that's a fatal error.
     false = is_nil(pg_version)
     {:reply, pg_version, state}
-  end
-
-  def handle_call(:await_active, from, %State{pool_pid: nil} = state) do
-    {:noreply, %State{state | awaiting_active: [from | state.awaiting_active]}}
-  end
-
-  def handle_call(:await_active, _from, state) do
-    {:reply, :ok, state}
   end
 
   def handle_call(:drop_replication_slot_on_stop, _from, state) do
@@ -344,11 +325,7 @@ defmodule Electric.Connection.Manager do
             monitoring_started?: true
         }
 
-        for awaiting <- state.awaiting_active do
-          GenServer.reply(awaiting, :ok)
-        end
-
-        {:noreply, %State{state | awaiting_active: []}}
+        {:noreply, state}
 
       {:error, reason} ->
         handle_connection_error(reason, state, "regular")
