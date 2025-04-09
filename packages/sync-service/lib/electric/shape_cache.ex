@@ -63,7 +63,11 @@ defmodule Electric.ShapeCache do
               default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/7
             ],
             purge_all_shapes?: [type: :boolean, required: false],
-            max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil]
+            max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
+            recover_shape_timeout: [
+              type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
+              default: 5_000
+            ]
           )
 
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
@@ -90,10 +94,7 @@ defmodule Electric.ShapeCache do
       GenServer.start_link(
         __MODULE__,
         Map.new(opts) |> Map.put(:db_pool, db_pool) |> Map.put(:name, name),
-        name: name,
-        # allow extra time for shape cache to initialise as it needs to
-        # restore existing shapes
-        timeout: Keyword.get(opts, :timeout, 20_000)
+        name: name
       )
     end
   end
@@ -227,7 +228,7 @@ defmodule Electric.ShapeCache do
         clean_up_all_shapes(state)
         Lsn.from_integer(0)
       else
-        recover_shapes(state)
+        recover_shapes(state, opts[:recover_shape_timeout])
       end
 
     # ensure publication filters are in line with existing shapes,
@@ -242,6 +243,7 @@ defmodule Electric.ShapeCache do
         reraise error, __STACKTRACE__
     catch
       :exit, reason ->
+        dbg(reason)
         clean_up_all_shapes(state)
         exit(reason)
     end
@@ -358,9 +360,7 @@ defmodule Electric.ShapeCache do
       # clean itself - this is not guaranteed to run in case of an actual exit
       # but provides an additional safeguard
 
-      shape_handle
-      |> Electric.ShapeCache.Storage.for_shape(state.storage)
-      |> Electric.ShapeCache.Storage.unsafe_cleanup!()
+      unsafe_cleanup_shape!(shape_handle, state)
     end
 
     :ok
@@ -375,32 +375,59 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  defp recover_shapes(state) do
-    %{publication_manager: {publication_manager, publication_manager_opts}} = state
-
+  defp recover_shapes(state, timeout) do
     state.shape_status_state
     |> state.shape_status.list_shapes()
     |> Enum.flat_map(fn {shape_handle, shape} ->
-      try do
-        {:ok, latest_offset} = start_shape(shape_handle, shape, state)
-
-        # recover publication filter state
-        publication_manager.recover_shape(shape, publication_manager_opts)
-        [LogOffset.extract_lsn(latest_offset)]
-      catch
-        kind, reason when kind in [:exit, :error] ->
-          Logger.error(
-            "Failed to recover shape #{shape_handle}: #{Exception.format(kind, reason, __STACKTRACE__)}"
-          )
-
-          # clean up corrupted data to avoid persisting bad state
-          Electric.ShapeCache.Storage.for_shape(shape_handle, state.storage)
-          |> Electric.ShapeCache.Storage.unsafe_cleanup!()
-
-          []
-      end
+      start_shape_with_timeout(shape_handle, shape, state, timeout)
     end)
     |> Lsn.max()
+  end
+
+  # the shape cache loads existing shapes within its init/1 callback
+  # which is useful because we know that when the start_link call on the
+  # stack completes the system is fully booted and all shape consumers are
+  # running.
+  #
+  # rather than set a global timeout for the `init/1` function we leave the
+  # `start_link/1` timeout as `:infinity` and instead have a timeout for every
+  # shape
+  defp start_shape_with_timeout(shape_handle, shape, state, timeout) do
+    task = Task.async(fn -> start_and_recover_shape(shape_handle, shape, state) end)
+
+    # since we catch errors in the task we don't need to handle the error state here
+    case Task.yield(task, timeout) || Task.shutdown(task) do
+      {:ok, lsn} ->
+        lsn
+
+      nil ->
+        unsafe_cleanup_shape!(shape_handle, state)
+
+        Logger.error(
+          "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
+        )
+
+        []
+    end
+  end
+
+  defp start_and_recover_shape(shape_handle, shape, state) do
+    %{publication_manager: {publication_manager, publication_manager_opts}} = state
+
+    {:ok, latest_offset} = start_shape(shape_handle, shape, state)
+
+    # recover publication filter state
+    publication_manager.recover_shape(shape, publication_manager_opts)
+    [LogOffset.extract_lsn(latest_offset)]
+  catch
+    kind, reason when kind in [:exit, :error] ->
+      Logger.error(
+        "Failed to recover shape #{shape_handle}: #{Exception.format(kind, reason, __STACKTRACE__)}"
+      )
+
+      # clean up corrupted data to avoid persisting bad state
+      unsafe_cleanup_shape!(shape_handle, state)
+      []
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
@@ -426,6 +453,12 @@ defmodule Electric.ShapeCache do
       {:ok, latest_offset} = Shapes.Consumer.initial_state(consumer)
       {:ok, latest_offset}
     end
+  end
+
+  defp unsafe_cleanup_shape!(shape_handle, state) do
+    shape_handle
+    |> Electric.ShapeCache.Storage.for_shape(state.storage)
+    |> Electric.ShapeCache.Storage.unsafe_cleanup!()
   end
 
   def get_shape_meta_table(opts),
