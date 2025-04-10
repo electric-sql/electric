@@ -108,9 +108,7 @@ defmodule Electric.StatusMonitor do
   end
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
-    for {condition, ^pid} <- :ets.tab2list(ets_table(state.stack_id)) do
-      true = :ets.delete(ets_table(state.stack_id), condition)
-    end
+    :ets.match_delete(ets_table(state.stack_id), {:_, pid})
 
     {:noreply, state}
   end
