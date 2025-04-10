@@ -6,7 +6,8 @@ defmodule Electric.Plug.HealthCheckPlug do
 
   plug :fetch_query_params
   plug :check_service_status
-  plug :put_relevant_headers
+  plug :put_resp_content_type, "application/json"
+  plug :put_cache_headers
   plug :send_response
 
   # Match service status to a status code and status message,
@@ -23,10 +24,8 @@ defmodule Electric.Plug.HealthCheckPlug do
     conn |> assign(:status_text, status_text) |> assign(:status_code, status_code)
   end
 
-  defp put_relevant_headers(conn, _) do
-    conn
-    |> put_resp_header("content-type", "application/json")
-    |> put_resp_header("cache-control", "no-cache, no-store, must-revalidate")
+  defp put_cache_headers(conn, _) do
+    put_resp_header(conn, "cache-control", "no-cache, no-store, must-revalidate")
   end
 
   defp send_response(%Conn{assigns: assigns} = conn, _) do

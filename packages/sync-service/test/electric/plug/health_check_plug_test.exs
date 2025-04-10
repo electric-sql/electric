@@ -32,7 +32,7 @@ defmodule Electric.Plug.HealthCheckPlugTest do
         conn(ctx)
         |> HealthCheckPlug.call([])
 
-      assert Conn.get_resp_header(conn, "content-type") == ["application/json"]
+      assert Conn.get_resp_header(conn, "content-type") == ["application/json; charset=utf-8"]
 
       assert Conn.get_resp_header(conn, "cache-control") == [
                "no-cache, no-store, must-revalidate"
