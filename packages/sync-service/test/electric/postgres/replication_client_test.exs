@@ -26,17 +26,30 @@ defmodule Electric.Postgres.ReplicationClientTest do
   # slow on CI/Docker etc
   @assert_receive_db_timeout 1000
 
+  defmodule MockConnectionManager do
+    def receive_casts(test_pid) do
+      receive do
+        message ->
+          if response = process_message(message) do
+            send(test_pid, response)
+          end
+
+          receive_casts(test_pid)
+      end
+    end
+
+    defp process_message({:"$gen_cast", :replication_connection_initializing}), do: nil
+    defp process_message({:"$gen_cast", {:pg_info_looked_up, _}}), do: nil
+
+    defp process_message({:"$gen_cast", :replication_connection_established}),
+      do: {self(), :ready_to_stream}
+  end
+
   setup do
     # Spawn a dummy process to serve as the black hole for the messages that
     # ReplicationClient normally sends to Connection.Manager.
-    pid =
-      spawn_link(fn ->
-        receive do
-          _ -> :ok
-        end
-      end)
-
-    %{dummy_pid: pid}
+    pid = spawn_link(MockConnectionManager, :receive_casts, [self()])
+    %{connection_manager: pid}
   end
 
   setup :with_stack_id_from_test
@@ -45,7 +58,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
     setup [:with_unique_db, :with_basic_tables, :with_status_monitor]
 
     test "creates an empty publication on startup if requested",
-         %{db_conn: conn, dummy_pid: dummy_pid} = ctx do
+         %{db_conn: conn, connection_manager: connection_manager} = ctx do
       replication_opts = [
         connection_opts: ctx.db_config,
         stack_id: ctx.stack_id,
@@ -54,7 +67,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
         slot_name: @slot_name,
         transaction_received: nil,
         relation_received: nil,
-        connection_manager: dummy_pid
+        connection_manager: connection_manager
       ]
 
       start_client(ctx, replication_opts: replication_opts)
@@ -118,7 +131,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
     end
 
     test "works with an existing replication slot", %{db_conn: conn} = ctx do
-      {:ok, pid} = start_client(ctx)
+      pid = start_client(ctx)
 
       assert %{
                "slot_name" => @slot_name,
@@ -141,7 +154,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
     end
 
     test "can replay already seen transaction", %{db_conn: conn} = ctx do
-      {:ok, pid} = start_client(ctx)
+      pid = start_client(ctx)
 
       insert_item(conn, "test value")
       assert %NewRecord{record: %{"value" => "test value"}} = receive_tx_change()
@@ -366,7 +379,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
         publication_name: "",
         try_creating_publication?: false,
         slot_name: "",
-        connection_manager: ctx.dummy_pid
+        connection_manager: ctx.connection_manager
       )
 
     state = %{state | applied_wal: lsn_to_wal("0/0")}
@@ -394,7 +407,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
         slot_name: @slot_name,
         transaction_received: {__MODULE__, :test_transaction_received, [self()]},
         relation_received: {__MODULE__, :test_relation_received, [self()]},
-        connection_manager: ctx.dummy_pid
+        connection_manager: ctx.connection_manager
       ]
     }
   end
@@ -475,10 +488,16 @@ defmodule Electric.Postgres.ReplicationClientTest do
   defp start_client(ctx, overrides \\ []) do
     ctx = Enum.into(overrides, ctx)
 
-    {:ok, _pid} =
+    {:ok, client_pid} =
       ReplicationClient.start_link(
         stack_id: ctx.stack_id,
         replication_opts: ctx.replication_opts
       )
+
+    conn_mgr = ctx.connection_manager
+    assert_receive {^conn_mgr, :ready_to_stream}, @assert_receive_db_timeout
+    ReplicationClient.start_streaming(client_pid)
+
+    client_pid
   end
 end

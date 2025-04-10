@@ -34,7 +34,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   def process_query_result(result, %{step: step} = state) do
     state = dispatch_query_result(step, result, state)
     next_step = next_step(state)
-    query_for_step(next_step, %{state | step: next_step})
+    {next_step, query_for_step(next_step, %{state | step: next_step})}
   end
 
   # Instruct `Postgrex.ReplicationConnection` to switch the connection into the logical
