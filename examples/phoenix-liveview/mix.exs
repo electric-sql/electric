@@ -56,8 +56,21 @@ defmodule Electric.PhoenixExample.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.1.1"},
       {:bandit, "~> 1.5"},
-      {:electric_phoenix, "~> 0.2.0"},
-      {:electric_client, ">= 0.2.6-pre-1", override: true}
+      {:phoenix_sync, "== 0.3.4"}
+    ] ++ deps_for_env(Mix.env())
+  end
+
+  defp deps_for_env(:test) do
+    # use local electric and electric_client for tests
+    [
+      {:electric, path: "../../packages/sync-service", only: [:test], override: true},
+      {:electric_client, path: "../../packages/elixir-client", only: [:test], override: true}
+    ]
+  end
+
+  defp deps_for_env(_) do
+    [
+      {:electric, "== 1.0.1"}
     ]
   end
 
