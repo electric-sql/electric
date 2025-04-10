@@ -97,16 +97,17 @@ defmodule Electric.StatusMonitorTest do
 
   describe "wait_until_active/2" do
     test "waits until all conditions are met", %{stack_id: stack_id} do
+      test_process = self()
+
+      Task.async(fn ->
+        assert StatusMonitor.wait_until_active(stack_id, 100) == :ok
+        send(test_process, :active)
+      end)
+
       start_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
-      test_process = self()
-
-      Task.async(fn ->
-        StatusMonitor.wait_until_active(stack_id)
-        send(test_process, :active)
-      end)
 
       refute_receive :active, 20
       assert StatusMonitor.mark_shape_log_collector_ready(stack_id, self()) == :ok
@@ -115,6 +116,10 @@ defmodule Electric.StatusMonitorTest do
 
     test "returns error on timeout", %{stack_id: stack_id} do
       start_supervised!({StatusMonitor, stack_id})
+      assert StatusMonitor.wait_until_active(stack_id, 1) == {:error, :timeout}
+    end
+
+    test "returns error on timeout when status monitor is not present", %{stack_id: stack_id} do
       assert StatusMonitor.wait_until_active(stack_id, 1) == {:error, :timeout}
     end
   end

@@ -64,7 +64,9 @@ defmodule Electric.StatusMonitor do
     GenServer.cast(name(stack_id), {:condition_met, condition, process})
   end
 
-  def wait_until_active(stack_id, timeout \\ 60_000) do
+  def wait_until_active(_stack_id, timeout) when timeout <= 0, do: {:error, :timeout}
+
+  def wait_until_active(stack_id, timeout) do
     if status(stack_id) == :active do
       :ok
     else
@@ -73,6 +75,10 @@ defmodule Electric.StatusMonitor do
       catch
         :exit, {:timeout, _} ->
           {:error, :timeout}
+
+        :exit, {:noproc, _} ->
+          Process.sleep(10)
+          wait_until_active(stack_id, timeout - 10)
       end
     end
   end
