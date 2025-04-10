@@ -22,7 +22,7 @@
 </script>
 
 <template>
-  <Section :actions="actions">
+  <Section :actions="actions" id="solves-sync-section">
     <template #title>
       Electric solves sync
     </template>
