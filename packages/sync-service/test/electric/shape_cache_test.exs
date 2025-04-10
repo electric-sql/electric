@@ -987,17 +987,50 @@ defmodule Electric.ShapeCacheTest do
       assert shape_handle1 != shape_handle2
     end
 
-    defp restart_shape_cache(context) do
+    defmodule SlowPublicationManager do
+      def refresh_publication(_), do: :ok
+      def remove_shape(_, _), do: :ok
+      def recover_shape(_, _), do: Process.sleep(100)
+    end
+
+    test "deletes shapes that fail to initialise within a timeout", ctx do
+      %{shape_cache_opts: opts} = ctx
+
+      {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
+
+      Mock.Storage
+      |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, [{shape_handle1, @shape}]} end)
+      |> stub(:for_shape, fn handle, _opts -> {:storage, handle} end)
+      |> expect(:unsafe_cleanup!, 1, fn {:storage, ^shape_handle1} ->
+        :ok
+      end)
+      |> allow(self(), fn -> Process.whereis(opts[:server]) end)
+
+      restart_shape_cache(
+        %{
+          ctx
+          | publication_manager: {SlowPublicationManager, []},
+            storage: {Mock.Storage, []}
+        },
+        recover_shape_timeout: 10
+      )
+    end
+
+    defp restart_shape_cache(context, opts \\ []) do
       stop_shape_cache(context)
 
       context = Map.merge(context, with_shape_log_collector(context))
 
-      with_shape_cache(Map.put(context, :inspector, @stub_inspector),
-        create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
-          GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-          Storage.make_new_snapshot!([["test"]], storage)
-          GenServer.cast(parent, {:snapshot_started, shape_handle})
-        end
+      with_shape_cache(
+        Map.put(context, :inspector, @stub_inspector),
+        Keyword.merge(opts,
+          create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
+            GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
+            Storage.make_new_snapshot!([["test"]], storage)
+            GenServer.cast(parent, {:snapshot_started, shape_handle})
+          end
+        )
       )
     end
 
