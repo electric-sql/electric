@@ -243,7 +243,6 @@ defmodule Electric.ShapeCache do
         reraise error, __STACKTRACE__
     catch
       :exit, reason ->
-        dbg(reason)
         clean_up_all_shapes(state)
         exit(reason)
     end
