@@ -3,8 +3,10 @@ import { createNeonDb, getNeonConnectionString } from './neon'
 
 async function addDatabaseToElectric({
   dbUri,
+  pooledDbUri,
 }: {
   dbUri: string
+  pooledDbUri?: string
 }): Promise<{ id: string; source_secret: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
   const teamId = process.env.ELECTRIC_TEAM_ID
@@ -28,6 +30,10 @@ async function addDatabaseToElectric({
     },
     body: JSON.stringify({
       database_url: dbUri,
+      source_options: {
+        db_pool_size: 5,
+        ...(pooledDbUri ? { pooledDbUri } : {}),
+      },
       region: `us-east-1`,
       team_id: teamId,
     }),
@@ -92,8 +98,8 @@ export function createDatabaseForCloudElectric({
     databaseUri.apply((uri) => applyMigrations(uri, migrationsDirectory))
   }
 
-  const electricInfo = databaseUri.apply((dbUri) =>
-    addDatabaseToElectric({ dbUri })
+  const electricInfo = $resolve([databaseUri, pooledDatabaseUri]).apply(
+    ([dbUri, pooledDbUri]) => addDatabaseToElectric({ dbUri, pooledDbUri })
   )
 
   return {
