@@ -114,7 +114,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
         :ok
       end)
 
-      {:ok, client_pid} = start_client(ctx)
+      client_pid = start_client(ctx)
       Repatch.allow(self(), client_pid)
 
       assert Repatch.called?(
