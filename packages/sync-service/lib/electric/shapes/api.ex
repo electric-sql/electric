@@ -105,7 +105,9 @@ defmodule Electric.Shapes.Api do
   def plug_opts(opts) do
     {api, config} = configure(opts)
 
-    Keyword.put(config, :api, api)
+    config
+    |> Keyword.put(:api, api)
+    |> Keyword.put(:stack_id, api.stack_id)
   end
 
   defp validate_encoder!(%Api{} = api) do
