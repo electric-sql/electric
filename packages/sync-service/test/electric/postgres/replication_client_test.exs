@@ -97,10 +97,19 @@ defmodule Electric.Postgres.ReplicationClientTest do
     end
 
     test "notifies the StatusMonitor when it is ready", ctx do
-      Repatch.patch(StatusMonitor, :replication_client_ready, [mode: :shared], fn _ -> :ok end)
-      {:ok, pid} = start_client(ctx)
-      Repatch.allow(self(), pid)
-      assert Repatch.called?(StatusMonitor, :replication_client_ready, [ctx.stack_id], by: :any)
+      Repatch.patch(StatusMonitor, :mark_replication_client_ready, [mode: :shared], fn _, _ ->
+        :ok
+      end)
+
+      {:ok, client_pid} = start_client(ctx)
+      Repatch.allow(self(), client_pid)
+
+      assert Repatch.called?(
+               StatusMonitor,
+               :mark_replication_client_ready,
+               [ctx.stack_id, client_pid],
+               by: :any
+             )
     end
 
     test "works with an existing publication", %{replication_opts: replication_opts} = ctx do

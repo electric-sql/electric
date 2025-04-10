@@ -147,7 +147,7 @@ defmodule Electric.Postgres.ReplicationClient do
     state = State.new(replication_opts)
     Logger.metadata(stack_id: state.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: state.stack_id)
-    Electric.StatusMonitor.replication_client_ready(state.stack_id)
+    Electric.StatusMonitor.mark_replication_client_ready(state.stack_id, self())
 
     {:ok, state}
   end

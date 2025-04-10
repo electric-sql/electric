@@ -52,7 +52,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     ]
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
-    Repatch.patch(StatusMonitor, :shape_log_collector_ready, [mode: :shared], fn _ -> :ok end)
+
+    Repatch.patch(StatusMonitor, :mark_shape_log_collector_ready, [mode: :shared], fn _, _ ->
+      :ok
+    end)
+
     Repatch.allow(self(), pid)
 
     Mock.ShapeStatus
@@ -301,7 +305,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     ]
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
-    Repatch.patch(StatusMonitor, :shape_log_collector_ready, [mode: :shared], fn _ -> :ok end)
+
+    Repatch.patch(StatusMonitor, :mark_shape_log_collector_ready, [mode: :shared], fn _, _ ->
+      :ok
+    end)
+
     Repatch.allow(self(), pid)
 
     Mock.Inspector
@@ -361,12 +369,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   end
 
   test "notifies the StatusMonitor when it's ready", ctx do
-    setup_log_collector(ctx)
+    ctx = Map.merge(ctx, setup_log_collector(ctx))
 
     assert RepatchExt.called_within_ms?(
              StatusMonitor,
-             :shape_log_collector_ready,
-             [ctx.stack_id],
+             :mark_shape_log_collector_ready,
+             [ctx.stack_id, ctx.server],
              100
            )
   end

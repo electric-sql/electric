@@ -97,7 +97,7 @@ defmodule Electric.Postgres.LockConnection do
   end
 
   defp notify_lock_acquired(%State{connection_manager: connection_manager} = state) do
-    Electric.StatusMonitor.pg_lock_acquired(state.stack_id)
+    Electric.StatusMonitor.mark_pg_lock_acquired(state.stack_id, self())
     Electric.Connection.Manager.exclusive_connection_lock_acquired(connection_manager)
   end
 

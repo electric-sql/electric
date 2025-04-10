@@ -132,7 +132,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   def handle_call({:start_processing, lsn}, _from, state) do
     LsnTracker.init(lsn, state.stack_id)
     GenStage.demand(self(), :forward)
-    Electric.StatusMonitor.shape_log_collector_ready(state.stack_id)
+    Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
     {:reply, :ok, [], Map.put(state, :last_processed_lsn, lsn)}
   end
 

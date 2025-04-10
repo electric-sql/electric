@@ -44,23 +44,23 @@ defmodule Electric.StatusMonitor do
     end
   end
 
-  def pg_lock_acquired(stack_id) do
-    condition_met(stack_id, :pg_lock_acquired, self())
+  def mark_pg_lock_acquired(stack_id, lock_pid) do
+    mark_condition_met(stack_id, :pg_lock_acquired, lock_pid)
   end
 
-  def replication_client_ready(stack_id) do
-    condition_met(stack_id, :replication_client_ready, self())
+  def mark_replication_client_ready(stack_id, client_pid) do
+    mark_condition_met(stack_id, :replication_client_ready, client_pid)
   end
 
-  def connection_pool_ready(stack_id, pool_pid) do
-    condition_met(stack_id, :connection_pool_ready, pool_pid)
+  def mark_connection_pool_ready(stack_id, pool_pid) do
+    mark_condition_met(stack_id, :connection_pool_ready, pool_pid)
   end
 
-  def shape_log_collector_ready(stack_id) do
-    condition_met(stack_id, :shape_log_collector_ready, self())
+  def mark_shape_log_collector_ready(stack_id, collector_pid) do
+    mark_condition_met(stack_id, :shape_log_collector_ready, collector_pid)
   end
 
-  defp condition_met(stack_id, condition, process) do
+  defp mark_condition_met(stack_id, condition, process) do
     GenServer.cast(name(stack_id), {:condition_met, condition, process})
   end
 
