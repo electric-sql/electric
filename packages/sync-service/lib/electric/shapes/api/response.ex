@@ -6,15 +6,14 @@ defmodule Electric.Shapes.Api.Response do
 
   require Logger
 
-  # Define Electric headers as module attributes
   @electric_cursor_header "electric-cursor"
   @electric_handle_header "electric-handle"
   @electric_offset_header "electric-offset"
   @electric_schema_header "electric-schema"
   @electric_up_to_date_header "electric-up-to-date"
 
-  # List of all Electric headers that need to be exposed for CORS
-  @electric_headers_to_expose [
+  # List of all Electric-specific headers that may be included in API responses
+  @electric_headers [
     @electric_cursor_header,
     @electric_handle_header,
     @electric_offset_header,
@@ -324,11 +323,5 @@ defmodule Electric.Shapes.Api.Response do
     end
   end
 
-  @doc """
-  Returns a comma-separated list of all Electric headers that need to be exposed for CORS.
-  This is used by the CORSHeaderPlug to set the Access-Control-Expose-Headers header.
-  """
-  def access_control_expose_headers do
-    Enum.join(@electric_headers_to_expose, ", ")
-  end
+  def electric_headers, do: @electric_headers
 end

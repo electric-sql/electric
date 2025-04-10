@@ -157,10 +157,7 @@ defmodule Electric.Plug.Utils do
       do:
         conn
         |> put_resp_header("access-control-allow-origin", get_allowed_origin(conn, opts))
-        |> put_resp_header(
-          "access-control-expose-headers",
-          Electric.Shapes.Api.Response.access_control_expose_headers()
-        )
+        |> put_resp_header("access-control-expose-headers", headers_to_expose())
         |> put_resp_header("access-control-allow-methods", get_allowed_methods(conn, opts))
 
     defp get_allowed_methods(_conn, opts), do: Access.get(opts, :methods, []) |> Enum.join(", ")
@@ -174,6 +171,10 @@ defmodule Electric.Plug.Utils do
           [] -> "*"
         end
       )
+    end
+
+    defp headers_to_expose do
+      Enum.join(Electric.Shapes.Api.Response.electric_headers(), ",")
     end
   end
 
