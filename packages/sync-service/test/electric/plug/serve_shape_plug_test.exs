@@ -323,6 +323,38 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
     end
 
+    test "sets correct CORS headers for Access-Control-Expose-Headers", ctx do
+      Mock.ShapeCache
+      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
+        {@test_shape_handle, @test_offset}
+      end)
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      |> expect(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
+        @first_offset
+      end)
+      |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
+        []
+      end)
+
+      conn =
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+        # Apply the CORS headers manually since we're not going through the router
+        |> Electric.Plug.Router.put_cors_headers([])
+        |> call_serve_shape_plug(ctx)
+
+      # Verify that all Electric headers are included in the response
+      assert [expose_header] = get_resp_header(conn, "access-control-expose-headers")
+      exposed_headers_in_response = String.split(expose_header, ",")
+
+      assert Enum.sort(exposed_headers_in_response) ==
+               Enum.sort(Electric.Shapes.Api.Response.electric_headers())
+    end
+
     test "invalid response specifies it should not be cached", ctx do
       conn =
         ctx
