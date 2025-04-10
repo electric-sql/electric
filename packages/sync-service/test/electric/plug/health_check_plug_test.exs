@@ -14,7 +14,7 @@ defmodule Electric.Plug.HealthCheckPlugTest do
   setup :with_stack_id_from_test
 
   def conn(ctx) do
-    config = [api: %{stack_id: ctx[:stack_id]}]
+    config = [stack_id: ctx[:stack_id]]
 
     Repatch.patch(StatusMonitor, :status, [mode: :shared], fn stack_id ->
       assert stack_id == ctx[:stack_id]

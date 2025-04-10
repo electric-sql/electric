@@ -15,7 +15,7 @@ defmodule Electric.Plug.HealthCheckPlug do
   # of the status to ensure the API is stable
   defp check_service_status(%Conn{assigns: %{config: config}} = conn, _) do
     {status_code, status_text} =
-      case StatusMonitor.status(config[:api].stack_id) do
+      case StatusMonitor.status(config[:stack_id]) do
         :waiting -> {202, "waiting"}
         :starting -> {202, "starting"}
         :active -> {200, "active"}
