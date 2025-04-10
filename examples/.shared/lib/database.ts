@@ -13,9 +13,8 @@ async function addDatabaseToElectric({
     throw new Error(`ELECTRIC_ADMIN_API or ELECTRIC_TEAM_ID is not set`)
   }
 
-  const adminApiTokenId = process.env.ELECTRIC_ADMIN_API_TOKEN_ID
-  const adminApiTokenSecret = process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET
-  if (!adminApiTokenId || !adminApiTokenSecret) {
+  const adminApiAuthToken = process.env.ELECTRIC_ADMIN_API_AUTH_TOKEN
+  if (!adminApiAuthToken) {
     throw new Error(
       `ADMIN_API_TOKEN_CLIENT_ID or ADMIN_API_TOKEN_CLIENT_SECRET is not set`
     )
@@ -25,8 +24,7 @@ async function addDatabaseToElectric({
     method: `PUT`,
     headers: {
       'Content-Type': `application/json`,
-      'CF-Access-Client-Id': adminApiTokenId,
-      'CF-Access-Client-Secret': adminApiTokenSecret,
+      Authorization: `Bearer ${adminApiAuthToken}`,
     },
     body: JSON.stringify({
       database_url: dbUri,
