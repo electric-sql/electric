@@ -58,7 +58,7 @@
 </style>
 
 <template>
-  <Section :actions="actions">
+  <Section :actions="actions" id="open-source-section">
     <template #title>
       Fully open source
     </template>
