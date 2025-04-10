@@ -159,7 +159,7 @@ defmodule Electric.Plug.Utils do
         |> put_resp_header("access-control-allow-origin", get_allowed_origin(conn, opts))
         |> put_resp_header(
           "access-control-expose-headers",
-          "electric-cursor, electric-handle, electric-offset, electric-schema, electric-up-to-date"
+          Electric.Shapes.Api.Response.access_control_expose_headers()
         )
         |> put_resp_header("access-control-allow-methods", get_allowed_methods(conn, opts))
 

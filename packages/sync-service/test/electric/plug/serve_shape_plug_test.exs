@@ -109,6 +109,45 @@ defmodule Electric.Plug.ServeShapePlugTest do
       :ok
     end
 
+    test "sets correct CORS headers for Access-Control-Expose-Headers", ctx do
+      Mock.ShapeCache
+      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
+        {@test_shape_handle, @test_offset}
+      end)
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      |> expect(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
+        @first_offset
+      end)
+      |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
+        []
+      end)
+
+      conn =
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+        |> call_serve_shape_plug(ctx)
+
+      # Get the Access-Control-Expose-Headers header
+      expose_headers = get_resp_header(conn, "access-control-expose-headers")
+
+      # Verify that the header contains all the required Electric headers
+      assert length(expose_headers) == 1
+      expose_header = List.first(expose_headers)
+
+      # Check that all required headers are included
+      required_headers =
+        Electric.Shapes.Api.Response.access_control_expose_headers() |> String.split(", ")
+
+      for header <- required_headers do
+        assert String.contains?(expose_header, header),
+               "Expected Access-Control-Expose-Headers to contain #{header}, but got: #{expose_header}"
+      end
+    end
+
     test "returns 400 for invalid table", ctx do
       conn =
         ctx
