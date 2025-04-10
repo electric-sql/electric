@@ -130,6 +130,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
         ctx
         |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
         |> call_serve_shape_plug(ctx)
+        # Apply the CORS headers manually since we're not going through the router
+        |> Electric.Plug.Utils.CORSHeaderPlug.call(%{methods: ["GET", "HEAD", "DELETE", "OPTIONS"]})
 
       # Get the Access-Control-Expose-Headers header
       expose_headers = get_resp_header(conn, "access-control-expose-headers")
