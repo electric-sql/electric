@@ -800,6 +800,22 @@ defmodule Electric.Connection.Manager do
     end
   end
 
+  defp stop_if_fatal_error(
+         %Postgrex.Error{
+           postgres: %{
+             code: :invalid_catalog_name,
+             pg_code: "3D000"
+           }
+         } = error,
+         state
+       ) do
+    if Regex.match?(~r/database ".*" does not exist$/, error.postgres.message) do
+      dispatch_fatal_error_and_shutdown({:database_does_not_exist, %{error: error}}, state)
+    else
+      false
+    end
+  end
+
   defp stop_if_fatal_error(_, _), do: false
 
   defp dispatch_fatal_error_and_shutdown(error, state) do
