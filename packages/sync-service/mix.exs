@@ -103,6 +103,7 @@ defmodule Electric.MixProject do
         {:retry, "~> 0.18"},
         {:remote_ip, "~> 1.2"},
         {:req, "~> 0.5"},
+        {:stream_split, "~> 0.1"},
         {:telemetry_poller, "~> 1.1"},
         {:tls_certificate_check, "~> 1.23"},
         {:tz, "~> 0.27"}
