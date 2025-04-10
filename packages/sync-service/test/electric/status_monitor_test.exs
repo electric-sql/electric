@@ -73,6 +73,8 @@ defmodule Electric.StatusMonitorTest do
           receive do
             :exit -> :ok
           end
+
+          Process.sleep(:infinity)
         end)
 
       receive do
@@ -85,7 +87,7 @@ defmodule Electric.StatusMonitorTest do
       assert StatusMonitor.status(stack_id) == :active
 
       send(process.pid, :exit)
-      stop_process(process.pid)
+      Task.shutdown(process)
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
 
@@ -121,18 +123,6 @@ defmodule Electric.StatusMonitorTest do
 
     test "returns error on timeout when status monitor is not present", %{stack_id: stack_id} do
       assert StatusMonitor.wait_until_active(stack_id, 1) == {:error, :timeout}
-    end
-  end
-
-  defp stop_process(pid) do
-    Process.unlink(pid)
-    Process.monitor(pid)
-    Process.exit(pid, :kill)
-
-    receive do
-      {:DOWN, _, :process, ^pid, _} -> :process_killed
-    after
-      500 -> raise "#{inspect(pid)} process not killed"
     end
   end
 end
