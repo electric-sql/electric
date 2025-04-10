@@ -6,8 +6,8 @@ import { execSync } from 'child_process'
 const isProduction = (stage: string) =>
   stage.toLocaleLowerCase() === `production`
 
-const adminApiTokenId = process.env.ELECTRIC_ADMIN_API_TOKEN_ID
-const adminApiTokenSecret = process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET
+
+const adminApiAuthToken = process.env.ELECTRIC_ADMIN_API_AUTH_TOKEN
 
 export default $config({
   app(input) {
@@ -25,12 +25,8 @@ export default $config({
     }
   },
   async run() {
-    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_ID) {
-      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
-    }
-
-    if (!$dev && !process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET) {
-      throw new Error(`ELECTRIC_ADMIN_API_TOKEN_ID is not set`)
+    if (!$dev && !process.env.ELECTRIC_ADMIN_API_AUTH_TOKEN) {
+      throw new Error(`ELECTRIC_ADMIN_API_AUTH_TOKEN is not set`)
     }
 
     try {
@@ -96,8 +92,7 @@ async function addDatabaseToElectric(
     method: `PUT`,
     headers: {
       'Content-Type': 'application/json',
-      'CF-Access-Client-Id': adminApiTokenId ?? ``,
-      'CF-Access-Client-Secret': adminApiTokenSecret ?? ``,
+      Authorization: `Bearer ${adminApiAuthToken}`,
     },
     body: JSON.stringify({
       database_url: uri,

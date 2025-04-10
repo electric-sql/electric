@@ -3,8 +3,10 @@ import { createNeonDb, getNeonConnectionString } from './neon'
 
 async function addDatabaseToElectric({
   dbUri,
+  pooledDbUri,
 }: {
   dbUri: string
+  pooledDbUri?: string
 }): Promise<{ id: string; source_secret: string }> {
   const adminApi = process.env.ELECTRIC_ADMIN_API
   const teamId = process.env.ELECTRIC_TEAM_ID
@@ -13,9 +15,8 @@ async function addDatabaseToElectric({
     throw new Error(`ELECTRIC_ADMIN_API or ELECTRIC_TEAM_ID is not set`)
   }
 
-  const adminApiTokenId = process.env.ELECTRIC_ADMIN_API_TOKEN_ID
-  const adminApiTokenSecret = process.env.ELECTRIC_ADMIN_API_TOKEN_SECRET
-  if (!adminApiTokenId || !adminApiTokenSecret) {
+  const adminApiAuthToken = process.env.ELECTRIC_ADMIN_API_AUTH_TOKEN
+  if (!adminApiAuthToken) {
     throw new Error(
       `ADMIN_API_TOKEN_CLIENT_ID or ADMIN_API_TOKEN_CLIENT_SECRET is not set`
     )
@@ -25,11 +26,14 @@ async function addDatabaseToElectric({
     method: `PUT`,
     headers: {
       'Content-Type': `application/json`,
-      'CF-Access-Client-Id': adminApiTokenId,
-      'CF-Access-Client-Secret': adminApiTokenSecret,
+      Authorization: `Bearer ${adminApiAuthToken}`,
     },
     body: JSON.stringify({
       database_url: dbUri,
+      source_options: {
+        db_pool_size: 5,
+        ...(pooledDbUri ? { pooledDbUri } : {}),
+      },
       region: `us-east-1`,
       team_id: teamId,
     }),
@@ -94,8 +98,8 @@ export function createDatabaseForCloudElectric({
     databaseUri.apply((uri) => applyMigrations(uri, migrationsDirectory))
   }
 
-  const electricInfo = databaseUri.apply((dbUri) =>
-    addDatabaseToElectric({ dbUri })
+  const electricInfo = $resolve([databaseUri, pooledDatabaseUri]).apply(
+    ([dbUri, pooledDbUri]) => addDatabaseToElectric({ dbUri, pooledDbUri })
   )
 
   return {
