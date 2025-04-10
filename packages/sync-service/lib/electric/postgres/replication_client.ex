@@ -135,10 +135,10 @@ defmodule Electric.Postgres.ReplicationClient do
   # from its `init()` callback.
   #
   # The callbacks `init()`, `handle_connect()` and `handle_result()` defined in this module
-  # below are all invoked inside the connection process' `init()` callback. Once any of our
-  # callbacks return `{:stream, ...}`, the connection process finishes its initialization and
-  # switches into the logical streaming mode to start receiving logical messages from Postgres,
-  # invoking the `handle_data()` callback for each one.
+  # would all be invoked inside the connection process' `init()` callback in that case. Once
+  # any of the callbacks return `{:stream, ...}`, the connection process finishes its
+  # initialization and switches into the logical streaming mode to start receiving logical
+  # messages from Postgres, invoking the `handle_data()` callback for each one.
   #
   # TODO(alco): this needs additional info about :noreply and :query return tuples.
   @impl true
@@ -147,7 +147,6 @@ defmodule Electric.Postgres.ReplicationClient do
     state = State.new(replication_opts)
     Logger.metadata(stack_id: state.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: state.stack_id)
-    Electric.StatusMonitor.mark_replication_client_ready(state.stack_id, self())
 
     {:ok, state}
   end
@@ -360,6 +359,7 @@ defmodule Electric.Postgres.ReplicationClient do
   defp notify_connection_ready_for_streaming(
          %State{connection_manager: connection_manager} = state
        ) do
+    Electric.StatusMonitor.mark_replication_client_ready(state.stack_id, self())
     :ok = Electric.Connection.Manager.replication_connection_established(connection_manager)
     state
   end
