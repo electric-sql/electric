@@ -27,7 +27,7 @@ image: /img/tutorials/sync-busters.jpg
   }
   @media (max-width: 518px) {
     .sync-busters {
-      margin: 32px 24px 40px;
+      margin: 32px 0px 40px;
       gap: 20px;
       grid-template-columns: 1fr;
     }
@@ -75,7 +75,7 @@ So, rather than just one walkthrough tutorial, we've made four, that illustrate 
     </h3>
     <p>
       James likes a functional programming language with mature
-      tooling and a batteries-included web framework.
+      tooling and a batteries-included web&nbsp;framework.
     </p>
   </SyncBuster>
 
@@ -89,7 +89,7 @@ So, rather than just one walkthrough tutorial, we've made four, that illustrate 
       Sam is British, so he likes
       <a href="https://www.youtube.com/watch?v=oaCheNXdz8A&t=51s">
         asking Bob for a P please</a>.
-      Hence coding in Python and syncing into a PGlite database.
+      Hence&nbsp;coding in Python and syncing into a PGlite&nbsp;database.
     </p>
   </SyncBuster>
 
@@ -103,7 +103,7 @@ So, rather than just one walkthrough tutorial, we've made four, that illustrate 
       Valter is a database PHD who
       <a href="/blog/2022/05/03/introducing-rich-crdts">
         invented rich-CRDTs</a>.
-      He likes conflict-free algorithms, so his stack is based on Yjs.
+      He&nbsp;likes conflict-free algorithms, so his stack is based on&nbsp;Yjs.
     </p>
   </SyncBuster>
 </div>

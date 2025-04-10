@@ -26,7 +26,18 @@
     }
     .avatar {
       flex: 0 0 auto;
-      margin-bottom: 24px;
+      overflow: hidden;
+      border-radius: 8px;
+      width: 128px;
+      height: 152px;
+    }
+    .avatar img {
+      position: relative;
+      display: block;
+      width: 128px;
+    }
+    :deep(.row > .content > h3) {
+      margin-top: 0px;
     }
   }
   :deep(.row > .content > p) {
@@ -57,7 +68,17 @@
     font-size: 14px;
     font-weight: 400;
   }
-
+  @media (max-width: 518px) {
+    .avatar img {
+      margin-top: 12px;
+      width: 128px;
+    }
+  }
+  @media (max-width: 419px) {
+    ul.stack li:first-child {
+      display: none;
+    }
+  }
 </style>
 
 <template>
