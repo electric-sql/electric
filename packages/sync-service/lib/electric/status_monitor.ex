@@ -1,4 +1,5 @@
 defmodule Electric.StatusMonitor do
+  @moduledoc false
   use GenServer
 
   @type status() :: :waiting | :starting | :active
