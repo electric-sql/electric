@@ -1,12 +1,14 @@
 defmodule Electric.Postgres.ReplicationClientTest do
   use ExUnit.Case, async: true
+  use Repatch.ExUnit
 
-  import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
+  import Support.ComponentSetup, only: [with_stack_id_from_test: 1, with_status_monitor: 1]
   import Support.DbSetup, except: [with_publication: 1]
   import Support.DbStructureSetup
 
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient
+  alias Electric.StatusMonitor
 
   alias Electric.Replication.Changes.{
     DeletedRecord,
@@ -40,7 +42,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   setup :with_stack_id_from_test
 
   describe "ReplicationClient init" do
-    setup [:with_unique_db, :with_basic_tables]
+    setup [:with_unique_db, :with_basic_tables, :with_status_monitor]
 
     test "creates an empty publication on startup if requested",
          %{db_conn: conn, dummy_pid: dummy_pid} = ctx do
@@ -65,7 +67,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   describe "ReplicationClient against real db" do
-    setup [:with_unique_db, :with_basic_tables, :with_publication, :with_replication_opts]
+    setup [
+      :with_unique_db,
+      :with_basic_tables,
+      :with_publication,
+      :with_replication_opts,
+      :with_status_monitor
+    ]
 
     test "calls a provided function when receiving it from the PG", %{db_conn: conn} = ctx do
       start_client(ctx)
@@ -86,6 +94,22 @@ defmodule Electric.Postgres.ReplicationClientTest do
         end)
 
       log =~ "Started replication from postgres"
+    end
+
+    test "notifies the StatusMonitor when it is ready", ctx do
+      Repatch.patch(StatusMonitor, :mark_replication_client_ready, [mode: :shared], fn _, _ ->
+        :ok
+      end)
+
+      {:ok, client_pid} = start_client(ctx)
+      Repatch.allow(self(), client_pid)
+
+      assert Repatch.called?(
+               StatusMonitor,
+               :mark_replication_client_ready,
+               [ctx.stack_id, client_pid],
+               by: :any
+             )
     end
 
     test "works with an existing publication", %{replication_opts: replication_opts} = ctx do
@@ -254,7 +278,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   describe "ReplicationClient against real db (toast)" do
-    setup [:with_unique_db, :with_basic_tables, :with_publication, :with_replication_opts]
+    setup [
+      :with_unique_db,
+      :with_basic_tables,
+      :with_publication,
+      :with_replication_opts,
+      :with_status_monitor
+    ]
 
     setup %{db_conn: conn} = ctx do
       Postgrex.query!(

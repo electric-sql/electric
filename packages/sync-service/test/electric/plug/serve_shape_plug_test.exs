@@ -9,6 +9,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
+  import Support.TestUtils, only: [set_status_to_active: 1]
 
   alias Support.Mock
 
@@ -72,7 +73,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     :ok
   end
 
-  setup :with_persistent_kv
+  setup [:with_persistent_kv, :with_stack_id_from_test, :with_status_monitor]
 
   def conn(_ctx, method, params, "?" <> _ = query_string) do
     Plug.Test.conn(method, "/" <> query_string, params)
@@ -99,13 +100,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
   end
 
   describe "serving shape" do
-    setup [:with_stack_id_from_test, :with_lsn_tracker]
+    setup :with_lsn_tracker
 
     setup ctx do
       {:via, _, {registry_name, registry_key}} =
         Electric.Replication.Supervisor.name(ctx)
 
       {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      set_status_to_active(ctx)
       :ok
     end
 
@@ -846,8 +848,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
   end
 
   describe "stack not ready" do
-    setup :with_stack_id_from_test
-
     test "returns 503", ctx do
       conn =
         ctx
@@ -868,10 +868,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
           |> call_serve_shape_plug(ctx)
         end)
 
-      # Wait for the task process to subscribe to stack events
-      wait_until_subscribed(ctx.stack_id, 50, 8)
-
-      Electric.StackSupervisor.dispatch_stack_event(ctx.stack_id, :ready)
+      set_status_to_active(ctx)
 
       conn = Task.await(conn_task)
 
@@ -896,17 +893,4 @@ defmodule Electric.Plug.ServeShapePlugTest do
   defp max_age(ctx), do: Access.get(ctx, :max_age, 60)
   defp stale_age(ctx), do: Access.get(ctx, :stale_age, 300)
   defp long_poll_timeout(ctx), do: Access.get(ctx, :long_poll_timeout, 20_000)
-
-  defp wait_until_subscribed(stack_id, _sleep, 0) do
-    raise "Timed out waiting for a process to subscribe to stack events in stack \"#{stack_id}\""
-  end
-
-  defp wait_until_subscribed(stack_id, sleep, num_attempts) do
-    if Registry.lookup(Electric.stack_events_registry(), {:stack_status, stack_id}) != [] do
-      :ok
-    else
-      Process.sleep(sleep)
-      wait_until_subscribed(stack_id, sleep, num_attempts - 1)
-    end
-  end
 end

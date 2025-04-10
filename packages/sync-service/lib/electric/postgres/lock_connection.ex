@@ -24,7 +24,8 @@ defmodule Electric.Postgres.LockConnection do
       :connection_manager,
       :lock_acquired,
       :lock_name,
-      :backoff
+      :backoff,
+      :stack_id
     ]
   end
 
@@ -57,7 +58,8 @@ defmodule Electric.Postgres.LockConnection do
        connection_manager: Keyword.fetch!(opts, :connection_manager),
        lock_name: Keyword.fetch!(opts, :lock_name),
        lock_acquired: false,
-       backoff: {:backoff.init(1000, 10_000), nil}
+       backoff: {:backoff.init(1000, 10_000), nil},
+       stack_id: Keyword.fetch!(opts, :stack_id)
      }}
   end
 
@@ -94,7 +96,8 @@ defmodule Electric.Postgres.LockConnection do
     {:noreply, %{state | lock_acquired: false, backoff: {backoff, tref}}}
   end
 
-  defp notify_lock_acquired(%State{connection_manager: connection_manager} = _state) do
+  defp notify_lock_acquired(%State{connection_manager: connection_manager} = state) do
+    Electric.StatusMonitor.mark_pg_lock_acquired(state.stack_id, self())
     Electric.Connection.Manager.exclusive_connection_lock_acquired(connection_manager)
   end
 

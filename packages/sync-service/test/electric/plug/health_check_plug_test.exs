@@ -1,15 +1,25 @@
 defmodule Electric.Plug.HealthCheckPlugTest do
   use ExUnit.Case, async: true
-  import Plug.Conn
-  alias Plug.Conn
+  use Repatch.ExUnit
 
+  import Plug.Conn
+  import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
+
+  alias Plug.Conn
   alias Electric.Plug.HealthCheckPlug
+  alias Electric.StatusMonitor
 
   @moduletag :capture_log
 
+  setup :with_stack_id_from_test
+
   def conn(ctx) do
-    # Pass mock dependencies to the plug
-    config = [get_service_status: fn -> ctx.connection_status end]
+    config = [api: %{stack_id: ctx[:stack_id]}]
+
+    Repatch.patch(StatusMonitor, :status, [mode: :shared], fn stack_id ->
+      assert stack_id == ctx[:stack_id]
+      ctx.connection_status
+    end)
 
     Plug.Test.conn("GET", "/")
     |> assign(:config, config)
@@ -22,7 +32,7 @@ defmodule Electric.Plug.HealthCheckPlugTest do
         conn(ctx)
         |> HealthCheckPlug.call([])
 
-      assert Conn.get_resp_header(conn, "content-type") == ["application/json"]
+      assert Conn.get_resp_header(conn, "content-type") == ["application/json; charset=utf-8"]
 
       assert Conn.get_resp_header(conn, "cache-control") == [
                "no-cache, no-store, must-revalidate"
@@ -57,16 +67,6 @@ defmodule Electric.Plug.HealthCheckPlugTest do
 
       assert conn.status == 200
       assert Jason.decode!(conn.resp_body) == %{"status" => "active"}
-    end
-
-    @tag connection_status: :stopping
-    test "returns 503 when stopping", ctx do
-      conn =
-        conn(ctx)
-        |> HealthCheckPlug.call([])
-
-      assert conn.status == 503
-      assert Jason.decode!(conn.resp_body) == %{"status" => "stopping"}
     end
   end
 end

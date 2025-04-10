@@ -1,5 +1,6 @@
 defmodule Electric.Replication.ShapeLogCollectorTest do
   use ExUnit.Case, async: false
+  use Repatch.ExUnit
 
   alias Electric.LsnTracker
   alias Electric.Postgres.Lsn
@@ -8,9 +9,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Shape
+  alias Electric.StatusMonitor
 
   alias Support.Mock
   alias Support.StubInspector
+  alias Support.RepatchExt
 
   import Support.ComponentSetup,
     only: [
@@ -49,6 +52,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     ]
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
+
+    Repatch.patch(StatusMonitor, :mark_shape_log_collector_ready, [mode: :shared], fn _, _ ->
+      :ok
+    end)
+
+    Repatch.allow(self(), pid)
 
     Mock.ShapeStatus
     |> expect(:initialise, 1, fn _opts -> {:ok, %{}} end)
@@ -297,6 +306,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
 
+    Repatch.patch(StatusMonitor, :mark_shape_log_collector_ready, [mode: :shared], fn _, _ ->
+      :ok
+    end)
+
+    Repatch.allow(self(), pid)
+
     Mock.Inspector
     |> stub(:load_relation, fn {"public", "test_table"}, _ ->
       {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
@@ -351,5 +366,16 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     assert :ok = ShapeLogCollector.store_transaction(txn_to_process, pid)
     Support.TransactionConsumer.assert_consume(consumers, [txn_to_process])
     assert next_lsn == LsnTracker.get_last_processed_lsn(ctx.stack_id)
+  end
+
+  test "notifies the StatusMonitor when it's ready", ctx do
+    ctx = Map.merge(ctx, setup_log_collector(ctx))
+
+    assert RepatchExt.called_within_ms?(
+             StatusMonitor,
+             :mark_shape_log_collector_ready,
+             [ctx.stack_id, ctx.server],
+             100
+           )
   end
 end

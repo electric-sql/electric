@@ -10,6 +10,7 @@ defmodule Electric.Shapes.ApiTest do
   alias Support.Mock
 
   import Support.ComponentSetup
+  import Support.TestUtils, only: [set_status_to_active: 1]
   import Mox
 
   @test_shape %Shape{
@@ -85,7 +86,7 @@ defmodule Electric.Shapes.ApiTest do
 
     {:ok, _} = Registry.register(registry_name, registry_key, nil)
     Electric.LsnTracker.init(Lsn.from_integer(0), ctx.stack_id)
-    :ok
+    set_status_to_active(ctx)
   end
 
   defp max_age(ctx), do: Access.get(ctx, :max_age, 60)
@@ -101,10 +102,10 @@ defmodule Electric.Shapes.ApiTest do
     :ok
   end
 
-  setup :with_persistent_kv
+  setup [:with_persistent_kv, :with_stack_id_from_test, :with_status_monitor]
 
   describe "validate/2" do
-    setup [:with_stack_id_from_test, :ready_stack, :configure_request]
+    setup [:ready_stack, :configure_request]
 
     test "returns 400 for invalid table", ctx do
       assert {:error, %{status: 400} = response} =
@@ -458,7 +459,7 @@ defmodule Electric.Shapes.ApiTest do
   end
 
   describe "validate_for_delete/2" do
-    setup [:with_stack_id_from_test, :ready_stack, :configure_request]
+    setup [:ready_stack, :configure_request]
 
     setup do
       admin_shape =
@@ -565,7 +566,7 @@ defmodule Electric.Shapes.ApiTest do
   end
 
   describe "serve/1" do
-    setup [:with_stack_id_from_test, :ready_stack, :configure_request]
+    setup [:ready_stack, :configure_request]
 
     # test "hold_conn_until_stack_ready"
 
@@ -961,7 +962,7 @@ defmodule Electric.Shapes.ApiTest do
   end
 
   describe "Pre-defined shape API" do
-    setup [:with_stack_id_from_test, :ready_stack, :configure_request]
+    setup [:ready_stack, :configure_request]
 
     setup(ctx) do
       admin_shape =
@@ -1041,7 +1042,7 @@ defmodule Electric.Shapes.ApiTest do
   end
 
   describe "stack not ready" do
-    setup [:with_stack_id_from_test, :configure_request]
+    setup [:configure_request]
 
     test "returns 503", ctx do
       assert {:error, response} =
@@ -1062,27 +1063,11 @@ defmodule Electric.Shapes.ApiTest do
           )
         end)
 
-      # Wait for the task process to subscribe to stack events
-      wait_until_subscribed(ctx.stack_id, 50, 10)
-
-      Electric.StackSupervisor.dispatch_stack_event(ctx.stack_id, :ready)
+      set_status_to_active(ctx)
 
       {:error, response} = Task.await(task)
 
       assert response.status == 400
-    end
-  end
-
-  defp wait_until_subscribed(stack_id, _sleep, 0) do
-    raise "Timed out waiting for a process to subscribe to stack events in stack \"#{stack_id}\""
-  end
-
-  defp wait_until_subscribed(stack_id, sleep, num_attempts) do
-    if Registry.lookup(Electric.stack_events_registry(), {:stack_status, stack_id}) != [] do
-      :ok
-    else
-      Process.sleep(sleep)
-      wait_until_subscribed(stack_id, sleep, num_attempts - 1)
     end
   end
 end

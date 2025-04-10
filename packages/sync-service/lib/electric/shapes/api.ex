@@ -319,24 +319,16 @@ defmodule Electric.Shapes.Api do
   end
 
   defp hold_until_stack_ready(%Api{} = api) do
-    stack_id = stack_id(api)
+    api
+    |> stack_id()
+    |> Electric.StatusMonitor.wait_until_active(api.stack_ready_timeout)
+    |> case do
+      :ok ->
+        :ok
 
-    ref =
-      Electric.StackSupervisor.subscribe_to_stack_events(
-        api.stack_events_registry,
-        stack_id
-      )
-
-    if Electric.ProcessRegistry.alive?(stack_id, Electric.Replication.Supervisor) do
-      :ok
-    else
-      receive do
-        {:stack_status, ^ref, :ready} ->
-          :ok
-      after
-        api.stack_ready_timeout ->
-          {:error, Response.error(api, "Stack not ready", status: 503)}
-      end
+      {:error, :timeout} ->
+        Logger.warning("Stack not ready after #{api.stack_ready_timeout}ms")
+        {:error, Response.error(api, "Stack not ready", status: 503)}
     end
   end
 

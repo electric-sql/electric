@@ -5,6 +5,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
+  import Support.TestUtils, only: [set_status_to_active: 1]
   alias Support.Mock
 
   import Mox
@@ -60,7 +61,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   setup :with_persistent_kv
 
   describe "DeleteShapePlug" do
-    setup :with_stack_id_from_test
+    setup [:with_stack_id_from_test, :with_status_monitor]
 
     setup ctx do
       start_link_supervised!({Registry, keys: :duplicate, name: @registry})
@@ -69,6 +70,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         Electric.Replication.Supervisor.name(ctx)
 
       {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      set_status_to_active(ctx)
 
       :ok
     end
@@ -153,7 +155,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   end
 
   describe "stack not ready" do
-    setup :with_stack_id_from_test
+    setup [:with_stack_id_from_test, :with_status_monitor]
 
     test "returns 503", ctx do
       conn =

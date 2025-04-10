@@ -48,7 +48,17 @@ defmodule Electric.Connection.Supervisor do
     Process.set_label({:connection_supervisor, opts[:stack_id]})
     Logger.metadata(stack_id: opts[:stack_id])
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
-    Supervisor.init([{Electric.Connection.Manager, opts}], strategy: :rest_for_one)
+
+    children = [
+      {Electric.StatusMonitor, opts[:stack_id]},
+      {Electric.Connection.Manager, opts}
+    ]
+
+    # The `rest_for_one` strategy is used here to ensure that if the StatusMonitor unexpectedly dies,
+    # all subsequent child processes are also restarted. Since the StatusMonitor keeps track of the
+    # statuses of the other children, losing it means losing that state. Restarting the other children
+    # ensures they re-notify the StatusMonitor, allowing it to rebuild its internal state correctly.
+    Supervisor.init(children, strategy: :rest_for_one)
   end
 
   def start_shapes_supervisor(opts) do
