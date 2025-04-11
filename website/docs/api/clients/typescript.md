@@ -142,7 +142,7 @@ export interface ShapeStreamOptions<T = never> {
    * will handle this automatically. A common scenario where you might pass an offset
    * is if you're maintaining a local cache of the log. If you've gone offline
    * and are re-starting a ShapeStream to catch-up to the latest state of the Shape,
-   * you'd pass in the last offset and shapeId you'd seen from the Electric server
+   * you'd pass in the last offset and shapeHandle you'd seen from the Electric server
    * so it knows at what point in the shape to catch you up from.
    */
   offset?: Offset
@@ -151,7 +151,7 @@ export interface ShapeStreamOptions<T = never> {
    * Similar to `offset`, this isn't typically used unless you're maintaining
    * a cache of the shape log.
    */
-  shapeId?: string
+  shapeHandle?: string
 
   /**
    * HTTP headers to attach to requests made by the client.
