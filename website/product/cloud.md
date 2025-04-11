@@ -139,7 +139,22 @@ export async function GET(req: Request) {
   originUrl.searchParams.set(`source_secret`, process.env.SOURCE_SECRET)
 
   // Proxy the authorised request on to the Electric Cloud.
-  return fetch(originUrl, {headers: req.headers})
+  const response = await fetch(originUrl)
+
+  // Fetch decompresses the body but doesn't remove the
+  // content-encoding & content-length headers which would
+  // break decoding in the browser.
+  //
+  // See https://github.com/whatwg/fetch/issues/1729
+  const headers = new Headers(response.headers)
+  headers.delete(`content-encoding`)
+  headers.delete(`content-length`)
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
 }
 ```
 
