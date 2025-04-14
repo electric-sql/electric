@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.3.2
+
+### Patch Changes
+
+- a466a6e: Add prefix support to the Elixir client
+
 ## 0.3.1
 
 ### Patch Changes

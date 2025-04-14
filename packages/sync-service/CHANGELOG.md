@@ -1,5 +1,24 @@
 # @core/sync-service
 
+## 1.0.6
+
+### Patch Changes
+
+- 5189825: Handle non existant DB as a fatal error.
+- 04feeea: Update otel_metric_exporter to fix protobuf encoding error
+- cb95ab5: Obfuscate database password during parsing to prevent its accidental leaking in logs.
+
+  When Electric is used in library mode, obfuscation by the parent application is
+  optional: Electric doesn't log the connection options until after it has
+  obfuscated the password.
+
+- e2a7008: Fix error generated when getting memory stats with dead processes
+- 68b0839: Fix a fatal bug in the encoding of WHERE query params when returning a 409 response from the server.
+- 787e363: Fix for initialization race condition that resulted in the error "the table identifier does not refer to an existing ETS table"
+- 3988f31: Update otel_metric_exporter to v0.3.5 for bugfixes
+- b65e70d: Set shape recovery timeout per-shape, not globally
+- c63c24b: Fix memory stats collection on dead processes
+
 ## 1.0.5
 
 ### Patch Changes
