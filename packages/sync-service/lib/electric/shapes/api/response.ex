@@ -1,5 +1,4 @@
 defmodule Electric.Shapes.Api.Response do
-  alias Electric.Plug.Utils
   alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
@@ -28,6 +27,7 @@ defmodule Electric.Shapes.Api.Response do
     api: %Api{},
     chunked: false,
     up_to_date: false,
+    no_change: false,
     params: %Api.Params{},
     status: 200,
     trace_attrs: %{},
@@ -44,6 +44,7 @@ defmodule Electric.Shapes.Api.Response do
           chunked: boolean(),
           params: Api.Params.t(),
           up_to_date: boolean(),
+          no_change: boolean(),
           status: pos_integer(),
           trace_attrs: %{optional(atom()) => term()},
           body: Enum.t()
@@ -194,6 +195,12 @@ defmodule Electric.Shapes.Api.Response do
     |> put_cache_header("cache-control", "no-cache", api)
   end
 
+  # Responses with no changes in them should never be cached
+  defp put_cache_headers(conn, %__MODULE__{no_change: true, api: api}) do
+    conn
+    |> put_cache_header("cache-control", "no-cache", api)
+  end
+
   defp put_cache_headers(conn, %__MODULE__{api: api} = response) do
     case response do
       # If the offset is -1, set a 1 week max-age, 1 hour s-maxage (shared cache)
@@ -236,26 +243,22 @@ defmodule Electric.Shapes.Api.Response do
     conn
   end
 
-  defp put_cursor_headers(conn, %__MODULE__{} = response) do
-    case response do
-      # For live requests we want short cache lifetimes and to update the live cursor
-      %{params: %{live: true}, api: api} ->
-        conn
-        |> Plug.Conn.put_resp_header(
-          @electric_cursor_header,
-          api.long_poll_timeout
-          |> Utils.get_next_interval_timestamp(conn.query_params["cursor"])
-          |> Integer.to_string()
-        )
-
-      _response ->
-        conn
-    end
-  end
-
-  defp put_etag_headers(conn, %{handle: nil}) do
+  # Maintain backwards compatibility on cursor header - if a client comes
+  # in a with a cursor, return the same cursor to ensure it does not break
+  # but handling of live requests is managed by cache mechanisms
+  defp put_cursor_headers(
+         %{query_params: %{"cursor" => cursor}} = conn,
+         %__MODULE__{params: %{live: true}} = _response
+       )
+       when not is_nil(cursor) do
     conn
+    |> Plug.Conn.put_resp_header("electric-cursor", cursor)
   end
+
+  defp put_cursor_headers(conn, _), do: conn
+
+  defp put_etag_headers(conn, %__MODULE__{handle: nil}), do: conn
+  defp put_etag_headers(conn, %__MODULE__{no_change: true}), do: conn
 
   defp put_etag_headers(conn, %__MODULE__{} = response) do
     # etag values should be in double quotes: https://www.rfc-editor.org/rfc/rfc7232#section-2.3

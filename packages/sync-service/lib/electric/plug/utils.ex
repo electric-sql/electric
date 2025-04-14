@@ -51,32 +51,6 @@ defmodule Electric.Plug.Utils do
     {:ok, columns}
   end
 
-  @doc """
-  Calculate the next interval that should be used for long polling based on the
-  current time and previous interval used.
-
-  Timestamp returned is in seconds and uses a custom epoch of 9th of October 2024, UTC.
-  """
-  @oct9th2024 ~U[2024-10-09 00:00:00Z]
-  @spec get_next_interval_timestamp(integer(), binary() | nil) :: integer()
-  def get_next_interval_timestamp(long_poll_timeout_ms, prev_interval \\ nil)
-
-  def get_next_interval_timestamp(long_poll_timeout_ms, _)
-      when div(long_poll_timeout_ms, 1000) == 0,
-      do: 0
-
-  def get_next_interval_timestamp(long_poll_timeout_ms, prev_interval) do
-    long_poll_timeout_sec = div(long_poll_timeout_ms, 1000)
-    diff_in_seconds = DateTime.diff(DateTime.utc_now(), @oct9th2024, :second)
-    next_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
-
-    if "#{next_interval}" == prev_interval do
-      next_interval + Enum.random(0..3_600)
-    else
-      next_interval
-    end
-  end
-
   alias OpenTelemetry.SemConv, as: SC
 
   def common_open_telemetry_attrs(%Plug.Conn{assigns: assigns} = conn) do
