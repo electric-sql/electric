@@ -310,6 +310,10 @@ defmodule Electric.Shapes.Api.Response do
 
   def etag(response, opts \\ [])
 
+  # When response contains no changes, in order to uniquely identify it and avoid
+  # infinite revalidations we add the current monotonic time to the etag.
+  # Any attempt by the CDN to revalidate an empty live response will fail and require
+  # actually holding and collapsing live requests.
   def etag(%__MODULE__{handle: handle, offset: offset, params: params, no_changes: true}, opts) do
     "#{handle}:#{params.offset}:#{offset}:#{System.monotonic_time()}"
     |> format_etag(opts)
