@@ -43,11 +43,15 @@ defmodule Electric.Postgres.LockConnection do
 
   @impl true
   def init(opts) do
+    opts = Map.new(opts)
+
+    Process.set_label({:lock_connection, state.stack_id})
+
     send(self(), :acquire_lock)
 
     metadata = [
-      lock_name: Keyword.fetch!(opts, :lock_name),
-      stack_id: Keyword.fetch!(opts, :stack_id)
+      lock_name: opts.lock_name,
+      stack_id: opts.stack_id
     ]
 
     Logger.metadata(metadata)
@@ -55,11 +59,11 @@ defmodule Electric.Postgres.LockConnection do
 
     {:ok,
      %State{
-       connection_manager: Keyword.fetch!(opts, :connection_manager),
-       lock_name: Keyword.fetch!(opts, :lock_name),
+       connection_manager: opts.connection_manager,
+       lock_name: opts.lock_name,
        lock_acquired: false,
        backoff: {:backoff.init(1000, 10_000), nil},
-       stack_id: Keyword.fetch!(opts, :stack_id)
+       stack_id: opts.stack_id
      }}
   end
 
