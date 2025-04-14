@@ -210,13 +210,6 @@ defmodule Electric.Shapes.Api.Response do
     )
   end
 
-  # Responses with no changes in them should have minimal caching just to
-  # satisfy request collapsing and should update the live cursor
-  defp put_cache_headers(conn, %__MODULE__{params: %{live: true}, no_changes: true, api: api}) do
-    conn
-    |> put_cache_header("cache-control", "public, max-age=1, must-revalidate", api)
-  end
-
   # For live requests we want short cache lifetimes and to update the live cursor
   defp put_cache_headers(conn, %__MODULE__{params: %{live: true}, api: api}) do
     conn
@@ -258,9 +251,6 @@ defmodule Electric.Shapes.Api.Response do
 
   # Responses that don't correspond to a shape should not be revalidateable
   defp put_etag_headers(conn, %__MODULE__{handle: nil}), do: conn
-
-  # Live responses without any changes in them should not be revalidateable
-  defp put_etag_headers(conn, %__MODULE__{params: %{live: true}, no_changes: true}), do: conn
 
   defp put_etag_headers(conn, %__MODULE__{} = response) do
     # etag values should be in double quotes: https://www.rfc-editor.org/rfc/rfc7232#section-2.3
@@ -318,9 +308,19 @@ defmodule Electric.Shapes.Api.Response do
     Plug.Conn.assign(conn, :streaming_bytes_sent, bytes_sent)
   end
 
-  def etag(%__MODULE__{handle: handle, offset: offset, params: params} = _response, opts \\ []) do
-    etag = "#{handle}:#{params.offset}:#{offset}"
+  def etag(response, opts \\ [])
 
+  def etag(%__MODULE__{handle: handle, offset: offset, params: params, no_changes: true}, opts) do
+    "#{handle}:#{params.offset}:#{offset}:#{System.monotonic_time()}"
+    |> format_etag(opts)
+  end
+
+  def etag(%__MODULE__{handle: handle, offset: offset, params: params}, opts) do
+    "#{handle}:#{params.offset}:#{offset}"
+    |> format_etag(opts)
+  end
+
+  defp format_etag(etag, opts) do
     if Keyword.get(opts, :quote, true),
       do: ~s|"#{etag}"|,
       else: etag

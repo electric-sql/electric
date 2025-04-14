@@ -664,7 +664,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert [%{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
 
-      assert get_resp_header(conn, "cache-control") == ["public, max-age=1, must-revalidate"]
+      assert get_resp_header(conn, "cache-control") == [
+               "public, max-age=5, stale-while-revalidate=5"
+             ]
 
       assert get_resp_header(conn, "electric-up-to-date") == [""]
     end
