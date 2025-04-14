@@ -16,7 +16,7 @@ defmodule Electric.PhoenixExample.Application do
       # Start a worker by calling: Electric.PhoenixExample.Worker.start_link(arg)
       # {Electric.PhoenixExample.Worker, arg},
       # Start to serve requests, typically the last entry
-      Electric.PhoenixExampleWeb.Endpoint
+      {Electric.PhoenixExampleWeb.Endpoint, phoenix_sync: Phoenix.Sync.plug_opts()}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
