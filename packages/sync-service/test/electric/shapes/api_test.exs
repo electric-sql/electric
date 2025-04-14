@@ -916,10 +916,9 @@ defmodule Electric.Shapes.ApiTest do
 
       assert response = Task.await(task)
 
-      assert response.status == 200
+      assert response.status == 409
       refute response.chunked
-      assert [%{headers: %{control: "up-to-date"}}] = response_body(response)
-      assert response.up_to_date
+      assert [%{headers: %{control: "must-refetch"}}] = response_body(response)
     end
 
     @tag long_poll_timeout: 100

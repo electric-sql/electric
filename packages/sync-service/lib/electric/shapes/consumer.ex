@@ -111,7 +111,7 @@ defmodule Electric.Shapes.Consumer do
 
   def handle_call(:clean_and_stop, _from, state) do
     state =
-      reply_to_snapshot_waiters({:error, "Shape terminated before snapshot completed"}, state)
+      reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot completed"})
 
     # TODO: ensure cleanup occurs after snapshot is done/failed/interrupted to avoid
     # any race conditions and leftover data
@@ -169,7 +169,7 @@ defmodule Electric.Shapes.Consumer do
           "Snapshot creation failed for #{shape_handle} because of:\n#{Exception.format(:error, error, stacktrace)}"
         )
 
-    state = reply_to_snapshot_waiters({:error, error}, state)
+    state = reply_to_snapshot_waiters(state, {:error, error})
     cleanup(state)
     {:stop, :normal, state}
   end
@@ -182,7 +182,7 @@ defmodule Electric.Shapes.Consumer do
 
   def terminate(reason, state) do
     state =
-      reply_to_snapshot_waiters({:error, "Shape terminated before snapshot was ready"}, state)
+      reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
 
     if is_error?(reason) do
       cleanup(state)
@@ -216,12 +216,10 @@ defmodule Electric.Shapes.Consumer do
     Inspector.clean(root_table, inspector)
 
     state =
-      reply_to_snapshot_waiters(
-        {:error, "Shape relation changed before snapshot was ready"},
-        state
-      )
-
-    cleanup(state)
+      state
+      |> reply_to_snapshot_waiters({:error, "Shape relation changed before snapshot was ready"})
+      |> notify_shape_rotation()
+      |> cleanup()
 
     {:stop, :normal, state}
   end
@@ -316,7 +314,6 @@ defmodule Electric.Shapes.Consumer do
       log_state: log_state,
       chunk_bytes_threshold: chunk_bytes_threshold,
       shape_status: {shape_status, shape_status_state},
-      registry: registry,
       storage: storage
     } = state
 
@@ -345,9 +342,9 @@ defmodule Electric.Shapes.Consumer do
           "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
         )
 
-        cleanup(state)
-
-        notify_listeners(registry, :shape_rotation, shape_handle, last_log_offset)
+        state
+        |> cleanup()
+        |> notify_shape_rotation()
 
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
 
@@ -368,7 +365,7 @@ defmodule Electric.Shapes.Consumer do
 
         shape_status.set_latest_offset(shape_status_state, shape_handle, last_log_offset)
 
-        notify_listeners(registry, :new_changes, shape_handle, last_log_offset)
+        notify_new_changes(state, last_log_offset)
 
         lag = calculate_replication_lag(txn)
         OpenTelemetry.add_span_attributes(replication_lag: lag)
@@ -396,26 +393,29 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp notify_listeners(registry, :new_changes, shape_handle, latest_log_offset) do
-    Registry.dispatch(registry, shape_handle, fn registered ->
+  defp notify_new_changes(state, latest_log_offset) do
+    Registry.dispatch(state.registry, state.shape_handle, fn registered ->
       Logger.debug(fn ->
-        "Notifying ~#{length(registered)} clients about new changes to #{shape_handle}"
+        "Notifying ~#{length(registered)} clients about new changes to #{state.shape_handle}"
       end)
 
       for {pid, ref} <- registered,
           do: send(pid, {ref, :new_changes, latest_log_offset})
     end)
+
+    state
   end
 
-  defp notify_listeners(registry, :shape_rotation, shape_handle, _latest_log_offset) do
-    Registry.dispatch(registry, shape_handle, fn registered ->
+  defp notify_shape_rotation(state) do
+    Registry.dispatch(state.registry, state.shape_handle, fn registered ->
       Logger.debug(fn ->
-        "Notifying ~#{length(registered)} clients about new changes to #{shape_handle}"
+        "Notifying ~#{length(registered)} clients about removal of shape #{state.shape_handle}"
       end)
 
-      for {pid, ref} <- registered,
-          do: send(pid, {ref, :shape_rotation})
+      for {pid, ref} <- registered, do: send(pid, {ref, :shape_rotation})
     end)
+
+    state
   end
 
   defp set_pg_snapshot(pg_snapshot, %{pg_snapshot: nil} = state) do
@@ -446,7 +446,7 @@ defmodule Electric.Shapes.Consumer do
   defp set_snapshot_started(%{shape_handle: shape_handle} = state) do
     %{shape_status: {shape_status, shape_status_state}} = state
     :ok = shape_status.mark_snapshot_started(shape_status_state, shape_handle)
-    reply_to_snapshot_waiters(:started, state)
+    reply_to_snapshot_waiters(state, :started)
   end
 
   defp stop_filtering_txns(state) do
@@ -464,13 +464,15 @@ defmodule Electric.Shapes.Consumer do
     shape_status.remove_shape(shape_status_state, state.shape_handle)
     publication_manager.remove_shape(state.shape, publication_manager_opts)
     ShapeCache.Storage.cleanup!(state.storage)
-  end
 
-  defp reply_to_snapshot_waiters(_reply, %{awaiting_snapshot_start: []} = state) do
     state
   end
 
-  defp reply_to_snapshot_waiters(reply, %{awaiting_snapshot_start: waiters} = state) do
+  defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: []} = state, _reply) do
+    state
+  end
+
+  defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: waiters} = state, reply) do
     for client <- List.wrap(waiters), not is_nil(client), do: GenStage.reply(client, reply)
     %{state | awaiting_snapshot_start: []}
   end

@@ -546,6 +546,47 @@ defmodule Electric.Shapes.ConsumerTest do
       refute_receive {:DOWN, ^ref2, :process, _, _}
     end
 
+    test "notifies live listeners when invalidated", ctx do
+      ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
+
+      {orig_schema, orig_table} = @shape1.root_table
+
+      rel_before = %Relation{
+        id: @shape1.root_table_id,
+        schema: orig_schema,
+        table: orig_table,
+        columns: [%{name: "id", type_oid: {1, 1}}]
+      }
+
+      assert :ok = ShapeLogCollector.handle_relation_msg(rel_before, ctx.producer)
+
+      refute_receive {:DOWN, _, :process, _, _}
+
+      live_ref = make_ref()
+      Registry.register(ctx.registry, @shape_handle1, live_ref)
+
+      rel_changed = %Relation{rel_before | columns: [%{name: "id", type_oid: {999, 1}}]}
+
+      Mock.Inspector
+      |> expect(:clean, 1, fn _, _ -> true end)
+      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
+
+      Mock.ShapeStatus
+      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
+      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
+
+      shape1 = ctx.shapes[@shape_handle1]
+
+      Mock.PublicationManager
+      |> expect(:remove_shape, 1, fn ^shape1, _ -> :ok end)
+      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
+
+      assert :ok = ShapeLogCollector.handle_relation_msg(rel_changed, ctx.producer)
+
+      assert_receive {:DOWN, ^ref1, :process, _, :normal}
+      assert_receive {^live_ref, :shape_rotation}
+    end
+
     test "unexpected error while handling events stops affected consumer and cleans affected shape",
          ctx do
       Mock.ShapeStatus
