@@ -1375,12 +1375,7 @@ defmodule Electric.Plug.RouterTest do
         end)
 
       Postgrex.query!(db_conn, "TRUNCATE TABLE items", [])
-      assert %{status: 200} = Task.await(task)
-
-      conn =
-        Router.call(conn("GET", "/v1/shape?table=items&offset=#{offset}&handle=#{handle}"), opts)
-
-      assert %{status: 409} = conn
+      assert %{status: 409} = conn = Task.await(task)
       assert [%{"headers" => %{"control" => "must-refetch"}}] = Jason.decode!(conn.resp_body)
 
       conn =

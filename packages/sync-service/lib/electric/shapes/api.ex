@@ -524,13 +524,10 @@ defmodule Electric.Shapes.Api do
         |> do_serve_shape_log()
 
       {^ref, :shape_rotation} ->
-        # We may want to notify the client better that the shape handle had
-        # changed, but just closing the response and letting the client handle
-        # it on reconnection is good enough.
-        request
-        |> update_attrs(%{ot_is_shape_rotated: true})
-        |> determine_global_last_seen_lsn()
-        |> no_change_response()
+        Response.error(request, @must_refetch,
+          handle: shape_handle,
+          status: 409
+        )
     after
       # If we timeout, return an up-to-date message
       long_poll_timeout ->

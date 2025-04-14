@@ -627,9 +627,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       # The conn process should exit after sending the response
       refute Process.alive?(conn.owner)
 
-      assert conn.status == 200
-      assert [%{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
-      assert get_resp_header(conn, "electric-up-to-date") == [""]
+      assert conn.status == 409
+      assert [%{"headers" => %{"control" => "must-refetch"}}] = Jason.decode!(conn.resp_body)
     end
 
     test "sends an up-to-date response after a timeout if no changes are observed",
