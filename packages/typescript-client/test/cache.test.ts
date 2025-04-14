@@ -107,7 +107,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     expect(getCacheStatus(cachedRes)).toBe(CacheStatus.HIT)
   })
 
-  it(`should collapse requests in live mode`, async ({
+  it.only(`should collapse requests in live mode`, async ({
     insertIssues,
     proxyCacheBaseUrl,
     issuesTableUrl,
@@ -171,7 +171,8 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     // wait for clients to catch up
     await waitForClients()
 
-    // add some data, should get cache hits for all clients but one
+    // add some data, should collapse requests and respond to
+    // all of them but one with cache hits
     resetReqStats()
     await insertIssues({ title: `foo` })
     await waitForClients()

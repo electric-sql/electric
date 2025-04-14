@@ -500,6 +500,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       cache_control = "public, max-age=5, stale-while-revalidate=5"
       assert {"cache-control", cache_control} in conn.resp_headers
+
+      expected_cursor =
+        Electric.Plug.Utils.get_next_interval_timestamp(long_poll_timeout(ctx), nil)
+        |> to_string()
+
+      assert {"electric-cursor", expected_cursor} in conn.resp_headers
     end
 
     test "handles live updates", ctx do
@@ -570,6 +576,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert get_resp_header(conn, "electric-offset") == [next_offset_str]
       assert get_resp_header(conn, "electric-up-to-date") == [""]
       assert get_resp_header(conn, "electric-schema") == []
+
+      expected_cursor =
+        Electric.Plug.Utils.get_next_interval_timestamp(long_poll_timeout(ctx), nil)
+        |> to_string()
+
+      assert {"electric-cursor", expected_cursor} in conn.resp_headers
     end
 
     test "handles shape rotation", ctx do
@@ -652,9 +664,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert [%{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
 
-      # should not cache response without changes
-      assert get_resp_header(conn, "cache-control") == ["no-cache"]
-      assert get_resp_header(conn, "etag") == []
+      assert get_resp_header(conn, "cache-control") == ["public, max-age=1, must-revalidate"]
 
       assert get_resp_header(conn, "electric-up-to-date") == [""]
     end

@@ -554,7 +554,7 @@ defmodule Electric.Shapes.Api do
     %Response{
       response
       | status: 200,
-        no_change: true,
+        no_changes: true,
         body: encode_log(request, [up_to_date_ctl(global_last_seen_lsn)])
     }
   end

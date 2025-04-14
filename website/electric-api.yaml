@@ -228,7 +228,6 @@ paths:
 
                 In the format `{shape_handle}:{start_offset}:{end_offset}`.
             electric-cursor:
-              deprecated: true
               schema:
                 type: string
               example: "1674440"
