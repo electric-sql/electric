@@ -45,7 +45,7 @@ defmodule Electric.Postgres.LockConnection do
   def init(opts) do
     opts = Map.new(opts)
 
-    Process.set_label({:lock_connection, state.stack_id})
+    Process.set_label({:lock_connection, opts.stack_id})
 
     send(self(), :acquire_lock)
 
