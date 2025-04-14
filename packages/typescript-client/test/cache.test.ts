@@ -107,7 +107,7 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     expect(getCacheStatus(cachedRes)).toBe(CacheStatus.HIT)
   })
 
-  it.only(`should collapse requests in live mode`, async ({
+  it(`should collapse requests in live mode`, async ({
     insertIssues,
     proxyCacheBaseUrl,
     issuesTableUrl,
