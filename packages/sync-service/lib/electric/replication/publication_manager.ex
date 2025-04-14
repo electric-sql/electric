@@ -153,8 +153,10 @@ defmodule Electric.Replication.PublicationManager do
 
   @impl true
   def init(opts) do
-    Logger.metadata(stack_id: Access.fetch!(opts, :stack_id))
-    Process.set_label({:publication_manager, Access.fetch!(opts, :stack_id)})
+    opts = Map.new(opts)
+
+    Logger.metadata(stack_id: opts.stack_id)
+    Process.set_label({:publication_manager, opts.stack_id})
 
     state = %__MODULE__{
       relation_filter_counters: %{},
@@ -164,13 +166,11 @@ defmodule Electric.Replication.PublicationManager do
       scheduled_updated_ref: nil,
       retries: 0,
       waiters: [],
-      update_debounce_timeout:
-        Access.get(opts, :update_debounce_timeout, @default_debounce_timeout),
-      publication_name: Access.fetch!(opts, :publication_name),
-      db_pool: Access.fetch!(opts, :db_pool),
-      pg_version: Access.fetch!(opts, :pg_version),
-      configure_tables_for_replication_fn:
-        Access.fetch!(opts, :configure_tables_for_replication_fn)
+      update_debounce_timeout: Map.get(opts, :update_debounce_timeout, @default_debounce_timeout),
+      publication_name: opts.publication_name,
+      db_pool: opts.db_pool,
+      pg_version: opts.pg_version,
+      configure_tables_for_replication_fn: opts.configure_tables_for_replication_fn
     }
 
     {:ok, state, {:continue, :get_pg_version}}
